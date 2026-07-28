@@ -33,9 +33,6 @@ type B = NdArray<f32>;
 // hand-rolled one was the same map behind the same seam.
 use muniment::MemoryBackend as InMemoryStore;
 
-
-
-
 // ── Tiny synthetic artifacts (mirrors decoder::loader's test fixtures) ──────
 
 const CONFIG_JSON: &str = r#"{
@@ -81,7 +78,11 @@ fn weights_bytes() -> Vec<u8> {
         push(format!("{p}.self_attn.k_proj.weight"), vec![kv, h], s + 2);
         push(format!("{p}.self_attn.v_proj.weight"), vec![kv, h], s + 3);
         push(format!("{p}.self_attn.o_proj.weight"), vec![h, h], s + 4);
-        push(format!("{p}.post_attention_layernorm.weight"), vec![h], s + 8);
+        push(
+            format!("{p}.post_attention_layernorm.weight"),
+            vec![h],
+            s + 8,
+        );
         push(format!("{p}.mlp.gate_proj.weight"), vec![inter, h], s + 5);
         push(format!("{p}.mlp.up_proj.weight"), vec![inter, h], s + 6);
         push(format!("{p}.mlp.down_proj.weight"), vec![h, inter], s + 7);
@@ -101,7 +102,12 @@ fn weights_bytes() -> Vec<u8> {
         .collect();
     let views: Vec<(&str, TensorView<'_>)> = buffers
         .iter()
-        .map(|(n, s, b)| (n.as_str(), TensorView::new(Dtype::F32, s.clone(), b).unwrap()))
+        .map(|(n, s, b)| {
+            (
+                n.as_str(),
+                TensorView::new(Dtype::F32, s.clone(), b).unwrap(),
+            )
+        })
         .collect();
     safetensors::serialize(views, &None).unwrap()
 }

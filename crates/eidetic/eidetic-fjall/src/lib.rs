@@ -20,9 +20,9 @@
 #![doc(html_root_url = "https://docs.rs/eidetic-fjall/0.0.1")]
 
 use async_trait::async_trait;
+use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use muniment::error::StoreError;
 use muniment::{Backend, WriteOp};
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use std::path::Path;
 
 /// Default partition name used by [`FjallStore::open`]. Callers that want
@@ -284,14 +284,8 @@ mod tests {
             alice.put("k", b"alice-value").await.unwrap();
             bob.put("k", b"bob-value").await.unwrap();
 
-            assert_eq!(
-                alice.get("k").await.unwrap(),
-                Some(b"alice-value".to_vec())
-            );
-            assert_eq!(
-                bob.get("k").await.unwrap(),
-                Some(b"bob-value".to_vec())
-            );
+            assert_eq!(alice.get("k").await.unwrap(), Some(b"alice-value".to_vec()));
+            assert_eq!(bob.get("k").await.unwrap(), Some(b"bob-value".to_vec()));
         });
     }
 }

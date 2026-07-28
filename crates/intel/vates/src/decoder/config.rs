@@ -72,8 +72,7 @@ impl DecoderConfig {
 
     /// Key/value head count, with the pre-GQA fallback.
     pub fn kv_heads(&self) -> usize {
-        self.num_key_value_heads
-            .unwrap_or(self.num_attention_heads)
+        self.num_key_value_heads.unwrap_or(self.num_attention_heads)
     }
 
     /// Per-head dimension.

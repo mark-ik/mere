@@ -147,8 +147,7 @@ pub fn verify_pack(manifest: &PackManifest, envelope: &TrustEnvelope) -> PackVer
         if pub_hex != manifest.author {
             return PackVerdict::Broken;
         }
-        let (Some(pub_bytes), Some(sig_bytes)) =
-            (unhex::<32>(pub_hex), unhex::<64>(sig_hex))
+        let (Some(pub_bytes), Some(sig_bytes)) = (unhex::<32>(pub_hex), unhex::<64>(sig_hex))
         else {
             return PackVerdict::Broken;
         };
@@ -225,7 +224,10 @@ mod tests {
             let kp = keypair();
             let pack = manifest(&kp);
             let sig = sign_pack(&pack, &kp);
-            assert_eq!(verify_pack(&pack, &envelope_with(sig.clone())), PackVerdict::Trusted);
+            assert_eq!(
+                verify_pack(&pack, &envelope_with(sig.clone())),
+                PackVerdict::Trusted
+            );
 
             let mut store = MemoryBackend::default();
             let at = Timestamp(1);
@@ -296,10 +298,16 @@ mod tests {
         let forged = sign_pack(&pack, &intruder);
         // The binding carries the INTRUDER's pubkey, which is not the
         // manifest's author.
-        assert_eq!(verify_pack(&pack, &envelope_with(forged)), PackVerdict::Broken);
+        assert_eq!(
+            verify_pack(&pack, &envelope_with(forged)),
+            PackVerdict::Broken
+        );
 
         let malformed = SignatureRef(format!("{PACK_SIG_PREFIX}nonsense"));
-        assert_eq!(verify_pack(&pack, &envelope_with(malformed)), PackVerdict::Broken);
+        assert_eq!(
+            verify_pack(&pack, &envelope_with(malformed)),
+            PackVerdict::Broken
+        );
 
         let unsigned = TrustEnvelope::self_asserted();
         assert_eq!(verify_pack(&pack, &unsigned), PackVerdict::Unsigned);

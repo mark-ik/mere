@@ -15,15 +15,17 @@
 //! as a vault slot (encrypted at rest by whichever backend the vault
 //! opened).
 //!
-//! ## Honest v1 limits
+//! ## Honest limits
 //!
 //! - Ed25519 only (the `ssh-key` dependency is built with only that
 //!   algorithm; other key types are refused with a clear error).
-//! - [`UnlockTier::PerUse`] slots refuse to sign — the agent has no
-//!   confirmation UI yet, and silently signing would make the tier a lie.
-//!   [`UnlockTier::ShortTtl`] is treated as Session until relock lands.
+//! - A standalone agent built with [`VaultAgent::new`] still refuses
+//!   [`UnlockTier::PerUse`]. A resident host may provide an
+//!   [`ApprovalBroker`] to enforce visible per-use decisions and bounded
+//!   short-TTL reuse.
 //! - `session-bind@openssh.com` signatures are verified and acknowledged,
-//!   but per-session key restrictions are not enforced yet.
+//!   and the verified host/session facts scope approval caching. OpenSSH
+//!   destination constraints are not yet stored as key policy.
 //! - Any local process may connect to the agent endpoint, same as stock
 //!   ssh-agent (plan §threat-model note).
 
@@ -36,10 +38,14 @@ use ssh_agent_lib::proto::extension::{QueryResponse, SessionBind};
 use ssh_agent_lib::proto::{
     AddIdentity, Extension, PrivateCredential, RemoveIdentity, SignRequest, message,
 };
+use ssh_key::HashAlg;
 use ssh_key::Signature;
 use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
 
+use crate::signing::{
+    ApprovalBroker, SigningFailureCode, SigningPolicy, SigningRecordResult, SigningRequest,
+};
 use crate::ssh_slot::{self, SshSlot};
 use crate::vault::{IdentityStorage, IdentityVault, ProtocolKey, UnlockTier};
 
@@ -52,12 +58,24 @@ pub use crate::ssh_slot::{SSH_MOD_ID, protocol_key_for};
 /// connection agent.
 pub struct VaultAgent<S: IdentityStorage> {
     vault: Arc<Mutex<IdentityVault<S>>>,
+    approval: Option<ApprovalBroker>,
+    adapter: String,
+    binding: Option<VerifiedSshBinding>,
+}
+
+#[derive(Clone)]
+struct VerifiedSshBinding {
+    target: String,
+    session: String,
 }
 
 impl<S: IdentityStorage> Clone for VaultAgent<S> {
     fn clone(&self) -> Self {
         Self {
             vault: Arc::clone(&self.vault),
+            approval: self.approval.clone(),
+            adapter: self.adapter.clone(),
+            binding: None,
         }
     }
 }
@@ -67,7 +85,48 @@ impl<S: IdentityStorage> VaultAgent<S> {
     pub fn new(vault: IdentityVault<S>) -> Self {
         Self {
             vault: Arc::new(Mutex::new(vault)),
+            approval: None,
+            adapter: "ssh-agent.local".to_string(),
+            binding: None,
         }
+    }
+
+    /// Wrap a vault and route tiered signing through a visible approval broker.
+    pub fn with_approval_broker(
+        vault: IdentityVault<S>,
+        approval: ApprovalBroker,
+        adapter: impl Into<String>,
+    ) -> Self {
+        Self {
+            vault: Arc::new(Mutex::new(vault)),
+            approval: Some(approval),
+            adapter: adapter.into(),
+            binding: None,
+        }
+    }
+
+    /// Build an agent over a vault already shared with its resident host.
+    pub fn from_shared_vault(
+        vault: Arc<Mutex<IdentityVault<S>>>,
+        approval: ApprovalBroker,
+        adapter: impl Into<String>,
+    ) -> Self {
+        Self {
+            vault,
+            approval: Some(approval),
+            adapter: adapter.into(),
+            binding: None,
+        }
+    }
+
+    /// Share the vault with the resident host's public projection adapter.
+    pub fn shared_vault(&self) -> Arc<Mutex<IdentityVault<S>>> {
+        Arc::clone(&self.vault)
+    }
+
+    /// Approval broker used by this resident agent, when configured.
+    pub fn approval_broker(&self) -> Option<&ApprovalBroker> {
+        self.approval.as_ref()
     }
 
     fn ssh_identities(&self) -> Vec<SshSlot> {
@@ -100,18 +159,55 @@ impl<S: IdentityStorage + 'static> Session for VaultAgent<S> {
         let Some(identity) = self.find_by_public(&wanted) else {
             return Err(std::io::Error::other("identity not found in vault").into());
         };
-        if identity.tier == UnlockTier::PerUse {
+        let authorization = if let Some(approval) = self.approval.clone() {
+            let profile = self.vault.lock().unwrap().current_profile().id.0.clone();
+            let mut signing_request = SigningRequest::new(
+                profile,
+                identity.fingerprint(),
+                "ssh.sign",
+                request.data.as_slice(),
+                self.adapter.clone(),
+            );
+            if let Some(binding) = &self.binding {
+                signing_request = signing_request
+                    .with_authenticated_target(binding.target.clone())
+                    .with_session_binding(binding.session.clone());
+            }
+            Some(
+                approval
+                    .authorize(signing_request, SigningPolicy::from(identity.tier))
+                    .await
+                    .map_err(|error| std::io::Error::other(error.to_string()))?,
+            )
+        } else if identity.tier == UnlockTier::PerUse {
             tracing::warn!(key = ?identity.key, "per-use slot refused: no confirmation UI yet");
             return Err(std::io::Error::other(
                 "per-use slot refused: the agent has no confirmation UI yet",
             )
             .into());
-        }
+        } else {
+            None
+        };
         tracing::info!(key = ?identity.key, "signing request");
-        identity
+        let signed = identity
             .private
             .try_sign(request.data.as_slice())
-            .map_err(AgentError::other)
+            .map_err(AgentError::other);
+        if let (Some(approval), Some(authorization)) = (&self.approval, authorization) {
+            let result = match &signed {
+                Ok(signature) => SigningRecordResult::Signed {
+                    signature_ref: format!(
+                        "blake3:{}",
+                        blake3::hash(signature.as_bytes()).to_hex()
+                    ),
+                },
+                Err(_) => SigningRecordResult::Failed {
+                    code: SigningFailureCode::AdapterFailure,
+                },
+            };
+            approval.complete(authorization, result);
+        }
+        signed
     }
 
     async fn add_identity(&mut self, identity: AddIdentity) -> Result<(), AgentError> {
@@ -123,8 +219,7 @@ impl<S: IdentityStorage + 'static> Session for VaultAgent<S> {
             private.set_comment(&comment);
         }
         let key = ssh_slot::protocol_key_for(&private);
-        let slot =
-            ssh_slot::slot_for(&private, UnlockTier::Session).map_err(AgentError::other)?;
+        let slot = ssh_slot::slot_for(&private, UnlockTier::Session).map_err(AgentError::other)?;
         tracing::info!(?key, "adding ssh identity to vault");
         self.vault
             .lock()
@@ -162,6 +257,17 @@ impl<S: IdentityStorage + 'static> Session for VaultAgent<S> {
                 Some(bind) => {
                     bind.verify_signature()
                         .map_err(|_| AgentError::ExtensionFailure)?;
+                    self.binding = Some(VerifiedSshBinding {
+                        target: format!(
+                            "ssh-host-key:{}",
+                            bind.host_key.fingerprint(HashAlg::Sha256)
+                        ),
+                        session: format!(
+                            "blake3:{};forwarding={}",
+                            blake3::hash(&bind.session_id).to_hex(),
+                            bind.is_forwarding
+                        ),
+                    });
                     tracing::debug!("session-bind acknowledged");
                     Ok(None)
                 }
@@ -192,10 +298,12 @@ impl<S: IdentityStorage + 'static> Session for VaultAgent<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vault::{InMemoryStorage, Profile, ProfileId};
     use crate::Ed25519Keypair;
+    use crate::signing::{ApprovalSource, RememberApproval, SigningDecision, SigningRecordResult};
+    use crate::vault::{InMemoryStorage, Profile, ProfileId};
     use signature::Verifier;
     use ssh_key::Algorithm;
+    use std::time::Duration;
 
     fn test_agent() -> VaultAgent<InMemoryStorage> {
         let profile = Profile::new(
@@ -288,6 +396,112 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.to_string().contains("per-use"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn per_use_slot_signs_only_after_broker_approval() {
+        let key = random_key("guarded");
+        let public = PublicKey::from(&key);
+        let mut profile = Profile::new(
+            ProfileId("research".into()),
+            "Research",
+            Ed25519Keypair::from_seed([7; 32]),
+        );
+        profile.slots.insert(
+            ssh_slot::protocol_key_for(&key),
+            ssh_slot::slot_for(&key, UnlockTier::PerUse).unwrap(),
+        );
+        let broker = ApprovalBroker::new(Duration::from_secs(1));
+        let mut agent = VaultAgent::with_approval_broker(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            broker.clone(),
+            "ssh-agent.test",
+        );
+        let data = b"approval-bound-payload".to_vec();
+        let verify_data = data.clone();
+        let signing = tokio::spawn(async move {
+            agent
+                .sign(SignRequest {
+                    credential: public.key_data().clone().into(),
+                    data,
+                    flags: 0,
+                })
+                .await
+        });
+
+        let pending = loop {
+            if let Some(pending) = broker.pending().into_iter().next() {
+                break pending;
+            }
+            tokio::task::yield_now().await;
+        };
+        assert_eq!(pending.request.profile, "research");
+        assert_eq!(pending.request.operation, "ssh.sign");
+        broker
+            .decide(
+                pending.request.request_id,
+                SigningDecision::Approve {
+                    remember: RememberApproval::Once,
+                },
+            )
+            .unwrap();
+
+        let signature = signing.await.unwrap().unwrap();
+        PublicKey::from(&key)
+            .key_data()
+            .verify(&verify_data, &signature)
+            .unwrap();
+        let history = broker.history();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].approval_source, Some(ApprovalSource::UserOnce));
+        assert!(matches!(
+            history[0].result,
+            SigningRecordResult::Signed { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn per_use_slot_denial_returns_to_the_ssh_adapter() {
+        let key = random_key("guarded");
+        let public = PublicKey::from(&key);
+        let mut profile = Profile::new(
+            ProfileId("research".into()),
+            "Research",
+            Ed25519Keypair::from_seed([7; 32]),
+        );
+        profile.slots.insert(
+            ssh_slot::protocol_key_for(&key),
+            ssh_slot::slot_for(&key, UnlockTier::PerUse).unwrap(),
+        );
+        let broker = ApprovalBroker::new(Duration::from_secs(1));
+        let mut agent = VaultAgent::with_approval_broker(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            broker.clone(),
+            "ssh-agent.test",
+        );
+        let signing = tokio::spawn(async move {
+            agent
+                .sign(SignRequest {
+                    credential: public.key_data().clone().into(),
+                    data: b"denied-payload".to_vec(),
+                    flags: 0,
+                })
+                .await
+        });
+
+        let pending = loop {
+            if let Some(pending) = broker.pending().into_iter().next() {
+                break pending;
+            }
+            tokio::task::yield_now().await;
+        };
+        broker
+            .decide(pending.request.request_id, SigningDecision::Deny)
+            .unwrap();
+        let error = signing.await.unwrap().unwrap_err();
+        assert!(error.to_string().contains("denied"), "got: {error}");
+        assert_eq!(broker.history().len(), 1);
+        assert_eq!(broker.history()[0].result, SigningRecordResult::Denied);
     }
 
     #[tokio::test]

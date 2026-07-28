@@ -210,4 +210,3 @@ impl CartographyGeometry {
     // facets (session-runtime `arrangement_facets`). This type remains as the
     // canvas's save-time read surface (`Canvas::cartography_geometry`).
 }
-

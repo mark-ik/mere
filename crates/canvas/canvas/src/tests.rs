@@ -796,6 +796,41 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
 }
 
 #[test]
+fn dragging_a_node_updates_its_active_strategy_slot() {
+    let mut graph = Graph::new();
+    graph.add_node(
+        "https://drag-strategy.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    let mut canvas = Canvas::with_graph(graph);
+    let key = canvas
+        .graph()
+        .get_node_by_url("https://drag-strategy.example")
+        .unwrap()
+        .0;
+    canvas.set_layout_strategy(Some("test.grid".to_string()));
+    canvas.apply_strategy_positions(&[(key, PortablePoint::new(100.0, 120.0))]);
+    canvas.apply_strategy_to_view();
+
+    let start = canvas.camera.to_screen(PortablePoint::new(100.0, 120.0));
+    canvas.pointer_down(PointerButton::Left, start.0, start.1);
+    canvas.cursor_moved(start.0 + 80.0, start.1 + 40.0);
+    canvas.pointer_up(PointerButton::Left, start.0 + 80.0, start.1 + 40.0);
+    canvas.apply_strategy_to_view();
+
+    let moved = canvas.view.position_of(key).expect("moved node position");
+    assert!((moved.x - 180.0).abs() < 0.01);
+    assert!((moved.y - 160.0).abs() < 0.01);
+    let slot = canvas
+        .strategy_positions
+        .as_ref()
+        .and_then(|positions| positions.iter().find(|(node, _)| *node == key))
+        .map(|(_, position)| *position)
+        .expect("updated strategy slot");
+    assert_eq!(slot, PortablePoint::new(180.0, 160.0));
+}
+
+#[test]
 fn node_face_defaults_to_favicon_and_takes_a_per_node_override() {
     let mut graph = Graph::new();
     graph.add_node(

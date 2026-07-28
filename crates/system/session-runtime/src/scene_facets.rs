@@ -79,8 +79,16 @@ pub fn write_scene_facets(store: &mut NodeFacetStore, container: Uuid, scene: &S
         let _ = store.set(container, FacetId::new(id), payload, &AcceptAll);
     };
     set(store, SCENE_SIZE_BY_DEGREE, json!(scene.size_by_degree));
-    set(store, SCENE_SIZE_BY_IMPORTANCE, json!(scene.size_by_importance));
-    set(store, SCENE_IMPORTANCE_METRIC, json!(scene.importance_metric));
+    set(
+        store,
+        SCENE_SIZE_BY_IMPORTANCE,
+        json!(scene.size_by_importance),
+    );
+    set(
+        store,
+        SCENE_IMPORTANCE_METRIC,
+        json!(scene.importance_metric),
+    );
     set(store, SCENE_PHYSICS_DAMPING, json!(scene.physics_damping));
 }
 
@@ -165,10 +173,20 @@ mod tests {
         let container = Uuid::from_u128(0x9);
         // A good degree flag, a garbage damping.
         store
-            .set(container, FacetId::new(SCENE_SIZE_BY_DEGREE), json!(true), &AcceptAll)
+            .set(
+                container,
+                FacetId::new(SCENE_SIZE_BY_DEGREE),
+                json!(true),
+                &AcceptAll,
+            )
             .unwrap();
         store
-            .set(container, FacetId::new(SCENE_PHYSICS_DAMPING), json!("nope"), &AcceptAll)
+            .set(
+                container,
+                FacetId::new(SCENE_PHYSICS_DAMPING),
+                json!("nope"),
+                &AcceptAll,
+            )
             .unwrap();
         let read = read_scene_facets(&store, container);
         assert!(read.size_by_degree, "the good field survives");

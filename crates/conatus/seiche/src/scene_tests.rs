@@ -3,8 +3,8 @@
 //! float, fluid displacement, vortex swirl, bounded emitter counts). Split from `lib.rs` alongside
 //! the tiers they cover.
 
-use euclid::default::Point2D;
 use crate::NodeKey;
+use euclid::default::Point2D;
 
 use crate::{NODE_BODY_RADIUS, NodeCollider, Simulation};
 

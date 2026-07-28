@@ -1,0 +1,123 @@
+{
+  "schema": "graphshell.h3.browser-receipts/v1",
+  "executed_at": "2026-07-28",
+  "url": "http://127.0.0.1:8765/",
+  "browser": "Chromium (Codex in-app browser)",
+  "runs": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "h3_chromium_wide.png",
+      "created_address": "https://example.net/transport-evaluation",
+      "file": {
+        "fixture": "route-note.unknown",
+        "portable_address": "urn:sha256:dc0e849709554214fb6e5b6b33956c297721c8ed4f98bca072972e24dc0d3f0e",
+        "title": "Route note",
+        "tags": [
+          "i2p",
+          "transport",
+          "unknown-file"
+        ],
+        "facet": {
+          "id": "research.note/v1",
+          "value": {
+            "source": "headed-browser",
+            "status": "metadata-only"
+          }
+        }
+      },
+      "relation": {
+        "kind": "Cites",
+        "target": "i2p://reference/service",
+        "selected_count": 2
+      },
+      "filter": {
+        "query": "unknown-file",
+        "family": "semantic",
+        "matched_nodes": 1
+      },
+      "scene": {
+        "layout": "grid.default",
+        "physics_paused": true,
+        "selected_count": 2,
+        "sprite_faces": 1,
+        "default_handler": "system.default",
+        "reopen_restored_state": true
+      },
+      "external_handler": {
+        "address": "https://example.test/i2p-port",
+        "status": "Accepted · opened in host browser · 1 invocation(s)",
+        "popup_observed": true
+      },
+      "engram": {
+        "schema": "graphshell.graph-engram/v1",
+        "scope": "selected-subgraph",
+        "node_ids": [
+          "0d2e5119-7a04-51f0-9340-40eedfdadce3",
+          "b0bcccf8-cfa4-4ea2-b592-29c4a88088a2"
+        ],
+        "nodes": 2,
+        "relations": 1,
+        "cites_relation": true,
+        "content_facet": true,
+        "research_facet": true,
+        "device_local_facet_excluded": true,
+        "scene_selected": 2,
+        "sprite_faces": 1,
+        "imported_nodes": 2,
+        "ids_preserved": true
+      }
+    },
+    {
+      "viewport": {
+        "width": 600,
+        "height": 800
+      },
+      "screenshot": "h3_chromium_narrow.png",
+      "created_address": "https://example.net/narrow-transport",
+      "file": {
+        "fixture": "route-note.unknown",
+        "portable_address": "urn:sha256:dc0e849709554214fb6e5b6b33956c297721c8ed4f98bca072972e24dc0d3f0e",
+        "title": "Narrow route note",
+        "facet": {
+          "id": "research.note/v1",
+          "value": {
+            "status": "narrow-headed"
+          }
+        }
+      },
+      "relation": {
+        "kind": "Cites",
+        "target": "i2p://reference/service",
+        "selected_count": 2
+      },
+      "filter": {
+        "query": "unknown-file",
+        "family": "semantic",
+        "matched_nodes": 1
+      },
+      "scene": {
+        "layout": "grid.default",
+        "physics_paused": true,
+        "selected_count": 2,
+        "face": "sprite"
+      },
+      "engram": {
+        "schema": "graphshell.graph-engram/v1",
+        "scope": "selected-subgraph",
+        "nodes": 2,
+        "relations": 1,
+        "cites_relation": true,
+        "device_local_facet_excluded": true,
+        "imported_nodes": 2
+      },
+      "responsive_panel": {
+        "client_width": 563,
+        "scroll_width": 563,
+        "horizontal_overflow": false
+      }
+    }
+  ]
+}

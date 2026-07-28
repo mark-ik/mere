@@ -1,0 +1,19 @@
+{
+  "cutover": {
+    "standalone_agent_retained": true,
+    "standard_endpoint_changed": false
+  },
+  "decision": {
+    "history_records": 1,
+    "intent": "graphshell.identity.signing.approve-once",
+    "signature_bytes": 64
+  },
+  "pending": {
+    "cleartext_payload_absent": true,
+    "operation": "ssh.sign",
+    "payload_digest": "blake3:8aaba30dbb215582a8d498aa1b5270f43320798db51ad42c537cea038bee278c",
+    "private_material_absent": true,
+    "request_id": "44e97390-a087-4537-b49a-854b0ebf17da"
+  },
+  "schema": "graphshell.h4a.identity-receipt/v1"
+}

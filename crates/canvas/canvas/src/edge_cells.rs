@@ -6,12 +6,12 @@
 use std::collections::{HashMap, HashSet};
 
 use euclid::default::{Box2D, Point2D};
-use seiche::LayoutView;
 use kernel::graph::{EdgeFamily, Graph, NodeKey, RelationKind, RelationSelector};
 use paint_list_api::{
     ColorF, CommonPlacement, LayoutPoint, LayoutRect, PaintCmd, PathCommand, PathData, StrokeCap,
     StrokeItem, StrokeJoin,
 };
+use seiche::LayoutView;
 
 use crate::EdgeCell;
 

@@ -48,9 +48,9 @@ mod tests {
     use cartography::request::{AxisValue, ViewIntent};
     use cartography::signals::IntelligenceSignals;
     use kernel::geometry::PortablePoint;
+    use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{Graph, NodeKey};
     use std::collections::HashMap;
-    use kernel::graph::fixtures::GraphFixtures;
     use uuid::Uuid;
 
     fn three_nodes() -> (Graph, [NodeKey; 3]) {

@@ -1,4 +1,3 @@
-
 //! BERT input embeddings: word + position + token-type, summed and
 //! layer-normed.
 //!

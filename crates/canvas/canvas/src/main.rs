@@ -17,10 +17,10 @@
 
 use std::sync::Arc;
 
-use netrender::external_texture::ExternalTexturePlacement;
-use netrender::{ColorLoad, NetrenderOptions};
 use canvas::{Canvas, PointerButton, WHEEL_PAN_SCALE};
 use genet_winit_host::SurfaceHost;
+use netrender::external_texture::ExternalTexturePlacement;
+use netrender::{ColorLoad, NetrenderOptions};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};

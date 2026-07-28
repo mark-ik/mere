@@ -5,29 +5,94 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Graphshell presentation host and loopback acceptance view."
+autobins = false
+
+[features]
+default = ["native"]
+# Existing admitted sessions, transports, Personae composition, and receipt
+# binaries. This remains the default so current native callers keep working.
+native = [
+    "dep:blake3",
+    "dep:graphshell-stdio",
+    "dep:notochord",
+    "dep:personae",
+    "dep:rand_core",
+    "dep:serde",
+    "dep:session-runtime",
+    "dep:ssh-agent-lib",
+    "dep:ssh-key",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:transport",
+    "dep:uuid",
+]
+# The browser reference-host cone. H0 proves the dependency boundary; H1 adds
+# the local Mere host adapter on top of this selected graph + canvas surface.
+web = [
+    "dep:chartulary",
+    "dep:mere",
+    "dep:muniment",
+    "dep:serde",
+    "dep:uuid",
+]
 
 [dependencies]
 base64.workspace = true
-blake3.workspace = true
+chartulary = { workspace = true, optional = true }
 graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
 graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
 graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
-graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio" }
-# The application composes Personae (section 3): the profile Graphshell
-# speaks as. The protocol and client crates deliberately do NOT depend on it.
-notochord = { workspace = true, features = ["tokio"] }
-personae.workspace = true
-session-runtime.workspace = true
+mere = { path = "../../crates/mere", default-features = false, features = ["graph", "canvas"], optional = true }
+muniment = { workspace = true, optional = true }
+sceno.workspace = true
+scenotime.workspace = true
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json.workspace = true
+uuid = { workspace = true, optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+blake3 = { workspace = true, optional = true }
+graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio", optional = true }
+# The application composes Personae: the profile Graphshell speaks as. The
+# protocol and client crates deliberately do not depend on it.
+notochord = { workspace = true, features = ["tokio"], optional = true }
+personae = { workspace = true, features = ["agent"], optional = true }
+rand_core = { version = "0.6", features = ["getrandom"], optional = true }
+session-runtime = { workspace = true, optional = true }
+ssh-agent-lib = { version = "0.6", optional = true }
+ssh-key = { version = "0.6", features = ["ed25519"], optional = true }
+thiserror = { version = "1", optional = true }
+tokio = { version = "1", features = ["io-util", "macros", "rt-multi-thread", "sync", "time"], optional = true }
 # G5d: the projection carrier. `notochord` brings in the one audited
 # `AcceptedSession -> SessionFacts` adapter (Notochord N1) so this port does
 # not hand-build carrier facts of its own.
-transport = { workspace = true, features = ["notochord"] }
-sceno.workspace = true
-scenotime.workspace = true
-serde = { version = "1", features = ["derive"] }
-serde_json.workspace = true
-thiserror = "1"
-tokio = { version = "1", features = ["io-util"] }
+transport = { workspace = true, features = ["notochord"], optional = true }
+
+[[bin]]
+name = "g1_receipt"
+path = "src/bin/g1_receipt.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "g4_sessions"
+path = "src/bin/g4_sessions.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "g5_peer"
+path = "src/bin/g5_peer.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "n4_policy_receipt"
+path = "src/bin/n4_policy_receipt.rs"
+required-features = ["native"]
+
+[[bin]]
+name = "h4_identity_receipt"
+path = "src/bin/h4_identity_receipt.rs"
+required-features = ["native"]
 
 [dev-dependencies]
+pollster = "0.4"
 tokio = { version = "1", features = ["io-util", "macros", "rt", "rt-multi-thread", "time"] }

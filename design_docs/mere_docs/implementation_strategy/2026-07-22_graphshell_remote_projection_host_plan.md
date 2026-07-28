@@ -540,37 +540,35 @@ their truths separate, and preserves its own arrangement and links.
 **Done when:** each adapter has a headed or hardware-backed task receipt and the
 constrained profile has measured byte budgets rather than desktop assumptions.
 
-### G8. Host the identity agent as a resident service
+### G8. Host the identity agent as a resident service — FOLDED INTO H4
 
-Mark ruled on 2026-07-22 that **the agent's resident home is Graphshell**
-(recorded in the identity-vault-ssh-agent plan's progress, not here). Nothing
-in this sequence carried it, so it was being counted on without being planned
-or assigned. This is that item.
+Written 2026-07-27 to carry Mark's 2026-07-22 ruling that **the agent's
+resident home is Graphshell**, which until then lived only in the
+identity-vault-ssh-agent plan's progress log and was being counted on without
+being planned or assigned.
 
-`personae::agent` is a library module precisely so a resident host serves the
-endpoint in-process rather than as a separate install. Today the endpoint is
-served by a logon-triggered scheduled task plus a relaunch wrapper, which that
-plan labels "interim dogfood scaffolding only, removed when the host adoption
-lands".
+**Superseded the same day** by
+[H4, "Make Personae visible and usable"](2026-07-27_graphshell_reference_host_plan.md),
+which covers the same ground in more detail: the resident host moves into
+native Graphshell, with an Identity surface for profiles, vault backend and
+protection, agent-listener state, SSH slots, devices and grants, and pending
+signing requests. Two items claiming one piece of work is how a piece of work
+gets done twice or not at all, so this one defers rather than duplicating.
 
-- Serve the agent endpoint from the Graphshell host process (Windows named
-  pipe, Unix socket) rather than a standalone bin.
-- Own the lifecycle the wrapper currently fakes: start at host start, survive
-  a crash, and stop for real when the host stops.
-- Add the per-use confirmation UI. `UnlockTier::PerUse` slots currently
-  **refuse to sign**, because signing silently would make the tier a lie, so
-  the tier is unusable until a host can ask.
-- Add the vault pane and lock/unlock control.
-- Retire the scheduled task and the `personae-agent` bin's launch role in the
-  same change that lands the above, not before.
+Three specifics from this entry that H4's file list does not spell out, kept
+here so they are not lost in the fold:
 
-**Done when:** a headed Graphshell run serves a real `ssh` authentication from
-a vault slot with the scheduled task stopped and the stock agent service
-disabled, a PerUse slot prompts and signs, and killing the host stops the
-endpoint rather than leaving an orphan.
-
-**Not gated on the carrier work.** This is host-side and independent of
-G5-G7; it is sequenced last only because it is newest.
+- `personae::agent` is a library module precisely so a resident host can serve
+  the endpoint **in-process** rather than as a separate install.
+- The lifecycle the interim scheduled task currently fakes is real work: start
+  with the host, survive a crash, and stop for real when the host stops. That
+  task's own plan calls it "interim dogfood scaffolding only, removed when the
+  host adoption lands", and retiring it belongs in the same change that
+  replaces it, not before.
+- `UnlockTier::PerUse` slots **refuse to sign** today, because signing silently
+  would make the tier a lie. So that tier is unusable rather than merely
+  unpolished until a host exists to ask, which makes the confirmation UI a
+  correctness item and not a nicety.
 
 ## 9. Repository boundary audit
 

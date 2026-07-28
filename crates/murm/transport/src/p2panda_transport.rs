@@ -55,7 +55,9 @@ use p2panda_core::{SigningKey, Topic, VerifyingKey};
 use p2panda_net::addrs::NodeInfo;
 use p2panda_net::discovery::DiscoveryConfig;
 use p2panda_net::gossip::{Gossip, GossipHandle};
-use p2panda_net::iroh_mdns::MdnsDiscoveryMode;
+// Re-exported: [`P2pandaTransportBuilder::mdns`] is public but its argument
+// type was not, so no consumer outside this crate could call it.
+pub use p2panda_net::iroh_mdns::MdnsDiscoveryMode;
 use p2panda_net::{AddressBook, Discovery, Endpoint, MdnsDiscovery};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};

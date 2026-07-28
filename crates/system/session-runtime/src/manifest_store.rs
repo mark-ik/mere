@@ -402,8 +402,8 @@ impl ManifestStore {
         }
         fs::rename(&source, &target)?;
         let text = fs::read_to_string(target.join(MANIFEST_FILE))?;
-        let manifest: GraphSessionManifest =
-            serde_json::from_str(&text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let manifest: GraphSessionManifest = serde_json::from_str(&text)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         self.manifests.insert(manifest.session_id, manifest);
         Ok(true)
     }
@@ -569,7 +569,11 @@ mod tests {
         store.flush_dirty().unwrap();
         // A sibling session file inside the dir must survive the round trip
         // (the whole directory moves, sidecars and all).
-        fs::write(root.join(sid.as_uuid().to_string()).join("facets.json"), "{}").unwrap();
+        fs::write(
+            root.join(sid.as_uuid().to_string()).join("facets.json"),
+            "{}",
+        )
+        .unwrap();
 
         store.move_to_trash(sid).unwrap();
         let listed = store.list_trash();
@@ -579,9 +583,15 @@ mod tests {
 
         assert!(store.restore_from_trash(sid).unwrap());
         assert!(store.get(sid).is_some(), "the manifest re-listed in memory");
-        assert_eq!(store.get(sid).unwrap().root_graph_id, gid, "identity intact");
+        assert_eq!(
+            store.get(sid).unwrap().root_graph_id,
+            gid,
+            "identity intact"
+        );
         assert!(
-            root.join(sid.as_uuid().to_string()).join("facets.json").exists(),
+            root.join(sid.as_uuid().to_string())
+                .join("facets.json")
+                .exists(),
             "the session's sidecars came back with it"
         );
         assert!(store.list_trash().is_empty(), "the trash entry is consumed");

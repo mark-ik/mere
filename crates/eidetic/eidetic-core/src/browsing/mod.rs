@@ -56,9 +56,7 @@ pub async fn bootstrap_browsing_schema(store: &mut dyn Store) -> Result<()> {
     // Write the payload bytes verbatim — re-serialization could reorder JSON
     // keys and break the hash anchor.
     let local_key = format!("blob:{}", Hash::of(BROWSING_TRACE_SCHEMA_PAYLOAD).to_hex());
-    store
-        .put(&local_key, BROWSING_TRACE_SCHEMA_PAYLOAD)
-        .await?;
+    store.put(&local_key, BROWSING_TRACE_SCHEMA_PAYLOAD).await?;
     let manifest = crate::manifest::BlobManifest {
         id,
         schema: *crate::schema_def::META_SCHEMA_REF,

@@ -100,17 +100,27 @@ fn timing_tokens_per_second_cpu_vs_gpu() {
 
     let cpu = load_provider::<Cpu>("burn-ndarray");
     let t = std::time::Instant::now();
-    let out_cpu = cpu.generate(&request(prompt, tokens)).expect("cpu generate");
+    let out_cpu = cpu
+        .generate(&request(prompt, tokens))
+        .expect("cpu generate");
     let cpu_ms = t.elapsed().as_millis();
 
     let gpu = load_provider::<Gpu>("burn-wgpu");
     // Warmup: one short generation so kernel compilation is not billed.
     let _ = gpu.generate(&request(prompt, 2)).expect("gpu warmup");
     let t = std::time::Instant::now();
-    let out_gpu = gpu.generate(&request(prompt, tokens)).expect("gpu generate");
+    let out_gpu = gpu
+        .generate(&request(prompt, tokens))
+        .expect("gpu generate");
     let gpu_ms = t.elapsed().as_millis();
 
-    println!("cpu: {tokens} tokens in {cpu_ms} ms ({:.2} tok/s): {out_cpu:?}", tokens as f64 * 1000.0 / cpu_ms as f64);
-    println!("gpu: {tokens} tokens in {gpu_ms} ms ({:.2} tok/s): {out_gpu:?}", tokens as f64 * 1000.0 / gpu_ms as f64);
+    println!(
+        "cpu: {tokens} tokens in {cpu_ms} ms ({:.2} tok/s): {out_cpu:?}",
+        tokens as f64 * 1000.0 / cpu_ms as f64
+    );
+    println!(
+        "gpu: {tokens} tokens in {gpu_ms} ms ({:.2} tok/s): {out_gpu:?}",
+        tokens as f64 * 1000.0 / gpu_ms as f64
+    );
     assert_eq!(out_cpu, out_gpu, "greedy output must match across backends");
 }

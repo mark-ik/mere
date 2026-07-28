@@ -4,8 +4,8 @@
 //! [`crate::scenes`] and its *format* in [`crate::scene_spec`]; this is the simulation side. Split
 //! from `lib.rs` to keep the simulation core under the per-file size ceiling. (Physics scenes.)
 
-use euclid::default::Point2D;
 use crate::NodeKey;
+use euclid::default::Point2D;
 use rapier2d::prelude::*;
 
 use crate::{

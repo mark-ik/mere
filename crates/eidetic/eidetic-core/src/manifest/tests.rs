@@ -37,12 +37,9 @@ fn manifest_for(blob: &[u8], sources: Vec<BlobSource>) -> BlobManifest {
     }
 }
 
-    // The in-memory test store is muniment's (2026-07-12): eidetic's
-    // hand-rolled one was the same map behind the same seam.
-    use muniment::MemoryBackend as InMemoryStore;
-
-
-
+// The in-memory test store is muniment's (2026-07-12): eidetic's
+// hand-rolled one was the same map behind the same seam.
+use muniment::MemoryBackend as InMemoryStore;
 
 /// Test fetcher that returns canned bytes for `Iroh` and `Https` sources
 /// keyed by their identifier. Returns `None` for any source it isn't

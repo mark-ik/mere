@@ -130,7 +130,10 @@ mod tests {
                 .map(|&(_, _, w)| w)
                 .unwrap()
         };
-        assert!(w(1, 2) >= w(1, 3), "closer pair should weigh at least as much");
+        assert!(
+            w(1, 2) >= w(1, 3),
+            "closer pair should weigh at least as much"
+        );
     }
 
     #[test]

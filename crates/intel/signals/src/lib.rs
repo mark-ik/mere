@@ -96,7 +96,11 @@ mod substrate_tests {
         let h = g.insert(Container::new("h"));
         for leaf in ["a", "b", "c"] {
             let k = g.insert(Container::new(leaf));
-            g.connect(k, h, Relation::new(RelationClass::recognized(Recognized::Cites)));
+            g.connect(
+                k,
+                h,
+                Relation::new(RelationClass::recognized(Recognized::Cites)),
+            );
         }
 
         // Degree importance ranks the hub top (it has all three edges).

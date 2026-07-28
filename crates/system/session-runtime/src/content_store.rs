@@ -56,9 +56,7 @@ pub async fn load_content(store: &mut dyn Store, url: &str) -> Result<Option<Sto
 pub async fn save_content(store: &mut dyn Store, url: &str, content: &StoredContent) -> Result<()> {
     store.put(&body_key(url), &content.body).await?;
     if let Some(content_type) = &content.content_type {
-        store
-            .put(&ct_key(url), content_type.as_bytes())
-            .await?;
+        store.put(&ct_key(url), content_type.as_bytes()).await?;
     }
     Ok(())
 }
@@ -89,11 +87,8 @@ mod tests {
     /// Minimal in-memory [`Store`] for the round-trip tests (mirrors the one in
     /// eidetic's own tests).
     // The in-memory test store is muniment's (2026-07-12): the
-// hand-rolled one was the same map behind the same seam.
-use muniment::MemoryBackend as MemStore;
-
-
-
+    // hand-rolled one was the same map behind the same seam.
+    use muniment::MemoryBackend as MemStore;
 
     #[test]
     fn evict_drops_cached_content() {

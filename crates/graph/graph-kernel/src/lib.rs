@@ -8,7 +8,8 @@
 //!
 //! Forbidden in this crate:
 //! - `Uuid::new_v4()` outside `#[cfg(not(target_arch = "wasm32"))]` (WASM hosts provide IDs)
-//! - `std::time::Instant` (panics on WASM — use `SystemTime` or accept time from host)
+//! - `std::time::{Instant, SystemTime}::now()` (panics on browser WASM — use
+//!   `PortableInstant` or the crate's `web_time`-backed wall-clock helpers)
 //! - `#[wasm_bindgen]` / UniFFI annotations (belong in wrapper crates)
 //! - any platform I/O (file, network, browser APIs)
 

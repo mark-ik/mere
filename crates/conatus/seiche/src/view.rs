@@ -16,8 +16,8 @@
 
 use std::collections::HashMap;
 
-use euclid::default::{Box2D, Point2D};
 use crate::NodeKey;
+use euclid::default::{Box2D, Point2D};
 
 use crate::{NODE_BODY_RADIUS, NodeCollider, SceneBodyId};
 

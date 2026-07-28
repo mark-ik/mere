@@ -1,4 +1,3 @@
-
 //! `BertModel` — embeddings + encoder + sentence pooling.
 //!
 //! For sentence-transformers compatibility this model produces sentence

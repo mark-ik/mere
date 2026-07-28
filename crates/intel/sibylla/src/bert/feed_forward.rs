@@ -1,4 +1,3 @@
-
 //! BERT feed-forward block: intermediate (Linear + GELU) + output
 //! (Linear + residual + LayerNorm).
 //!

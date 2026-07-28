@@ -242,8 +242,11 @@ pub fn read_arrangement_materials(store: &NodeFacetStore) -> Vec<(Uuid, (f32, f3
         let restitution = value.get("restitution")?.as_f64()? as f32;
         let friction = value.get("friction")?.as_f64()? as f32;
         let density = value.get("density")?.as_f64()? as f32;
-        (restitution.is_finite() && friction.is_finite() && density.is_finite())
-            .then_some((restitution, friction, density))
+        (restitution.is_finite() && friction.is_finite() && density.is_finite()).then_some((
+            restitution,
+            friction,
+            density,
+        ))
     })
 }
 
@@ -323,7 +326,12 @@ mod tests {
         let mut store = NodeFacetStore::new();
         let a = Uuid::from_u128(1);
         store
-            .set(a, FacetId::new("web.viewer"), json!({ "mode": "reader" }), &AcceptAll)
+            .set(
+                a,
+                FacetId::new("web.viewer"),
+                json!({ "mode": "reader" }),
+                &AcceptAll,
+            )
             .unwrap();
         write_arrangement_positions(&mut store, [(a, (3.0, 4.0))]);
         write_arrangement_positions(&mut store, []);
@@ -343,7 +351,12 @@ mod tests {
         let bad_nan = Uuid::from_u128(3);
         let facet = arrangement_position_facet();
         store
-            .set(good, facet.clone(), json!({ "x": 7.0, "y": 8.0 }), &AcceptAll)
+            .set(
+                good,
+                facet.clone(),
+                json!({ "x": 7.0, "y": 8.0 }),
+                &AcceptAll,
+            )
             .unwrap();
         store
             .set(bad_shape, facet.clone(), json!([7.0, 8.0]), &AcceptAll)
@@ -351,12 +364,14 @@ mod tests {
         // JSON has no NaN literal; a null coordinate stands in for the
         // unparsable case (as_f64 fails the same way).
         store
-            .set(bad_nan, facet.clone(), json!({ "x": null, "y": 1.0 }), &AcceptAll)
+            .set(
+                bad_nan,
+                facet.clone(),
+                json!({ "x": null, "y": 1.0 }),
+                &AcceptAll,
+            )
             .unwrap();
-        assert_eq!(
-            read_arrangement_positions(&store),
-            vec![(good, (7.0, 8.0))]
-        );
+        assert_eq!(read_arrangement_positions(&store), vec![(good, (7.0, 8.0))]);
     }
 
     #[test]
@@ -365,7 +380,10 @@ mod tests {
         let a = Uuid::from_u128(1);
         write_arrangement_sizes(&mut store, [(a, 48.0)]);
         write_arrangement_sprites(&mut store, [(a, "data:image/png;base64,AAAA")]);
-        write_arrangement_sprite_hulls(&mut store, [(a, vec![(-0.5, -0.5), (0.5, 0.0), (0.0, 0.5)])]);
+        write_arrangement_sprite_hulls(
+            &mut store,
+            [(a, vec![(-0.5, -0.5), (0.5, 0.0), (0.0, 0.5)])],
+        );
         write_arrangement_materials(&mut store, [(a, (0.8, 0.2, 3.0))]);
         write_arrangement_faces(&mut store, [(a, "sprite")]);
 
@@ -378,8 +396,14 @@ mod tests {
             read_arrangement_sprite_hulls(&store),
             vec![(a, vec![(-0.5, -0.5), (0.5, 0.0), (0.0, 0.5)])]
         );
-        assert_eq!(read_arrangement_materials(&store), vec![(a, (0.8, 0.2, 3.0))]);
-        assert_eq!(read_arrangement_faces(&store), vec![(a, "sprite".to_string())]);
+        assert_eq!(
+            read_arrangement_materials(&store),
+            vec![(a, (0.8, 0.2, 3.0))]
+        );
+        assert_eq!(
+            read_arrangement_faces(&store),
+            vec![(a, "sprite".to_string())]
+        );
     }
 
     #[test]
@@ -391,7 +415,10 @@ mod tests {
         // Rewriting sizes to empty must not disturb the face facet.
         write_arrangement_sizes(&mut store, []);
         assert!(read_arrangement_sizes(&store).is_empty());
-        assert_eq!(read_arrangement_faces(&store), vec![(a, "bare".to_string())]);
+        assert_eq!(
+            read_arrangement_faces(&store),
+            vec![(a, "bare".to_string())]
+        );
     }
 
     #[test]
@@ -419,7 +446,12 @@ mod tests {
         let departed = Uuid::from_u128(2);
         write_arrangement_positions(&mut store, [(live, (1.0, 2.0)), (departed, (3.0, 4.0))]);
         store
-            .set(departed, FacetId::new("some-mod.exotic"), json!(true), &AcceptAll)
+            .set(
+                departed,
+                FacetId::new("some-mod.exotic"),
+                json!(true),
+                &AcceptAll,
+            )
             .unwrap();
         let present: BTreeSet<Uuid> = [live].into_iter().collect();
         retain_present_nodes(&mut store, &present);

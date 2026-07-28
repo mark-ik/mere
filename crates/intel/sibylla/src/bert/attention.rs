@@ -1,4 +1,3 @@
-
 //! BERT multi-head self-attention.
 //!
 //! ```text

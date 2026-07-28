@@ -78,11 +78,7 @@ pub fn save_node_facets(session_dir: &Path, facets: &NodeFacetStore) -> io::Resu
 /// contribute nothing. The container-scoped `scene.*` carry is separate
 /// (`scene_facets::copy_scene_facets`) — container ids are not graph nodes, so
 /// no remap names them.
-pub fn copy_node_facets(
-    donor: &NodeFacetStore,
-    fork: &mut NodeFacetStore,
-    remap: &[(Uuid, Uuid)],
-) {
+pub fn copy_node_facets(donor: &NodeFacetStore, fork: &mut NodeFacetStore, remap: &[(Uuid, Uuid)]) {
     for (source, new) in remap {
         let Some(facets) = donor.facets_of(source) else {
             continue;
@@ -127,10 +123,20 @@ mod tests {
         let mut store = NodeFacetStore::new();
         let node = Uuid::from_u128(0xa);
         store
-            .set(node, FacetId::new("web.viewer"), json!({ "mode": "reader" }), &AcceptAll)
+            .set(
+                node,
+                FacetId::new("web.viewer"),
+                json!({ "mode": "reader" }),
+                &AcceptAll,
+            )
             .unwrap();
         store
-            .set(node, FacetId::new("arrangement.pin"), json!(true), &AcceptAll)
+            .set(
+                node,
+                FacetId::new("arrangement.pin"),
+                json!(true),
+                &AcceptAll,
+            )
             .unwrap();
         store
     }
@@ -165,7 +171,12 @@ mod tests {
         let mut store = NodeFacetStore::new();
         let node = Uuid::from_u128(0xb);
         store
-            .set(node, FacetId::new("some-mod.exotic"), json!({ "k": [1, 2] }), &AcceptAll)
+            .set(
+                node,
+                FacetId::new("some-mod.exotic"),
+                json!({ "k": [1, 2] }),
+                &AcceptAll,
+            )
             .unwrap();
         save_node_facets(&dir, &store).unwrap();
         let restored = load_node_facets(&dir).unwrap().unwrap();
@@ -182,16 +193,31 @@ mod tests {
         let (src_a, src_b, unforked) = (Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(3));
         let (new_a, new_b) = (Uuid::from_u128(0x11), Uuid::from_u128(0x12));
         donor
-            .set(src_a, FacetId::new("arrangement.position"), json!({"x": 5.0, "y": 6.0}), &AcceptAll)
+            .set(
+                src_a,
+                FacetId::new("arrangement.position"),
+                json!({"x": 5.0, "y": 6.0}),
+                &AcceptAll,
+            )
             .unwrap();
         donor
-            .set(src_a, FacetId::new("some-mod.exotic"), json!({"k": 1}), &AcceptAll)
+            .set(
+                src_a,
+                FacetId::new("some-mod.exotic"),
+                json!({"k": 1}),
+                &AcceptAll,
+            )
             .unwrap();
         donor
             .set(src_b, FacetId::new("web.content"), json!(true), &AcceptAll)
             .unwrap();
         donor
-            .set(unforked, FacetId::new("web.content"), json!(true), &AcceptAll)
+            .set(
+                unforked,
+                FacetId::new("web.content"),
+                json!(true),
+                &AcceptAll,
+            )
             .unwrap();
 
         let mut fork = NodeFacetStore::new();
@@ -207,7 +233,10 @@ mod tests {
             Some(&json!({"k": 1})),
             "foreign namespaces ride too — the whole character"
         );
-        assert_eq!(fork.get(&new_b, &FacetId::new("web.content")), Some(&json!(true)));
+        assert_eq!(
+            fork.get(&new_b, &FacetId::new("web.content")),
+            Some(&json!(true))
+        );
         assert!(
             fork.facets_of(&unforked).is_none() && fork.facets_of(&src_a).is_none(),
             "nodes outside the remap (and donor ids themselves) do not appear"

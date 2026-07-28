@@ -38,6 +38,7 @@
 //! honest either way: revocation is by certificate id, so the server's refusal
 //! is the same one a real owner would cause.
 
+use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use graphshell::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE, open_session};
@@ -61,7 +62,7 @@ use personae::delegation::{
 use personae::{IdentityProvider, InMemoryProvider};
 use sceno::{Arrangement, InstanceId, Score};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use transport::p2panda_transport::P2pandaTransport;
+use transport::p2panda_transport::{MdnsDiscoveryMode, P2pandaTransport};
 use transport::{Transport, initiator_binding};
 
 const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -163,8 +164,13 @@ async fn serve(
     network: NetworkId,
     revoked: bool,
 ) -> Result<(), String> {
+    // mDNS on: peers on this LAN populate each other's address books without a
+    // pasted ticket. The ticket is still printed, because discovery is a
+    // convenience and a hand-carried ticket is the fallback that always works
+    // (and the only one that works across networks).
     let carrier = P2pandaTransport::builder_from_seed(seed)
         .alpns(vec![projection_alpn()])
+        .mdns(MdnsDiscoveryMode::Active)
         .bind()
         .await
         .map_err(|e| format!("bind: {e}"))?;
@@ -176,7 +182,7 @@ async fn serve(
     println!("  run on the other device:");
     println!("    g5_peer connect --peer {ticket}");
     if revoked {
-        println!("  the peer's grant will be revoked before its first request");
+        println!("  the grant will be revoked after session 2");
     }
     println!("  waiting for a peer...");
 
@@ -189,7 +195,10 @@ async fn serve(
         vec![profile()],
         None,
     );
-    let mut ledger = RevocationLedger::new();
+    // Shared, because the session loop re-reads it per request: an owner who
+    // revokes mid-session is answered at the next request rather than at the
+    // next reconnect.
+    let revocations = RwLock::new(RevocationLedger::new());
 
     // One endpoint across every session, because that is what makes a resume
     // a resume: its diff history and current revision have to outlive the
@@ -201,9 +210,11 @@ async fn serve(
     // not own the carrier; see `graphshell::carrier`.
     for attempt in 1.. {
         println!("  waiting for session {attempt}...");
-        let outcome = accept_projection_session(&carrier, &policy, &ledger, now_ms(), 0)
-            .await
-            .map_err(|e| format!("accept: {e}"))?;
+        let outcome = {
+            let ledger = revocations.read().expect("ledger lock");
+            accept_projection_session(&carrier, &policy, &ledger, now_ms(), 0).await
+        }
+        .map_err(|e| format!("accept: {e}"))?;
         let mut session = match outcome {
             Ok(session) => session,
             Err(refusal) => {
@@ -225,29 +236,30 @@ async fn serve(
 
         // Revoked before the loop, so the ledger the loop consults already
         // carries it. A real owner revokes out of band; the effect is the
-        // same, because the check runs per request rather than at admission.
-        // Revoked while the peer was away, between its two sessions, which
-        // is when an owner realistically withdraws a grant. Session 1 is
-        // served in full; session 2 is refused at its first request.
-        if revoked && attempt == 2 && ledger.is_empty() {
-            if let Some(certificate) = session.claims.delegations.first() {
-                let statement = SignedDelegationRevocation::issue(
-                    &owner,
-                    DelegationRevocation::new(
-                        certificate.certificate.id(),
-                        owner.master_public_key().to_bytes(),
-                        certificate.certificate.scope.clone(),
-                        now_ms(),
-                        [12; 32],
-                    ),
-                )
-                .expect("issue revocation");
-                assert!(
-                    ledger.fold(&statement),
-                    "the owner's own revocation verifies"
-                );
-                println!("  grant revoked");
-            }
+        // Revoked after session 2, so the peer's *next* request is the one
+        // refused. Session 3's first request is an `IntentInvocation`, which
+        // is the verb G5's done-when actually names: the earlier arrangement
+        // refused whatever came first, and that was always an `Open`.
+        if revoked
+            && attempt == 3
+            && let Some(certificate) = session.claims.delegations.first()
+        {
+            let statement = SignedDelegationRevocation::issue(
+                &owner,
+                DelegationRevocation::new(
+                    certificate.certificate.id(),
+                    owner.master_public_key().to_bytes(),
+                    certificate.certificate.scope.clone(),
+                    now_ms(),
+                    [12; 32],
+                ),
+            )
+            .expect("issue revocation");
+            assert!(
+                revocations.write().expect("ledger lock").fold(&statement),
+                "the owner's own revocation verifies"
+            );
+            println!("  grant revoked");
         }
 
         let mut resume = |endpoint: &mut ResumeFixtureEndpoint, request| {
@@ -256,7 +268,7 @@ async fn serve(
         let summary = serve_admitted_session(
             &mut session,
             &authority,
-            &ledger,
+            &revocations,
             &mut endpoint,
             &mut resume,
             now_ms,
@@ -285,6 +297,7 @@ async fn connect(
 ) -> Result<(), String> {
     let carrier = P2pandaTransport::builder_from_seed(seed)
         .alpns(vec![projection_alpn()])
+        .mdns(MdnsDiscoveryMode::Active)
         .bind()
         .await
         .map_err(|e| format!("bind: {e}"))?;
@@ -344,22 +357,38 @@ async fn connect(
             ),
             // A real IntentInvocation, so the revoked run refuses the verb the
             // done-when actually names rather than a stand-in.
-            (
-                6,
-                CarrierRequestBody::Intent(IntentInvocation {
-                    session: ProjectionSession(RESUME_SESSION.into()),
-                    target: InstanceId(1),
-                    observed_epoch: SceneEpoch(3),
-                    observed_revision: Revision(3),
-                    intent: "fixture.inspect".to_string(),
-                    payload: Vec::new(),
-                }),
-            ),
+            (6, intent_body()),
             (7, CarrierRequestBody::Close),
         ],
     )
     .await?;
+
+    // A third session whose *first* request is an intent. In the granted run
+    // it is accepted; in the revoked run it is the verb the refusal lands on,
+    // which is what G5's done-when names. Earlier arrangements always refused
+    // an `Open`, because the gate fires on whatever arrives first.
+    println!("  --- session 3: intent first ---");
+    run_session(
+        &carrier,
+        peer,
+        &me,
+        &owner,
+        network,
+        vec![(8, intent_body()), (9, CarrierRequestBody::Close)],
+    )
+    .await?;
     Ok(())
+}
+
+fn intent_body() -> CarrierRequestBody {
+    CarrierRequestBody::Intent(IntentInvocation {
+        session: ProjectionSession(RESUME_SESSION.into()),
+        target: InstanceId(1),
+        observed_epoch: SceneEpoch(3),
+        observed_revision: Revision(3),
+        intent: "fixture.inspect".to_string(),
+        payload: Vec::new(),
+    })
 }
 
 /// The endpoint's own projection session, which is independent of admission:

@@ -83,6 +83,7 @@ members = [
     "crates/graphshell/graphshell-endpoint",
     "crates/graphshell/graphshell-stdio",
     "ports/graphshell",
+    "ports/graphshell/web",
     "ports/knot",
 ]
 exclude = [

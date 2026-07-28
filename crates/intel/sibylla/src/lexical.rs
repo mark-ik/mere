@@ -163,7 +163,10 @@ mod tests {
         let p = LexicalEmbeddingProvider::new(256).unwrap();
         let a = p.embed_one("Rust, Async!").unwrap();
         let b = p.embed_one("rust async").unwrap();
-        assert!(cosine(&a, &b) > 0.999, "case/punct should fold to the same tokens");
+        assert!(
+            cosine(&a, &b) > 0.999,
+            "case/punct should fold to the same tokens"
+        );
     }
 
     #[test]
@@ -172,7 +175,10 @@ mod tests {
         for text in ["", "   ", "!!! ---"] {
             let v = p.embed_one(text).unwrap();
             assert_eq!(v.len(), 64);
-            assert!(v.iter().all(|&x| x == 0.0), "tokenless {text:?} → zero vector");
+            assert!(
+                v.iter().all(|&x| x == 0.0),
+                "tokenless {text:?} → zero vector"
+            );
         }
     }
 

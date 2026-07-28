@@ -1,4 +1,3 @@
-
 //! BERT transformer layer — composes attention with feed-forward.
 //!
 //! ```text

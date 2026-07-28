@@ -324,12 +324,16 @@ impl Graph {
 
     /// Iterate outgoing neighbor keys for a node
     pub fn out_neighbors(&self, key: NodeKey) -> impl Iterator<Item = NodeKey> + '_ {
-        self.inner.inner().neighbors_directed(key, Direction::Outgoing)
+        self.inner
+            .inner()
+            .neighbors_directed(key, Direction::Outgoing)
     }
 
     /// Iterate incoming neighbor keys for a node
     pub fn in_neighbors(&self, key: NodeKey) -> impl Iterator<Item = NodeKey> + '_ {
-        self.inner.inner().neighbors_directed(key, Direction::Incoming)
+        self.inner
+            .inner()
+            .neighbors_directed(key, Direction::Incoming)
     }
 
     /// Iterate undirected neighbor keys for a node.
@@ -413,9 +417,11 @@ impl Graph {
         if self.get_node(source).is_none() {
             return HashMap::new();
         }
-        dijkstra(&UndirectedAdaptor(self.inner.inner()), source, None, |_| 1_usize)
-            .into_iter()
-            .collect()
+        dijkstra(&UndirectedAdaptor(self.inner.inner()), source, None, |_| {
+            1_usize
+        })
+        .into_iter()
+        .collect()
     }
 
     /// Nodes with no incoming or outgoing edges.

@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -129,10 +128,7 @@ fn statement_minter_salt() -> u64 {
 ///   parsing this id, so legacy `{ts:016x}-{nonce:016x}` ids already in
 ///   snapshots remain valid handles forever.
 pub(crate) fn mint_local_statement_id() -> String {
-    let timestamp_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
+    let timestamp_ms = crate::time::unix_epoch_millis();
     let salt = statement_minter_salt();
     let nonce = NEXT_LOCAL_STATEMENT_NONCE.fetch_add(1, Ordering::Relaxed);
     format!("{timestamp_ms:012x}-{salt:016x}-{nonce:016x}")
@@ -527,7 +523,10 @@ impl NodeProperty {
     serde::Serialize,
     serde::Deserialize,
 )]
-#[rkyv(compare(PartialEq, PartialOrd), derive(Debug, PartialEq, Eq, PartialOrd, Ord))]
+#[rkyv(
+    compare(PartialEq, PartialOrd),
+    derive(Debug, PartialEq, Eq, PartialOrd, Ord)
+)]
 pub enum ImageRole {
     Favicon,
     Preview,

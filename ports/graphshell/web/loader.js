@@ -1,0 +1,74 @@
+const originalError = console.error.bind(console);
+
+console.error = (...args) => {
+  if (!document.title.startsWith("GRAPHSHELL H3 FAIL")) {
+    document.title = `GRAPHSHELL H3 FAIL: ${args.map(String).join(" ").slice(0, 240)}`;
+  }
+  originalError(...args);
+};
+
+window.addEventListener("error", (event) => {
+  document.title = `GRAPHSHELL H3 FAIL: ${event.message}`;
+});
+
+function semanticNode(element) {
+  const role =
+    element.getAttribute("role") ||
+    ({ BUTTON: "button", NAV: "navigation", MAIN: "main", SECTION: "region" }[
+      element.tagName
+    ] ?? null);
+  const label =
+    element.getAttribute("aria-label") ||
+    (element.matches("button, h1, h2, dd") ? element.textContent.trim() : null);
+  const children = [...element.children]
+    .filter((child) => child.getAttribute("aria-hidden") !== "true")
+    .map(semanticNode)
+    .filter((child) => child.role || child.label || child.children.length);
+  return {
+    ...(role ? { role } : {}),
+    ...(label ? { label } : {}),
+    ...(element.id ? { id: element.id } : {}),
+    ...(element.hasAttribute("aria-pressed")
+      ? { pressed: element.getAttribute("aria-pressed") === "true" }
+      : {}),
+    children,
+  };
+}
+
+window.graphshellSemanticTree = () =>
+  semanticNode(document.getElementById("semantic-host"));
+
+window.graphshellReceipt = () => ({
+  title: document.title,
+  ready: document.body.dataset.ready === "true",
+  session: document.body.dataset.session,
+  detailOpen: document.body.dataset.detailOpen === "true",
+  actionCount: Number(document.body.dataset.actionCount || 0),
+  camera: document.getElementById("graphshell-canvas").dataset.camera,
+  focusedNode: document.getElementById("graphshell-canvas").dataset.focusedNode,
+  product: {
+    status: document.body.dataset.productStatus,
+    nodeCount: Number(document.body.dataset.nodeCount || 0),
+    filterCount: Number(document.body.dataset.filterCount || 0),
+    layout: document.body.dataset.layout,
+    physicsPaused: document.body.dataset.physicsPaused === "true",
+    selectedCount: Number(document.body.dataset.selectedCount || 0),
+    exportBytes: Number(document.body.dataset.exportBytes || 0),
+    importedNodes: Number(document.body.dataset.importedNodes || 0),
+    relationFamily: document.body.dataset.relationFamily,
+    face: document.body.dataset.face,
+  },
+  viewport: {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  },
+  semantics: window.graphshellSemanticTree(),
+});
+
+try {
+  const module = await import("./pkg/graphshell_web.js");
+  await module.default();
+} catch (error) {
+  document.title = `GRAPHSHELL H3 FAIL: ${error}`;
+  originalError(error);
+}

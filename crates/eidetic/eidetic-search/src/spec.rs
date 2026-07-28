@@ -54,9 +54,7 @@ pub async fn bootstrap_search_schema(store: &mut dyn Store) -> eidetic::Result<(
         return Ok(());
     }
     let local_key = format!("blob:{}", Hash::of(SEARCH_INDEX_SCHEMA_PAYLOAD).to_hex());
-    store
-        .put(&local_key, SEARCH_INDEX_SCHEMA_PAYLOAD)
-        .await?;
+    store.put(&local_key, SEARCH_INDEX_SCHEMA_PAYLOAD).await?;
     let manifest = eidetic::manifest::BlobManifest {
         id,
         schema: *eidetic::schema_def::META_SCHEMA_REF,

@@ -5,8 +5,8 @@
 
 use std::collections::HashSet;
 
-use euclid::default::Point2D;
 use crate::NodeKey;
+use euclid::default::Point2D;
 use rapier2d::prelude::*;
 
 use crate::{
@@ -180,6 +180,10 @@ mod tests {
             after > before,
             "exclusion pushed the two nodes apart with no graph ({after} > {before})"
         );
-        assert_eq!(sim.positions().count(), 2, "positions read back, still no graph");
+        assert_eq!(
+            sim.positions().count(),
+            2,
+            "positions read back, still no graph"
+        );
     }
 }

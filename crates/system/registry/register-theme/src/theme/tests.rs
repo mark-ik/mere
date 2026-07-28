@@ -250,9 +250,8 @@ fn default_mode_for_def_matches_legacy_builtins() {
     // Activating a legacy built-in re-seeds the mode from its def, so the
     // four pre-modes themes keep their meaning.
     let registry = ThemeRegistry::default();
-    let mode_of = |id: &str| {
-        crate::seed::default_mode_for_def(registry.theme_def(id).expect("builtin def"))
-    };
+    let mode_of =
+        |id: &str| crate::seed::default_mode_for_def(registry.theme_def(id).expect("builtin def"));
     assert_eq!(mode_of(THEME_ID_DEFAULT), Mode::Dark);
     assert_eq!(mode_of(THEME_ID_DARK), Mode::Dark);
     assert_eq!(mode_of(THEME_ID_LIGHT), Mode::Light);

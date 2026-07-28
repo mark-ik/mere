@@ -23,7 +23,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 const USAGE: &str = "\
 usage: luggage-manifest --artifact <path> --version <semver> --format <fmt> [options]

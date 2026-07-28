@@ -114,7 +114,10 @@ where
     K: Hash + Eq + Clone,
     B: Backend,
 {
-    let entries: Vec<(K, Vec<f32>)> = index.iter().map(|(key, v)| (key.clone(), v.clone())).collect();
+    let entries: Vec<(K, Vec<f32>)> = index
+        .iter()
+        .map(|(key, v)| (key.clone(), v.clone()))
+        .collect();
     let corpus: Vec<Vec<f32>> = entries.iter().map(|(_, v)| v.clone()).collect();
     cosine_top_k::<B>(queries, &corpus, k, device)
         .into_iter()
@@ -143,7 +146,10 @@ where
     K: Hash + Eq + Clone,
     B: Backend,
 {
-    let entries: Vec<(K, Vec<f32>)> = index.iter().map(|(key, v)| (key.clone(), v.clone())).collect();
+    let entries: Vec<(K, Vec<f32>)> = index
+        .iter()
+        .map(|(key, v)| (key.clone(), v.clone()))
+        .collect();
     if entries.len() < 2 {
         return Vec::new();
     }
@@ -181,11 +187,11 @@ mod tests {
     /// ambiguity), plus the query.
     fn fixture() -> (Vec<Vec<f32>>, Vec<Vec<f32>>) {
         let corpus = vec![
-            vec![1.0, 0.0, 0.0],  // 0: cosine 1.000 to the query
-            vec![0.9, 0.1, 0.0],  // 1: cosine ~0.994
-            vec![0.5, 0.5, 0.0],  // 2: cosine ~0.707
-            vec![0.0, 1.0, 0.0],  // 3: cosine 0
-            vec![0.0, 0.0, 1.0],  // 4: cosine 0
+            vec![1.0, 0.0, 0.0], // 0: cosine 1.000 to the query
+            vec![0.9, 0.1, 0.0], // 1: cosine ~0.994
+            vec![0.5, 0.5, 0.0], // 2: cosine ~0.707
+            vec![0.0, 1.0, 0.0], // 3: cosine 0
+            vec![0.0, 0.0, 1.0], // 4: cosine 0
         ];
         let queries = vec![vec![1.0, 0.0, 0.0]];
         (queries, corpus)
@@ -220,7 +226,11 @@ mod tests {
         let got = cosine_top_k::<B>(&corpus, &corpus, 1, &Default::default());
         for (i, row) in got.iter().enumerate() {
             assert_eq!(row[0].0, i, "item {i} should be its own nearest");
-            assert!((row[0].1 - 1.0).abs() < 1e-5, "self-cosine ~1, got {}", row[0].1);
+            assert!(
+                (row[0].1 - 1.0).abs() < 1e-5,
+                "self-cosine ~1, got {}",
+                row[0].1
+            );
         }
     }
 
@@ -241,7 +251,10 @@ mod tests {
             vec![Vec::<(usize, f32)>::new()]
         );
         // k clamps to the corpus size.
-        assert_eq!(cosine_top_k::<B>(&[vec![1.0, 0.0]], &corpus, 99, &dev)[0].len(), 2);
+        assert_eq!(
+            cosine_top_k::<B>(&[vec![1.0, 0.0]], &corpus, 99, &dev)[0].len(),
+            2
+        );
     }
 
     #[test]
@@ -300,9 +313,17 @@ mod tests {
                 .collect()
         };
         let (cm, gm) = (canon(&cpu), canon(&gpu));
-        assert_eq!(cm.len(), gm.len(), "same pair count: cpu {} gpu {}", cm.len(), gm.len());
+        assert_eq!(
+            cm.len(),
+            gm.len(),
+            "same pair count: cpu {} gpu {}",
+            cm.len(),
+            gm.len()
+        );
         for (pair, cw) in &cm {
-            let gw = gm.get(pair).unwrap_or_else(|| panic!("gpu missing pair {pair:?}"));
+            let gw = gm
+                .get(pair)
+                .unwrap_or_else(|| panic!("gpu missing pair {pair:?}"));
             assert!((cw - gw).abs() < 1e-5, "weight {cw} vs {gw} for {pair:?}");
         }
     }

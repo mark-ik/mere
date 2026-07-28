@@ -14,14 +14,14 @@ use std::{
 
 use cargo_packager_utils::current_exe::current_exe;
 use http::{
-    HeaderName,
     header::{ACCEPT, USER_AGENT},
+    HeaderName,
 };
 use percent_encoding::{AsciiSet, CONTROLS};
 use reqwest::{
-    StatusCode,
     blocking::Client,
     header::{HeaderMap, HeaderValue},
+    StatusCode,
 };
 use semver::Version;
 use url::Url;
@@ -29,7 +29,7 @@ use url::Url;
 use crate::config::{Config, Feed};
 use crate::error::{Error, Result};
 use crate::install::Update;
-use crate::release::{MANIFEST_NAME, RemoteRelease};
+use crate::release::{RemoteRelease, MANIFEST_NAME};
 
 /// An [`Updater`] builder.
 pub struct UpdaterBuilder {
@@ -262,14 +262,12 @@ impl Updater {
     /// feed's `luggage.json.sig`, or `None` when the feed had none.
     fn verify_manifest(&self, bytes: &[u8], signature: Option<&str>) -> Result<()> {
         match signature {
-            Some(signature) => {
-                crate::signing::verify_bytes(
-                    bytes,
-                    &crate::signing::normalize_signature_file(signature),
-                    &self.config.pubkey,
-                )
-                .map_err(|_| Error::ManifestSignatureInvalid)
-            }
+            Some(signature) => crate::signing::verify_bytes(
+                bytes,
+                &crate::signing::normalize_signature_file(signature),
+                &self.config.pubkey,
+            )
+            .map_err(|_| Error::ManifestSignatureInvalid),
             None if self.config.require_signed_manifest => Err(Error::ManifestUnsigned),
             // Explicitly opted out: the caller accepted the downgrade risk.
             None => {
@@ -588,7 +586,8 @@ mod tests {
         let keypair = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
         if sign_it {
             let signature =
-                minisign::sign(None, &keypair.sk, std::io::Cursor::new(&bytes), None, None).unwrap();
+                minisign::sign(None, &keypair.sk, std::io::Cursor::new(&bytes), None, None)
+                    .unwrap();
             // As `cargo packager signer sign` leaves it: raw minisign text.
             std::fs::write(
                 dir.join(format!("{MANIFEST_NAME}.sig")),
@@ -596,8 +595,7 @@ mod tests {
             )
             .unwrap();
         }
-        base64::engine::general_purpose::STANDARD
-            .encode(keypair.pk.to_box().unwrap().to_string())
+        base64::engine::general_purpose::STANDARD.encode(keypair.pk.to_box().unwrap().to_string())
     }
 
     fn strict_updater(dir: &Path, pubkey: String) -> Updater {
@@ -661,11 +659,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         // Signed by the key this manifest came with, checked against another.
         write_signed_manifest(dir.path(), "0.2.0", true);
-        let other = write_signed_manifest(
-            &tempfile::tempdir().unwrap().keep(),
-            "0.2.0",
-            true,
-        );
+        let other = write_signed_manifest(&tempfile::tempdir().unwrap().keep(), "0.2.0", true);
         let err = strict_updater(dir.path(), other).check().unwrap_err();
         assert!(matches!(err, Error::ManifestSignatureInvalid), "got: {err}");
     }

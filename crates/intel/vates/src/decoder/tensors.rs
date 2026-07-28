@@ -113,7 +113,10 @@ mod tests {
         let t: Tensor<B, 1> = extract_1d(&view, 4, &device).unwrap();
         let out = t.into_data().to_vec::<f32>().unwrap();
         for (a, b) in out.iter().zip(&values) {
-            assert!((a - b).abs() < 0.02, "bf16 round-trip too lossy: {a} vs {b}");
+            assert!(
+                (a - b).abs() < 0.02,
+                "bf16 round-trip too lossy: {a} vs {b}"
+            );
         }
     }
 

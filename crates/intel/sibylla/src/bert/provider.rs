@@ -1,4 +1,3 @@
-
 //! [`BertEmbeddingProvider`] — Burn-generic BERT provider.
 //!
 //! End-to-end wiring is in place: the provider holds a [`BertModel`]

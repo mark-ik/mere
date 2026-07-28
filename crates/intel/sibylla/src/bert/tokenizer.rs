@@ -1,4 +1,3 @@
-
 //! Wrapper around HuggingFace's `tokenizers` crate, scoped to BERT
 //! word-piece encoding for the embedding-provider use case.
 //!

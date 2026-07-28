@@ -262,7 +262,9 @@ mod tests {
         assert!(trail.covers(&Cap::scope("trail").unwrap()));
         // The F1 table, inverted.
         assert!(
-            !Cap::scope("app/nav").unwrap().covers(&Cap::scope("app/navigate").unwrap()),
+            !Cap::scope("app/nav")
+                .unwrap()
+                .covers(&Cap::scope("app/navigate").unwrap()),
             "a shorter sibling segment must not cover a longer one"
         );
         assert!(
@@ -271,7 +273,10 @@ mod tests {
                 .covers(&Cap::scope("app/session-admin").unwrap())
         );
         assert!(!trail.covers(&Cap::scope("trailer").unwrap()));
-        assert!(!Cap::scope("trail/step1").unwrap().covers(&trail), "narrower covers nothing wider");
+        assert!(
+            !Cap::scope("trail/step1").unwrap().covers(&trail),
+            "narrower covers nothing wider"
+        );
     }
 
     #[test]
@@ -289,8 +294,16 @@ mod tests {
     #[test]
     fn kinds_never_cross() {
         // A scope literally spelled like a power name still is not one.
-        assert!(!Cap::scope("navigate").unwrap().covers(&Cap::power("navigate").unwrap()));
-        assert!(!Cap::power("navigate").unwrap().covers(&Cap::scope("navigate").unwrap()));
+        assert!(
+            !Cap::scope("navigate")
+                .unwrap()
+                .covers(&Cap::power("navigate").unwrap())
+        );
+        assert!(
+            !Cap::power("navigate")
+                .unwrap()
+                .covers(&Cap::scope("navigate").unwrap())
+        );
     }
 
     #[test]
@@ -311,7 +324,10 @@ mod tests {
         }
         // Pre-round strings meant scopes, and still do.
         assert_eq!(Cap::parse("trail/"), Ok(Cap::scope("trail").unwrap()));
-        assert_eq!(Cap::parse("app/navigate"), Ok(Cap::scope("app/navigate").unwrap()));
+        assert_eq!(
+            Cap::parse("app/navigate"),
+            Ok(Cap::scope("app/navigate").unwrap())
+        );
         // A tagged form this build does not know is loud, never permissive.
         assert_eq!(
             Cap::parse("moot:something"),

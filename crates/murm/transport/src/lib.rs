@@ -44,12 +44,12 @@ mod alpn;
 pub mod blobs;
 mod error;
 pub mod memory;
+#[cfg(feature = "notochord")]
+pub mod notochord;
 pub mod p2panda_transport;
 mod peer_id;
 #[cfg(feature = "reticulum")]
 pub mod reticulum_transport;
-#[cfg(feature = "notochord")]
-pub mod notochord;
 mod transport;
 
 pub use crate::accepted::{AcceptedSession, IngressContext, IngressInterfaceId, TransportKind};
@@ -59,13 +59,13 @@ pub use crate::error::TransportError;
 pub use crate::p2panda_transport::{P2pandaStream, P2pandaTransport, sync_overlay_topic};
 // The gossip handle returned by `P2pandaTransport::subscribe` (space live-sync):
 // `publish(bytes)` to broadcast, `subscribe()` for the received-bytes stream.
+#[cfg(feature = "notochord")]
+pub use crate::notochord::{initiator_binding, initiator_link_binding};
 pub use crate::peer_id::PeerID;
 #[cfg(feature = "reticulum")]
 pub use crate::reticulum_transport::{
     ReticulumInterface, ReticulumStream, ReticulumTransport, ReticulumTransportBuilder,
 };
-#[cfg(feature = "notochord")]
-pub use crate::notochord::{initiator_binding, initiator_link_binding};
 pub use crate::transport::Transport;
 pub use p2panda_net::gossip::GossipHandle;
 

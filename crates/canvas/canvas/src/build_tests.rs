@@ -8,11 +8,11 @@ use kernel::graph::fixtures::GraphFixtures;
 use std::collections::{HashMap, HashSet};
 
 use euclid::default::Point2D;
+use genet_layout::IncrementalLayout;
 use kernel::graph::{
     ContainmentSubKind, EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind,
 };
 use layout_dom_api::LayoutDomMut;
-use genet_layout::IncrementalLayout;
 
 use crate::build::*;
 use crate::palette;

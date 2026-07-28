@@ -1,4 +1,3 @@
-
 //! Construct Burn nn modules (`Linear`, `Embedding`, `LayerNorm`) with
 //! pre-loaded weight tensors.
 //!

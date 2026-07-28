@@ -85,7 +85,12 @@ impl<B: Backend> DecoderLayer<B> {
 
     /// `x: [batch, seq, hidden]` → same shape.
     pub fn forward(&self, x: Tensor<B, 3>, rope: &RotaryEncoding<B>, start: usize) -> Tensor<B, 3> {
-        self.forward_cached(x, rope, &mut super::attention::LayerKvCache::default(), start)
+        self.forward_cached(
+            x,
+            rope,
+            &mut super::attention::LayerKvCache::default(),
+            start,
+        )
     }
 
     /// Cached variant: threads the layer's KV cache through attention.
@@ -100,7 +105,9 @@ impl<B: Backend> DecoderLayer<B> {
             + self
                 .attention
                 .forward_cached(self.input_norm.forward(x), rope, cache, start);
-        let mlp = self.down.forward(self.mlp.forward(self.post_norm.forward(h.clone())));
+        let mlp = self
+            .down
+            .forward(self.mlp.forward(self.post_norm.forward(h.clone())));
         h + mlp
     }
 }
@@ -157,7 +164,11 @@ mod tests {
         assert_eq!(a.len(), 5 * config.hidden_size);
         assert!(a.iter().all(|v| v.is_finite()), "NaN/Inf in layer output");
 
-        let b = layer.forward(x, &rope, 0).into_data().to_vec::<f32>().unwrap();
+        let b = layer
+            .forward(x, &rope, 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
         assert_eq!(a, b, "same input must produce identical output");
     }
 }
@@ -216,6 +227,9 @@ mod tests_wgpu {
             .zip(&gpu)
             .map(|(a, b)| (a - b).abs())
             .fold(0.0f32, f32::max);
-        assert!(max_diff < 2.0e-3, "cpu/gpu layer outputs diverged: {max_diff}");
+        assert!(
+            max_diff < 2.0e-3,
+            "cpu/gpu layer outputs diverged: {max_diff}"
+        );
     }
 }

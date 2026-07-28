@@ -32,10 +32,7 @@ use crate::provider::{GenerationRequest, InferError, InferenceProvider, ModelCap
 pub enum InferCommand {
     /// Run one generation. `id` is the kernel's correlation key; every
     /// update for this request carries it back.
-    Generate {
-        id: u64,
-        request: GenerationRequest,
-    },
+    Generate { id: u64, request: GenerationRequest },
     /// Cancel request `id`: stops it mid-stream if running, drops it if
     /// still queued. Unknown/finished ids are ignored.
     Cancel { id: u64 },
@@ -277,8 +274,10 @@ mod tests {
         let got: Vec<InferUpdate> = updates.iter().collect();
         assert!(got.contains(&InferUpdate::Cancelled { id: 3 }));
         assert!(
-            !got.iter()
-                .any(|u| matches!(u, InferUpdate::Fragment { .. } | InferUpdate::Finished { .. })),
+            !got.iter().any(|u| matches!(
+                u,
+                InferUpdate::Fragment { .. } | InferUpdate::Finished { .. }
+            )),
             "no fragments or finish may leak past a cancel: {got:?}"
         );
     }

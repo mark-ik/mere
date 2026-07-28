@@ -18,8 +18,8 @@ use uuid::Uuid;
 
 use crate::types::GraphScope;
 
-use super::edge_data::{SemanticStatementSpec, StatementAssert, SemanticStatement};
 use super::edge_data::Traversal;
+use super::edge_data::{SemanticStatement, SemanticStatementSpec, StatementAssert};
 use super::edge_payload::EdgePayload;
 use super::edge_taxonomy::{EdgeAssertion, RelationSelector, SemanticSubKind};
 use super::identity::{EdgeKey, NodeKey};

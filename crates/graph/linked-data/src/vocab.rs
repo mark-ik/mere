@@ -173,8 +173,14 @@ mod tests {
             .find(|q| q.subject.to_string().contains(cites))
             .expect("cites has an alignment quad");
         assert_eq!(cites_quad.predicate.as_str(), OWL_EQUIVALENT_PROPERTY);
-        assert_eq!(cites_quad.object.to_string(), "<http://purl.org/spar/cito/cites>");
-        assert!(is_vocabulary_quad(cites_quad), "alignment lives in the vocab graph");
+        assert_eq!(
+            cites_quad.object.to_string(),
+            "<http://purl.org/spar/cito/cites>"
+        );
+        assert!(
+            is_vocabulary_quad(cites_quad),
+            "alignment lives in the vocab graph"
+        );
 
         let hyperlink = predicate_iri(SemanticSubKind::Hyperlink);
         let hyperlink_quad = quads

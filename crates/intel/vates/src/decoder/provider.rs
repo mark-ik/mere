@@ -23,9 +23,7 @@ use super::generate::{TokenPicker, generate_ids_with};
 use super::loader::load_decoder_from_bytes;
 use super::model::DecoderModel;
 use super::sample::{Sampler, SplitMix64};
-use crate::provider::{
-    GenerationRequest, InferError, InferenceProvider, ModelCapability,
-};
+use crate::provider::{GenerationRequest, InferError, InferenceProvider, ModelCapability};
 
 /// A llama-family decoder wired to the `InferenceProvider` seam.
 pub struct DecoderProvider<B: Backend> {
@@ -248,7 +246,10 @@ mod tests {
         let mut req = request("t1 t5", 4);
         req.stop = vec![stop.clone()];
         let stopped = p.generate(&req).unwrap();
-        assert!(!stopped.contains(&stop), "stop sequence leaked: {stopped:?}");
+        assert!(
+            !stopped.contains(&stop),
+            "stop sequence leaked: {stopped:?}"
+        );
         assert!(free.starts_with(&stopped));
     }
 
@@ -259,7 +260,10 @@ mod tests {
         let err = p.generate(&request(&long.join(" "), 4)).unwrap_err();
         assert!(matches!(
             err,
-            InferError::PromptTooLong { length: 20, limit: 16 }
+            InferError::PromptTooLong {
+                length: 20,
+                limit: 16
+            }
         ));
     }
 

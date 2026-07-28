@@ -181,8 +181,14 @@ mod tests {
             .write_all(artifact)
             .unwrap();
         let keypair = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
-        let signature = minisign::sign(None, &keypair.sk, std::io::Cursor::new(artifact), None, None)
-            .unwrap();
+        let signature = minisign::sign(
+            None,
+            &keypair.sk,
+            std::io::Cursor::new(artifact),
+            None,
+            None,
+        )
+        .unwrap();
         use base64::Engine as _;
         let engine = base64::engine::general_purpose::STANDARD;
         let digest = blake3::hash(artifact).to_hex().to_string();
@@ -197,7 +203,11 @@ mod tests {
                 }
             }
         });
-        std::fs::write(dir.join(MANIFEST_NAME), serde_json::to_vec(&manifest).unwrap()).unwrap();
+        std::fs::write(
+            dir.join(MANIFEST_NAME),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
 
         UpdaterBuilder::new(
             "0.1.0".parse().unwrap(),

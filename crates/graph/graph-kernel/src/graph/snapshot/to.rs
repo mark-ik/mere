@@ -407,10 +407,7 @@ impl Graph {
             })
             .collect();
 
-        let timestamp_secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        let timestamp_secs = crate::time::unix_epoch_seconds();
 
         GraphSnapshot {
             nodes,

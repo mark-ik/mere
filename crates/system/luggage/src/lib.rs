@@ -73,11 +73,11 @@ mod updater;
 pub use config::{Config, Feed, WindowsConfig, WindowsUpdateInstallMode};
 pub use error::{Error, Result};
 pub use install::Update;
-pub use staging::StagedUpdate;
 pub use release::{
-    MANIFEST_NAME, ReleaseManifestPlatform, RemoteRelease, RemoteReleaseData, UpdateFormat,
+    ReleaseManifestPlatform, RemoteRelease, RemoteReleaseData, UpdateFormat, MANIFEST_NAME,
 };
-pub use updater::{Updater, UpdaterBuilder, target};
+pub use staging::StagedUpdate;
+pub use updater::{target, Updater, UpdaterBuilder};
 
 pub use http;
 pub use reqwest;
@@ -88,5 +88,7 @@ use semver::Version;
 
 /// Check for an update against the configured feeds.
 pub fn check_update(current_version: Version, config: Config) -> Result<Option<Update>> {
-    UpdaterBuilder::new(current_version, config).build()?.check()
+    UpdaterBuilder::new(current_version, config)
+        .build()?
+        .check()
 }

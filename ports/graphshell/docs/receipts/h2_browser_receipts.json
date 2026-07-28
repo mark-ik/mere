@@ -1,0 +1,419 @@
+{
+  "schema": "graphshell.h2.browser-receipts/v1",
+  "executed_at": "2026-07-28",
+  "url": "http://127.0.0.1:8765/",
+  "engines": {
+    "chromium": "150.0.7871.187",
+    "firefox": "151.0"
+  },
+  "runs": [
+    {
+      "browser": "Chromium",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "h2_chromium_wide.png",
+      "pan_zoom": {
+        "camera_before": "640.00,400.00,1.000",
+        "camera_after": "773.84,400.00,1.150",
+        "passed": true
+      },
+      "selection_and_drag": {
+        "address": "https://example.test/i2p-port",
+        "focused_before": "669.5,337.0",
+        "focused_after": "753.0,401.0",
+        "passed": true
+      },
+      "detail_and_action": {
+        "detail_open": true,
+        "action_count": 1,
+        "status": "Accepted · 1 invocation(s)",
+        "passed": true
+      },
+      "session_switch": {
+        "remote_observed": "remote",
+        "local_restored": "local",
+        "passed": true
+      },
+      "final": {
+        "title": "GRAPHSHELL H2 READY",
+        "ready": true,
+        "camera": "919.70,400.00,1.150",
+        "focused_node": "1049.6,401.1",
+        "semantic_tree": "wide"
+      }
+    },
+    {
+      "browser": "Chromium",
+      "viewport": {
+        "width": 600,
+        "height": 800
+      },
+      "screenshot": "h2_chromium_narrow.png",
+      "pan_zoom": {
+        "camera_before": "300.00,400.00,1.000",
+        "camera_after": "300.00,400.00,1.150",
+        "passed": true
+      },
+      "selection_and_drag": {
+        "address": "https://example.test/i2p-port",
+        "focused_before": "329.5,337.0",
+        "focused_after": "413.0,401.0",
+        "passed": true
+      },
+      "detail_and_action": {
+        "detail_open": true,
+        "action_count": 1,
+        "status": "Accepted · 1 invocation(s)",
+        "passed": true
+      },
+      "session_switch": {
+        "remote_observed": "remote",
+        "local_restored": "local",
+        "passed": true
+      },
+      "final": {
+        "title": "GRAPHSHELL H2 READY",
+        "ready": true,
+        "camera": "577.49,400.00,1.150",
+        "focused_node": "707.4,401.1",
+        "semantic_tree": "narrow"
+      }
+    },
+    {
+      "browser": "Firefox",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "screenshot": "h2_firefox_wide.png",
+      "pan_zoom": {
+        "camera_before": "640.00,400.00,1.000",
+        "camera_after": "748.05,400.00,1.150",
+        "passed": true
+      },
+      "selection_and_drag": {
+        "address": "https://example.test/i2p-port",
+        "focused_before": "669.5,337.0",
+        "focused_after": "753.0,401.0",
+        "passed": true
+      },
+      "detail_and_action": {
+        "detail_open": true,
+        "action_count": 1,
+        "status": "Accepted · 1 invocation(s)",
+        "passed": true
+      },
+      "session_switch": {
+        "remote_observed": "remote",
+        "local_restored": "local",
+        "passed": true
+      },
+      "final": {
+        "title": "GRAPHSHELL H2 READY",
+        "ready": true,
+        "camera": "919.70,400.00,1.150",
+        "focused_node": "1049.6,401.1",
+        "semantic_tree": "wide"
+      }
+    },
+    {
+      "browser": "Firefox",
+      "viewport": {
+        "width": 600,
+        "height": 800
+      },
+      "screenshot": "h2_firefox_narrow.png",
+      "pan_zoom": {
+        "camera_before": "300.00,400.00,1.000",
+        "camera_after": "300.00,400.00,1.150",
+        "passed": true
+      },
+      "selection_and_drag": {
+        "address": "https://example.test/i2p-port",
+        "focused_before": "333.9,327.5",
+        "focused_after": "249.0,391.0",
+        "passed": true
+      },
+      "detail_and_action": {
+        "detail_open": true,
+        "action_count": 1,
+        "status": "Accepted · 1 invocation(s)",
+        "passed": true
+      },
+      "session_switch": {
+        "remote_observed": "remote",
+        "local_restored": "local",
+        "passed": true
+      },
+      "final": {
+        "title": "GRAPHSHELL H2 READY",
+        "ready": true,
+        "camera": "579.70,400.00,1.150",
+        "focused_node": "528.7,391.0",
+        "semantic_tree": "narrow"
+      }
+    }
+  ],
+  "semantic_trees": {
+    "wide": {
+      "role": "main",
+      "label": "Graphshell reference host",
+      "id": "semantic-host",
+      "children": [
+        {
+          "label": "Mounted sessions",
+          "children": [
+            {
+              "role": "button",
+              "label": "Local Mere",
+              "id": "session-local",
+              "pressed": true,
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Remote mount",
+              "id": "session-remote",
+              "pressed": false,
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "navigation",
+          "label": "Graph controls",
+          "children": [
+            {
+              "role": "button",
+              "label": "Select web object",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Open detail",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan left",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan right",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan up",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan down",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Zoom in",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Zoom out",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "region",
+          "label": "Object detail",
+          "id": "detail-surface",
+          "children": [
+            {
+              "label": "https://example.test/i2p-port",
+              "id": "detail-title",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Open with Graphshell Inspect",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Close detail",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "region",
+          "label": "Host status",
+          "children": [
+            {
+              "label": "Current state",
+              "children": []
+            },
+            {
+              "children": [
+                {
+                  "label": "Local Mere · 11 objects",
+                  "id": "active-session",
+                  "children": []
+                },
+                {
+                  "label": "https://example.test/i2p-port",
+                  "id": "selection-status",
+                  "children": []
+                },
+                {
+                  "role": "status",
+                  "label": "Accepted · 1 invocation(s)",
+                  "id": "action-status",
+                  "children": []
+                },
+                {
+                  "label": "1280 by 800",
+                  "id": "viewport-status",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "narrow": {
+      "role": "main",
+      "label": "Graphshell reference host",
+      "id": "semantic-host",
+      "children": [
+        {
+          "label": "Mounted sessions",
+          "children": [
+            {
+              "role": "button",
+              "label": "Local Mere",
+              "id": "session-local",
+              "pressed": true,
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Remote mount",
+              "id": "session-remote",
+              "pressed": false,
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "navigation",
+          "label": "Graph controls",
+          "children": [
+            {
+              "role": "button",
+              "label": "Select web object",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Open detail",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan left",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan right",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan up",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Pan down",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Zoom in",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Zoom out",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "region",
+          "label": "Object detail",
+          "id": "detail-surface",
+          "children": [
+            {
+              "label": "https://example.test/i2p-port",
+              "id": "detail-title",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Open with Graphshell Inspect",
+              "children": []
+            },
+            {
+              "role": "button",
+              "label": "Close detail",
+              "children": []
+            }
+          ]
+        },
+        {
+          "role": "region",
+          "label": "Host status",
+          "children": [
+            {
+              "label": "Current state",
+              "children": []
+            },
+            {
+              "children": [
+                {
+                  "label": "Local Mere · 11 objects",
+                  "id": "active-session",
+                  "children": []
+                },
+                {
+                  "label": "https://example.test/i2p-port",
+                  "id": "selection-status",
+                  "children": []
+                },
+                {
+                  "role": "status",
+                  "label": "Accepted · 1 invocation(s)",
+                  "id": "action-status",
+                  "children": []
+                },
+                {
+                  "label": "600 by 800",
+                  "id": "viewport-status",
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -18,9 +18,9 @@
 //! `½(x² + y²)` (its gradient is `(x, y)`, so `-grad · strength = -pos · strength`).
 //! The built-ins stay as the fast native path; couplings are the general one.
 
-use quint::{FieldRegistry, ScalarField, VectorField, eval_scalar, eval_vector, grad_scalar};
 use crate::NodeKey;
 use numen::{CouplingResponse, FieldDefinition};
+use quint::{FieldRegistry, ScalarField, VectorField, eval_scalar, eval_vector, grad_scalar};
 use rapier2d::prelude::*;
 
 use crate::{Force, ForceContext};
@@ -282,7 +282,9 @@ mod tests {
         let mut sim = Simulation::new();
         g.sync(&mut sim);
         sim.add_force(CouplingForce::new(
-            CouplingResponse::open("https://mere.computer/ns/coupling#visual/highlight".to_string()),
+            CouplingResponse::open(
+                "https://mere.computer/ns/coupling#visual/highlight".to_string(),
+            ),
             1.0,
             [a],
             FieldDefinition::Scalar(paraboloid()),

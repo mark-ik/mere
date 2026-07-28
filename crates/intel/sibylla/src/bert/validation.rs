@@ -1,4 +1,3 @@
-
 //! Tiered validation for the Burn-side BERT.
 //!
 //! Drift is a real risk: Burn moves fast (we're already three minor

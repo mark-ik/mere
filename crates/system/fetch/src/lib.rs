@@ -237,10 +237,7 @@ pub async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fetched, S
 /// Smolweb requests use errand's process-level trust store. A host that admits
 /// Gemini should install one explicitly with
 /// [`install_in_memory_smolweb_tofu`] or its own durable store.
-pub async fn fetch_page_anonymous_capped(
-    url: &str,
-    max_bytes: usize,
-) -> Result<Fetched, String> {
+pub async fn fetch_page_anonymous_capped(url: &str, max_bytes: usize) -> Result<Fetched, String> {
     match scheme_of(url).and_then(errand::Scheme::parse) {
         Some(_) => fetch_page_capped(url, max_bytes).await,
         None => {

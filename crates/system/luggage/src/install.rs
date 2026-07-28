@@ -68,7 +68,10 @@ impl Update {
     ///
     /// Use [`Update::install`] to install it.
     pub fn download(&self) -> Result<Vec<u8>> {
-        self.download_inner(None::<Box<dyn Fn(usize, Option<u64>)>>, None::<Box<dyn FnOnce()>>)
+        self.download_inner(
+            None::<Box<dyn Fn(usize, Option<u64>)>>,
+            None::<Box<dyn FnOnce()>>,
+        )
     }
 
     /// [`Update::download`] with progress callbacks: the first runs per
@@ -522,14 +525,8 @@ mod tests {
     /// base64-of-boxed forms download() expects for (pubkey, signature).
     fn sign(data: &[u8]) -> (String, String) {
         let keypair = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
-        let signature = minisign::sign(
-            None,
-            &keypair.sk,
-            std::io::Cursor::new(data),
-            None,
-            None,
-        )
-        .unwrap();
+        let signature =
+            minisign::sign(None, &keypair.sk, std::io::Cursor::new(data), None, None).unwrap();
         let engine = base64::engine::general_purpose::STANDARD;
         (
             engine.encode(keypair.pk.to_box().unwrap().to_string()),

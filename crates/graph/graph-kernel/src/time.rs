@@ -30,10 +30,31 @@
 //!   fail to compile against a `PortableInstant` field, surfacing
 //!   the host-boundary violation.
 //!
-//! WASM portability: no `std::time::Instant`, no `SystemTime::now()`,
-//! no `std::thread`. Pure `u64` arithmetic.
+//! WASM portability: no `std::time::Instant`, no
+//! `std::time::SystemTime::now()`, no `std::thread`. `PortableInstant` is pure
+//! `u64` arithmetic; the wall-clock helpers use `web_time`.
 
 use serde::{Deserialize, Serialize};
+
+/// Wall-clock milliseconds since the Unix epoch.
+///
+/// `web_time` re-exports `std::time` on native targets and uses `Date.now()` in
+/// browser WASM, so persisted graph timestamps never call the unsupported
+/// `std::time::SystemTime::now()` implementation.
+pub(crate) fn unix_epoch_millis() -> u64 {
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Wall-clock seconds since the Unix epoch.
+pub(crate) fn unix_epoch_seconds() -> u64 {
+    web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
 
 /// Host-provided monotonic timestamp, measured in milliseconds from a
 /// host-chosen origin.

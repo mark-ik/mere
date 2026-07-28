@@ -82,7 +82,11 @@ fn repulsion_solver_routes_only_above_threshold() {
     for _ in 0..5 {
         sim.tick(1.0 / 60.0);
     }
-    assert_eq!(calls.load(Ordering::SeqCst), 0, "below threshold stays naive");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "below threshold stays naive"
+    );
 
     // At/above the threshold: the solver is consulted every tick, and its
     // distinctive +x push moves the whole layout's center of mass right —
@@ -102,8 +106,14 @@ fn repulsion_solver_routes_only_above_threshold() {
         .filter_map(|&k| sim.position_of(k).map(|p| p.x))
         .sum::<f32>()
         / keys.len() as f32;
-    assert!(calls.load(Ordering::SeqCst) >= 10, "solver consulted each tick");
-    assert!(mean_x > 0.0, "the solver's +x push moved the layout right: {mean_x}");
+    assert!(
+        calls.load(Ordering::SeqCst) >= 10,
+        "solver consulted each tick"
+    );
+    assert!(
+        mean_x > 0.0,
+        "the solver's +x push moved the layout right: {mean_x}"
+    );
 }
 
 /// End-to-end settle timing: naive CPU repulsion vs the quint wgpu solver,

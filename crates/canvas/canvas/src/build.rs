@@ -12,7 +12,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::LazyLock;
 
-use seiche::LayoutView;
 use kernel::geometry::PortablePoint;
 use kernel::graph::apply::{self as graph_apply};
 use kernel::graph::{
@@ -24,6 +23,7 @@ use paint_list_api::{
     LayoutSize, PaintCmd, PathCommand, PathData, RadialGradientItem, RadialGradientPayload,
     RectItem, StrokeCap, StrokeItem, StrokeJoin,
 };
+use seiche::LayoutView;
 
 use crate::scene_paint::ScenePaintStyle;
 use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};

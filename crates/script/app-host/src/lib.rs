@@ -197,10 +197,7 @@ impl<S: ActionSink + 'static> AppScript<S> {
         // no authority, and `actions` is gated per EMISSION by the sink (the
         // ring check), not by linking. Unlinking it would only make a
         // component fail to instantiate rather than learn why it was refused.
-        crate::mere::script::log::add_to_linker::<_, HasSelf<AppHostState<S>>>(
-            &mut linker,
-            |s| s,
-        )?;
+        crate::mere::script::log::add_to_linker::<_, HasSelf<AppHostState<S>>>(&mut linker, |s| s)?;
         crate::mere::script::caps::add_to_linker::<_, HasSelf<AppHostState<S>>>(
             &mut linker,
             |s| s,

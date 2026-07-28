@@ -105,8 +105,10 @@ pub fn generate_ids_with<B: Backend>(
         if on_token(token).is_break() {
             break;
         }
-        let step: Tensor<B, 2, Int> =
-            Tensor::from_data(burn::tensor::TensorData::new(vec![token as i32], [1, 1]), &device);
+        let step: Tensor<B, 2, Int> = Tensor::from_data(
+            burn::tensor::TensorData::new(vec![token as i32], [1, 1]),
+            &device,
+        );
         logits = model.forward_cached(step, &mut cache);
     }
     out
@@ -141,8 +143,8 @@ pub(crate) fn generate_ids_uncached<B: Backend>(
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::tests::det_loaded;
     use super::super::model::DecoderModel;
+    use super::super::model::tests::det_loaded;
     use super::super::test_support::tiny_config;
     use super::*;
     use burn::backend::NdArray;
@@ -184,7 +186,9 @@ mod tests {
         // Discover what the model would emit, then make its second token
         // the eos and expect exactly the first token back.
         let free = generate_ids(&m, &prompt, 3, &[], &mut |_| ControlFlow::Continue(()));
-        let stopped = generate_ids(&m, &prompt, 3, &[free[1]], &mut |_| ControlFlow::Continue(()));
+        let stopped = generate_ids(&m, &prompt, 3, &[free[1]], &mut |_| {
+            ControlFlow::Continue(())
+        });
         assert_eq!(stopped, vec![free[0]]);
     }
 

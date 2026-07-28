@@ -1,4 +1,3 @@
-
 //! BERT configuration. Maps directly onto the HuggingFace `config.json`
 //! shape so loading is a one-to-one parse when the loader lands.
 

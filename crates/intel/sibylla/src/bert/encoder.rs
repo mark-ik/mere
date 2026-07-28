@@ -1,4 +1,3 @@
-
 //! BERT encoder — a stack of [`BertLayer`]s.
 //!
 //! Mirrors HF's `BertEncoder` shape so safetensors `encoder.layer.{i}.…`

@@ -75,7 +75,9 @@ impl ActionSink for StubGate {
                 ));
             }
             if !self.granted.contains(&ring) {
-                return Err(Refusal::Denied(format!("{ring}: not covered by this grant")));
+                return Err(Refusal::Denied(format!(
+                    "{ring}: not covered by this grant"
+                )));
             }
             Ok(())
         })();
@@ -124,13 +126,18 @@ async fn granted_emissions_queue_for_lowering() {
         .collect();
     assert_eq!(accepted, ["open-address", "fit-view"]);
     assert!(
-        script.sink().accepted[0].1.contains("https://example.test/a"),
+        script.sink().accepted[0]
+            .1
+            .contains("https://example.test/a"),
         "the payload crossed intact: {:?}",
         script.sink().accepted[0].1
     );
     assert!(script.sink().refusals.is_empty());
     assert!(
-        script.logs().iter().any(|l| l.contains("open-address accepted")),
+        script
+            .logs()
+            .iter()
+            .any(|l| l.contains("open-address accepted")),
         "the guest saw its own success: {:?}",
         script.logs()
     );
@@ -148,7 +155,9 @@ async fn an_ungranted_ring_is_denied_and_never_queues() {
     );
     assert_eq!(
         script.sink().refusals,
-        vec![Refusal::Denied("session: not covered by this grant".to_string())]
+        vec![Refusal::Denied(
+            "session: not covered by this grant".to_string()
+        )]
     );
     assert!(
         script

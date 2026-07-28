@@ -7,12 +7,9 @@ use crate::schema::{ProvenanceOrigin, ProvenanceRecord, Timestamp};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-    // The in-memory test store is muniment's (2026-07-12): eidetic's
-    // hand-rolled one was the same map behind the same seam.
-    use muniment::MemoryBackend as InMemoryStore;
-
-
-
+// The in-memory test store is muniment's (2026-07-12): eidetic's
+// hand-rolled one was the same map behind the same seam.
+use muniment::MemoryBackend as InMemoryStore;
 
 fn test_provenance() -> ProvenanceRecord {
     ProvenanceRecord {

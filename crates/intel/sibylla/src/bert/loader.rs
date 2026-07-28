@@ -1,4 +1,3 @@
-
 //! Load a BERT model from a HuggingFace-style on-disk layout.
 //!
 //! Expected layout (matching `sentence-transformers/all-MiniLM-L6-v2`):

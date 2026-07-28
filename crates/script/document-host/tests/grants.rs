@@ -53,8 +53,8 @@ fn granted_names_reflect_the_grant() {
 /// decided by the one grant.
 #[tokio::test(flavor = "current_thread")]
 async fn authority_derived_grant_gates_instantiation() {
-    use servitor::{Cap, GrantTable, Mode, Subject};
     use servitor::Grant as IssuedGrant;
+    use servitor::{Cap, GrantTable, Mode, Subject};
 
     let scripter = Subject::new([1; 32]);
     let bystander = Subject::new([2; 32]);

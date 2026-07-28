@@ -46,9 +46,9 @@ use identity::delegation::{
     SignedDelegationCertificate,
 };
 
+use crate::Subject;
 use crate::cap::Cap;
 use crate::grant::{AuthorityProvider, Mode};
-use crate::Subject;
 
 /// The application family servitor's denizen capabilities live under, in
 /// personae's `domain` dimension. Keeps denizen certificates from ever being
@@ -376,8 +376,14 @@ mod tests {
         let (table, _user, helper) = rooted(Mode::Write, 0);
         let subject = subject_of(&helper);
         assert!(table.covers(subject, &scope("trail/step"), Mode::Write));
-        assert!(table.covers(subject, &scope("trail/step"), Mode::Read), "write implies read");
-        assert!(!table.covers(subject, &scope("notes"), Mode::Write), "outside the scope");
+        assert!(
+            table.covers(subject, &scope("trail/step"), Mode::Read),
+            "write implies read"
+        );
+        assert!(
+            !table.covers(subject, &scope("notes"), Mode::Write),
+            "outside the scope"
+        );
         assert!(
             !table.covers(subject, &scope("trail/step"), Mode::Delegate),
             "a Write grant confers no delegate action"
@@ -482,7 +488,10 @@ mod tests {
             [12; 32],
         );
         let wide_signed = SignedDelegationCertificate::issue(&helper, wide).unwrap();
-        assert!(wide_signed.verify(), "signed correctly, but still not authorized");
+        assert!(
+            wide_signed.verify(),
+            "signed correctly, but still not authorized"
+        );
         let err = table.verify_chain(&wide_signed).unwrap_err();
         assert!(matches!(err, ChainError::NotAttenuating(_)), "{err:?}");
     }

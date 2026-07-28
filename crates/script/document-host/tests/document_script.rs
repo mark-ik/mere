@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use document_host::{DocumentScript, Grant, NetFetcher, NetResponse, Quota, TurnOutcome};
-use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use genet_scripted_dom::{NodeId, ScriptedDom};
+use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 
 /// A stub network backend for the fetch test: echoes the requested URL (the real
 /// backend, netfetcher/errand, lives in the meerkat content actor).

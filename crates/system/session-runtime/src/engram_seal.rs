@@ -72,7 +72,11 @@ impl WalletEpochSealer {
         let Some(epoch) = load_current_private_epoch(data_root, persona)? else {
             return Ok(None);
         };
-        Ok(Some(Self::from_epoch(persona, epoch.epoch_id, &epoch.epoch_secret)))
+        Ok(Some(Self::from_epoch(
+            persona,
+            epoch.epoch_id,
+            &epoch.epoch_secret,
+        )))
     }
 
     /// Add another epoch's key (e.g. a pre-rotation epoch, for historical reads).

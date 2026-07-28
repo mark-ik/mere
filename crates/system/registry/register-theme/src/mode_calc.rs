@@ -228,7 +228,11 @@ pub fn chrome_from_custom_mode(
         .filter(|r| !def.chrome.contains_key(*r))
         .collect();
     if !missing.is_empty() {
-        return Err(format!("mode '{}' missing roles: {}", def.id, missing.join(", ")));
+        return Err(format!(
+            "mode '{}' missing roles: {}",
+            def.id,
+            missing.join(", ")
+        ));
     }
     let unknown: Vec<&String> = def
         .chrome
@@ -237,7 +241,11 @@ pub fn chrome_from_custom_mode(
         .collect();
     if !unknown.is_empty() {
         let names: Vec<&str> = unknown.iter().map(|s| s.as_str()).collect();
-        return Err(format!("mode '{}' unknown roles: {}", def.id, names.join(", ")));
+        return Err(format!(
+            "mode '{}' unknown roles: {}",
+            def.id,
+            names.join(", ")
+        ));
     }
     let role = |name: &str| eval_role(&def.chrome[name], seeds);
     Ok(crate::chrome::ChromeTheme {
@@ -325,8 +333,20 @@ mod tests {
             // Semantic roundtrip (f64 shortest-repr wobbles exact bits): the
             // reloaded def must still be a complete, valid calculator with the
             // same identity + flags + role set.
-            assert_eq!((back.id.as_str(), back.name.as_str(), back.dark, back.high_contrast),
-                       (def.id.as_str(), def.name.as_str(), def.dark, def.high_contrast));
+            assert_eq!(
+                (
+                    back.id.as_str(),
+                    back.name.as_str(),
+                    back.dark,
+                    back.high_contrast
+                ),
+                (
+                    def.id.as_str(),
+                    def.name.as_str(),
+                    def.dark,
+                    def.high_contrast
+                )
+            );
             assert_eq!(back.chrome.len(), def.chrome.len());
             chrome_from_custom_mode(&back, &seeds()).expect("reloaded template still valid");
         }

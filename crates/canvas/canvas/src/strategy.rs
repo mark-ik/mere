@@ -154,10 +154,8 @@ impl Canvas {
     pub(crate) fn sync_anchor_force(&mut self) {
         let anchors = match (&self.strategy_positions, self.arrangement_pull > 0.0) {
             (Some(positions), true) if !self.physics_paused => Some(
-                seiche::AnchorSpring::new(
-                    positions.iter().map(|(k, p)| (*k, (p.x, p.y))),
-                )
-                .with_stiffness(self.arrangement_pull),
+                seiche::AnchorSpring::new(positions.iter().map(|(k, p)| (*k, (p.x, p.y))))
+                    .with_stiffness(self.arrangement_pull),
             ),
             _ => None,
         };
@@ -240,8 +238,7 @@ impl Canvas {
         // frame — from *live* inputs, not the saved ones — and the restored
         // positions would never paint. The claim lapses as soon as the graph
         // changes or the user picks a layout.
-        self.restored_score_hold =
-            Some(("phyllotaxis.default".to_string(), self.graph.revision()));
+        self.restored_score_hold = Some(("phyllotaxis.default".to_string(), self.graph.revision()));
         // Same default as picking an arrangement: hold the restored placement,
         // via the visible global pause rather than a hidden halt.
         self.set_physics_paused(true);

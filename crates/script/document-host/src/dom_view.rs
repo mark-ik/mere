@@ -9,8 +9,8 @@
 //! any mutation (the unknown-node guard), so no host id-map is needed. The
 //! revision is host-side (genet's DOM tracks none).
 
-use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, NodeKind, QualName};
 use genet_scripted_dom::{NodeId, ScriptedDom};
+use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, NodeKind, QualName};
 
 use crate::content_hash;
 use crate::mere::script::document::{

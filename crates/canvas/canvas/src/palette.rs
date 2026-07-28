@@ -30,13 +30,25 @@ pub struct NodeAccent {
 }
 
 /// Selected: amber, dark label. Wins over every activation state.
-pub const SELECTED: NodeAccent = NodeAccent { bg: [232, 150, 40], fg: [28, 22, 10] };
+pub const SELECTED: NodeAccent = NodeAccent {
+    bg: [232, 150, 40],
+    fg: [28, 22, 10],
+};
 /// Open: a live actor is showing real fetched content.
-pub const OPEN: NodeAccent = NodeAccent { bg: [58, 140, 94], fg: [238, 250, 243] };
+pub const OPEN: NodeAccent = NodeAccent {
+    bg: [58, 140, 94],
+    fg: [238, 250, 243],
+};
 /// Closed: real fetched content, but no actor showing it right now.
-pub const CLOSED: NodeAccent = NodeAccent { bg: [166, 72, 72], fg: [250, 240, 240] };
+pub const CLOSED: NodeAccent = NodeAccent {
+    bg: [166, 72, 72],
+    fg: [250, 240, 240],
+};
 /// Idle: local / settings / synthesized / blank / errored. The default fill.
-pub const IDLE: NodeAccent = NodeAccent { bg: [54, 92, 156], fg: [245, 247, 252] };
+pub const IDLE: NodeAccent = NodeAccent {
+    bg: [54, 92, 156],
+    fg: [245, 247, 252],
+};
 
 /// The canvas caption label riding beside a gnode (not a node fill, so it is not
 /// a [`NodeAccent`]).
@@ -126,8 +138,14 @@ mod tests {
     fn declarations_define_every_var_the_sheets_reference() {
         let decls = custom_property_declarations();
         for slug in ["idle", "open", "closed", "selected"] {
-            assert!(decls.contains(&format!("--node-{slug}-bg:")), "missing {slug} bg");
-            assert!(decls.contains(&format!("--node-{slug}-fg:")), "missing {slug} fg");
+            assert!(
+                decls.contains(&format!("--node-{slug}-bg:")),
+                "missing {slug} bg"
+            );
+            assert!(
+                decls.contains(&format!("--node-{slug}-fg:")),
+                "missing {slug} fg"
+            );
         }
         assert!(decls.contains("--node-caption-fg:"));
     }

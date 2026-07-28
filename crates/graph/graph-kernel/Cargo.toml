@@ -42,6 +42,9 @@ futures-util = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 rkyv = { version = "0.8", features = ["std"] }
 time = { version = "0.3", features = ["formatting"] }
+# Drop-in std::time replacement whose SystemTime::now() uses Date.now() in
+# wasm32 browser hosts instead of the unsupported std implementation.
+web-time = "1"
 url = "2.5"
 mime_guess = "2.0"
 infer = "0.19"

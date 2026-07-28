@@ -268,8 +268,14 @@ mod tests {
         let rewritten = store
             .get(&id, &FacetId::new(DENIZEN_BINDING))
             .expect("still bound");
-        assert!(rewritten.get("nested_log").is_none(), "the legacy field is gone");
-        assert_eq!(read_denizen_binding(&store, id).unwrap().subject, "aa".repeat(32));
+        assert!(
+            rewritten.get("nested_log").is_none(),
+            "the legacy field is gone"
+        );
+        assert_eq!(
+            read_denizen_binding(&store, id).unwrap().subject,
+            "aa".repeat(32)
+        );
     }
 
     #[test]
@@ -277,7 +283,12 @@ mod tests {
         let mut store = NodeFacetStore::new();
         let id = Uuid::from_u128(0xa);
         store
-            .set(id, FacetId::new(DENIZEN_BINDING), serde_json::json!([1, 2]), &AcceptAll)
+            .set(
+                id,
+                FacetId::new(DENIZEN_BINDING),
+                serde_json::json!([1, 2]),
+                &AcceptAll,
+            )
             .unwrap();
         assert!(read_denizen_binding(&store, id).is_none());
         assert!(!is_denizen(&store, id));

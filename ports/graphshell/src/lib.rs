@@ -3,18 +3,37 @@
 //! G1 adds a native semantic view over the portable client state. Networking,
 //! product models, and source authority remain injected at the edge.
 
+#[cfg(feature = "web")]
+pub mod access;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod admission;
+#[cfg(feature = "web")]
+pub mod app;
 pub mod canary;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod carrier;
+#[cfg(feature = "web")]
+pub mod handlers;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod identity;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod identity_projection;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod lifecycle;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(feature = "web")]
+pub mod mere_host;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod native;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod policy_projection;
+#[cfg(feature = "web")]
+pub mod product;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod profile;
 pub mod resume;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod session_loop;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod sessions;
 pub mod view;
 

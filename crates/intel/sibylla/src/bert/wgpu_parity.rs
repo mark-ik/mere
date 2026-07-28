@@ -1,4 +1,3 @@
-
 //! Wgpu ↔ NdArray parity and timing for the BERT model (burn brief
 //! Lane 1, `bert-wgpu`). Weights are synthesized deterministically on the
 //! host so both backends run the identical model — no model files needed.
@@ -110,8 +109,7 @@ fn sentence_on<B: Backend>(config: &BertConfig, ids: &[Vec<i32>]) -> Vec<f32> {
     let model = det_loaded::<B>(config).into_model(&dev);
     let (batch, seq) = (ids.len(), ids[0].len());
     let flat: Vec<i32> = ids.iter().flatten().copied().collect();
-    let input_ids: Tensor<B, 2, Int> =
-        Tensor::from_data(TensorData::new(flat, [batch, seq]), &dev);
+    let input_ids: Tensor<B, 2, Int> = Tensor::from_data(TensorData::new(flat, [batch, seq]), &dev);
     model
         .forward_sentence(input_ids, Pooling::Mean, true)
         .into_data()

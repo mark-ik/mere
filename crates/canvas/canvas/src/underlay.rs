@@ -52,13 +52,7 @@ pub fn projection_from_positions<F>(graph: &Graph, position_of: F) -> Projection
 where
     F: Fn(NodeKey) -> Option<PortablePoint>,
 {
-    project(
-        graph,
-        |k| position_of(k),
-        |_| true,
-        "canvas.live",
-        false,
-    )
+    project(graph, |k| position_of(k), |_| true, "canvas.live", false)
 }
 
 /// The canvas's read-through *Identity* arrangement for `graph`: every graph member

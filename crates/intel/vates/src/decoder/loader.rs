@@ -135,7 +135,10 @@ mod tests {
 
     /// The full name → (shape, values) table for `tiny_config`, values
     /// deterministic per tensor.
-    fn tiny_tensor_table(config: &DecoderConfig, with_lm_head: bool) -> Vec<(String, Vec<usize>, Vec<f32>)> {
+    fn tiny_tensor_table(
+        config: &DecoderConfig,
+        with_lm_head: bool,
+    ) -> Vec<(String, Vec<usize>, Vec<f32>)> {
         let h = config.hidden_size;
         let kv = config.kv_heads() * config.head_dim();
         let inter = config.intermediate_size;
@@ -144,7 +147,11 @@ mod tests {
             let n: usize = shape.iter().product();
             out.push((name, shape, det_vec(n, salt)));
         };
-        push("model.embed_tokens.weight".into(), vec![config.vocab_size, h], 7);
+        push(
+            "model.embed_tokens.weight".into(),
+            vec![config.vocab_size, h],
+            7,
+        );
         for i in 0..config.num_hidden_layers {
             let p = format!("model.layers.{i}");
             let s = 100 * (i + 1);
@@ -153,7 +160,11 @@ mod tests {
             push(format!("{p}.self_attn.k_proj.weight"), vec![kv, h], s + 2);
             push(format!("{p}.self_attn.v_proj.weight"), vec![kv, h], s + 3);
             push(format!("{p}.self_attn.o_proj.weight"), vec![h, h], s + 4);
-            push(format!("{p}.post_attention_layernorm.weight"), vec![h], s + 8);
+            push(
+                format!("{p}.post_attention_layernorm.weight"),
+                vec![h],
+                s + 8,
+            );
             push(format!("{p}.mlp.gate_proj.weight"), vec![inter, h], s + 5);
             push(format!("{p}.mlp.up_proj.weight"), vec![inter, h], s + 6);
             push(format!("{p}.mlp.down_proj.weight"), vec![h, inter], s + 7);
@@ -238,8 +249,16 @@ mod tests {
         let bf16_model =
             load_decoder_from_bytes::<B>(&config, &serialize_bf16(&table), &Default::default())
                 .unwrap();
-        let a = f32_model.logits(ids(), 0).into_data().to_vec::<f32>().unwrap();
-        let b = bf16_model.logits(ids(), 0).into_data().to_vec::<f32>().unwrap();
+        let a = f32_model
+            .logits(ids(), 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
+        let b = bf16_model
+            .logits(ids(), 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
         let max_diff = a
             .iter()
             .zip(&b)
@@ -270,8 +289,9 @@ mod tests {
         let config = tiny_config();
         let mut table = tiny_tensor_table(&config, true);
         table.retain(|(n, _, _)| n != "model.layers.1.mlp.up_proj.weight");
-        let err = load_decoder_from_bytes::<B>(&config, &serialize_f32(&table), &Default::default())
-            .unwrap_err();
+        let err =
+            load_decoder_from_bytes::<B>(&config, &serialize_f32(&table), &Default::default())
+                .unwrap_err();
         match err {
             InferError::InvalidWeights(msg) => {
                 assert!(msg.contains("model.layers.1.mlp.up_proj.weight"), "{msg}")

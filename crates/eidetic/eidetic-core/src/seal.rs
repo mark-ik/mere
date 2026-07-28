@@ -95,12 +95,8 @@ pub trait PayloadSealer {
     /// Unseal `sealed` bytes produced under `marker`, selecting the key by
     /// `marker.epoch`. Returns an error if the epoch key is unavailable or the
     /// ciphertext fails authentication.
-    fn unseal(
-        &self,
-        content_hash: &Hash,
-        marker: &SealedBlobRef,
-        sealed: &[u8],
-    ) -> Result<Vec<u8>>;
+    fn unseal(&self, content_hash: &Hash, marker: &SealedBlobRef, sealed: &[u8])
+    -> Result<Vec<u8>>;
 }
 
 /// Whether a payload of this privacy class belongs to the encrypted-at-rest
@@ -125,8 +121,8 @@ pub fn seal_marker(manifest: &BlobManifest) -> Result<Option<SealedBlobRef>> {
 }
 
 fn set_seal_marker(manifest: &mut BlobManifest, marker: &SealedBlobRef) -> Result<()> {
-    let value =
-        serde_json::to_value(marker).map_err(|err| Error::new(format!("encode seal marker: {err}")))?;
+    let value = serde_json::to_value(marker)
+        .map_err(|err| Error::new(format!("encode seal marker: {err}")))?;
     match &mut manifest.schema_metadata {
         serde_json::Value::Object(map) => {
             map.insert(SEAL_MARKER_KEY.to_string(), value);
@@ -189,9 +185,7 @@ pub async fn resolve_sealed_blob(
         return resolve_blob(store, fetcher, manifest).await;
     };
     let sealer = sealer.ok_or_else(|| {
-        Error::new(
-            "manifest blob is sealed at rest; resolve_sealed_blob needs a PayloadSealer",
-        )
+        Error::new("manifest blob is sealed at rest; resolve_sealed_blob needs a PayloadSealer")
     })?;
 
     let mut last_error: Option<Error> = None;
@@ -244,12 +238,9 @@ mod tests {
     use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
     use std::collections::HashMap;
 
-        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // The in-memory test store is muniment's (2026-07-12): eidetic's
     // hand-rolled one was the same map behind the same seam.
     use muniment::MemoryBackend as MemStore;
-
-
-
 
     /// Test sealer over XChaCha20-Poly1305, mirroring the wallet's AEAD family.
     ///
@@ -375,8 +366,7 @@ mod tests {
             let cleartext = b"a private engram payload";
             let mut manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
 
-            let stored =
-                seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
+            let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             assert_ne!(stored.as_slice(), cleartext, "stored bytes must be sealed");
             assert!(seal_marker(&manifest).unwrap().is_some());
 
@@ -397,8 +387,7 @@ mod tests {
             let cleartext = b"a public moot engram";
             let mut manifest = manifest_for(cleartext, PrivacyClass::MootScoped);
 
-            let stored =
-                seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
+            let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             assert_eq!(stored.as_slice(), cleartext, "public lane is not sealed");
             assert!(seal_marker(&manifest).unwrap().is_none());
 
@@ -426,8 +415,7 @@ mod tests {
             let sealer = TestSealer::new([3u8; 16], [7u8; 32]);
             let cleartext = b"sealed but keyless read";
             let mut manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
-            let stored =
-                seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
+            let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
             store.put(&store_key(&manifest), &stored).await.unwrap();
 
@@ -444,8 +432,7 @@ mod tests {
             let sealer = TestSealer::new([4u8; 16], [6u8; 32]);
             let cleartext = b"should not resolve via the cleartext path";
             let mut manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
-            let stored =
-                seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
+            let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
             store.put(&store_key(&manifest), &stored).await.unwrap();
 
@@ -468,8 +455,7 @@ mod tests {
             let mut store = MemStore::default();
             store.put(&store_key(&manifest), &stored).await.unwrap();
 
-            let rotated =
-                TestSealer::new([0xBB; 16], [2u8; 32]).with_epoch([0xAA; 16], [1u8; 32]);
+            let rotated = TestSealer::new([0xBB; 16], [2u8; 32]).with_epoch([0xAA; 16], [1u8; 32]);
             let got = resolve_sealed_blob(&mut store, &mut NoFetcher, Some(&rotated), &manifest)
                 .await
                 .unwrap();
@@ -483,8 +469,7 @@ mod tests {
             let cleartext = b"sealed under a key we lost";
             let mut manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
             let sealer = TestSealer::new([5u8; 16], [3u8; 32]);
-            let stored =
-                seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
+            let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
             let mut store = MemStore::default();
             store.put(&store_key(&manifest), &stored).await.unwrap();
 
@@ -543,10 +528,7 @@ mod tests {
             let manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
             assert!(seal_marker(&manifest).unwrap().is_none());
             let mut store = MemStore::default();
-            store
-                .put(&store_key(&manifest), cleartext)
-                .await
-                .unwrap();
+            store.put(&store_key(&manifest), cleartext).await.unwrap();
 
             // With or without a sealer, an unmarked blob resolves as cleartext.
             let got = resolve_sealed_blob(&mut store, &mut NoFetcher, None, &manifest)

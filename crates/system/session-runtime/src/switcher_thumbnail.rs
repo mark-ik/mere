@@ -304,7 +304,8 @@ mod tests {
         let a = graph.add_node("a".into(), PortablePoint::new(0.0, 0.0));
         let b = graph.add_node("b".into(), PortablePoint::new(100.0, 0.0));
         graph.assert_relation(a, b, hyperlink()).unwrap();
-        let t = build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
+        let t =
+            build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
         assert_eq!(t.edges.len(), 1);
         // RelationKind::tag()'s top byte is the family ordinal. The
         // Semantic family is 0 per the kernel's tag scheme; the
@@ -332,7 +333,8 @@ mod tests {
             )
             .unwrap();
 
-        let t = build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
+        let t =
+            build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
         assert_eq!(t.edges.len(), 2);
         let tags: std::collections::HashSet<u8> = t.edges.iter().map(|e| e.family_tag).collect();
         assert!(tags.contains(&expected_family_tag(EdgeFamily::Semantic)));
@@ -386,7 +388,8 @@ mod tests {
         let mut graph = Graph::new();
         let a = graph.add_node("a".into(), PortablePoint::new(0.0, 0.0));
         graph.assert_relation(a, a, hyperlink()).unwrap();
-        let t = build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
+        let t =
+            build_switcher_thumbnail_with(&graph, |_| None, SwitcherThumbnailOptions::default());
         assert_eq!(t.nodes.len(), 1);
         assert!(t.edges.is_empty());
     }

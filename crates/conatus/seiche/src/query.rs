@@ -10,8 +10,8 @@
 //! rect-select that returns both nodes and edges. Split out of `lib.rs` to keep
 //! both files under the workspace's per-file size ceiling.
 
-use euclid::default::{Box2D, Point2D};
 use crate::NodeKey;
+use euclid::default::{Box2D, Point2D};
 
 use crate::view::{point_segment_distance, segment_intersects_box};
 use crate::{RectSelection, Simulation};

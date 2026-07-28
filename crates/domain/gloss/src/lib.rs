@@ -11,11 +11,11 @@
 #![doc(html_root_url = "https://docs.rs/gloss/0.0.1")]
 
 use accesskit::{Node, Role};
+use canvas::NodeState;
 use forme::GraphMemberId;
 use inker::{Block, EngineDocument, inline_text};
 use kernel::graph::Graph;
 use netrender::Scene;
-use canvas::NodeState;
 use register_theme::chrome::{ChromeTheme, Color32};
 use uxtree::{UxTree, node_id_for_path};
 

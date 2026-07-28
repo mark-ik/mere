@@ -102,9 +102,6 @@ mod tests {
     #[test]
     fn engine_rules_still_route_beneath_the_app_layer() {
         let decision = route_policy().route(&request("gemini://example.test"));
-        assert_eq!(
-            decision.engine_id,
-            inker::routing::ENGINE_NEMATIC_GEMTEXT
-        );
+        assert_eq!(decision.engine_id, inker::routing::ENGINE_NEMATIC_GEMTEXT);
     }
 }

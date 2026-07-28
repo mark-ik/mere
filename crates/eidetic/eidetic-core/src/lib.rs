@@ -59,13 +59,13 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-pub mod pack;
 pub mod browsing;
 pub mod bundle;
 pub mod deleted;
 pub mod engram;
 pub mod manifest;
 pub mod models;
+pub mod pack;
 pub mod schema;
 pub mod schema_def;
 pub mod seal;
@@ -170,7 +170,6 @@ impl From<muniment::error::StoreError> for Error {
     }
 }
 
-
 /// Idempotent first-init seeding for any [`Store`].
 ///
 /// Currently equivalent to [`bootstrap_meta_schema`]; in the future will
@@ -202,12 +201,9 @@ mod tests {
     use muniment::error::StoreError;
     use std::collections::HashMap;
 
-        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // The in-memory test store is muniment's (2026-07-12): eidetic's
     // hand-rolled one was the same map behind the same seam.
     use muniment::MemoryBackend as InMemoryStore;
-
-
-
 
     #[test]
     fn dispatch_round_trips_save_then_load() {

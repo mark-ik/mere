@@ -129,11 +129,7 @@ impl ArchiveWith<codicil::LogId> for LogIdAsString {
     type Archived = Archived<String>;
     type Resolver = Resolver<String>;
 
-    fn resolve_with(
-        field: &codicil::LogId,
-        resolver: Self::Resolver,
-        out: Place<Self::Archived>,
-    ) {
+    fn resolve_with(field: &codicil::LogId, resolver: Self::Resolver, out: Place<Self::Archived>) {
         field.as_str().to_string().resolve(resolver, out);
     }
 }

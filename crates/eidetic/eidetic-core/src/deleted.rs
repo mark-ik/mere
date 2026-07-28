@@ -146,12 +146,9 @@ mod tests {
     use async_trait::async_trait;
     use std::collections::HashMap;
 
-        // The in-memory test store is muniment's (2026-07-12): eidetic's
+    // The in-memory test store is muniment's (2026-07-12): eidetic's
     // hand-rolled one was the same map behind the same seam.
     use muniment::MemoryBackend as InMemoryStore;
-
-
-
 
     fn tombstone(url: &str, at: u64) -> DeletedNode {
         DeletedNode {
@@ -221,7 +218,9 @@ mod tests {
             assert_eq!(listed[0].url, "https://b.test", "the other survives");
             // Purging an absent node forgets nothing (genuine feedback).
             assert_eq!(
-                purge_deleted(&mut store, "id-https://a.test").await.unwrap(),
+                purge_deleted(&mut store, "id-https://a.test")
+                    .await
+                    .unwrap(),
                 0
             );
 

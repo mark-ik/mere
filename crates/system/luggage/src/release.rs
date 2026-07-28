@@ -14,7 +14,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use semver::Version;
-use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 use time::OffsetDateTime;
 use url::Url;
 
@@ -232,8 +232,14 @@ mod tests {
             release.blake3("windows-x86_64").unwrap(),
             Some("ab12".to_string())
         );
-        assert_eq!(release.format("windows-x86_64").unwrap(), UpdateFormat::Nsis);
-        assert!(release.blake3("linux-x86_64").is_err(), "unknown target errors");
+        assert_eq!(
+            release.format("windows-x86_64").unwrap(),
+            UpdateFormat::Nsis
+        );
+        assert!(
+            release.blake3("linux-x86_64").is_err(),
+            "unknown target errors"
+        );
     }
 
     #[test]

@@ -240,7 +240,11 @@ mod tests {
         };
 
         let rope = rope(&config);
-        let a = attn.forward(base, &rope, 0).into_data().to_vec::<f32>().unwrap();
+        let a = attn
+            .forward(base, &rope, 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
         let b = perturbed_out(&attn, perturbed, &rope);
 
         let per_pos = h;
@@ -256,7 +260,10 @@ mod tests {
         }
         let (lo, hi) = (4 * per_pos, 5 * per_pos);
         assert!(
-            a[lo..hi].iter().zip(&b[lo..hi]).any(|(x, y)| (x - y).abs() > 1.0e-6),
+            a[lo..hi]
+                .iter()
+                .zip(&b[lo..hi])
+                .any(|(x, y)| (x - y).abs() > 1.0e-6),
             "the perturbed position itself must change"
         );
     }
@@ -266,7 +273,10 @@ mod tests {
         x: Tensor<B, 3>,
         rope: &RotaryEncoding<B>,
     ) -> Vec<f32> {
-        attn.forward(x, rope, 0).into_data().to_vec::<f32>().unwrap()
+        attn.forward(x, rope, 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap()
     }
 
     /// GQA equivalence: a GQA attention (kv_heads < heads) must equal a
@@ -302,19 +312,21 @@ mod tests {
             o_w.clone(),
             &dev,
         );
-        let mha = DecoderAttention::from_loaded(
-            &mha_cfg,
-            q_w,
-            dup(&kv_w_gqa),
-            dup(&kv_v_gqa),
-            o_w,
-            &dev,
-        );
+        let mha =
+            DecoderAttention::from_loaded(&mha_cfg, q_w, dup(&kv_w_gqa), dup(&kv_v_gqa), o_w, &dev);
 
         let x = t2::<B>(6, h, 30, &dev).reshape([1, 6, h]);
         let rope = rope(&gqa_cfg);
-        let a = gqa.forward(x.clone(), &rope, 0).into_data().to_vec::<f32>().unwrap();
-        let b = mha.forward(x, &rope, 0).into_data().to_vec::<f32>().unwrap();
+        let a = gqa
+            .forward(x.clone(), &rope, 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
+        let b = mha
+            .forward(x, &rope, 0)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
         assert!(
             a.iter().zip(&b).all(|(x, y)| (x - y).abs() < 1.0e-5),
             "GQA and duplicated-kv MHA diverged"

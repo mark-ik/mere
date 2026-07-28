@@ -73,9 +73,7 @@ fn main() {
             }
         }
 
-        let built = guest
-            .join("target/wasm32-wasip2/release")
-            .join(artifact);
+        let built = guest.join("target/wasm32-wasip2/release").join(artifact);
         if !built.exists() {
             println!(
                 "cargo::warning={dir}: build reported success but {} is missing",

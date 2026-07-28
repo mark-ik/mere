@@ -132,7 +132,10 @@ mod tests {
         let (w, h) = (64u32, 64u32);
         let rgba = vec![255u8; (w * h * 4) as usize];
         let hull = trace_sprite_hull(&rgba, w, h);
-        assert!(hull.len() >= 3 && hull.len() <= 6, "a square is a few points: {hull:?}");
+        assert!(
+            hull.len() >= 3 && hull.len() <= 6,
+            "a square is a few points: {hull:?}"
+        );
         // Extremes reach (nearly) the face bounds.
         let max_x = hull.iter().map(|p| p.0).fold(f32::MIN, f32::max);
         let min_x = hull.iter().map(|p| p.0).fold(f32::MAX, f32::min);
@@ -158,7 +161,11 @@ mod tests {
             })
             .collect();
         let simplified = simplify_hull(convex_hull(&circle), 0.02);
-        assert!(simplified.len() < 16, "a circle decimates: {}", simplified.len());
+        assert!(
+            simplified.len() < 16,
+            "a circle decimates: {}",
+            simplified.len()
+        );
         assert!(simplified.len() >= 4);
     }
 }

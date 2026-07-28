@@ -210,7 +210,12 @@ mod tests {
 
     #[test]
     fn rejects_malformed_github_feeds() {
-        for bad in ["github:", "github:justowner", "github:o/r/extra", "github:/r"] {
+        for bad in [
+            "github:",
+            "github:justowner",
+            "github:o/r/extra",
+            "github:/r",
+        ] {
             assert!(Feed::parse(bad).is_err(), "{bad:?} should be rejected");
         }
     }

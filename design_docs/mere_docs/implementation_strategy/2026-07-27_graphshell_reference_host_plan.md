@@ -1,11 +1,11 @@
 # Graphshell Reference Host Plan
 
 **Date:** 2026-07-27
-**Status:** product boundary ruled with Mark; H0-H8 not started.
+**Status:** product boundary ruled with Mark; H0-H3 complete; H4 in progress; H5-H9 not started.
 **Scope:** Make Graphshell Mere's useful, WASM-safe reference host: a graph
-portal, browser-extension companion, application launcher, and personal
-cross-device surface for addressed things. It does not wait for Turnstone's WPT
-or media work.
+portal, Personae identity-vault surface, browser-extension companion,
+application launcher, and personal cross-device surface for addressed things.
+It does not wait for Turnstone's WPT or media work.
 
 This plan amends the product center of the
 [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md).
@@ -27,6 +27,8 @@ Related boundaries:
 - [repo consolidation](2026-07-23_repo_consolidation_plan.md)
 - [Knot port](2026-07-25_knot_port_plan.md)
 - [low-power radio and managed network](2026-07-24_low_power_managed_network_plan.md)
+- [identity vault and SSH agent](2026-07-22_identity-vault-ssh-agent_plan.md)
+- [persona wallet carry layer](2026-06-25_persona_wallet_carry_layer_plan.md)
 
 ---
 
@@ -38,6 +40,8 @@ It is:
 
 - a local graph GUI over Mere's `Container`, relations, facets, vaults,
   personae, and history;
+- the permanent resident host and GUI for Personae's identity vault, SSH agent,
+  signing approvals, devices, and grants;
 - a Cambium and Genet consumer;
 - a host for Mere scenes, sprites, arrangements, physics, and eventually
   attributed inference;
@@ -70,6 +74,9 @@ The shortest product description is:
 |---|---|---|
 | Containers, user-authored relations, tags, local scenes, handler preferences | Local Mere graph in Graphshell | Read, write, persist, sync, and present |
 | Access and transfer records | Local Mere/Eidetic store | Append, project, retain, redact, and sync under user policy |
+| Persona master seeds, private keys, vault roots, and private epoch material | Personae vault | Host the native authority, request typed operations, and never copy secret material into the graph or browser |
+| Persona profiles, public key references, device roster, signed delegations, and revocations | Personae, with carry records still partly in `session-runtime` | Project public summaries and signed evidence; invoke typed management intents |
+| Signing approval policy and signing records | Local Graphshell policy plus the native Personae host | Present, enforce, append, retain, and redact under user policy |
 | Web document/runtime state | Turnstone or the current host browser | Hold an address and disclosed facets; request `Open` |
 | Files-in-place and document merge state | Knot or another file authority | Hold references and disclosed metadata; request read/write/copy intents |
 | Radio paths, peers, power, queues, routing | Retinue agent | Mount projections and invoke typed management intents |
@@ -81,6 +88,83 @@ The old remote-host rule still applies to mounted domains. A Retinue route or
 Turnstone page runtime does not become Graphshell truth because Graphshell can
 display it. The new rule is that Graphshell is itself a real Mere application,
 so its local graph is not merely a cache of other applications.
+
+### Personae is a first-class surface
+
+Personae already supplies the useful core:
+
+- passphrase- or OS-store-unlocked encrypted profiles and slots;
+- a resident SSH agent over the standard Windows named pipe or Unix socket;
+- SSH key import, listing, public-key export, removal, and signing;
+- master-authorized protocol-key derivation and attestation;
+- signed, attenuable, expiring, and revocable delegation certificates.
+
+The current limits are product gaps, not hidden accomplishments. The agent is
+Ed25519-only. A `PerUse` SSH slot refuses to sign because there is no
+confirmation UI. `ShortTtl` currently behaves like `Session`.
+`session-bind@openssh.com` is verified but does not yet constrain the key to
+that session. Device roster, persona-wallet manifests, grants, and private
+epoch carry also still live partly in `session-runtime` rather than Personae.
+
+The prior identity-vault plan already ruled that the agent's permanent home is
+Mere/Graphshell. Restore that ruling here:
+
+- native Graphshell hosts the Personae vault and SSH-agent endpoint in-process;
+- Graphshell's browser/PWA profile reaches that authority through an admitted
+  local-device session;
+- the interim standalone agent remains a recovery and dogfood tool until the
+  Graphshell host proves equivalent launch, crash recovery, and real SSH use;
+- browser WASM never receives a seed, private key, vault root, private epoch,
+  decrypted slot payload, or unrestricted signing handle.
+
+Graphshell projects the safe, useful identity surface into Mere as provisional
+Graphshell-local facets and content classes:
+
+- persona/profile;
+- vault protection and lock state;
+- references to the muniment data vaults and graph roots the persona may use;
+- public key reference: protocol, public key or fingerprint, comment, lineage,
+  unlock tier, and availability;
+- device and enrollment state;
+- signed grant, delegation, attenuation, expiry, and revocation evidence;
+- signing request, decision, and result receipt.
+
+These are graph projections, not duplicate authorities. Signed evidence remains
+authoritative in Personae, Servitor, or the owning grant ledger. The graph may
+explain and index it, but editing a projected grant cannot grant authority.
+Secret bytes never become facets or `Container` bodies.
+
+Keep the two uses of *vault* distinct. The Personae credential vault holds
+secrets and performs cryptographic operations. Muniment data vaults hold the
+content and graph roots a persona may access. Mere relates their safe public
+references; it does not merge their storage or unlock domains.
+
+This is where Mere earns its place rather than acting as a settings shell. A
+persona, device, key reference, application, address, file, transport, and
+signing receipt are neutral `Container`s related in one graph. A persona may
+bear a nested graph for its devices and authority projections when containment
+is useful; cross-app and cross-vault references remain ordinary relations.
+Eidetic carries the append-only signing/decision record, Stemma carries
+replacement and derivation lineage, Servitor gates application and agent
+intents, and Notochord authenticates the session that requested them.
+
+That permits useful graph queries and scenes without exposing secrets:
+
+- which persona, device, handler, and transport were involved in an access;
+- which public key reference signed an operation and under which approval;
+- which devices and applications hold an active grant from this persona;
+- which keys, grants, or devices are expired, revoked, unavailable, or due for
+  replacement;
+- which files, addresses, and sessions share an identity or signing history.
+
+Cross-app persona linkage remains opt-in. A work face and burner face do not
+become correlatable merely because Graphshell can display both.
+
+The level-0 threat boundary remains explicit: encryption at rest protects a
+closed vault on disk, not a compromised native Graphshell process. The standard
+SSH-agent endpoint also accepts local clients. Per-use approval, authenticated
+session context, and bounded policies reduce that authority; the GUI must not
+claim they identify or sandbox every local caller.
 
 ## 3. One object, several representations and handlers
 
@@ -200,21 +284,28 @@ A native, headless authority for capabilities browser WASM cannot own:
 
 - arbitrary filesystem access;
 - local application launching;
+- Personae vault custody, the standard SSH-agent endpoint, and signing approval
+  enforcement;
 - Iroh/p2panda;
 - Reticulum, Tulle, Sennet, Tucket, and other native transports;
 - protected key storage;
 - large or background transfers.
 
-The agent exposes projections and typed intents. It is not another GUI.
+The agent exposes projections and typed intents. Graphshell is its GUI.
 
 ## 7. Dependency direction
 
 ```text
-ports/graphshell (WASM reference host)
+ports/graphshell (portable application and WASM reference host)
     -> mere portable graph/canvas profile
     -> cambium + Genet DOM/layout/host seams
     -> graphshell-client + graphshell-protocol
     -> NetRender WebGPU for Graphshell's own surface
+
+ports/graphshell (native composition)
+    -> portable Graphshell application
+    -> personae vault + SSH-agent library
+    -> Notochord admission + native device capabilities
 
 Turnstone
     -> mere + Genet browser engine + native presentation/embedding
@@ -278,6 +369,13 @@ Checked in the live workspaces on 2026-07-27:
   `welding`.
 - the current `ports/graphshell` is still a native receipt/session host. It has
   no Cambium, Genet, Mere kernel, browser storage, or browser presenter.
+- Personae's DPAPI/passphrase vault, standard SSH-agent endpoint, SSH slot
+  management, delegation certificates, and real Windows-to-Linux signing receipt
+  already exist in this workspace. The vault pane, signing confirmation broker,
+  real short-TTL relock, and Graphshell residency do not.
+- Personae's carry-layer destination is ruled, but the live device roster,
+  persona-wallet manifests, device grants, and private-epoch bridge still reside
+  in `session-runtime`.
 - NetRender provides portable async device boot and a WebGPU target, but its
   deferred browser-canvas demo has no real consumer. Graphshell is now that
   consumer.
@@ -339,6 +437,16 @@ cargo tree -p graphshell --target wasm32-unknown-unknown --no-default-features -
 are green, and the tree check contains none of the forbidden embedding/browser
 crates.
 
+**2026-07-27 receipt:** H0 is complete. Mere now exposes `graph`,
+`linked-data`, `canvas`, and `workbench` capabilities while retaining the full
+default facade. Graphshell has explicit default `native` and opt-in `web`
+profiles; the web profile selects only Mere graph + canvas. All receipt binaries
+require `native`, and the standalone canvas presenter requires
+`native-present`. The exact WASM checks, native compatibility checks, 44-test
+Graphshell receipt, warning-denying focused Clippy, dependency-cone result, and
+local-patch limitation are recorded in the
+[H0 WASM product-cone receipt](../../../ports/graphshell/docs/2026-07-27_h0_wasm_product_cone_receipt.md).
+
 **Stop rule:** do not start extension packaging while the application cone is
 red or while a native-only dependency is merely hidden by an untested cfg.
 
@@ -355,7 +463,8 @@ red or while a native-only dependency is merely hidden by an untested cfg.
 Compose:
 
 - a local Mere graph and facet store;
-- local Personae/profile selection;
+- a selected persona/profile reference, with actual vault authority injected by
+  the native host when present;
 - Eidetic/muniment storage through an injected backend;
 - Graphshell client mounts for remote endpoints;
 - an in-process Mere projection endpoint so local and remote scenes traverse
@@ -374,10 +483,22 @@ Build one deterministic fixture containing:
 - access records from two devices;
 - a mounted remote projection;
 - an unknown facet namespace that must survive load/save.
+- one public persona, device, key-reference, grant, and signing-receipt
+  projection containing synthetic test material only.
 
 **Done when:** the fixture loads, projects, mutates through typed intents,
 persists, reopens byte-equivalently at the graph/facet boundary, and retains the
 unknown facet.
+
+**2026-07-27 receipt:** H1 is complete. The Graphshell port now owns a local
+Mere host adapter, injected Muniment persistence, local and remote mounts
+through one portable client, typed address-open intents with configurable
+handler offers, access-history facets, and safe public identity projections.
+The deterministic fixture mutates through an advertised open intent, persists,
+reopens, retains its foreign facet, remounts both scenes, and re-saves the
+unchanged boundary document byte-equivalently. Commands, results, and the
+normalization finding are recorded in the
+[H1 local Mere host receipt](../../../ports/graphshell/docs/2026-07-27_h1_local_mere_host_receipt.md).
 
 ### H2. Present the host in a browser
 
@@ -408,6 +529,15 @@ semantic-tree receipts.
 **Stop rule:** a WASM compile or generated HTML receipt is not a headed-browser
 receipt.
 
+**2026-07-28 receipt:** H2 is complete. Graphshell now has a separate
+`graphshell-web` workspace package that owns the browser-only Cambium, Genet,
+NetRender, WebGPU, and DOM dependencies while the existing `graphshell` web
+profile stays portable. Headed Chromium 150 and Firefox 151 passed pan, zoom,
+selection, persistent node drag, detail, mounted-session switching, and
+advertised-action invocation at 1280×800 and 600×800. Four screenshots and the
+captured semantic trees are committed with the
+[H2 browser presenter receipt](../../../ports/graphshell/docs/2026-07-27_h2_browser_presenter_receipt.md).
+
 ### H3. Ship the local graph product
 
 Add the daily graph operations:
@@ -437,10 +567,127 @@ unknown file through metadata, open web content in a configured handler, and
 round-trip a selected subgraph without losing ids, relations, facets, sprites,
 or provenance.
 
-This is the first standalone product cut. It does not wait for extension
+This is the first standalone graph product cut. It does not wait for extension
 capture or cross-device sync.
 
-### H4. Add the browser-extension profile
+**H3 receipt (2026-07-28):** the WASM-safe product layer now owns address and
+file creation, metadata and relation editing, filtering, arrangement and
+physics settings, representations, scenes, handler choice, and scoped graph
+engram transfer. A native round-trip preserves ids, semantic and provenance
+relations, facets, and sprite state. Headed Chromium passed the full product
+path at 1280×800 and 600×800, including an exact external-handler handoff and
+device-local facet exclusion. See the
+[H3 local graph product receipt](../../../ports/graphshell/docs/2026-07-28_h3_local_graph_product_receipt.md).
+
+### H4. Make Personae visible and usable
+
+**Absorbs G8** from the
+[remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md),
+which was written the same day to carry the 2026-07-22 ruling that the agent's
+resident home is Graphshell. Three things that entry made explicit and this
+one should not lose:
+
+- `personae::agent` is a library module so the resident host serves the
+  endpoint **in-process**, not as a separate install.
+- The interim logon scheduled task fakes a lifecycle this item has to own for
+  real: start with the host, survive a crash, stop when the host stops. Retire
+  the task in the same change that replaces it, never before.
+- `UnlockTier::PerUse` slots **refuse to sign** today, because signing without
+  asking would make the tier a lie. The confirmation UI is therefore what makes
+  that tier usable at all, not a polish item.
+
+**Files:**
+
+- `ports/graphshell/src/identity.rs` (new)
+- `ports/graphshell/src/identity_projection.rs` (new)
+- `ports/graphshell/src/native/personae_host.rs` (new)
+- `crates/persona/personae/src/agent.rs`
+- `crates/persona/personae/src/signing.rs` (new only if the approval seam is
+  independently useful outside Graphshell)
+- current `crates/system/session-runtime/src/wallet_store.rs` and
+  `wallet_grant.rs` carry sources, through a narrow read/intent adapter
+
+Move the resident Personae host into native Graphshell and add a plain
+**Identity** surface. It presents:
+
+- profiles/personas and the selected face;
+- vault backend, protection, lock, and agent-listener state;
+- SSH key references with public fingerprint, comment, lineage, unlock tier,
+  public-key export, import, generation, and explicit removal;
+- devices, enrollments, grants, delegations, expiry, and revocation;
+- pending signing requests and an append-only decision/result history.
+
+Do not block the pane on the remaining carry-layer promotion. Read each fact
+from its live authority through one adapter, label unavailable features
+honestly, and move the adapter when the roster/grant/epoch types finish folding
+into Personae.
+
+Add an approval broker between the SSH protocol adapter and vault signing.
+`PerUse` waits for an explicit visible decision. `ShortTtl` caches approval only
+for its configured idle window and then relocks. `Session` retains the existing
+unlocked-session behavior. Policies are configurable per key and adapter, with
+bounded remember/expiry choices rather than a process-wide boolean.
+
+The approval surface shows only facts the carrier can prove: persona, public key
+reference, operation class, payload digest, time, and any authenticated
+requester, process, host, or session binding. Missing context is displayed as
+unknown. Graphshell does not infer a target host from ambient state or present
+an unverified process label as authority.
+
+Append one signing record for approve, deny, timeout, or failure. It links the
+public key reference, persona, device, authenticated requester/target when
+known, decision policy, signed-payload digest, result, and related graph object
+or session when one exists. It does not contain private key material or the
+cleartext payload by default.
+
+Applications and AI use the same typed signing request and Servitor grant as
+other callers. Automation may receive a bounded pre-approval policy, but it
+cannot bypass the broker or silently widen its own scope.
+
+**Done when:**
+
+- native Graphshell owns the real standard SSH-agent endpoint and lists the
+  existing vault-held key by its public fingerprint;
+- the browser Graphshell surface reaches that local authority only through an
+  admitted session, and a captured browser snapshot contains none of the
+  vault's secret material;
+- a `PerUse` request blocks, displays proven context, succeeds after approval,
+  fails after denial, and both paths append signing records;
+- a `ShortTtl` key signs within its configured window and requires approval
+  after real idle expiry;
+- a real SSH login signs through Graphshell after process restart;
+- the interim resident task is removed only after launch-at-login and crash
+  recovery are proved for Graphshell on the same machine;
+- identity, device, grant, access, and signing projections can be selected in
+  one scene and survive reopen without becoming authority.
+
+**Stop rules:**
+
+- never serialize a seed, vault root, decrypted slot, private epoch, or private
+  key into Mere, Eidetic, a Graphshell session, browser storage, logs, or
+  receipts;
+- never treat an editable grant projection as authorization evidence;
+- do not claim per-use confirmation when the request cannot actually wait for a
+  decision;
+- retain the standalone agent until the Graphshell replacement passes the real
+  SSH and recovery receipts.
+
+**H4a receipt (2026-07-28):** the first H4 authority slice is complete.
+Personae now has a shared approval broker that makes `PerUse` genuinely wait,
+implements bounded `ShortTtl` reuse with real idle expiry, and records only
+public request facts and digests. Native Graphshell composes the vault, SSH
+adapter, approval broker, public identity/carry read model, portable cards, and
+typed approve/deny intents in-process. A live pending-card intent released the
+real SSH adapter and appended a signed history record. The standard endpoint
+and standalone scheduled task were deliberately left unchanged. Browser
+admission, real SSH login after restart, lifecycle cutover, management actions,
+and mixed-scene reopen remain H4 work. See the
+[H4a Personae authority receipt](../../../ports/graphshell/docs/2026-07-28_h4a_personae_authority_receipt.md).
+
+This is the first integrated reference-host cut: the graph, identity vault, and
+native capability broker work as one product.
+
+### H5. Add the browser-extension profile
 
 **Files:**
 
@@ -469,7 +716,7 @@ muniment after a second browser consumer proves the same contract.
 restart, can be filtered by time/device/persona, can be forgotten, and the same
 extension package passes headed Chromium and Firefox receipts.
 
-### H5. Move one selection between two devices
+### H6. Move one selection between two devices
 
 Complete the two open G5f clauses first:
 
@@ -499,7 +746,7 @@ survive, the destination examination appends its own AccessRecord, revocation
 blocks a transfer intent, and interruption resumes without restarting the
 whole transfer.
 
-### H6. Add continuous personal-device sync
+### H7. Add continuous personal-device sync
 
 Evaluate the existing Chartulary, Stickleback, and Commons-spine seams against
 the Graphshell event grammar. Reuse them where their contracts match; do not
@@ -519,11 +766,17 @@ Sync:
 - saved scenes and handler preferences selected for sync;
 - blob availability separately from metadata.
 
+Only user-selected public identity projections may ride this generic graph
+sync. Credential slots, seeds, credential-vault root keys, private epochs, and
+decrypted payloads are categorically excluded. Personae carry and secret sync
+remain a separate high-assurance lane with their own device enrollment,
+wrapping, revocation, and recovery receipts.
+
 **Done when:** two offline devices edit tags/relations and record accesses,
 reconnect, converge deterministically, expose any unresolved domain conflict,
 and retain per-device chronology without last-writer loss.
 
-### H7. Add the Retinue agent and constrained profile
+### H8. Add the Retinue agent and constrained profile
 
 **Retinue repository files:**
 
@@ -559,7 +812,7 @@ resulting graph/access/transfer records agree with the Iroh profile.
 **Stop rule:** a TCP Reticulum run does not prove RF, and the existing 4 KiB
 one-hop receipt does not prove arbitrary file transfer or routing.
 
-### H8. Open the same surface to applications and AI
+### H9. Open the same surface to applications and AI
 
 Expose the same projection, query, and intent grammar through:
 
@@ -577,12 +830,62 @@ truth.
 scene and invoke the same action through three adapters, with equivalent
 authorization and attributed results.
 
+### H10. Surface the local network as nodes
+
+Mark's ask, 2026-07-27: "I'd like to be able to easily find printers and
+surface them as local network devices in my mere."
+
+**Two capabilities that share a protocol and nothing else.** Conflating them is
+the main risk in this item:
+
+1. **Peer discovery.** p2panda's `MdnsDiscoveryMode`, already wired in
+   `mere-transport::P2pandaTransportBuilder::mdns` and exercised in that
+   crate's own tests, but **used nowhere in production**. Turning it on lets one
+   Graphshell find another on the LAN without a pasted ticket, which is what
+   closes G5's "discovery **or** ticket exchange" clause. Small: a builder call
+   plus a connect path that waits for the address book to populate.
+2. **Service browsing (DNS-SD).** Finding `_ipp._tcp` printers, `_http._tcp`,
+   `_smb._tcp`, AirPlay, and friends. **No crate in the tree does this today** --
+   p2panda's mDNS finds p2panda peers, not arbitrary services. This is the half
+   that makes a printer a node, and it is new dependency surface.
+
+**What a discovered service becomes.** One Container per service instance,
+carrying service type, instance name, host, port, addresses, and TXT records.
+Its provenance is *observed on this interface at this time*: a device's TXT
+records are that device's claims about itself, not facts, and the node must not
+present them as though the graph asserted them. A device seen on two networks
+is not the same node unless something stable says so.
+
+**Owner-controlled, defaulting off.** Browsing is passive but not invisible: it
+puts queries on the wire and builds a picture of a household. Announcing,
+browsing, and which service types are surfaced are three separate settings,
+consistent with this plan's rule that discovery, service admission, and transit
+stay independent axes.
+
+**Handlers.** A printer node's default handler opens its `ipp://`/`ipps://`
+address through section 3's handler routing. That is the payoff: the device is
+reachable *from* the graph rather than merely listed in it.
+
+**Done when:** a real printer on the LAN appears as a node with its address and
+advertised capabilities; a second run recognises it as the same remembered
+device rather than minting a duplicate; the node greys when it stops responding
+instead of silently persisting as live; and browsing can be turned off with
+nothing left listening.
+
+**Stop rules:** do not promote a TXT record to a graph assertion; do not
+identify a device across networks without a stable identifier; do not let
+service *browsing* imply service *admission*, which stays Notochord's.
+
 ## 10. Settings that remain user-controlled
 
 - captured browser APIs and origins;
 - private-window behavior;
 - history retention and redaction;
 - synchronized facet namespaces;
+- identity projections visible per persona and application;
+- vault backend and startup unlock mode;
+- signing approval mode, remembered scope, and expiry per key/adapter;
+- retention and redaction of signing records;
 - transfer relation closure;
 - handler choice by scheme/content class;
 - device and carrier preference;
@@ -607,11 +910,13 @@ Defaults may be supplied, but the data boundary is not hardcoded.
 
 1. deterministic local Mere fixture and reopen;
 2. headed Chromium and Firefox graph-host interaction;
-3. consented extension capture and forget;
-4. two-device admitted transfer, interruption/resume, and revocation;
-5. offline convergence;
-6. real Retinue agent management;
-7. measured RF constrained transfer.
+3. real vault-held SSH signing through the Graphshell resident host;
+4. per-use approval/denial, short-TTL relock, and secret-exclusion audit;
+5. consented extension capture and forget;
+6. two-device admitted transfer, interruption/resume, and revocation;
+7. offline convergence;
+8. real Retinue agent management;
+9. measured RF constrained transfer.
 
 The evidence ladder stays explicit: compile, unit, native integration, headed
 browser, two-device network, and real RF are different claims.
@@ -630,6 +935,15 @@ browser, two-device network, and real RF are different claims.
    alone.
 5. Which Retinue projection is first: attached-radio management or Reticulum
    route/service state. Choose the one with a real device receipt available.
+6. Which non-Windows OS-protected vault backend follows DPAPI. Until it lands,
+   expose the portable passphrase backend as the honest profile rather than
+   claiming equivalent auto-unlock.
+7. How much caller and target context each SSH-agent carrier can authenticate.
+   The approval UI degrades to explicit unknown fields; it does not manufacture
+   attribution.
+8. Which identity facet vocabulary promotes out of Graphshell after a second
+   application consumes it. Keep the first projection local and delete it when
+   the shared replacement lands.
 
 None of these decisions changes the product boundary or requires a new
 repository.

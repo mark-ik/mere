@@ -1,0 +1,3 @@
+route = "emissary"
+transport = "i2p"
+purpose = "Graphshell H3 file-metadata intake receipt"

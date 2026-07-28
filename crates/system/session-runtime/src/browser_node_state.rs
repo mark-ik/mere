@@ -301,7 +301,6 @@ mod tests {
         assert!(states.get(untouched).is_none());
     }
 
-
     /// A pre-split `graph.json` (the legacy inline session_state form) seeds
     /// the sidecar once; after the sidecar exists its values win on re-runs.
     #[cfg(not(target_arch = "wasm32"))]

@@ -169,8 +169,8 @@ mod tests {
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
     use kernel::geometry::PortablePoint;
-    use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use kernel::graph::fixtures::GraphFixtures;
+    use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use uuid::Uuid;
 
     fn star_graph() -> (Graph, [NodeKey; 5]) {

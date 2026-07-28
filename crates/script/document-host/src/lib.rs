@@ -26,8 +26,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use genet_scripted_dom::ScriptedDom;
+use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};

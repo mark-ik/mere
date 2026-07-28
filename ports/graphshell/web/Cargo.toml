@@ -1,0 +1,51 @@
+[package]
+name = "graphshell-web"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "graphshell_web"
+crate-type = ["cdylib"]
+path = "../src/web.rs"
+
+[dependencies]
+graphshell = { path = "..", default-features = false, features = ["web"] }
+mere = { path = "../../../crates/mere", default-features = false, features = ["graph", "canvas"] }
+muniment = { path = "../../../crates/eidetic/muniment" }
+sceno = { path = "../../../crates/scenograph/sceno" }
+cambium = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
+js-sys = "0.3"
+netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+netrender_device = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+sha2.workspace = true
+uuid.workspace = true
+wasm-bindgen = "=0.2.126"
+wasm-bindgen-futures = "0.4"
+wgpu = { version = "29", default-features = false, features = ["std", "wgsl", "webgpu"] }
+console_error_panic_hook = "0.1"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Blob",
+    "Document",
+    "DomRect",
+    "Element",
+    "Event",
+    "EventTarget",
+    "File",
+    "FileList",
+    "HtmlCanvasElement",
+    "HtmlElement",
+    "HtmlInputElement",
+    "HtmlSelectElement",
+    "HtmlTextAreaElement",
+    "KeyboardEvent",
+    "MouseEvent",
+    "PointerEvent",
+    "WheelEvent",
+    "Window",
+] }

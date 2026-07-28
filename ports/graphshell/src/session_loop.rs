@@ -37,6 +37,7 @@ use graphshell_protocol::{
 };
 use notochord::{AdmittedSession, RevocationLedger};
 use std::fmt::Display;
+use std::sync::RwLock;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::lifecycle::{Lapse, SessionAuthority};
@@ -86,10 +87,13 @@ pub enum SessionLoopError {
 ///
 /// `now_ms` is called per request rather than once, so a session that outlives
 /// its grant notices at the next request instead of at the next reconnect.
+/// `revocations` is shared for the same reason in the other direction: an
+/// owner who withdraws a grant mid-session is answered at the very next
+/// request, not at the next reconnect.
 pub async fn serve_admitted_session<E, S, F, N>(
     session: &mut AdmittedSession<S>,
     authority: &SessionAuthority,
-    ledger: &RevocationLedger,
+    revocations: &RwLock<RevocationLedger>,
     endpoint: &mut E,
     resume: &mut F,
     now_ms: N,
@@ -134,7 +138,19 @@ where
 
         // Before the endpoint sees it. A revoked grant must not buy one more
         // snapshot on its way out.
-        if let Some(lapse) = authority.lapse(ledger, now_ms()) {
+        //
+        // Read fresh each request rather than closed over once: the owner may
+        // revoke *during* a session, and a loop holding one snapshot of the
+        // ledger would serve the rest of that session on authority that had
+        // already been withdrawn. The lock is taken and dropped without an
+        // await in between.
+        let lapse = {
+            let ledger = revocations
+                .read()
+                .expect("the revocation ledger lock is never poisoned by this loop");
+            authority.lapse(&ledger, now_ms())
+        };
+        if let Some(lapse) = lapse {
             write_line(&mut writer, &failure(id, lapse_message(lapse))).await?;
             answered += 1;
             break SessionEnd::Lapsed(lapse);
@@ -417,7 +433,7 @@ mod tests {
         let summary = serve_admitted_session(
             &mut session,
             &authority(),
-            &ledger,
+            &RwLock::new(ledger),
             &mut endpoint,
             &mut resume,
             clock,

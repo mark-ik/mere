@@ -18,8 +18,8 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use incipit::{GraphId, SessionId};
 pub use identity::PersonaId;
+use incipit::{GraphId, SessionId};
 use serde::{Deserialize, Serialize};
 
 /// Current manifest schema version. Bump on incompatible changes

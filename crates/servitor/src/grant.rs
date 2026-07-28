@@ -9,8 +9,8 @@
 //! graph-cluster-derived namespaces can replace [`GrantTable`] without the
 //! gate changing.
 
-use crate::cap::{Cap, Capability};
 use crate::Subject;
+use crate::cap::{Cap, Capability};
 
 /// Access mode, in the meadowcap sense. Ordered by power: a `Write` grant
 /// covers a `Read` need, and `Delegate` covers both.
@@ -183,8 +183,14 @@ mod tests {
         let grant = Grant::new(subject(1), scope("trail"), Mode::Write);
         assert!(grant.covers(subject(1), &scope("trail/step1"), Mode::Write));
         assert!(grant.covers(subject(1), &scope("trail/step1"), Mode::Read));
-        assert!(!grant.covers(subject(1), &scope("other/x"), Mode::Write), "outside the scope");
-        assert!(!grant.covers(subject(2), &scope("trail/step1"), Mode::Write), "wrong subject");
+        assert!(
+            !grant.covers(subject(1), &scope("other/x"), Mode::Write),
+            "outside the scope"
+        );
+        assert!(
+            !grant.covers(subject(2), &scope("trail/step1"), Mode::Write),
+            "wrong subject"
+        );
         assert!(
             !grant.covers(subject(1), &scope("trail/step1"), Mode::Delegate),
             "insufficient mode"
@@ -198,8 +204,14 @@ mod tests {
             .with_grant(Grant::new(subject(2), scope("notes"), Mode::Read));
         assert!(authority.covers(subject(1), &scope("trail/step1"), Mode::Write));
         assert!(authority.covers(subject(2), &scope("notes/a"), Mode::Read));
-        assert!(!authority.covers(subject(2), &scope("notes/a"), Mode::Write), "read-only");
-        assert!(!authority.covers(subject(1), &scope("notes/a"), Mode::Read), "no grant there");
+        assert!(
+            !authority.covers(subject(2), &scope("notes/a"), Mode::Write),
+            "read-only"
+        );
+        assert!(
+            !authority.covers(subject(1), &scope("notes/a"), Mode::Read),
+            "no grant there"
+        );
     }
 
     #[test]
@@ -230,10 +242,17 @@ mod tests {
         // The hazard the typed capability exists to kill, at the authority
         // level: a denizen granted `navigate` gains nothing when a later build
         // adds a power whose name extends it.
-        let authority = GrantTable::new()
-            .with_grant(Grant::new(subject(1), Cap::power("navigate").unwrap(), Mode::Write));
+        let authority = GrantTable::new().with_grant(Grant::new(
+            subject(1),
+            Cap::power("navigate").unwrap(),
+            Mode::Write,
+        ));
         assert!(authority.covers(subject(1), &Cap::power("navigate").unwrap(), Mode::Write));
-        assert!(!authority.covers(subject(1), &Cap::power("navigate-admin").unwrap(), Mode::Write));
+        assert!(!authority.covers(
+            subject(1),
+            &Cap::power("navigate-admin").unwrap(),
+            Mode::Write
+        ));
         assert!(
             !authority.covers(subject(1), &scope("navigate"), Mode::Write),
             "a scope spelled like the power is not the power"

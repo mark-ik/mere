@@ -52,7 +52,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 ssh-agent-lib = { version = "0.6", optional = true }
 ssh-key = { version = "0.6", features = ["ed25519"], optional = true }
 signature = { version = "2", optional = true }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"], optional = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
 [dev-dependencies]

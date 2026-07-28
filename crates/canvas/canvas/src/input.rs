@@ -90,6 +90,15 @@ impl Canvas {
                 self.physics.pin(d.node, world);
                 // Track the cursor in the view immediately (the actor lags a frame).
                 self.view.set_position(d.node, world);
+                // A paused analytic arrangement is reapplied after every frame.
+                // Move its slot with the user's drag so that overlay does not
+                // immediately erase the manual placement.
+                if let Some(positions) = self.strategy_positions.as_mut()
+                    && let Some((_, position)) =
+                        positions.iter_mut().find(|(node, _)| *node == d.node)
+                {
+                    *position = PortablePoint::new(world.x, world.y);
+                }
                 redraw = true;
             }
             self.drag = Some(d);
@@ -211,6 +220,7 @@ impl Canvas {
                     if d.moved {
                         self.physics.unpin(d.node);
                         self.physics.set_dragging(false);
+                        self.sync_anchor_force();
                         self.settle_physics(SETTLE_TICKS / 3);
                     } else if self.shift {
                         // Shift-click toggles the node in the selection (multi-select).

@@ -193,7 +193,9 @@ impl Mode {
             "dark" => Some(Mode::Dark),
             "hc_light" => Some(Mode::HcLight),
             "hc_dark" => Some(Mode::HcDark),
-            _ => key.strip_prefix("custom:").map(|id| Mode::Custom(id.to_string())),
+            _ => key
+                .strip_prefix("custom:")
+                .map(|id| Mode::Custom(id.to_string())),
         }
     }
 

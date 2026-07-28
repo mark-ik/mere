@@ -6,9 +6,7 @@
 //! that class omit `lm_head.weight` entirely.
 
 use burn::module::Param;
-use burn::nn::{
-    Embedding, EmbeddingConfig, Linear, RmsNorm, RotaryEncoding, RotaryEncodingConfig,
-};
+use burn::nn::{Embedding, EmbeddingConfig, Linear, RmsNorm, RotaryEncoding, RotaryEncodingConfig};
 use burn::tensor::{Int, Tensor, backend::Backend};
 
 use super::attention::linear_no_bias_from_loaded;
@@ -114,7 +112,11 @@ impl<B: Backend> DecoderModel<B> {
     /// positions `cache.position..`, extends the cache, and returns
     /// logits `[batch, seq, vocab]` for the block. Prefill = first call
     /// with the whole prompt; decode = subsequent single-token calls.
-    pub fn forward_cached(&self, input_ids: Tensor<B, 2, Int>, cache: &mut KvCache<B>) -> Tensor<B, 3> {
+    pub fn forward_cached(
+        &self,
+        input_ids: Tensor<B, 2, Int>,
+        cache: &mut KvCache<B>,
+    ) -> Tensor<B, 3> {
         let seq = input_ids.dims()[1];
         let start = cache.position;
         let mut h = self.embed.forward(input_ids);

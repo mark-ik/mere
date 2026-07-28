@@ -59,11 +59,11 @@ pub mod canvas_search;
 pub mod field_bridge;
 pub mod persistence;
 
+pub use affinity::affinity_pairs;
 #[cfg(feature = "bert")]
 pub use bert::{
     BGE_MICRO_V2, BertConfig, BertEmbeddingProvider, MINILM_L6_V2, SNOWFLAKE_ARCTIC_EMBED_XS,
 };
-pub use affinity::affinity_pairs;
 pub use canvas_search::CanvasSearchSurface;
 pub use field_bridge::{build_query_similarity_field, register_query_similarity_field};
 pub use index::{IndexError, VectorIndex};

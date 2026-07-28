@@ -108,8 +108,8 @@ impl Classified for EdgePayload {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::edge_taxonomy::{EdgeAssertion, SemanticSubKind};
+    use super::*;
 
     #[test]
     fn web_node_satisfies_the_container_capabilities() {

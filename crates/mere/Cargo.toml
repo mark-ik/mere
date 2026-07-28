@@ -9,30 +9,55 @@ rust-version = "1.92.0"
 description = "The composed graph library behind Turnstone and other graph-shaped applications."
 
 [features]
-default = []
+default = ["graph", "linked-data", "canvas", "workbench"]
+# The portable Mere graph/domain surface. This is deliberately smaller than
+# the composed desktop facade so browser hosts can take graph truth without
+# presentation or host-workbench dependencies.
+graph = [
+    "dep:forme",
+    "dep:graphlets",
+    "dep:glossary",
+    "dep:kernel",
+    "dep:roster",
+    "dep:trail",
+]
+# Semantic import/export remains independent of the graph canvas.
+linked-data = ["graph", "dep:linked-data"]
+# Mere's graph-aware visual surface. `gloss` is canvas-backed, so it belongs in
+# this capability rather than the graph-only cone.
+canvas = ["graph", "dep:canvas", "dep:gloss"]
+# App-host composition and routing. Native hosts use this today; portable
+# graph consumers do not need to pay for it.
+workbench = [
+    "graph",
+    "dep:apparatus",
+    "dep:inker",
+    "dep:platen",
+    "dep:workbench",
+]
 # The app-facing semantic query surface stays opt-in because it carries the
 # SPARQL evaluator. Consumers that only need graph construction do not pull it.
-query = ["linked-data/query"]
+query = ["linked-data", "linked-data/query"]
 # Test-only fixture escape hatch. This mirrors kernel's gate without exposing
 # the fixture API to ordinary library consumers.
-fixtures = ["kernel/fixtures"]
+fixtures = ["graph", "kernel/fixtures"]
 
 [dependencies]
-apparatus = { workspace = true }
-forme = { workspace = true }
+apparatus = { workspace = true, optional = true }
+forme = { workspace = true, optional = true }
 # The engine-management layer (genet component since 2026-07-10): the facade
 # composes mere's routing vocabulary over inker's host-neutral policy.
-inker = { workspace = true }
-graphlets = { workspace = true }
-glossary = { workspace = true }
-gloss = { workspace = true }
-kernel = { workspace = true }
-linked-data = { workspace = true }
-canvas = { workspace = true }
-platen = { workspace = true }
-roster = { workspace = true }
-trail = { workspace = true }
-workbench = { workspace = true }
+inker = { workspace = true, optional = true }
+graphlets = { workspace = true, optional = true }
+glossary = { workspace = true, optional = true }
+gloss = { workspace = true, optional = true }
+kernel = { workspace = true, optional = true }
+linked-data = { workspace = true, optional = true }
+canvas = { workspace = true, optional = true }
+platen = { workspace = true, optional = true }
+roster = { workspace = true, optional = true }
+trail = { workspace = true, optional = true }
+workbench = { workspace = true, optional = true }
 
 [lints]
 workspace = true

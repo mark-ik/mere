@@ -21,7 +21,6 @@ use petgraph::stable_graph::NodeIndex;
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use rkyv::{Archive, Archived, Deserialize, Place, Resolver, Serialize, rancor::Fallible};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub use chartulary::stemma::TransitionKind as NodeHistoryTransitionKind;
@@ -210,10 +209,7 @@ pub(crate) fn normalize_import_records(import_records: &mut Vec<ImportRecord>) {
 }
 
 pub(crate) fn current_unix_timestamp_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    crate::time::unix_epoch_seconds()
 }
 
 // Node, NodeLifecycle, and impl Node moved to `node.rs` per the
@@ -582,10 +578,7 @@ impl Graph {
 
     /// Milliseconds since the Unix epoch, for visit timestamps (live-app clock).
     fn epoch_ms() -> u64 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0)
+        crate::time::unix_epoch_millis()
     }
 }
 

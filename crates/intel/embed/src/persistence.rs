@@ -108,7 +108,9 @@ where
 /// [`TypedPayload`] that carries the schema, and the only type carrying
 /// `VectorIndex`'s schema is the private `PersistedIndex` newtype above. A caller
 /// outside this module cannot name it, so it cannot list without this.
-pub async fn list_from_eidetic<K>(store: &mut dyn eidetic::Store) -> eidetic::Result<Vec<BlobManifest>>
+pub async fn list_from_eidetic<K>(
+    store: &mut dyn eidetic::Store,
+) -> eidetic::Result<Vec<BlobManifest>>
 where
     K: Hash + Eq + Clone + Serialize + DeserializeOwned,
 {
@@ -141,12 +143,9 @@ mod tests {
     use std::collections::HashMap;
 
     // The in-memory store is muniment's (2026-07-12): the hand-rolled
-// one was the same map behind the same seam.
+    // one was the same map behind the same seam.
     use muniment::Backend as _;
     use muniment::MemoryBackend as InMemoryStore;
-
-
-
 
     fn make_index() -> VectorIndex<u32> {
         let mut idx = VectorIndex::<u32>::new(3, SimilarityMetric::Cosine);

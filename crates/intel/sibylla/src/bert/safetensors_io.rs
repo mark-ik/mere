@@ -1,4 +1,3 @@
-
 //! Convert raw safetensors tensor bytes into Burn `Tensor<B, D>` values.
 //!
 //! `safetensors` stores tensors as raw little-endian bytes plus a JSON

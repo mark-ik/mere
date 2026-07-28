@@ -269,8 +269,14 @@ mod tests {
         let mut edges: Vec<(String, String, String)> = graph
             .relations()
             .map(|rel| {
-                let from = graph.get_node(rel.from).map(|n| n.id.to_string()).unwrap_or_default();
-                let to = graph.get_node(rel.to).map(|n| n.id.to_string()).unwrap_or_default();
+                let from = graph
+                    .get_node(rel.from)
+                    .map(|n| n.id.to_string())
+                    .unwrap_or_default();
+                let to = graph
+                    .get_node(rel.to)
+                    .map(|n| n.id.to_string())
+                    .unwrap_or_default();
                 (from, to, format!("{:?}", rel.kind))
             })
             .collect();
@@ -289,10 +295,18 @@ mod tests {
         journal.set_author(USER_AUTHOR);
         journal.record_as("gate", add(3, "https://c.test/"));
 
-        let authors: Vec<&str> = journal.entries().iter().map(|e| e.author.as_str()).collect();
+        let authors: Vec<&str> = journal
+            .entries()
+            .iter()
+            .map(|e| e.author.as_str())
+            .collect();
         assert_eq!(authors, ["user", "aa11", "gate"]);
         assert_eq!(journal.author(), USER_AUTHOR, "scoping restored");
-        assert_eq!(journal.replay().node_count(), 3, "replay strips the envelope");
+        assert_eq!(
+            journal.replay().node_count(),
+            3,
+            "replay strips the envelope"
+        );
     }
 
     /// A pre-envelope bare log migrates one-way with the `pre-gate` author.
@@ -328,7 +342,9 @@ mod tests {
         let graph = journal.replay();
         assert_eq!(graph.node_count(), 2);
         assert_eq!(graph.relations().count(), 1, "the cites relation replayed");
-        let (_, node) = graph.get_node_by_id(Uuid::from_u128(1)).expect("node a present");
+        let (_, node) = graph
+            .get_node_by_id(Uuid::from_u128(1))
+            .expect("node a present");
         assert_eq!(node.title, "Paper A", "the content edit replayed too");
     }
 
@@ -339,7 +355,11 @@ mod tests {
         source.record(add(2, "https://b.test/"));
 
         let mut fork = source.fork(LogId::new("fork"));
-        assert_eq!(fork.entries(), source.entries(), "the fork copies the history");
+        assert_eq!(
+            fork.entries(),
+            source.entries(),
+            "the fork copies the history"
+        );
         let provenance = fork.provenance().expect("a fork has provenance");
         assert_eq!(provenance.source, Some(LogId::new("source")));
         assert_eq!(provenance.at, Seq(source.len() as u64));

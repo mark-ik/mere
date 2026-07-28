@@ -5,7 +5,6 @@
 //! Extracted from `edge_taxonomy.rs` per the 600-LOC ceiling.
 
 use std::collections::BTreeSet;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -25,10 +24,7 @@ pub struct Traversal {
 
 impl Traversal {
     pub fn now(trigger: NavigationTrigger) -> Self {
-        let timestamp_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
+        let timestamp_ms = crate::time::unix_epoch_millis();
         Self {
             timestamp_ms,
             trigger,

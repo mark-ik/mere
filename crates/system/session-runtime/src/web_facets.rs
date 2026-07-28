@@ -50,7 +50,13 @@ pub const WEB_CONTENT: &str = "web.content";
 
 /// The five `web.*` facet ids, the set this module owns (used by the rewrite
 /// to clear stale fields).
-const WEB_FACETS: [&str; 5] = [WEB_SCROLL, WEB_FORM_DRAFT, WEB_VIEWER, WEB_COMPAT, WEB_CONTENT];
+const WEB_FACETS: [&str; 5] = [
+    WEB_SCROLL,
+    WEB_FORM_DRAFT,
+    WEB_VIEWER,
+    WEB_COMPAT,
+    WEB_CONTENT,
+];
 
 /// Replace the store's `web.*` facets with `states` — the save-time write.
 /// Every existing `web.*` facet is cleared first (a node absent from `states`,

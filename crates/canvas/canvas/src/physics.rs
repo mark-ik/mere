@@ -25,11 +25,11 @@ use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use euclid::default::Point2D;
+use kernel::graph::NodeKey;
 use seiche::{
     AffinitySpring, Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider,
     NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
 };
-use kernel::graph::NodeKey;
 
 use super::TICK_DT;
 

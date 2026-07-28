@@ -1,8 +1,8 @@
 # Graphshell
 
-Graphshell is a remote, local-first projection host. Applications retain their
-own truth and authority; Graphshell stores only curation state, disclosed
-scenes, and presentation preferences.
+Graphshell is Mere's local-first reference host and projection portal.
+Applications retain authority over mounted domains; Graphshell also grows its
+own local Mere graph through the reference-host plan.
 
 ## Current boundary
 
@@ -20,6 +20,81 @@ The reusable session stack lives in [`crates/graphshell`](../../crates/graphshel
 This port is the `graphshell` presentation host. Its native receipt view can
 place resolved presentations at disclosed Scenograph origins, draw disclosed
 relations, and collapse to a semantic card stack on narrow screens.
+
+## Build profiles
+
+The package has two explicit capability profiles:
+
+- `native` is the default. It contains the existing admitted sessions,
+  Personae composition, native transports, stdio carrier, and receipt binaries.
+- `web` selects Mere's portable graph + canvas facade and leaves native
+  admission, transport, Tokio, Personae vault, and receipt binaries outside the
+  WASM dependency cone.
+
+H0 proves the web cone. H1 adds the local graph-host adapter inside that cone:
+
+```powershell
+$env:CARGO_TARGET_DIR = 'target-plan-graphshell'
+cargo check -p graphshell-protocol -p graphshell-client --target wasm32-unknown-unknown
+cargo check -p mere-canvas --target wasm32-unknown-unknown
+cargo check -p graphshell --target wasm32-unknown-unknown --no-default-features --features web
+python scripts/check_port_boundaries.py
+```
+
+The `web` profile now exposes:
+
+- a local Mere graph plus its unknown-forward facet store;
+- Muniment persistence through an injected backend;
+- an in-process Graphshell endpoint with portable cards and typed open intents;
+- user-configurable handler offers;
+- local and remote projections mounted through one `ClientState`;
+- public Personae references while vault authority remains native.
+
+The H1 fixture exercises web, custom-protocol, and file addresses; saved scene
+and remote-mount facets; several relation families; two-device access history;
+synthetic public identity projections; and a foreign facet namespace. Its open
+intent mutates access history, persists, reopens, and re-saves the unchanged
+graph/facet boundary byte-equivalently:
+
+```powershell
+$env:CARGO_TARGET_DIR = 'target-plan-graphshell'
+cargo test -p graphshell --no-default-features --features web
+```
+
+H2 adds the real browser presenter as a separate `graphshell-web` workspace
+package. It composes the H1 host with Mere Canvas, Cambium over Genet's neutral
+DOM/layout seam, and NetRender over an asynchronous WebGPU canvas. The
+browser-only stack does not enter the portable `graphshell` crate.
+
+```powershell
+$env:CARGO_TARGET_DIR = 'target-plan-graphshell-web'
+cargo build -p graphshell-web --offline --target wasm32-unknown-unknown
+wasm-bindgen --target web --out-dir ports/graphshell/web/pkg `
+  target-plan-graphshell-web/wasm32-unknown-unknown/debug/graphshell_web.wasm
+python -m http.server 8765 --bind 127.0.0.1 --directory ports/graphshell/web
+```
+
+Headed Chromium and Firefox receipts cover pan, zoom, selection, persistent
+node drag, detail, local/remote session switching, and advertised action
+invocation at wide and narrow sizes. See the
+[H2 receipt](docs/2026-07-27_h2_browser_presenter_receipt.md) and its
+[screenshots plus semantic tree](docs/receipts/h2_browser_receipts.json).
+Canvas2D was not needed.
+
+H3 turns that presenter into the first standalone graph product cut. The
+browser can create addressed and content-addressed file objects, edit graph
+metadata and relations, filter and arrange the graph, save and reopen scenes,
+choose representations and open handlers, and round-trip an explicitly scoped
+graph engram. Device-local file metadata stays out of transfer unless the user
+opts in. See the
+[H3 local graph product receipt](docs/2026-07-28_h3_local_graph_product_receipt.md)
+and its [headed browser record](docs/receipts/h3_browser_receipts.json).
+
+The standalone native canvas presenter is similarly explicit:
+
+```powershell
+cargo run -p mere-canvas --features native-present --bin canvas
+```
 
 The portable crates may depend on Scenograph contracts, serialization, and
 content-addressing primitives. They must not depend on Mere, Turnstone, Isometry,
@@ -66,7 +141,9 @@ G3 lives in Turnstone, in the required dependency direction. Its endpoint reads
 live Mere graph truth through Mere cartography, returns the resulting score,
 scene, routed relations, and content-addressed card offers, and maps advertised
 intents back through Turnstone's Servitor gate. Graphshell gains only the generic
-spatial receipt view; this repository still has no Mere or Turnstone dependency.
+spatial receipt view. The portable Graphshell crates still have no Mere or
+Turnstone dependency; this application port selects Mere explicitly in its
+`web` profile.
 
 The portable stack was published on 2026-07-22 as the active Graphshell tree.
 It joined Mere on 2026-07-23, and the reference application moved under

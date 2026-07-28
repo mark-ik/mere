@@ -183,7 +183,10 @@ mod tests {
     #[test]
     fn coupling_with_unknown_field_resolves_to_none() {
         let (graph, _) = graph_with_nodes(2);
-        let coupling = force_coupling(FieldId::from_uuid(Uuid::from_u128(0xDEAD)), NodeSelector::All);
+        let coupling = force_coupling(
+            FieldId::from_uuid(Uuid::from_u128(0xDEAD)),
+            NodeSelector::All,
+        );
         assert!(
             coupling_force_from_graph(&coupling, &graph).is_none(),
             "an unknown field id yields no force"

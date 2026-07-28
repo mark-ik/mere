@@ -1,4 +1,3 @@
-
 //! Typed bundle of all tensors loaded from a HF BERT safetensors file.
 //!
 //! This is the structured intermediate between bytes-on-disk and a
