@@ -127,9 +127,14 @@ async fn main() -> Result<(), String> {
     let mode = args.next().unwrap_or_default();
     let mut peer_ticket = None;
     let mut revoked = false;
+    let mut discover = false;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--peer" => peer_ticket = args.next(),
+            // No ticket: derive the peer id from a shared name and let mDNS
+            // resolve its address. See `PeerSource` for what that does and
+            // does not buy.
+            "--discover" => discover = true,
             "--revoked" => revoked = true,
             other => return Err(format!("unexpected argument {other:?}")),
         }
@@ -146,9 +151,15 @@ async fn main() -> Result<(), String> {
 
     match mode.as_str() {
         "serve" => serve(owner, me, seed, network, revoked).await,
+        "connect" if discover => {
+            let peer_key = InMemoryProvider::from_seed(env_hash("G5_PEER")?).master_public_key();
+            let peer = transport::PeerID::from_bytes(&peer_key.to_bytes())
+                .map_err(|e| format!("peer id: {e}"))?;
+            connect(owner, me, seed, network, PeerSource::Discovered(peer)).await
+        }
         "connect" => {
-            let ticket = peer_ticket.ok_or("connect needs --peer <ticket>")?;
-            connect(owner, me, seed, network, ticket).await
+            let ticket = peer_ticket.ok_or("connect needs --peer <ticket> or --discover")?;
+            connect(owner, me, seed, network, PeerSource::Ticket(ticket)).await
         }
         other => Err(format!(
             "usage: g5_peer serve [--revoked] | g5_peer connect --peer <ticket>\n\
@@ -288,12 +299,28 @@ async fn serve(
     Ok(())
 }
 
+/// How this run learned which peer to dial.
+///
+/// The distinction matters and is easy to overstate. p2panda's mDNS populates
+/// the address book so a `connect` to a **known** peer id succeeds without an
+/// explicit `add_peer`. It does **not** answer "who is on this LAN":
+/// `mere-transport` exposes no way to enumerate what discovery found, so
+/// `Discovered` still derives the peer id from a shared name. mDNS removes the
+/// need to exchange an *address*, not the need to know *who*.
+enum PeerSource {
+    /// A ticket carried by hand: id and address together, and the only form
+    /// that works off this LAN.
+    Ticket(String),
+    /// A peer id known in advance, with mDNS expected to resolve its address.
+    Discovered(transport::PeerID),
+}
+
 async fn connect(
     owner: InMemoryProvider,
     me: InMemoryProvider,
     seed: [u8; 32],
     network: NetworkId,
-    ticket: String,
+    source: PeerSource,
 ) -> Result<(), String> {
     let carrier = P2pandaTransport::builder_from_seed(seed)
         .alpns(vec![projection_alpn()])
@@ -303,12 +330,26 @@ async fn connect(
         .map_err(|e| format!("bind: {e}"))?;
     assert_same_key(&carrier, &me)?;
 
-    let peer = carrier
-        .add_peer_ticket(&ticket)
-        .await
-        .map_err(|e| format!("ticket: {e}"))?;
     println!("g5_peer connect");
-    println!("  dialling {}", hex8(&peer.to_bytes()));
+    let peer = match source {
+        PeerSource::Ticket(ticket) => {
+            let peer = carrier
+                .add_peer_ticket(&ticket)
+                .await
+                .map_err(|e| format!("ticket: {e}"))?;
+            println!("  peer from ticket: {}", hex8(&peer.to_bytes()));
+            peer
+        }
+        PeerSource::Discovered(peer) => {
+            // Nothing is added to the address book. If the dial succeeds, mDNS
+            // resolved the address by itself.
+            println!(
+                "  no ticket, no add_peer; waiting for mDNS to resolve {}",
+                hex8(&peer.to_bytes())
+            );
+            peer
+        }
+    };
 
     // Phase one: open, take a snapshot, and suspend. Suspend rather than
     // close, because the point is a session the peer intends to come back to.
