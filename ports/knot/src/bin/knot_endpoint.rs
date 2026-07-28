@@ -428,9 +428,7 @@ mod tests {
     use std::net::TcpListener;
     use std::thread;
 
-    fn serve_http_cookie_probe(
-        body: &'static str,
-    ) -> (String, thread::JoinHandle<Vec<String>>) {
+    fn serve_http_cookie_probe(body: &'static str) -> (String, thread::JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind HTTP fixture");
         let address = listener.local_addr().expect("read HTTP fixture address");
         let handle = thread::spawn(move || {

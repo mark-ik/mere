@@ -331,9 +331,10 @@ Current user settings:
 
 The shipped providers are rooted `file:` transclusion for directory endpoints
 and sandboxed Rhai evaluation. Anonymous HTTP(S) and the read-only smolweb
-providers now join the rooted-file lane under the same Knot authority.
-Sanitized HTML and the sealed attributable derived cache remain the evaluation plan's
-consumer-pulled E3/E4 work.
+providers now join the rooted-file lane under the same Knot authority. The
+html5ever-backed reader fragment lane also sanitizes fetched HTML before Knot
+splices derived blocks. The sealed attributable derived cache remains the
+evaluation plan's consumer-pulled E4 work.
 
 ## Stop rules
 

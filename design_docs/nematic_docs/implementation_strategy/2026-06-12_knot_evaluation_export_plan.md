@@ -2,9 +2,9 @@
 
 **Date**: 2026-06-12
 **Status**: reconciled and advanced 2026-07-27. K5, K1's pure resolve pass,
-K2's evaluation seam, the Knot production effect bridge, and Turnstone consent
-surface landed. Sanitized HTML, additional network providers, and the sealed
-derived cache remain open. Inker and Nematic now live in Genet; Meerkat, the
+K2's evaluation seam, the Knot production effect bridge, Turnstone consent,
+network providers, and sanitized HTML fragment lane landed. The sealed
+derived cache remains open. Inker and Nematic now live in Genet; Meerkat, the
 host named throughout the dated progress log, was deleted 2026-07-18. The
 current ownership and remaining sequence below supersede the old Meerkat
 wiring assignments. The production Knot adapter now supplies anonymous
@@ -41,7 +41,7 @@ an effectful Knot service and a product-host consent surface.
 | K5 exporters | Complete: gemtext already existed; gophermap and text exporters landed | Genet `components/inker/src/document/render/export.rs` |
 | K1 transclusion | Complete: pure pass plus production rooted-file, anonymous HTTP(S), and read-only smolweb providers; Knot policy, Graphshell intent, and Turnstone Ask/Auto receipt complete | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
 | K2 evaluation | `BlockEvaluator`, registry, policy, Rhai backend, bounded Piccolo proof, nested render, production registration, and consent complete | Seam in Genet Inker; evaluators remain capability providers. Knot chooses and invokes them under document policy. |
-| K4 sanitized HTML clips | Open | Genet Nematic/inker as a pure parse, sanitize, and lower lane |
+| K4 sanitized HTML clips | Complete: optional html5ever-backed reader fragment engine plus Knot transclusion routing and hostile-fragment receipt | Genet Nematic/inker owns the pure parse, sanitize, and lower lane |
 | K3 cache and consent | Consent complete; sealed cache open | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents and user consent. |
 
 ### Boundary ruling
@@ -87,9 +87,14 @@ holds the retained consumer and mutation receipts.
    user's confirmation, queues Auto on open, and renders the result as
    non-persisted derived text tied to the current base token. Stale invocations
    refuse before fetch or evaluation.
-3. **E3, sanitized HTML.** Land an optional html5ever-backed fragment engine in
-   Genet, with scripts, event handlers, iframes, and style authority removed by
-   tests. Keep the semantic sibling as the export path.
+3. **E3, sanitized HTML. Complete.** Nematic's optional, default-enabled
+   `html-fragment` feature parses through the existing html5ever-backed static
+   DOM and lowers only passive reader structure. Scripts, event handlers,
+   iframes, forms, style authority, and active URL schemes are removed by
+   tests. Knot routes fetched HTML/XHTML through this engine before splicing
+   derived blocks; an endpoint receipt proves hostile content stays out while
+   headings and safe links survive. The semantic sibling remains the export
+   path.
 4. **E4, sealed derived cache.** Cache fetched or explicitly cacheable
    evaluation results inside Knot's encryption profile with source, policy,
    evaluator/fetcher version, fetched-at, and source-revision attribution.
@@ -102,7 +107,8 @@ holds the retained consumer and mutation receipts.
    differently signed Commons operation under the group-data encryption
    profile: Auto is rejected, explicit Run succeeds, authored source stays
    unchanged, and plaintext is absent from the fixture store. Offline age
-   requires E4. Sanitized clip rendering requires E3.
+   requires E4. Sanitized HTML is proved through Knot's endpoint lane; faithful
+   clip capture remains with the selected-range producer work.
 
 JavaScript backends, public serving, canvas outputs, and additional block kinds
 remain separate consumer-pulled work. They are not closure conditions for this

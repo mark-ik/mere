@@ -1265,6 +1265,7 @@ fn render_effect_input(input: &EngineInput) -> Result<EngineDocument, String> {
     let engine: Box<dyn Engine> = match media_type {
         Some("text/gemini") => Box::new(nematic::GemtextEngine::new()),
         Some("text/markdown") => Box::new(nematic::MarkdownEngine::new()),
+        Some("text/html" | "application/xhtml+xml") => Box::new(nematic::HtmlFragmentEngine::new()),
         Some("text/x-knot" | "text/vnd.knot") => Box::new(nematic::KnotEngine::new()),
         Some("text/plain") => Box::new(nematic::TextEngine::new()),
         _ if address.ends_with(".gmi") || address.ends_with(".gemini") => {
@@ -1272,6 +1273,9 @@ fn render_effect_input(input: &EngineInput) -> Result<EngineDocument, String> {
         }
         _ if address.ends_with(".md") || address.ends_with(".markdown") => {
             Box::new(nematic::MarkdownEngine::new())
+        }
+        _ if address.ends_with(".html") || address.ends_with(".htm") => {
+            Box::new(nematic::HtmlFragmentEngine::new())
         }
         _ if address.ends_with(".knot") => Box::new(nematic::KnotEngine::new()),
         _ => Box::new(nematic::TextEngine::new()),
@@ -1627,6 +1631,27 @@ mod tests {
                 Ok(Fetched {
                     content_type: Some("text/markdown".into()),
                     body: "## Included\n\nFetched text.\n".into(),
+                })
+            } else {
+                Err(format!("unexpected fetch: {address}"))
+            }
+        }
+    }
+
+    struct StubHtmlFetcher;
+
+    impl KnotEffectFetcher for StubHtmlFetcher {
+        fn fetch(&mut self, address: &str) -> Result<Fetched, String> {
+            if address == "https://fixture.test/article" {
+                Ok(Fetched {
+                    content_type: Some("text/html".into()),
+                    body: r#"<article>
+                        <h2 onclick="steal()" style="display:none">Visible HTML</h2>
+                        <p>A <a href="/safe">safe link</a>.</p>
+                        <script>SECRET_SCRIPT()</script>
+                        <iframe srcdoc="SECRET_FRAME"></iframe>
+                    </article>"#
+                        .into(),
                 })
             } else {
                 Err(format!("unexpected fetch: {address}"))
@@ -2000,6 +2025,62 @@ Fallback.
             .unwrap();
         assert!(matches!(stale, IntentResult::Stale { .. }));
         assert_eq!(fs::read_to_string(path).unwrap(), "# Changed elsewhere\n");
+    }
+
+    #[test]
+    fn html_transclusion_lowers_only_the_sanitized_semantic_fragment() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("field.knot");
+        let authored = "# Field\n\n```include https://fixture.test/article\nFallback.\n```\n";
+        fs::write(&path, authored).unwrap();
+        let effects = KnotEffectAuthority::new(KnotEffectPolicy {
+            resolve: KnotEffectMode::Ask,
+            allowed_schemes: vec!["https".into()],
+            max_depth: 1,
+            ..KnotEffectPolicy::default()
+        })
+        .with_fetcher(StubHtmlFetcher);
+        let mut endpoint =
+            KnotEndpoint::open_writable(temp.path(), KnotWriteGrant::new(4096)).unwrap();
+        endpoint.grant_effects(effects);
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "field.knot");
+
+        assert_eq!(
+            endpoint
+                .invoke(effect_invocation(
+                    &snapshot,
+                    target,
+                    KNOT_TRANSCLUSION_RESOLVE_INTENT,
+                    &KnotEffectV1 {
+                        base_token: editable.base_token,
+                        confirmed: true,
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        let ResumeReply::Snapshot(current) = endpoint
+            .resume(ResumeRequest {
+                session: snapshot.session,
+                epoch: snapshot.scene.epoch,
+                revision: snapshot.scene.revision,
+            })
+            .unwrap()
+        else {
+            panic!("HTML resolve must refresh the derived presentation");
+        };
+        let (_, current, _) = editable_resource(&mut endpoint, &current, "field.knot");
+        let derived = current.derived.expect("HTML resolve result");
+        assert!(derived.source.contains("Visible HTML"));
+        assert!(derived.source.contains("safe link"));
+        assert!(!derived.source.contains("SECRET_SCRIPT"));
+        assert!(!derived.source.contains("SECRET_FRAME"));
+        assert!(!derived.source.contains("onclick"));
+        assert!(!derived.source.contains("display:none"));
+        assert_eq!(derived.summary, "resolved 1; denied 0; failed 0");
+        assert_eq!(fs::read_to_string(path).unwrap(), authored);
     }
 
     #[test]
