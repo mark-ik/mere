@@ -87,7 +87,9 @@ fn parse_args() -> Result<Args, String> {
                 socket = Some(argv.next().ok_or("--socket needs a value")?);
             }
             "--log-file" => {
-                log_file = Some(PathBuf::from(argv.next().ok_or("--log-file needs a value")?));
+                log_file = Some(PathBuf::from(
+                    argv.next().ok_or("--log-file needs a value")?,
+                ));
             }
             "--help" | "-h" => {
                 return Err(
@@ -122,7 +124,11 @@ async fn main() {
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
             Ok(file) => {
                 tracing_subscriber::fmt()
                     .with_max_level(tracing::Level::INFO)

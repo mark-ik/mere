@@ -38,9 +38,9 @@ impl Unlock {
     /// [`Unlock::AutoOs`].
     pub fn from_env() -> Self {
         match std::env::var_os(PASSPHRASE_ENV) {
-            Some(value) => Self::Passphrase(Zeroizing::new(
-                value.to_string_lossy().as_bytes().to_vec(),
-            )),
+            Some(value) => {
+                Self::Passphrase(Zeroizing::new(value.to_string_lossy().as_bytes().to_vec()))
+            }
             None => Self::AutoOs,
         }
     }

@@ -921,40 +921,34 @@ adapters, Wi-Fi, Bluetooth PAN, Teredo). A userspace mDNS socket joining the
 multicast group on the wrong interface is the leading hypothesis and matches
 both the same-machine success and the two-way cross-host failure.
 
-**Narrowed 2026-07-28, without a capture.** Four things are now established
-and one hypothesis survives.
+**Measured 2026-07-28. Two earlier conclusions here were wrong.** The network
+was blamed and the network is fine. What follows is instrumented rather than
+inferred.
 
-- **Both peers do advertise.** p2panda's actor calls
-  `.advertise(mode.is_active())`, and both sides run `Active`. So this is not a
-  passive-mode mistake.
-- **The macOS mDNS stack is healthy.** `dns-sd -B _ssh._tcp local` finds
-  `Q-PC` on interfaces 1, 11 and 12 immediately.
-- **`_irohv1._udp` never appears** in an OS-level browse while the Windows peer
-  serves. Weak evidence on its own: the browse was killed with `pkill`, and a
-  block-buffered file may not have flushed, so treat this as suggestive rather
-  than proof.
-- **The library hardcodes `IpClass::Auto`.** `iroh-mdns-address-lookup` builds
-  its `Discoverer` with `IpClass::Auto`, which swarm-discovery documents as
-  "attempt to bind to both ipv4 and ipv6, only error if unable to bind to
-  either" — best effort, with no interface pinning. p2panda exposes **no** way
-  to set the IP class or the interface; `MdnsDiscoveryMode` is the entire knob.
+- **Multicast crosses both ways.** A neutral group (239.255.42.99, TTL 1) sent
+  from Windows reached the iMac 7 times in 8, and from the iMac reached Windows
+  8 in 8. Link-local multicast is carried between these hosts.
+- **Windows userspace can receive real mDNS from the wire.** A socket bound to
+  5353 with `SO_REUSEADDR`, joined to 224.0.0.251, received live mDNS from
+  192.168.4.26 and .27 within seconds. Port contention with the OS responder is
+  not the problem.
+- **The firewall permits it.** Two enabled Private-profile rules named
+  `g5_peer.exe` allow inbound UDP and TCP for exactly that binary path.
+- **Both peers advertise.** p2panda calls `.advertise(mode.is_active())` and
+  both sides ran `Active`.
+- **And nothing is on the wire.** With the iMac peer serving continuously
+  (confirmed still running afterwards), Windows saw **zero** packets containing
+  `irohv1` in 40s of IPv4 mDNS and 25s of IPv6 mDNS. IPv6 mDNS is nearly silent
+  on this network anyway: 2 packets total.
 
-The surviving hypothesis is socket/interface selection below our API: the
-Windows host is multi-homed across five adapters and the gateway is
-IPv6 link-local, so a best-effort bind can plausibly join the group on an
-interface that does not reach the iMac, while same-machine delivery succeeds
-regardless. That fits every observation.
-
-**What this means for the lane.** The failure is beneath the surface Mere
-controls, and the knob that would fix it is not exposed by p2panda. Options are
-upstream work on `iroh-mdns-address-lookup`, a different discovery mechanism, or
-accepting tickets on this network. Note also that `swarm-discovery` is at
-`0.6.0-alpha.2` beneath this path.
-
-**Still not concluded.** A capture on UDP 5353 at both ends would settle
-whether Windows announces at all and on which interface. Until then, **mDNS
-peer discovery is unproven on this network**, and the hand-carried ticket
-remains the only path with a two-machine receipt behind it.
+**Conclusion: the announcement never reaches the LAN.** It is visible only to
+sockets on the same host, which is why the same-machine ticketless connect
+completes the full three-session flow while both cross-host directions fail.
+That is a send-side interface problem inside
+`iroh-mdns-address-lookup`/`swarm-discovery`, not multicast handling by the
+access point, not IPv4-versus-IPv6, not the firewall, and not Mere's code.
+`IpClass::Auto` with no interface pinning remains the most likely mechanism,
+and p2panda exposes no knob for it.
 
 **Consequence for the printers half.** Even the "easy" capability does not
 deliver a device list: `mere-transport` exposes no way to enumerate what

@@ -76,8 +76,9 @@ impl SealedProfileStorage {
     /// storing plaintext.
     pub fn open_auto_os(root: impl Into<PathBuf>) -> Result<Option<Self>, IdentityError> {
         let root: PathBuf = root.into();
-        let Some(key) =
-            crate::startup_unlock::load_or_create_auto_unlock_root(root.join(AUTO_UNLOCK_ROOT_FILE))?
+        let Some(key) = crate::startup_unlock::load_or_create_auto_unlock_root(
+            root.join(AUTO_UNLOCK_ROOT_FILE),
+        )?
         else {
             return Ok(None);
         };
@@ -154,8 +155,8 @@ impl IdentityStorage for SealedProfileStorage {
         };
         let mut out = Vec::new();
         for entry in entries {
-            let entry = entry
-                .map_err(|err| IdentityError::Backend(format!("read dir entry: {err}")))?;
+            let entry =
+                entry.map_err(|err| IdentityError::Backend(format!("read dir entry: {err}")))?;
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
             if !name.ends_with(".json") {

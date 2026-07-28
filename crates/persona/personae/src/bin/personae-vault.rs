@@ -29,12 +29,10 @@ use std::path::PathBuf;
 
 use personae::bootstrap::{self, Unlock};
 use personae::ssh_slot;
-use personae::vault::{
-    IdentitySlot, IdentityStorage, Profile, ProfileId, ProtocolKey, UnlockTier,
-};
+use personae::vault::{IdentitySlot, IdentityStorage, Profile, ProfileId, ProtocolKey, UnlockTier};
+use ssh_key::HashAlg;
 use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
-use ssh_key::HashAlg;
 
 const USAGE: &str = "\
 usage: personae-vault [--dir <vault-dir>] [--profile <name>] <command>
@@ -199,11 +197,7 @@ fn cmd_list(
     Ok(())
 }
 
-fn cmd_show(
-    storage: &dyn IdentityStorage,
-    id: &ProfileId,
-    rest: &[String],
-) -> Result<(), String> {
+fn cmd_show(storage: &dyn IdentityStorage, id: &ProfileId, rest: &[String]) -> Result<(), String> {
     let profile = load(storage, id)?;
     let key = resolve_key(&profile, rest.first().ok_or("show needs a slot key")?)?;
     let slot = &profile.slots[&key];
@@ -220,7 +214,10 @@ fn cmd_show(
         println!("  ssh:       {line}");
     }
     println!("  lineage:   {:?}", slot.lineage());
-    println!("  losing this device: {}", slot.lineage().device_loss_note());
+    println!(
+        "  losing this device: {}",
+        slot.lineage().device_loss_note()
+    );
     Ok(())
 }
 
@@ -455,7 +452,10 @@ mod tests {
         ]);
         let err = resolve_key(&profile, "ssh:SHA256:aa").unwrap_err();
         assert!(err.contains("ambiguous"), "got: {err}");
-        assert!(err.contains("SHA256:aaa") && err.contains("SHA256:aab"), "got: {err}");
+        assert!(
+            err.contains("SHA256:aaa") && err.contains("SHA256:aab"),
+            "got: {err}"
+        );
     }
 
     #[test]

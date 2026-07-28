@@ -93,6 +93,11 @@ name = "h4_identity_receipt"
 path = "src/bin/h4_identity_receipt.rs"
 required-features = ["native"]
 
+[[bin]]
+name = "graphshell_native_host"
+path = "src/bin/graphshell_native_host.rs"
+required-features = ["native"]
+
 [dev-dependencies]
 pollster = "0.4"
 signature = "2"
