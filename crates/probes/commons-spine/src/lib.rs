@@ -26,6 +26,7 @@
 //! split the statement kernel brief draws: the log accumulates, the graph is
 //! recomputed.
 
+pub mod call;
 pub mod chat;
 
 use chartulary::{Batch, Container, GraphEdit, GraphLog, Relation, WriterId};

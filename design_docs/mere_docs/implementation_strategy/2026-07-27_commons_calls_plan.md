@@ -1,7 +1,7 @@
 # Commons Calls Plan
 
 **Date:** 2026-07-27  
-**Status:** product plan; implementation not started  
+**Status:** A0 complete locally 2026-07-28; A1-A6 not started.
 **Depends on:** the
 [Commons profile](../design/2026-07-27_commons_profile_v1.md), the
 [Notochord session spine](./2026-07-26_notochord_session_policy_spine_plan.md),
@@ -172,6 +172,22 @@ Property-test duplicate, reordered, expired, and concurrent control frames.
 
 **Done:** two peers fold every permutation to the same visible state; stale
 frames cannot reopen an ended call.
+
+**Receipt:** `commons-spine::call` now owns versioned retained invitation and
+terminal facts plus an expiring, sans-I/O control grammar for ring, accept,
+decline, cancel, leave, end, failure, reconnect/resume, mute, push-to-talk,
+and audio offer/selection. Per-sender sequence settles stale settings. Exact
+duplicates are harmless, equivocation at one sender sequence fails closed,
+and terminal controls remain dominant over later non-terminal frames.
+Concurrent terminal reasons use an explicit semantic rank plus participant
+identity, never wall-clock order.
+
+Ten A0 tests cover all 24 permutations of the receipt conversation, a second
+peer's reversed and duplicate arrival, property-generated duplicates,
+reordering, expiry, and concurrent terminals, retained-terminal dominance,
+equivocation, and CBOR round trips. The complete 36-test Commons spine suite
+and all-target Clippy with warnings denied pass. A0 selects no audio device or
+codec dependency; that remains A2's measured probe.
 
 ### A1. Admitted control session
 
