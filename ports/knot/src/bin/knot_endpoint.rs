@@ -336,6 +336,18 @@ impl knot::KnotEffectFetcher for RoutedEffectFetcher {
             _ => Err(format!("Knot has no fetch provider for {address}")),
         }
     }
+
+    fn cache_version(&self) -> String {
+        let network = self
+            .network
+            .as_ref()
+            .map(knot::KnotEffectFetcher::cache_version)
+            .unwrap_or_else(|| "none".into());
+        format!(
+            "knot.routed-effect-fetcher/v1;file={};network={network}",
+            self.file.is_some()
+        )
+    }
 }
 
 struct NetworkEffectFetcher {
@@ -363,6 +375,13 @@ impl knot::KnotEffectFetcher for NetworkEffectFetcher {
             content_type: fetched.content_type,
             body: fetched.body,
         })
+    }
+
+    fn cache_version(&self) -> String {
+        format!(
+            "knot.anonymous-network-effect-fetcher/v1;max-bytes={}",
+            self.max_bytes
+        )
     }
 }
 
@@ -504,6 +523,23 @@ mod tests {
         assert_eq!(fetched.content_type.as_deref(), Some("text/plain"));
         assert_eq!(fetched.body, "from Gopher\r\n");
         assert_eq!(server.join().expect("join Gopher fixture"), "note\r\n");
+    }
+
+    #[test]
+    fn effect_cache_identity_binds_the_fetch_byte_cap() {
+        let small = RoutedEffectFetcher {
+            file: None,
+            network: Some(NetworkEffectFetcher::new(1024).expect("start small fetcher")),
+        };
+        let large = RoutedEffectFetcher {
+            file: None,
+            network: Some(NetworkEffectFetcher::new(2048).expect("start large fetcher")),
+        };
+
+        assert_ne!(
+            knot::KnotEffectFetcher::cache_version(&small),
+            knot::KnotEffectFetcher::cache_version(&large)
+        );
     }
 
     #[test]

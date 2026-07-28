@@ -21,8 +21,11 @@ pub struct ProtocolVersion {
 impl ProtocolVersion {
     /// Protocol 1.1 adds the payload-free carrier revision notice.
     pub const V1_1: Self = Self { major: 1, minor: 1 };
-    /// Latest protocol 1.x. Protocol 1.2 adds editable-text resources.
-    pub const V1: Self = Self { major: 1, minor: 2 };
+    /// Protocol 1.2 adds editable-text resources.
+    pub const V1_2: Self = Self { major: 1, minor: 2 };
+    /// Latest protocol 1.x. Protocol 1.3 adds attributable derived-cache
+    /// metadata to editable-text resources.
+    pub const V1: Self = Self { major: 1, minor: 3 };
 }
 
 /// An endpoint-scoped projection session. It is opaque to Graphshell clients.
@@ -362,7 +365,8 @@ pub struct EditableTextV1 {
     pub encoding: TextEncoding,
     pub source: String,
     pub base_token: Vec<u8>,
-    /// A host-authorized, non-persisted rendering derived from `source`.
+    /// A host-authorized rendering derived from `source`. A sealed source
+    /// endpoint may restore this projection from its attributable cache.
     ///
     /// The base token still names the authored source. Consumers must not
     /// offer this text as the save buffer.
@@ -376,6 +380,20 @@ pub struct EditableTextV1 {
 pub struct DerivedTextV1 {
     pub source: String,
     pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache: Option<DerivedCacheInfoV1>,
+}
+
+/// Attribution for a resolved result. Sealed source endpoints may persist it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DerivedCacheInfoV1 {
+    pub effect: String,
+    pub sources: Vec<String>,
+    pub provider_version: String,
+    pub policy_fingerprint: String,
+    pub fetched_at_unix_ms: u64,
+    pub source_revision: u64,
 }
 
 /// Typed payload for [`EDITABLE_TEXT_SAVE_INTENT`].
@@ -407,7 +425,7 @@ pub struct InsertKnotClipV1 {
 pub const KNOT_CLIP_INSERT_INTENT: &str = "knot.clip.insert";
 pub const KNOT_CLIP_INSERT_SCHEMA: &str = "knot.clip.insert/v1";
 
-/// Typed consent receipt for Knot's non-persisting document effects.
+/// Typed consent receipt for Knot's derived-state document effects.
 ///
 /// `confirmed` records an explicit product gesture when policy requires one.
 /// The endpoint still decides whether the action is admitted.
@@ -732,14 +750,26 @@ mod tests {
     #[test]
     fn editable_text_and_save_payloads_are_versioned_and_strict() {
         assert_eq!(ProtocolVersion::V1_1.minor, 1);
-        assert_eq!(ProtocolVersion::V1.minor, 2);
+        assert_eq!(ProtocolVersion::V1_2.minor, 2);
+        assert_eq!(ProtocolVersion::V1.minor, 3);
         let editable = EditableTextV1 {
             address: "knot://field-note".into(),
             media_type: "text/vnd.knot".into(),
             encoding: TextEncoding::Utf8,
             source: "# Field note\n".into(),
             base_token: vec![1, 2, 3],
-            derived: None,
+            derived: Some(DerivedTextV1 {
+                source: "# Field note\n\nFetched.\n".into(),
+                summary: "resolved 1; denied 0; failed 0".into(),
+                cache: Some(DerivedCacheInfoV1 {
+                    effect: "resolve".into(),
+                    sources: vec!["https://example.test/field".into()],
+                    provider_version: "fixture/v1".into(),
+                    policy_fingerprint: "policy-digest".into(),
+                    fetched_at_unix_ms: 42,
+                    source_revision: 7,
+                }),
+            }),
         };
         let bytes = serde_json::to_vec(&editable).unwrap();
         assert_eq!(
@@ -751,6 +781,14 @@ mod tests {
             serde_json::from_slice::<EditableTextV1>(legacy)
                 .unwrap()
                 .derived
+                .is_none()
+        );
+        let protocol_1_2_derived =
+            br##"{"source":"# Field note\n\nFetched.\n","summary":"resolved 1"}"##;
+        assert!(
+            serde_json::from_slice::<DerivedTextV1>(protocol_1_2_derived)
+                .unwrap()
+                .cache
                 .is_none()
         );
 
@@ -793,10 +831,7 @@ mod tests {
             confirmed: true,
         };
         let wire = serde_json::to_string(&effect).unwrap();
-        assert_eq!(
-            serde_json::from_str::<KnotEffectV1>(&wire).unwrap(),
-            effect
-        );
+        assert_eq!(serde_json::from_str::<KnotEffectV1>(&wire).unwrap(), effect);
         assert!(
             serde_json::from_str::<KnotEffectV1>(
                 r#"{"base_token":[1,2,3],"confirmed":true,"command":"rm"}"#

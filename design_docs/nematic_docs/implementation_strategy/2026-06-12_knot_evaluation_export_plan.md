@@ -1,16 +1,16 @@
 # Knot Evaluation + Export Plan — live blocks in, any protocol out
 
 **Date**: 2026-06-12
-**Status**: reconciled and advanced 2026-07-27. K5, K1's pure resolve pass,
-K2's evaluation seam, the Knot production effect bridge, Turnstone consent,
-network providers, and sanitized HTML fragment lane landed. The sealed
-derived cache remains open. Inker and Nematic now live in Genet; Meerkat, the
-host named throughout the dated progress log, was deleted 2026-07-18. The
-current ownership and remaining sequence below supersede the old Meerkat
-wiring assignments. The production Knot adapter now supplies anonymous
-HTTP(S) plus read-only Gemini, Gopher, Finger, Spartan, Nex, and Guppy
-fetches; Titan remains excluded because navigation is still a zero-byte
-upload.
+**Status**: reconciled and complete for the first production capability set
+2026-07-27. K5, K1's pure resolve pass, K2's evaluation seam, the Knot
+production effect bridge, Turnstone consent, network providers, sanitized HTML
+fragments, and the sealed attributable resolve cache landed. Inker and Nematic
+now live in Genet; Meerkat, the host named throughout the dated progress log,
+was deleted 2026-07-18. The current ownership and completion sequence below
+supersede the old Meerkat wiring assignments. The production Knot adapter now
+supplies anonymous HTTP(S) plus read-only Gemini, Gopher, Finger, Spartan, Nex,
+and Guppy fetches; Titan remains excluded because navigation is still a
+zero-byte upload.
 **What this is**: the effectful half the
 [polyglot knot design](2026-05-08_polyglot_knot_design.md) deliberately left
 host-side, plus the export dual it promised. Knots (CommonMark and djot
@@ -42,7 +42,7 @@ an effectful Knot service and a product-host consent surface.
 | K1 transclusion | Complete: pure pass plus production rooted-file, anonymous HTTP(S), and read-only smolweb providers; Knot policy, Graphshell intent, and Turnstone Ask/Auto receipt complete | Pure pass in Genet Inker. Knot owns document trust and invokes an injected fetch capability. |
 | K2 evaluation | `BlockEvaluator`, registry, policy, Rhai backend, bounded Piccolo proof, nested render, production registration, and consent complete | Seam in Genet Inker; evaluators remain capability providers. Knot chooses and invokes them under document policy. |
 | K4 sanitized HTML clips | Complete: optional html5ever-backed reader fragment engine plus Knot transclusion routing and hostile-fragment receipt | Genet Nematic/inker owns the pure parse, sanitize, and lower lane |
-| K3 cache and consent | Consent complete; sealed cache open | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents and user consent. |
+| K3 cache and consent | Complete for fetched results; evaluation remains opt-in and no shipped evaluator declares cacheability | Knot owns sealed derived caches and policy. Graphshell/Turnstone presents declared intents, age, and user consent. |
 
 ### Boundary ruling
 
@@ -69,7 +69,7 @@ invocation. The
 [Knot authoring consumer plan](../../mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md)
 holds the retained consumer and mutation receipts.
 
-### Remaining sequence
+### Completion sequence
 
 1. **E1, Knot effect service. Complete.** Explicit
    Resolve and Run intents, injected fetch/evaluator registries, document trust
@@ -84,9 +84,10 @@ holds the retained consumer and mutation receipts.
    require explicit confirmation even under Auto.
 2. **E2, product consent. Complete.** Graphshell advertises strict versioned
    actions. Turnstone presents only advertised Resolve/Run controls, sends the
-   user's confirmation, queues Auto on open, and renders the result as
-   non-persisted derived text tied to the current base token. Stale invocations
-   refuse before fetch or evaluation.
+   user's confirmation, queues Auto on open, and renders the result as derived
+   text tied to the current base token. A sealed endpoint may restore an
+   attributable resolve result; it never becomes authored source. Stale
+   invocations refuse before fetch or evaluation.
 3. **E3, sanitized HTML. Complete.** Nematic's optional, default-enabled
    `html-fragment` feature parses through the existing html5ever-backed static
    DOM and lowers only passive reader structure. Scripts, event handlers,
@@ -95,20 +96,32 @@ holds the retained consumer and mutation receipts.
    derived blocks; an endpoint receipt proves hostile content stays out while
    headings and safe links survive. The semantic sibling remains the export
    path.
-4. **E4, sealed derived cache.** Cache fetched or explicitly cacheable
-   evaluation results inside Knot's encryption profile with source, policy,
-   evaluator/fetcher version, fetched-at, and source-revision attribution.
-   Lock, revocation, and Commons epoch rotation must make the cache unavailable
-   on the same boundary as its source.
-5. **E5, end-to-end receipts. Partially complete.** Own-document Ask and Auto,
+4. **E4, sealed derived cache. Complete.** Successful resolve results from
+   sealed vault sources persist inside Knot's encryption profile with source
+   URLs, policy fingerprint, fetcher version and relevant configuration,
+   fetched-at time, source revision, and source base token. Personal results
+   use Personae sealed-record storage.
+   Commons results are additionally wrapped by the current group-data epoch.
+   Lock, revocation, source or policy change, provider change, and Commons epoch
+   rotation make restoration a cache miss; deleting a projected document
+   collects its cache record. Directory results remain memory-only. Evaluation
+   remains uncached because no shipped evaluator yet declares an explicit
+   cacheability contract. A refresh re-runs from authored source; complete
+   fetch failure leaves a still-valid cached document visible and reports the
+   failed refresh.
+5. **E5, end-to-end receipts. Complete for this capability set.** Own-document Ask and Auto,
    source immutability, derived revision refresh, operation-budget exhaustion,
    and stale-consent rejection are proved; the real Turnstone process receipt
    crosses both actions. A second real-process fixture starts from a
    differently signed Commons operation under the group-data encryption
    profile: Auto is rejected, explicit Run succeeds, authored source stays
-   unchanged, and plaintext is absent from the fixture store. Offline age
-   requires E4. Sanitized HTML is proved through Knot's endpoint lane; faithful
-   clip capture remains with the selected-range producer work.
+   unchanged, and plaintext is absent from the fixture store. The E4 receipt
+   proves encrypted persistence, reopen restoration, revocation and policy
+   invalidation, and Commons current-epoch invalidation. Graphshell 1.3 carries
+   fetched-time attribution and Turnstone renders its real age. Sanitized HTML
+   is proved through Knot's endpoint lane. Faithful selected-range clip capture
+   remains a separate Genet producer seam; Knot already accepts explicit
+   selector provenance.
 
 JavaScript backends, public serving, canvas outputs, and additional block kinds
 remain separate consumer-pulled work. They are not closure conditions for this
@@ -119,8 +132,8 @@ plan.
 ## Execution order
 
 **Historical order: K5 → K1 → K2 → K4 → K3.** K5 (exporters) was pure
-functions with zero new dependencies. The unfinished work now follows E1
-through E5 above; the original K sections remain the design and progress
+functions with zero new dependencies. E1 through E5 above are the completed
+production sequence; the original K sections remain the design and progress
 record.
 
 ## K5 — protocol exporters (`to_gemtext` and friends)
@@ -339,12 +352,13 @@ produces the semantic downgrade.
 
 ## K3 — caching + consent surfaces (gated last)
 
-- Resolved transclusions persist as **engrams** (content + source URL +
-  fetched-at, LocalOnly): offline renders show cached content with a
-  staleness mark (real age, no placebo); re-fetch governed by a max-age
-  setting.
+- Resolved transclusions from sealed sources persist as Knot-owned sealed
+  records with source URL, fetched-at, source revision, provider version, and
+  policy attribution. They do not become authored engrams or enter a
+  Graphshell cache. Directory sources remain memory-only because they have no
+  endpoint sealing profile.
 - Script results may opt into the same cache (`eval` fences declaring
-  deterministic intent), default off.
+  deterministic intent), default off. No shipped evaluator currently opts in.
 - The consent surfaces — the "resolve" / "run" affordance on inert fences
   in received knots — are product-host UX over declared Knot endpoint intents.
   E1/E2 now provide that path for writable own documents and require explicit
@@ -352,9 +366,10 @@ produces the semantic downgrade.
   an engine rehearsal; the Knot endpoint is the authority-bearing product
   path.
 
-**Done when**: second render offline serves the cached transclusion with
-its age shown; cache entries are LocalOnly engrams the GC pass can walk;
-the bin can resolve-with-consent a received knot end to end.
+**Done when**: a reopened sealed endpoint serves the cached transclusion with
+its real age available to the product host; invalid source, policy, provider,
+grant, or current Commons epoch cannot restore it; and the product path can
+resolve with consent end to end.
 
 ## Out of scope (named)
 

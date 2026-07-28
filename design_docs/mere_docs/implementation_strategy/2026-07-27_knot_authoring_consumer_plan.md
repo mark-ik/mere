@@ -1,9 +1,13 @@
 # Knot Authoring Consumer Plan
 
 **Date:** 2026-07-27
-**Status:** implementation complete locally for A1 through A4, typed Inspector
-clip insertion, and the first Resolve/Run bridge. Deterministic and real-process
-receipts are green, including the OS-headed Genet Probe drive.
+**Status:** all Knot-owned work in the reconciled sequence is complete locally:
+A1 through A4, typed Inspector clip insertion, production Resolve/Run
+providers, sanitized HTML lowering, and the sealed attributable resolve cache.
+Deterministic and real-process receipts are green, including the OS-headed
+Genet Probe drive. Selected-range clipping remains a Genet producer seam,
+specified below; Knot already accepts an explicit selector without inventing
+one.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
 the reconciled
@@ -45,7 +49,10 @@ depend on Knot, Cambium, Genet, Turnstone, or a document model. Turnstone is the
 first retained UI consumer. A Graphshell host without editable-text support
 continues to receive the existing card or glyph fallback.
 
-## Live findings
+## Starting findings (historical)
+
+These were the live seams when this plan was cut. The current receipt below
+records their implementation.
 
 - `graphshell-protocol` 1.1 has native glyph, portable card, and image
   capabilities. It has no editable-text codec or typed save payload.
@@ -83,7 +90,16 @@ struct EditableTextV1 {
     encoding: TextEncoding,       // v1: UTF-8
     source: String,
     base_token: Vec<u8>,          // opaque, endpoint minted
-    derived: Option<DerivedTextV1>, // non-persisted effect result
+    derived: Option<DerivedTextV1>, // effect result, optionally sealed by Knot
+}
+
+struct DerivedCacheInfoV1 {
+    effect: String,
+    sources: Vec<String>,
+    provider_version: String,
+    policy_fingerprint: String,
+    fetched_at_unix_ms: u64,
+    source_revision: u64,
 }
 
 struct SaveTextV1 {
@@ -121,15 +137,20 @@ Editable resources always use `CacheRetention::MemoryOnly` with
 death drop the cached source and the retained editor buffer. Persistent
 Graphshell caches never contain editable source.
 
+Protocol 1.3 may disclose attribution for a Knot-sealed derived result. The
+sealed result remains endpoint-side, bound to the source token and revision,
+and never becomes the save buffer. Protocol 1.2 clients still receive derived
+text without the 1.3 cache metadata.
+
 ## Four rungs
 
 ### Current receipt
 
 - A1 is complete: protocol 1.2 carries strict editable-text resources and save
-  payloads, older clients retain card/glyph fallback, and the Graphshell host
-  has a retained mount/resolve/invoke/resume/close session. The optional
-  `DerivedTextV1` field decodes absent for older 1.2 resources and never becomes
-  the editor's save buffer.
+  payloads; protocol 1.3 adds optional derived-cache attribution. Older clients
+  retain card/glyph fallback, and the Graphshell host has a retained
+  mount/resolve/invoke/resume/close session. Derived text never becomes the
+  editor's save buffer.
 - A2 is complete for writable directory
   documents and injected personal/communal vault stores. Save validates the
   snapshot target, grant, observed revision, format, size, and document base
@@ -163,6 +184,15 @@ Graphshell caches never contain editable source.
   derived revision. Turnstone presents the advertised buttons, sends explicit
   confirmation for Ask, queues Auto on open, and drops a derived preview on
   local edit.
+- Sealed resolve caching is complete. Personal-vault results use Personae's
+  sealed-record storage. Commons results are additionally wrapped by the
+  current group-data epoch and become unavailable after rotation, even while an
+  older key remains retained. Entries bind the source token and revision,
+  fetched URLs, provider version and relevant configuration, policy
+  fingerprint, and fetched time.
+  Removing a projected document collects its cache record. Directory results
+  remain memory-only because they have no sealing profile. Run results remain
+  process-local until an evaluator declares an explicit cacheability contract.
 - The real-process effect receipt resolves a rooted Markdown include and runs a
   Rhai fence through the built `knot_endpoint`; both manual Ask and Auto on
   reopen produce derived refreshes while the authored `.knot` file remains
@@ -299,7 +329,7 @@ receipt is a real retained stdio process lane.
 unrelated churn does not destroy work, revision-bell refresh is real, sealed
 bytes remain opaque at rest, and the host never receives the vault key.
 
-## What follows
+## Closed follow-ons and remaining producer seam
 
 ### Inspector clip action. Complete locally
 
@@ -313,7 +343,7 @@ and records the document mutation and provenance.
 Creating a new clip document requires an explicitly advertised Create action.
 Appending to the open document uses the existing target and base token.
 
-### Run and Resolve. First production bridge complete locally
+### Run and Resolve. Complete for the first production capability set
 
 Transclusion Resolve and block Run reuse the same intent advertisement,
 capability, consent, stale-revision, receipt, and revision-bell path from the
@@ -333,8 +363,36 @@ The shipped providers are rooted `file:` transclusion for directory endpoints
 and sandboxed Rhai evaluation. Anonymous HTTP(S) and the read-only smolweb
 providers now join the rooted-file lane under the same Knot authority. The
 html5ever-backed reader fragment lane also sanitizes fetched HTML before Knot
-splices derived blocks. The sealed attributable derived cache remains the
-evaluation plan's consumer-pulled E4 work.
+splices derived blocks.
+
+Knot persists successful resolve results only for sealed vault sources. A
+personal result uses the vault seal. A Commons result also uses the current
+group-data epoch, so rotating that epoch makes the old cache unavailable.
+Graphshell 1.3 carries source, provider, policy, revision, and fetched-time
+attribution without disclosing an encryption epoch or key. Turnstone shows the
+real fetched age. Effect revocation, source revision, policy change, provider
+change, lock, and current-epoch change all reduce restoration to a cache miss.
+Resolve refresh starts again from authored source; a completely failed refresh
+reports the failure and retains a still-valid cached document for offline use.
+
+### Selected-range clipping. Exact external gate
+
+Knot's `knot.clip.insert/v1` payload already accepts an optional selector and
+records it with the source URI. The missing truth is upstream of Knot:
+
+1. Genet's retained `DocumentSession` needs pointer or keyboard selection
+   state, or a host-neutral equivalent.
+2. Static, Livery, and scripted sessions must map retained layout hit positions
+   to stable DOM text offsets.
+3. `DocumentClip` must return the selected normalized text, a stable DOM-range
+   selector, and links scoped to that range.
+
+Today `DocumentSession::clip()` calls `semantic_clip_from_dom`, which extracts
+the whole semantic document and sets `selector: None` for the static and Livery
+lanes; the scripted lane supplies no clip yet. Turnstone cannot recover a
+faithful range from those values, and Knot must not infer one. Whole-document
+clipping remains the explicit fallback where available until this Genet
+producer seam lands.
 
 ## Stop rules
 

@@ -3,12 +3,15 @@
 use std::path::{Path, PathBuf};
 
 use personae::{SealedRecordStorage, seal_bytes, unseal_bytes};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sibylla::VectorIndex;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const INDEX_PATH: &str = "knot/documents.json";
 pub(crate) const SEARCH_INDEX_PATH: &str = "knot/search-index.json";
+const DERIVED_CACHE_PATH_CONTEXT: &str = "mere.knot.derived-cache-path.v1";
+const DERIVED_CACHE_VERSION: u64 = 1;
 const INDEX_VERSION: u64 = 1;
 const SYNC_KEY_CONTEXT: &str = "mere.knot.personal-vault-sync.v1";
 
@@ -30,6 +33,12 @@ struct VaultIndex {
     version: u64,
     revision: u64,
     documents: Vec<VaultDocument>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct DerivedCacheBlob {
+    version: u64,
+    bytes: Vec<u8>,
 }
 
 /// An unlockable sealed document store.
@@ -124,6 +133,20 @@ impl KnotVault {
         if self.index.documents == documents {
             return Ok(false);
         }
+        let removed = self
+            .index
+            .documents
+            .iter()
+            .filter(|current| {
+                !documents
+                    .iter()
+                    .any(|replacement| replacement.id == current.id)
+            })
+            .map(|document| document.id.clone())
+            .collect::<Vec<_>>();
+        for id in removed {
+            self.delete_derived_cache(&id)?;
+        }
         self.index.documents.zeroize();
         self.index.documents = documents;
         self.index.revision = self.index.revision.saturating_add(1).max(1);
@@ -159,6 +182,75 @@ impl KnotVault {
             .ok_or_else(|| "Knot vault is locked".to_string())?
             .load_record(SEARCH_INDEX_PATH)
             .map_err(|error| format!("could not load Knot vault search index: {error}"))
+    }
+
+    /// Seal one non-authoritative derived-cache record beside the source
+    /// index. The record id is keyed with vault material before it becomes a
+    /// path, so it can neither escape the namespace nor act as a public
+    /// dictionary oracle for document ids.
+    pub(crate) fn store_derived_cache<T>(&self, id: &str, value: &T) -> Result<(), String>
+    where
+        T: Serialize,
+    {
+        let bytes = serde_json::to_vec(value)
+            .map_err(|error| format!("could not encode Knot derived cache: {error}"))?;
+        let path = self.derived_cache_path(id)?;
+        self.store
+            .as_ref()
+            .ok_or_else(|| "Knot vault is locked".to_string())?
+            .save_record(
+                path,
+                &DerivedCacheBlob {
+                    version: DERIVED_CACHE_VERSION,
+                    bytes,
+                },
+            )
+            .map_err(|error| format!("could not seal Knot derived cache: {error}"))
+    }
+
+    /// Open one derived-cache record while the source vault is unlocked.
+    pub(crate) fn load_derived_cache<T>(&self, id: &str) -> Result<Option<T>, String>
+    where
+        T: DeserializeOwned,
+    {
+        let path = self.derived_cache_path(id)?;
+        let blob = self
+            .store
+            .as_ref()
+            .ok_or_else(|| "Knot vault is locked".to_string())?
+            .load_record::<DerivedCacheBlob>(path)
+            .map_err(|error| format!("could not unseal Knot derived cache: {error}"))?;
+        let Some(blob) = blob else {
+            return Ok(None);
+        };
+        if blob.version != DERIVED_CACHE_VERSION {
+            return Ok(None);
+        }
+        serde_json::from_slice(&blob.bytes)
+            .map(Some)
+            .map_err(|error| format!("could not decode Knot derived cache: {error}"))
+    }
+
+    fn delete_derived_cache(&self, id: &str) -> Result<(), String> {
+        let path = self.derived_cache_path(id)?;
+        self.store
+            .as_ref()
+            .ok_or_else(|| "Knot vault is locked".to_string())?
+            .delete_record(path)
+            .map_err(|error| format!("could not delete Knot derived cache: {error}"))
+    }
+
+    fn derived_cache_path(&self, id: &str) -> Result<PathBuf, String> {
+        let key = self
+            .sync_key
+            .as_ref()
+            .ok_or_else(|| "Knot vault is locked".to_string())?;
+        let path_key = Zeroizing::new(blake3::derive_key(DERIVED_CACHE_PATH_CONTEXT, &**key));
+        let digest = blake3::keyed_hash(&*path_key, id.as_bytes());
+        Ok(PathBuf::from(format!(
+            "knot/derived-cache/{}.json",
+            digest.to_hex()
+        )))
     }
 
     pub(crate) fn seal_sync_payload(
@@ -294,6 +386,34 @@ mod tests {
         assert_eq!(
             vault.body("field-note"),
             Some(&b"private field observation"[..])
+        );
+    }
+
+    #[test]
+    fn removing_a_projected_document_collects_its_derived_cache() {
+        let temp = tempdir().unwrap();
+        let mut vault = KnotVault::open(temp.path(), [0x74; 32]).unwrap();
+        vault.put(note()).unwrap();
+        vault
+            .store_derived_cache("field-note", &"cached result".to_string())
+            .unwrap();
+        let public_id_hash = blake3::hash(b"field-note").to_hex();
+        assert!(
+            !temp
+                .path()
+                .join(format!("knot/derived-cache/{public_id_hash}.json"))
+                .exists(),
+            "cache paths must not expose a public dictionary hash of the document id"
+        );
+        assert_eq!(
+            vault.load_derived_cache::<String>("field-note").unwrap(),
+            Some("cached result".into())
+        );
+
+        assert!(vault.replace_projection(Vec::new()).unwrap());
+        assert_eq!(
+            vault.load_derived_cache::<String>("field-note").unwrap(),
+            None
         );
     }
 }

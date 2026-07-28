@@ -12,15 +12,15 @@ use graphshell_endpoint::{
 };
 use graphshell_protocol::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash,
-    DerivedTextV1, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1,
-    EndpointDescriptor, InsertKnotClipV1, IntentEffect, IntentInvocation, IntentReference,
-    IntentResult, KNOT_BLOCK_RUN_INTENT, KNOT_BLOCK_RUN_SCHEMA, KNOT_CLIP_INSERT_INTENT,
-    KNOT_CLIP_INSERT_SCHEMA, KNOT_TRANSCLUSION_RESOLVE_INTENT, KNOT_TRANSCLUSION_RESOLVE_SCHEMA,
-    KnotEffectV1, NativeGlyphV1, PortableCardV1, PresentationBinding, PresentationCapability,
-    PresentationCodec, PresentationKey, PresentationManifest, PresentationOffer,
-    PresentationSemantics, ProjectionAck, ProjectionOffer, ProjectionRequest, ProjectionSession,
-    ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, ResumeReply,
-    ResumeRequest, SaveTextV1, SemanticRole, TextEncoding,
+    DerivedCacheInfoV1, DerivedTextV1, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA,
+    EditableTextV1, EndpointDescriptor, InsertKnotClipV1, IntentEffect, IntentInvocation,
+    IntentReference, IntentResult, KNOT_BLOCK_RUN_INTENT, KNOT_BLOCK_RUN_SCHEMA,
+    KNOT_CLIP_INSERT_INTENT, KNOT_CLIP_INSERT_SCHEMA, KNOT_TRANSCLUSION_RESOLVE_INTENT,
+    KNOT_TRANSCLUSION_RESOLVE_SCHEMA, KnotEffectV1, NativeGlyphV1, PortableCardV1,
+    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
+    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer,
+    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
+    ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole, TextEncoding,
 };
 use inker::{
     BlockEvaluators, DocumentTrustState, Engine, EngineDocument, EngineInput, EvaluationPolicy,
@@ -32,7 +32,8 @@ use sceno::{
     SourceRef, Transform2, Vec2,
 };
 use scenotime::{Revision, SceneEpoch, SceneSnapshot};
-use stickleback::DataKeyring;
+use serde::{Deserialize, Serialize};
+use stickleback::{DataKeyring, GroupCiphertext, GroupSecretId};
 use zeroize::Zeroizing;
 
 use crate::{
@@ -67,7 +68,7 @@ pub enum KnotEffectMode {
     Never,
 }
 
-/// User settings and hard limits for Knot's non-persisting effects.
+/// User settings and hard limits for Knot's derived document effects.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KnotEffectPolicy {
     pub resolve: KnotEffectMode,
@@ -95,6 +96,13 @@ impl Default for KnotEffectPolicy {
 /// path, network, or vault checks before returning source bytes.
 pub trait KnotEffectFetcher: Send {
     fn fetch(&mut self, address: &str) -> Result<Fetched, String>;
+
+    /// Stable implementation identity bound into reusable derived cache
+    /// entries. Providers with behavior-affecting configuration must include
+    /// it here and change the value when their interpretation changes.
+    fn cache_version(&self) -> String {
+        std::any::type_name::<Self>().to_string()
+    }
 }
 
 /// Effect capabilities admitted for one endpoint process.
@@ -164,7 +172,32 @@ struct DerivedDocument {
     base_token: Vec<u8>,
     document: EngineDocument,
     summary: String,
+    cache: Option<CacheAttribution>,
 }
+
+#[derive(Clone)]
+struct CacheAttribution {
+    info: DerivedCacheInfoV1,
+    epoch: Option<GroupSecretId>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct DerivedCacheRecord {
+    version: u64,
+    document_id: String,
+    base_token: Vec<u8>,
+    document: EngineDocument,
+    summary: String,
+    info: DerivedCacheInfoV1,
+}
+
+#[derive(Serialize, Deserialize)]
+enum StoredDerivedCache {
+    Personal(DerivedCacheRecord),
+    Commons(GroupCiphertext),
+}
+
+const DERIVED_CACHE_RECORD_VERSION: u64 = 1;
 
 /// Knot's read-only Graphshell endpoint.
 pub struct KnotEndpoint {
@@ -421,6 +454,10 @@ impl KnotEndpoint {
 
     pub fn grant_writes(&mut self, grant: KnotWriteGrant) {
         self.write_grant = Some(grant);
+        self.derived.clear();
+        if self.effects.is_some() && self.restore_derived_caches().is_err() {
+            self.derived.clear();
+        }
         self.snapshot = None;
         self.resources.clear();
         self.bindings.clear();
@@ -429,6 +466,11 @@ impl KnotEndpoint {
     pub fn grant_effects(&mut self, authority: KnotEffectAuthority) {
         self.effects = Some(authority);
         self.derived.clear();
+        if self.restore_derived_caches().is_err() {
+            // A cache is never authority. Corruption, a missing epoch, or an
+            // incompatible record degrades to a miss.
+            self.derived.clear();
+        }
         self.snapshot = None;
         self.resources.clear();
         self.bindings.clear();
@@ -465,7 +507,38 @@ impl KnotEndpoint {
         };
         source.vault.unlock(key)?;
         self.refresh_vault_projection()?;
+        if self.effects.is_some() && self.restore_derived_caches().is_err() {
+            self.derived.clear();
+        }
         Ok(true)
+    }
+
+    /// Replace the Commons data-key view after the admitted membership layer
+    /// rotates or prunes epochs. Knot owns the keys after handoff and drops
+    /// every disclosed/derived resource before re-projecting under them.
+    pub fn replace_communal_keys(&mut self, keys: DataKeyring) -> Result<bool, String> {
+        let changed = {
+            let Source::Vault(VaultSource {
+                sync: Some(VaultSyncAuthority::Commons { keys: current, .. }),
+                ..
+            }) = &mut self.source
+            else {
+                return Ok(false);
+            };
+            let changed = current.epoch_ids() != keys.epoch_ids()
+                || current.current_epoch() != keys.current_epoch();
+            *current = keys;
+            changed
+        };
+        if changed {
+            self.derived.clear();
+            self.snapshot = None;
+            self.resources.clear();
+            self.bindings.clear();
+            self.refresh_vault_projection()?;
+            self.sync_source_revision();
+        }
+        Ok(changed)
     }
 
     fn refresh(&mut self) -> Result<(), String> {
@@ -552,9 +625,12 @@ impl KnotEndpoint {
     fn sync_source_revision(&mut self) {
         let current = self.raw_source_revision();
         if self.observed_source_revision != Some(current) {
+            let changed_after_observation = self.observed_source_revision.is_some();
             self.observed_source_revision = Some(current);
             self.scene_revision = Revision(self.scene_revision.0.saturating_add(1).max(1));
-            self.derived.clear();
+            if changed_after_observation {
+                self.derived.clear();
+            }
         }
     }
 
@@ -662,11 +738,133 @@ impl KnotEndpoint {
 
     fn derived_text(&self, id: &str, base_token: &[u8]) -> Option<DerivedTextV1> {
         self.derived.get(id).and_then(|derived| {
-            (derived.base_token == base_token).then(|| DerivedTextV1 {
+            let cache_is_current = derived
+                .cache
+                .as_ref()
+                .is_none_or(|cache| self.cache_attribution_is_current(cache));
+            (derived.base_token == base_token && cache_is_current).then(|| DerivedTextV1 {
                 source: derived.document.to_knot(),
                 summary: derived.summary.clone(),
+                cache: (self.protocol_version.minor >= ProtocolVersion::V1.minor)
+                    .then(|| derived.cache.as_ref().map(|cache| cache.info.clone()))
+                    .flatten(),
             })
         })
+    }
+
+    fn cache_attribution_is_current(&self, cache: &CacheAttribution) -> bool {
+        cache.info.source_revision == self.raw_source_revision()
+            && (cache.epoch.is_none() || cache.epoch == self.current_commons_epoch())
+    }
+
+    fn current_commons_epoch(&self) -> Option<GroupSecretId> {
+        match &self.source {
+            Source::Vault(VaultSource {
+                sync: Some(VaultSyncAuthority::Commons { keys, .. }),
+                ..
+            }) => keys.current_epoch(),
+            _ => None,
+        }
+    }
+
+    fn restore_derived_caches(&mut self) -> Result<(), String> {
+        let Some(effects) = &self.effects else {
+            return Ok(());
+        };
+        if effects.policy.resolve == KnotEffectMode::Never || effects.fetcher.is_none() {
+            return Ok(());
+        }
+        let provider_version = effects
+            .fetcher
+            .as_ref()
+            .expect("checked above")
+            .cache_version();
+        let policy_fingerprint = resolve_policy_fingerprint(&effects.policy);
+        let source_revision = self.raw_source_revision();
+        let candidates = self
+            .documents()
+            .into_iter()
+            .filter_map(|document| {
+                let editable = self.editable_text(&document)?;
+                Some((document.id, editable.base_token))
+            })
+            .collect::<Vec<_>>();
+
+        let Source::Vault(source) = &self.source else {
+            return Ok(());
+        };
+        for (id, base_token) in candidates {
+            let Some(stored) = source.vault.load_derived_cache::<StoredDerivedCache>(&id)? else {
+                continue;
+            };
+            let (record, epoch) = match (&source.sync, stored) {
+                (
+                    Some(VaultSyncAuthority::Commons { keys, .. }),
+                    StoredDerivedCache::Commons(envelope),
+                ) => {
+                    let current = keys.current_epoch();
+                    if current != Some(envelope.epoch) {
+                        continue;
+                    }
+                    let plaintext = match keys.open(&envelope) {
+                        Ok(plaintext) => plaintext,
+                        Err(_) => continue,
+                    };
+                    let record = match serde_json::from_slice::<DerivedCacheRecord>(&plaintext) {
+                        Ok(record) => record,
+                        Err(_) => continue,
+                    };
+                    (record, Some(envelope.epoch))
+                }
+                (Some(VaultSyncAuthority::Commons { .. }), _) => continue,
+                (_, StoredDerivedCache::Personal(record)) => (record, None),
+                (_, StoredDerivedCache::Commons(_)) => continue,
+            };
+            if record.version != DERIVED_CACHE_RECORD_VERSION
+                || record.document_id != id
+                || record.base_token != base_token
+                || record.info.effect != "resolve"
+                || record.info.provider_version != provider_version
+                || record.info.policy_fingerprint != policy_fingerprint
+                || record.info.source_revision != source_revision
+            {
+                continue;
+            }
+            self.derived.insert(
+                id,
+                DerivedDocument {
+                    base_token: record.base_token,
+                    document: record.document,
+                    summary: record.summary,
+                    cache: Some(CacheAttribution {
+                        info: record.info,
+                        epoch,
+                    }),
+                },
+            );
+        }
+        Ok(())
+    }
+
+    fn persist_derived_cache(&self, id: &str, record: &DerivedCacheRecord) -> Result<(), String> {
+        let Source::Vault(source) = &self.source else {
+            // Files-in-place have no sealing profile. They retain only the
+            // in-memory projection.
+            return Ok(());
+        };
+        let stored = match &source.sync {
+            Some(VaultSyncAuthority::Commons { keys, .. }) => {
+                let plaintext = serde_json::to_vec(record)
+                    .map_err(|error| format!("could not encode Commons derived cache: {error}"))?;
+                StoredDerivedCache::Commons(
+                    keys.seal_random(&plaintext).map_err(|error| {
+                        format!("could not seal Commons derived cache: {error}")
+                    })?,
+                )
+            }
+            _ => StoredDerivedCache::Personal(record.clone()),
+        };
+        source.vault.store_derived_cache(id, &stored)
     }
 
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, String> {
@@ -707,7 +905,7 @@ impl KnotEndpoint {
                 .as_deref()
                 .unwrap_or("application/octet-stream")
                 .to_string();
-            let editable = (self.protocol_version.minor >= ProtocolVersion::V1.minor)
+            let editable = (self.protocol_version.minor >= ProtocolVersion::V1_2.minor)
                 .then(|| self.editable_text(document))
                 .flatten();
             let conflicted = match &self.source {
@@ -1073,7 +1271,8 @@ impl KnotEndpoint {
         id: &str,
         payload: KnotEffectV1,
     ) -> Result<IntentResult, String> {
-        let Some((current, mut document)) = self.effect_input(id, &payload.base_token)? else {
+        let Some((current, mut document)) = self.effect_input(id, &payload.base_token, false)?
+        else {
             return Ok(self.stale_result());
         };
         let mode = self
@@ -1090,32 +1289,78 @@ impl KnotEndpoint {
             });
         }
 
-        let effects = self
-            .effects
-            .as_mut()
-            .ok_or_else(|| "Knot session has no effect authority".to_string())?;
-        let fetcher = effects
-            .fetcher
-            .as_mut()
-            .ok_or_else(|| "Knot session has no transclusion fetcher".to_string())?;
-        let policy = TransclusionPolicy::for_own_notes(
-            effects.policy.allowed_schemes.clone(),
-            effects.policy.max_depth,
-        );
-        let mut fetch = |address: &str| fetcher.fetch(address);
-        let mut render = render_effect_input;
-        let outcome = resolve_transclusions(&mut document, &mut fetch, &mut render, &policy);
+        let source_revision = self.raw_source_revision();
+        let encryption_epoch = self.current_commons_epoch();
+        let has_sealed_cache = matches!(&self.source, Source::Vault(_));
+        let retained_cache = self.derived.get(id).is_some_and(|derived| {
+            derived.base_token == current.base_token
+                && derived
+                    .cache
+                    .as_ref()
+                    .is_some_and(|cache| self.cache_attribution_is_current(cache))
+        });
+        let (outcome, sources, provider_version, policy_fingerprint) = {
+            let effects = self
+                .effects
+                .as_mut()
+                .ok_or_else(|| "Knot session has no effect authority".to_string())?;
+            let provider_version = effects
+                .fetcher
+                .as_ref()
+                .ok_or_else(|| "Knot session has no transclusion fetcher".to_string())?
+                .cache_version();
+            let policy_fingerprint = resolve_policy_fingerprint(&effects.policy);
+            let fetcher = effects
+                .fetcher
+                .as_mut()
+                .ok_or_else(|| "Knot session has no transclusion fetcher".to_string())?;
+            let policy = TransclusionPolicy::for_own_notes(
+                effects.policy.allowed_schemes.clone(),
+                effects.policy.max_depth,
+            );
+            let mut sources = Vec::new();
+            let mut fetch = |address: &str| {
+                let fetched = fetcher.fetch(address)?;
+                sources.push(address.to_string());
+                Ok(fetched)
+            };
+            let mut render = render_effect_input;
+            let outcome = resolve_transclusions(&mut document, &mut fetch, &mut render, &policy);
+            sources.sort();
+            sources.dedup();
+            (outcome, sources, provider_version, policy_fingerprint)
+        };
         let summary = format!(
             "resolved {}; denied {}; failed {}",
             outcome.resolved,
             outcome.denied.len(),
             outcome.failed.len()
         );
-        self.accept_derived(id, current.base_token, document, summary)
+        if retained_cache && outcome.resolved == 0 && !outcome.failed.is_empty() {
+            return Ok(IntentResult::Rejected {
+                reason: format!(
+                    "resolve refresh failed; retained cached result ({} failure(s))",
+                    outcome.failed.len()
+                ),
+            });
+        }
+        let cache = (has_sealed_cache && outcome.resolved > 0).then(|| CacheAttribution {
+            info: DerivedCacheInfoV1 {
+                effect: "resolve".into(),
+                sources,
+                provider_version,
+                policy_fingerprint,
+                fetched_at_unix_ms: unix_time_ms(),
+                source_revision,
+            },
+            epoch: encryption_epoch,
+        });
+        self.accept_derived(id, current.base_token, document, summary, cache, true)
     }
 
     fn run_blocks(&mut self, id: &str, payload: KnotEffectV1) -> Result<IntentResult, String> {
-        let Some((current, mut document)) = self.effect_input(id, &payload.base_token)? else {
+        let Some((current, mut document)) = self.effect_input(id, &payload.base_token, true)?
+        else {
             return Ok(self.stale_result());
         };
         let mode = self
@@ -1149,13 +1394,17 @@ impl KnotEndpoint {
             outcome.denied.len(),
             outcome.failed.len()
         );
-        self.accept_derived(id, current.base_token, document, summary)
+        // Evaluation providers do not yet expose a cacheability contract.
+        // The evaluated document is therefore process-local even when its
+        // input began as a separately cached resolve result.
+        self.accept_derived(id, current.base_token, document, summary, None, false)
     }
 
     fn effect_input(
         &self,
         id: &str,
         base_token: &[u8],
+        use_derived: bool,
     ) -> Result<Option<(EditableTextV1, EngineDocument)>, String> {
         let document = self
             .documents()
@@ -1168,11 +1417,14 @@ impl KnotEndpoint {
         if base_token != current.base_token {
             return Ok(None);
         }
-        let derived = self
-            .derived
-            .get(id)
-            .filter(|derived| derived.base_token == current.base_token)
-            .map(|derived| derived.document.clone());
+        let derived = use_derived
+            .then(|| {
+                self.derived
+                    .get(id)
+                    .filter(|derived| derived.base_token == current.base_token)
+                    .map(|derived| derived.document.clone())
+            })
+            .flatten();
         let document = match derived {
             Some(document) => document,
             None => render_effect_input(
@@ -1214,13 +1466,29 @@ impl KnotEndpoint {
         base_token: Vec<u8>,
         document: EngineDocument,
         summary: String,
+        cache: Option<CacheAttribution>,
+        persist: bool,
     ) -> Result<IntentResult, String> {
+        if persist && let Some(cache) = &cache {
+            self.persist_derived_cache(
+                id,
+                &DerivedCacheRecord {
+                    version: DERIVED_CACHE_RECORD_VERSION,
+                    document_id: id.to_string(),
+                    base_token: base_token.clone(),
+                    document: document.clone(),
+                    summary: summary.clone(),
+                    info: cache.info.clone(),
+                },
+            )?;
+        }
         self.derived.insert(
             id.to_string(),
             DerivedDocument {
                 base_token,
                 document,
                 summary,
+                cache,
             },
         );
         self.advance_derived_revision();
@@ -1281,6 +1549,33 @@ fn render_effect_input(input: &EngineInput) -> Result<EngineDocument, String> {
         _ => Box::new(nematic::TextEngine::new()),
     };
     engine.render(input).map_err(|error| error.to_string())
+}
+
+fn resolve_policy_fingerprint(policy: &KnotEffectPolicy) -> String {
+    let mut schemes = policy.allowed_schemes.clone();
+    schemes.sort();
+    schemes.dedup();
+    let mut hasher = blake3::Hasher::new_derive_key("mere.knot.resolve-cache-policy.v1");
+    hasher.update(&[match policy.resolve {
+        KnotEffectMode::Auto => 0,
+        KnotEffectMode::Ask => 1,
+        KnotEffectMode::Never => 2,
+    }]);
+    hasher.update(&[policy.max_depth]);
+    for scheme in schemes {
+        hasher.update(&(scheme.len() as u64).to_le_bytes());
+        hasher.update(scheme.as_bytes());
+    }
+    hasher.finalize().to_hex().to_string()
+}
+
+fn unix_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 fn file_base_token(id: &str, bytes: &[u8]) -> Vec<u8> {
@@ -1635,6 +1930,18 @@ mod tests {
             } else {
                 Err(format!("unexpected fetch: {address}"))
             }
+        }
+    }
+
+    struct OfflineStubFetcher;
+
+    impl KnotEffectFetcher for OfflineStubFetcher {
+        fn fetch(&mut self, address: &str) -> Result<Fetched, String> {
+            Err(format!("offline: {address}"))
+        }
+
+        fn cache_version(&self) -> String {
+            std::any::type_name::<StubFetcher>().to_string()
         }
     }
 
@@ -2365,6 +2672,252 @@ Fallback.
         assert_eq!(
             reopened.body("field-note"),
             Some(&b"# Private revised\n"[..])
+        );
+    }
+
+    #[test]
+    fn personal_vault_restores_only_matching_attributable_sealed_cache() {
+        let vault_dir = tempdir().unwrap();
+        let sync_dir = tempdir().unwrap();
+        let key = [0x92; 32];
+        let seed = [0x42; 32];
+        let writer = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let space = [0x52; 32];
+        let database = sync_dir.path().join("knot.redb");
+        let vault = KnotVault::open(vault_dir.path(), key).unwrap();
+        let store = KnotSyncFileStore::open(&database, space, [writer]).unwrap();
+        pollster::block_on(
+            store.author(
+                seed,
+                &vault,
+                &KnotSyncEvent::Put(VaultDocument {
+                    id: "field-note".into(),
+                    title: "Field note".into(),
+                    body: b"# Private\n\n```include file://fixture/included.md\nFallback.\n```\n"
+                        .to_vec(),
+                    media_type: "text/vnd.knot".into(),
+                }),
+            ),
+        )
+        .unwrap();
+        let policy = KnotEffectPolicy {
+            resolve: KnotEffectMode::Ask,
+            allowed_schemes: vec!["file".into()],
+            max_depth: 1,
+            ..KnotEffectPolicy::default()
+        };
+        let mut endpoint =
+            KnotEndpoint::from_synced_vault(vault, store, seed, KnotWriteGrant::new(4096)).unwrap();
+        endpoint.grant_effects(KnotEffectAuthority::new(policy.clone()).with_fetcher(StubFetcher));
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "field-note");
+        assert_eq!(
+            endpoint
+                .invoke(effect_invocation(
+                    &snapshot,
+                    target,
+                    KNOT_TRANSCLUSION_RESOLVE_INTENT,
+                    &KnotEffectV1 {
+                        base_token: editable.base_token,
+                        confirmed: true,
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        let cache_files = fs::read_dir(vault_dir.path().join("knot/derived-cache"))
+            .unwrap()
+            .map(|entry| fs::read(entry.unwrap().path()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(cache_files.len(), 1);
+        assert!(cache_files.iter().all(|sealed| {
+            !sealed
+                .windows(b"Fetched text.".len())
+                .any(|window| window == b"Fetched text.")
+        }));
+        drop(endpoint);
+
+        let vault = KnotVault::open(vault_dir.path(), key).unwrap();
+        let store = KnotSyncFileStore::open(&database, space, [writer]).unwrap();
+        let mut reopened =
+            KnotEndpoint::from_synced_vault(vault, store, seed, KnotWriteGrant::new(4096)).unwrap();
+        reopened.grant_effects(
+            KnotEffectAuthority::new(policy.clone()).with_fetcher(OfflineStubFetcher),
+        );
+        let request = reopened.describe().projections.remove(0).request;
+        let snapshot = reopened.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut reopened, &snapshot, "field-note");
+        let base_token = editable.base_token.clone();
+        let restored = editable.derived.expect("sealed cache should restore");
+        assert!(restored.source.contains("Fetched text."));
+        let cache = restored.cache.expect("cache attribution");
+        assert_eq!(cache.effect, "resolve");
+        assert_eq!(cache.sources, vec!["file://fixture/included.md"]);
+        assert!(cache.provider_version.contains("StubFetcher"));
+        assert_eq!(cache.source_revision, 1);
+        assert!(cache.fetched_at_unix_ms > 0);
+        let refresh = reopened
+            .invoke(effect_invocation(
+                &snapshot,
+                target,
+                KNOT_TRANSCLUSION_RESOLVE_INTENT,
+                &KnotEffectV1 {
+                    base_token,
+                    confirmed: true,
+                },
+            ))
+            .unwrap();
+        assert!(
+            matches!(
+                refresh,
+                IntentResult::Rejected { ref reason }
+                    if reason.contains("retained cached result")
+            ),
+            "an offline refresh must report failure without replacing the cache: {refresh:?}"
+        );
+        reopened.snapshot = None;
+        reopened.resources.clear();
+        reopened.bindings.clear();
+        let request = reopened.describe().projections.remove(0).request;
+        let after_failed_refresh = reopened.snapshot(request).unwrap();
+        let (_, editable, _) =
+            editable_resource(&mut reopened, &after_failed_refresh, "field-note");
+        assert!(
+            editable
+                .derived
+                .is_some_and(|derived| derived.source.contains("Fetched text.")),
+            "an offline refresh must leave the restored document available"
+        );
+
+        reopened.protocol_version = ProtocolVersion::V1_2;
+        reopened.snapshot = None;
+        reopened.resources.clear();
+        let request = reopened.describe().projections.remove(0).request;
+        let snapshot = reopened.snapshot(request).unwrap();
+        let (_, editable, _) = editable_resource(&mut reopened, &snapshot, "field-note");
+        let compatible = editable.derived.expect("1.2 still receives derived text");
+        assert!(
+            compatible.cache.is_none(),
+            "1.2 resources must omit the 1.3 cache field"
+        );
+        reopened.protocol_version = ProtocolVersion::V1;
+        reopened.snapshot = None;
+        reopened.resources.clear();
+
+        assert!(reopened.lock_vault());
+        assert!(reopened.unlock_vault(key).unwrap());
+        let request = reopened.describe().projections.remove(0).request;
+        let snapshot = reopened.snapshot(request).unwrap();
+        let (_, editable, _) = editable_resource(&mut reopened, &snapshot, "field-note");
+        assert!(
+            editable.derived.is_some(),
+            "unlock under the same source authority should restore the sealed cache"
+        );
+
+        assert!(reopened.revoke_effects());
+        let request = reopened.describe().projections.remove(0).request;
+        let snapshot = reopened.snapshot(request).unwrap();
+        let (_, editable, _) = editable_resource(&mut reopened, &snapshot, "field-note");
+        assert!(
+            editable.derived.is_none(),
+            "effect revocation must make the cache unavailable"
+        );
+
+        reopened.grant_effects(
+            KnotEffectAuthority::new(KnotEffectPolicy {
+                max_depth: 2,
+                ..policy
+            })
+            .with_fetcher(StubFetcher),
+        );
+        let request = reopened.describe().projections.remove(0).request;
+        let snapshot = reopened.snapshot(request).unwrap();
+        let (_, editable, _) = editable_resource(&mut reopened, &snapshot, "field-note");
+        assert!(
+            editable.derived.is_none(),
+            "a changed resolve policy must invalidate the cache"
+        );
+    }
+
+    #[test]
+    fn commons_epoch_rotation_makes_the_old_cache_unavailable() {
+        let vault_dir = tempdir().unwrap();
+        let sync_dir = tempdir().unwrap();
+        let vault_key = [0x93; 32];
+        let seed = [0x43; 32];
+        let writer = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let space = [0x53; 32];
+        let vault = KnotVault::open(vault_dir.path(), vault_key).unwrap();
+        let store =
+            KnotSyncFileStore::open_commons(sync_dir.path().join("knot.redb"), space, [writer])
+                .unwrap();
+        let mut keys = DataKeyring::new();
+        let first_epoch = keys.rotate_random().unwrap().id();
+        pollster::block_on(store.author_communal(
+            seed,
+            &keys,
+            &KnotSyncEvent::Put(VaultDocument {
+                id: "shared-note".into(),
+                title: "Shared note".into(),
+                body:
+                    b"# Shared\n\n```include file://fixture/included.md\nFallback.\n```\n".to_vec(),
+                media_type: "text/vnd.knot".into(),
+            }),
+        ))
+        .unwrap();
+        let mut rotated = DataKeyring::from_bytes(&keys.to_bytes().unwrap()).unwrap();
+        let second_epoch = rotated.rotate_random().unwrap().id();
+        assert_ne!(first_epoch, second_epoch);
+
+        let policy = KnotEffectPolicy {
+            resolve: KnotEffectMode::Ask,
+            allowed_schemes: vec!["file".into()],
+            max_depth: 1,
+            ..KnotEffectPolicy::default()
+        };
+        let mut endpoint =
+            KnotEndpoint::from_communal_vault(vault, store, seed, keys, KnotWriteGrant::new(4096))
+                .unwrap();
+        endpoint.grant_effects(KnotEffectAuthority::new(policy.clone()).with_fetcher(StubFetcher));
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "shared-note");
+        assert_eq!(
+            endpoint
+                .invoke(effect_invocation(
+                    &snapshot,
+                    target,
+                    KNOT_TRANSCLUSION_RESOLVE_INTENT,
+                    &KnotEffectV1 {
+                        base_token: editable.base_token,
+                        confirmed: true,
+                    },
+                ))
+                .unwrap(),
+            IntentResult::Accepted
+        );
+        let ResumeReply::Snapshot(resolved) = endpoint
+            .resume(ResumeRequest {
+                session: snapshot.session,
+                epoch: snapshot.scene.epoch,
+                revision: snapshot.scene.revision,
+            })
+            .unwrap()
+        else {
+            panic!("resolve should advance");
+        };
+        let (_, editable, _) = editable_resource(&mut endpoint, &resolved, "shared-note");
+        assert!(editable.derived.is_some());
+
+        assert!(endpoint.replace_communal_keys(rotated).unwrap());
+        endpoint.grant_effects(KnotEffectAuthority::new(policy).with_fetcher(StubFetcher));
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (_, editable, _) = editable_resource(&mut endpoint, &snapshot, "shared-note");
+        assert!(
+            editable.derived.is_none(),
+            "a cache sealed under the previous Commons epoch must stay unavailable"
         );
     }
 
