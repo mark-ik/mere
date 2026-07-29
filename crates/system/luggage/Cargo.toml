@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "Self-update for packaged apps: signed manifests over pluggable feeds (HTTP, directory, GitHub Releases). A fork of cargo-packager-updater carrying the Merely family's update posture."
-repository = "https://github.com/mark-ik/mere"
+repository = "https://github.com/merely-made/mere"
 
 # Forked 2026-07-24 from cargo-packager-updater 0.2.3 (Tauri Programme /
 # CrabNebula Ltd, MIT OR Apache-2.0), per the auto-update plan ruling: a

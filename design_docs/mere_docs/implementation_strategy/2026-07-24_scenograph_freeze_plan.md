@@ -22,7 +22,7 @@ F3 channels (add, forced)     F4 pick (add, forced)   -> 0.0.3 freeze
 
 **Baseline.** 29 family tests green: sceno 13, scenomise 9, scenotime 7.
 Family is 2,113 LOC across four crates at 0.0.2. Live consumers are mere (by
-path), isometry and turnstone (git, `mark-ik/mere` branch `main`), and mere's
+path), isometry and turnstone (git, `merely-made/mere` branch `main`), and mere's
 own `ports/graphshell`. The archived `repos/graphshell` still pins
 `scenograph.git`, a repository the 2026-07-23 consolidation absorbed; that
 copy is dead (its last commit is "Archived: moved in the 2026-07-23 repo
@@ -197,7 +197,7 @@ and update `sceno`'s package description, which currently promises that
 second half.
 
 Re-resolve isometry and turnstone against the new commit, since both track
-`mark-ik/mere` branch `main`.
+`merely-made/mere` branch `main`.
 
 **Done when:** the note has no open questions, `woodshed` can adopt against a
 stated contract, and the freeze list in its stage-set plan is answered rather

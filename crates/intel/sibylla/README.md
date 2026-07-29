@@ -26,7 +26,7 @@ assert_eq!(hits[0].0, 1);
 Promoted from mere's `intel/embed`. This cut is the seam plus the portable
 retrieval core (P0 + P1); the burn-wgpu BERT backend is the roadmap in
 [`design_docs/`](design_docs/). Sibling to
-[vates](https://github.com/mark-ik/mere) (generation): where vates voices and
+[vates](https://github.com/merely-made/mere) (generation): where vates voices and
 foretells, sibylla is the consulted corpus — it embeds and returns what is asked
 for.
 

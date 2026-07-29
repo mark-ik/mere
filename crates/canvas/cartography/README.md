@@ -71,7 +71,7 @@ Contracts only:
 
 `(x, y)` is identical across all `ProjectionDimension` variants. The
 `z` axis (when applicable) is metadata-driven via the
-[graph-canvas field algebra plan](https://github.com/mark-ik/mere/blob/main/design_docs/graphshell_docs/implementation_strategy/2026-05-07_graph_canvas_field_algebra_plan.md)'s
+[graph-canvas field algebra plan](https://github.com/merely-made/mere/blob/main/design_docs/graphshell_docs/implementation_strategy/2026-05-07_graph_canvas_field_algebra_plan.md)'s
 `FieldProjection` / `ZSource` — not strategy-driven. Switching
 dimensions never invalidates a strategy's output.
 
@@ -104,7 +104,7 @@ embed ────►│ IntelligenceSignals
                      └──────────────┘
 ```
 
-See [`design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md`](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
+See [`design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md`](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
 for the full design + strategy catalogue + scoping decisions.
 
 ## Status

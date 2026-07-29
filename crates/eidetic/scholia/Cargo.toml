@@ -4,7 +4,7 @@ version = "0.1.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "The RDF projection over a chartulary graph's semantic ring. Nodes with addresses and labels become RDF subjects with schema.org literals; edges carrying a predicate IRI become triples; app-private relations are not projected. Emits expanded JSON-LD and N-Quads. Harvested from mere's linked-data, re-seamed onto the capability traits."
-repository = "https://github.com/mark-ik/mere"
+repository = "https://github.com/merely-made/mere"
 keywords = ["rdf", "json-ld", "linked-data", "graph", "semantic"]
 categories = ["data-structures", "encoding"]
 

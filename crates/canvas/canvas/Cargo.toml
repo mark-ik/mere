@@ -67,9 +67,9 @@ netrender = { git = "https://github.com/merely-made/netrender.git", branch = "ma
 # under the camera-transformed container), driven through IncrementalLayout
 # (apply on the RepaintOnly path + emit_paint_list) from genet-layout and
 # composited with the underlay. layout_dom_api supplies the build traits + names.
-genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/genet.git", branch = "main" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-layout = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+layout_dom_api = { package = "layout-dom-api", git = "https://github.com/merely-made/genet.git", branch = "main" }
 
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -81,7 +81,7 @@ euclid = "0.22"
 # the winit window + wgpu present + the shared SurfaceHost are bin-only and gated
 # off wasm. The wasm present path (canvas + WebGPU) is a later step. (P2, 2026-06-06.)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-genet-winit-host = { git = "https://github.com/mark-ik/genet.git", branch = "main", optional = true }
+genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main", optional = true }
 winit = { workspace = true, optional = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"], optional = true }
 

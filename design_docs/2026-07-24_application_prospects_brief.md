@@ -7,7 +7,7 @@ composition thesis, and the separators with their dispositions. Spun-out
 siblings from the same session: the
 [shared-engram commons brief](mere_docs/research/2026-07-24_shared_engram_commons_brief.md)
 (mere side) and the pelt/knot direction doc (genet side,
-[`docs/2026-07-24_pelt_knot_direction.md`](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)).
+[`docs/2026-07-24_pelt_knot_direction.md`](https://github.com/merely-made/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)).
 
 ## The filter
 
@@ -106,7 +106,7 @@ over the mesh, and a placed item in a score.
 ## Separators, with dispositions (2026-07-24)
 
 1. **Engine identity rides on the livery cutover** (genet's
-   [cutover plan](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_livery_fullweb_cutover_and_servo_retirement_plan.md)).
+   [cutover plan](https://github.com/merely-made/genet/blob/main/docs/2026-07-24_livery_fullweb_cutover_and_servo_retirement_plan.md)).
    Agreed; in progress; the long pole, grind not risk.
 2. **Agent-drives-pelt probe receipt.** Endorsed; queued so it does not
    compete with livery focus; done-condition recorded in the genet direction

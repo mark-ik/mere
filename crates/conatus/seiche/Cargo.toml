@@ -4,7 +4,7 @@ version = "0.0.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Kernel-free, rapier-backed force-directed graph layout: bodies bound to node keys, themable forces (exclusion, springs, boundary), and quint field couplings. A host feeds node keys + positions; seiche integrates."
-repository = "https://github.com/mark-ik/mere"
+repository = "https://github.com/merely-made/mere"
 keywords = ["physics", "layout", "graph", "force-directed", "rapier"]
 categories = ["graphics", "simulation"]
 

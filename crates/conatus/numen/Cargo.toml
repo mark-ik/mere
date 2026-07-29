@@ -4,7 +4,7 @@ version = "0.1.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "The portable field-primitive definitions for a graph-canvas physics substrate: the scalar/vector field algebra as data, the Field truth primitive (definition + extent + lifecycle), and Coupling (field -> node-selector -> response) with its open response vocabulary. Fields are a third graph primitive beside nodes and edges; `quint` evaluates these definitions and `seiche` integrates the forces. Plain data, WASM-clean."
-repository = "https://github.com/mark-ik/mere"
+repository = "https://github.com/merely-made/mere"
 keywords = ["field", "physics", "force-directed", "graph", "spatial"]
 categories = ["data-structures", "science"]
 

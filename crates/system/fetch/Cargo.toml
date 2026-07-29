@@ -14,8 +14,8 @@ path = "src/lib.rs"
 [dependencies]
 armillary.workspace = true
 eidetic.workspace = true
-errand = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
-netfetcher = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+errand = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+netfetcher = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 pollster = "0.4"
 rustls-pki-types = "1"
 serde = { workspace = true }
@@ -24,7 +24,7 @@ session-runtime.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
 tracing.workspace = true
 url = "2"
-verso-tile = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+verso-tile = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 
 [lints]
 workspace = true

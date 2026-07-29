@@ -94,7 +94,7 @@ impl chartulary::ContainerAddress for Address {
 
 /// Role of an address claim on a node.
 ///
-/// Per the [node identity + duplicates brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
+/// Per the [node identity + duplicates brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
 /// a node carries a `Vec<AddressClaim>`; one of them must be `Primary`
 /// (the canonical retrieval target), the rest are `Alias`es (equivalent
 /// addresses — mirrors, cross-protocol pairs, user-declared aliases).

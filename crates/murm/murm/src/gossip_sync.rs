@@ -19,7 +19,7 @@
 //! dance. Both ingest idempotently (content-addressed), so a post arriving on
 //! both lanes lands once.
 //!
-//! [plan]: https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-02_logsync_sync_as_projection_plan.md
+//! [plan]: https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-02_logsync_sync_as_projection_plan.md
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

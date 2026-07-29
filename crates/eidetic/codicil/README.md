@@ -3,7 +3,7 @@
 An append-only, replayable log. A `Codicil<T>` is a linear sequence of immutable
 entries you append and replay to rebuild the state they describe. Edits are never
 destroyed; a change is a new entry. The event-source and nondestructive-history
-primitive, persisted through its sibling [muniment](https://github.com/mark-ik/mere).
+primitive, persisted through its sibling [muniment](https://github.com/merely-made/mere).
 
 ```rust
 use codicil::{Codicil, Seq};

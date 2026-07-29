@@ -6,7 +6,7 @@ license = "MIT OR Apache-2.0"
 edition = "2024"
 rust-version = "1.92.0"
 description = "Field algebra for graph canvases — scalar/vector fields over canvas space, node/edge couplings, and evaluation (Rhai authoring, Burn lowering). The portable field source whose forces `seiche` integrates."
-repository = "https://github.com/mark-ik/mere"
+repository = "https://github.com/merely-made/mere"
 keywords = ["field", "physics", "graph", "layout", "canvas"]
 categories = ["graphics", "science"]
 

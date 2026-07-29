@@ -1,6 +1,6 @@
 # scholia
 
-The RDF projection over a [chartulary](https://github.com/mark-ik/mere)
+The RDF projection over a [chartulary](https://github.com/merely-made/mere)
 graph's semantic ring. Scholia are the annotations in a manuscript's margins; this
 crate is that commentary layer for a graph, projecting it into linked data.
 

@@ -200,7 +200,7 @@ below that bar folds into mere or genet, so this list is short by design.
 
 Mere consumes these one-way (it depends on them; they never depend on Mere):
 
-- `genet` (`mark-ik/genet`): the Servo-derived web engine and host layer. It
+- `genet` (`merely-made/genet`): the Servo-derived web engine and host layer. It
   carries the engine-management family (`inker`, `nematic`, `document-canvas`,
   2026-07-10) and, since the consolidation, the reactive UI toolkit
   (`cambium`, `sprigging`, `meristem`), the Fetch engine (`netfetcher`), and
@@ -209,7 +209,7 @@ Mere consumes these one-way (it depends on them; they never depend on Mere):
   The `taffy` / `ipc-channel` forks are vendored there and patched in.
 - `netrender` (`merely-made/netrender`): the paint-realization engine. Public, with
   its own upstream lineage.
-- `retinue` (`mark-ik/retinue`): the radio family in one workspace — the
+- `retinue` (`merely-made/retinue`): the radio family in one workspace — the
   Reticulum implementation plus `tulle`, `sennet`, `tucket`, and the firmware.
   MPL-2.0, unlike the rest of the family.
 - `smolweb` (`merely-made/smolweb`): the small-web wire layer (`misfin` and the

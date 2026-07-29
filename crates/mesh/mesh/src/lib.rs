@@ -35,7 +35,7 @@
 //!   path ([`SyncedMesh::author`]) and a real, non-placebo [`SyncStatus`].
 //!
 //! See the
-//! [mesh M1 plan](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-12_mesh_m1_plan.md).
+//! [mesh M1 plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-12_mesh_m1_plan.md).
 
 pub mod board;
 pub mod drop_export;

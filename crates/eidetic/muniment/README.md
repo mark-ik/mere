@@ -28,7 +28,7 @@ one. It moves bytes and does not model what they mean.
 
 Built from a survey of four consumers (woodshed, hocket, isometry, mere), each
 of which was hand-rolling this seam. Sibling to
-[codicil](https://github.com/mark-ik/mere), the append-only log that versions
+[codicil](https://github.com/merely-made/mere), the append-only log that versions
 what muniment stores. See [`design_docs/`](design_docs/).
 
 The name: a muniment room is where a household keeps its deeds and records, the

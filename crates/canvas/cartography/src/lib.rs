@@ -27,7 +27,7 @@
 //!
 //! Strategies emit a [`Projection`]
 //! output type so canvases consume one shape uniformly. See the
-//! [cartography layer brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
+//! [cartography layer brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
 //! for the full design.
 //!
 //! ## The framing

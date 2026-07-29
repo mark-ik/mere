@@ -41,7 +41,7 @@ impl Graph {
     /// duplicates explicitly when relevant.
     ///
     /// Canonical address lookup per the [node identity + duplicates
-    /// brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md);
+    /// brief](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md);
     /// supersedes the URL-string-keyed `get_node_by_url` (which is
     /// retained as a transitional shim — see below).
     pub fn find_node_by_address(

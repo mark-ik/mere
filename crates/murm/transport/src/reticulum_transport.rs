@@ -29,7 +29,7 @@
 //! `mere/cable/v1` maps to `DestinationName::new("mere", ["cable.v1"])`: the first
 //! path segment is the Reticulum app name, the rest the dotted aspect.
 //!
-//! [`retinue`]: https://github.com/mark-ik/retinue
+//! [`retinue`]: https://github.com/merely-made/retinue
 
 mod announce;
 mod keys;

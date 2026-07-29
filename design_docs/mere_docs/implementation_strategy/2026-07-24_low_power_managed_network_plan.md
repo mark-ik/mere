@@ -33,11 +33,11 @@ boundary. The radio, Reticulum, and queue work lands in the Retinue workspace.
   admitted-session boundary. Its two-consumer gate passed and `notochord` is
   now the authoritative package name.
 - Retinue's existing direct-PHY Resource receipt:
-  [`2026-07-23_direct_phy_resource_acceptance.md`](https://github.com/mark-ik/retinue/blob/main/design_docs/2026-07-23_direct_phy_resource_acceptance.md)
+  [`2026-07-23_direct_phy_resource_acceptance.md`](https://github.com/merely-made/retinue/blob/main/design_docs/2026-07-23_direct_phy_resource_acceptance.md)
 - Tulle/RNode headed receipt:
-  [`2026-07-22_tulle_headed_acceptance.md`](https://github.com/mark-ik/retinue/blob/main/design_docs/2026-07-22_tulle_headed_acceptance.md)
+  [`2026-07-22_tulle_headed_acceptance.md`](https://github.com/merely-made/retinue/blob/main/design_docs/2026-07-22_tulle_headed_acceptance.md)
 - Retinue reliable-link RF findings:
-  [`2026-07-21_first_reliable_link_over_rf.md`](https://github.com/mark-ik/retinue/blob/main/design_docs/2026-07-21_first_reliable_link_over_rf.md)
+  [`2026-07-21_first_reliable_link_over_rf.md`](https://github.com/merely-made/retinue/blob/main/design_docs/2026-07-21_first_reliable_link_over_rf.md)
 - Mere's current Reticulum adoption boundary:
   [`MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md)
 - Personae's shared delegation grammar:

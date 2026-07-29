@@ -10,7 +10,7 @@ forces.
   keys from any graph, or mints them directly.
 - **Built-in forces** (node exclusion, edge springs, a centering boundary) plus
   an optional Barnes–Hut approximation for big-graph repulsion.
-- **Field couplings.** A [`quint`](https://github.com/mark-ik/mere) field
+- **Field couplings.** A [`quint`](https://github.com/merely-made/mere) field
   (evaluated in closed form with finite-difference gradients) compiles to a
   `CouplingForce` the same tick integrates, so scriptable fields drive layout
   beside the native forces.

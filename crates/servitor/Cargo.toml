@@ -5,7 +5,7 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Capability-scoped resident helpers for graph applications: a denizen holds a scoped structural capability and proposes changes through a validating gate, attributed and revision-checked."
 keywords = ["extension", "plugin", "capability", "agent"]
-repository = "https://github.com/mark-ik/mere"
+repository = "https://github.com/merely-made/mere"
 
 [dependencies]
 # The nested-graph substrate: a denizen's inner world is a chartulary GraphLog,

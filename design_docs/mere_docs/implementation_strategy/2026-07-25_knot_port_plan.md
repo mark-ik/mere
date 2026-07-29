@@ -13,9 +13,9 @@ primitive is committed on local Genet `main` at `44e291afe8b`; publishing that
 commit remains the clean remote-checkout gate.
 
 **Companions:** genet's
-[pelt and knot direction](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)
+[pelt and knot direction](https://github.com/merely-made/genet/blob/main/docs/2026-07-24_pelt_knot_direction.md)
 (the text-editing ruling and knot's destination) and its
-[pelt port boundary](https://github.com/mark-ik/genet/blob/main/docs/2026-07-24_pelt_port_boundary.md),
+[pelt port boundary](https://github.com/merely-made/genet/blob/main/docs/2026-07-24_pelt_port_boundary.md),
 the [application prospects brief](../../2026-07-24_application_prospects_brief.md)
 (the composition thesis this port instantiates), the
 [shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md)
