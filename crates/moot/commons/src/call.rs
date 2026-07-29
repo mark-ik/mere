@@ -1,4 +1,4 @@
-//! Sans-I/O control grammar and deterministic fold for a two-person Commons call.
+//! Reusable sans-I/O control grammar and deterministic fold for a two-person Commons call.
 //!
 //! Retained invitations and sparse terminal facts are Commons records. Ringing,
 //! acceptance, media negotiation, mute state, and reconnect state are expiring

@@ -1,8 +1,8 @@
 # Graphshell browser carrier
 
 This package carries the Graphshell Wasm portal and the H4 browser-to-device
-identity bridge. H5a adds the consented browsing-history delivery buffer; the
-final headed capture receipts remain open.
+identity bridge. H5 adds consented browser-history delivery, durable local
+authority, filtering, forgetting, and headed Chromium and Firefox receipts.
 
 ## Boundary
 
@@ -42,6 +42,11 @@ against the visible query-string and origin-exclusion settings before entering
 the bounded `storage.local` queue. The Wasm host acknowledges them only after
 one atomic Muniment batch persists the graph document, LocalOnly AccessRecords,
 and Eidetic browsing traces.
+
+Capture attribution comes from the `SelectedPersonaRef` and device reference
+injected by the composing host. The reference package displays and records its
+stable reference pair. It does not infer an active browsing identity from the
+selected Personae vault profile or a device-roster entry.
 
 `bridge.html` remains the admitted native Identity surface and is linked from
 the graph portal.

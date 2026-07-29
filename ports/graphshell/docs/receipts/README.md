@@ -78,5 +78,28 @@ The
 records the Graphshell-local IndexedDB backend, consented and redacted history
 pipeline, LocalOnly typed AccessRecord authority, restart dedupe, filtering,
 forget behavior, durable extension delivery queue, and the real Chromium
-permission/import/restart receipt. H5 remains open for headed live intake, the
-Firefox packaged-extension receipt, and final filter/forget controls.
+permission/import/restart receipt. H5a left headed live intake, Firefox, and
+the final controls open. The
+[H5b cross-browser capture and controls note](../2026-07-28_h5b_cross_browser_capture_controls_receipt.md)
+closes those walls with exact-package Chromium and Firefox receipts, portal
+filtering and scoped forgetting, and the explicit Personae attribution seam.
+
+The
+[H6a G5f prerequisite note](../2026-07-29_h6a_g5f_prerequisite_receipt.md)
+records a real p2panda/QUIC suspend, redial, contiguous-diff resume, accepted
+intent, and intent-first revocation refusal across separate local processes.
+The
+[H6b physical G5f closure note](../2026-07-29_h6b_physical_g5f_closure_receipt.md)
+repeats the combined run between Windows and Q-PC and closes G5. The
+[H6c transfer-core note](../2026-07-29_h6c_transfer_core_receipt.md)
+records the versioned selection engram, independently verified blobs,
+replicate/copy identity rules, policy-carried access history, destination
+AccessRecords, typed receipt, revoked-before-mutation guard, and resumable
+two-store proof. The
+[H6d physical transfer closure note](../2026-07-29_h6d_physical_transfer_closure_receipt.md)
+records the real Windows-to-Q-PC manifest/blob transfer, fresh-admission
+resume, preserved ids/tags/relation, destination AccessRecords, typed receipt,
+and intent-first live revocation. H6 is complete. The
+[H4i remote SSH login note](../2026-07-29_h4i_remote_ssh_login_receipt.md)
+proves the same resident Graphshell authority authenticated a batch-mode
+OpenSSH login to Q-PC through the standard agent endpoint.

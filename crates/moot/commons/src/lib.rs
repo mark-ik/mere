@@ -1,8 +1,8 @@
 //! The commons spine: a chartulary container graph as a replicated domain.
 //!
-//! M3 of the commons multi-writer convergence plan. Before this, nothing in
-//! the tree bridged chartulary to the replication layer: a chartulary `Batch`
-//! is not a p2panda `Operation`, so a graph edit could not ride a lane.
+//! M3 of the Commons multi-writer convergence plan, promoted when Turnstone
+//! became its first intended place consumer. A chartulary `Batch` is not a
+//! p2panda `Operation`, so a graph edit needs this profile to ride a lane.
 //!
 //! ## The shape
 //!
@@ -36,9 +36,9 @@ use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
-use personae::DerivedKeyAttestation;
+use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
-use servitor::{AuthorityProvider, Cap, Mode, Subject};
+use servitor::{AuthorityProvider, Cap, Mode, Subject, cap_path};
 use std::collections::{BTreeMap, BTreeSet};
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, MunimentStore, OperationPolicy,
@@ -513,6 +513,57 @@ pub struct ServitorAuthorityView<'a, A> {
     pub revoked_subjects: &'a BTreeSet<[u8; 32]>,
 }
 
+/// Adapter from Gemot's converged delegation fold to the Commons capability
+/// query. The adapter receives only retained authority facts and a host-set
+/// evaluation time: session, relay, and transport identity never enter this
+/// decision.
+pub struct GemotAuthorityView<'a> {
+    pub authority: gemot::moot::MootAuthority<'a>,
+}
+
+impl CommonsAuthority for GemotAuthorityView<'_> {
+    fn classify(&self, subject: Subject, capability: &Cap, mode: Mode) -> AuthorityState {
+        if self.authority.covers(subject, capability, mode) {
+            return AuthorityState::Effective;
+        }
+
+        let needed = cap_path(capability);
+        let withdrawn_current_grant = self
+            .authority
+            .delegations
+            .projections(
+                self.authority.moot_id,
+                self.authority.rules,
+                self.authority.now_ms,
+            )
+            .into_iter()
+            .any(|grant| {
+                grant.subject == subject.0
+                    && grant.not_before_ms <= self.authority.now_ms
+                    && grant
+                        .expires_at_ms
+                        .is_none_or(|expires| self.authority.now_ms <= expires)
+                    && !grant.active
+                    && path_covers(&grant.path_prefix, &needed)
+            });
+
+        if withdrawn_current_grant {
+            AuthorityState::Revoked
+        } else {
+            AuthorityState::Pending
+        }
+    }
+}
+
+/// Match a capability path at a segment boundary. A narrower delegation does
+/// not authorize its parent and an unrelated prefix cannot collide by text.
+fn path_covers(prefix: &str, path: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
 impl<A: AuthorityProvider> CommonsAuthority for ServitorAuthorityView<'_, A> {
     fn classify(&self, subject: Subject, capability: &Cap, mode: Mode) -> AuthorityState {
         if self.revoked_subjects.contains(&subject.0) {
@@ -607,18 +658,33 @@ pub enum ReplicaError {
     BatchCount(usize),
 }
 
+/// Failure to bind a Commons replica to its stable Personae identity.
+#[derive(Debug, thiserror::Error)]
+pub enum ReplicaIdentityError {
+    #[error(transparent)]
+    Identity(#[from] IdentityError),
+    #[error("identity provider returned an invalid Commons writer attestation")]
+    InvalidAttestation,
+    #[error("identity provider attested a different Commons writer")]
+    WriterMismatch,
+}
+
 /// One member's replica of one shared container.
 pub struct Replica<B: Backend + Clone + Send + Sync + 'static> {
     store: MunimentStore<B, CommonsExt>,
     container: [u8; 32],
     writer: WriterId,
     signing_seed: [u8; 32],
+    writer_attestation: Option<DerivedKeyAttestation>,
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
-    /// A replica writing under `signing_seed`, whose verifying key is also the
-    /// chartulary `WriterId` that scopes minted edge ids. One identity, so a
-    /// replica cannot mint an edge id another replica could also mint.
+    /// A replica writing directly under `signing_seed`, whose verifying key is
+    /// both the stable authority subject and the chartulary `WriterId` that
+    /// scopes minted edge ids.
+    ///
+    /// Product hosts with a Personae identity should use [`Self::for_identity`]
+    /// so the wire record carries the root binding.
     pub fn new(backend: B, container: [u8; 32], signing_seed: [u8; 32]) -> Self {
         let writer = WriterId(
             *SigningKey::from_bytes(&signing_seed)
@@ -630,7 +696,43 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
             container,
             writer,
             signing_seed,
+            writer_attestation: None,
         }
+    }
+
+    /// A replica writing under this container's derived Personae key.
+    ///
+    /// The master secret remains behind `identity`. Each authored operation
+    /// carries the master-signed attestation, so authority is evaluated against
+    /// the stable Personae root while edge ids remain scoped to the derived
+    /// writer key.
+    pub fn for_identity<P: IdentityProvider + ?Sized>(
+        backend: B,
+        container: [u8; 32],
+        identity: &P,
+    ) -> Result<Self, ReplicaIdentityError> {
+        let salt = commons_identity_salt(container);
+        let keypair = identity.derive_keypair(&salt)?;
+        let writer_attestation = identity.attest_derived_key(&salt)?;
+        if !writer_attestation.verify(&salt) {
+            return Err(ReplicaIdentityError::InvalidAttestation);
+        }
+        let writer = WriterId(keypair.public_key().to_bytes());
+        if writer_attestation
+            .derived_public_key()
+            .map_err(|_| ReplicaIdentityError::InvalidAttestation)?
+            .to_bytes()
+            != writer.0
+        {
+            return Err(ReplicaIdentityError::WriterMismatch);
+        }
+        Ok(Self {
+            store: MunimentStore::new(backend),
+            container,
+            writer,
+            signing_seed: keypair.to_seed(),
+            writer_attestation: Some(writer_attestation),
+        })
     }
 
     /// The store, for `JoinedSpace::join`.
@@ -682,13 +784,14 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
             &COMMONS_LOG,
         )
         .map_err(MaterializeError::from)?;
-        let op = to_operation(
+        let op = to_operation_with_attestation(
             self.signing_seed,
             self.container,
             &batch,
             parents,
             seq,
             backlink,
+            self.writer_attestation.clone(),
         );
         self.accept(&op).await?;
         Ok(op)
@@ -712,6 +815,16 @@ impl<B: Backend + Clone + Send + Sync + 'static> Replica<B> {
     pub async fn projection(&self) -> Result<CommonsProjection, MaterializeError> {
         materialize_projection(&self.store, self.container).await
     }
+
+    /// Current graph classified by the caller's converged authority view.
+    /// Product ports must use this for communal projection; the authority view
+    /// receives retained Personae/Gemot facts, never relay or session identity.
+    pub async fn projection_with_authority<A: CommonsAuthority>(
+        &self,
+        authority: &A,
+    ) -> Result<CommonsProjection, MaterializeError> {
+        materialize_with_authority(&self.store, self.container, authority).await
+    }
 }
 
 #[cfg(test)]
@@ -719,7 +832,13 @@ mod tests {
     use super::*;
     use chartulary::taxonomy::{Recognized, RelationClass};
     use chartulary::{Author, EdgeId, FacetId};
+    use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
+    use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
     use muniment::{MemoryBackend, RedbBackend};
+    use personae::delegation::{
+        CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
+        SignedDelegationCertificate, SignedDelegationRevocation,
+    };
     use personae::{IdentityProvider, InMemoryProvider};
     use proptest::prelude::*;
     use serde_json::json;
@@ -729,9 +848,68 @@ mod tests {
     use transport::{P2pandaTransport, PeerID, sync_overlay_topic};
 
     const CONTAINER: [u8; 32] = [0xc0; 32];
+    const MOOT: [u8; 32] = [0x6d; 32];
+    const ROOT_GRANT: [u8; 32] = [0x67; 32];
+    const AUTHORITY_NOW_MS: u64 = 50;
 
     fn cites() -> Relation {
         Relation::new(RelationClass::recognized(Recognized::Cites))
+    }
+
+    fn gemot_rules(root: &InMemoryProvider, path_prefix: String) -> ConstitutionRules {
+        let mut rules = ConstitutionRules::founder_only(root.master_public_key().to_bytes());
+        rules.grant(CapabilityGrant {
+            id: ROOT_GRANT,
+            subject: root.master_public_key().to_bytes(),
+            path_prefix,
+            not_before_ms: 10,
+            expires_at_ms: Some(1_000),
+            delegation_depth: 2,
+        });
+        rules
+    }
+
+    fn issue_gemot_delegation(
+        root: &InMemoryProvider,
+        writer: &InMemoryProvider,
+        path_prefix: String,
+        expires_at_ms: Option<u64>,
+        nonce: u8,
+    ) -> SignedDelegationCertificate {
+        SignedDelegationCertificate::issue(
+            root,
+            DelegationCertificate::new(
+                DelegationParent::Root(ROOT_GRANT),
+                root.master_public_key().to_bytes(),
+                writer.master_public_key().to_bytes(),
+                CapabilityScope {
+                    domain: MOOT_DELEGATION_DOMAIN.into(),
+                    resource: MOOT.to_vec(),
+                    path_prefix,
+                    actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+                },
+                15,
+                20,
+                expires_at_ms,
+                0,
+                [nonce; 32],
+            ),
+        )
+        .expect("test delegation signs")
+    }
+
+    fn gemot_authority<'a>(
+        delegations: &'a MootDelegations,
+        rules: &'a ConstitutionRules,
+    ) -> GemotAuthorityView<'a> {
+        GemotAuthorityView {
+            authority: MootAuthority {
+                delegations,
+                rules,
+                moot_id: MOOT,
+                now_ms: AUTHORITY_NOW_MS,
+            },
+        }
     }
 
     type Fingerprint = (
@@ -1213,25 +1391,177 @@ mod tests {
         }
     }
 
+    /// A retained fact is governed by its stable writer subject and the
+    /// converged Gemot delegation state. The holder that relays the operation
+    /// has no input to the decision, and neither does a session or carrier.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn gemot_delegation_reprojects_retained_write_and_revocation() {
+        let root = InMemoryProvider::from_seed([0x71; 32]);
+        let writer = InMemoryProvider::from_seed([0x72; 32]);
+        let capability = commons_write_capability(CONTAINER);
+        let rules = gemot_rules(&root, cap_path(&capability));
+        let delegation =
+            issue_gemot_delegation(&root, &writer, cap_path(&capability), Some(900), 1);
+        let delegation_id = delegation.certificate.id();
+        let delegation_scope = delegation.certificate.scope.clone();
+        let mut delegations = MootDelegations::new();
+        assert!(
+            delegations
+                .accept_certificate(MOOT, &rules, delegation)
+                .expect("live delegation is admitted")
+        );
+
+        let mut author = Replica::for_identity(MemoryBackend::new(), CONTAINER, &writer).unwrap();
+        let operation = author
+            .edit(|graph| {
+                graph.insert_node(&Author::new("turnstone"), Container::new("retained"));
+            })
+            .await
+            .expect("author writes a retained fact");
+        let relay = Replica::new(MemoryBackend::new(), CONTAINER, [0x73; 32]);
+        relay
+            .accept(&operation)
+            .await
+            .expect("relay retains the fact");
+        let retained = relay.sync_store();
+
+        let effective = relay
+            .projection_with_authority(&gemot_authority(&delegations, &rules))
+            .await
+            .expect("Gemot grants the writer capability");
+        assert_eq!(effective.graph.graph().node_count(), 1);
+        assert!(effective.pending_authority.is_empty());
+        assert!(effective.revoked.is_empty());
+
+        let revocation = SignedDelegationRevocation::issue(
+            &root,
+            DelegationRevocation::new(
+                delegation_id,
+                root.master_public_key().to_bytes(),
+                delegation_scope,
+                60,
+                [2; 32],
+            ),
+        )
+        .expect("test revocation signs");
+        assert!(
+            delegations
+                .accept_revocation(revocation)
+                .expect("Gemot accepts the issuer revocation")
+        );
+
+        let withdrawn = relay
+            .projection_with_authority(&gemot_authority(&delegations, &rules))
+            .await
+            .expect("authority reprojects without reinserting the fact");
+        assert_eq!(withdrawn.graph.graph().node_count(), 0);
+        assert!(withdrawn.pending_authority.is_empty());
+        assert_eq!(withdrawn.revoked.len(), 1);
+        assert_eq!(
+            retained
+                .operation_count()
+                .await
+                .expect("retained fact count"),
+            1,
+            "revocation changes projection, never retained history"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn gemot_expired_unrelated_and_insufficient_delegations_stay_pending() {
+        let root = InMemoryProvider::from_seed([0x81; 32]);
+        let writer = InMemoryProvider::from_seed([0x82; 32]);
+        let capability = commons_write_capability(CONTAINER);
+        let needed = cap_path(&capability);
+        let mut author = Replica::new(MemoryBackend::new(), CONTAINER, [0x82; 32]);
+        let operation = author
+            .edit(|graph| {
+                graph.insert_node(&Author::new("turnstone"), Container::new("pending"));
+            })
+            .await
+            .expect("author writes one retained fact");
+        let relay = Replica::new(MemoryBackend::new(), CONTAINER, [0x83; 32]);
+        relay
+            .accept(&operation)
+            .await
+            .expect("relay retains the fact");
+        let retained = relay.sync_store();
+
+        let cases = [
+            ("expired", needed.clone(), needed.clone(), Some(40)),
+            (
+                "unrelated",
+                "scope/commons".to_string(),
+                "scope/commons/other".to_string(),
+                Some(900),
+            ),
+            (
+                "insufficient",
+                "scope/commons".to_string(),
+                format!("{needed}/child"),
+                Some(900),
+            ),
+        ];
+
+        for (index, (name, root_path, delegation_path, expires_at_ms)) in
+            cases.into_iter().enumerate()
+        {
+            let rules = gemot_rules(&root, root_path);
+            let delegation = issue_gemot_delegation(
+                &root,
+                &writer,
+                delegation_path,
+                expires_at_ms,
+                index as u8 + 3,
+            );
+            let mut delegations = MootDelegations::new();
+            assert!(
+                delegations
+                    .accept_certificate(MOOT, &rules, delegation)
+                    .expect("structurally valid delegation is retained")
+            );
+
+            let projection = relay
+                .projection_with_authority(&gemot_authority(&delegations, &rules))
+                .await
+                .expect("authority fold succeeds");
+            assert_eq!(projection.graph.graph().node_count(), 0, "{name}");
+            assert_eq!(projection.pending_authority.len(), 1, "{name}");
+            assert!(projection.revoked.is_empty(), "{name} is not revocation");
+        }
+        assert_eq!(
+            retained
+                .operation_count()
+                .await
+                .expect("retained fact count"),
+            1,
+            "ineffective authority never deletes the retained fact"
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_derived_writer_is_bound_to_its_personae_root() {
         let root = InMemoryProvider::from_seed([0xa7; 32]);
-        let salt = commons_identity_salt(CONTAINER);
-        let derived = root.derive_keypair(&salt).unwrap();
-        let attestation = root.attest_derived_key(&salt).unwrap();
-        let writer = WriterId(derived.public_key().to_bytes());
         let author = Author::new("ui");
-        let mut graph = GraphLog::<Container, Relation>::new().for_writer(writer);
-        graph.insert_node(&author, Container::new("derived"));
-        let batch = graph.log().entries().last().unwrap().clone();
-        let operation = to_operation_with_attestation(
-            derived.to_seed(),
-            CONTAINER,
-            &batch,
-            Vec::new(),
-            0,
-            None,
-            Some(attestation.clone()),
+        let mut origin =
+            Replica::for_identity(MemoryBackend::new(), CONTAINER, &root).expect("bind identity");
+        let operation = origin
+            .edit(|graph| {
+                graph.insert_node(&author, Container::new("derived"));
+            })
+            .await
+            .expect("identity-backed replica authors");
+        let record = from_operation(&operation).unwrap();
+        let attestation = record
+            .writer_attestation
+            .expect("the authoring path carries its stable-root binding");
+        assert_eq!(
+            attestation.master_public_key().unwrap(),
+            root.master_public_key()
+        );
+        assert_eq!(
+            attestation.derived_public_key().unwrap().to_bytes(),
+            origin.writer().0
         );
 
         let receiver = Replica::new(MemoryBackend::new(), CONTAINER, [91; 32]);
@@ -1251,7 +1581,7 @@ mod tests {
         let forged = to_operation_with_attestation(
             [0xb8; 32],
             CONTAINER,
-            &batch,
+            &record.batch,
             Vec::new(),
             0,
             None,
@@ -1264,6 +1594,37 @@ mod tests {
             .expect_err("another signer cannot claim the certified derived key");
         assert!(error.to_string().contains("writer-attestation-mismatch"));
         assert_eq!(empty.sync_store().operation_count().await.unwrap(), 0);
+    }
+
+    struct CrossWiredIdentity {
+        writer: InMemoryProvider,
+        attester: InMemoryProvider,
+    }
+
+    impl IdentityProvider for CrossWiredIdentity {
+        fn master_public_key(&self) -> personae::Ed25519PublicKey {
+            self.attester.master_public_key()
+        }
+
+        fn derive_keypair(&self, salt: &[u8]) -> Result<personae::Ed25519Keypair, IdentityError> {
+            self.writer.derive_keypair(salt)
+        }
+
+        fn attest_derived_key(&self, salt: &[u8]) -> Result<DerivedKeyAttestation, IdentityError> {
+            self.attester.attest_derived_key(salt)
+        }
+    }
+
+    #[test]
+    fn a_replica_rejects_an_attestation_for_another_derived_writer() {
+        let identity = CrossWiredIdentity {
+            writer: InMemoryProvider::from_seed([0xc1; 32]),
+            attester: InMemoryProvider::from_seed([0xc2; 32]),
+        };
+        let error = Replica::for_identity(MemoryBackend::new(), CONTAINER, &identity)
+            .err()
+            .expect("cross-wired identity must fail closed");
+        assert!(matches!(error, ReplicaIdentityError::WriterMismatch));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -143,7 +143,7 @@ exposes edit/delete.
 
 Move causal ordering, frontier recovery, bounds, and partial-projection
 diagnostics from `commons-spine` into Stickleback. Commons remains green and
-the probe-local duplicate is deleted.
+the former probe-local duplicate is deleted.
 
 Receipt: Stickleback owns bounded causal admission, author-head and frontier
 recovery, topological projection, happens-before queries, and pending-root
@@ -164,6 +164,29 @@ re-projects them through pending, effective, and revoked states. Personae
 derived-key attestations bind each writer to a stable root; Servitor supplies
 typed capability checks.
 
+**Promotion receipt 2026-07-28:** `commons-spine` is now the workspace
+technical profile at `crates/moot/commons`. `GemotAuthorityView` adapts
+Gemot's current `MootAuthority` to the existing Commons typed query. A live
+delegation makes a retained write effective; a current withdrawn delegation
+retracts it from projection without deleting the operation; expired,
+unrelated, and narrower grants remain pending. Relay, carrier, and session
+identity do not enter the adapter.
+
+**Authoring receipt 2026-07-29:** `Replica::for_identity` derives the
+container-scoped writer through Personae, validates its root attestation, and
+retains that binding on the replica. `Replica::edit` now places the attestation
+on every authored operation, so `GemotAuthorityView` evaluates the stable
+Personae root rather than the derived signing key. The Commons library suite
+passes 39 tests, and library Clippy passes with warnings denied.
+
+**Gemot aggregate receipt 2026-07-29:** `Moot` exposes its constitution and
+membership sync stores. Membership has a Gemot-owned signed wire grammar,
+Personae root attestation, durable Memory/Redb storage, deterministic
+p2panda-auth materialization, plain snapshots, outbound operations, and native
+drop carriage. Aggregate drops now reconstruct nonempty constitution,
+delegation, membership, object, and Tessera state on a fresh peer. The Gemot
+suite passes 107 tests, and library Clippy passes with warnings denied.
+
 ### C3. Group-key engine — DONE 2026-07-27
 
 Wire the p2panda data scheme first, with durable group state, welcome delivery,
@@ -175,6 +198,18 @@ Receipt: Stickleback persists versioned data-encryption keyrings and retained
 epochs. A real p2panda DCGKA test authenticates a welcome, removes a member,
 rotates the key, preserves old-epoch reads, and withholds later plaintext from
 the removed member.
+
+Production promotion 2026-07-29: the former test-only DCGKA seam is now the
+serializable `GroupSession` API. It exports versioned pre-key,
+broadcast-control, and recipient-direct frames; binds each crypto recipient and
+pre-key to a group-scoped Personae derived-key attestation; processes create,
+update, add/welcome, and removal transactionally; and persists its complete
+secret state through a Personae-sealed record. The receipt rejects a tampered
+identity binding, a mismatched authenticated operation root, and a direct frame
+addressed to another member. It restores the same session after restart,
+welcomes a late member with retained epochs, and withholds the removal rotation
+from the removed member. Stickleback passes 55 unit and 5 boundary tests plus
+strict library Clippy.
 
 ### C4. Knot consumer pull and durable projection — DONE 2026-07-27
 

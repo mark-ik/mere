@@ -78,7 +78,7 @@ and checked against a monotonic stored frontier.
 
 The merge rules are stated and property-tested. A truly concurrent removal now
 wins over an insert of the same node, while an insert that causally observes
-the removal deliberately recreates it. The tracked `commons-spine` probe now bridges chartulary
+the removal deliberately recreates it. The tracked `commons-spine` workspace package now bridges chartulary
 to real p2panda LogSync: partitioned members reconverge to identical graph
 fingerprints, one member can then edit the other's synced edge and reconverge
 again, and an actual Redb close/reopen resumes both operation and edge

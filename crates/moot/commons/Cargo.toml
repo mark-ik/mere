@@ -1,12 +1,7 @@
-# M3 of the commons multi-writer convergence plan (mere design_docs,
-# 2026-07-26): the first bridge from a chartulary container graph to a
-# replicated lane. Nothing in the tree joined those two before this probe.
-#
-# A probe, not a crate, on purpose: the commons spine gets founded (and named)
-# when a consumer pulls it, per the workspace's consumer-pull doctrine. What
-# this proves is that the merge rules M1/M2 settled actually hold over real
-# LogSync reconciliation rather than only over hand-built journals.
-# Standalone (crates/probes is excluded from the mere workspace).
+# The technical Commons profile: graph, encrypted chat, governed retained
+# facts, and the reusable sans-I/O call grammar. This was M3's consumer-pull
+# receipt; Turnstone is now its intended place consumer, so it belongs in the
+# Mere workspace without becoming a product or UI crate.
 [package]
 name = "commons-spine"
 version = "0.0.1"
@@ -22,6 +17,7 @@ personae = { path = "../../persona/personae" }
 proofs = { package = "mere-proofs", path = "../../system/proofs" }
 servitor = { path = "../../servitor" }
 stickleback = { path = "../../stickleback" }
+gemot = { workspace = true }
 p2panda-core = "0.7.0"
 p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_scheme"] }
 p2panda-net = "0.7.0"

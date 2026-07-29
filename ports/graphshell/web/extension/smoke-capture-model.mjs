@@ -41,4 +41,25 @@ assert.deepEqual(
   model.mergeQueue([accepted], [{ ...accepted, title: "Updated" }]),
   [{ ...accepted, title: "Updated" }],
 );
+assert.deepEqual(
+  model.historyFilterFromControls(7, " persona:a ", " device:b ", 700_000_000),
+  {
+    start_ms: 95_200_000,
+    end_ms: null,
+    persona: "persona:a",
+    device: "device:b",
+  },
+);
+assert.deepEqual(
+  model.forgetRequest(
+    "https://private.example/a?token=secret#part",
+    true,
+    policy,
+  ),
+  {
+    url: "https://private.example/a",
+    remove_object: true,
+  },
+  "an excluded origin stays forgettable after capture",
+);
 console.log("Graphshell capture policy smoke passed");

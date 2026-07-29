@@ -56,5 +56,5 @@ The Retinue bench programs are:
 - `crates/retinue/examples/direct_phy_bytes.rs` for the full Endpoint path;
 - `crates/retinue/examples/direct_phy_resource_trace.rs` for packet-level
   Resource diagnosis; and
-- `crates/probes/commons-spine/examples/commons_rf_fixture.rs` for fixture
+- `crates/moot/commons/examples/commons_rf_fixture.rs` for fixture
   emission and domain verification.

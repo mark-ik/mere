@@ -218,6 +218,9 @@ impl ReticulumTransport {
         ReticulumTransportBuilder::new(master)
     }
 
+    // This is the builder's one-to-one handoff; a parameter bundle here would
+    // duplicate the public builder state solely to appease a lint.
+    #[allow(clippy::too_many_arguments)]
     async fn bind_inner(
         master: &Ed25519Keypair,
         alpns: Vec<Alpn>,

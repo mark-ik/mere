@@ -8,8 +8,10 @@ the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice". Decision 2 is answered by the
 [follow-on plan](2026-07-27_commons_authority_keys_consumers_plan.md) and
 [Commons profile](../design/2026-07-27_commons_profile_v1.md), rather than by
-this convergence plan. The tracked `commons-spine` probe is the receipt;
-it remains outside the main workspace until a consumer pulls and names it.
+this convergence plan. The tracked `commons-spine` receipt was promoted to
+the workspace package at `crates/moot/commons` when Turnstone became its
+intended place consumer. `commons-spine` remains a technical profile, not a
+product name.
 
 **Method, as the brief instructed:** check what `stickleback` already
 inherits from p2panda before designing anything. That check is section 1. It
@@ -212,8 +214,8 @@ Done-conditions, not dates.
     tail; `merge_divergent` models that and the naive `merge` is kept only
     for replicas with no shared history.
 - **M3. Reconvergence over a real lane. DONE 2026-07-27**, as the tracked
-  `commons-spine` probe (`crates/probes/commons-spine`, 17 test functions
-  green, including one 48-case property test).
+  `commons-spine` package (`crates/moot/commons`, originally 17 test
+  functions green, including one 48-case property test).
 
   The bullet originally claimed this "reuses the join ceremony, so this is a
   test rather than new machinery". **That was false**: no crate bridged

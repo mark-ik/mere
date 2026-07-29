@@ -2,7 +2,9 @@
 
 Date: 2026-07-28
 
-Status: bounded H5 slice complete. H5 as a whole remains open.
+Status: bounded H5 slice complete. The later
+[H5b receipt](2026-07-28_h5b_cross_browser_capture_controls_receipt.md)
+closes H5.
 
 ## What landed
 
@@ -46,10 +48,10 @@ available for retry.
 
 ## Evidence
 
-- `cargo test -p graphshell --no-default-features --features web --offline`
-  passes the capture policy, graph projection, LocalOnly authority, time /
-  persona / device filter, restart dedupe, forget, and post-forget recapture
-  scenario.
+- `cargo test -p graphshell --all-features --offline` passes 76 tests. These
+  include the capture policy, graph projection, LocalOnly authority, time /
+  persona / device filter, atomic-failure retry, restart dedupe, forget, and
+  post-forget recapture scenarios.
 - `cargo test -p mere-eidetic --offline` passes 88 unit tests and preserves
   the native pack-signing and JSON Schema defaults.
 - `cargo check -p graphshell-web --target wasm32-unknown-unknown --offline`
@@ -76,9 +78,10 @@ available for retry.
   reopened IndexedDB at twelve nodes, and kept the delivery queue empty. The
   isolated test profile was then removed.
 
-## Walls still open
+## Walls left open by H5a
 
-This is not the H5 completion receipt.
+This was not the H5 completion receipt. The later H5b receipt closes the first
+three walls below.
 
 - The Chromium permission, bounded import, redaction, acknowledgement, graph
   persistence, and cold-restart clauses are closed. Live `onVisited` intake
@@ -87,7 +90,8 @@ This is not the H5 completion receipt.
 - Filter and forget are proved authority operations but do not yet have their
   final graph-portal controls.
 - Favicon intake remains optional in the event shape but the extension does
-  not request `tabs` or store favicons yet.
-- The first portal labels captures with Graphshell's selected local reference
-  persona and device. Binding that selection to the live Personae surface is a
-  later integration seam, not inferred authority.
+  not request `tabs` or store favicons yet. This is a richer capture feature,
+  not an H5 done condition.
+- The portal labels captures with the persona and device injected by its
+  composing host. A second host still needs to prove live selection injection;
+  Graphshell does not infer that authority from the Personae vault profile.

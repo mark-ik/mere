@@ -100,7 +100,7 @@ epoch. Stickleback's 55 unit tests, 5 boundary tests, and doctests pass.
 
 Files:
 
-- `crates/probes/commons-spine/src/chat.rs`
+- `crates/moot/commons/src/chat.rs`
 - the promoted Commons domain selected by its first product consumer
 
 Done when:

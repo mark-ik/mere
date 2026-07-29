@@ -43,6 +43,10 @@ pub mod resume;
 pub mod session_loop;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod sessions;
+#[cfg(feature = "web")]
+pub mod transfer;
+#[cfg(feature = "web")]
+pub mod transfer_endpoint;
 pub mod view;
 
 pub use graphshell_client as client;

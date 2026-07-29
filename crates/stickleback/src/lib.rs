@@ -18,6 +18,7 @@ pub mod drop;
 mod drop_io;
 mod epoch_retention;
 mod group_crypto;
+mod group_session;
 mod joined_space;
 mod processor;
 #[cfg(test)]
@@ -52,6 +53,11 @@ pub use epoch_retention::{
 };
 pub use group_crypto::{
     DataKeyring, GroupCiphertext, GroupCryptoError, GroupEncryptionMode, GroupEncryptionProfile,
+};
+pub use group_session::{
+    GroupControlAction, GroupControlFrame, GroupControlId, GroupDirectFrame, GroupPrekeyBundle,
+    GroupRecipientId, GroupSession, GroupSessionDispatch, GroupSessionError, GroupSessionId,
+    GroupSessionProcess,
 };
 pub use joined_space::{JoinError, JoinedSpace};
 pub use p2panda_encryption::data_scheme::GroupSecretId;

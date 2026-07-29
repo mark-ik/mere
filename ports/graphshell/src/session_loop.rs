@@ -247,7 +247,7 @@ mod tests {
     use graphshell_protocol::{
         CapabilityProfile, CarrierRequestBody, EndpointDescriptor, IntentInvocation, IntentResult,
         PresentationCapability, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
-        ResourceRequest, ResourceResponse, SessionOpen,
+        ResourceRequest, ResourceResponse, Revision, SceneEpoch, SessionOpen,
     };
     use notochord::{
         AdmittedPrincipal, CarrierKind, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction,
@@ -261,6 +261,7 @@ mod tests {
         Ed25519Keypair, IdentityProvider, IdentityVault, InMemoryProvider, InMemoryStorage,
         Profile, ProfileId,
     };
+    use sceno::InstanceId;
     use signature::Verifier;
     use ssh_agent_lib::agent::Session;
     use ssh_agent_lib::proto::SignRequest;
@@ -421,6 +422,21 @@ mod tests {
                 version: ProtocolVersion { major: 1, minor: 0 },
                 capabilities: CapabilityProfile::default(),
             })),
+        )
+    }
+
+    fn intent_request(id: u64) -> String {
+        let authority = authority();
+        request(
+            id,
+            CarrierRequestBody::Intent(IntentInvocation {
+                session: authority.session().clone(),
+                target: InstanceId(1),
+                observed_epoch: SceneEpoch(1),
+                observed_revision: Revision(1),
+                intent: "fixture.inspect".to_string(),
+                payload: Vec::new(),
+            }),
         )
     }
 
@@ -792,6 +808,23 @@ mod tests {
                 failure.message
             ),
             other => panic!("a revoked session must not be opened: {other:?}"),
+        }
+        assert_eq!(summary.end, SessionEnd::Lapsed(Lapse::Revoked));
+    }
+
+    /// G5 names the application verb explicitly. Keep a literal invocation at
+    /// the gate so a future request-loop rewrite cannot prove only `Open`.
+    #[tokio::test]
+    async fn a_revoked_grant_refuses_a_literal_intent_before_dispatch() {
+        let (responses, summary) = run(&intent_request(7), revoked()).await;
+        assert_eq!(responses.len(), 1);
+        match &responses[0].body {
+            Err(failure) => assert!(
+                failure.message.contains("revoked"),
+                "the intent refusal names the lapsed authority: {}",
+                failure.message
+            ),
+            other => panic!("a revoked intent must not reach the endpoint: {other:?}"),
         }
         assert_eq!(summary.end, SessionEnd::Lapsed(Lapse::Revoked));
     }

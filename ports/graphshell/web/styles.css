@@ -144,11 +144,17 @@ nav button:nth-child(8) { left: 254px; }
 }
 
 #semantic-host h1,
-#semantic-host h2 {
+#semantic-host h2,
+#semantic-host h3 {
   margin: 0 0 9px;
   color: #f5e7c4;
   font-size: 14px;
   font-weight: 600;
+}
+
+#semantic-host h3 {
+  margin-top: 14px;
+  font-size: 12px;
 }
 
 #detail-surface h1 {
@@ -190,6 +196,20 @@ nav button:nth-child(8) { left: 254px; }
 #semantic-host textarea {
   min-height: 58px;
   resize: vertical;
+}
+
+#history-results {
+  max-height: 132px;
+  margin: 6px 0 0;
+  padding-left: 20px;
+  overflow: auto;
+  color: #b8c8cd;
+  font-size: 10px;
+}
+
+#history-results li {
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
 }
 
 #engram-data {

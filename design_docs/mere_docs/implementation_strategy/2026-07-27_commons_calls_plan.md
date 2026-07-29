@@ -1,11 +1,14 @@
 # Commons Calls Plan
 
 **Date:** 2026-07-27  
-**Status:** A0 complete locally 2026-07-28; A1-A6 not started.
+**Status:** A0 complete and promoted at `crates/moot/commons` 2026-07-28;
+A1-A6 not started. Turnstone is
+the fixed first consumer for A1, gated on its render-free shared-place port.
 **Depends on:** the
 [Commons profile](../design/2026-07-27_commons_profile_v1.md), the
 [Notochord session spine](./2026-07-26_notochord_session_policy_spine_plan.md),
-and the real `mere-transport` carriers.
+the real `mere-transport` carriers, and Turnstone's
+[peer-web reframe](../../../../turnstone/design_docs/2026-07-28_turnstone_peer_web_reframe.md).
 
 ## Product contract
 
@@ -13,6 +16,11 @@ A call is an admitted live session inside one Commons. The Commons supplies
 membership, identity, invitation context, and settings. Notochord admits each
 live service session. A call service owns signaling, media, presence, and
 carrier policy after admission.
+
+Turnstone is the first product consumer. It owns call actions, device choices,
+visible consent, interruption settings, and the live call surface inside a
+shared place. The retained call grammar remains reusable Mere-side software;
+Graphshell may project call state but is not the product host.
 
 The first product is two-person audio:
 
@@ -33,7 +41,7 @@ products. The first slice must not create abstractions for them.
 | Live-session admission | Notochord | `SessionHello` proves the caller and action before call bytes are read. |
 | Carrier truth | `mere-transport` and Retinue | `AcceptedSession` supplies only observed peer, protocol, interface, and link facts. |
 | Call state and media control | Call service | Ephemeral state with sequence numbers, expiry, and explicit terminal states. |
-| Audio capture and playback | Product host | Device permission, selection, gain, and local mute remain user controls. |
+| Audio capture and playback | Turnstone first; product host contract | Device permission, selection, gain, and local mute remain user controls. |
 | Retained chat and clips | Commons chat | A recording or voice note is a message attachment, not live media history. |
 
 Presence is soft state, not authority. “Online”, “ringing”, and carrier quality
@@ -164,8 +172,8 @@ device.
 
 **Seams:**
 
-- `crates/probes/commons-spine/src/call.rs`
-- `crates/probes/commons-spine/src/lib.rs`
+- `crates/moot/commons/src/call.rs`
+- `crates/moot/commons/src/lib.rs`
 
 Define retained invite/terminal facts and the sans-I/O live control grammar.
 Property-test duplicate, reordered, expired, and concurrent control frames.
@@ -195,14 +203,19 @@ codec dependency; that remains A2's measured probe.
 
 - `crates/murm/transport/src/accepted.rs`
 - `crates/system/notochord/src/io.rs`
-- a call-owned accept module beside the first product consumer
+- `turnstone/src/call.rs`, beside Turnstone's place port
+
+A1 starts only after Turnstone can open a shared place and supply its admitted
+session context. It must not found a second generic call host merely to keep
+the proof inside Mere.
 
 Accept `mere/commons-call/v1`, convert `AcceptedSession` through the existing
 audited adapter, then call `notochord::admit_session` before decoding call
 control.
 
-**Done:** Memory and p2panda carriers complete invite, accept, leave, and end;
-foreign-service grants are refused; denial emits no call frame.
+**Done:** Turnstone's render-free call port completes invite, accept, leave,
+and end over Memory and p2panda carriers; foreign-service grants are refused;
+denial emits no call frame.
 
 ### A2. Loopback audio
 
@@ -260,3 +273,6 @@ bandwidth cost, and the proof required before group calls enter the profile.
 - Do not begin group media before a two-machine A3 receipt exists.
 - Do not retain media or fine-grained quality history as a side effect of
   diagnostics.
+- Do not start A1 before Turnstone's shared-place port can supply the product
+  context and admitted session.
+- Do not make Graphshell or a Mere probe the first call product.

@@ -74,15 +74,15 @@ where
         let current = self.owners.get(owner_id).and_then(|owner| owner.current);
         if let Some(current_id) = current {
             let mut maybe_forward = None;
-            if let Some(current_visit) = self.visits.get(current_id) {
-                if current_visit.children.contains(&visit_id) {
-                    maybe_forward = Some(visit_id);
-                }
+            if let Some(current_visit) = self.visits.get(current_id)
+                && current_visit.children.contains(&visit_id)
+            {
+                maybe_forward = Some(visit_id);
             }
-            if let Some(forward_child) = maybe_forward {
-                if let Some(binding) = self.ensure_binding(current_id, owner_id, at_ms) {
-                    binding.forward_child = Some(forward_child);
-                }
+            if let Some(forward_child) = maybe_forward
+                && let Some(binding) = self.ensure_binding(current_id, owner_id, at_ms)
+            {
+                binding.forward_child = Some(forward_child);
             }
         }
 
@@ -137,10 +137,10 @@ where
 
         self.bind_owner_to_visit(owner_id, visit_id, at_ms)?;
 
-        if let Some(owner) = self.owners.get_mut(owner_id) {
-            if owner.origin.is_none() {
-                owner.origin = Some(visit_id);
-            }
+        if let Some(owner) = self.owners.get_mut(owner_id)
+            && owner.origin.is_none()
+        {
+            owner.origin = Some(visit_id);
         }
 
         if let Some(entry) = self.entries.get_mut(entry_id) {
@@ -393,14 +393,12 @@ where
         at_ms: u64,
     ) -> Option<&mut OwnerBinding> {
         let visit = self.visits.get_mut(visit_id)?;
-        Some(visit.bindings.entry(owner_id).or_insert(OwnerBinding {
+        let binding = visit.bindings.entry(owner_id).or_insert(OwnerBinding {
             forward_child: None,
             last_accessed_at_ms: at_ms,
-        }))
-        .map(|binding| {
-            binding.last_accessed_at_ms = at_ms;
-            binding
-        })
+        });
+        binding.last_accessed_at_ms = at_ms;
+        Some(binding)
     }
 
     fn root_of(&self, visit_id: VisitId) -> Result<VisitId, StemmaError> {

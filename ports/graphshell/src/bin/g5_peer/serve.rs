@@ -75,11 +75,13 @@ pub(crate) async fn serve(
     // not own the carrier; see `graphshell::carrier`.
     for attempt in 1.. {
         println!("  waiting for session {attempt}...");
-        let outcome = {
-            let ledger = revocations.read().expect("ledger lock");
-            accept_projection_session(&carrier, &policy, &ledger, now_ms(), 0).await
-        }
-        .map_err(|e| format!("accept: {e}"))?;
+        // Admission evaluates one ledger snapshot. Do not hold the synchronous
+        // lock while the carrier awaits a peer; the live request loop below
+        // still re-reads the shared ledger before every application request.
+        let admission_ledger = revocations.read().expect("ledger lock").clone();
+        let outcome = accept_projection_session(&carrier, &policy, &admission_ledger, now_ms(), 0)
+            .await
+            .map_err(|e| format!("accept: {e}"))?;
         let mut session = match outcome {
             Ok(session) => session,
             Err(refusal) => {

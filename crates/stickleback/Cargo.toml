@@ -13,6 +13,7 @@ categories = ["network-programming", "database"]
 path = "src/lib.rs"
 
 [dependencies]
+identity.workspace = true
 muniment.workspace = true
 p2panda-core = "0.7.0"
 p2panda-encryption = { version = "0.7.0", features = ["data_scheme", "message_scheme"] }
@@ -30,3 +31,4 @@ thiserror = "1"
 [dev-dependencies]
 pollster = "0.4"
 p2panda-stream = { version = "0.7.0", default-features = false, features = ["log_prune"] }
+tempfile = "3"

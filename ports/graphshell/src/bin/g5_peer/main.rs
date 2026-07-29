@@ -47,8 +47,27 @@ pub(crate) const ROOT_AUTHORITY: [u8; 32] = [7; 32];
 /// How long a dial waits for mDNS to name an address before giving up.
 pub(crate) const DIAL_DEADLINE: Duration = Duration::from_secs(20);
 
+/// Route library warnings to stderr when `RUST_LOG` asks for them.
+///
+/// Off by default so ordinary runs read exactly as before. It earns its place
+/// because the discovery stack below us reports fatal conditions *only* through
+/// `tracing`: `swarm-discovery`'s supervisor tears its whole service down when
+/// any of its actors stops and says so at `warn`, with no error returned and no
+/// change to this process's exit status. Without a subscriber that is invisible,
+/// which is exactly how a peer can sit there announcing nothing while still
+/// printing `waiting for a peer...`. `RUST_LOG=warn` makes it audible.
+fn init_tracing() {
+    if std::env::var_os("RUST_LOG").is_some() {
+        tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_writer(std::io::stderr)
+            .init();
+    }
+}
+
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), String> {
+    init_tracing();
     let mut args = std::env::args().skip(1);
     let mode = args.next().unwrap_or_default();
     let mut peer_ticket = None;

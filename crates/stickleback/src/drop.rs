@@ -56,6 +56,8 @@ pub enum EvidenceKind {
     CapabilityChain = 2,
     CheckpointAuthorization = 3,
     KeyEnvelope = 4,
+    /// Versioned auxiliary operation corpora carried by a domain aggregate.
+    DomainOperations = 5,
 }
 
 /// One semantic record in a native drop.

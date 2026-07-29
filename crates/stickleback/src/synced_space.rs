@@ -92,7 +92,7 @@ impl SyncedSpace {
     /// Drains `sub`, calling `accept` on each received operation and counting the
     /// ones it accepts (returns `true`). `accept` absorbs the per-consumer verify
     /// + insert; returning a future lets a synchronous insert hand back
-    /// [`std::future::ready`] while an asynchronous one awaits its store.
+    ///   [`std::future::ready`] while an asynchronous one awaits its store.
     pub fn drive<E, A, Fut>(mut sub: SyncSubscription<TopicLogSyncEvent<E>>, mut accept: A) -> Self
     where
         E: Extensions + Send + 'static,

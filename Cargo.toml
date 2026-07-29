@@ -51,6 +51,7 @@ members = [
     "crates/murm/murm",
     "crates/murm/transport",
     "crates/persona/gazetteer",
+    "crates/moot/commons",
     "crates/moot/gemot",
     "crates/moot/moothold",
     "crates/moot/mooting",
@@ -238,6 +239,7 @@ murm = { path = "crates/murm/murm" }
 transport = { package = "mere-transport", path = "crates/murm/transport" }
 
 gemot = { version = "0.1.0", path = "crates/moot/gemot" }
+commons-spine = { path = "crates/moot/commons" }
 moothold = { version = "0.1.0", path = "crates/moot/moothold" }
 mooting = { version = "0.1.0", path = "crates/moot/mooting" }
 

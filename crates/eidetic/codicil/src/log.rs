@@ -108,25 +108,21 @@ impl<T> Codicil<T> {
 
     /// Fold every entry into a state, oldest first, to reconstruct what the log
     /// describes.
-    pub fn replay<S, F>(&self, init: S, mut f: F) -> S
+    pub fn replay<S, F>(&self, init: S, f: F) -> S
     where
         F: FnMut(S, &T) -> S,
     {
-        self.entries
-            .iter()
-            .fold(init, |state, entry| f(state, entry))
+        self.entries.iter().fold(init, f)
     }
 
     /// Fold entries from `seq` onward into an existing state. The incremental
     /// twin of [`replay`], for advancing a materialized state by only the new
     /// entries.
-    pub fn replay_from<S, F>(&self, seq: Seq, init: S, mut f: F) -> S
+    pub fn replay_from<S, F>(&self, seq: Seq, init: S, f: F) -> S
     where
         F: FnMut(S, &T) -> S,
     {
-        self.from(seq)
-            .iter()
-            .fold(init, |state, entry| f(state, entry))
+        self.from(seq).iter().fold(init, f)
     }
 }
 

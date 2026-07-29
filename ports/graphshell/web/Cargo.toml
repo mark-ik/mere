@@ -14,6 +14,7 @@ graphshell = { path = "..", default-features = false, features = ["web"] }
 mere = { path = "../../../crates/mere", default-features = false, features = ["graph", "canvas"] }
 muniment = { path = "../../../crates/eidetic/muniment" }
 sceno = { path = "../../../crates/scenograph/sceno" }
+serde.workspace = true
 cambium = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-layout = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/mark-ik/genet.git", branch = "main", version = "=0.1.0" }
@@ -46,6 +47,7 @@ web-sys = { version = "0.3", features = [
     "HtmlTextAreaElement",
     "KeyboardEvent",
     "MouseEvent",
+    "Node",
     "PointerEvent",
     "WheelEvent",
     "Window",

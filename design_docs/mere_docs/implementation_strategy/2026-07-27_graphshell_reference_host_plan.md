@@ -1,7 +1,7 @@
 # Graphshell Reference Host Plan
 
 **Date:** 2026-07-27
-**Status:** product boundary ruled with Mark; H0-H3 complete; H4 in progress; H5-H9 not started.
+**Status:** product boundary ruled with Mark; H0-H3 complete; H4 operational follow-ons remain; H5-H6 complete; H7-H9 not started.
 **Scope:** Make Graphshell Mere's useful, WASM-safe reference host: a graph
 portal, Personae identity-vault surface, browser-extension companion,
 application launcher, and personal cross-device surface for addressed things.
@@ -788,6 +788,15 @@ mutated. A real sign-out or reboot, remote SSH login, native Firefox import,
 macOS/Linux dialogs, and a configured carry root remain open. See the
 [H4h live cutover and Firefox receipt](../../../ports/graphshell/docs/2026-07-28_h4h_live_cutover_firefox_receipt.md).
 
+**H4i receipt (2026-07-29):** Q-PC returned at `192.168.4.105`. With the
+installed `graphshell-device-host` running, `personae-agent` disabled, and the
+stock Windows agent stopped, the standard endpoint listed the existing
+`SHA256:d3tQ...` vault key. Batch-mode OpenSSH then authenticated
+`markik@192.168.4.105` and executed a remote command on Darwin 24.6.0. The
+remote-login done-condition is closed. Real sign-out or reboot recovery and
+final retirement of the disabled Personae task remain open. See the
+[H4i remote SSH login receipt](../../../ports/graphshell/docs/2026-07-29_h4i_remote_ssh_login_receipt.md).
+
 This is the first integrated reference-host cut: the graph, identity vault, and
 native capability broker work as one product.
 
@@ -835,25 +844,56 @@ by default while the Wasm consumer omits both native dependency cones. In a
 fresh headed Chromium profile, the user granted `history`; one query-redacted
 synthetic visit reached LocalOnly AccessRecord and browsing-trace authority,
 the queue drained, the graph grew from eleven to twelve nodes, and a cold
-restart retained both the permission and graph. H5 remains open for headed live
-intake, the Firefox packaged-extension receipt, final filter/forget controls,
-favicon intake, and binding the portal selection to the live Personae surface.
-See the
+restart retained both the permission and graph. See the
 [H5a browser storage and capture-core receipt](../../../ports/graphshell/docs/2026-07-28_h5a_browser_storage_capture_core_receipt.md).
+
+**H5b receipt (2026-07-28):** H5 is complete. The exact package passed
+user-granted permission, bounded import, live `onVisited`, pre-queue redaction,
+atomic acknowledgement, authority display, and cold-restart checks in Chromium
+and Firefox. The portal filters stored visits by time, persona, and device and
+can forget a scoped address with explicit capture-created-object removal.
+Graphshell records the persona and device injected by its composing host; it
+does not infer an active browsing identity from Personae's vault selection.
+Proving that injection in a second host remains an integration follow-on.
+Favicon intake is a separate optional `tabs` permission and retention feature,
+not an H5 completion condition. See the
+[H5b cross-browser capture and controls receipt](../../../ports/graphshell/docs/2026-07-28_h5b_cross_browser_capture_controls_receipt.md).
 
 ### H6. Move one selection between two devices
 
-Complete the two open G5f clauses first:
+The G5f carrier prerequisites are complete:
 
-- resume after a real interruption;
-- reject an actual `IntentInvocation` after revocation.
+- resume after a real interruption was proved across the Windows-to-Q-PC
+  physical run;
+- the corrected intent-first arrangement now rejects a literal
+  `IntentInvocation` after revocation through the real p2panda/QUIC carrier.
 
-Then use the existing admitted p2panda/Iroh carrier for the first transfer:
+The first 2026-07-29 execution used separate local processes. A second run then
+repeated the exact suspend, redial, two-diff resume, accepted intent, and
+intent-first revocation refusal across Windows and Q-PC. G5 is complete. See
+the [H6a implementation receipt](../../../ports/graphshell/docs/2026-07-29_h6a_g5f_prerequisite_receipt.md)
+and [H6b physical closure receipt](../../../ports/graphshell/docs/2026-07-29_h6b_physical_g5f_closure_receipt.md).
 
-- graph/scene selection encoded as a versioned engram;
-- content-addressed blobs transferred and verified independently;
-- access records included according to user policy;
-- transfer receipt records source, destination, route, hashes, and result.
+The transfer contract is implemented and verified across independent
+stores. It uses a schema-typed immutable selection engram, separate verified
+Muniment blobs, an explicit source-history policy, destination AccessRecords,
+and a typed transfer receipt. Replicate preserves ids within one persona; copy
+mints stable-per-transfer ids through Mere's existing copy primitive and keeps
+`CopiedFrom` provenance. Revocation is checked before destination reads or
+mutation, and resume skips an already-verified destination blob. See the
+[H6c transfer-core receipt](../../../ports/graphshell/docs/2026-07-29_h6c_transfer_core_receipt.md).
+
+**H6d receipt (2026-07-29):** H6 is complete. `TransferSourceEndpoint` carries
+the prepared manifest and independently addressed blobs through the existing
+snapshot, intent, resource, and resume verbs. A Windows source and Q-PC
+destination transferred one URL and one real file. The destination cached the
+manifest, suspended, redialed under a fresh admission, resumed the current
+projection without a new snapshot, fetched and verified the blob, and applied
+two preserved ids, both tag sets, one `Cites` relation, and two new destination
+AccessRecords. A second physical run revoked session 3 before its first,
+literal transfer intent; the request loop served one refusal and ended
+`Lapsed(Revoked)` before endpoint dispatch. See the
+[H6d physical transfer receipt](../../../ports/graphshell/docs/2026-07-29_h6d_physical_transfer_closure_receipt.md).
 
 Distinguish two operations:
 
@@ -869,7 +909,8 @@ retirement. A successful copy never silently deletes the source.
 device to another, content hashes verify, the chosen relation closure and tags
 survive, the destination examination appends its own AccessRecord, revocation
 blocks a transfer intent, and interruption resumes without restarting the
-whole transfer.
+whole transfer. **Met 2026-07-29** by the H6c data-contract receipt and H6d
+Windows-to-Q-PC carrier receipt.
 
 ### H7. Add continuous personal-device sync
 
@@ -1090,9 +1131,18 @@ service-name filter being right.
   binary replicating the exact socket setup (bind `0.0.0.0:5353`, join
   `224.0.0.251`, no pinning) reaches the wire from this host, so neither macOS
   Local Network privacy nor binary identity is responsible.
-- **Interface pinning is a dead hypothesis.** A patch adding
-  `with_multicast_interfaces_v4` was A/B'd on *both* hosts and changed nothing
-  either way. `IpClass::Auto` is not the mechanism. Do not spend on it again.
+- **Interface pinning is NOT a dead hypothesis. That earlier note was wrong and
+  is retracted.** It was dismissed on an A/B that measured whether packets
+  reached the wire, when the thing it fixes is *receive* membership. Measured
+  2026-07-29 on Windows with a raw listener: a default join to `224.0.0.251`
+  lands on the WSL/Hyper-V adapter `172.28.32.1` and sees **no LAN traffic at
+  all**; a join pinned to the Wi-Fi address `192.168.4.36` immediately receives
+  it. With `with_multicast_interfaces_v4` supplying the interface list,
+  `join_group_on_main_v4` reports `JOIN OK on interface 192.168.4.36` (and a
+  harmless `JOIN FAILED ... os error 10022` on the virtual adapter). That is a
+  real bug on any multi-homed Windows box, worth landing on its own merits as a
+  `mark-ik` fork patched by branch. It is necessary, not sufficient: Windows
+  still discovers only itself, because the iMac is not reaching the wire.
 
 **The blocker for `--discover` is a client-side race.** In `connect` mode,
 `spawn_discoverer` runs *after* session 1 begins: p2panda builds the endpoint
@@ -1111,13 +1161,80 @@ snapshot, suspend, a reconnect resumed by replaying 2 contiguous diffs
 (revisions 1->2, 2->3), `intent Accepted`, close. G5's cross-machine done-when
 is met by the ticket path.
 
-**Still open:** why `swarm-discovery`'s sender actor stalls on macOS after its
-opening burst, stops answering queries, and does so non-deterministically. That
-single fault is what remains between here and ticketless cross-host discovery,
-and it is now localised to the sender/cadence actor rather than to sockets,
-routing, or egress. **Method note for whoever picks this up: arm the observer
-before starting the peer.** Two wrong conclusions in this section came from
-sniffing a burst that had already finished. One
+**The sender does stall on macOS, and the loopback test proves it with the
+network removed.** An instrumented five-minute soak ran perfectly steadily (78
+`send_msg` calls per 30s, no guardian exit, no receiver death), which briefly
+looked like a refutation; that was simply a healthy run. The decisive instrument
+is to have the iMac listen to **itself**: multicast loopback is on, so a sending
+peer sees its own records without any AP, band, or mesh involvement.
+
+- A freshly started peer emits **40 packets in 15s** to loopback, well-formed,
+  instance `tavio6zxv...`.
+- Two to three minutes later the same process, still alive and still printing
+  `waiting for session 1`, emits **zero** to loopback over 15s.
+
+No network can explain that. `swarm-discovery`'s sender simply stops. Use the
+loopback listener to reproduce it: it is cheap, needs one host, and removes
+every variable that produced wrong answers earlier in this section.
+
+**A "C reaches the wire, Rust does not" reading was recorded here and is
+retracted.** It came from runs minutes apart on a link whose delivery varies
+over tens of seconds. Interleaved inside one window, both arms delivered, and on
+another occasion the verdict inverted entirely. When the channel itself is
+intermittent, arms must be interleaved in a single window or the comparison is a
+coin flip. Language, runtime, binary identity, code signature and macOS Local
+Network privacy are all excluded.
+
+**Disabling AWDL did not fix it.** `sudo ifconfig awdl0 down` (flags drop from
+`8843<UP,...,RUNNING,...>` to `8802`) left ticketless discovery failing, so AWDL
+time-slicing is not the explanation, or not the whole one.
+
+**Linux is healthy.** Fedora's `g5_peer` put **64 packets in 25s** on the wire,
+full `_p2pandav1._udp.local` records, observed from the iMac. Whatever this is,
+it is not the crate on every platform.
+
+**The stalled peer ignores a direct query, so the actor tree is down, not a
+timer.** A stalled peer was poked with five PTR queries for
+`_p2pandav1._udp.local` and answered none, while both processes stayed alive. A
+query arrives as `MdnsMsg::QueryV4` and is answered irrespective of any timer, so
+its receiver is not delivering either. That excludes timer coalescing, App Nap
+and any sender-only parking. `caffeinate -i -s` also failed to prevent the stall,
+though note it suppresses sleep rather than App Nap, so it was the wrong lever
+rather than a refutation.
+
+**The mechanism that fits every symptom** is `guardian`'s supervision loop: it
+`break`s, tearing the entire service down, when *any* supervised actor stops, and
+announces that only through `tracing::warn!`. `g5_peer` installs no subscriber,
+so the message goes nowhere. Alive process, no announcements, no query answers,
+no error output: all of it falls out of that one line.
+
+**It is a heisenbug, which is why it is still open.** Four instrumented runs
+totalling roughly 30 minutes never stalled, including a build with *zero*
+hot-path I/O whose only `eprintln!`s were on fatal paths. Stock builds stalled
+twice in far less observation. Any probe on the send path appears to suppress it.
+
+**Next instrument, and it needs no crate patch at all:** initialise a tracing
+subscriber in `g5_peer` (graphshell already depends on `tracing-subscriber`) and
+run stock `swarm-discovery` under `RUST_LOG=warn`. That makes `guardian`'s
+existing warning visible with no perturbation of the crate whatsoever, which is
+exactly the property every patched build lacked. Failing that, attach `lldb` to a
+silent process and read where each actor is parked.
+
+**Benign, but worth an upstream note:** the stale-timer race is real and fires
+regularly, always off by one and always in the response loop
+(`RESP-LOOP dropped stale timeout 278 (want 279)`). Peers ran straight through
+it, so it is not this bug.
+
+Two latent hazards were read in `swarm-discovery` while looking, neither
+observed firing: `guardian` breaks its loop and tears down the whole service
+when *any* supervised actor stops, reporting it only at `tracing::warn`; and the
+sender drops a stale `MdnsMsg::Timeout` whose count no longer matches, which
+would leave it awaiting a timer that will never arrive.
+
+**Method note for whoever picks this up: arm the observer before starting the
+peer, and A/B on the host that exhibits the fault.** Most of the wrong turns in
+this section came from sniffing a window that had already passed, or from
+measuring egress when the fix was about reception. One
 unexplained one-off is worth recording: a ~10 minute stale ticket produced
 `Delegation(NotYetValid)` although all three clocks agree to 0.1s, and it did
 not reproduce with a fresh ticket.

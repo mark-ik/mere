@@ -134,7 +134,7 @@ impl<N: Identified, E> Graph<N, E> {
 
     /// Every node, as `(key, payload)`.
     pub fn nodes<'a>(&'a self) -> impl Iterator<Item = (NodeKey, &'a N)> + 'a {
-        self.inner.node_references().map(|(key, node)| (key, node))
+        self.inner.node_references()
     }
 
     /// The nodes reachable by one outgoing edge from `key`.

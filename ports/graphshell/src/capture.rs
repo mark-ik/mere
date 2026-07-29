@@ -28,7 +28,7 @@ use crate::mere_host::{MereHost, MereHostError};
 use crate::product::ProductError;
 
 pub const BROWSER_HISTORY_FACET: &str = "graphshell.browser-history/v1";
-const BROWSER_HISTORY_HANDLER_PREFIX: &str = "browser.history/";
+pub const BROWSER_HISTORY_HANDLER_PREFIX: &str = "browser.history/";
 
 #[cfg(not(target_arch = "wasm32"))]
 pub trait CaptureBackend: Backend + Sync {}
@@ -507,7 +507,12 @@ impl BrowserHistoryCapture {
         mode: ForgetMode,
         saved_at_secs: u64,
     ) -> Result<usize, CaptureError> {
-        let canonical = canonical_url(url, &self.policy).map_err(CaptureError::RejectedAddress)?;
+        // A newly excluded origin must remain forgettable. Exclusions govern
+        // intake, not the user's ability to erase records already stored.
+        let mut forget_policy = self.policy.clone();
+        forget_policy.excluded_origins.clear();
+        let canonical =
+            canonical_url(url, &forget_policy).map_err(CaptureError::RejectedAddress)?;
         let memory_before = self.memory.clone();
         let mut batch = CaptureBatch::new(&*store);
         let staged = async {
@@ -1091,6 +1096,11 @@ mod tests {
                 vec![CaptureOutcome::Dropped(CaptureDropReason::Duplicate)]
             );
 
+            let mut excluded_after_capture = capture.policy().clone();
+            excluded_after_capture
+                .excluded_origins
+                .insert("https://capture.example".to_string());
+            capture.set_policy(excluded_after_capture);
             capture
                 .forget_url(
                     &mut host,
@@ -1121,6 +1131,7 @@ mod tests {
                 host.graph().get_node_by_url(FIXTURE_WEB_ADDRESS).is_some(),
                 "forget remains scoped to the captured address"
             );
+            capture.set_policy(HistoryCapturePolicy::consented());
             assert_eq!(
                 host.access_history_for(FIXTURE_WEB_ADDRESS)
                     .unwrap()

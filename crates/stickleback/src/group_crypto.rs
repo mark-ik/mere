@@ -112,6 +112,24 @@ impl DataKeyring {
         }
     }
 
+    pub(crate) fn install_bundle(&mut self, bundle: SecretBundleState) -> Vec<GroupSecretId> {
+        let mut secrets: Vec<_> = bundle.into_iter().map(|(_, secret)| secret).collect();
+        secrets.sort_by_key(|secret| (secret.timestamp(), secret.id()));
+        let mut installed = Vec::with_capacity(secrets.len());
+        for secret in secrets {
+            let epoch = secret.id();
+            if !self.contains(&epoch) {
+                installed.push(epoch);
+            }
+            self.install(secret);
+        }
+        installed
+    }
+
+    pub(crate) fn secret_bundle(&self) -> &SecretBundleState {
+        &self.secrets
+    }
+
     pub fn contains(&self, epoch: &GroupSecretId) -> bool {
         self.secrets.contains(epoch)
     }
@@ -201,6 +219,12 @@ impl DataKeyring {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, GroupCryptoError> {
         let state: Self =
             decode_cbor(bytes).map_err(|error| GroupCryptoError::Decode(error.to_string()))?;
+        state.validate()?;
+        Ok(state)
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), GroupCryptoError> {
+        let state = self;
         if state.version != Self::VERSION {
             return Err(GroupCryptoError::UnsupportedVersion(state.version));
         }
@@ -214,7 +238,7 @@ impl DataKeyring {
         {
             return Err(GroupCryptoError::InvalidEpochOrder);
         }
-        Ok(state)
+        Ok(())
     }
 }
 
@@ -240,112 +264,7 @@ pub enum GroupCryptoError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-    use std::convert::Infallible;
-    use std::marker::PhantomData;
-
-    use p2panda_encryption::crypto::x25519::SecretKey;
-    use p2panda_encryption::data_scheme::dcgka::{
-        Dcgka, DcgkaState, GroupSecretOutput, ProcessInput,
-    };
-    use p2panda_encryption::key_bundle::Lifetime;
-    use p2panda_encryption::key_manager::KeyManager;
-    use p2panda_encryption::key_registry::KeyRegistry;
-    use p2panda_encryption::traits::{GroupMembership, IdentityHandle, OperationId, PreKeyManager};
-
     use super::*;
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    struct Member([u8; 32]);
-
-    impl IdentityHandle for Member {}
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-    struct ControlOp {
-        author: Member,
-        seq: u64,
-    }
-
-    impl OperationId for ControlOp {}
-
-    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-    struct GemotMembership<ID, OP> {
-        _marker: PhantomData<(ID, OP)>,
-    }
-
-    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-    struct GemotMembershipState<ID: IdentityHandle, OP> {
-        my_id: ID,
-        members: HashSet<ID>,
-        _marker: PhantomData<OP>,
-    }
-
-    impl<ID: IdentityHandle, OP> GemotMembership<ID, OP> {
-        fn init(my_id: ID) -> GemotMembershipState<ID, OP> {
-            GemotMembershipState {
-                my_id,
-                members: HashSet::new(),
-                _marker: PhantomData,
-            }
-        }
-    }
-
-    impl<ID, OP> GroupMembership<ID, OP> for GemotMembership<ID, OP>
-    where
-        ID: IdentityHandle + Serialize + for<'a> Deserialize<'a>,
-        OP: OperationId + Serialize + for<'a> Deserialize<'a>,
-    {
-        type State = GemotMembershipState<ID, OP>;
-        type Error = Infallible;
-
-        fn create(my_id: ID, initial_members: &[ID]) -> Result<Self::State, Self::Error> {
-            Ok(GemotMembershipState {
-                my_id,
-                members: initial_members.iter().copied().collect(),
-                _marker: PhantomData,
-            })
-        }
-
-        fn from_welcome(my_id: ID, history: Self::State) -> Result<Self::State, Self::Error> {
-            Ok(GemotMembershipState {
-                my_id,
-                members: history.members,
-                _marker: PhantomData,
-            })
-        }
-
-        fn add(
-            mut state: Self::State,
-            _adder: ID,
-            added: ID,
-            _operation_id: OP,
-        ) -> Result<Self::State, Self::Error> {
-            state.members.insert(added);
-            Ok(state)
-        }
-
-        fn remove(
-            mut state: Self::State,
-            _remover: ID,
-            removed: &ID,
-            _operation_id: OP,
-        ) -> Result<Self::State, Self::Error> {
-            state.members.remove(removed);
-            Ok(state)
-        }
-
-        fn members(state: &Self::State) -> Result<HashSet<ID>, Self::Error> {
-            Ok(state.members.clone())
-        }
-    }
-
-    type TestDcgka = DcgkaState<
-        Member,
-        ControlOp,
-        KeyRegistry<Member>,
-        GemotMembership<Member, ControlOp>,
-        KeyManager,
-    >;
 
     #[test]
     fn durable_epochs_reopen_and_removed_members_miss_the_rotated_key() {
@@ -437,126 +356,6 @@ mod tests {
             reopened.epochs_oldest_first(),
             Some([first, third].as_slice())
         );
-    }
-
-    #[test]
-    fn gemot_membership_drives_dcgka_welcome_and_removal_rotation() {
-        let rng = Rng::default();
-        let alice = Member([0xa1; 32]);
-        let bob = Member([0xb2; 32]);
-
-        let alice_secret = SecretKey::from_rng(&rng).unwrap();
-        let bob_secret = SecretKey::from_rng(&rng).unwrap();
-        let alice_keys = KeyManager::init(&alice_secret).unwrap();
-        let alice_keys = KeyManager::rotate_prekey(alice_keys, Lifetime::default(), &rng).unwrap();
-        let bob_keys = KeyManager::init(&bob_secret).unwrap();
-        let bob_keys = KeyManager::rotate_prekey(bob_keys, Lifetime::default(), &rng).unwrap();
-        let alice_prekeys = KeyManager::prekey_bundle(&alice_keys).unwrap();
-        let bob_prekeys = KeyManager::prekey_bundle(&bob_keys).unwrap();
-
-        let alice_pki = KeyRegistry::init();
-        let alice_pki =
-            KeyRegistry::add_longterm_bundle(alice_pki, alice, alice_prekeys.clone()).unwrap();
-        let alice_pki =
-            KeyRegistry::add_longterm_bundle(alice_pki, bob, bob_prekeys.clone()).unwrap();
-        let bob_pki = KeyRegistry::init();
-        let bob_pki = KeyRegistry::add_longterm_bundle(bob_pki, alice, alice_prekeys).unwrap();
-        let bob_pki = KeyRegistry::add_longterm_bundle(bob_pki, bob, bob_prekeys).unwrap();
-
-        let alice_dcgka: TestDcgka =
-            Dcgka::init(alice, alice_keys, alice_pki, GemotMembership::init(alice));
-        let bob_dcgka: TestDcgka = Dcgka::init(bob, bob_keys, bob_pki, GemotMembership::init(bob));
-
-        let mut alice_ring = DataKeyring::new();
-        let initial = alice_ring.rotate(&rng).unwrap();
-        let (alice_dcgka, create) =
-            Dcgka::create(alice_dcgka, vec![alice, bob], &initial, &rng).unwrap();
-        let bob_welcome = create
-            .direct_messages
-            .iter()
-            .find(|message| message.recipient == bob)
-            .cloned()
-            .unwrap();
-        let (alice_dcgka, _) = Dcgka::process(
-            alice_dcgka,
-            ProcessInput {
-                seq: ControlOp {
-                    author: alice,
-                    seq: 0,
-                },
-                sender: alice,
-                control_message: create.control_message.clone(),
-                direct_message: None,
-            },
-        )
-        .unwrap();
-        let (bob_dcgka, output) = Dcgka::process(
-            bob_dcgka,
-            ProcessInput {
-                seq: ControlOp {
-                    author: alice,
-                    seq: 0,
-                },
-                sender: alice,
-                control_message: create.control_message,
-                direct_message: Some(bob_welcome),
-            },
-        )
-        .unwrap();
-        let GroupSecretOutput::Secret(bob_initial) = output else {
-            panic!("Bob's authenticated welcome must yield the group epoch");
-        };
-        let mut bob_ring = DataKeyring::new();
-        bob_ring.install(bob_initial);
-        let before_removal = alice_ring.seal(b"before", &rng).unwrap();
-        assert_eq!(bob_ring.open(&before_removal).unwrap(), b"before");
-
-        let rotated = alice_ring.rotate(&rng).unwrap();
-        let (alice_dcgka, removal) = Dcgka::remove(alice_dcgka, bob, &rotated, &rng).unwrap();
-        assert!(
-            removal
-                .direct_messages
-                .iter()
-                .all(|message| message.recipient != bob),
-            "a removed member does not receive the rotated epoch"
-        );
-        let (alice_dcgka, _) = Dcgka::process(
-            alice_dcgka,
-            ProcessInput {
-                seq: ControlOp {
-                    author: alice,
-                    seq: 1,
-                },
-                sender: alice,
-                control_message: removal.control_message.clone(),
-                direct_message: None,
-            },
-        )
-        .unwrap();
-        let (_bob_dcgka, bob_output) = Dcgka::process(
-            bob_dcgka,
-            ProcessInput {
-                seq: ControlOp {
-                    author: alice,
-                    seq: 1,
-                },
-                sender: alice,
-                control_message: removal.control_message,
-                direct_message: None,
-            },
-        )
-        .unwrap();
-        assert_eq!(bob_output, GroupSecretOutput::None);
-        assert_eq!(
-            Dcgka::members(&alice_dcgka).unwrap(),
-            HashSet::from([alice])
-        );
-        let after_removal = alice_ring.seal(b"after", &rng).unwrap();
-        assert!(matches!(
-            bob_ring.open(&after_removal),
-            Err(GroupCryptoError::UnknownEpoch(_))
-        ));
-        assert_eq!(bob_ring.open(&before_removal).unwrap(), b"before");
     }
 
     #[test]

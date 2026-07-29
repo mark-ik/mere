@@ -14,14 +14,17 @@ use graphshell::protocol::{
 };
 use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
 use netrender::Scene;
+use serde::Deserialize;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::{Document, Element, HtmlCanvasElement, Window};
 
+use graphshell::access::{AccessRecord, AccessRecordFilter, query_access_records};
 use graphshell::app::GraphshellApp;
 use graphshell::canary::FixtureEndpoint;
 use graphshell::capture::{
-    BrowserHistoryCapture, BrowserVisit, CaptureOutcome, HistoryCapturePolicy,
+    BROWSER_HISTORY_HANDLER_PREFIX, BrowserHistoryCapture, BrowserVisit, CaptureOutcome,
+    ForgetMode, HistoryCapturePolicy,
 };
 use graphshell::indexeddb_backend::IndexedDbBackend;
 use graphshell::mere_host::{
@@ -37,12 +40,51 @@ use web_view::{ChromeModel, build_chrome_scene};
 const REMOTE_LABEL: &str = "Remote projection · 2 objects";
 const CAPTURE_POLICY_GLOBAL: &str = "graphshellCapturePolicyJson";
 const CAPTURE_VISITS_GLOBAL: &str = "graphshellInitialVisitsJson";
+const HISTORY_FILTER_GLOBAL: &str = "graphshellHistoryFilterJson";
+const HISTORY_FORGET_GLOBAL: &str = "graphshellHistoryForgetJson";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct InitialCaptureSummary {
     active: bool,
     accepted: usize,
     dropped: usize,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct HistoryFilterInput {
+    start_ms: Option<u64>,
+    end_ms: Option<u64>,
+    persona: Option<String>,
+    device: Option<String>,
+}
+
+impl From<HistoryFilterInput> for AccessRecordFilter {
+    fn from(value: HistoryFilterInput) -> Self {
+        Self {
+            start_ms: value.start_ms,
+            end_ms: value.end_ms,
+            persona: value.persona,
+            device: value.device,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HistoryForgetInput {
+    url: String,
+    #[serde(default)]
+    remove_object: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+struct HistoryControlSummary {
+    active: bool,
+    records: Vec<AccessRecord>,
+    forget_attempted: bool,
+    forgotten: usize,
+    error: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -413,10 +455,11 @@ fn initial_capture_input(
 async fn apply_initial_capture(
     app: &mut GraphshellApp<IndexedDbBackend>,
     store: &mut IndexedDbBackend,
+    input: Option<(HistoryCapturePolicy, Vec<BrowserVisit>)>,
     persona: &str,
     now_secs: u64,
 ) -> Result<InitialCaptureSummary, String> {
-    let Some((policy, visits)) = initial_capture_input(&window()?)? else {
+    let Some((policy, visits)) = input else {
         return Ok(InitialCaptureSummary::default());
     };
     let mut capture = BrowserHistoryCapture::load(store, policy)
@@ -452,6 +495,89 @@ async fn apply_initial_capture(
     })
 }
 
+fn history_control_input(
+    window: &Window,
+) -> Result<Option<(AccessRecordFilter, Option<HistoryForgetInput>)>, String> {
+    let Some(filter_json) = global_json(window, HISTORY_FILTER_GLOBAL)? else {
+        return Ok(None);
+    };
+    let filter: HistoryFilterInput = serde_json::from_str(&filter_json)
+        .map_err(|error| format!("invalid history authority filter: {error}"))?;
+    let forget = global_json(window, HISTORY_FORGET_GLOBAL)?
+        .map(|json| {
+            serde_json::from_str(&json)
+                .map_err(|error| format!("invalid history forget request: {error}"))
+        })
+        .transpose()?;
+    Ok(Some((filter.into(), forget)))
+}
+
+async fn apply_history_controls(
+    app: &mut GraphshellApp<IndexedDbBackend>,
+    store: &mut IndexedDbBackend,
+    policy: HistoryCapturePolicy,
+    now_secs: u64,
+) -> HistoryControlSummary {
+    let browser_window = match window() {
+        Ok(window) => window,
+        Err(error) => {
+            return HistoryControlSummary {
+                active: true,
+                error: Some(error),
+                ..HistoryControlSummary::default()
+            };
+        }
+    };
+    let input = match history_control_input(&browser_window) {
+        Ok(input) => input,
+        Err(error) => {
+            return HistoryControlSummary {
+                active: true,
+                error: Some(error),
+                ..HistoryControlSummary::default()
+            };
+        }
+    };
+    let Some((filter, forget)) = input else {
+        return HistoryControlSummary::default();
+    };
+    let mut summary = HistoryControlSummary {
+        active: true,
+        forget_attempted: forget.is_some(),
+        ..HistoryControlSummary::default()
+    };
+    if let Some(forget) = forget {
+        let mode = if forget.remove_object {
+            ForgetMode::RemoveCapturedObject
+        } else {
+            ForgetMode::HistoryOnly
+        };
+        let result = async {
+            let mut capture = BrowserHistoryCapture::load(store, policy).await?;
+            capture
+                .forget_url(&mut app.host, store, &forget.url, mode, now_secs)
+                .await
+        }
+        .await;
+        match result {
+            Ok(forgotten) => summary.forgotten = forgotten,
+            Err(error) => summary.error = Some(error.to_string()),
+        }
+    }
+    if summary.error.is_none() {
+        match query_access_records(store, &filter).await {
+            Ok(records) => {
+                summary.records = records
+                    .into_iter()
+                    .filter(|record| record.handler.starts_with(BROWSER_HISTORY_HANDLER_PREFIX))
+                    .collect();
+            }
+            Err(error) => summary.error = Some(error.to_string()),
+        }
+    }
+    summary
+}
+
 fn publish_capture_receipt(
     document: &Document,
     summary: InitialCaptureSummary,
@@ -473,6 +599,57 @@ fn publish_capture_receipt(
     Ok(())
 }
 
+fn publish_history_controls(
+    document: &Document,
+    summary: &HistoryControlSummary,
+) -> Result<(), String> {
+    if !summary.active {
+        return Ok(());
+    }
+    let body = document.body().ok_or("document has no body")?;
+    body.set_attribute(
+        "data-history-result-count",
+        &summary.records.len().to_string(),
+    )
+    .map_err(|_| "could not expose history result count")?;
+    body.set_attribute(
+        "data-history-forget-attempted",
+        &summary.forget_attempted.to_string(),
+    )
+    .map_err(|_| "could not expose history forget state")?;
+    body.set_attribute("data-history-forgotten", &summary.forgotten.to_string())
+        .map_err(|_| "could not expose forgotten history count")?;
+    if let Some(error) = &summary.error {
+        body.set_attribute("data-history-error", error)
+            .map_err(|_| "could not expose history action error")?;
+    } else {
+        body.remove_attribute("data-history-error")
+            .map_err(|_| "could not clear history action error")?;
+    }
+
+    let results = element(document, "history-results")?;
+    results.set_text_content(None);
+    for record in summary.records.iter().rev().take(100) {
+        let item = document
+            .create_element("li")
+            .map_err(|_| "could not create history result")?;
+        item.set_text_content(Some(&format!(
+            "{} · {} · {} · {}",
+            record.address, record.persona, record.device, record.at_ms
+        )));
+        results
+            .append_child(&item)
+            .map_err(|_| "could not append history result")?;
+    }
+    document
+        .dispatch_event(
+            &web_sys::Event::new("graphshell-history-controls-complete")
+                .map_err(|_| "could not create history completion event")?,
+        )
+        .map_err(|_| "could not dispatch history completion event")?;
+    Ok(())
+}
+
 fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     let document = document()?;
     let model = host.chrome_model();
@@ -481,6 +658,15 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     set_text(&document, "detail-title", &model.selection);
     set_text(&document, "detail-address", &model.detail_address);
     set_text(&document, "action-status", &host.action_status);
+    set_text(
+        &document,
+        "capture-attribution",
+        &format!(
+            "Reference-host attribution · {} · {}",
+            host.app.host.selected_persona().persona,
+            FIXTURE_DEVICE_TWO_ADDRESS
+        ),
+    );
     set_text(
         &document,
         "viewport-status",
@@ -583,14 +769,27 @@ async fn run() -> Result<(), String> {
     }
     .to_string();
     let now_secs = (js_sys::Date::now() / 1_000.0) as u64;
-    let capture_summary =
-        apply_initial_capture(&mut app, &mut capture_store, &capture_persona, now_secs).await?;
+    let capture_input = initial_capture_input(&window()?)?;
+    let capture_policy = capture_input
+        .as_ref()
+        .map(|(policy, _)| policy.clone())
+        .unwrap_or_else(HistoryCapturePolicy::disabled);
+    let capture_summary = apply_initial_capture(
+        &mut app,
+        &mut capture_store,
+        capture_input,
+        &capture_persona,
+        now_secs,
+    )
+    .await?;
     if capture_summary.accepted == 0 {
         app.host
             .persist(now_secs)
             .await
             .map_err(|error| error.to_string())?;
     }
+    let history_summary =
+        apply_history_controls(&mut app, &mut capture_store, capture_policy, now_secs).await;
     app.mount_local().map_err(|error| error.to_string())?;
     let mut remote = FixtureEndpoint::new();
     let remote_snapshot = remote
@@ -676,6 +875,7 @@ async fn run() -> Result<(), String> {
     web_product::install_product_events(&state)?;
     update_semantics(&mut state.borrow_mut())?;
     publish_capture_receipt(&document, capture_summary)?;
+    publish_history_controls(&document, &history_summary)?;
     schedule_frames(state)?;
     Ok(())
 }

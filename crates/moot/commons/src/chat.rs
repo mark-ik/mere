@@ -1,4 +1,4 @@
-//! Minimal encrypted Commons chat domain.
+//! Minimal encrypted Commons chat profile.
 //!
 //! This is intentionally distinct from Murm's bilateral `Post` grammar. It is
 //! the second consumer of Stickleback's causal projection seam after Knot.

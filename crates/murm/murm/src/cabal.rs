@@ -329,7 +329,7 @@ impl CabalHandle {
     /// content-addressed). On a `Lagged` error the consumer should re-read
     /// `history` to reconcile.
     pub fn subscribe(&self) -> Result<tokio::sync::broadcast::Receiver<Post>, MurmError> {
-        Ok(self.engine.subscribe(self.cabal_id.as_bytes())?)
+        self.engine.subscribe(self.cabal_id.as_bytes())
     }
 
     /// Inject a post arrived from a peer (e.g. via transport sync).

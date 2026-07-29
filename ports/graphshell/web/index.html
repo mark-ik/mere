@@ -43,6 +43,9 @@
         <section id="capture-panel" hidden>
           <h2>Browser history</h2>
           <p id="capture-status" role="status">Checking capture permission…</p>
+          <p id="capture-attribution">
+            Attribution is supplied by the Graphshell host.
+          </p>
           <label for="capture-range">First import</label>
           <select id="capture-range">
             <option value="0">Live visits only</option>
@@ -64,6 +67,29 @@
             <button id="capture-save" type="button">Save privacy settings</button>
             <button id="capture-disable" type="button">Stop capture</button>
           </div>
+          <h3>Stored visits</h3>
+          <label for="history-filter-range">When</label>
+          <select id="history-filter-range">
+            <option value="0">All time</option>
+            <option value="1">Last day</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <label for="history-filter-persona">Persona, exact address (optional)</label>
+          <input id="history-filter-persona" placeholder="personae://persona/alice">
+          <label for="history-filter-device">Device, exact address (optional)</label>
+          <input id="history-filter-device" placeholder="personae://device/phone">
+          <button id="history-filter-apply" type="button">Filter stored visits</button>
+          <p id="history-result-status" role="status">Loading stored visits…</p>
+          <ol id="history-results"></ol>
+          <h3>Forget an address</h3>
+          <label for="history-forget-address">Exact stored address</label>
+          <input id="history-forget-address" placeholder="https://example.net/page">
+          <label class="check">
+            <input id="history-forget-object" type="checkbox">
+            Also remove the graph object if capture created it
+          </label>
+          <button id="history-forget" type="button">Forget this address</button>
           <a href="bridge.html">Open Identity</a>
         </section>
 

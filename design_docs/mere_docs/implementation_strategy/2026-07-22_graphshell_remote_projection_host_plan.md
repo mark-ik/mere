@@ -846,7 +846,7 @@ the low-power lane, landed the same week):
   conclusion, so a carrier-admitted session can notice later revocation without
   reconstructing authority from application data.
 
-- **G5f — the two-device run. LANDED 2026-07-27, one clause short.**
+- **G5f — the two-device run. COMPLETE 2026-07-29.**
   `ports/graphshell/src/bin/g5_peer.rs`, modelled on `mesh-peer`. **Windows
   laptop → iMac (Q-PC, macOS 15.7.7) over p2panda/iroh QUIC on the LAN**, both
   at `0ffe8a62`, distinct identity seeds, ticket pasted between them.
@@ -891,17 +891,24 @@ the low-power lane, landed the same week):
   The reply summary names which `ResumeReply` arrived. Before that it printed
   only "resume", which cannot distinguish a real resume from a fresh snapshot
   under a nicer name — a receipt that would have proved nothing.
-  **What remains open, precisely.** The revoked run demonstrates the
-  **per-request** authority check, not admission-time chain rejection: the
-  revocation is folded after `accept_projection_session` returns, so session 2
-  passes admission and is stopped at its first request. Those are different
-  paths and only one is exercised. The refused verb is therefore the `Open`
-  that precedes the intent, because the gate fires on whatever comes first, so
-  "reject a revoked intent" holds in mechanism and on the good path (the
-  `IntentInvocation` is sent and `Accepted`) but not literally in the clause's
-  shape. Discovery is still untested: the ticket was carried by hand, which the
-  clause permits ("discovery **or** ticket exchange"), leaving mDNS unexercised.
-  The browser carrier remains separate by G5's own instruction.
+  **2026-07-29 correction and executable receipt.** The current script adds a
+  third admission whose first request is the literal `IntentInvocation`. The
+  server folds the signed grant revocation after admission and before that
+  request enters `serve_admitted_session`. Two separate local processes then
+  proved session-one suspend, session-two redial and two-diff replay, an
+  accepted good-path intent, and session-three refusal of request `#8` with
+  `session authority was revoked`; the server ended `Lapsed(Revoked)`.
+  A request-loop regression test now pins the literal intent shape.
+  A second run then closed the physical composition requirement. Windows used
+  the current split client; Q-PC at `192.168.4.105` used corrected commit
+  `86d77d41` as server. Session one suspended, session two redialed and replayed
+  both contiguous diffs before accepting intent `#6`, and session three's first
+  request was intent `#8`, refused after the owner revocation. Q-PC ended
+  `Lapsed(Revoked)` and both processes exited successfully. Ticket exchange
+  satisfies G5's stated discovery alternative; mDNS remains convenience
+  coverage. The browser carrier remains separate by G5's own instruction. See
+  the [H6a implementation receipt](../../../ports/graphshell/docs/2026-07-29_h6a_g5f_prerequisite_receipt.md)
+  and [H6b physical closure receipt](../../../ports/graphshell/docs/2026-07-29_h6b_physical_g5f_closure_receipt.md).
 
 **Only after G5b+G5c does the capability round's deferred sub-delegation become
 buildable**: the endpoint's certificate goes to depth 1 and issues a narrower

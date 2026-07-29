@@ -685,7 +685,7 @@ fn filter_scene(mut scene: SavedSceneV1, members: &HashSet<Uuid>) -> SavedSceneV
     scene
 }
 
-fn decode_engram(bytes: &[u8]) -> Result<ProductEngramV1, ProductError> {
+pub(crate) fn decode_engram(bytes: &[u8]) -> Result<ProductEngramV1, ProductError> {
     let engram: ProductEngramV1 = serde_json::from_slice(bytes)
         .map_err(|error| ProductError::InvalidEngram(error.to_string()))?;
     if engram.schema != PRODUCT_ENGRAM_SCHEMA {

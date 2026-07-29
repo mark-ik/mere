@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-27
 **Status:** executable software profile. The graph, Knot-document, and chat
-receipts live in `commons-spine`, Knot, and Stickleback. This document states
+receipts live in the `commons-spine` workspace package, Knot, and Stickleback. This document states
 the user-visible contract rather than inventing another runtime.
 
 ## Shared substrate

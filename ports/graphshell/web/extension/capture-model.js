@@ -92,6 +92,55 @@
     return text || null;
   }
 
+  function normalizeHistoryFilter(value) {
+    const start = Number.isFinite(value?.start_ms)
+      ? Math.max(0, Math.trunc(value.start_ms))
+      : null;
+    const end = Number.isFinite(value?.end_ms)
+      ? Math.max(0, Math.trunc(value.end_ms))
+      : null;
+    return {
+      start_ms: start,
+      end_ms: end !== null && start !== null && end <= start ? null : end,
+      persona: optionalText(value?.persona),
+      device: optionalText(value?.device),
+    };
+  }
+
+  function historyFilterFromControls(days, persona, device, nowMs = Date.now()) {
+    const boundedDays = boundedInteger(days, 0, 0, 3650);
+    const end = Math.max(0, Math.trunc(nowMs));
+    return normalizeHistoryFilter({
+      start_ms: boundedDays > 0 ? end - boundedDays * 86_400_000 : null,
+      end_ms: null,
+      persona,
+      device,
+    });
+  }
+
+  function forgetRequest(address, removeObject, configuredPolicy) {
+    const policy = normalizePolicy(configuredPolicy);
+    try {
+      const url = new URL(String(address).trim());
+      const scheme = url.protocol.slice(0, -1).toLowerCase();
+      if (!policy.accepted_schemes.includes(scheme)) {
+        return null;
+      }
+      if (policy.strip_query) {
+        url.search = "";
+      }
+      if (policy.strip_fragment) {
+        url.hash = "";
+      }
+      return {
+        url: url.href,
+        remove_object: removeObject === true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   function sanitizeVisit(value, configuredPolicy) {
     const policy = normalizePolicy(configuredPolicy);
     if (!policy.enabled || value?.private === true) {
@@ -135,6 +184,9 @@
     DEFAULT_QUEUE_LIMIT,
     defaultPolicy,
     normalizePolicy,
+    normalizeHistoryFilter,
+    historyFilterFromControls,
+    forgetRequest,
     sanitizeVisit,
     queueKey,
     mergeQueue,
