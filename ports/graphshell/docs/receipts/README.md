@@ -103,3 +103,11 @@ and intent-first live revocation. H6 is complete. The
 [H4i remote SSH login note](../2026-07-29_h4i_remote_ssh_login_receipt.md)
 proves the same resident Graphshell authority authenticated a batch-mode
 OpenSSH login to Q-PC through the standard agent endpoint.
+
+The
+[H7a personal-sync core note](../2026-07-29_h7a_personal_sync_core_receipt.md)
+records the selected, secret-free Graphshell event grammar, shared
+Stickleback intake boundary, two-peer LogSync convergence, retained
+per-device access chronology, and explicit concurrent scalar conflict. H7
+remains open for durable reopen, resident-host/browser wiring, a physical
+two-device receipt, and blob availability.

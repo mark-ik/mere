@@ -1,7 +1,7 @@
 # Graphshell Reference Host Plan
 
 **Date:** 2026-07-27
-**Status:** product boundary ruled with Mark; H0-H3 complete; H4 operational follow-ons remain; H5-H6 complete; H7-H9 not started.
+**Status:** product boundary ruled with Mark; H0-H3 complete; H4 operational follow-ons remain; H5-H6 complete; H7 in progress; H8-H9 not started.
 **Scope:** Make Graphshell Mere's useful, WASM-safe reference host: a graph
 portal, Personae identity-vault surface, browser-extension companion,
 application launcher, and personal cross-device surface for addressed things.
@@ -941,6 +941,19 @@ wrapping, revocation, and recovery receipts.
 **Done when:** two offline devices edit tags/relations and record accesses,
 reconnect, converge deterministically, expose any unresolved domain conflict,
 and retain per-device chronology without last-writer loss.
+
+**H7a receipt (2026-07-29):** the native personal-sync core now implements a
+selected, secret-free Graphshell event grammar over p2panda operations,
+Stickleback policy-before-storage intake, and LogSync. Two partitioned
+in-process peers converge tags, one relation, two source-attributed access
+histories, a selected facet, a saved scene, and a handler preference. A
+separate concurrent scalar edit remains visible as a conflict. Arbitrary Mere
+facets now travel through the ordinary `GraphDelta` capture/replay journal, and
+Commons-spine consumes the promoted Stickleback writer binding while Knot
+retains its text-specific fold. Durable reopen, resident device-host and
+admitted-browser composition, a physical two-device receipt, and blob
+availability remain open. See the
+[H7a personal-sync core receipt](../../../ports/graphshell/docs/2026-07-29_h7a_personal_sync_core_receipt.md).
 
 ### H8. Add the Retinue agent and constrained profile
 

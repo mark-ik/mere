@@ -793,6 +793,70 @@ mod tests {
     }
 
     #[test]
+    fn arbitrary_facets_use_the_same_capture_and_replay_spine() {
+        let captured = Arc::new(Mutex::new(Vec::<CapturedDelta>::new()));
+        let sink = captured.clone();
+        set_captured_delta_hook(Some(Arc::new(move |delta| {
+            sink.lock().expect("capture sink").push(delta.clone());
+        })));
+
+        let id = Uuid::from_u128(0xfac7);
+        let mut graph = Graph::new();
+        let key = crate::graph::apply::add_node(
+            &mut graph,
+            Some(id),
+            "mere://facet-test".into(),
+            point(0.0, 0.0),
+        );
+        let value = serde_json::json!({"portable": true});
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeFacet {
+                key,
+                facet: "example.portable/v1".into(),
+                value: value.clone(),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::SetNodeFacet {
+                key,
+                facet: "example.portable/v1".into(),
+                value: value.clone(),
+            },
+        );
+        let _ = apply_graph_delta(
+            &mut graph,
+            GraphDelta::RemoveNodeFacet {
+                key,
+                facet: "example.portable/v1".into(),
+            },
+        );
+        set_captured_delta_hook(None);
+
+        let captured = captured.lock().expect("capture sink");
+        assert_eq!(
+            captured.len(),
+            3,
+            "add, first set, and remove are captured; an identical set is not"
+        );
+        let set_projection = replay_captured_deltas(captured[..2].iter().cloned());
+        assert_eq!(
+            set_projection
+                .facets()
+                .get(&id, &chartulary::FacetId::new("example.portable/v1"),),
+            Some(&value)
+        );
+        let removed_projection = replay_captured_deltas(captured.iter().cloned());
+        assert!(
+            removed_projection
+                .facets()
+                .get(&id, &chartulary::FacetId::new("example.portable/v1"),)
+                .is_none()
+        );
+    }
+
+    #[test]
     fn traversal_captured_delta_round_trips_through_postcard() {
         let delta = CapturedDelta::ReplayAppendTraversalByIds {
             from_id: Uuid::from_u128(3).to_string(),

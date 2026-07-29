@@ -437,6 +437,15 @@ impl GroupSession {
         self.keyring.epoch_count()
     }
 
+    /// Serialize the retained data epochs for a domain replica opened beside
+    /// this group session.
+    ///
+    /// The returned bytes remain secret state and must stay within the same
+    /// Personae-sealed storage boundary as [`Self::to_bytes`].
+    pub fn data_keyring_state(&self) -> Result<Vec<u8>, GroupSessionError> {
+        self.keyring.to_bytes().map_err(GroupSessionError::Crypto)
+    }
+
     pub fn members(&self) -> Result<BTreeSet<GroupRecipientId>, GroupSessionError> {
         let state = self.state()?;
         let members =
@@ -1062,6 +1071,12 @@ mod tests {
         assert_eq!(reopened_bob.member(), bob.member());
         assert_eq!(reopened_bob.members().unwrap(), bob.members().unwrap());
         assert_eq!(reopened_bob.current_epoch(), bob.current_epoch());
+        let reopened_keys = DataKeyring::from_bytes(&reopened_bob.data_keyring_state().unwrap())
+            .expect("group session exposes the same sealed data epochs");
+        assert_eq!(
+            reopened_keys.epochs_oldest_first(),
+            bob.keyring.epochs_oldest_first()
+        );
         assert_eq!(reopened_bob.open(&after_update).unwrap(), b"after update");
 
         let removal = alice.remove(bob.member()).unwrap();
