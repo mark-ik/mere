@@ -10,8 +10,8 @@ separate browser host. The graph (the *orrery*) is the root surface; tiles,
 panes, and content cards are projections of it.
 
 <p align="center">
-  <img src="assets/screenshots/graphshell-browser-wide.png" alt="Graphshell showing a local Mere graph and the selected object's action surface" width="900"><br>
-  <sub>Graphshell, Mere's reference host: a local graph, selected object, and its advertised action.</sub>
+  <img src="assets/screenshots/graphshell-grid.png" alt="Graphshell arranging a local Mere graph in a grid" width="900"><br>
+  <sub>Graphshell, Mere's reference host: a local graph arranged through the product's own search, relation, and scene controls.</sub>
 </p>
 
 This repository is a Cargo workspace of 55 member crates organized by concern.
@@ -61,13 +61,6 @@ Up and down the stack, this pattern repeats:
 - Everything else is kind-dependent data in a table picked by the kind.
 - Change is a recorded delta stream against the tables,
 - and every downstream layer is an incremental fold over that stream.
-
-## Screenshots
-
-<p align="center">
-  <img src="assets/screenshots/graphshell-local-product.png" alt="Graphshell local graph product with address, filtering, arrangement, scene, and transfer controls" width="900"><br>
-  <sub>Graphshell's local graph product: create and arrange addressed objects, save a scene, and transfer a selected subgraph.</sub>
-</p>
 
 ## Toolchain
 
