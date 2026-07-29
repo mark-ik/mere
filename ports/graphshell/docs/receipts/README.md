@@ -62,3 +62,21 @@ adds the one-vault resident process, vault-free browser relay, isolated and
 live standard-agent restart signatures, admitted browser relay proof, and
 reversible Windows lifecycle installer. Remote login and real logon startup
 remain open because the known laptop was offline. The interim task was restored.
+The
+[H4g carry-mutation and mixed-scene note](../2026-07-28_h4g_carry_mutation_mixed_scene_receipt.md)
+adds confirmed delegated-device revocation through the live carry authority
+and proves explicitly pinned public identity projections alongside access
+history in one persisted and reopened Mere scene. The
+[H4h live-cutover and Firefox note](../2026-07-28_h4h_live_cutover_firefox_receipt.md)
+records the installed Windows task, same-fingerprint crash replacement,
+intentional failed-update rollback, headed Firefox admission with ten public
+cards, and clean carrier close. The retained Personae task is disabled but not
+retired because logon/reboot and remote-login receipts remain open.
+
+The
+[H5a browser storage and capture-core note](../2026-07-28_h5a_browser_storage_capture_core_receipt.md)
+records the Graphshell-local IndexedDB backend, consented and redacted history
+pipeline, LocalOnly typed AccessRecord authority, restart dedupe, filtering,
+forget behavior, durable extension delivery queue, and the real Chromium
+permission/import/restart receipt. H5 remains open for headed live intake, the
+Firefox packaged-extension receipt, and final filter/forget controls.

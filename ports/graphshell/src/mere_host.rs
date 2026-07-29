@@ -128,6 +128,24 @@ pub struct MereHost<B> {
 }
 
 impl<B: Backend> MereHost<B> {
+    fn persistence_document(&self, saved_at_secs: u64) -> PersistedMereHost {
+        match &self.persisted_document {
+            Some(document) if !self.dirty && document.graph.timestamp_secs == saved_at_secs => {
+                document.clone()
+            }
+            _ => {
+                let mut graph = self.graph.to_snapshot();
+                graph.timestamp_secs = saved_at_secs;
+                PersistedMereHost {
+                    graph,
+                    facets: self.graph.facets().clone(),
+                    projection_epoch: self.projection_epoch,
+                    projection_revision: self.projection_revision,
+                }
+            }
+        }
+    }
+
     pub fn empty(
         backend: B,
         selected_persona: SelectedPersonaRef,
@@ -195,22 +213,25 @@ impl<B: Backend> MereHost<B> {
     /// The clock is injected so tests and importing hosts can produce stable
     /// bytes. Equal graph/facet truth plus an equal clock yields equal bytes.
     pub async fn persist(&mut self, saved_at_secs: u64) -> Result<(), MereHostError> {
-        let document = match &self.persisted_document {
-            Some(document) if !self.dirty && document.graph.timestamp_secs == saved_at_secs => {
-                document.clone()
-            }
-            _ => {
-                let mut graph = self.graph.to_snapshot();
-                graph.timestamp_secs = saved_at_secs;
-                PersistedMereHost {
-                    graph,
-                    facets: self.graph.facets().clone(),
-                    projection_epoch: self.projection_epoch,
-                    projection_revision: self.projection_revision,
-                }
-            }
-        };
+        let document = self.persistence_document(saved_at_secs);
         self.slots.save(HOST_SLOT, &document).await?;
+        self.persisted_document = Some(document);
+        self.dirty = false;
+        Ok(())
+    }
+
+    /// Stage the host document through another backend. Capture uses this with
+    /// a write-buffer backend so the graph, facets, access records, and
+    /// browsing traces land in one outer `Backend::apply`.
+    pub(crate) async fn persist_through<T: Backend>(
+        &mut self,
+        backend: &T,
+        saved_at_secs: u64,
+    ) -> Result<(), MereHostError> {
+        let document = self.persistence_document(saved_at_secs);
+        let bytes =
+            serde_json::to_vec(&document).map_err(|error| StoreError::Codec(error.to_string()))?;
+        backend.put(HOST_SLOT, &bytes).await?;
         self.persisted_document = Some(document);
         self.dirty = false;
         Ok(())
@@ -218,6 +239,12 @@ impl<B: Backend> MereHost<B> {
 
     pub fn graph(&self) -> &Graph {
         &self.graph
+    }
+
+    /// Whether this host was reconstructed from a stored document rather than
+    /// created empty or from the reference fixture in this process.
+    pub fn was_reopened(&self) -> bool {
+        self.persisted_document.is_some()
     }
 
     pub fn selected_persona(&self) -> &SelectedPersonaRef {

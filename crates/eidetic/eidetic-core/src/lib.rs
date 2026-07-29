@@ -56,7 +56,6 @@
 
 #![doc(html_root_url = "https://docs.rs/eidetic/0.0.1")]
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 pub mod browsing;
@@ -198,8 +197,8 @@ pub async fn dispatch(store: &mut dyn Store, request: &Request) -> Result<Respon
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use muniment::error::StoreError;
-    use std::collections::HashMap;
 
     // The in-memory test store is muniment's (2026-07-12): eidetic's
     // hand-rolled one was the same map behind the same seam.

@@ -4,18 +4,24 @@ import { endianness } from "node:os";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 
-const [binaryArgument, scratchArgument] = process.argv.slice(2);
+const [binaryArgument, scratchArgument, browser = "chromium"] = process.argv.slice(2);
 if (!binaryArgument || !scratchArgument) {
-  throw new Error("usage: node smoke-native-host.mjs NATIVE_HOST SCRATCH_ROOT");
+  throw new Error(
+    "usage: node smoke-native-host.mjs NATIVE_HOST SCRATCH_ROOT [chromium|firefox]",
+  );
+}
+if (!["chromium", "firefox"].includes(browser)) {
+  throw new Error(`unsupported browser: ${browser}`);
 }
 
 const binary = resolve(binaryArgument);
 const scratch = resolve(scratchArgument);
 mkdirSync(scratch, { recursive: true });
 
-const child = spawn(binary, [
-  "chrome-extension://oajkkocppbpbmfblepgbiidagliniofd/",
-], {
+const launcherArguments = browser === "firefox"
+  ? ["org.mere.graphshell.firefox.json", "graphshell@mere.systems"]
+  : ["chrome-extension://oajkkocppbpbmfblepgbiidagliniofd/"];
+const child = spawn(binary, launcherArguments, {
   env: {
     ...process.env,
     LOCALAPPDATA: scratch,

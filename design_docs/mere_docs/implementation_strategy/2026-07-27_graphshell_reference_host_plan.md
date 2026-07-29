@@ -757,6 +757,37 @@ installed or used to retire the interim task because a real sign-out or reboot
 receipt is still required. See the
 [H4f resident device-host receipt](../../../ports/graphshell/docs/2026-07-28_h4f_resident_device_host_receipt.md).
 
+**H4g receipt (2026-07-28):** the final mixed-scene done-condition is now
+closed. Active delegated-device cards advertise one typed, native-only
+revocation intent with explicit confirmation. The live `session-runtime`
+roster remains mutation authority; Graphshell exposes only a public result and
+refreshes the projection after acceptance. Public identity cards are
+exportable only by explicit user pinning. Their local facet stores the public
+portable card, source and observed revision, fixes authority to
+`source-owned`, and omits live actions. A proof issued a real signed device
+grant, produced a real Personae SSH signing-history record, rejected an
+unconfirmed revocation, accepted a confirmed revocation through the endpoint,
+then persisted and reopened profile, device, grant, signing, and access
+projections in one Mere scene. Remote login, real logon recovery and interim
+task retirement, headed Firefox, other dialog providers, and broader carry
+management remain open. See the
+[H4g carry mutation and mixed-scene receipt](../../../ports/graphshell/docs/2026-07-28_h4g_carry_mutation_mixed_scene_receipt.md).
+
+**H4h receipt (2026-07-28):** the Windows lifecycle installer now carries an
+optional data root, quotes its recovery launcher correctly, disables the
+retained Personae task after cutover, and restores it after a failed install or
+update. A real install listed the same SSH fingerprint before and after killing
+the first Graphshell child and observing its replacement. An intentional
+wrong-fingerprint update restored Personae, and a correct rerun left
+`graphshell-device-host` running with `personae-agent` retained but disabled.
+Firefox 153 then loaded the temporary extension against that resident
+authority, reached `Admitted · 10 public cards`, displayed the new Device
+access boundary, and closed after 13 answered requests. The bridge renders
+confirmed SSH-removal and device-revocation actions, but the live vault was not
+mutated. A real sign-out or reboot, remote SSH login, native Firefox import,
+macOS/Linux dialogs, and a configured carry root remain open. See the
+[H4h live cutover and Firefox receipt](../../../ports/graphshell/docs/2026-07-28_h4h_live_cutover_firefox_receipt.md).
+
 This is the first integrated reference-host cut: the graph, identity vault, and
 native capability broker work as one product.
 
@@ -788,6 +819,27 @@ muniment after a second browser consumer proves the same contract.
 **Done when:** real consented browsing appears in the graph, survives browser
 restart, can be filtered by time/device/persona, can be forgotten, and the same
 extension package passes headed Chromium and Firefox receipts.
+
+**H5a receipt (2026-07-28):** the browser-storage and capture core is complete.
+Graphshell owns a full IndexedDB `muniment::Backend`; the Wasm host seeds once
+and reopens the same Mere document. A disabled-by-default policy now sanitizes,
+filters, deduplicates, and batches browser visits into LocalOnly typed
+AccessRecords, derived graph/facet state, traversal relations, and Eidetic
+browsing memory. Authority queries filter by time, persona, and device.
+Forgetting removes trace and AccessRecord manifests, clears dedupe state, and
+can remove capture-created objects. The extension action now opens the Wasm
+graph portal, requests `history` only from an explicit Enable action, sanitizes
+before its bounded durable queue, and acknowledges only after graph
+persistence. Native Eidetic keeps pack signing and full JSON Schema validation
+by default while the Wasm consumer omits both native dependency cones. In a
+fresh headed Chromium profile, the user granted `history`; one query-redacted
+synthetic visit reached LocalOnly AccessRecord and browsing-trace authority,
+the queue drained, the graph grew from eleven to twelve nodes, and a cold
+restart retained both the permission and graph. H5 remains open for headed live
+intake, the Firefox packaged-extension receipt, final filter/forget controls,
+favicon intake, and binding the portal selection to the live Personae surface.
+See the
+[H5a browser storage and capture-core receipt](../../../ports/graphshell/docs/2026-07-28_h5a_browser_storage_capture_core_receipt.md).
 
 ### H6. Move one selection between two devices
 
@@ -997,6 +1049,78 @@ That is a send-side interface problem inside
 access point, not IPv4-versus-IPv6, not the firewall, and not Mere's code.
 `IpClass::Auto` with no interface pinning remains the most likely mechanism,
 and p2panda exposes no knob for it.
+
+**Measured 2026-07-28, later the same day. The conclusion directly above is
+wrong, and so is the instrument that produced it.** Three hosts were used this
+time (Windows, the iMac, and the Fedora ThinkPad as a neutral observer), with a
+raw multicast socket rather than avahi or `dns-sd`, so nothing depends on a
+service-name filter being right.
+
+- **The service name is `p2pandav1`, not `irohv1`.** `iroh-mdns-address-lookup`
+  defaults to `irohv1`, but p2panda overrides it; a runtime probe reports
+  `service=p2pandav1`. Every earlier capture filtered for a string this stack
+  never emits, which is why "zero packets" was recorded. `avahi-browse` also
+  fails to surface the service even when the records are demonstrably on the
+  wire, so it is not a usable instrument here either.
+- **Windows advertises correctly and reaches the LAN.** From the Fedora box,
+  37 to 60 packets per 20s from 192.168.4.36, alternating queries and
+  well-formed responses (`QR=RESPONSE`, `an=4`, `ar=4`) carrying instance,
+  hostname and TXT. The announcement leaves the host.
+- **The advertised id is the right id.** The instance label base32-decodes to
+  exactly the node id the dialling side seeks, so the `G5_PEER` derivation was
+  never at fault.
+- **The iMac receives and surfaces those records.** 24 to 28 discovery
+  callbacks in 22s, on stock upstream crates.
+- **The iMac's egress works. Its responder stalls.** An earlier reading here,
+  that the iMac never puts records on the wire, was an artefact of arming the
+  listener too late. With the listener armed first, Fedora received 34 packets
+  from 192.168.4.105 in one window, including its own
+  `tavio6zxv..._p2pandav1._udp.local` instance. Instrumented `swarm-discovery`
+  shows every `send_to` returning `Ok` with the full byte count from
+  `0.0.0.0:5353`.
+- **What actually fails is that the sender stops.** Runs are not deterministic.
+  One run sent 14 then 36 packets over six seconds and stayed healthy; another
+  sent exactly 12 (6 queries of 39 bytes, 6 responses of 596) and then emitted
+  **nothing for the next 20 seconds**, including no answer to the queries
+  Windows was actively sending throughout. Windows by contrast sustains 37 to 60
+  packets per 20s. A stalled responder is invisible and unreachable, which is
+  why `--discover` fails while a ticket works.
+- **Two mechanisms are ruled out.** `IpClass::Auto` reports `v4=OK v6=OK`, so the
+  `.ok()` error-swallowing path is not taken. And an unsigned third-party C
+  binary replicating the exact socket setup (bind `0.0.0.0:5353`, join
+  `224.0.0.251`, no pinning) reaches the wire from this host, so neither macOS
+  Local Network privacy nor binary identity is responsible.
+- **Interface pinning is a dead hypothesis.** A patch adding
+  `with_multicast_interfaces_v4` was A/B'd on *both* hosts and changed nothing
+  either way. `IpClass::Auto` is not the mechanism. Do not spend on it again.
+
+**The blocker for `--discover` is a client-side race.** In `connect` mode,
+`spawn_discoverer` runs *after* session 1 begins: p2panda builds the endpoint
+and its mDNS actor lazily on the first dial, then reads the address book
+synchronously, so discovery has no opportunity to answer. It wins that race on
+loopback and loses it on any real link, which is exactly the same-machine
+success and two-way cross-host failure. The earlier "not a timing problem" note
+measured *server* uptime, which the race is indifferent to; the race is on the
+client, which always dials immediately after starting. `g5_peer` now forces
+endpoint construction with `carrier.ticket()` before dialling and retries to
+`DIAL_DEADLINE`.
+
+**Everything above the transport is proven across two machines.** Mac to
+Windows over a hand-carried ticket completed the full flow: three admissions,
+snapshot, suspend, a reconnect resumed by replaying 2 contiguous diffs
+(revisions 1->2, 2->3), `intent Accepted`, close. G5's cross-machine done-when
+is met by the ticket path.
+
+**Still open:** why `swarm-discovery`'s sender actor stalls on macOS after its
+opening burst, stops answering queries, and does so non-deterministically. That
+single fault is what remains between here and ticketless cross-host discovery,
+and it is now localised to the sender/cadence actor rather than to sockets,
+routing, or egress. **Method note for whoever picks this up: arm the observer
+before starting the peer.** Two wrong conclusions in this section came from
+sniffing a burst that had already finished. One
+unexplained one-off is worth recording: a ~10 minute stale ticket produced
+`Delegation(NotYetValid)` although all three clocks agree to 0.1s, and it did
+not reproduce with a fresh ticket.
 
 **Consequence for the printers half.** Even the "easy" capability does not
 deliver a device list: `mere-transport` exposes no way to enumerate what

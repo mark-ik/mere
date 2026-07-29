@@ -16,6 +16,7 @@ use personae::{
     IdentityProvider, IdentityStorage, IdentityVault, ProtocolKey, UnlockTier,
 };
 use serde::{Deserialize, Serialize};
+use session_runtime::{DeviceId, revoke_remote_auth_device};
 use ssh_key::{Algorithm, PrivateKey, PublicKey};
 use uuid::Uuid;
 
@@ -24,10 +25,10 @@ use crate::identity::{
     VaultProtectionView, VaultView, load_carry_view,
 };
 use crate::identity_projection::{
-    GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1, RemoveSshKeyIntentV1,
-    SIGNING_APPROVE_IDLE_INTENT, SIGNING_APPROVE_ONCE_INTENT, SIGNING_DENY_INTENT,
-    SSH_GENERATE_INTENT, SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT, SigningDecisionIntentV1,
-    SshUnlockPolicyIntentV1,
+    DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1, RemoveSshKeyIntentV1,
+    RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT, SIGNING_APPROVE_ONCE_INTENT,
+    SIGNING_DENY_INTENT, SSH_GENERATE_INTENT, SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT,
+    SigningDecisionIntentV1, SshUnlockPolicyIntentV1,
 };
 
 const MAX_SHORT_TTL_SECONDS: u32 = 24 * 60 * 60;
@@ -59,6 +60,12 @@ pub enum IdentityIntentError {
     KeyNotFound,
     #[error("SSH import requires a native private-key handoff")]
     NativeHandoffRequired,
+    #[error("device revocation requires explicit confirmation")]
+    DeviceRevocationConfirmationRequired,
+    #[error("carry authority is not configured")]
+    CarryUnavailable,
+    #[error("device revocation failed ({0:?})")]
+    DeviceRevocation(std::io::ErrorKind),
 }
 
 /// Public result of a native SSH key mutation.
@@ -86,6 +93,16 @@ pub enum SshKeyMutationKind {
 pub enum IdentityIntentOutcome {
     SigningDecision,
     SshKeyMutation(SshKeyMutationReceipt),
+    DeviceRevocation(DeviceRevocationReceipt),
+}
+
+/// Public facts produced by a carry-authority revocation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceRevocationReceipt {
+    pub device_id: String,
+    pub already_revoked: bool,
+    pub rotated_personas: Vec<String>,
+    pub refreshed_devices: Vec<String>,
 }
 
 /// Native owner of one shared Personae vault and its SSH adapter.
@@ -301,6 +318,36 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         Ok(receipt)
     }
 
+    /// Revoke one delegated device through session-runtime's live authority.
+    pub fn revoke_device(
+        &self,
+        request: RevokeDeviceIntentV1,
+    ) -> Result<DeviceRevocationReceipt, IdentityIntentError> {
+        if !request.confirmed {
+            return Err(IdentityIntentError::DeviceRevocationConfirmationRequired);
+        }
+        let data_root = self
+            .data_root
+            .as_deref()
+            .ok_or(IdentityIntentError::CarryUnavailable)?;
+        let outcome = revoke_remote_auth_device(data_root, DeviceId::from_uuid(request.device_id))
+            .map_err(|error| IdentityIntentError::DeviceRevocation(error.kind()))?;
+        Ok(DeviceRevocationReceipt {
+            device_id: outcome.device_id.as_uuid().to_string(),
+            already_revoked: outcome.already_revoked,
+            rotated_personas: outcome
+                .rotated_personas
+                .into_iter()
+                .map(|persona| persona.as_uuid().to_string())
+                .collect(),
+            refreshed_devices: outcome
+                .refreshed_devices
+                .into_iter()
+                .map(|device| device.as_uuid().to_string())
+                .collect(),
+        })
+    }
+
     /// Secret-free Graphshell read model.
     pub fn snapshot(&self) -> std::io::Result<IdentitySurfaceSnapshot> {
         let vault = self.vault.lock().unwrap();
@@ -443,7 +490,12 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
                 let _: ImportSshKeyNativeIntentV1 = serde_json::from_slice(payload)?;
                 Err(IdentityIntentError::NativeHandoffRequired)
             }
-            _ => return Err(IdentityIntentError::UnknownIntent),
+            DEVICE_REVOKE_INTENT => {
+                let payload: RevokeDeviceIntentV1 = serde_json::from_slice(payload)?;
+                self.revoke_device(payload)
+                    .map(IdentityIntentOutcome::DeviceRevocation)
+            }
+            _ => Err(IdentityIntentError::UnknownIntent),
         }
     }
 }

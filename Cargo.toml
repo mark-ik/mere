@@ -204,7 +204,7 @@ roster = { package = "mere-roster", path = "crates/domain/roster" }
 trail = { package = "mere-trail", path = "crates/domain/trail" }
 workbench = { path = "crates/platen/domain/workbench" }
 
-eidetic = { package = "mere-eidetic", path = "crates/eidetic/eidetic-core" }
+eidetic = { package = "mere-eidetic", path = "crates/eidetic/eidetic-core", default-features = false }
 eidetic-fjall = { package = "mere-eidetic-fjall", path = "crates/eidetic/eidetic-fjall" }
 eidetic-https-fetcher = { package = "mere-eidetic-https-fetcher", path = "crates/eidetic/eidetic-https-fetcher" }
 eidetic-iroh-fetcher = { package = "mere-eidetic-iroh-fetcher", path = "crates/eidetic/eidetic-iroh-fetcher" }

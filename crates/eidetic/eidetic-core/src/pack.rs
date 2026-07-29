@@ -32,10 +32,13 @@
 //! this module. The canonical-CBOR upgrade (wallet_grant's discipline) is a
 //! compatible follow-on: the binding string is versioned by its prefix.
 
+#[cfg(feature = "pack-signing")]
 use identity::{Ed25519Keypair, Ed25519PublicKey, Ed25519Signature};
 use serde::{Deserialize, Serialize};
 
-use crate::schema::{ManifestId, SchemaRef, SignatureRef, TrustEnvelope};
+use crate::schema::{ManifestId, SchemaRef};
+#[cfg(feature = "pack-signing")]
+use crate::schema::{SignatureRef, TrustEnvelope};
 use crate::typed::TypedPayload;
 
 /// The pack schema id (`SchemaRef` derives from it by content hash).
@@ -121,6 +124,7 @@ pub fn canonical_bytes(manifest: &PackManifest) -> Vec<u8> {
 /// Sign `manifest` with the author's keypair, returning the [`SignatureRef`]
 /// to carry in the engram's [`TrustEnvelope::signatures`]. The manifest's
 /// `author` field must be this keypair's public key (verification checks it).
+#[cfg(feature = "pack-signing")]
 pub fn sign_pack(manifest: &PackManifest, keypair: &Ed25519Keypair) -> SignatureRef {
     let signature = keypair.sign(&canonical_bytes(manifest));
     SignatureRef(format!(
@@ -134,13 +138,12 @@ pub fn sign_pack(manifest: &PackManifest, keypair: &Ed25519Keypair) -> Signature
 /// binding parses, names the manifest's author, and verifies over the
 /// canonical bytes; a claimed-but-failing binding is `Broken`; no claim is
 /// `Unsigned`.
+#[cfg(feature = "pack-signing")]
 pub fn verify_pack(manifest: &PackManifest, envelope: &TrustEnvelope) -> PackVerdict {
-    let mut claimed = false;
     for sig in &envelope.signatures {
         let Some(rest) = sig.0.strip_prefix(PACK_SIG_PREFIX) else {
             continue; // some other scheme's signature; not ours to judge
         };
-        claimed = true;
         let Some((pub_hex, sig_hex)) = rest.split_once(':') else {
             return PackVerdict::Broken;
         };
@@ -160,14 +163,15 @@ pub fn verify_pack(manifest: &PackManifest, envelope: &TrustEnvelope) -> PackVer
         }
         return PackVerdict::Broken;
     }
-    let _ = claimed;
     PackVerdict::Unsigned
 }
 
+#[cfg(feature = "pack-signing")]
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+#[cfg(feature = "pack-signing")]
 fn unhex<const N: usize>(hex: &str) -> Option<[u8; N]> {
     if hex.len() != N * 2 {
         return None;
@@ -180,7 +184,7 @@ fn unhex<const N: usize>(hex: &str) -> Option<[u8; N]> {
     Some(out)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "pack-signing"))]
 mod tests {
     use super::*;
     use crate::schema::{

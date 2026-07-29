@@ -3,6 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use chartulary::AcceptAll;
+use graphshell_protocol::PortableCardV1;
 use mere::canvas::CartographyGeometry;
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
@@ -12,6 +13,7 @@ use mere::kernel::graph::{
 };
 use mere::kernel::persistence::GraphSnapshot;
 use muniment::Backend;
+use sceno::SourceRef;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -20,6 +22,7 @@ use crate::mere_host::{MereHost, MereHostError};
 pub const LOCAL_FILE_FACET: &str = "graphshell.local-file/v1";
 pub const CONTENT_FACET: &str = "graphshell.content/v1";
 pub const SAVED_SCENE_FACET: &str = "graphshell.saved-scene/v2";
+pub const PINNED_PROJECTION_FACET: &str = "graphshell.pinned-projection/v1";
 pub const PRODUCT_ENGRAM_SCHEMA: &str = "graphshell.graph-engram/v1";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,6 +176,27 @@ pub struct SavedSceneV1 {
     pub camera_zoom: f32,
     pub default_handler: String,
     pub cartography: CartographyGeometry,
+}
+
+/// User-selected public card copied from a mounted endpoint into local graph
+/// truth. The source remains authoritative. Actions are deliberately absent,
+/// because they are valid only in the live admitted session that advertised
+/// them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PinnedProjectionAuthorityV1 {
+    SourceOwned,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedProjectionCardV1 {
+    pub source: SourceRef,
+    pub observed_session: String,
+    pub observed_epoch: u64,
+    pub observed_revision: u64,
+    pub authority: PinnedProjectionAuthorityV1,
+    pub card: PortableCardV1,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -12,6 +12,8 @@ pub mod app;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod browser_carrier;
 pub mod canary;
+#[cfg(feature = "web")]
+pub mod capture;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod carrier;
 #[cfg(feature = "web")]
@@ -22,6 +24,8 @@ pub mod identity;
 pub mod identity_endpoint;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod identity_projection;
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+pub mod indexeddb_backend;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod lifecycle;
 #[cfg(feature = "web")]

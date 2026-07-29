@@ -10,12 +10,12 @@ use std::sync::Arc;
 
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use graphshell_protocol::{
-    AdvertisedAction, BoundsRelationship, CachePolicy, ContentHash, EndpointDescriptor,
-    IntentEffect, IntentInvocation, IntentReference, IntentResult, PresentationBinding,
-    PresentationCapability, PresentationCodec, PresentationKey, PresentationManifest,
-    PresentationOffer, PresentationSemantics, ProjectionOffer, ProjectionRequest,
-    ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse,
-    SemanticRole,
+    AdvertisedAction, BoundsRelationship, CachePolicy, CacheRetention, ContentHash,
+    EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
+    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
+    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionOffer,
+    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
+    ResourceResponse, SemanticRole,
 };
 use personae::IdentityStorage;
 use sceno::{
@@ -212,7 +212,11 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
             session: self.session(),
             scene,
             presentation,
-            cache_policy: CachePolicy::default(),
+            cache_policy: CachePolicy {
+                retention: CacheRetention::Exportable,
+                expires_at_ms: None,
+                purge_on_revocation: true,
+            },
         })
     }
 

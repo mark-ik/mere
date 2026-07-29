@@ -192,6 +192,19 @@ function importUnlockPolicy(select, idleInput) {
   return { kind: select.value };
 }
 
+function invokeIntent(action, item, payload) {
+  request({
+    Intent: {
+      session: snapshot.session,
+      target: item.binding.instance,
+      observed_epoch: snapshot.scene.epoch,
+      observed_revision: snapshot.scene.revision,
+      intent: action.intent,
+      payload: Array.from(encoder.encode(JSON.stringify(payload))),
+    },
+  }, { type: "intent", label: action.label });
+}
+
 function renderNativeImportAction(action, actionsNode) {
   const controls = document.createElement("div");
   controls.className = "native-import";
@@ -251,6 +264,41 @@ function renderNativeImportAction(action, actionsNode) {
   actionsNode.append(controls);
 }
 
+function renderConfirmedIdentityAction(action, card, item, actionsNode) {
+  const specs = {
+    "graphshell.identity.ssh.remove": {
+      field: "Fingerprint",
+      key: "fingerprint",
+      prompt: "Remove this SSH key from the Personae vault?",
+    },
+    "graphshell.identity.device.revoke": {
+      field: "Device",
+      key: "device_id",
+      prompt: "Revoke this delegated device and rotate its future access?",
+    },
+  };
+  const spec = specs[action.intent];
+  if (!spec) {
+    return false;
+  }
+  const value = card.values.find((candidate) => candidate.label === spec.field)?.value;
+  if (!value) {
+    return true;
+  }
+  const button = document.createElement("button");
+  button.textContent = action.label;
+  button.dataset.intent = action.intent;
+  button.addEventListener("click", () => {
+    if (!globalThis.confirm(spec.prompt)) {
+      setStatus(`${action.label} cancelled`);
+      return;
+    }
+    invokeIntent(action, item, { [spec.key]: value, confirmed: true });
+  });
+  actionsNode.append(button);
+  return true;
+}
+
 function renderCard(card, item) {
   const node = cardTemplate.content.firstElementChild.cloneNode(true);
   node.dataset.instance = String(item.binding.instance);
@@ -271,6 +319,9 @@ function renderCard(card, item) {
       renderNativeImportAction(action, actionsNode);
       continue;
     }
+    if (renderConfirmedIdentityAction(action, card, item, actionsNode)) {
+      continue;
+    }
     if (!action.intent.startsWith("graphshell.identity.signing.")) {
       continue;
     }
@@ -283,17 +334,7 @@ function renderCard(card, item) {
         setStatus("The pending request card has no public request id.", "failed");
         return;
       }
-      const payload = Array.from(encoder.encode(JSON.stringify({ request_id: requestId })));
-      request({
-        Intent: {
-          session: snapshot.session,
-          target: item.binding.instance,
-          observed_epoch: snapshot.scene.epoch,
-          observed_revision: snapshot.scene.revision,
-          intent: action.intent,
-          payload,
-        },
-      }, { type: "intent", label: action.label });
+      invokeIntent(action, item, { request_id: requestId });
     });
     actionsNode.append(button);
   }

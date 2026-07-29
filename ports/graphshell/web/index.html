@@ -40,6 +40,33 @@
       </nav>
 
       <aside id="product-panel" aria-label="Graph tools">
+        <section id="capture-panel" hidden>
+          <h2>Browser history</h2>
+          <p id="capture-status" role="status">Checking capture permission…</p>
+          <label for="capture-range">First import</label>
+          <select id="capture-range">
+            <option value="0">Live visits only</option>
+            <option value="1">Last day</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <label class="check">
+            <input id="capture-strip-query" type="checkbox">
+            Remove query strings before storage
+          </label>
+          <label for="capture-exclusions">Excluded origins</label>
+          <textarea
+            id="capture-exclusions"
+            placeholder="https://private.example"
+          ></textarea>
+          <div class="button-row">
+            <button id="capture-enable" type="button">Enable capture</button>
+            <button id="capture-save" type="button">Save privacy settings</button>
+            <button id="capture-disable" type="button">Stop capture</button>
+          </div>
+          <a href="bridge.html">Open Identity</a>
+        </section>
+
         <section>
           <h2>Add an object</h2>
           <label for="address-input">Address</label>

@@ -1,7 +1,8 @@
 # Graphshell browser carrier
 
-This package is the H4d browser-to-device carrier. It is intentionally smaller
-than H5's browsing-history companion.
+This package carries the Graphshell Wasm portal and the H4 browser-to-device
+identity bridge. H5a adds the consented browsing-history delivery buffer; the
+final headed capture receipts remain open.
 
 ## Boundary
 
@@ -33,6 +34,18 @@ the native host; the extension receives only a public import receipt or a
 bounded failure reason. Import controls remain disabled until that interaction
 finishes.
 
+The browser action opens `graph.html`. Its history capture begins off.
+`nativeMessaging` and local `storage` are installed capabilities; `history`,
+`tabs`, and `webNavigation` remain optional. The current surface requests only
+`history`, from the user's **Enable capture** action. Visits are sanitized
+against the visible query-string and origin-exclusion settings before entering
+the bounded `storage.local` queue. The Wasm host acknowledges them only after
+one atomic Muniment batch persists the graph document, LocalOnly AccessRecords,
+and Eidetic browsing traces.
+
+`bridge.html` remains the admitted native Identity surface and is linked from
+the graph portal.
+
 ## Development package
 
 Build the native host:
@@ -50,6 +63,8 @@ Personae task until the login and logon receipts are explicit.
 Prepare one unpacked extension directory:
 
 ```text
+wasm-bindgen /path/to/graphshell_web.wasm --target web \
+  --out-dir ../pkg --out-name graphshell_web
 ./prepare-extension.ps1 -Browser chromium -Destination ./dist/chromium
 ./prepare-extension.ps1 -Browser firefox -Destination ./dist/firefox
 ```

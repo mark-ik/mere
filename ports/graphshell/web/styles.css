@@ -323,3 +323,14 @@ nav button:nth-child(8) { left: 254px; }
     padding: 12px 0 0;
   }
 }
+*[hidden] {
+  display: none !important;
+}
+
+#capture-status[data-state="failed"] {
+  color: #ff9f92;
+}
+
+#capture-status[data-state="working"] {
+  color: #f4cf7b;
+}

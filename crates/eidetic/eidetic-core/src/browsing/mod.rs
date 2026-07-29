@@ -193,6 +193,7 @@ pub async fn save_trace(
 
 /// The user-facing browsing memory: open (unflushed) segments per owner plus
 /// the loaded trace corpus, with the design-pass reads over both.
+#[derive(Clone)]
 pub struct BrowsingMemory {
     /// Stored traces (paired with their manifest ids) and adopted unsaved
     /// traces (`None`), kept sorted by `ended_at_ms`.

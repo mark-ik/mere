@@ -25,6 +25,8 @@ pub const SSH_IMPORT_NATIVE_INTENT: &str = "graphshell.identity.ssh.import-nativ
 pub const SSH_IMPORT_NATIVE_SCHEMA: &str = "graphshell.identity.ssh.import-native/v1";
 pub const SSH_REMOVE_INTENT: &str = "graphshell.identity.ssh.remove";
 pub const SSH_REMOVE_SCHEMA: &str = "graphshell.identity.ssh.remove/v1";
+pub const DEVICE_REVOKE_INTENT: &str = "graphshell.identity.device.revoke";
+pub const DEVICE_REVOKE_SCHEMA: &str = "graphshell.identity.device.revoke/v1";
 
 /// Typed, secret-free signing decision payload.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +67,14 @@ pub struct ImportSshKeyNativeIntentV1 {
 #[serde(deny_unknown_fields)]
 pub struct RemoveSshKeyIntentV1 {
     pub fingerprint: String,
+    pub confirmed: bool,
+}
+
+/// Explicit revocation of one delegated device at the live carry authority.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RevokeDeviceIntentV1 {
+    pub device_id: Uuid,
     pub confirmed: bool,
 }
 
@@ -120,6 +130,35 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
             },
         ],
     }];
+
+    cards.push(IdentityProjectionCard {
+        key: "identity:carry".to_string(),
+        card: PortableCardV1 {
+            title: "Device access".to_string(),
+            values: vec![
+                value(
+                    "Recovery",
+                    snapshot
+                        .carry
+                        .recovery_policy
+                        .as_deref()
+                        .unwrap_or("not configured"),
+                ),
+                value("Personae", joined_or_unknown(&snapshot.carry.personas)),
+                value(
+                    "Authority",
+                    if snapshot.carry.unavailable.is_empty() {
+                        "session-runtime ready".to_string()
+                    } else {
+                        snapshot.carry.unavailable.join("; ")
+                    },
+                ),
+            ],
+            badges: vec!["carry".to_string(), "device authority".to_string()],
+            media: Vec::new(),
+        },
+        actions: Vec::new(),
+    });
 
     cards.extend(
         snapshot
@@ -183,6 +222,24 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
         if device.revoked {
             badges.push("revoked".to_string());
         }
+        let actions = if device.revoked {
+            Vec::new()
+        } else {
+            vec![IdentityProjectionAction {
+                intent: DEVICE_REVOKE_INTENT,
+                schema: DEVICE_REVOKE_SCHEMA,
+                label: "Revoke device…",
+                payload: Some(
+                    serde_json::to_value(RevokeDeviceIntentV1 {
+                        device_id: Uuid::parse_str(&device.device_id)
+                            .expect("carry device ids are UUIDs"),
+                        confirmed: false,
+                    })
+                    .expect("device revocation payload is always serializable"),
+                ),
+                native_only: true,
+            }]
+        };
         IdentityProjectionCard {
             key: format!("identity:device:{}", device.device_id),
             card: PortableCardV1 {
@@ -198,40 +255,52 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 badges,
                 media: Vec::new(),
             },
-            actions: Vec::new(),
+            actions,
         }
     }));
 
-    cards.extend(
-        snapshot
+    cards.extend(snapshot.carry.grants.iter().map(|grant| {
+        let mut badges = vec!["delegation".to_string()];
+        if snapshot
             .carry
-            .grants
+            .devices
             .iter()
-            .map(|grant| IdentityProjectionCard {
-                key: format!("identity:grant:{}", grant.device_id),
-                card: PortableCardV1 {
-                    title: "Device grant".to_string(),
-                    values: vec![
-                        value("Device", &grant.device_id),
-                        value(
-                            "Signature",
-                            match grant.signature_valid {
-                                Some(true) => "verified",
-                                Some(false) => "invalid",
-                                None => "unknown",
-                            },
-                        ),
-                        value("Scopes", joined_or_unknown(&grant.scopes)),
-                        value("Attenuations", joined_or_unknown(&grant.attenuations)),
-                        value("Personae", joined_or_unknown(&grant.personas)),
-                        value("Wrapped epochs", grant.wrapped_epoch_count.to_string()),
-                    ],
-                    badges: vec!["delegation".to_string()],
-                    media: Vec::new(),
-                },
-                actions: Vec::new(),
-            }),
-    );
+            .any(|device| device.device_id == grant.device_id && device.revoked)
+        {
+            badges.push("revoked".to_string());
+        }
+        IdentityProjectionCard {
+            key: format!("identity:grant:{}", grant.device_id),
+            card: PortableCardV1 {
+                title: "Device grant".to_string(),
+                values: vec![
+                    value("Device", &grant.device_id),
+                    value(
+                        "Signature",
+                        match grant.signature_valid {
+                            Some(true) => "verified",
+                            Some(false) => "invalid",
+                            None => "unknown",
+                        },
+                    ),
+                    value("Issued", grant.issued_at_ms.to_string()),
+                    value(
+                        "Expires",
+                        grant
+                            .expires_at_ms
+                            .map_or_else(|| "never".to_string(), |expires| expires.to_string()),
+                    ),
+                    value("Scopes", joined_or_unknown(&grant.scopes)),
+                    value("Attenuations", joined_or_unknown(&grant.attenuations)),
+                    value("Personae", joined_or_unknown(&grant.personas)),
+                    value("Wrapped epochs", grant.wrapped_epoch_count.to_string()),
+                ],
+                badges,
+                media: Vec::new(),
+            },
+            actions: Vec::new(),
+        }
+    }));
 
     cards.extend(snapshot.pending_signing.iter().map(|pending| {
         let payload = SigningDecisionIntentV1 {
@@ -483,7 +552,9 @@ mod tests {
     use personae::signing::{PendingSigningRequest, SigningPolicy, SigningRequest};
 
     use super::*;
-    use crate::identity::{CarryView, IdentitySurfaceSnapshot, SshKeyView, VaultView};
+    use crate::identity::{
+        CarryView, DeviceGrantView, DeviceView, IdentitySurfaceSnapshot, SshKeyView, VaultView,
+    };
 
     fn snapshot(policy: SigningPolicy) -> IdentitySurfaceSnapshot {
         let request = SigningRequest::new(
@@ -602,5 +673,62 @@ mod tests {
                 .unwrap()
                 .contains("private")
         );
+    }
+
+    #[test]
+    fn active_device_advertises_confirmed_revocation_and_revoked_grant_is_inert() {
+        let device_id = Uuid::from_u128(0x1234);
+        let mut snapshot = snapshot(SigningPolicy::PerUse);
+        snapshot.carry.devices.push(DeviceView {
+            device_id: device_id.to_string(),
+            label: "Pocket relay".to_string(),
+            mode: "delegated".to_string(),
+            exposure: "hidden client".to_string(),
+            public_key_fingerprint: "blake3:public".to_string(),
+            revoked: false,
+            grant_ref: Some("grant:public".to_string()),
+        });
+        snapshot.carry.grants.push(DeviceGrantView {
+            device_id: device_id.to_string(),
+            grant_ref: Some("grant:public".to_string()),
+            signature_valid: Some(true),
+            issued_at_ms: 1,
+            expires_at_ms: Some(2),
+            personas: vec!["persona:public".to_string()],
+            scopes: vec!["identity.act".to_string()],
+            attenuations: vec!["no-subdelegation".to_string()],
+            wrapped_epoch_count: 0,
+        });
+
+        let active = project_identity(&snapshot);
+        let device = active
+            .iter()
+            .find(|card| card.key == format!("identity:device:{device_id}"))
+            .unwrap();
+        let revoke = device
+            .actions
+            .iter()
+            .find(|action| action.intent == DEVICE_REVOKE_INTENT)
+            .unwrap();
+        assert!(revoke.native_only);
+        let payload: RevokeDeviceIntentV1 =
+            serde_json::from_value(revoke.payload.clone().unwrap()).unwrap();
+        assert_eq!(payload.device_id, device_id);
+        assert!(!payload.confirmed);
+
+        snapshot.carry.devices[0].revoked = true;
+        let revoked = project_identity(&snapshot);
+        let device = revoked
+            .iter()
+            .find(|card| card.key == format!("identity:device:{device_id}"))
+            .unwrap();
+        assert!(device.actions.is_empty());
+        assert!(device.card.badges.iter().any(|badge| badge == "revoked"));
+        let grant = revoked
+            .iter()
+            .find(|card| card.key == format!("identity:grant:{device_id}"))
+            .unwrap();
+        assert!(grant.actions.is_empty());
+        assert!(grant.card.badges.iter().any(|badge| badge == "revoked"));
     }
 }

@@ -44,6 +44,11 @@ window.graphshellReceipt = () => ({
   session: document.body.dataset.session,
   detailOpen: document.body.dataset.detailOpen === "true",
   actionCount: Number(document.body.dataset.actionCount || 0),
+  storage: document.body.dataset.storage,
+  capture: {
+    accepted: Number(document.body.dataset.captureAccepted || 0),
+    dropped: Number(document.body.dataset.captureDropped || 0),
+  },
   camera: document.getElementById("graphshell-canvas").dataset.camera,
   focusedNode: document.getElementById("graphshell-canvas").dataset.focusedNode,
   product: {
@@ -66,6 +71,11 @@ window.graphshellReceipt = () => ({
 });
 
 try {
+  if ((globalThis.browser ?? globalThis.chrome)?.runtime?.id) {
+    await import("./capture-model.js");
+    const extensionProfile = await import("./extension-profile.js");
+    await extensionProfile.prepareCapture();
+  }
   const module = await import("./pkg/graphshell_web.js");
   await module.default();
 } catch (error) {

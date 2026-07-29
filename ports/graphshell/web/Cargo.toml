@@ -22,6 +22,7 @@ netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" 
 netrender_device = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+serde_json.workspace = true
 sha2.workspace = true
 uuid.workspace = true
 wasm-bindgen = "=0.2.126"

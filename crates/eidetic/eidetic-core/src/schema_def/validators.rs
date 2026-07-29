@@ -24,27 +24,39 @@ impl SchemaValidator for JsonSchemaValidator {
             )));
         }
 
-        let compiled = jsonschema::JSONSchema::compile(&definition.body).map_err(|e| {
-            Error::new(format!(
-                "json-schema compile ({}): {e}",
+        #[cfg(not(feature = "json-schema"))]
+        {
+            let _ = payload_bytes;
+            Err(Error::new(format!(
+                "json-schema validation unavailable in this build for {}",
                 definition.schema_id
-            ))
-        })?;
-
-        let payload_value: serde_json::Value = serde_json::from_slice(payload_bytes)
-            .map_err(|e| Error::new(format!("payload parse (json-schema): {e}")))?;
-
-        if let Err(errors) = compiled.validate(&payload_value) {
-            let collected: Vec<String> = errors
-                .map(|e| format!("{} at {}", e, e.instance_path))
-                .collect();
-            return Err(Error::new(format!(
-                "json-schema validation failed for {}: {}",
-                definition.schema_id,
-                collected.join("; ")
-            )));
+            )))
         }
-        Ok(())
+
+        #[cfg(feature = "json-schema")]
+        {
+            let compiled = jsonschema::JSONSchema::compile(&definition.body).map_err(|e| {
+                Error::new(format!(
+                    "json-schema compile ({}): {e}",
+                    definition.schema_id
+                ))
+            })?;
+
+            let payload_value: serde_json::Value = serde_json::from_slice(payload_bytes)
+                .map_err(|e| Error::new(format!("payload parse (json-schema): {e}")))?;
+
+            if let Err(errors) = compiled.validate(&payload_value) {
+                let collected: Vec<String> = errors
+                    .map(|e| format!("{} at {}", e, e.instance_path))
+                    .collect();
+                return Err(Error::new(format!(
+                    "json-schema validation failed for {}: {}",
+                    definition.schema_id,
+                    collected.join("; ")
+                )));
+            }
+            Ok(())
+        }
     }
 }
 

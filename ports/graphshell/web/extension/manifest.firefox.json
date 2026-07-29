@@ -4,7 +4,13 @@
   "version": "0.1.0",
   "description": "Open Graphshell's local graph and identity surfaces.",
   "permissions": [
-    "nativeMessaging"
+    "nativeMessaging",
+    "storage"
+  ],
+  "optional_permissions": [
+    "history",
+    "tabs",
+    "webNavigation"
   ],
   "browser_specific_settings": {
     "gecko": {
@@ -13,8 +19,12 @@
   },
   "background": {
     "scripts": [
+      "capture-model.js",
       "background.js"
     ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
   "action": {
     "default_title": "Open Graphshell"

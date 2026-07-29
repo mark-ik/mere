@@ -18,7 +18,7 @@ path = "src/lib.rs"
 # The personae signing binding for pack engrams (participant gate B4): the
 # identity crate IS the "concrete shape lands with identity" note on
 # SignatureRef, landed.
-identity = { workspace = true }
+identity = { workspace = true, optional = true }
 # The storage floor (2026-07-12): eidetic's `Store` was muniment's `Backend`
 # declared twice — same get/put/delete/list seam. Eidetic now consumes it, and
 # `eidetic::Store` is an alias so the layers above (manifests, schemas, engrams)
@@ -26,7 +26,7 @@ identity = { workspace = true }
 muniment = { path = "../muniment", version = "0.1.0" }
 async-trait = "0.1"
 blake3 = "1.5"
-jsonschema = { version = "0.18", default-features = false }
+jsonschema = { version = "0.18", default-features = false, optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # The browsing lineage bridge (`browsing::lineage`, feature `lineage`):
@@ -38,6 +38,16 @@ serde_json = "1.0"
 chartulary = { path = "../chartulary", version = "0.2.0", optional = true }
 
 [features]
+default = ["pack-signing", "json-schema"]
+# Personae-backed pack signing and verification. Browser consumers that only
+# need storage, typed payloads, and browsing memory can omit the native
+# identity/crypto cone.
+pack-signing = ["dep:identity"]
+# Full JSON Schema validation. Browser consumers that only use Mere-native
+# schemas can omit the heavier validator and its platform-specific dependency
+# cone while preserving a clear "validator unavailable" error for stored JSON
+# Schema definitions.
+json-schema = ["dep:jsonschema"]
 lineage = ["dep:chartulary"]
 
 [dev-dependencies]

@@ -9,6 +9,7 @@ param(
     [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Graphshell\bin"),
     [string]$TaskName = "graphshell-device-host",
     [string]$PreviousTaskName = "personae-agent",
+    [string]$DataRoot,
     [string]$SshProbeTarget,
     [switch]$RetirePreviousTask,
     [switch]$ConfirmLogonProof
@@ -79,7 +80,9 @@ $logFile = Join-Path (Split-Path -Parent $InstallRoot) "device-host.log"
 
 $previousTask = Get-ScheduledTask -TaskName $PreviousTaskName -ErrorAction SilentlyContinue
 $previousWasRunning = $previousTask -and $previousTask.State -eq "Running"
+$previousWasEnabled = $previousTask -and $previousTask.State -ne "Disabled"
 $newTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+$newTaskWasRunning = $newTask -and $newTask.State -eq "Running"
 if ($newTask) {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 }
@@ -90,12 +93,20 @@ if (Test-Path -LiteralPath $installedDevice) {
 Copy-Item -LiteralPath $deviceSource -Destination $installedDevice -Force
 Copy-Item -LiteralPath $nativeSource -Destination $installedNative -Force
 
+$deviceArguments = "--log-file ""$logFile"""
+$resolvedDataRoot = $null
+if ($DataRoot) {
+    $resolvedDataRoot = [System.IO.Path]::GetFullPath($DataRoot)
+    $deviceArguments += " --data-root ""$resolvedDataRoot"""
+}
+$deviceCommand = """$installedDevice"" $deviceArguments"
+$escapedDeviceCommand = $deviceCommand.Replace("""", """""")
 $vbs = @"
 ' Graphshell resident host recovery loop. Task Scheduler owns this launcher;
 ' the launcher restarts the device host after a crash.
 Set shell = CreateObject("WScript.Shell")
 Do
-  shell.Run """$installedDevice"" --log-file ""$logFile""", 0, True
+  shell.Run "$escapedDeviceCommand", 0, True
   WScript.Sleep 5000
 Loop
 "@
@@ -122,6 +133,7 @@ Register-ScheduledTask `
 
 try {
     if ($previousTask) {
+        Disable-ScheduledTask -TaskName $PreviousTaskName | Out-Null
         Stop-ScheduledTask -TaskName $PreviousTaskName -ErrorAction SilentlyContinue
     }
     $personaeExecutable = Join-Path $env:LOCALAPPDATA "personae\bin\personae-agent.exe"
@@ -176,14 +188,24 @@ try {
         listed_before_restart = $before
         listed_after_restart = $after
         ssh_probe = if ($SshProbeTarget) { $SshProbeTarget } else { $null }
+        data_root = $resolvedDataRoot
+        previous_task_disabled = [bool]($previousTask -and -not $RetirePreviousTask)
         previous_task_retired = [bool]$RetirePreviousTask
         native_relay = $installedNative
     }
 } catch {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Stop-InstalledProcess $installedDevice
-    if ($previousTask -and $previousWasRunning) {
-        Start-ScheduledTask -TaskName $PreviousTaskName
+    if ($newTask) {
+        Disable-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null
+    } else {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    if ($previousTask -and ($previousWasEnabled -or $newTaskWasRunning)) {
+        Enable-ScheduledTask -TaskName $PreviousTaskName | Out-Null
+        if ($previousWasRunning -or $newTaskWasRunning) {
+            Start-ScheduledTask -TaskName $PreviousTaskName
+        }
     }
     throw
 }

@@ -13,7 +13,6 @@ use graphshell::protocol::{
     CapabilityProfile, IntentInvocation, IntentResult, PresentationCapability, ProjectionSession,
 };
 use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
-use muniment::MemoryBackend;
 use netrender::Scene;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -21,7 +20,13 @@ use web_sys::{Document, Element, HtmlCanvasElement, Window};
 
 use graphshell::app::GraphshellApp;
 use graphshell::canary::FixtureEndpoint;
-use graphshell::mere_host::{FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef};
+use graphshell::capture::{
+    BrowserHistoryCapture, BrowserVisit, CaptureOutcome, HistoryCapturePolicy,
+};
+use graphshell::indexeddb_backend::IndexedDbBackend;
+use graphshell::mere_host::{
+    FIXTURE_DEVICE_TWO_ADDRESS, FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef,
+};
 use graphshell::product::{RelationFamilyFilter, SavedSceneV1};
 use uuid::Uuid;
 use web_events::{install_events, schedule_frames};
@@ -30,6 +35,15 @@ use web_product::update_product_semantics;
 use web_view::{ChromeModel, build_chrome_scene};
 
 const REMOTE_LABEL: &str = "Remote projection · 2 objects";
+const CAPTURE_POLICY_GLOBAL: &str = "graphshellCapturePolicyJson";
+const CAPTURE_VISITS_GLOBAL: &str = "graphshellInitialVisitsJson";
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct InitialCaptureSummary {
+    active: bool,
+    accepted: usize,
+    dropped: usize,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ActiveSession {
@@ -38,7 +52,7 @@ enum ActiveSession {
 }
 
 struct BrowserHost {
-    app: GraphshellApp<MemoryBackend>,
+    app: GraphshellApp<IndexedDbBackend>,
     remote: FixtureEndpoint,
     remote_session: ProjectionSession,
     active: ActiveSession,
@@ -53,6 +67,7 @@ struct BrowserHost {
     width: u32,
     height: u32,
     product_status: String,
+    storage_status: String,
     layout_id: String,
     physics_paused: bool,
     physics_damping: f32,
@@ -374,6 +389,90 @@ fn set_attr(element: &Element, name: &str, value: &str) -> Result<(), String> {
         .map_err(|_| format!("could not set {name} on #{}", element.id()))
 }
 
+fn global_json(window: &Window, name: &str) -> Result<Option<String>, String> {
+    let value = js_sys::Reflect::get(window.as_ref(), &JsValue::from_str(name))
+        .map_err(|_| format!("could not read browser global {name}"))?;
+    Ok(value.as_string())
+}
+
+fn initial_capture_input(
+    window: &Window,
+) -> Result<Option<(HistoryCapturePolicy, Vec<BrowserVisit>)>, String> {
+    let Some(policy_json) = global_json(window, CAPTURE_POLICY_GLOBAL)? else {
+        return Ok(None);
+    };
+    let policy = serde_json::from_str(&policy_json)
+        .map_err(|error| format!("invalid browser capture policy: {error}"))?;
+    let visits_json =
+        global_json(window, CAPTURE_VISITS_GLOBAL)?.unwrap_or_else(|| "[]".to_string());
+    let visits = serde_json::from_str(&visits_json)
+        .map_err(|error| format!("invalid browser visit batch: {error}"))?;
+    Ok(Some((policy, visits)))
+}
+
+async fn apply_initial_capture(
+    app: &mut GraphshellApp<IndexedDbBackend>,
+    store: &mut IndexedDbBackend,
+    persona: &str,
+    now_secs: u64,
+) -> Result<InitialCaptureSummary, String> {
+    let Some((policy, visits)) = initial_capture_input(&window()?)? else {
+        return Ok(InitialCaptureSummary::default());
+    };
+    let mut capture = BrowserHistoryCapture::load(store, policy)
+        .await
+        .map_err(|error| error.to_string())?;
+    if visits.is_empty() {
+        return Ok(InitialCaptureSummary {
+            active: capture.policy().enabled,
+            ..InitialCaptureSummary::default()
+        });
+    }
+    let outcomes = capture
+        .ingest_batch(
+            &mut app.host,
+            store,
+            visits,
+            persona,
+            FIXTURE_DEVICE_TWO_ADDRESS,
+            now_secs,
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(InitialCaptureSummary {
+        active: capture.policy().enabled,
+        accepted: outcomes
+            .iter()
+            .filter(|outcome| matches!(outcome, CaptureOutcome::Accepted { .. }))
+            .count(),
+        dropped: outcomes
+            .iter()
+            .filter(|outcome| matches!(outcome, CaptureOutcome::Dropped(_)))
+            .count(),
+    })
+}
+
+fn publish_capture_receipt(
+    document: &Document,
+    summary: InitialCaptureSummary,
+) -> Result<(), String> {
+    if !summary.active {
+        return Ok(());
+    }
+    let body = document.body().ok_or("document has no body")?;
+    body.set_attribute("data-capture-accepted", &summary.accepted.to_string())
+        .map_err(|_| "could not expose accepted capture count")?;
+    body.set_attribute("data-capture-dropped", &summary.dropped.to_string())
+        .map_err(|_| "could not expose dropped capture count")?;
+    document
+        .dispatch_event(
+            &web_sys::Event::new("graphshell-capture-complete")
+                .map_err(|_| "could not create capture completion event")?,
+        )
+        .map_err(|_| "could not dispatch capture completion event")?;
+    Ok(())
+}
+
 fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     let document = document()?;
     let model = host.chrome_model();
@@ -447,6 +546,8 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         .map_err(|_| "could not expose detail state")?;
     body.set_attribute("data-action-count", &host.action_count.to_string())
         .map_err(|_| "could not expose action count")?;
+    body.set_attribute("data-storage", &host.storage_status)
+        .map_err(|_| "could not expose storage state")?;
     document.set_title("GRAPHSHELL H3 READY");
     Ok(())
 }
@@ -463,13 +564,33 @@ async fn run() -> Result<(), String> {
     canvas.set_width(width);
     canvas.set_height(height);
 
-    let backend = MemoryBackend::new();
+    let backend = IndexedDbBackend::open("graphshell-reference-host-h5", "muniment")
+        .await
+        .map_err(|error| error.to_string())?;
+    let mut capture_store = backend.clone();
     let selected_persona = SelectedPersonaRef {
         persona: FIXTURE_PERSONA_ADDRESS.to_string(),
         profile: "profile:graphshell-h3".to_string(),
     };
-    let mut app =
-        GraphshellApp::fixture(backend, selected_persona).map_err(|error| error.to_string())?;
+    let capture_persona = selected_persona.persona.clone();
+    let mut app = GraphshellApp::open_or_fixture(backend, selected_persona)
+        .await
+        .map_err(|error| error.to_string())?;
+    let storage_status = if app.host.was_reopened() {
+        "IndexedDB reopened"
+    } else {
+        "IndexedDB seeded"
+    }
+    .to_string();
+    let now_secs = (js_sys::Date::now() / 1_000.0) as u64;
+    let capture_summary =
+        apply_initial_capture(&mut app, &mut capture_store, &capture_persona, now_secs).await?;
+    if capture_summary.accepted == 0 {
+        app.host
+            .persist(now_secs)
+            .await
+            .map_err(|error| error.to_string())?;
+    }
     app.mount_local().map_err(|error| error.to_string())?;
     let mut remote = FixtureEndpoint::new();
     let remote_snapshot = remote
@@ -496,17 +617,26 @@ async fn run() -> Result<(), String> {
     graph_canvas.fit_to_content();
     graph_canvas.select_by_url(FIXTURE_WEB_ADDRESS);
     let primary_member = graph_canvas.focused_member();
+    let node_count = app.host.graph().node_count();
+    let product_status = if capture_summary.active {
+        format!(
+            "Daily graph operations ready · {storage_status} · {} captured",
+            capture_summary.accepted
+        )
+    } else {
+        format!("Daily graph operations ready · {storage_status}")
+    };
 
     let gpu = GpuPresenter::boot(canvas.clone(), width, height).await?;
     let initial_model = ChromeModel {
-        active_session: "Local Mere · 11 objects".to_string(),
+        active_session: format!("Local Mere · {node_count} objects"),
         local_active: true,
         selection: FIXTURE_WEB_ADDRESS.to_string(),
         detail_open: false,
         detail_address: FIXTURE_WEB_ADDRESS.to_string(),
         action_status: "Ready".to_string(),
         viewport_label: format!("{width} × {height}"),
-        product_status: "Daily graph operations ready".to_string(),
+        product_status: product_status.clone(),
         arrangement: "phyllotaxis.default".to_string(),
         physics_paused: false,
     };
@@ -526,13 +656,14 @@ async fn run() -> Result<(), String> {
         action_status: "Ready".to_string(),
         width,
         height,
-        product_status: "Daily graph operations ready".to_string(),
+        product_status,
+        storage_status,
         layout_id: "phyllotaxis.default".to_string(),
         physics_paused: false,
         physics_damping: 0.82,
         handler_id: "graphshell.inspect".to_string(),
         relation_family: RelationFamilyFilter::All,
-        filter_count: 11,
+        filter_count: node_count,
         face: "favicon".to_string(),
         last_export: String::new(),
         export_bytes: 0,
@@ -544,6 +675,7 @@ async fn run() -> Result<(), String> {
     install_events(&state)?;
     web_product::install_product_events(&state)?;
     update_semantics(&mut state.borrow_mut())?;
+    publish_capture_receipt(&document, capture_summary)?;
     schedule_frames(state)?;
     Ok(())
 }
