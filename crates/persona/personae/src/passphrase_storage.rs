@@ -40,7 +40,7 @@ use std::sync::{Arc, Mutex};
 use argon2::Argon2;
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
-use rand_core::{OsRng, RngCore};
+ 
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -93,7 +93,7 @@ pub(crate) fn derive_kek(
 
 fn random_bytes(n: usize) -> Vec<u8> {
     let mut buf = vec![0u8; n];
-    OsRng.fill_bytes(&mut buf);
+    getrandom::fill(&mut buf).expect("OS randomness available");
     buf
 }
 
@@ -204,7 +204,7 @@ fn tempfile_in_dir(dir: &Path) -> Result<PathBuf, IdentityError> {
         .map_err(|e| IdentityError::Backend(format!("time: {e}")))?
         .as_nanos();
     let mut rand = [0u8; 8];
-    OsRng.fill_bytes(&mut rand);
+    getrandom::fill(&mut rand).expect("OS randomness available");
     // Render `rand` as lowercase hex without pulling in the `hex` crate.
     let mut hex = String::with_capacity(16);
     for b in rand {

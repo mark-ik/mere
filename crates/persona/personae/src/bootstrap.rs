@@ -120,7 +120,7 @@ pub fn load_or_create_profile(
     let profile = Profile::new(
         id.clone(),
         id.0.clone(),
-        Ed25519Keypair::generate(&mut rand_core::OsRng),
+        Ed25519Keypair::generate(),
     );
     storage.save_profile(&profile)?;
     Ok((profile, true))

@@ -341,6 +341,21 @@ taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # does not inherit genet's patch table, so it restates it here (same rule as
 # taffy above; the local `.cargo/config.toml` redirects it to a genet checkout).
 stylo_taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
+# p2panda repointed to the owned fork (branch-tracked, same rule as above) for
+# the dalek-3 unification: the fork's core/encryption are ported to
+# ed25519/x25519-dalek 3 + curve25519-dalek 5, unifying with iroh >=1.0.3 and
+# personae so one dalek per major resolves across the graph. The whole family
+# moves together — the fork is one workspace. Drop this block when upstream
+# p2panda releases the port. (hpke-rs still carries an x25519-dalek 2 copy
+# inside p2panda-encryption; that residual retires with an hpke dalek-3 release.)
+p2panda-auth = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-core = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-discovery = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-encryption = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-net = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-store = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-stream = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+p2panda-sync = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 
 # ─── LAN peer discovery (H10): two mDNS fixes not yet released upstream ──────
 # iroh-mdns-address-lookup 0.4.0 joins the multicast group only on the

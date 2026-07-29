@@ -13,7 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
-use rand_core::{OsRng, RngCore};
+ 
 use serde::{Deserialize, Serialize};
 
 use crate::IdentityError;
@@ -91,7 +91,7 @@ fn load_or_create_auto_unlock_root_impl(path: &Path) -> Result<Option<[u8; 32]>,
         })?;
     }
     let mut root = [0u8; 32];
-    OsRng.fill_bytes(&mut root);
+    getrandom::fill(&mut root).expect("OS randomness available");
     let wrapped_key = dpapi_protect(&root)?;
     let file = AutoUnlockKeyFile {
         version: AUTO_UNLOCK_KEY_FILE_VERSION,
@@ -128,7 +128,7 @@ fn tempfile_in_dir(dir: &Path) -> Result<PathBuf, IdentityError> {
         .map_err(|err| IdentityError::Backend(format!("time: {err}")))?
         .as_nanos();
     let mut rand = [0u8; 8];
-    OsRng.fill_bytes(&mut rand);
+    getrandom::fill(&mut rand).expect("OS randomness available");
     let mut hex = String::with_capacity(16);
     for byte in rand {
         use std::fmt::Write as _;

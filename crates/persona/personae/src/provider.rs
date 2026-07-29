@@ -2,7 +2,6 @@
 
 use std::path::Path;
 
-use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -149,7 +148,7 @@ impl SealedIdentityProvider {
                 record
             }
             None => {
-                let master = Ed25519Keypair::generate(&mut OsRng);
+                let master = Ed25519Keypair::generate();
                 let record = SealedIdentityRecord {
                     format_version: SEALED_IDENTITY_FORMAT_VERSION,
                     master_seed: master.to_seed(),
@@ -201,7 +200,7 @@ impl InMemoryProvider {
     /// Create a new provider with a freshly-generated random master keypair.
     pub fn random() -> Self {
         Self {
-            master: Ed25519Keypair::generate(&mut OsRng),
+            master: Ed25519Keypair::generate(),
         }
     }
 

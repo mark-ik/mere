@@ -1,7 +1,6 @@
 //! Ed25519 keypair, public key, and signature types.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use rand_core::{CryptoRng, RngCore};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::IdentityError;
@@ -19,9 +18,18 @@ use crate::IdentityError;
 pub struct Ed25519Keypair(SigningKey);
 
 impl Ed25519Keypair {
-    /// Generate a new random keypair.
-    pub fn generate<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        Self(SigningKey::generate(rng))
+    /// Generate a new random keypair from OS randomness.
+    ///
+    /// An Ed25519 signing key is a 32-byte uniform random seed; sourcing it
+    /// from `getrandom` directly keeps the public API free of rand_core
+    /// version coupling. Deterministic keys (tests, derivation) go through
+    /// [`Self::from_seed`].
+    pub fn generate() -> Self {
+        let mut seed = [0u8; 32];
+        getrandom::fill(&mut seed).expect("OS randomness available");
+        let keypair = Self(SigningKey::from_bytes(&seed));
+        seed.zeroize();
+        keypair
     }
 
     /// Construct from a 32-byte seed.

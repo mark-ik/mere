@@ -8,7 +8,7 @@
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
-use rand_core::{OsRng, RngCore};
+ 
 
 use crate::IdentityError;
 
@@ -21,7 +21,7 @@ const NONCE_LEN: usize = 24;
 pub fn seal_bytes(key: &[u8; 32], aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, IdentityError> {
     let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
     let mut nonce = [0u8; NONCE_LEN];
-    OsRng.fill_bytes(&mut nonce);
+    getrandom::fill(&mut nonce).expect("OS randomness available");
     let ciphertext = cipher
         .encrypt(
             XNonce::from_slice(&nonce),
