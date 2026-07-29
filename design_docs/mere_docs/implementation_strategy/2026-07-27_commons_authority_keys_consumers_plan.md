@@ -234,6 +234,16 @@ Receipt: `commons.channel` and immutable `commons.message` use the shared
 causal seam and the durable-data chat profile. Partitioned replicas converge
 through both Memory acceptance and real p2panda LogSync.
 
+Promotion receipt 2026-07-29: `ChatReplica::for_identity` derives a
+space-scoped writer and carries its Personae attestation inside each encrypted
+signed event or checkpoint. Admission rejects a foreign-root claim and a
+cross-space attestation replay before storage. Projection exposes the stable
+root, and edit, delete, and checkpoint authority compare that root. A real
+Gemot delegation classifies the projected author effective and then revoked
+while the retained operations remain stored. `cargo test -p commons-spine`
+passes 40 tests; strict library Clippy passes. This proves the chat identity
+seam; authority-filtered chat reprojection remains consumer composition work.
+
 ### C6. Carrier identity — DONE 2026-07-27
 
 Export the same signed encrypted operations through a protected native drop

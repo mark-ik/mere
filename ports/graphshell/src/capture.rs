@@ -8,7 +8,7 @@ use std::collections::{BTreeSet, HashSet};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
-use chartulary::{AcceptAll, FacetId};
+use chartulary::FacetId;
 use eidetic::browsing::{
     BrowsingMemory, PageRef, TraceEvent, TraceTransition, bootstrap_browsing_schema,
 };
@@ -790,21 +790,32 @@ impl<B: Backend> MereHost<B> {
                     .records
                     .retain(|record| !record.handler.starts_with(BROWSER_HISTORY_HANDLER_PREFIX));
                 if history.records.is_empty() {
-                    graph
-                        .facets_mut()
-                        .remove(&node_id, &FacetId::new(ACCESS_HISTORY_FACET));
+                    apply_graph_delta(
+                        graph,
+                        GraphDelta::RemoveNodeFacet {
+                            key,
+                            facet: ACCESS_HISTORY_FACET.to_string(),
+                        },
+                    );
                 } else {
-                    let _ = graph.facets_mut().set(
-                        node_id,
-                        FacetId::new(ACCESS_HISTORY_FACET),
-                        serde_json::to_value(history).expect("AccessHistory always serializes"),
-                        &AcceptAll,
+                    apply_graph_delta(
+                        graph,
+                        GraphDelta::SetNodeFacet {
+                            key,
+                            facet: ACCESS_HISTORY_FACET.to_string(),
+                            value: serde_json::to_value(history)
+                                .expect("AccessHistory always serializes"),
+                        },
                     );
                 }
             }
-            graph
-                .facets_mut()
-                .remove(&node_id, &FacetId::new(BROWSER_HISTORY_FACET));
+            apply_graph_delta(
+                graph,
+                GraphDelta::RemoveNodeFacet {
+                    key,
+                    facet: BROWSER_HISTORY_FACET.to_string(),
+                },
+            );
             for (from, to) in traversal_pairs {
                 apply_graph_delta(
                     graph,

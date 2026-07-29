@@ -26,6 +26,7 @@ mod prune_proof;
 mod receipt;
 mod store;
 mod synced_space;
+mod writer;
 
 pub use authority::CheckpointAuthority;
 pub use causal::{
@@ -71,6 +72,7 @@ pub use receipt::{
 };
 pub use store::{BlobGcReport, MunimentStore};
 pub use synced_space::{SyncRound, SyncStatus, SyncedSpace};
+pub use writer::{WriterBindingError, stable_writer_subject};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

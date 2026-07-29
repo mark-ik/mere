@@ -83,6 +83,15 @@ pub enum GraphDelta {
         node_id: Uuid,
         is_pinned: bool,
     },
+    ReplaySetNodeFacetById {
+        node_id: Uuid,
+        facet: String,
+        value: serde_json::Value,
+    },
+    ReplayRemoveNodeFacetById {
+        node_id: Uuid,
+        facet: String,
+    },
     ReplayInsertNodeTagById {
         node_id: Uuid,
         tag: String,
@@ -227,6 +236,17 @@ pub enum GraphDelta {
     SetNodePinned {
         key: NodeKey,
         is_pinned: bool,
+    },
+    /// Set one arbitrary, namespaced facet through the durable delta spine.
+    SetNodeFacet {
+        key: NodeKey,
+        facet: String,
+        value: serde_json::Value,
+    },
+    /// Remove one arbitrary, namespaced facet through the durable delta spine.
+    RemoveNodeFacet {
+        key: NodeKey,
+        facet: String,
     },
     AppendFrameLayoutHint {
         key: NodeKey,
@@ -441,6 +461,31 @@ fn capture_resolved_import_records(graph: &Graph) {
     record_captured_delta(&CapturedDelta::ReplaySetImportRecords {
         import_records: graph.import_records().to_vec(),
     });
+}
+
+fn set_node_facet(graph: &mut Graph, key: NodeKey, facet: &str, value: serde_json::Value) -> bool {
+    let Some(node_id) = graph.get_node(key).map(|node| node.id) else {
+        return false;
+    };
+    let facet = chartulary::FacetId::new(facet);
+    if graph.facets().get(&node_id, &facet) == Some(&value) {
+        return false;
+    }
+    graph
+        .facets
+        .set(node_id, facet, value, &chartulary::AcceptAll)
+        .expect("AcceptAll cannot reject a graph facet");
+    true
+}
+
+fn remove_node_facet(graph: &mut Graph, key: NodeKey, facet: &str) -> bool {
+    let Some(node_id) = graph.get_node(key).map(|node| node.id) else {
+        return false;
+    };
+    graph
+        .facets
+        .remove(&node_id, &chartulary::FacetId::new(facet))
+        .is_some()
 }
 
 pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResult {
@@ -753,6 +798,61 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 record_captured_delta(&CapturedDelta::ReplaySetNodePinnedById {
                     node_id: node_id.to_string(),
                     is_pinned,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplaySetNodeFacetById {
+            node_id,
+            facet,
+            value,
+        } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| set_node_facet(graph, key, &facet, value.clone()));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeFacetById {
+                    node_id: node_id.to_string(),
+                    facet,
+                    value_json: serde_json::to_string(&value)
+                        .expect("a graph facet value always serializes"),
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::SetNodeFacet { key, facet, value } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let capture_value = value.clone();
+            let updated = set_node_facet(graph, key, &facet, value);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplaySetNodeFacetById {
+                    node_id: node_id.to_string(),
+                    facet,
+                    value_json: serde_json::to_string(&capture_value)
+                        .expect("a graph facet value always serializes"),
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::ReplayRemoveNodeFacetById { node_id, facet } => {
+            let updated = graph
+                .get_node_key_by_id(node_id)
+                .is_some_and(|key| remove_node_facet(graph, key, &facet));
+            if updated {
+                record_captured_delta(&CapturedDelta::ReplayRemoveNodeFacetById {
+                    node_id: node_id.to_string(),
+                    facet,
+                });
+            }
+            GraphDeltaResult::NodeMetadataUpdated(updated)
+        }
+        GraphDelta::RemoveNodeFacet { key, facet } => {
+            let node_id = graph.get_node(key).map(|node| node.id);
+            let updated = remove_node_facet(graph, key, &facet);
+            if updated && let Some(node_id) = node_id {
+                record_captured_delta(&CapturedDelta::ReplayRemoveNodeFacetById {
+                    node_id: node_id.to_string(),
+                    facet,
                 });
             }
             GraphDeltaResult::NodeMetadataUpdated(updated)

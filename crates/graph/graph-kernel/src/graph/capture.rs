@@ -107,6 +107,15 @@ pub enum CapturedDelta {
         node_id: String,
         is_pinned: bool,
     },
+    ReplaySetNodeFacetById {
+        node_id: String,
+        facet: String,
+        value_json: String,
+    },
+    ReplayRemoveNodeFacetById {
+        node_id: String,
+        facet: String,
+    },
     ReplayInsertNodeTagById {
         node_id: String,
         tag: String,
@@ -316,6 +325,24 @@ impl CapturedDelta {
                 GraphDelta::ReplaySetNodePinnedById {
                     node_id: parse_uuid(node_id),
                     is_pinned: *is_pinned,
+                }
+            }
+            Self::ReplaySetNodeFacetById {
+                node_id,
+                facet,
+                value_json,
+            } => {
+                let value = serde_json::from_str(value_json).ok()?;
+                GraphDelta::ReplaySetNodeFacetById {
+                    node_id: parse_uuid(node_id),
+                    facet: facet.clone(),
+                    value,
+                }
+            }
+            Self::ReplayRemoveNodeFacetById { node_id, facet } => {
+                GraphDelta::ReplayRemoveNodeFacetById {
+                    node_id: parse_uuid(node_id),
+                    facet: facet.clone(),
                 }
             }
             Self::ReplayInsertNodeTagById { node_id, tag } => GraphDelta::ReplayInsertNodeTagById {

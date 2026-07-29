@@ -1,12 +1,13 @@
 //! Address-access facts projected into Mere's unknown-forward facet store.
 
-use chartulary::{AcceptAll, FacetError, FacetId};
+use chartulary::{FacetError, FacetId};
 use eidetic::{
     BlobSource, Hash, ManifestId, MereNativeFieldSpec, MereNativeSchemaBuilder, ModerationState,
     NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaDefinition, SchemaRef,
     Timestamp, TrustEnvelope, TrustLevel, TypedPayload, list_typed, load_typed, save_schema,
     save_typed,
 };
+use mere::kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
 use mere::kernel::graph::{Graph, NodeKey};
 use muniment::Backend;
 use serde::{Deserialize, Serialize};
@@ -396,14 +397,14 @@ pub fn record_observation(
     }
     history.records.push(record.clone());
     let value = serde_json::to_value(history).expect("AccessHistory always serializes");
-    graph
-        .facets_mut()
-        .set(
-            node_id,
-            FacetId::new(ACCESS_HISTORY_FACET),
+    let updated = apply_graph_delta(
+        graph,
+        GraphDelta::SetNodeFacet {
+            key,
+            facet: ACCESS_HISTORY_FACET.to_string(),
             value,
-            &AcceptAll,
-        )
-        .map_err(AccessError::RejectedFacet)?;
+        },
+    );
+    debug_assert_eq!(updated, GraphDeltaResult::NodeMetadataUpdated(true));
     Ok((record, true))
 }

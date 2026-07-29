@@ -32,6 +32,8 @@ pub mod lifecycle;
 pub mod mere_host;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod native;
+#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+pub mod personal_sync;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod policy_projection;
 #[cfg(feature = "web")]

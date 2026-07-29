@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chartulary::{AcceptAll, FacetError, FacetId};
+use chartulary::{FacetError, FacetId};
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use graphshell_protocol::{
     BoundsRelationship, CachePolicy, CardValueV1, ContentHash, EndpointDescriptor,
@@ -316,16 +316,22 @@ impl<B: Backend> MereHost<B> {
         facet: &str,
         value: Value,
     ) -> Result<(), MereHostError> {
-        let node_id = self
-            .graph
-            .get_node(key)
-            .map(|node| node.id)
-            .ok_or(AccessError::UnknownNode)?;
-        self.graph
-            .facets_mut()
-            .set(node_id, FacetId::new(facet), value, &AcceptAll)?;
-        self.projection_revision = self.projection_revision.wrapping_add(1);
-        self.dirty = true;
+        self.graph.get_node(key).ok_or(AccessError::UnknownNode)?;
+        let updated = matches!(
+            apply_graph_delta(
+                &mut self.graph,
+                GraphDelta::SetNodeFacet {
+                    key,
+                    facet: facet.to_string(),
+                    value,
+                },
+            ),
+            mere::kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        );
+        if updated {
+            self.projection_revision = self.projection_revision.wrapping_add(1);
+            self.dirty = true;
+        }
         Ok(())
     }
 

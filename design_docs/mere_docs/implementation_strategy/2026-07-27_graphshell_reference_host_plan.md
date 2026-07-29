@@ -1208,17 +1208,44 @@ announces that only through `tracing::warn!`. `g5_peer` installs no subscriber,
 so the message goes nowhere. Alive process, no announcements, no query answers,
 no error output: all of it falls out of that one line.
 
-**It is a heisenbug, which is why it is still open.** Four instrumented runs
-totalling roughly 30 minutes never stalled, including a build with *zero*
-hot-path I/O whose only `eprintln!`s were on fatal paths. Stock builds stalled
-twice in far less observation. Any probe on the send path appears to suppress it.
+**The leading explanation is an empty address set, not a dead actor.** The
+`RUST_LOG` subscriber added to `g5_peer` surfaced a path we had never seen:
+`swarm_discovery::sender: no addresses for peer, not announcing`. Reading it
+back through the two crates:
 
-**Next instrument, and it needs no crate patch at all:** initialise a tracing
-subscriber in `g5_peer` (graphshell already depends on `tracing-subscriber`) and
-run stock `swarm-discovery` under `RUST_LOG=warn`. That makes `guardian`'s
-existing warning visible with no perturbation of the crate whatsoever, which is
-exactly the property every patched build lacked. Failing that, attach `lldb` to a
-silent process and read where each actor is parked.
+1. `iroh-mdns-address-lookup` handles every address change by calling
+   `address_lookup.remove_all()` **first**, then re-adding whatever the new
+   `EndpointData` contains (`lib.rs`, the `addrs_change.updated()` branch).
+2. `RemoveAll` in `swarm-discovery`'s sender does
+   `discoverer.peers.remove(&discoverer.peer_id)`, dropping the **local** peer.
+3. With no local peer, `make_response` returns `None`, logging that line.
+4. A peer in that state announces nothing *and* answers nothing, because the
+   response loop only sends `if let Some(response)`.
+
+If the new address set is empty, as it is while the link is down, the peer is
+left permanently silent: nothing restores it until another address change
+arrives. Alive process, no announcements, no query answers, no error output.
+That is every symptom, and it explains the poke result without requiring any
+actor to have died.
+
+**The timing correlation supports it.** Both clean reproductions happened around
+the period when the Wi-Fi was failing. Since the network was restored, the stall
+has not reproduced once in roughly 40 minutes across five runs, including fully
+stock builds with no instrumentation at all in the exact configuration that
+stalled twice before.
+
+**Caveat: this is inference from code plus correlation, not yet a controlled
+reproduction.** The test that would settle it is to flap the iMac's link (Wi-Fi
+off, a few seconds, on) while a peer runs under `RUST_LOG=info`, and check for
+`no addresses for peer, not announcing` followed by permanent silence. That
+needs someone at the machine, since it is a system network action.
+
+**Do not try to catch this with in-process instrumentation.** Four instrumented
+builds and one `warn`-level subscriber run, roughly 40 minutes total, never
+reproduced it. Installing any subscriber also swaps tracing's global dispatcher
+from a no-op to a real one, so even `warn`-only filtering adds work at every
+`debug!`/`trace!` site in the hot path. Observe from outside the process
+(loopback listener, then `sample <pid>` once it is already silent).
 
 **Benign, but worth an upstream note:** the stale-timer race is real and fires
 regularly, always off by one and always in the response loop
