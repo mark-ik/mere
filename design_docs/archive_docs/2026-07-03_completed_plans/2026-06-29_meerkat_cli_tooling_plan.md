@@ -4,9 +4,9 @@
 **Status**: Complete for the local tooling slice.
 **Code**: `scripts/meerkat.ps1`, `scripts/check-meerkat.ps1`,
 `scripts/test-roster.ps1`, `scripts/drive-meerkat.ps1`; local ignored config in
-`.cargo/config.toml`, `C:\Users\mark_\Code\.cargo\config.toml`,
-`C:\Users\mark_\Code\repos\woodshed\.cargo\config.toml`, and
-`C:\Users\mark_\Code\repos\strophe\.cargo\config.toml`.
+`.cargo/config.toml`, `<workspace>\.cargo\config.toml`,
+`<workspace>\repos\woodshed\.cargo\config.toml`, and
+`<workspace>\repos\strophe\.cargo\config.toml`.
 
 This slice cleans up the local Meerkat build loop after the roster/card work
 exposed two avoidable sources of doubt: the target cache was named
@@ -65,10 +65,10 @@ edit loop without the path-override warning storm.
 - `wgpu-scry`: `scrying`.
 - `wgpu-graft`: `grafting`.
 
-The inherited parent config at `C:\Users\mark_\Code\.cargo\config.toml` was also
+The inherited parent config at `<workspace>\.cargo\config.toml` was also
 cleared of `paths` entries. Those entries were intended for Woodshed/Strophe, but
 Cargo inherited them into Mere and forced `xilem_core` from
-`C:\Users\mark_\Code\crates\xilem-woodshed`. Woodshed and Strophe now carry those
+`<workspace>\crates\xilem-woodshed`. Woodshed and Strophe now carry those
 local overrides in their own ignored repo configs.
 
 ### T3 - Add one blessed Meerkat runner
@@ -128,7 +128,7 @@ Landed:
 - Renamed `C:\t\graphshell-target` to `C:\t\meerkat-target`.
 - Rewrote Mere's ignored `.cargo/config.toml` from broad `paths` overrides to
   source-specific local patches and `build.target-dir = "C:/t/meerkat-target"`.
-- Cleared inherited `paths` entries from `C:\Users\mark_\Code\.cargo\config.toml`.
+- Cleared inherited `paths` entries from `<workspace>\.cargo\config.toml`.
 - Moved the Woodshed/Strophe `xilem-woodshed` overrides into ignored local config
   files for those repos.
 - Added `scripts/meerkat.ps1` and the short wrappers:
@@ -139,7 +139,7 @@ Verification:
 - `cargo metadata --no-deps --format-version 1` with `CARGO_TARGET_DIR` removed
   reports `target_directory: C:/t/meerkat-target`.
 - `cargo tree -p meerkat -i xilem_core --edges normal` resolves `xilem_core`
-  from `C:\Users\mark_\Code\repos\genet\components\xilem-core`.
+  from `<workspace>\repos\genet\components\xilem-core`.
 - `powershell -ExecutionPolicy Bypass -File scripts\check-meerkat.ps1` passed.
 - `powershell -ExecutionPolicy Bypass -File scripts\test-roster.ps1` passed:
   graphlet card tests, active-tab test, fanned relation-cell test, and hidden

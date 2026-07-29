@@ -70,7 +70,7 @@ receipt does not claim a tracked clean-checkout lockfile.
 
 ## Remaining H4 boundary
 
-- Repeat the standard-pipe restart with `192.168.4.38:22` reachable and prove a
+- Repeat the standard-pipe restart with `<private-address>:22` reachable and prove a
   real public-key login.
 - Install the Graphshell logon task, sign out or reboot, prove startup and crash
   recovery in that session, then retire the interim Personae task.

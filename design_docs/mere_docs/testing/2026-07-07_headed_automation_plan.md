@@ -44,7 +44,7 @@ The Slice 3 headed check found the PS layer broken in four ways. Three were fixe
 session; the fourth is the proposal below.
 
 - **Dead shared base.** ~130 `drive-*.ps1` / `verify-*.ps1` scripts each begin
-  `. C:\Users\mark_\Code\pelt-shots\harness.ps1` — but `pelt-shots\` was deleted 2026-06-15.
+  `. <workspace>\pelt-shots\harness.ps1` — but `pelt-shots\` was deleted 2026-06-15.
   Every script is broken at line 1. **Fixed**: a single canonical base,
   `testing\mere\scripts\mk-harness.ps1` (its `scry-shots\` home was retired in the folder
   reorg below), folds in the reliable primitives each script re-derived ad hoc (see below).

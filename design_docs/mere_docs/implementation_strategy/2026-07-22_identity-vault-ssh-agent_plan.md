@@ -57,7 +57,7 @@ Differentiators if built here: local-first with P2P sync on the family spine
 unification with the identity layer (secrets live where the master key already
 lives), and an agent whose approval policy the user controls (automation
 friendly instead of prompt-per-use, per
-[`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md)).
+[`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md)).
 
 ## Phases
 
@@ -72,11 +72,11 @@ encrypted at rest, on Windows and Linux.
 - Serialization: CBOR via ciborium, matching the rest of the family.
 - `SecretBytes` zeroization audit while touching this code.
 - No new crate. This is personae-internal wiring
-  ([`feedback_check_existing_crates_before_new_module`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_check_existing_crates_before_new_module.md)).
+  ([`feedback_check_existing_crates_before_new_module`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_check_existing_crates_before_new_module.md)).
 
 ### V2. SSH agent front end
 
-Done condition: `ssh markik@<laptop>` from the Windows machine authenticates
+Done condition: `ssh <remote-user>@<laptop>` from the Windows machine authenticates
 via the agent with the key served from the vault, and the plaintext
 `~/.ssh/id_ed25519` is deleted.
 

@@ -31,11 +31,11 @@ applies the original manifest rather than preparing or requesting it again.
 ## Executable proof
 
 The granted and revoked variants first passed between two Windows processes.
-The same executable was then compiled on Q-PC with Rust 1.97.1 in a detached
-temporary worktree. Q-PC's clean `main` checkout remained untouched.
+The same executable was then compiled on <remote-host> with Rust 1.97.1 in a detached
+temporary worktree. <remote-host>'s clean `main` checkout remained untouched.
 
-The physical source ran on Windows and the destination ran on Q-PC at
-`192.168.4.105`. The transferred file was the 3,389-byte H6c receipt.
+The physical source ran on Windows and the destination ran on <remote-host> at
+`<private-address>`. The transferred file was the 3,389-byte H6c receipt.
 
 Granted run:
 
@@ -96,10 +96,10 @@ cargo test -p graphshell --all-features
 83 passed; 0 failed
 
 cargo check -p graphshell --bin h6_transfer_peer --all-features
-passed on Windows and Q-PC
+passed on Windows and <remote-host>
 
 cargo build -p graphshell --bin h6_transfer_peer --all-features
-passed on Windows and Q-PC
+passed on Windows and <remote-host>
 
 cargo fmt -p graphshell -- --check
 passed
@@ -107,7 +107,7 @@ passed
 
 Generated source logs and typed receipt JSON remain outside Git under
 `C:\t\mere-h6-physical-windows-qpc*` on Windows and the isolated H6 worktree
-under `/tmp/mere-h6-physical-20260729` on Q-PC.
+under `/tmp/mere-h6-physical-20260729` on <remote-host>.
 
 ## Boundary
 

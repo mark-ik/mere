@@ -320,7 +320,7 @@ The renderer registry `NodeRenderer` framing **does not require renaming, deprec
 
 This is the case for the registry being **additive over inker, not a rewrite**. The renderer registry is a host-side seam; inker stays the engine-controller it already is, and grows a small adapter layer that exposes its engines through the registry surface.
 
-The renaming concern (per [feedback_consumer_pull_gates_check_first](C:/Users/mark_/.claude/projects/c--Users-mark--Code/memory/feedback_consumer_pull_gates_check_first.md)): we're the only consumer of the inker trait surface today, so even a more invasive rename would be cheap — but additive is cheaper, and additive doesn't preclude later consolidation.
+The renaming concern (per [feedback_consumer_pull_gates_check_first](<user-home>/.claude/projects/c--Users-mark--Code/memory/feedback_consumer_pull_gates_check_first.md)): we're the only consumer of the inker trait surface today, so even a more invasive rename would be cheap — but additive is cheaper, and additive doesn't preclude later consolidation.
 
 ## 10. Open questions
 

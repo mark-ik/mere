@@ -6,8 +6,8 @@ Status: G5 complete; H6 carrier gate closed.
 
 ## Physical run
 
-The Windows machine ran the current split `g5_peer` client. Q-PC at
-`192.168.4.105` ran the corrected monolithic server from commit `86d77d41`.
+The Windows machine ran the current split `g5_peer` client. <remote-host> at
+`<private-address>` ran the corrected monolithic server from commit `86d77d41`.
 Both used distinct Personae seeds, the same owner and network, a hand-carried
 p2panda/Iroh endpoint ticket, and a fresh signed `SessionHello` admission for
 each carrier connection.
@@ -24,7 +24,7 @@ and admission, and received:
 #6 -> intent Accepted
 ```
 
-After session two closed, session three admitted the same peer. Q-PC folded
+After session two closed, session three admitted the same peer. <remote-host> folded
 the owner's signed grant revocation before entering the request loop. The
 client's first application request was the literal intent:
 
@@ -33,7 +33,7 @@ client's first application request was the literal intent:
 #8 -> refused: session authority was revoked
 ```
 
-Q-PC recorded one answered request and
+<remote-host> recorded one answered request and
 `ended Lapsed(Revoked)`. Both processes exited with status zero.
 
 ## Done-condition

@@ -10,7 +10,7 @@
 - [`2026-05-15_renderer_registry_contract_brief.md`](2026-05-15_renderer_registry_contract_brief.md) — sibling. xilem (if embeddable) becomes the implementation of the `mere-domain.panel` in-scene-paint renderer in §7's per-renderer mapping table.
 - [`2026-05-15_os_plumbing_reuse_audit_brief.md`](2026-05-15_os_plumbing_reuse_audit_brief.md) — sibling. xilem brings its own answers to several subsystems (cursors via `cursor-icon`, IME area routing via `RenderRootSignal`, AccessKit via `accesskit::TreeUpdate`); embedding posture changes which subsystems Mere implements vs. inherits.
 - Memory: `user_testing_hardware` (Windows + iMac + Fedora 44 + Mint Acer all locally validatable as of today; supersedes prior `user_linux_hardware` framing).
-- Upstream: [linebender/xilem](https://github.com/linebender/xilem) (cloned shallow at `c:/Users/mark_/Code/repos/xilem/`).
+- Upstream: [linebender/xilem](https://github.com/linebender/xilem) (cloned shallow at `<workspace>/repos/xilem/`).
 
 ---
 
@@ -26,7 +26,7 @@ Five concrete findings below.
 
 ## 1. What I did
 
-Cloned `linebender/xilem` shallow into `c:/Users/mark_/Code/repos/xilem/`. Read:
+Cloned `linebender/xilem` shallow into `<workspace>/repos/xilem/`. Read:
 
 - `ARCHITECTURE.md` (top-level repo structure + Mermaid dep graph)
 - `README.md`

@@ -44,7 +44,7 @@ Neither blob bytes nor local filesystem locations enter personal graph sync.
 ## Physical two-device proof
 
 `h7_sync_peer` authors into independent Redb stores before either transport is
-bound. Windows and Q-PC each create the same two base nodes, then make distinct
+bound. Windows and <remote-host> each create the same two base nodes, then make distinct
 offline edits:
 
 - concurrent titles for the same node;
@@ -80,7 +80,7 @@ ticket exchange, as two configured resident hosts do.
 
 The Windows logs and Redb store remain outside Git under
 `C:\t\mere-h7-physical-bidir-cc8f290a043a40468d3c9e3387f84989`.
-Q-PC used the isolated source tree under
+<remote-host> used the isolated source tree under
 `/tmp/mere-h7-physical-bd541032cc8e45bfaf7203509af45124`; its clean main
 checkout was untouched.
 
@@ -98,7 +98,7 @@ cargo check -p graphshell --bin h7_sync_peer --features personal-sync
 passed on Windows
 
 cargo build -p graphshell --bin h7_sync_peer --features personal-sync
-passed on Q-PC
+passed on <remote-host>
 
 cargo check -p graphshell --target wasm32-unknown-unknown \
   --no-default-features --features web

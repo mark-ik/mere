@@ -79,7 +79,7 @@ This receipt proves the carrier-ready transfer contract and two-store behavior.
 It does not itself claim a physical-device transfer. The
 [H6d physical transfer receipt](2026-07-29_h6d_physical_transfer_closure_receipt.md)
 composes this contract with the admitted p2panda/Iroh carrier between Windows
-and Q-PC, including a transfer interrupted between manifest and blob,
+and <remote-host>, including a transfer interrupted between manifest and blob,
 destination application, and live intent revocation.
 
 Source retirement remains outside this slice. `Move` still means a completed

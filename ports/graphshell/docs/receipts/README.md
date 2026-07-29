@@ -90,19 +90,19 @@ records a real p2panda/QUIC suspend, redial, contiguous-diff resume, accepted
 intent, and intent-first revocation refusal across separate local processes.
 The
 [H6b physical G5f closure note](../2026-07-29_h6b_physical_g5f_closure_receipt.md)
-repeats the combined run between Windows and Q-PC and closes G5. The
+repeats the combined run between Windows and <remote-host> and closes G5. The
 [H6c transfer-core note](../2026-07-29_h6c_transfer_core_receipt.md)
 records the versioned selection engram, independently verified blobs,
 replicate/copy identity rules, policy-carried access history, destination
 AccessRecords, typed receipt, revoked-before-mutation guard, and resumable
 two-store proof. The
 [H6d physical transfer closure note](../2026-07-29_h6d_physical_transfer_closure_receipt.md)
-records the real Windows-to-Q-PC manifest/blob transfer, fresh-admission
+records the real Windows-to-<remote-host> manifest/blob transfer, fresh-admission
 resume, preserved ids/tags/relation, destination AccessRecords, typed receipt,
 and intent-first live revocation. H6 is complete. The
 [H4i remote SSH login note](../2026-07-29_h4i_remote_ssh_login_receipt.md)
 proves the same resident Graphshell authority authenticated a batch-mode
-OpenSSH login to Q-PC through the standard agent endpoint.
+OpenSSH login to <remote-host> through the standard agent endpoint.
 
 The
 [H7a personal-sync core note](../2026-07-29_h7a_personal_sync_core_receipt.md)
@@ -112,4 +112,4 @@ per-device access chronology, and explicit concurrent scalar conflict. The
 [H7b personal-sync closure note](../2026-07-29_h7b_personal_sync_closure_receipt.md)
 records durable Redb reopen, resident-host and admitted-browser composition,
 separate blob-availability metadata, bilateral ticket bootstrap, and
-byte-identical Windows/Q-PC convergence receipts. H7 is complete.
+byte-identical Windows/<remote-host> convergence receipts. H7 is complete.

@@ -788,11 +788,11 @@ mutated. A real sign-out or reboot, remote SSH login, native Firefox import,
 macOS/Linux dialogs, and a configured carry root remain open. See the
 [H4h live cutover and Firefox receipt](../../../ports/graphshell/docs/2026-07-28_h4h_live_cutover_firefox_receipt.md).
 
-**H4i receipt (2026-07-29):** Q-PC returned at `192.168.4.105`. With the
+**H4i receipt (2026-07-29):** <remote-host> returned at `<private-address>`. With the
 installed `graphshell-device-host` running, `personae-agent` disabled, and the
 stock Windows agent stopped, the standard endpoint listed the existing
 `SHA256:d3tQ...` vault key. Batch-mode OpenSSH then authenticated
-`markik@192.168.4.105` and executed a remote command on Darwin 24.6.0. The
+`<remote-user>@<private-address>` and executed a remote command on macOS. The
 remote-login done-condition is closed. Real sign-out or reboot recovery and
 final retirement of the disabled Personae task remain open. See the
 [H4i remote SSH login receipt](../../../ports/graphshell/docs/2026-07-29_h4i_remote_ssh_login_receipt.md).
@@ -863,14 +863,14 @@ not an H5 completion condition. See the
 
 The G5f carrier prerequisites are complete:
 
-- resume after a real interruption was proved across the Windows-to-Q-PC
+- resume after a real interruption was proved across the Windows-to-<remote-host>
   physical run;
 - the corrected intent-first arrangement now rejects a literal
   `IntentInvocation` after revocation through the real p2panda/QUIC carrier.
 
 The first 2026-07-29 execution used separate local processes. A second run then
 repeated the exact suspend, redial, two-diff resume, accepted intent, and
-intent-first revocation refusal across Windows and Q-PC. G5 is complete. See
+intent-first revocation refusal across Windows and <remote-host>. G5 is complete. See
 the [H6a implementation receipt](../../../ports/graphshell/docs/2026-07-29_h6a_g5f_prerequisite_receipt.md)
 and [H6b physical closure receipt](../../../ports/graphshell/docs/2026-07-29_h6b_physical_g5f_closure_receipt.md).
 
@@ -885,7 +885,7 @@ mutation, and resume skips an already-verified destination blob. See the
 
 **H6d receipt (2026-07-29):** H6 is complete. `TransferSourceEndpoint` carries
 the prepared manifest and independently addressed blobs through the existing
-snapshot, intent, resource, and resume verbs. A Windows source and Q-PC
+snapshot, intent, resource, and resume verbs. A Windows source and <remote-host>
 destination transferred one URL and one real file. The destination cached the
 manifest, suspended, redialed under a fresh admission, resumed the current
 projection without a new snapshot, fetched and verified the blob, and applied
@@ -910,7 +910,7 @@ device to another, content hashes verify, the chosen relation closure and tags
 survive, the destination examination appends its own AccessRecord, revocation
 blocks a transfer intent, and interruption resumes without restarting the
 whole transfer. **Met 2026-07-29** by the H6c data-contract receipt and H6d
-Windows-to-Q-PC carrier receipt.
+Windows-to-<remote-host> carrier receipt.
 
 ### H7. Add continuous personal-device sync
 
@@ -958,7 +958,7 @@ Redb replica and LogSync session; explicit close/reopen retains the projection
 and author head. Selected blob availability folds independently of graph
 metadata and carries no bytes. The browser receives public sync cards only
 through its existing challenge and `SessionHello`-admitted device session.
-Windows and Q-PC each reopened independent offline edits, exchanged endpoint
+Windows and <remote-host> each reopened independent offline edits, exchanged endpoint
 tickets in both directions, and converged to byte-identical receipts retaining
 both tags, both chronological access records, one relation, the explicit title
 conflict, both blob locations, four writer heads, and zero pending history.
@@ -1079,7 +1079,7 @@ address book, so a successful dial means mDNS resolved the address by itself.
 
 So the code path and API use are right, and something between the two hosts is
 not carrying it. Two facts narrow it further: the Windows OS resolver resolves
-`Q-PC.local` to 192.168.4.105 without trouble, so basic mDNS is not blocked
+`<remote-host>.local` to <private-address> without trouble, so basic mDNS is not blocked
 outright; and the Windows host is multi-homed (three Wireless LAN pseudo
 adapters, Wi-Fi, Bluetooth PAN, Teredo). A userspace mDNS socket joining the
 multicast group on the wrong interface is the leading hypothesis and matches
@@ -1094,7 +1094,7 @@ inferred.
   8 in 8. Link-local multicast is carried between these hosts.
 - **Windows userspace can receive real mDNS from the wire.** A socket bound to
   5353 with `SO_REUSEADDR`, joined to 224.0.0.251, received live mDNS from
-  192.168.4.26 and .27 within seconds. Port contention with the OS responder is
+  <private-address> and .27 within seconds. Port contention with the OS responder is
   not the problem.
 - **The firewall permits it.** Two enabled Private-profile rules named
   `g5_peer.exe` allow inbound UDP and TCP for exactly that binary path.
@@ -1127,7 +1127,7 @@ service-name filter being right.
   fails to surface the service even when the records are demonstrably on the
   wire, so it is not a usable instrument here either.
 - **Windows advertises correctly and reaches the LAN.** From the Fedora box,
-  37 to 60 packets per 20s from 192.168.4.36, alternating queries and
+  37 to 60 packets per 20s from <private-address>, alternating queries and
   well-formed responses (`QR=RESPONSE`, `an=4`, `ar=4`) carrying instance,
   hostname and TXT. The announcement leaves the host.
 - **The advertised id is the right id.** The instance label base32-decodes to
@@ -1138,7 +1138,7 @@ service-name filter being right.
 - **The iMac's egress works. Its responder stalls.** An earlier reading here,
   that the iMac never puts records on the wire, was an artefact of arming the
   listener too late. With the listener armed first, Fedora received 34 packets
-  from 192.168.4.105 in one window, including its own
+  from <private-address> in one window, including its own
   `tavio6zxv..._p2pandav1._udp.local` instance. Instrumented `swarm-discovery`
   shows every `send_to` returning `Ok` with the full byte count from
   `0.0.0.0:5353`.
@@ -1158,10 +1158,10 @@ service-name filter being right.
   is retracted.** It was dismissed on an A/B that measured whether packets
   reached the wire, when the thing it fixes is *receive* membership. Measured
   2026-07-29 on Windows with a raw listener: a default join to `224.0.0.251`
-  lands on the WSL/Hyper-V adapter `172.28.32.1` and sees **no LAN traffic at
-  all**; a join pinned to the Wi-Fi address `192.168.4.36` immediately receives
+  lands on the WSL/Hyper-V adapter `<private-address>` and sees **no LAN traffic at
+  all**; a join pinned to the Wi-Fi address `<private-address>` immediately receives
   it. With `with_multicast_interfaces_v4` supplying the interface list,
-  `join_group_on_main_v4` reports `JOIN OK on interface 192.168.4.36` (and a
+  `join_group_on_main_v4` reports `JOIN OK on interface <private-address>` (and a
   harmless `JOIN FAILED ... os error 10022` on the virtual adapter). That is a
   real bug on any multi-homed Windows box, worth landing on its own merits as a
   `mark-ik` fork patched by branch. It is necessary, not sufficient: Windows
@@ -1235,7 +1235,7 @@ no error output: all of it falls out of that one line.
 *trigger*, not the boundary of the bug. A fresh PR-#7 peer on a stable network
 was watched announcing (34 packets/12s on loopback), and at t+2m32s its only
 IPv4 interface socket began returning the same errno on every send —
-`error sending mDNS on interface 192.168.4.105: No route to host` then
+`error sending mDNS on interface <private-address>: No route to host` then
 `failed to send mDNS on any IPv4 interface in multi-interface mode` — and never
 recovered (+28 failures per 10s, indefinitely), route table healthy throughout.
 In the same minutes, an unpinned C sender on the same host delivered to Windows
@@ -1316,8 +1316,8 @@ WARN swarm_discovery::socket: error sending mDNS: No route to host (os error 65)
 `errno 65` is `EHOSTUNREACH`. The socket was created and joined `224.0.0.251`
 while the interface held its old state; after the interface went down and came
 back, that binding is stale and every send fails forever. Measured after full
-recovery, with `en1` holding `192.168.4.105`, the default route via
-`192.168.4.1`, and both `224.0.0/4` and `224.0.0.251` routing to `en1`: **1732
+recovery, with `en1` holding `<private-address>`, the default route via
+`<private-address>`, and both `224.0.0/4` and `224.0.0.251` routing to `en1`: **1732
 accumulated errors and 42 more in 15 seconds.** Routing is correct; the socket
 is dead. `swarm-discovery` never re-creates it or re-joins, because it does not
 watch interfaces.

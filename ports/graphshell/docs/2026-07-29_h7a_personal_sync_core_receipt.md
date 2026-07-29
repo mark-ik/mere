@@ -99,6 +99,6 @@ LogSync convergence. The validator mismatch is outside the promoted H7 seam.
 
 The H7b slice adds Redb reopen, resident device-host ownership, admitted
 browser projection, separate blob-availability metadata, and the physical
-Windows-to-Q-PC convergence receipt. Personae carry, enrollment, secret
+Windows-to-<remote-host> convergence receipt. Personae carry, enrollment, secret
 wrapping, revocation, and recovery remain on their separate high-assurance
 lane.

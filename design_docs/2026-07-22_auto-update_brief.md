@@ -11,13 +11,13 @@ alongside the identity vault
 
 1. **Configurable, never a checkbox default.** Update policy is a real
    setting per
-   [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md):
+   [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md):
    off / check-and-notify / download-then-ask / fully automatic; channel
    selection (stable/beta/dev); check cadence; metered-connection behavior.
 2. **Honest status.** Real states surfaced to the user (idle, checking,
    available, downloading, staged, restart-pending, applied, failed with
    reason), never a placebo spinner
-   ([`feedback_real_sync_feedback`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_real_sync_feedback.md)).
+   ([`feedback_real_sync_feedback`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_real_sync_feedback.md)).
 3. **Signed.** Every artifact verified against a release key before apply.
    Release signing keys are company/offline keys, deliberately separate from
    personae user identity.

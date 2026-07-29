@@ -848,7 +848,7 @@ the low-power lane, landed the same week):
 
 - **G5f — the two-device run. COMPLETE 2026-07-29.**
   `ports/graphshell/src/bin/g5_peer.rs`, modelled on `mesh-peer`. **Windows
-  laptop → iMac (Q-PC, macOS 15.7.7) over p2panda/iroh QUIC on the LAN**, both
+  laptop → iMac (<remote-host>, macOS 15.7.7) over p2panda/iroh QUIC on the LAN**, both
   at `0ffe8a62`, distinct identity seeds, ticket pasted between them.
   - *Granted run.* Client: `dialling f541dd2c`, `admitted`, `#1 -> opened,
     status Live, expires Some(1785188082892)`, `#2 -> descriptor "graphshell
@@ -878,7 +878,7 @@ the low-power lane, landed the same week):
   endpoint's current position). `serve` loops against **one** endpoint, because
   an endpoint that dies with its connection can only ever answer a resume with
   a fresh snapshot.
-  *Granted run, Windows → Q-PC.* Session 1: `opened, status Live`, `snapshot of
+  *Granted run, Windows → <remote-host>.* Session 1: `opened, status Live`, `snapshot of
   2 item(s)`, `suspended` (server: served 3, ended `Suspended`). Interruption:
   a new dial, a new handshake, a new admission. Session 2: `opened`, **`resumed
   by replaying 2 contiguous diff(s), revisions 1->2, 2->3`**, `intent
@@ -900,10 +900,10 @@ the low-power lane, landed the same week):
   `session authority was revoked`; the server ended `Lapsed(Revoked)`.
   A request-loop regression test now pins the literal intent shape.
   A second run then closed the physical composition requirement. Windows used
-  the current split client; Q-PC at `192.168.4.105` used corrected commit
+  the current split client; <remote-host> at `<private-address>` used corrected commit
   `86d77d41` as server. Session one suspended, session two redialed and replayed
   both contiguous diffs before accepting intent `#6`, and session three's first
-  request was intent `#8`, refused after the owner revocation. Q-PC ended
+  request was intent `#8`, refused after the owner revocation. <remote-host> ended
   `Lapsed(Revoked)` and both processes exited successfully. Ticket exchange
   satisfies G5's stated discovery alternative; mDNS remains convenience
   coverage. The browser carrier remains separate by G5's own instruction. See

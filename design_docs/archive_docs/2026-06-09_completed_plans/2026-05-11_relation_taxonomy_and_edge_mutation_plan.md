@@ -12,8 +12,8 @@
 - [`2026-05-11_node_per_tile_lineage_plan.md`](2026-05-11_node_per_tile_lineage_plan.md) §5.4 — graph-tree's per-workbench `Provenance::Traversal` lineage facet coexists with kernel-level `Traversal` events (different scopes; see §8.5 below).
 - [`crates/mere-kernel/src/graph/edge_taxonomy.rs`](../../../crates/mere-kernel/src/graph/edge_taxonomy.rs) — current state of the taxonomy.
 - [`crates/mere-kernel/src/graph/edge_payload.rs`](../../../crates/mere-kernel/src/graph/edge_payload.rs) — `EdgePayload` to refactor.
-- `c:/Users/mark_/Code/repos/graphshell/design_docs/graphshell_docs/implementation_strategy/graph/2026-03-14_graph_relation_families.md` — prior thinking on family vocabulary (informative, not authoritative; see [memory: graphshell-donor-not-authority](../../../.claude/memory/project_graphshell_donor_not_authority.md)).
-- `c:/Users/mark_/Code/repos/graphshell/design_docs/graphshell_docs/implementation_strategy/graph/2026-03-21_edge_family_and_provenance_expansion_plan.md` — prior thinking on collapsing `EdgeType` into family + sub-kind (informative).
+- `<workspace>/repos/graphshell/design_docs/graphshell_docs/implementation_strategy/graph/2026-03-14_graph_relation_families.md` — prior thinking on family vocabulary (informative, not authoritative; see [memory: graphshell-donor-not-authority](../../../.claude/memory/project_graphshell_donor_not_authority.md)).
+- `<workspace>/repos/graphshell/design_docs/graphshell_docs/implementation_strategy/graph/2026-03-21_edge_family_and_provenance_expansion_plan.md` — prior thinking on collapsing `EdgeType` into family + sub-kind (informative).
 
 ---
 

@@ -53,7 +53,7 @@ The architectural through-line. Engines (Wry, Genet, Nematic) produce content. T
 
 ## 3. Workspace crates
 
-All scaffolded at `c:\Users\mark_\Code\repos\mere\crates\`. Reserved on crates.io as `0.0.1`. **(2026-05-04 snapshot; the workspace has since reorganized into supercrate subtrees with `meerkat` as host. See the [`DOC_README.md`](DOC_README.md) topology table for the current layout.)**
+All scaffolded at `<workspace>\repos\mere\crates\`. Reserved on crates.io as `0.0.1`. **(2026-05-04 snapshot; the workspace has since reorganized into supercrate subtrees with `meerkat` as host. See the [`DOC_README.md`](DOC_README.md) topology table for the current layout.)**
 
 | Crate | Role |
 |-------|------|
@@ -172,7 +172,7 @@ Then, on 2026-07-09:
    as a colophon). Croft benched with affection as a possible future colloquial
    place-name inside the family.
 
-Other rejected candidates (with reason): Carta (Carta, Inc. wall), Camino (Mozilla Camino® + camino crate), Tela (Schlumberger + tela.com), Waystone (Waystone Group financial), Almagest (Almagest Space Corp.), Holon (Holon Solutions/Platform), Duende (Duende Software/IdentityServer), Synoche (user reported conflict), Snicket (Snicket Labs Feb 2026 rebrand same metaphor), Holloway (Holloway.com publishing platform), Postern (dead Android proxifier ghost), Foundry (Foundry VTT + Foundry FX), Caster (`caster` crate taken), Motif (X11 Motif® + motif.io VC + crate), Syzygy (WPP-owned digital agency), Lemni (Sequoia-backed AI-agent), and others (see [`project_naming_state.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) for the full list).
+Other rejected candidates (with reason): Carta (Carta, Inc. wall), Camino (Mozilla Camino® + camino crate), Tela (Schlumberger + tela.com), Waystone (Waystone Group financial), Almagest (Almagest Space Corp.), Holon (Holon Solutions/Platform), Duende (Duende Software/IdentityServer), Synoche (user reported conflict), Snicket (Snicket Labs Feb 2026 rebrand same metaphor), Holloway (Holloway.com publishing platform), Postern (dead Android proxifier ghost), Foundry (Foundry VTT + Foundry FX), Caster (`caster` crate taken), Motif (X11 Motif® + motif.io VC + crate), Syzygy (WPP-owned digital agency), Lemni (Sequoia-backed AI-agent), and others (see [`project_naming_state.md`](<user-home>\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) for the full list).
 
 ## 7. Pending mechanical work (updated 2026-06-09)
 
@@ -187,9 +187,9 @@ Most of the original list has executed:
 
 ## 8. References
 
-- Memory: [`project_naming_state.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) — full naming-decision history with rejected candidates and TESS findings
-- Memory: [`project_tessera_trust_token.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\project_tessera_trust_token.md) — the tessera concept reservation
-- Memory: [`user_aesthetic_word_list.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\user_aesthetic_word_list.md) — pool of evocative/niche words for future component naming
+- Memory: [`project_naming_state.md`](<user-home>\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) — full naming-decision history with rejected candidates and TESS findings
+- Memory: [`project_tessera_trust_token.md`](<user-home>\.claude\projects\c--Users-mark--Code\memory\project_tessera_trust_token.md) — the tessera concept reservation
+- Memory: [`user_aesthetic_word_list.md`](<user-home>\.claude\projects\c--Users-mark--Code\memory\user_aesthetic_word_list.md) — pool of evocative/niche words for future component naming
 - Inherited: [`graphshell/design_docs/TERMINOLOGY.md`](../../graphshell/design_docs/TERMINOLOGY.md) — pre-Mere canonical terminology (still authoritative for terms not addressed here)
 - Inherited: [`graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md`](../../graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md) — engram canonical spec (1100+ lines)
 - Inherited: [`graphshell/design_docs/verso_docs/technical_architecture/VERSO_AS_PEER.md`](../../graphshell/design_docs/verso_docs/technical_architecture/VERSO_AS_PEER.md) — pre-migration Verso role spec

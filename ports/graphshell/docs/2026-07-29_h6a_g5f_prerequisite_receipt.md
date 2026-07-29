@@ -59,12 +59,12 @@ all-target Clippy passed with only the existing
 
 ## Evidence boundary
 
-The earlier G5f receipt already proved physical Windows-to-Q-PC p2panda
+The earlier G5f receipt already proved physical Windows-to-<remote-host> p2panda
 admission and a later run proved resume across that real device interruption.
 This receipt proves the corrected intent-first arrangement through the exact
 carrier and session code on one machine.
 
 This local proof did not substitute composition for the G5 done-condition.
-The later H6b run repeated the arrangement across Windows and Q-PC so
+The later H6b run repeated the arrangement across Windows and <remote-host> so
 interruption, diff replay, and literal post-revocation intent refusal appeared
 in one physical-link receipt.

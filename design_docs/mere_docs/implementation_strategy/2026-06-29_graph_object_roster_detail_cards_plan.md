@@ -328,7 +328,7 @@ Headed/runtime notes:
 - The fresh app binary for headed verification was
   `C:\t\graphshell-target\debug\meerkat.exe`; using repo-local
   `target/debug/meerkat.exe` produced stale visual checks.
-- Screenshots were saved under `C:\Users\mark_\Code\scry-shots\`:
+- Screenshots were saved under `<workspace>\scry-shots\`:
   `meerkat-roster-tabs-visible-final-full.png`,
   `meerkat-roster-tabs-visible-final-crop.png`, and
   `meerkat-roster-tabs-visible-final-tabs-zoom.png`.
@@ -386,7 +386,7 @@ Verification:
   `render/connections.rs` 89.
 - Headed run launched `C:\t\graphshell-target\debug\meerkat.exe`; window title
   was `Meerkat — Mere chrome on genet`. Screenshots saved under
-  `C:\Users\mark_\Code\screenshots\`:
+  `<workspace>\screenshots\`:
   `meerkat-roster-tail-2026-06-29.png`,
   `meerkat-roster-open-2026-06-29.png`, and
   `meerkat-roster-tab-switch-2026-06-29.png`.

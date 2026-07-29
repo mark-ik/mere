@@ -163,7 +163,7 @@ This is correct for Cable (per-cabal Ed25519 derivation) but doesn't model the b
 
 This bifurcation matters because protocols differ on what "an identity" actually is. Nostr's `nsec` is bytes — the vault can store and load it. Matrix's identity surface is a `user_id` plus per-device Curve25519/Ed25519 keys generated fresh per login, plus cross-signing keys (master / self-signing / user-signing), plus pickled Olm/Megolm sessions that grow into megabytes per conversation, plus a recovery key for secret storage. `matrix-rust-sdk` already has a `StateStore` trait (sqlite-backed by default) for exactly this; the vault's job is to store the *bootstrap* and let the SDK own the rest behind an at-rest encryption boundary the vault provides.
 
-> *Illustrative — signature-only, not implementation-ready (per [`feedback_spec_code_samples_illustrative_vs_implementation_ready`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_spec_code_samples_illustrative_vs_implementation_ready.md))*
+> *Illustrative — signature-only, not implementation-ready (per [`feedback_spec_code_samples_illustrative_vs_implementation_ready`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_spec_code_samples_illustrative_vs_implementation_ready.md))*
 
 ```rust
 /// Per-protocol identity slot. Two categories: vault-modelable (Direct)
@@ -292,7 +292,7 @@ Each backend implements `IdentityStorage`. Multiple may coexist; a vault is open
 | `HardwareTokenStorage` | YubiKey / similar — root key never leaves device | Desktop |
 | `HostBridgeStorage` | Browser-extension host: defers to extension's storage API | Extension/PWA |
 
-Backend selection is a Mere-level deployment choice; the vault doesn't know which it's talking to. (Per [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md), expose this choice in user settings; the default is `OsKeychainStorage`.)
+Backend selection is a Mere-level deployment choice; the vault doesn't know which it's talking to. (Per [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md), expose this choice in user settings; the default is `OsKeychainStorage`.)
 
 ### 3.3 Multi-profile (resolved)
 
@@ -300,7 +300,7 @@ A single user may keep multiple profiles (work / personal / pseudonymous). Profi
 
 **Element-style sub-instances.** Each mod holds N profile-scoped sub-instances simultaneously; the UI shows one at a time but they are all live (resource-using). Switching profiles is a UI operation, not a process restart. The user can explicitly close a profile-scoped sub-instance to reclaim resources (memory, open sockets, sync state) — same shape as Element's "Sign out of this account" without removing the credentials.
 
-This trades resource use (each loaded profile has its own SDK state-dir, gossip subscriptions, open Cable cabal connections) for fast switching. Per [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): expose "auto-load profile on switch" vs "lazy-load on first use" as a setting; default to lazy-load (user opens a profile by name, mods spin up its sub-instances on demand).
+This trades resource use (each loaded profile has its own SDK state-dir, gossip subscriptions, open Cable cabal connections) for fast switching. Per [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): expose "auto-load profile on switch" vs "lazy-load on first use" as a setting; default to lazy-load (user opens a profile by name, mods spin up its sub-instances on demand).
 
 Implication: mods (murm Cable engine; moothold Matrix mod; etc.) hold an `Arc<ProfileId>`-keyed map of sub-instances internally, and the per-mod `mount_personal` / `mount_in_moot` calls take a `ProfileId`. The vault's "current profile" pointer drives UI focus, not mod lifecycle.
 
@@ -315,7 +315,7 @@ A single "recovery phrase recovers everything" mental model is wrong and will mi
 | `ExternallyIssued` | Tokens rotate / expire by design. Recovery = **re-authenticate** to the issuer. |
 | `ExternallyRootedLocallyHeld` | CA-issued certs: revoke + reissue by upstream authority. |
 
-The vault UI must surface this distinction explicitly. Per [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): expose per-slot "what does losing this device mean for this slot?" status to the user, not buried in docs. Phase 2C identity-vault sub-plan owns the UX shape.
+The vault UI must surface this distinction explicitly. Per [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): expose per-slot "what does losing this device mean for this slot?" status to the user, not buried in docs. Phase 2C identity-vault sub-plan owns the UX shape.
 
 ### 3.5 Compatibility
 
@@ -342,7 +342,7 @@ Unlock methods (the *how* of any tier):
 | **Passphrase** | `PassphraseEncryptedStorage`, or fallback when no passkey/keyring | Argon2id-derived KEK; standard |
 | **Hardware token** | `HardwareTokenStorage` | Per-tier UX: session unlock vs per-use challenge |
 
-Combinations are valid (passphrase + passkey 2FA on `PassphraseEncryptedStorage`). Per [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): tier and method are user-overridable per slot; defaults aim for "good enough for a credential of that lineage."
+Combinations are valid (passphrase + passkey 2FA on `PassphraseEncryptedStorage`). Per [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): tier and method are user-overridable per slot; defaults aim for "good enough for a credential of that lineage."
 
 ### 3.7 Isolation and capability scoping (stated threat model)
 
@@ -419,7 +419,7 @@ Mere instances of *kith* / *kin* (per the Mere lexicon) can serve as cooperative
 
 #### Future: decentralized storage time bank
 
-User explicitly named this as the eventual filler for Mode 2: a peer-supplied storage marketplace where users trade availability time. Out of scope for this plan; named here so future work can slot in cleanly. Per [`feedback_targets_over_time_estimates`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_targets_over_time_estimates.md) — the done-condition is "Mode 2 has a Mere-native option," not a date.
+User explicitly named this as the eventual filler for Mode 2: a peer-supplied storage marketplace where users trade availability time. Out of scope for this plan; named here so future work can slot in cleanly. Per [`feedback_targets_over_time_estimates`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_targets_over_time_estimates.md) — the done-condition is "Mode 2 has a Mere-native option," not a date.
 
 ### 4.5 The pattern is general
 
@@ -474,7 +474,7 @@ Notes:
 }
 ```
 
-Both endpoints draw from the same vault slots: WebFinger from `MatrixBootstrap`, `AtprotoBootstrap`, `Misfin`, `CableCabalKey`, etc.; NIP-05 from `Nostr`. Per [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): expose per-slot publication toggle; default to "private until opted in."
+Both endpoints draw from the same vault slots: WebFinger from `MatrixBootstrap`, `AtprotoBootstrap`, `Misfin`, `CableCabalKey`, etc.; NIP-05 from `Nostr`. Per [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): expose per-slot publication toggle; default to "private until opted in."
 
 **Back-claim collection.** When the user adds a slot, Mere offers to publish the matching back-claim (e.g., NIP-39 kind:0 metadata for Nostr; signed-room post for Matrix). The vault tracks back-claim status per slot so the UI can render *verified* vs *unverified* identity cards (§4.2).
 
@@ -514,7 +514,7 @@ Q12 framing: a "publish to NIP-05" toggle separate from "publish to WebFinger" l
 
 The toggle is keyed off the slot, not the endpoint. The endpoint set is derived from the slot's protocol (`Nostr` slot → NIP-05 + WebFinger Nostr-link; `MatrixBootstrap` slot → WebFinger Matrix-link only; etc.).
 
-Advanced users who want to publish to one endpoint but not another edit the published-policy config directly (in-app config editor; not a UI checkbox). Per [`feedback_configurability_over_opinionated_defaults`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): the simple toggle is the default; the granular config exists for users who want it; the UI doesn't drag everyone through the granular case.
+Advanced users who want to publish to one endpoint but not another edit the published-policy config directly (in-app config editor; not a UI checkbox). Per [`feedback_configurability_over_opinionated_defaults`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_configurability_over_opinionated_defaults.md): the simple toggle is the default; the granular config exists for users who want it; the UI doesn't drag everyone through the granular case.
 
 ### 4.10 Phase boundary
 

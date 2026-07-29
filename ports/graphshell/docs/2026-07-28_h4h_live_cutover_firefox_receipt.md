@@ -41,7 +41,7 @@ correct update returned the system to:
 - stock OpenSSH endpoint: served by Graphshell;
 - listed key: the expected fingerprint above.
 
-The known laptop at `192.168.4.38:22` remained unreachable. The installer did
+The known laptop at `<private-address>:22` remained unreachable. The installer did
 not retire `personae-agent`; retirement still requires a real sign-out or
 reboot receipt and a real remote public-key login.
 

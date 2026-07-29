@@ -156,7 +156,7 @@ pub trait BilateralProtocol {
 }
 ```
 
-Per [`feedback_spec_code_samples_illustrative_vs_implementation_ready`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_spec_code_samples_illustrative_vs_implementation_ready.md), this trait sketch is **illustrative-signature-only**. The concrete trait shape is a Phase 2 deliverable once Cable's actual concrete implementation surfaces the right associated types.
+Per [`feedback_spec_code_samples_illustrative_vs_implementation_ready`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_spec_code_samples_illustrative_vs_implementation_ready.md), this trait sketch is **illustrative-signature-only**. The concrete trait shape is a Phase 2 deliverable once Cable's actual concrete implementation surfaces the right associated types.
 
 ### 4.3 Cable as the first concrete module
 
@@ -362,7 +362,7 @@ Subsequent phases (per the migration plan):
 1. **Concrete `BilateralProtocol` trait shape** — settles when Cable's actual implementation surfaces the right associated types
 2. **MLS adoption decision** — when/whether to add MLS as a sibling protocol module
 3. **Co-op-to-moot promotion path** — if a co-op session wants to grow into a long-term shared moot, what's the boundary-crossing model?
-4. **Cable.rs upstream contributions** — deferred per [`feedback_upstream_contributions`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\feedback_upstream_contributions.md). Build internal first; revisit later.
+4. **Cable.rs upstream contributions** — deferred per [`feedback_upstream_contributions`](<user-home>\.claude\projects\c--Users-mark--Code\memory\feedback_upstream_contributions.md). Build internal first; revisit later.
 5. **Per-cabal data-dir layout details** — final form of subdirectory conventions, snapshot/checkpoint mechanics, atomicity guarantees during sync
 6. **Sodiumoxide vs ed25519-dalek/blake2** — Cable spec §5.2 noted the cable.rs upstream uses sodiumoxide; mere-identity will likely use ed25519-dalek + blake2 (pure Rust) for consistency with rest of Mere. Phase 2 decision: fork Cable wire-protocol code to use pure-Rust crypto, or accept sodiumoxide as a transitive dep.
 7. **async-std vs tokio** — Cable spec §5.2 noted cable.rs uses async-std; Mere uses tokio. Phase 2 decision: implement Cable's tokio-native peer manager in murmuring (recommended per migration plan), or use a tokio-compat shim.
