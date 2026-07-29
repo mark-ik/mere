@@ -1221,10 +1221,45 @@ announces that only through `tracing::warn!`. `g5_peer` installs no subscriber,
 so the message goes nowhere. Alive process, no announcements, no query answers,
 no error output: all of it falls out of that one line.
 
-**The leading explanation is an empty address set, not a dead actor.** The
-`RUST_LOG` subscriber added to `g5_peer` surfaced a path we had never seen:
-`swarm_discovery::sender: no addresses for peer, not announcing`. Reading it
-back through the two crates:
+**RESOLVED 2026-07-29: the multicast socket does not survive a link flap.**
+Toggling the iMac's Wi-Fi off and on, with a peer running under `RUST_LOG`,
+reproduced the stall immediately and named it:
+
+```
+WARN swarm_discovery::socket: error sending mDNS: No route to host (os error 65)
+```
+
+`errno 65` is `EHOSTUNREACH`. The socket was created and joined `224.0.0.251`
+while the interface held its old state; after the interface went down and came
+back, that binding is stale and every send fails forever. Measured after full
+recovery, with `en1` holding `192.168.4.105`, the default route via
+`192.168.4.1`, and both `224.0.0/4` and `224.0.0.251` routing to `en1`: **1732
+accumulated errors and 42 more in 15 seconds.** Routing is correct; the socket
+is dead. `swarm-discovery` never re-creates it or re-joins, because it does not
+watch interfaces.
+
+This accounts for every observation. The process stays alive and keeps printing
+`waiting for a peer...` because the sender loop is healthy at roughly 2.8 calls
+a second; it is only the socket underneath that is dead. Loopback sees nothing
+because the send fails before any delivery. Direct PTR queries go unanswered
+because response sends fail identically. And it explains the correlation with
+the failing Wi-Fi.
+
+**The "heisenbug" was a coincidence, and the retraction is worth keeping.** Four
+instrumented runs and one subscriber run never reproduced it, which looked like
+probes suppressing a timing bug. They did not: every instrumented run happened
+to be on a stable network. Nothing about instrumentation was ever relevant.
+
+**The fix already exists upstream.** `n0-computer/iroh-address-lookups` PR #7,
+"maintain multicast sockets for all usable IPv4 interfaces", watches the host's
+interfaces via `netwatch` and adds and removes multicast sockets at runtime as
+interfaces come and go, which is exactly what a link flap needs. Its companion
+is `rkuhn/swarm-discovery#25` (pin egress with `IP_MULTICAST_IF`, join per
+interface). Track PR #7's branch rather than authoring a fork; the existing
+`mark-ik/iroh` fork does not contain this crate, which lives in its own repo.
+
+Superseded hypothesis, kept because the reasoning still reads plausibly and the
+code path is real: an emptied address set.
 
 1. `iroh-mdns-address-lookup` handles every address change by calling
    `address_lookup.remove_all()` **first**, then re-adding whatever the new

@@ -96,6 +96,24 @@ pub enum PersonalGraphEvent {
         key: String,
         handler: String,
     },
+    ObserveBlobAvailability {
+        observation: BlobAvailabilityObservation,
+    },
+}
+
+/// One immutable statement about which device currently holds addressed bytes.
+///
+/// Blob bytes never enter this record. Later observations supersede the
+/// current device state without deleting its earlier chronology.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BlobAvailabilityObservation {
+    pub record_id: Uuid,
+    pub container_id: Uuid,
+    pub blob: [u8; 32],
+    pub device: String,
+    pub available: bool,
+    pub at_ms: u64,
 }
 
 /// One signed authoring turn.
@@ -134,6 +152,7 @@ pub struct SyncSelection {
     pub access_records: bool,
     pub saved_scenes: bool,
     pub handler_preferences: bool,
+    pub blob_availability: bool,
 }
 
 impl SyncSelection {
@@ -157,6 +176,11 @@ impl SyncSelection {
         self
     }
 
+    pub fn with_blob_availability(mut self, enabled: bool) -> Self {
+        self.blob_availability = enabled;
+        self
+    }
+
     fn projects(&self, event: &PersonalGraphEvent) -> bool {
         match event {
             PersonalGraphEvent::SetFacet { facet, .. }
@@ -164,6 +188,7 @@ impl SyncSelection {
             PersonalGraphEvent::AppendAccess { .. } => self.access_records,
             PersonalGraphEvent::SaveScene { .. } => self.saved_scenes,
             PersonalGraphEvent::SetHandlerPreference { .. } => self.handler_preferences,
+            PersonalGraphEvent::ObserveBlobAvailability { .. } => self.blob_availability,
             _ => true,
         }
     }
@@ -190,6 +215,8 @@ pub struct SyncProjection {
     pub access_records: Vec<AccessRecord>,
     pub scenes: BTreeMap<Uuid, SavedSceneV1>,
     pub handler_preferences: BTreeMap<String, String>,
+    pub blob_availability: Vec<BlobAvailabilityObservation>,
+    pub available_blobs: BTreeMap<[u8; 32], BTreeSet<String>>,
     pub pending: Vec<PendingCausalOperation>,
     pub conflicts: Vec<SyncConflict>,
     pub writers: Vec<WriterReceipt>,
@@ -311,6 +338,14 @@ fn validate_event(event: &PersonalGraphEvent) -> Result<(), Reject> {
             Err(Reject::new(
                 "empty-handler-preference",
                 "handler preference key and value must be non-empty",
+            ))
+        }
+        PersonalGraphEvent::ObserveBlobAvailability { observation }
+            if observation.device.trim().is_empty() =>
+        {
+            Err(Reject::new(
+                "empty-blob-availability-device",
+                "blob availability observation must name its source device",
             ))
         }
         _ => Ok(()),
@@ -634,6 +669,7 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     let mut access = BTreeMap::<Uuid, AccessRecord>::new();
     let mut scenes = BTreeMap::new();
     let mut handlers = BTreeMap::new();
+    let mut blob_availability = BTreeMap::<Uuid, BlobAvailabilityObservation>::new();
     let mut writers = Vec::new();
 
     for &index in &causal.order {
@@ -648,7 +684,14 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
         });
         for event in &stored.record.events {
             if selection.projects(event) {
-                apply_event(&mut graph, &mut access, &mut scenes, &mut handlers, event);
+                apply_event(
+                    &mut graph,
+                    &mut access,
+                    &mut scenes,
+                    &mut handlers,
+                    &mut blob_availability,
+                    event,
+                );
             }
         }
     }
@@ -676,11 +719,38 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
         }
     }
 
+    let mut blob_availability = blob_availability.into_values().collect::<Vec<_>>();
+    blob_availability.sort_by_key(|observation| {
+        (
+            observation.at_ms,
+            observation.device.clone(),
+            observation.record_id,
+        )
+    });
+    let mut latest = BTreeMap::<([u8; 32], String), &BlobAvailabilityObservation>::new();
+    for observation in &blob_availability {
+        let key = (observation.blob, observation.device.clone());
+        let replace = latest.get(&key).is_none_or(|current| {
+            (observation.at_ms, observation.record_id) > (current.at_ms, current.record_id)
+        });
+        if replace {
+            latest.insert(key, observation);
+        }
+    }
+    let mut available_blobs = BTreeMap::<[u8; 32], BTreeSet<String>>::new();
+    for ((blob, device), observation) in latest {
+        if observation.available {
+            available_blobs.entry(blob).or_default().insert(device);
+        }
+    }
+
     Ok(SyncProjection {
         graph,
         access_records,
         scenes,
         handler_preferences: handlers,
+        blob_availability,
+        available_blobs,
         pending: causal.pending,
         conflicts,
         writers,
@@ -692,6 +762,7 @@ fn apply_event(
     access: &mut BTreeMap<Uuid, AccessRecord>,
     scenes: &mut BTreeMap<Uuid, SavedSceneV1>,
     handlers: &mut BTreeMap<String, String>,
+    blob_availability: &mut BTreeMap<Uuid, BlobAvailabilityObservation>,
     event: &PersonalGraphEvent,
 ) {
     match event {
@@ -806,6 +877,11 @@ fn apply_event(
         PersonalGraphEvent::SetHandlerPreference { key, handler } => {
             handlers.insert(key.clone(), handler.clone());
         }
+        PersonalGraphEvent::ObserveBlobAvailability { observation } => {
+            blob_availability
+                .entry(observation.record_id)
+                .or_insert_with(|| observation.clone());
+        }
     }
 }
 
@@ -883,6 +959,9 @@ fn event_target(event: &PersonalGraphEvent) -> String {
         }
         PersonalGraphEvent::SaveScene { node, .. } => format!("scene/{node}"),
         PersonalGraphEvent::SetHandlerPreference { key, .. } => format!("handler/{key}"),
+        PersonalGraphEvent::ObserveBlobAvailability { observation } => {
+            format!("blob-availability/{}", observation.record_id)
+        }
     }
 }
 
@@ -896,7 +975,7 @@ mod tests {
     use crate::access::{AccessAction, AccessTransition};
     use mere::canvas::CartographyGeometry;
     use mere::kernel::graph::{EdgeFamily, RelationKind, SemanticSubKind};
-    use muniment::MemoryBackend;
+    use muniment::{MemoryBackend, RedbBackend};
     use personae::{IdentityProvider, InMemoryProvider};
     use std::sync::Arc;
     use std::time::Duration;
@@ -921,6 +1000,7 @@ mod tests {
             .with_access_records(true)
             .with_saved_scenes(true)
             .with_handler_preferences(true)
+            .with_blob_availability(true)
     }
 
     fn access(device: &str, id: u128, at_ms: u64) -> AccessRecord {
@@ -1054,6 +1134,16 @@ mod tests {
             PersonalGraphEvent::SetHandlerPreference {
                 key: "https".into(),
                 handler: "turnstone".into(),
+            },
+            PersonalGraphEvent::ObserveBlobAvailability {
+                observation: BlobAvailabilityObservation {
+                    record_id: Uuid::from_u128(3),
+                    container_id: A,
+                    blob: [0x42; 32],
+                    device: "bob-phone".into(),
+                    available: true,
+                    at_ms: 95,
+                },
             },
         ])
         .await
@@ -1195,6 +1285,11 @@ mod tests {
                 .map(String::as_str),
             Some("turnstone")
         );
+        assert_eq!(alice_projection.blob_availability.len(), 1);
+        assert_eq!(
+            alice_projection.available_blobs.get(&[0x42; 32]),
+            Some(&BTreeSet::from(["bob-phone".to_string()]))
+        );
         assert!(
             alice_projection
                 .writers
@@ -1284,5 +1379,70 @@ mod tests {
                 .count(),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn redb_reopen_restores_projection_and_resumes_the_author_head() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("graphshell-personal-sync.redb");
+        let seed = [0x51; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let roster = SyncRoster::new([subject]);
+
+        let first = {
+            let backend = RedbBackend::open(&path).unwrap();
+            let mut replica =
+                PersonalGraphReplica::new(backend, GRAPH, seed, roster.clone(), selection());
+            replica
+                .author(vec![
+                    PersonalGraphEvent::AddNode {
+                        id: A,
+                        address: "https://a.test/".into(),
+                        title: "A".into(),
+                    },
+                    PersonalGraphEvent::AddTag {
+                        node: A,
+                        tag: "before-restart".into(),
+                    },
+                    PersonalGraphEvent::AppendAccess {
+                        record: access("durable-device", 4, 120),
+                    },
+                ])
+                .await
+                .unwrap()
+        };
+
+        let backend = RedbBackend::open(&path).unwrap();
+        let mut reopened =
+            PersonalGraphReplica::new(backend, GRAPH, seed, roster.clone(), selection());
+        let restored = reopened.projection().await.unwrap();
+        assert!(
+            restored
+                .graph
+                .get_node_by_id(A)
+                .unwrap()
+                .1
+                .tags
+                .contains("before-restart")
+        );
+        assert_eq!(restored.access_records.len(), 1);
+
+        let second = reopened
+            .author(vec![PersonalGraphEvent::AddTag {
+                node: A,
+                tag: "after-restart".into(),
+            }])
+            .await
+            .unwrap();
+        assert_eq!(second.header.seq_num, first.header.seq_num + 1);
+        assert_eq!(
+            second.header.backlink.as_ref().map(|hash| *hash.as_bytes()),
+            Some(*first.hash.as_bytes())
+        );
+        let final_projection = reopened.projection().await.unwrap();
+        let node = final_projection.graph.get_node_by_id(A).unwrap().1;
+        assert!(node.tags.contains("before-restart"));
+        assert!(node.tags.contains("after-restart"));
+        assert!(final_projection.pending.is_empty());
     }
 }

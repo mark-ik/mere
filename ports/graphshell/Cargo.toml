@@ -53,6 +53,7 @@ web = [
 personal-sync = [
     "native",
     "web",
+    "muniment/redb",
     "dep:p2panda-core",
     "dep:p2panda-store",
     "dep:stickleback",
@@ -183,4 +184,5 @@ required-features = ["native"]
 
 [dev-dependencies]
 pollster = "0.4"
+tempfile = "3"
 tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }
