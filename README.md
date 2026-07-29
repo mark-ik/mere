@@ -207,12 +207,12 @@ Mere consumes these one-way (it depends on them; they never depend on Mere):
   the product-neutral host contract (`genet-host-api`). Pelt is Genet's
   reference application; Mere does not depend on Pelt.
   The `taffy` / `ipc-channel` forks are vendored there and patched in.
-- `netrender` (`mark-ik/netrender`): the paint-realization engine. Public, with
+- `netrender` (`merely-made/netrender`): the paint-realization engine. Public, with
   its own upstream lineage.
 - `retinue` (`mark-ik/retinue`): the radio family in one workspace — the
   Reticulum implementation plus `tulle`, `sennet`, `tucket`, and the firmware.
   MPL-2.0, unlike the rest of the family.
-- `smolweb` (`mark-ik/smolweb`): the small-web wire layer (`misfin` and the
+- `smolweb` (`merely-made/smolweb`): the small-web wire layer (`misfin` and the
   spartan / nex / guppy protocol crates). Held in stewardship for their
   protocols' communities.
 - `boa` (`mark-ik/boa`): the Boa JavaScript document-host lane.

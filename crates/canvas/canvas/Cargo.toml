@@ -59,9 +59,9 @@ armillary.workspace = true
 
 # Compose the underlay (+ the node-children document) into one Scene, and
 # present it. Path deps on the sibling netrender checkout, like meerkat's.
-paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
-paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
-netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+paint_list_render = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
+paint_list_api = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
+netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 
 # The node-children layer: a persistent genet ScriptedDom (abs-pos node subtrees
 # under the camera-transformed container), driven through IncrementalLayout

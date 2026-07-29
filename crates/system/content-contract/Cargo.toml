@@ -21,8 +21,8 @@ linebender_resource_handle = "0.1"
 parley.workspace = true
 postcard = { version = "1", features = ["alloc"] }
 serde.workspace = true
-netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main", features = ["serde"] }
-paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main", features = ["serde"] }
+paint_list_render = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

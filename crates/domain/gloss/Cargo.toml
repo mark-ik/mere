@@ -24,4 +24,4 @@ canvas.workspace = true
 register-theme.workspace = true
 tracing.workspace = true
 uxtree.workspace = true
-netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
