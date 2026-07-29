@@ -1231,7 +1231,41 @@ announces that only through `tracing::warn!`. `g5_peer` installs no subscriber,
 so the message goes nowhere. Alive process, no announcements, no query answers,
 no error output: all of it falls out of that one line.
 
-**RESOLVED 2026-07-29: the multicast socket does not survive a link flap.**
+**REFINED, same day, after catching it live with tracing on:** the flap is a
+*trigger*, not the boundary of the bug. A fresh PR-#7 peer on a stable network
+was watched announcing (34 packets/12s on loopback), and at t+2m32s its only
+IPv4 interface socket began returning the same errno on every send —
+`error sending mDNS on interface 192.168.4.105: No route to host` then
+`failed to send mDNS on any IPv4 interface in multi-interface mode` — and never
+recovered (+28 failures per 10s, indefinitely), route table healthy throughout.
+In the same minutes, an unpinned C sender on the same host delivered to Windows
+(8 packets observed in a properly overlapped window) while the peer's socket
+failed every send.
+
+The unifying statement, which fits every observation across both days: **on this
+iMac, some routine Wi-Fi state transition (every few minutes on the eero mesh;
+always on a link flap) permanently wedges UDP multicast sockets that existed
+before it — subsequent sends return `EHOSTUNREACH` forever — while sockets
+created after the transition work.** Every ad-hoc probe (C, Python) used a
+fresh socket and so always "worked"; every long-lived peer socket eventually
+wedged. `swarm-discovery` keeps its sockets for the life of the process and
+treats send errors as log-and-continue, so one transition silences a peer
+permanently. PR #7's netwatch arm does not help: it reacts to interface
+add/remove, and the interface set never changes.
+
+The upstream-shaped fix is socket re-creation: on persistent send failure (or
+on link/route events, not just interface add/remove), rebuild the socket and
+re-join the group. Nobody has written that yet, in either crate.
+
+Also observed on the fresh peer: every IPv6 send fails the same way from
+process start (`error sending mDNS on IPv6: No route to host`), hours after the
+flap, so the host-level IPv6 multicast state never recovered. Separate, lower
+priority; IPv4 carries discovery here.
+
+The original account of the flap experiment follows, kept because its
+measurements stand:
+
+**2026-07-29 (earlier): the multicast socket does not survive a link flap.**
 Toggling the iMac's Wi-Fi off and on, with a peer running under `RUST_LOG`,
 reproduced the stall immediately and named it:
 
