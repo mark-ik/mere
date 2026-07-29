@@ -148,6 +148,11 @@ path = "src/bin/h6_transfer_peer/main.rs"
 required-features = ["native", "web"]
 
 [[bin]]
+name = "h7_sync_peer"
+path = "src/bin/h7_sync_peer.rs"
+required-features = ["personal-sync"]
+
+[[bin]]
 name = "n4_policy_receipt"
 path = "src/bin/n4_policy_receipt.rs"
 required-features = ["native"]

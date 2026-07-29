@@ -21,7 +21,7 @@ use crate::browser_carrier::{
     BrowserMessage, NativeIdentityFailure, NativeIdentityResult, admit_browser_session,
     read_native_message_async, write_native_message_async,
 };
-use crate::identity_endpoint::IdentityEndpoint;
+use crate::identity_endpoint::{IdentityEndpoint, SupplementalCard};
 use crate::lifecycle::SessionAuthority;
 use crate::native::identity_ui::{NativeIdentityUi, apply_native_identity_action};
 use crate::native::personae_host::PersonaeHost;
@@ -56,6 +56,38 @@ pub async fn serve_identity_native_messages<P, S, U, R, W>(
     reader: &mut R,
     writer: &mut W,
     session_duration_ms: u64,
+) -> Result<Option<SessionSummary>, BrowserHostError>
+where
+    P: IdentityProvider,
+    S: IdentityStorage + 'static,
+    U: NativeIdentityUi,
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    serve_identity_native_messages_with_cards(
+        identity,
+        personae,
+        native_ui,
+        launcher,
+        reader,
+        writer,
+        session_duration_ms,
+        Vec::new(),
+    )
+    .await
+}
+
+/// Serve the admitted resident-device surface with additional public cards.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn serve_identity_native_messages_with_cards<P, S, U, R, W>(
+    identity: &P,
+    personae: Arc<PersonaeHost<S>>,
+    native_ui: &U,
+    launcher: BrowserLauncher,
+    reader: &mut R,
+    writer: &mut W,
+    session_duration_ms: u64,
+    supplemental_cards: Vec<SupplementalCard>,
 ) -> Result<Option<SessionSummary>, BrowserHostError>
 where
     P: IdentityProvider,
@@ -128,7 +160,11 @@ where
         subject: base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(authority.principal().subject),
     };
-    let mut endpoint = IdentityEndpoint::for_admitted(Arc::clone(&personae), &authority);
+    let mut endpoint = IdentityEndpoint::for_admitted_with_cards(
+        Arc::clone(&personae),
+        &authority,
+        supplemental_cards,
+    );
     let server = tokio::spawn(async move {
         let revocations = RwLock::new(revocations);
         let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {
@@ -245,4 +281,210 @@ fn local_browser_grant<P: IdentityProvider>(
             nonce,
         ),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use graphshell_protocol::{
+        CapabilityProfile, CarrierRequest, PortableCardV1, ProtocolVersion, ResourceRequest,
+        SessionOpen,
+    };
+    use personae::{
+        Ed25519Keypair, IdentityVault, InMemoryProvider, InMemoryStorage, Profile, ProfileId,
+    };
+
+    use super::*;
+    use crate::browser_carrier::{BrowserHostMessage, CHROMIUM_EXTENSION_ID};
+    use crate::identity::VaultProtectionView;
+    use crate::native::identity_ui::UnavailableNativeIdentityUi;
+
+    #[tokio::test]
+    async fn admitted_browser_receives_resident_personal_sync_cards() {
+        let identity = InMemoryProvider::from_seed([0x81; 32]);
+        let profile = Profile::new(
+            ProfileId("default".into()),
+            "Default",
+            Ed25519Keypair::from_seed([0x82; 32]),
+        );
+        let personae = Arc::new(PersonaeHost::new(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            None,
+            VaultProtectionView::Ephemeral,
+        ));
+        let launcher =
+            BrowserLauncher::parse(&[format!("chrome-extension://{CHROMIUM_EXTENSION_ID}/")])
+                .unwrap();
+        let supplemental = SupplementalCard {
+            adapter: "graphshell.personal-sync".into(),
+            source_id: "receipt-graph".into(),
+            card: PortableCardV1 {
+                title: "Personal graph sync".into(),
+                values: Vec::new(),
+                badges: vec!["Durable".into()],
+                media: Vec::new(),
+            },
+        };
+        let (host_stream, browser_stream) = tokio::io::duplex(64 * 1024);
+        let (mut host_reader, mut host_writer) = tokio::io::split(host_stream);
+        let (mut browser_reader, mut browser_writer) = tokio::io::split(browser_stream);
+        let ui = UnavailableNativeIdentityUi;
+
+        let host = serve_identity_native_messages_with_cards(
+            &identity,
+            personae,
+            &ui,
+            launcher,
+            &mut host_reader,
+            &mut host_writer,
+            60_000,
+            vec![supplemental],
+        );
+        let browser = async {
+            let challenge =
+                match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                {
+                    BrowserHostMessage::Challenge { challenge } => challenge,
+                    other => panic!("expected browser challenge, got {other:?}"),
+                };
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Connect {
+                    schema: "mere.graphshell/browser-connect/v1".into(),
+                    host_nonce: challenge.host_nonce,
+                    client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD
+                        .encode([0x83; 32]),
+                },
+            )
+            .await
+            .unwrap();
+            assert!(matches!(
+                read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                BrowserHostMessage::Connected { .. }
+            ));
+
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Request {
+                    request: CarrierRequest {
+                        id: 1,
+                        body: CarrierRequestBody::Open(Box::new(SessionOpen {
+                            version: ProtocolVersion { major: 1, minor: 0 },
+                            capabilities: CapabilityProfile::default(),
+                        })),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let projection =
+                match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                {
+                    BrowserHostMessage::Response { response } => match response.body.unwrap() {
+                        CarrierResponseBody::Opened(opened) => {
+                            opened.descriptor.projections[0].request.clone()
+                        }
+                        other => panic!("expected opened response, got {other:?}"),
+                    },
+                    other => panic!("expected carrier response, got {other:?}"),
+                };
+
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Request {
+                    request: CarrierRequest {
+                        id: 2,
+                        body: CarrierRequestBody::Snapshot(projection),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let snapshot =
+                match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                {
+                    BrowserHostMessage::Response { response } => match response.body.unwrap() {
+                        CarrierResponseBody::Snapshot(snapshot) => snapshot,
+                        other => panic!("expected snapshot response, got {other:?}"),
+                    },
+                    other => panic!("expected carrier response, got {other:?}"),
+                };
+            let resource = snapshot
+                .presentation
+                .offers
+                .values()
+                .flatten()
+                .find(|offer| offer.semantics.label == "Personal graph sync")
+                .expect("admitted device scene includes personal sync")
+                .resource;
+
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Request {
+                    request: CarrierRequest {
+                        id: 3,
+                        body: CarrierRequestBody::Resource(ResourceRequest {
+                            session: snapshot.session.clone(),
+                            resource,
+                        }),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let card = match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                BrowserHostMessage::Response { response } => match response.body.unwrap() {
+                    CarrierResponseBody::Resource(resource) => {
+                        serde_json::from_slice::<PortableCardV1>(&resource.bytes).unwrap()
+                    }
+                    other => panic!("expected resource response, got {other:?}"),
+                },
+                other => panic!("expected carrier response, got {other:?}"),
+            };
+
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Request {
+                    request: CarrierRequest {
+                        id: 4,
+                        body: CarrierRequestBody::Close,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            assert!(matches!(
+                read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                BrowserHostMessage::Response {
+                    response: graphshell_protocol::CarrierResponse {
+                        body: Ok(CarrierResponseBody::Closed),
+                        ..
+                    }
+                }
+            ));
+            card
+        };
+
+        let (summary, card) = tokio::join!(host, browser);
+        assert_eq!(card.title, "Personal graph sync");
+        assert!(summary.unwrap().is_some());
+    }
 }

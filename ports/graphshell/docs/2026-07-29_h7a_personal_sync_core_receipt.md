@@ -2,9 +2,10 @@
 
 Date: 2026-07-29
 
-Status: the bounded native sync core is implemented. H7 remains open for
-durable reopen, device-host/browser composition, physical-device convergence,
-and blob availability.
+Status: the bounded native sync core is implemented. The later
+[H7b closure receipt](2026-07-29_h7b_personal_sync_closure_receipt.md) closes
+the durable reopen, device-host/browser composition, physical-device
+convergence, and blob-availability gates.
 
 ## Implemented boundary
 
@@ -94,18 +95,10 @@ disabled while those tests require its JSON-schema validator. All 14 Knot sync
 tests pass, including durable author-head/frontier reopen and real p2panda
 LogSync convergence. The validator mismatch is outside the promoted H7 seam.
 
-## Remaining H7 gates
+## H7 closure
 
-This is a native core receipt, not full H7 closure.
-
-- The proof uses `MemoryBackend`; a durable p2panda store must reopen and
-  reproduce the same projection.
-- The resident Graphshell device host does not yet own and drive the replica,
-  and the browser/PWA surface does not yet reach it through its admitted
-  session.
-- The two-peer transport proof is in-process. Two physical devices must edit
-  offline, reconnect, and produce the same convergence and chronology receipt.
-- Blob availability remains a separate metadata lane and is not implemented
-  by this event grammar.
-- Personae carry, enrollment, secret wrapping, revocation, and recovery remain
-  on their separate high-assurance lane.
+The H7b slice adds Redb reopen, resident device-host ownership, admitted
+browser projection, separate blob-availability metadata, and the physical
+Windows-to-Q-PC convergence receipt. Personae carry, enrollment, secret
+wrapping, revocation, and recovery remain on their separate high-assurance
+lane.

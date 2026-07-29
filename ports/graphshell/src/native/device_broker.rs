@@ -14,17 +14,20 @@ use personae::IdentityStorage;
 use personae::bootstrap;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::RwLock;
 
 use crate::browser_carrier::{
     AllowedExtensions, BrowserCarrierError, BrowserLauncher, read_native_message_async,
     write_native_message_async,
 };
-use crate::native::browser_host::{BrowserHostError, serve_identity_native_messages};
+use crate::identity_endpoint::SupplementalCard;
+use crate::native::browser_host::{BrowserHostError, serve_identity_native_messages_with_cards};
 use crate::native::identity_ui::NativeIdentityUi;
 use crate::native::personae_host::PersonaeHost;
 
 pub const DEVICE_ENDPOINT_ENV: &str = "GRAPHSHELL_DEVICE_ENDPOINT";
 const BROKER_HELLO_SCHEMA: &str = "mere.graphshell/device-broker-hello/v1";
+pub type DeviceSupplementalCards = Arc<RwLock<Vec<SupplementalCard>>>;
 
 #[cfg(windows)]
 const DEFAULT_WINDOWS_DEVICE_ENDPOINT: &str = r"\\.\pipe\graphshell-device-browser";
@@ -133,6 +136,31 @@ where
         native_ui,
         allowlist,
         session_duration_ms,
+        None,
+    )
+    .await
+}
+
+/// Serve browser relays with public cards owned by another resident authority.
+pub async fn serve_browser_broker_with_cards<S, U>(
+    endpoint: &str,
+    personae: Arc<PersonaeHost<S>>,
+    native_ui: Arc<U>,
+    allowlist: AllowedExtensions,
+    session_duration_ms: u64,
+    supplemental_cards: DeviceSupplementalCards,
+) -> Result<(), DeviceBrokerError>
+where
+    S: IdentityStorage + 'static,
+    U: NativeIdentityUi + 'static,
+{
+    serve(
+        endpoint,
+        personae,
+        native_ui,
+        allowlist,
+        session_duration_ms,
+        Some(supplemental_cards),
     )
     .await
 }
@@ -144,6 +172,7 @@ async fn serve_connection<S, U, R, W>(
     native_ui: Arc<U>,
     allowlist: &AllowedExtensions,
     session_duration_ms: u64,
+    supplemental_cards: Option<DeviceSupplementalCards>,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -156,7 +185,11 @@ where
         .ok_or(DeviceBrokerError::MissingHello)?;
     let launcher = hello.accept()?;
     allowlist.admit(&launcher)?;
-    let summary = serve_identity_native_messages(
+    let supplemental_cards = match supplemental_cards {
+        Some(cards) => cards.read().await.clone(),
+        None => Vec::new(),
+    };
+    let summary = serve_identity_native_messages_with_cards(
         personae.as_ref(),
         Arc::clone(&personae),
         native_ui.as_ref(),
@@ -164,6 +197,7 @@ where
         reader,
         writer,
         session_duration_ms,
+        supplemental_cards,
     )
     .await?;
     if let Some(summary) = summary {
@@ -190,6 +224,7 @@ async fn serve<S, U>(
     native_ui: Arc<U>,
     allowlist: AllowedExtensions,
     session_duration_ms: u64,
+    supplemental_cards: Option<DeviceSupplementalCards>,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -208,6 +243,7 @@ where
         let personae = Arc::clone(&personae);
         let native_ui = Arc::clone(&native_ui);
         let allowlist = allowlist.clone();
+        let supplemental_cards = supplemental_cards.clone();
         tokio::spawn(async move {
             if let Err(error) = verify_same_user(&connection) {
                 tracing::warn!(%error, "browser device broker rejected a different user");
@@ -221,6 +257,7 @@ where
                 native_ui,
                 &allowlist,
                 session_duration_ms,
+                supplemental_cards,
             )
             .await
             {
@@ -350,6 +387,7 @@ async fn serve<S, U>(
     native_ui: Arc<U>,
     allowlist: AllowedExtensions,
     session_duration_ms: u64,
+    supplemental_cards: Option<DeviceSupplementalCards>,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -365,6 +403,7 @@ where
         let personae = Arc::clone(&personae);
         let native_ui = Arc::clone(&native_ui);
         let allowlist = allowlist.clone();
+        let supplemental_cards = supplemental_cards.clone();
         tokio::spawn(async move {
             let (mut reader, mut writer) = tokio::io::split(connection);
             if let Err(error) = serve_connection(
@@ -374,6 +413,7 @@ where
                 native_ui,
                 &allowlist,
                 session_duration_ms,
+                supplemental_cards,
             )
             .await
             {

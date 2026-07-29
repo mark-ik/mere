@@ -12,10 +12,10 @@ use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, Pro
 use graphshell_protocol::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CacheRetention, ContentHash,
     EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
-    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
-    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionOffer,
-    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
-    ResourceResponse, SemanticRole,
+    PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
+    PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics,
+    ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
+    ResourceRequest, ResourceResponse, SemanticRole,
 };
 use personae::IdentityStorage;
 use sceno::{
@@ -32,6 +32,14 @@ use crate::identity_projection::{
 use crate::native::personae_host::PersonaeHost;
 
 pub const IDENTITY_SESSION: &str = "native:personae";
+
+/// One public, action-free card composed beside the Personae surface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SupplementalCard {
+    pub adapter: String,
+    pub source_id: String,
+    pub card: PortableCardV1,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityEndpointError {
@@ -57,6 +65,7 @@ pub struct IdentityEndpoint<S: IdentityStorage> {
     last_public_snapshot: Option<Vec<u8>>,
     resources: BTreeMap<ContentHash, Vec<u8>>,
     instance_actions: Vec<BTreeSet<String>>,
+    supplemental_cards: Vec<SupplementalCard>,
 }
 
 impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
@@ -73,6 +82,16 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
         Self::with_session(host, authority.session().clone())
     }
 
+    pub fn for_admitted_with_cards(
+        host: Arc<PersonaeHost<S>>,
+        authority: &crate::lifecycle::SessionAuthority,
+        supplemental_cards: Vec<SupplementalCard>,
+    ) -> Self {
+        let mut endpoint = Self::with_session(host, authority.session().clone());
+        endpoint.supplemental_cards = supplemental_cards;
+        endpoint
+    }
+
     fn with_session(host: Arc<PersonaeHost<S>>, session: ProjectionSession) -> Self {
         Self {
             host,
@@ -82,6 +101,7 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
             last_public_snapshot: None,
             resources: BTreeMap::new(),
             instance_actions: Vec::new(),
+            supplemental_cards: Vec::new(),
         }
     }
 
@@ -117,7 +137,27 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
 
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, IdentityEndpointError> {
         let snapshot = self.observe()?;
-        let cards = project_identity(&snapshot);
+        let mut cards = project_identity(&snapshot)
+            .into_iter()
+            .map(|projected| {
+                (
+                    "personae",
+                    "personae.public".to_string(),
+                    projected.key,
+                    projected.card,
+                    projected.actions,
+                )
+            })
+            .collect::<Vec<_>>();
+        cards.extend(self.supplemental_cards.iter().cloned().map(|supplemental| {
+            (
+                "device",
+                supplemental.adapter,
+                supplemental.source_id,
+                supplemental.card,
+                Vec::new(),
+            )
+        }));
         let mut scene = Scene::new();
         let mut presentation = PresentationManifest::default();
         let mut resources = BTreeMap::new();
@@ -129,13 +169,15 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
         const GAP_Y: f32 = 24.0;
         const COLUMNS: usize = 3;
 
-        for (index, projected) in cards.into_iter().enumerate() {
+        for (index, (presentation_namespace, adapter, source_id, card, card_actions)) in
+            cards.into_iter().enumerate()
+        {
             let instance = InstanceId(index as u32);
             let column = (index % COLUMNS) as f32;
             let row = (index / COLUMNS) as f32;
             let x = column * (WIDTH + GAP_X);
             let y = row * (HEIGHT + GAP_Y);
-            let source = scene.intern_source(SourceRef::new("personae.public", projected.key));
+            let source = scene.intern_source(SourceRef::new(adapter, source_id));
             scene.items.push(ProjectedItem {
                 source,
                 space: Scene::WORLD,
@@ -150,17 +192,15 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
                 channels: Vec::new(),
             });
 
-            let bytes = serde_json::to_vec(&projected.card)?;
+            let bytes = serde_json::to_vec(&card)?;
             let resource = ContentHash::of(&bytes);
-            let key = PresentationKey(format!("personae:card:{index}"));
-            let actions = projected
-                .actions
+            let key = PresentationKey(format!("{presentation_namespace}:card:{index}"));
+            let actions = card_actions
                 .iter()
                 .map(advertised_action)
                 .collect::<Vec<_>>();
             instance_actions.push(
-                projected
-                    .actions
+                card_actions
                     .into_iter()
                     .map(|action| action.intent.to_string())
                     .collect(),
@@ -177,7 +217,7 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
                     byte_size: bytes.len() as u64,
                     requires: PresentationCapability::PortableCard,
                     semantics: PresentationSemantics {
-                        label: projected.card.title,
+                        label: card.title,
                         role: SemanticRole::Article,
                         bounds: BoundsRelationship::FillFootprint,
                         actions,
@@ -463,5 +503,52 @@ mod tests {
             .unwrap();
         assert_eq!(accepted, IntentResult::Accepted);
         assert_eq!(endpoint.host().snapshot().unwrap().ssh_keys.len(), 2);
+    }
+
+    #[test]
+    fn supplemental_public_cards_share_the_device_projection() {
+        let (mut endpoint, private_openssh) = endpoint_with_private_sentinel();
+        let identity_count = endpoint
+            .snapshot(endpoint.request())
+            .unwrap()
+            .scene
+            .active_item_count();
+        endpoint.supplemental_cards = vec![SupplementalCard {
+            adapter: "graphshell.personal-sync".into(),
+            source_id: "graph-1".into(),
+            card: PortableCardV1 {
+                title: "Personal graph sync".into(),
+                values: vec![graphshell_protocol::CardValueV1 {
+                    label: "Nodes".into(),
+                    value: "2".into(),
+                }],
+                badges: vec!["Durable".into()],
+                media: Vec::new(),
+            },
+        }];
+
+        let snapshot = endpoint.snapshot(endpoint.request()).unwrap();
+        assert_eq!(snapshot.scene.active_item_count(), identity_count + 1);
+        let resource = snapshot
+            .presentation
+            .offers
+            .values()
+            .flatten()
+            .find(|offer| offer.semantics.label == "Personal graph sync")
+            .unwrap()
+            .resource;
+        let response = endpoint
+            .resource(ResourceRequest {
+                session: snapshot.session,
+                resource,
+            })
+            .unwrap();
+        let card: PortableCardV1 = serde_json::from_slice(&response.bytes).unwrap();
+        assert_eq!(card.title, "Personal graph sync");
+        assert!(
+            !String::from_utf8(response.bytes)
+                .unwrap()
+                .contains(&private_openssh)
+        );
     }
 }

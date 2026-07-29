@@ -108,6 +108,8 @@ The
 [H7a personal-sync core note](../2026-07-29_h7a_personal_sync_core_receipt.md)
 records the selected, secret-free Graphshell event grammar, shared
 Stickleback intake boundary, two-peer LogSync convergence, retained
-per-device access chronology, and explicit concurrent scalar conflict. H7
-remains open for durable reopen, resident-host/browser wiring, a physical
-two-device receipt, and blob availability.
+per-device access chronology, and explicit concurrent scalar conflict. The
+[H7b personal-sync closure note](../2026-07-29_h7b_personal_sync_closure_receipt.md)
+records durable Redb reopen, resident-host and admitted-browser composition,
+separate blob-availability metadata, bilateral ticket bootstrap, and
+byte-identical Windows/Q-PC convergence receipts. H7 is complete.

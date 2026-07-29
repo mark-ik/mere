@@ -9,12 +9,20 @@ use std::sync::Arc;
 
 use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::device_broker::{DeviceSupplementalCards, serve_browser_broker_with_cards};
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
 use graphshell::native::identity_ui::SystemNativeIdentityUi;
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::personal_sync_host::{PersonalSyncHost, PersonalSyncHostConfig};
+#[cfg(feature = "personal-sync")]
+use graphshell::personal_sync::{SyncRoster, SyncSelection};
 use graphshell::profile::{default_vault_dir, selected_profile};
+#[cfg(feature = "personal-sync")]
+use personae::IdentityProvider;
 use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
 use personae::{IdentityVault, ProfileId};
 use ssh_agent_lib::agent::listen;
@@ -22,6 +30,8 @@ use ssh_agent_lib::agent::listen;
 const EXTRA_EXTENSIONS_ENV: &str = "GRAPHSHELL_EXTENSION_IDS";
 const DATA_ROOT_ENV: &str = "GRAPHSHELL_DATA_ROOT";
 const SESSION_SECONDS_ENV: &str = "GRAPHSHELL_BROWSER_SESSION_SECONDS";
+#[cfg(feature = "personal-sync")]
+const PERSONAL_GRAPH_DOMAIN: &[u8] = b"mere.graphshell/personal-graph/v1";
 
 enum AgentEndpoint {
     Standard(String),
@@ -35,6 +45,21 @@ struct Args {
     browser_endpoint: String,
     data_root: Option<PathBuf>,
     log_file: Option<PathBuf>,
+    #[cfg(feature = "personal-sync")]
+    sync: Option<SyncArgs>,
+}
+
+#[cfg(feature = "personal-sync")]
+struct SyncArgs {
+    graph: String,
+    store_path: Option<PathBuf>,
+    roots: Vec<[u8; 32]>,
+    peer_tickets: Vec<String>,
+    facets: Vec<String>,
+    access_records: bool,
+    saved_scenes: bool,
+    handler_preferences: bool,
+    blob_availability: bool,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -64,6 +89,24 @@ fn parse_args() -> Result<Args, String> {
     let mut browser_endpoint = configured_device_endpoint();
     let mut data_root = std::env::var_os(DATA_ROOT_ENV).map(PathBuf::from);
     let mut log_file = None;
+    #[cfg(feature = "personal-sync")]
+    let mut sync_graph = None;
+    #[cfg(feature = "personal-sync")]
+    let mut sync_store = None;
+    #[cfg(feature = "personal-sync")]
+    let mut sync_roots = Vec::new();
+    #[cfg(feature = "personal-sync")]
+    let mut sync_peers = Vec::new();
+    #[cfg(feature = "personal-sync")]
+    let mut sync_facets = Vec::new();
+    #[cfg(feature = "personal-sync")]
+    let mut sync_access = false;
+    #[cfg(feature = "personal-sync")]
+    let mut sync_scenes = false;
+    #[cfg(feature = "personal-sync")]
+    let mut sync_handlers = false;
+    #[cfg(feature = "personal-sync")]
+    let mut sync_blobs = false;
     let mut argv = std::env::args().skip(1);
 
     while let Some(arg) = argv.next() {
@@ -96,15 +139,40 @@ fn parse_args() -> Result<Args, String> {
                     argv.next().ok_or("--log-file needs a value")?,
                 ));
             }
+            #[cfg(feature = "personal-sync")]
+            "--sync-graph" => {
+                sync_graph = Some(argv.next().ok_or("--sync-graph needs a value")?);
+            }
+            #[cfg(feature = "personal-sync")]
+            "--sync-store" => {
+                sync_store = Some(PathBuf::from(
+                    argv.next().ok_or("--sync-store needs a value")?,
+                ));
+            }
+            #[cfg(feature = "personal-sync")]
+            "--sync-root" => {
+                sync_roots.push(parse_public_root(
+                    &argv.next().ok_or("--sync-root needs a value")?,
+                )?);
+            }
+            #[cfg(feature = "personal-sync")]
+            "--sync-peer" => {
+                sync_peers.push(argv.next().ok_or("--sync-peer needs a value")?);
+            }
+            #[cfg(feature = "personal-sync")]
+            "--sync-facet" => {
+                sync_facets.push(argv.next().ok_or("--sync-facet needs a value")?);
+            }
+            #[cfg(feature = "personal-sync")]
+            "--sync-access" => sync_access = true,
+            #[cfg(feature = "personal-sync")]
+            "--sync-scenes" => sync_scenes = true,
+            #[cfg(feature = "personal-sync")]
+            "--sync-handlers" => sync_handlers = true,
+            #[cfg(feature = "personal-sync")]
+            "--sync-blobs" => sync_blobs = true,
             "--help" | "-h" => {
-                return Err(
-                    "usage: graphshell_device_host [--dir <vault-dir>] [--profile <name>] \
-                     [--agent-endpoint <standard-endpoint>] \
-                     [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
-                     [--log-file <path>]\n\
-                     receipt only: --receipt-agent-endpoint <isolated-endpoint>"
-                        .to_string(),
-                );
+                return Err(usage().to_string());
             }
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -127,7 +195,41 @@ fn parse_args() -> Result<Args, String> {
         browser_endpoint,
         data_root,
         log_file,
+        #[cfg(feature = "personal-sync")]
+        sync: sync_graph.map(|graph| SyncArgs {
+            graph,
+            store_path: sync_store,
+            roots: sync_roots,
+            peer_tickets: sync_peers,
+            facets: sync_facets,
+            access_records: sync_access,
+            saved_scenes: sync_scenes,
+            handler_preferences: sync_handlers,
+            blob_availability: sync_blobs,
+        }),
     })
+}
+
+#[cfg(feature = "personal-sync")]
+fn usage() -> &'static str {
+    "usage: graphshell_device_host [--dir <vault-dir>] [--profile <name>] \
+     [--agent-endpoint <standard-endpoint>] \
+     [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
+     [--log-file <path>]\n\
+     personal sync: [--sync-graph <name>] [--sync-store <path>] \
+     [--sync-root <64-hex-public-root>] [--sync-peer <ticket>] \
+     [--sync-facet <id>] [--sync-access] [--sync-scenes] \
+     [--sync-handlers] [--sync-blobs]\n\
+     receipt only: --receipt-agent-endpoint <isolated-endpoint>"
+}
+
+#[cfg(not(feature = "personal-sync"))]
+fn usage() -> &'static str {
+    "usage: graphshell_device_host [--dir <vault-dir>] [--profile <name>] \
+     [--agent-endpoint <standard-endpoint>] \
+     [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
+     [--log-file <path>]\n\
+     receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }
 
 fn default_agent_endpoint(vault_dir: &Path) -> String {
@@ -186,7 +288,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     };
     let personae = Arc::new(PersonaeHost::new(
         IdentityVault::with_profile(opened.storage, profile),
-        args.data_root,
+        args.data_root.clone(),
         protection,
     ));
 
@@ -213,6 +315,90 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let allowlist = AllowedExtensions::default()
         .with_additional(&std::env::var(EXTRA_EXTENSIONS_ENV).unwrap_or_default());
     let agent = listen(agent_listener, personae.agent_session());
+    #[cfg(feature = "personal-sync")]
+    let supplemental_cards = if let Some(sync) = args.sync {
+        let graph = personal_graph_id(&sync.graph);
+        let data_root = args
+            .data_root
+            .clone()
+            .unwrap_or_else(|| args.vault_dir.join("graphshell-data"));
+        let store_path = sync.store_path.unwrap_or_else(|| {
+            data_root
+                .join("personal-sync")
+                .join(format!("{}.redb", hex(&graph)))
+        });
+        let mut roots = sync.roots;
+        roots.push(personae.master_public_key().to_bytes());
+        roots.sort_unstable();
+        roots.dedup();
+        let selection = SyncSelection::default()
+            .with_facets(sync.facets)
+            .with_access_records(sync.access_records)
+            .with_saved_scenes(sync.saved_scenes)
+            .with_handler_preferences(sync.handler_preferences)
+            .with_blob_availability(sync.blob_availability);
+        let personal_sync = Arc::new(
+            PersonalSyncHost::open(
+                personae.as_ref(),
+                PersonalSyncHostConfig {
+                    graph,
+                    store_path,
+                    roster: SyncRoster::new(roots),
+                    selection,
+                    peer_tickets: sync.peer_tickets,
+                },
+            )
+            .await?,
+        );
+        tracing::info!(
+            graph = %hex(&graph),
+            ticket = %personal_sync.ticket().await?,
+            "personal graph sync listening"
+        );
+        let cards: DeviceSupplementalCards = Arc::new(tokio::sync::RwLock::new(
+            personal_sync.supplemental_cards().await?,
+        ));
+        let refresh_cards = Arc::clone(&cards);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                match personal_sync.supplemental_cards().await {
+                    Ok(snapshot) => *refresh_cards.write().await = snapshot,
+                    Err(error) => tracing::warn!(%error, "personal sync projection refresh failed"),
+                }
+            }
+        });
+        Some(cards)
+    } else {
+        None
+    };
+    #[cfg(feature = "personal-sync")]
+    let browser = async {
+        match supplemental_cards {
+            Some(cards) => {
+                serve_browser_broker_with_cards(
+                    &args.browser_endpoint,
+                    Arc::clone(&personae),
+                    Arc::new(SystemNativeIdentityUi::default()),
+                    allowlist,
+                    session_duration_ms(),
+                    cards,
+                )
+                .await
+            }
+            None => {
+                serve_browser_broker(
+                    &args.browser_endpoint,
+                    Arc::clone(&personae),
+                    Arc::new(SystemNativeIdentityUi::default()),
+                    allowlist,
+                    session_duration_ms(),
+                )
+                .await
+            }
+        }
+    };
+    #[cfg(not(feature = "personal-sync"))]
     let browser = serve_browser_broker(
         &args.browser_endpoint,
         Arc::clone(&personae),
@@ -232,6 +418,34 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             Err("browser device broker ended unexpectedly".into())
         }
     }
+}
+
+#[cfg(feature = "personal-sync")]
+fn personal_graph_id(name: &str) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(PERSONAL_GRAPH_DOMAIN);
+    hasher.update(name.as_bytes());
+    *hasher.finalize().as_bytes()
+}
+
+#[cfg(feature = "personal-sync")]
+fn parse_public_root(value: &str) -> Result<[u8; 32], String> {
+    let value = value.trim();
+    if value.len() != 64 {
+        return Err("--sync-root must be exactly 64 hexadecimal characters".into());
+    }
+    let mut root = [0u8; 32];
+    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+        let digits = std::str::from_utf8(chunk).map_err(|error| error.to_string())?;
+        root[index] = u8::from_str_radix(digits, 16)
+            .map_err(|_| "--sync-root contains a non-hexadecimal byte".to_string())?;
+    }
+    Ok(root)
+}
+
+#[cfg(feature = "personal-sync")]
+fn hex(bytes: &[u8; 32]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn session_duration_ms() -> u64 {
