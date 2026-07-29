@@ -33,11 +33,12 @@ identity.workspace = true
 tokio = { version = "1", features = ["io-util", "sync", "rt", "macros", "time"] }
 thiserror = "1"
 tracing = "0.1"
-# iroh 1.0 wraps quinn QUIC; ed25519-dalek =3.0.0-rc.0 internally (it still
-# exact-pins a prerelease). We cross the dalek-version boundary via raw 32-byte
-# seeds, so identity/personae and retinue (both on dalek 2.x) do not need to
-# track iroh's prerelease dalek dep; the two majors coexist as separate copies.
-iroh = "1.0.2"
+# iroh 1.0 wraps quinn QUIC. The 1.0.3 floor matters: 1.0.2 exact-pinned
+# ed25519-dalek =3.0.0-rc.0, which blocked the dalek 3.0/5.0 finals from
+# resolving; 1.0.3 relaxed it to a range. identity/personae and retinue are
+# still on dalek 2.x (majors coexist as separate copies, crossed via raw
+# 32-byte seeds) until their own dalek-3 migration wave.
+iroh = "1.0.3"
 iroh-blobs = "0.103"
 # Shareable connection tickets: serialize this node's `EndpointAddr` to a string
 # a peer can paste to dial it (the explicit-bootstrap path, e.g. a host's
@@ -54,6 +55,12 @@ retinue = { workspace = true, optional = true }
 notochord = { workspace = true, optional = true }
 hkdf = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
+
+# The notochord integration test imports feature-gated items; without this
+# guard a bare `cargo test -p mere-transport` fails to compile the test file.
+[[test]]
+name = "notochord"
+required-features = ["notochord"]
 
 [dev-dependencies]
 notochord = { workspace = true, features = ["tokio"] }

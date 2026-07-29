@@ -1257,6 +1257,46 @@ The upstream-shaped fix is socket re-creation: on persistent send failure (or
 on link/route events, not just interface add/remove), rebuild the socket and
 re-join the group. Nobody has written that yet, in either crate.
 
+**FINAL, later the same day: socket age was also wrong. The denier is macOS
+per-binary local-network policy, and no socket-level fix can work.** The
+rebuild fix was written (mark-ik/swarm-discovery branch `mere`), deployed, and
+fired 272-350 times against a live wedge: every freshly rebuilt socket failed
+identically, killing the fresh-socket theory. The decisive split, same host,
+same SSH launch context, same socket shape, same seconds: an Apple-signed
+`/usr/bin/python3` sender ran 72/72 successful multicast sends over six
+minutes, while `g5_peer` hit `EHOSTUNREACH` on its first send and logged 1130
+errors. The denial follows the *binary*: an ad-hoc-signed copy at a fresh path
+died at t=32s, and the same binary as a launchd user agent died at t=32s. The
+System Settings > Privacy & Security > Local Network panel lists nothing to
+grant: on Sequoia, processes without a responsible GUI app can be denied
+without ever becoming grantable. The earlier grace periods (2m32s of healthy
+announcing before death) match asynchronous policy evaluation; the eventual
+instant-death matches a cached deny; every short-lived probe binary finished
+inside the evaluation window, which is why probes kept "refuting" the peer's
+failure.
+
+Consequences:
+- The socket-rebuild branch stays but is NOT upstreamed; its premise did not
+  survive contact. It is harmless (tests pass, rebuilds are defensive) and the
+  committed manifest keeps it only because the branch also pins the fork pair.
+- **Product requirement, not a dev quirk: a macOS resident Mere peer must ship
+  as a signed app with the local-network usage declaration, or it will be
+  silently denied multicast egress with no user-visible recourse.** An unsigned
+  dev binary under sshd or launchd is not a viable macOS peer.
+- Dev-box paths still open, untested: running the peer once from Terminal.app
+  (a responsible GUI app makes the prompt possible), a real Developer ID
+  signature, or `sudo log stream` on the NECP/TCC subsystems during a death to
+  capture the verdict line naming the policy.
+
+**Ticketless discovery receipts on the committed fork stack (2026-07-29):**
+Fedora -> Windows and Windows -> Fedora each completed the full three-session
+flow (snapshot, suspend, resume replaying 2 contiguous diffs, intent accepted)
+with no ticket and no `add_peer`. Windows -> Fedora is the direction that
+requires the multi-homed receive fix, so PR #7's adoption is validated in both
+roles. Mac -> Windows also passed earlier in the day; only Windows -> Mac
+remains blocked, by the macOS policy above, since the Mac cannot be heard while
+denied egress.
+
 Also observed on the fresh peer: every IPv6 send fails the same way from
 process start (`error sending mDNS on IPv6: No route to host`), hours after the
 flap, so the host-level IPv6 multicast state never recovered. Separate, lower
