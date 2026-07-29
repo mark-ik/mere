@@ -342,6 +342,22 @@ taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 # taffy above; the local `.cargo/config.toml` redirects it to a genet checkout).
 stylo_taffy = { git = "https://github.com/mark-ik/genet.git", branch = "main" }
 
+# ─── LAN peer discovery (H10): two mDNS fixes not yet released upstream ──────
+# iroh-mdns-address-lookup 0.4.0 joins the multicast group only on the
+# default-route interface, so a multi-homed host (Windows with a WSL/Hyper-V
+# adapter holding the multicast route) never hears LAN mDNS. The fork's `mere`
+# branch is n0-computer/iroh-address-lookups PR #7 (per-interface sockets kept
+# in sync with the host's interfaces via netwatch), taken as-is; drop this
+# patch when a release containing it ships.
+iroh-mdns-address-lookup = { git = "https://github.com/mark-ik/iroh-address-lookups.git", branch = "mere", version = "=0.4.0" }
+# swarm-discovery 0.6.3 keeps its sockets for the life of the process, and on
+# macOS a Wi-Fi state transition leaves pre-existing multicast sockets
+# permanently returning EHOSTUNREACH, silencing the peer (it stops announcing
+# and answering, since answers are sends). The fork's `mere` branch rebuilds an
+# interface socket after three consecutive send failures. Measured on the
+# Intel iMac, where the trigger recurs every few minutes on the eero mesh.
+swarm-discovery = { git = "https://github.com/mark-ik/swarm-discovery.git", branch = "mere", version = "=0.6.3" }
+
 # ipc-channel: in-process fork, vendored in genet at support/patches/ipc-channel
 # and reached here via genet's git (exactly like the taffy patch above). Mere is
 # single-process, so ipc-channel's OS IPC transport is vestigial; the fork defaults
