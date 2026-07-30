@@ -5,7 +5,7 @@ nodes in a spatial graph: html pages, gemini capsules, local media, and notes si
 side by side in one canvas, joined by user-made and inferred relationships. Mere
 composes that world (graph truth, arrangement, persistence, retrieval, identity,
 comms) and hands it to a host. [Graphshell](ports/graphshell/) is the reference
-graph host and portal; [turnstone](https://github.com/mark-ik/turnstone) is the
+graph host and portal; [turnstone](https://github.com/merely-made/turnstone) is the
 separate browser host. The graph (the *orrery*) is the root surface; tiles,
 panes, and content cards are projections of it.
 
@@ -91,7 +91,7 @@ cargo test -p kernel
 ```
 
 Run the reference host with `cargo run -p graphshell`. Turnstone, the separate
-browser host, lives in the sibling `mark-ik/turnstone` repository and pulls
+browser host, lives in the sibling `merely-made/turnstone` repository and pulls
 `mere` as a git dependency; run it there with `cargo run`.
 
 The workspace's runnable hosts live under `ports/`. Development binaries that

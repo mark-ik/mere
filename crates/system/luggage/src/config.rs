@@ -192,9 +192,9 @@ mod tests {
             Feed::Http(_)
         ));
         assert_eq!(
-            Feed::parse("github:mark-ik/hocket").unwrap(),
+            Feed::parse("github:merely-made/hocket").unwrap(),
             Feed::GitHub {
-                owner: "mark-ik".into(),
+                owner: "merely-made".into(),
                 repo: "hocket".into()
             }
         );
@@ -228,8 +228,8 @@ mod tests {
     #[test]
     fn github_manifest_url_targets_the_latest_release_asset() {
         assert_eq!(
-            Feed::github_manifest_url("mark-ik", "hocket"),
-            "https://github.com/mark-ik/hocket/releases/latest/download/luggage.json"
+            Feed::github_manifest_url("merely-made", "hocket"),
+            "https://github.com/merely-made/hocket/releases/latest/download/luggage.json"
         );
     }
 }

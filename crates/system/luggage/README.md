@@ -30,7 +30,7 @@ Everything else — the manifest JSON shape, minisign verification, the
 per-platform install mechanics (NSIS/MSI, `.app.tar.gz`, AppImage) — is
 upstream's, deliberately. Planned divergences (staged-swap apply mechanics,
 the P2P lane) are tracked in
-[hocket's auto-update plan](https://github.com/mark-ik/hocket/blob/main/design_docs/2026-07-24_auto-update_plan.md)
+[hocket's auto-update plan](https://github.com/merely-made/hocket/blob/main/design_docs/2026-07-24_auto-update_plan.md)
 and mere's auto-update brief.
 
 ## Security: two signatures, and why both
