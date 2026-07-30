@@ -83,6 +83,19 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 - **fili** — reserved name for Moot lineage: community ancestry, forks, and
   genealogy across related moots. Do not use it for ordinary event history,
   retention, or storage mechanics.
+- **tulpa** — the legend and memorial layer: what memory makes of history
+  (legends, memorials, epithets, the manifestations of the dead), sustained
+  by continued attention — presence scales with retelling, and a legend
+  nobody tells fades. A *view* over a codicil log holding the retold subset,
+  never the log itself. Do not use it for ordinary event history (that is
+  **codicil**) or for descent (that is **fili**): where fili tracks who
+  carried the line, tulpa holds what is remembered when nobody did. Chosen by
+  Mark 2026-07-30 and published the same day (crates.io `tulpa` 0.0.1,
+  `merely-made/tulpa`). Completes the thoughtform triad the stack already
+  held: **servitor** (created and bounded) → **tulpa** (remembered and
+  autonomous) → **egregore** (collective and emergent). From Tibetan
+  *sprul-pa* by way of two westernizations; the living-office cousin *tulku*
+  is deliberately not used.
 - **gemot** *(count noun)* — a sovereign assembly of mootholds (t4; renamed from *coalition* 2026-07-30, which had renamed *demesne* 2026-06-04). OE *gemōt*, the collective form of *mōt* itself: the assembly of assemblies, rejoining the moot/moothold word-family where *coalition* was the Latinate outlier. crates.io `gemot` already held (0.1.0, claimed 2026-07-14 as the assembly-layer crate: Moot lifecycle, governance, replication, Tessera), so the t4 count noun and the governance crate share the name deliberately
 - **suzerainty** *(relation)* — the outer-tier ↔ inner-member relationship (moothold ↔ moot, gemot ↔ moothold); overlordship without absorbing internal sovereignty
 - **volvelle** — UI form factor: a moot expanded radially in the Navigator (medieval rotating-disc knowledge instrument)
