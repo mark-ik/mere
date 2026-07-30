@@ -1,13 +1,13 @@
 # numen
 
-The portable field-primitive definitions of the **aether** / **gyre** physics
+The portable field-primitive definitions of the **quint** / **seiche** physics
 substrate.
 
 A *numen* is a pervading influence, the presence felt in a place. This crate is that
 influence as data: the definitions of the **fields** an app lays over its graph, and
 the **couplings** that say how elements respond to them. numen holds the definitions;
-it does not evaluate them (that is `aether`) and it does not integrate the forces
-(that is `gyre`).
+it does not evaluate them (that is [`quint`](https://github.com/merely-made/mere)) and
+it does not integrate the forces (that is [`seiche`](https://github.com/merely-made/mere)).
 
 Fields are the third graph primitive, beside nodes and edges. The node and edge
 primitives live in the content substrate ([chartulary](https://github.com/merely-made/mere));
@@ -19,7 +19,7 @@ the field primitives live here, at the same portable tier, because a field is
 - `Field` — a field as truth: identity + a `FieldDefinition` + a `FieldExtent`
   (global / region / attached-to-node) + a `FieldLifecycle`.
 - `Coupling` — `field → NodeSelector × CouplingResponse × strength`. The response
-  vocabulary is a recognized force core (the six `gyre` integrates) plus an open IRI
+  vocabulary is a recognized force core (the six `seiche` integrates) plus an open IRI
   tail for visual / navigational / selection / semantic / trigger families.
 - `EdgePath` / `EdgePathRule` — how an edge's curve is drawn, including a field-traced
   `FieldLine`.

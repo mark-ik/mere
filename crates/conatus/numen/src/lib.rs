@@ -1,11 +1,11 @@
-//! numen — the field-primitive definitions of the aether/gyre physics substrate.
+//! numen — the field-primitive definitions of the quint/seiche physics substrate.
 //!
 //! A numen is a pervading influence, the presence felt in a place. This crate is
 //! that influence as data: the portable definitions of the **fields** an app lays
 //! over its graph, and the **couplings** that say how elements respond to them.
-//! numen holds the definitions; it does not evaluate them (`aether` does, closed
+//! numen holds the definitions; it does not evaluate them (`quint` does, closed
 //! forms and finite differences, optionally on Burn) and it does not integrate the
-//! forces (`gyre` does, over rapier bodies).
+//! forces (`seiche` does, over rapier bodies).
 //!
 //! Fields are the third graph primitive, beside nodes and edges. Where the node and
 //! edge primitives live in the content substrate ([`chartulary`](https://github.com/mark-ik/chartulary)),
@@ -20,7 +20,7 @@
 //!   [`FieldExtent`] (global / region / attached-to-node) + a [`FieldLifecycle`].
 //! - [`Coupling`] — `field -> `[`NodeSelector`]` x `[`CouplingResponse`]` x strength`:
 //!   how elements respond to a field at their position. The response vocabulary is a
-//!   recognized force core (the six `gyre` integrates) plus an open IRI tail
+//!   recognized force core (the six `seiche` integrates) plus an open IRI tail
 //!   ([`COUPLING_VOCAB`]) for visual / navigational / selection / semantic / trigger
 //!   families.
 //! - [`EdgePath`] / [`EdgePathRule`] — how an edge's curve is drawn, including a

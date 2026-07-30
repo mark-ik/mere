@@ -65,7 +65,7 @@ All scaffolded at `<workspace>\repos\mere\crates\`. Reserved on crates.io as `0.
 | **`nematic`** | Smolweb engine — Gemini, Gopher, HTML, Markdown, RSS/Atom |
 | **`murm`** | Bilateral peer-to-peer comms supercrate |
 | **`murmuring`** | Inner protocol-core for bilateral chat-protocol selection (within `murm`) |
-| **`moothold`** | Federation of moots (Tier 3). The crate hosts t1–t3 logic; t4 coalition logic may end up in a sibling `coalition` crate. (Will switch to `moot` if that crate name frees up.) |
+| **`moothold`** | Federation of moots (Tier 3). The crate hosts t1–t3 logic; t4 gemot logic homes in the sibling `gemot` crate (claimed on crates.io 2026-07-14, 0.1.0: assembly layer for Moot lifecycle, governance, replication, and Tessera). (Will switch to `moot` if that crate name frees up.) |
 | **`mooting`** | Inner protocol-core for moot internal coordination + thin protocol-client orchestration (within `moothold`) |
 | **`eidetic`** | Private local memory crate — owner-scoped blob storage substrate the orrery (Tier 1) lives on |
 
@@ -80,10 +80,10 @@ Mere's social-graph structures form a four-tier scale. Full design in
 
 | Tier | Term | What it is |
 | --- | --- | --- |
-| **T1** | **mere** | A single user's root dataspace, *their root mere*. *"Your mere is your moot."* Backed by `eidetic`. (Was **orrery** until 2026-07-26; see §4.2.) |
+| **T1** | **mere** | A single user's root dataspace, *their root mere*, pre-social: it founds a moot the moment it is shared. Backed by `eidetic`. (Was **orrery** until 2026-07-26. The moot-of-one slogan *"Your mere is your moot"* superseded 2026-07-30 by *"a moot is when your mere is shared"*; see §4.2.) |
 | **T2** | **moot** | A persistent themed federatable graph-view community. Members pin and govern. Dissolves if nobody pins. |
 | **T3** | **moothold** | A federation of moots — *a holding of moots*, in the Anglo-Saxon sense (cf. household, stronghold, freehold). ILL-shaped reciprocity between member moots. |
-| **T4** | **coalition** | A sovereign coalition of mootholds. Provides organizing defaults; per-moothold override + clean fork-out always possible. |
+| **T4** | **gemot** | A sovereign assembly of mootholds. Provides organizing defaults; per-moothold override + clean fork-out always possible. (Was **coalition** until 2026-07-30; see §4.2.) |
 
 All four tiers are **forkable**.
 
@@ -91,16 +91,16 @@ All four tiers are **forkable**.
 
 | Term | Role |
 | --- | --- |
-| **mere** *(count noun)* | **A configurable spatial dataspace.** The unit an application integrates: Isometry's overmap, Woodshed's stage, Strophe's arrangement, Turnstone's canvas are each a mere. Many per user. The platform is named for its unit, so capital **Mere** is the platform and lowercase **a mere** is one dataspace. Ruled with Mark 2026-07-26: the concept had no name and was informally covered by *orrery* while the reference host was the only application, which is why the word stopped stretching once four products each integrated one. The word is the lake sense already carried in the product's positioning (see [`TERMINOLOGY.md`](TERMINOLOGY.md)), and it pluralizes, which *orrery* never did. |
-| **your root mere** *(t1)* | The tier-1 mere: a user's own, their personal moot-of-one. Replaces *orrery* at this tier. |
+| **mere** *(count noun)* | **A configurable spatial dataspace.** The unit an application integrates: Isometry's overmap, Woodshed's stage, Strophe's arrangement, Turnstone's canvas are each a mere. Many per user. The platform is named for its unit, so capital **Mere** is the platform and lowercase **a mere** is one dataspace. Ruled with Mark 2026-07-26: the concept had no name and was informally covered by *orrery* while the reference host was the only application, which is why the word stopped stretching once four products each integrated one. The word is the lake sense already carried in the product's positioning (see [`TERMINOLOGY.md`](TERMINOLOGY.md)), and it pluralizes, which *orrery* never did. Amended 2026-07-30: the tiers are escalating socialization of the mere; sharing never stops a mere being a mere. |
+| **your root mere** *(t1)* | The tier-1 mere: a user's own, pre-social; it founds (or joins) a moot the moment it is shared. Replaces *orrery* at this tier; the "personal moot-of-one" phrasing superseded 2026-07-30. |
 | **orrery** *(form factor)* | The cosmos-style spatial form factor — the whole knowledge-cosmos seen at once, force-directed, in-scene. A way a mere can be *rendered*, exactly as **volvelle** names the radial-moot form factor; not a tier and not a container. Narrowed from "a user's root graph view" 2026-07-26. Code that says `Scope::Orrery`, "orrery root", or "the orrery's tick" already means this and is correct as written. |
-| **moot** *(t2, count noun)* | A single persistent themed federatable graph-view community |
+| **moot** *(t2, count noun)* | A persistent themed federatable graph-view community: what a mere becomes when shared (ruled 2026-07-30). Genesis face: a moot begins when your mere is shared. Grown face: a mature moot may govern one or more meres (the region-grafting model); a shared world never stops being a mere. Substrate rule: solo meres are born share-ready, so mootedness is a membership change, never a format migration. |
 | **moothold** *(t3, count noun)* | A federation of moots — a sovereign holding (Anglo-Saxon *-hold* sense) |
-| **coalition** *(t4, count noun)* | A sovereign cluster of mootholds (renamed from *demesne* 2026-06-04 for familiarity; *demesne* sounds like *domain*, which already names the domain layer) |
-| **suzerainty** *(relation)* | The relation between an outer tier and its inner members — overlordship without absorbing internal sovereignty. Applies at moothold ↔ moot and coalition ↔ moothold. |
+| **gemot** *(t4, count noun)* | A sovereign assembly of mootholds (renamed from *coalition* 2026-07-30: OE *gemōt* is the collective form of *mōt*, so the apex tier rejoins the moot/moothold word-family where *coalition* was the Latinate outlier; *coalition* had itself renamed *demesne* 2026-06-04). Historically *gemot* named assemblies at every scale (hundredgemot, shiregemot), with the witenagemot as the famous apex; the bare/prefixed split maps onto t2/t4. crates.io `gemot` already held (0.1.0, 2026-07-14). |
+| **suzerainty** *(relation)* | The relation between an outer tier and its inner members — overlordship without absorbing internal sovereignty. Applies at moothold ↔ moot and gemot ↔ moothold. |
 | **volvelle** | UI form factor — a moot expanded radially in the Navigator (medieval rotating-disc knowledge instrument) |
 | **astroid** | Internal UX vocab for graphlet hub-collapse: collapsing a graphlet to its central node forms an astroid-shaped boundary curve |
-| **tessera** | Trust / contribution / reputation token; validated across mootholds and coalitions (Roman *tessera hospitalis*). Accrues against an identity's chain root (per the substrate brief's persona-id-chain insight). |
+| **tessera** | Trust / contribution / reputation token; validated across mootholds and gemots (Roman *tessera hospitalis*). Accrues against an identity's chain root (per the substrate brief's persona-id-chain insight). |
 | **engram** | Portable, durable, schematicized memory unit — the canonical contribution payload. `TransferProfile` envelope plus typed `EngramMemory` items (see inherited [`engram_spec.md`](../../graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md)) |
 | **flora** | Accumulated body of engrams composing a moot's culture / geist |
 | **eidetic** | Private local memory — owner-scoped, the substrate engrams are distilled from. *Distinct from any moot's flora.* |

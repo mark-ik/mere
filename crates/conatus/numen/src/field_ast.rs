@@ -3,14 +3,15 @@
 //! Two mutually-recursive enums describe the algebra: [`ScalarField`] for
 //! `f: R^2 -> R` and [`VectorField`] for `f: R^2 -> R^2`. This is the
 //! *definition* the kernel owns and persists; **the kernel does not evaluate
-//! it** — `aether` does (closed forms + finite differences, optionally Burn).
+//! it** — `quint` does (closed forms + finite differences, optionally Burn).
 //!
-//! Ported from `aether::ast` (the field-system step-3 plan, 2026-05-31): the
-//! kernel becomes the owner of the portable definition, `aether` gains a
+//! Ported from `quint::ast` (the field-system step-3 plan, 2026-05-31): the
+//! kernel becomes the owner of the portable definition, `quint` gains a
 //! `kernel` dependency and uses these types for evaluation. Two differences
-//! from the aether original: [`ScalarField::Sample`] / [`VectorField::Sample`]
+//! from the quint original: [`ScalarField::Sample`] / [`VectorField::Sample`]
 //! reference the kernel-stable [`FieldId`](super::field::FieldId) (UUID) rather
-//! than aether's registry-local `FieldId(u64)`; and there is no Rhai/Burn here.
+//! than the original's registry-local `FieldId(u64)`; and there is no Rhai/Burn
+//! here.
 //!
 //! Derives are serde only for now. rkyv archiving is handled at the
 //! `Persisted*` DTO layer (plan Phase 2), where the recursive-Box rkyv decision

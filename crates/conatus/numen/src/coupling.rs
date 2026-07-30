@@ -9,9 +9,9 @@
 //! `EdgePayload` sidecar on a node-to-node edge, and `EdgeFamily` (derived from
 //! node-edge sidecars) stays six.
 //!
-//! Ported from `aether::coupling`. The response vocabulary is a
+//! Ported from `quint::coupling`. The response vocabulary is a
 //! recognized-core-plus-open-tail hybrid (plan Phase 4): the six force responses
-//! are the recognized core `gyre` integrates, and [`CouplingResponse::Open`]
+//! are the recognized core `seiche` integrates, and [`CouplingResponse::Open`]
 //! carries the open families (visual / navigational / selection / semantic /
 //! trigger) by IRI until a consumer recognizes them. See [`CouplingResponse`].
 //! Derives are serde only here; rkyv lands at the `Persisted*` DTO layer (plan
@@ -48,7 +48,7 @@ pub const COUPLING_VOCAB: &str = "https://mere.computer/ns/coupling#";
 /// How a node responds to a field at its position.
 ///
 /// **Recognized core (force).** The six force responses are the recognized core:
-/// `gyre` dispatches on them to integrate motion. This is the statements-over-schema
+/// `seiche` dispatches on them to integrate motion. This is the statements-over-schema
 /// "recognized core gets behavior" half; the responses are also the v1 surface.
 ///
 /// **Open tail.** The coupling contract is deliberately open beyond force (the
