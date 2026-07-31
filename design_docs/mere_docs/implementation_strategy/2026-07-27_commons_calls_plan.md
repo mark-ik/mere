@@ -2,8 +2,12 @@
 
 **Date:** 2026-07-27  
 **Status:** A0 complete and promoted at `crates/moot/commons` 2026-07-28;
-A1-A6 not started. Turnstone is
-the fixed first consumer for A1, gated on its render-free shared-place port.
+A1-A6 not started. Turnstone is the fixed first consumer for A1, gated on
+**T5** of the
+[place-port plan](../../../../turnstone/design_docs/2026-07-28_turnstone_place_port_plan.md):
+the headed two-window receipt, not merely the existence of a place port or a
+`place.json`. Named as a rung rather than a capability because "can open a
+shared place" was already true at T2, when nothing was live.
 **Depends on:** the
 [Commons profile](../design/2026-07-27_commons_profile_v1.md), the
 [Notochord session spine](./2026-07-26_notochord_session_policy_spine_plan.md),
@@ -178,7 +182,7 @@ device.
 Define retained invite/terminal facts and the sans-I/O live control grammar.
 Property-test duplicate, reordered, expired, and concurrent control frames.
 
-**Done:** two peers fold every permutation to the same visible state; stale
+**Done when:** two peers fold every permutation to the same visible state; stale
 frames cannot reopen an ended call.
 
 **Receipt:** `commons-spine::call` now owns versioned retained invitation and
@@ -193,9 +197,11 @@ identity, never wall-clock order.
 Ten A0 tests cover all 24 permutations of the receipt conversation, a second
 peer's reversed and duplicate arrival, property-generated duplicates,
 reordering, expiry, and concurrent terminals, retained-terminal dominance,
-equivocation, and CBOR round trips. The complete 36-test Commons spine suite
-and all-target Clippy with warnings denied pass. A0 selects no audio device or
-codec dependency; that remains A2's measured probe.
+equivocation, and CBOR round trips. The Commons spine suite passed complete at
+36 tests when A0 landed, and stands at 43 as of 2026-07-31 after chat gained
+its authority filter. Quote the count with its date: this line has already
+been read as current twice. All-target Clippy with warnings denied passes. A0
+selects no audio device or codec dependency; that remains A2's measured probe.
 
 ### A1. Admitted control session
 
@@ -205,15 +211,15 @@ codec dependency; that remains A2's measured probe.
 - `crates/system/notochord/src/io.rs`
 - `turnstone/src/call.rs`, beside Turnstone's place port
 
-A1 starts only after Turnstone can open a shared place and supply its admitted
-session context. It must not found a second generic call host merely to keep
-the proof inside Mere.
+A1 starts only after the place-port plan's **T5** headed receipt, not merely
+when Turnstone can open a place. It must not found a second generic call host
+to keep the proof inside Mere.
 
 Accept `mere/commons-call/v1`, convert `AcceptedSession` through the existing
 audited adapter, then call `notochord::admit_session` before decoding call
 control.
 
-**Done:** Turnstone's render-free call port completes invite, accept, leave,
+**Done when:** Turnstone's render-free call port completes invite, accept, leave,
 and end over Memory and p2panda carriers; foreign-service grants are refused;
 denial emits no call frame.
 
@@ -223,7 +229,7 @@ Choose the audio-device and codec dependencies only after a small duplex probe
 reports capture format, playback format, end-to-end latency, jitter behavior,
 and clean device loss. Keep codec frames outside Commons operations.
 
-**Done:** two local processes exchange intelligible mono audio; mute stops
+**Done when:** two local processes exchange intelligible mono audio; mute stops
 capture; device removal ends or recovers without a stuck microphone; media
 bytes are encrypted with fresh call keys.
 
@@ -232,7 +238,7 @@ bytes are encrypted with fresh call keys.
 Run the A2 media protocol over the admitted p2panda/Iroh bearer. Add bounded
 jitter buffering, packet loss accounting, reconnect, and resume-secret proof.
 
-**Done:** two machines complete a call, survive one forced connection loss,
+**Done when:** two machines complete a call, survive one forced connection loss,
 and reject a replayed resume attempt. The final quality receipt reports
 measured loss, latency, jitter, reconnect count, and selected codec.
 
@@ -241,7 +247,7 @@ measured loss, latency, jitter, reconnect count, and selected codec.
 Add expiring presence, local ring policy, focus/quiet-hours integration, device
 selection, and visible degraded states.
 
-**Done:** an offline or silenced peer is represented truthfully; presence
+**Done when:** an offline or silenced peer is represented truthfully; presence
 expiry cannot change membership; every automatic decline names the local
 policy reason without disclosing private settings to the caller.
 
@@ -251,7 +257,7 @@ Carry retained invites, terminal facts, and bounded voice-note attachments
 over Reticulum and direct PHY. Keep live audio disabled on carriers that fail
 the configured bitrate and latency floor.
 
-**Done:** the connected T114 and Heltec V4 exchange an invite and voice note
+**Done when:** the connected T114 and Heltec V4 exchange an invite and voice note
 with byte-identical Commons verification; the UI says “voice note” rather than
 claiming a live call.
 
@@ -261,7 +267,7 @@ Only after A0-A5, compare mesh forwarding, a selected forwarder, and an
 external relay using measured two-person media costs and the actual membership
 model.
 
-**Done:** a written choice names participant limit, trust model, failure mode,
+**Done when:** a written choice names participant limit, trust model, failure mode,
 bandwidth cost, and the proof required before group calls enter the profile.
 
 ## Stop rules
@@ -273,6 +279,24 @@ bandwidth cost, and the proof required before group calls enter the profile.
 - Do not begin group media before a two-machine A3 receipt exists.
 - Do not retain media or fine-grained quality history as a side effect of
   diagnostics.
-- Do not start A1 before Turnstone's shared-place port can supply the product
-  context and admitted session.
+- Do not start A1 before the place-port plan's T5 headed receipt exists.
 - Do not make Graphshell or a Mere probe the first call product.
+
+## Open question: is a call owned by the right noun?
+
+Raised 2026-07-31, unresolved, recorded so A1 does not settle it by accident.
+
+The product contract above says a call is an admitted live session *inside one
+Commons*. That reads naturally for a place call and excludes the ordinary case
+of two people who already know each other calling from a Murm relationship,
+with no moot between them. If that exclusion stands, direct calling later needs
+either a second grammar or a retrofitted one.
+
+The alternative is a plain reusable calls service that takes an admitted
+session and a participant set from either context: Commons keeps retained
+invitations and terminal history for place calls, Murm initiates direct calls,
+Notochord admits either, and Turnstone hosts the surface. A0's grammar is
+already sans-I/O and carries no Commons-specific state beyond the space id, so
+extracting it is cheap now and expensive once A1 has a wire.
+
+Decide before A1 writes its first frame. Do not decide by starting A1.
