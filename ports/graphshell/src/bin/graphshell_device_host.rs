@@ -13,6 +13,8 @@ use graphshell::identity::VaultProtectionView;
 use graphshell::native::device_broker::{DeviceSupplementalCards, serve_browser_broker_with_cards};
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
 use graphshell::native::identity_ui::SystemNativeIdentityUi;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::owner_settings::{self, DataRootMigration, OwnerSettings, SyncOverrides};
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
@@ -45,22 +47,13 @@ struct Args {
     browser_endpoint: String,
     data_root: Option<PathBuf>,
     log_file: Option<PathBuf>,
+    /// Command-line overrides folded over the profile's stored settings.
     #[cfg(feature = "personal-sync")]
-    sync: Option<SyncArgs>,
-}
-
-#[cfg(feature = "personal-sync")]
-struct SyncArgs {
-    graph: String,
-    store_path: Option<PathBuf>,
-    roots: Vec<[u8; 32]>,
-    peer_tickets: Vec<String>,
-    peer_nodes: Vec<[u8; 32]>,
-    facets: Vec<String>,
-    access_records: bool,
-    saved_scenes: bool,
-    handler_preferences: bool,
-    blob_availability: bool,
+    sync_overrides: SyncOverrides,
+    /// Peer tickets stay arguments rather than settings: a ticket is only
+    /// valid until that peer rebinds, so storing one would go stale.
+    #[cfg(feature = "personal-sync")]
+    sync_peer_tickets: Vec<String>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -154,9 +147,9 @@ fn parse_args() -> Result<Args, String> {
             }
             #[cfg(feature = "personal-sync")]
             "--sync-root" => {
-                sync_roots.push(parse_public_root(
-                    &argv.next().ok_or("--sync-root needs a value")?,
-                )?);
+                let value = argv.next().ok_or("--sync-root needs a value")?;
+                owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
+                sync_roots.push(value);
             }
             #[cfg(feature = "personal-sync")]
             "--sync-peer" => {
@@ -167,9 +160,9 @@ fn parse_args() -> Result<Args, String> {
             // after that device restarts. A node id is stable.
             #[cfg(feature = "personal-sync")]
             "--sync-peer-node" => {
-                sync_peer_nodes.push(parse_public_root(
-                    &argv.next().ok_or("--sync-peer-node needs a value")?,
-                )?);
+                let value = argv.next().ok_or("--sync-peer-node needs a value")?;
+                owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
+                sync_peer_nodes.push(value);
             }
             #[cfg(feature = "personal-sync")]
             "--sync-facet" => {
@@ -208,18 +201,19 @@ fn parse_args() -> Result<Args, String> {
         data_root,
         log_file,
         #[cfg(feature = "personal-sync")]
-        sync: sync_graph.map(|graph| SyncArgs {
-            graph,
+        sync_overrides: SyncOverrides {
+            graph: sync_graph,
             store_path: sync_store,
-            roots: sync_roots,
-            peer_tickets: sync_peers,
-            peer_nodes: sync_peer_nodes,
+            roster_roots: sync_roots,
+            paired_nodes: sync_peer_nodes,
             facets: sync_facets,
             access_records: sync_access,
             saved_scenes: sync_scenes,
             handler_preferences: sync_handlers,
             blob_availability: sync_blobs,
-        }),
+        },
+        #[cfg(feature = "personal-sync")]
+        sync_peer_tickets: sync_peers,
     })
 }
 
@@ -330,66 +324,98 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         .with_additional(&std::env::var(EXTRA_EXTENSIONS_ENV).unwrap_or_default());
     let agent = listen(agent_listener, personae.agent_session());
     #[cfg(feature = "personal-sync")]
-    let supplemental_cards = if let Some(sync) = args.sync {
-        let graph = personal_graph_id(&sync.graph);
-        let data_root = args
-            .data_root
-            .clone()
-            .unwrap_or_else(|| args.vault_dir.join("graphshell-data"));
-        let store_path = sync.store_path.unwrap_or_else(|| {
-            data_root
-                .join("personal-sync")
-                .join(format!("{}.redb", hex(&graph)))
-        });
-        let mut roots = sync.roots;
-        roots.push(personae.master_public_key().to_bytes());
-        roots.sort_unstable();
-        roots.dedup();
-        let selection = SyncSelection::default()
-            .with_facets(sync.facets)
-            .with_access_records(sync.access_records)
-            .with_saved_scenes(sync.saved_scenes)
-            .with_handler_preferences(sync.handler_preferences)
-            .with_blob_availability(sync.blob_availability);
-        let personal_sync = Arc::new(
-            PersonalSyncHost::open(
-                personae.as_ref(),
-                PersonalSyncHostConfig {
-                    graph,
-                    store_path,
-                    roster: SyncRoster::new(roots),
-                    selection,
-                    peer_tickets: sync.peer_tickets,
-                    paired_nodes: sync.peer_nodes,
-                },
-            )
-            .await?,
-        );
-        // node_id is the durable half of this line: a peer pairs with it once
-        // and it survives restarts. The ticket is logged too because it still
-        // bootstraps across networks, where mDNS cannot reach.
+    let supplemental_cards = {
+        let app_dir = owner_settings::default_app_dir();
+        let settings_file = owner_settings::settings_path(&app_dir, &args.profile);
+        let stored = OwnerSettings::load(&settings_file)?;
         tracing::info!(
-            graph = %hex(&graph),
-            node_id = %hex(&personal_sync.node_id()),
-            ticket = %personal_sync.ticket().await?,
-            "personal graph sync listening"
+            path = %settings_file.display(),
+            configured = stored.sync.is_some(),
+            "owner settings"
         );
-        let cards: DeviceSupplementalCards = Arc::new(tokio::sync::RwLock::new(
-            personal_sync.supplemental_cards().await?,
-        ));
-        let refresh_cards = Arc::clone(&cards);
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                match personal_sync.supplemental_cards().await {
-                    Ok(snapshot) => *refresh_cards.write().await = snapshot,
-                    Err(error) => tracing::warn!(%error, "personal sync projection refresh failed"),
+        let resolved = owner_settings::resolve_sync(stored.sync, args.sync_overrides);
+        if let Some(sync) = resolved {
+            let graph = personal_graph_id(&sync.graph);
+            // An explicit --data-root or GRAPHSHELL_DATA_ROOT is the owner
+            // naming a location, so leave it alone. Otherwise take the default
+            // and bring any store still sitting inside the Personae vault with
+            // it, once.
+            let data_root = match args.data_root.clone() {
+                Some(explicit) => explicit,
+                None => {
+                    let current = owner_settings::default_data_root(&app_dir);
+                    let legacy = owner_settings::legacy_data_root(&args.vault_dir);
+                    if let DataRootMigration::Moved { from, to } =
+                        owner_settings::migrate_data_root(&legacy, &current)?
+                    {
+                        tracing::info!(
+                            from = %from.display(),
+                            to = %to.display(),
+                            "moved the Graphshell data root out of the Personae vault"
+                        );
+                    }
+                    current
                 }
-            }
-        });
-        Some(cards)
-    } else {
-        None
+            };
+            let store_path = sync.store_path.clone().unwrap_or_else(|| {
+                data_root
+                    .join("personal-sync")
+                    .join(format!("{}.redb", hex(&graph)))
+            });
+            let mut roots = sync.roster_root_keys()?;
+            roots.push(personae.master_public_key().to_bytes());
+            roots.sort_unstable();
+            roots.dedup();
+            let paired_nodes = sync.paired_node_keys()?;
+            let selection = SyncSelection::default()
+                .with_facets(sync.lanes.facets.clone())
+                .with_access_records(sync.lanes.access_records)
+                .with_saved_scenes(sync.lanes.saved_scenes)
+                .with_handler_preferences(sync.lanes.handler_preferences)
+                .with_blob_availability(sync.lanes.blob_availability);
+            let personal_sync = Arc::new(
+                PersonalSyncHost::open(
+                    personae.as_ref(),
+                    PersonalSyncHostConfig {
+                        graph,
+                        store_path,
+                        roster: SyncRoster::new(roots),
+                        selection,
+                        peer_tickets: args.sync_peer_tickets,
+                        paired_nodes,
+                    },
+                )
+                .await?,
+            );
+            // node_id is the durable half of this line: a peer pairs with it
+            // once and it survives restarts. The ticket is logged too because
+            // it still bootstraps across networks, where mDNS cannot reach.
+            tracing::info!(
+                graph = %hex(&graph),
+                node_id = %hex(&personal_sync.node_id()),
+                paired = sync.paired_devices.len(),
+                ticket = %personal_sync.ticket().await?,
+                "personal graph sync listening"
+            );
+            let cards: DeviceSupplementalCards = Arc::new(tokio::sync::RwLock::new(
+                personal_sync.supplemental_cards().await?,
+            ));
+            let refresh_cards = Arc::clone(&cards);
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    match personal_sync.supplemental_cards().await {
+                        Ok(snapshot) => *refresh_cards.write().await = snapshot,
+                        Err(error) => {
+                            tracing::warn!(%error, "personal sync projection refresh failed")
+                        }
+                    }
+                }
+            });
+            Some(cards)
+        } else {
+            None
+        }
     };
     #[cfg(feature = "personal-sync")]
     let browser = async {
@@ -445,21 +471,6 @@ fn personal_graph_id(name: &str) -> [u8; 32] {
     hasher.update(PERSONAL_GRAPH_DOMAIN);
     hasher.update(name.as_bytes());
     *hasher.finalize().as_bytes()
-}
-
-#[cfg(feature = "personal-sync")]
-fn parse_public_root(value: &str) -> Result<[u8; 32], String> {
-    let value = value.trim();
-    if value.len() != 64 {
-        return Err("--sync-root must be exactly 64 hexadecimal characters".into());
-    }
-    let mut root = [0u8; 32];
-    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
-        let digits = std::str::from_utf8(chunk).map_err(|error| error.to_string())?;
-        root[index] = u8::from_str_radix(digits, 16)
-            .map_err(|_| "--sync-root contains a non-hexadecimal byte".to_string())?;
-    }
-    Ok(root)
 }
 
 #[cfg(feature = "personal-sync")]

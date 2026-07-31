@@ -104,6 +104,15 @@ $escapedDeviceCommand = $deviceCommand.Replace("""", """""")
 $vbs = @"
 ' Graphshell resident host recovery loop. Task Scheduler owns this launcher;
 ' the launcher restarts the device host after a crash.
+'
+' Personal sync is not configured here. Which graph, which lanes and which
+' paired devices are owner settings, stored per Personae profile under
+' %LOCALAPPDATA%\Graphshell\settings. Editing this launcher is not how you
+' change what the device synchronises.
+'
+' Arguments still override the settings file for a one-off run. Peer tickets
+' stay arguments only: a ticket goes stale as soon as that peer rebinds, so
+' pairing records a node id instead.
 Set shell = CreateObject("WScript.Shell")
 Do
   shell.Run "$escapedDeviceCommand", 0, True
