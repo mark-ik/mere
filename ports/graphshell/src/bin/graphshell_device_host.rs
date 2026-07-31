@@ -60,6 +60,7 @@ struct Args {
 #[cfg(feature = "personal-sync")]
 struct PairRequest {
     node_id: String,
+    root: Option<String>,
     label: String,
 }
 
@@ -141,6 +142,8 @@ fn parse_args() -> Result<Args, String> {
     #[cfg(feature = "personal-sync")]
     let mut pair_node = None;
     #[cfg(feature = "personal-sync")]
+    let mut pair_root = None;
+    #[cfg(feature = "personal-sync")]
     let mut pair_label = String::new();
     #[cfg(feature = "personal-sync")]
     let mut unpair_node = None;
@@ -216,6 +219,12 @@ fn parse_args() -> Result<Args, String> {
                 pair_node = Some(value);
             }
             #[cfg(feature = "personal-sync")]
+            "--pair-root" => {
+                let value = argv.next().ok_or("--pair-root needs a value")?;
+                owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
+                pair_root = Some(value);
+            }
+            #[cfg(feature = "personal-sync")]
             "--pair-label" => {
                 pair_label = argv.next().ok_or("--pair-label needs a value")?;
             }
@@ -274,6 +283,7 @@ fn parse_args() -> Result<Args, String> {
         #[cfg(feature = "personal-sync")]
         pair: pair_node.map(|node_id| PairRequest {
             node_id,
+            root: pair_root,
             label: pair_label,
         }),
         #[cfg(feature = "personal-sync")]
@@ -300,20 +310,31 @@ fn unpair_device(args: &Args, node_id: &str) -> Result<String, String> {
 #[cfg(feature = "personal-sync")]
 fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
     let node = owner_settings::parse_hex32(&request.node_id).map_err(|error| error.to_string())?;
+    let root = match &request.root {
+        Some(value) => Some(owner_settings::parse_hex32(value).map_err(|error| error.to_string())?),
+        None => None,
+    };
     let outcome = device_sync::pair_device(
         &owner_settings::default_app_dir(),
         &args.profile,
         node,
+        root,
         &request.label,
         now_ms(),
     )
     .map_err(|error| error.to_string())?;
     Ok(match outcome {
-        device_sync::PairOutcome::Added { path } => format!(
-            "paired {} as {:?} in {}",
+        device_sync::PairOutcome::Added { path, receive_only } => format!(
+            "paired {} as {:?} in {}{}",
             request.node_id,
             request.label,
-            path.display()
+            path.display(),
+            if receive_only {
+                "\nno --pair-root given: this device will receive the graph, \
+                 and its own writes will be refused"
+            } else {
+                ""
+            }
         ),
         device_sync::PairOutcome::AlreadyPaired => {
             format!("{} was already paired; settings unchanged", request.node_id)
@@ -340,7 +361,8 @@ fn usage() -> &'static str {
      [--sync-peer <ticket>] \
      [--sync-facet <id>] [--sync-access] [--sync-scenes] \
      [--sync-handlers] [--sync-blobs]\n\
-     pair and exit: --pair-node <64-hex-node-id> [--pair-label <name>]\n\
+     pair and exit: --pair-node <64-hex-node-id> \
+     [--pair-root <64-hex-master-root>] [--pair-label <name>]\n\
      unpair and exit: --unpair-node <64-hex-node-id>\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }

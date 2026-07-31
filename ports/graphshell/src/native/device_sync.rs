@@ -47,7 +47,12 @@ pub enum DeviceSyncError {
 /// What a pairing attempt did.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PairOutcome {
-    Added { path: PathBuf },
+    Added {
+        path: PathBuf,
+        /// True when no roster root was supplied, so the device will receive
+        /// this graph but its writes will be refused.
+        receive_only: bool,
+    },
     AlreadyPaired,
 }
 
@@ -89,6 +94,7 @@ pub fn pair_device(
     app_dir: &Path,
     profile: &ProfileId,
     node_id: [u8; 32],
+    root: Option<[u8; 32]>,
     label: &str,
     at_ms: u64,
 ) -> Result<PairOutcome, DeviceSyncError> {
@@ -103,11 +109,14 @@ pub fn pair_device(
             path: path.display().to_string(),
         });
     }
-    if !sync.pair(node_id, label, at_ms) {
+    if !sync.pair(node_id, root, label, at_ms) {
         return Ok(PairOutcome::AlreadyPaired);
     }
     settings.save(&path)?;
-    Ok(PairOutcome::Added { path })
+    Ok(PairOutcome::Added {
+        path,
+        receive_only: root.is_none(),
+    })
 }
 
 /// Resolve the data root, moving it out of the Personae vault once if it is
@@ -200,6 +209,17 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         ticket = %host.ticket().await?,
         "personal graph sync listening"
     );
+    // Name any device that can reach this graph but cannot write to it. The
+    // failure it would otherwise produce is a stream of refused operations on
+    // the far side, which is a confusing place to learn about a missing root.
+    for device in sync.receive_only_devices() {
+        tracing::warn!(
+            node = %device.node_id,
+            label = %device.label,
+            "paired device has no roster root: it will receive this graph, and \
+             its own writes will be refused"
+        );
+    }
 
     spawn_pairing_watch(Arc::clone(&host), settings_file, paired_nodes);
     let cards: DeviceSupplementalCards =
@@ -334,7 +354,8 @@ mod tests {
     #[test]
     fn pairing_refuses_when_no_graph_is_configured() {
         let directory = tempfile::tempdir().unwrap();
-        let error = pair_device(directory.path(), &profile(), [0x31; 32], "qpc", 1).unwrap_err();
+        let error =
+            pair_device(directory.path(), &profile(), [0x31; 32], None, "qpc", 1).unwrap_err();
         assert!(
             matches!(error, DeviceSyncError::NoGraphConfigured { .. }),
             "pairing into a profile with no graph must fail rather than \
@@ -356,11 +377,11 @@ mod tests {
         .unwrap();
 
         assert!(matches!(
-            pair_device(directory.path(), &profile(), [0x31; 32], "qpc", 100).unwrap(),
+            pair_device(directory.path(), &profile(), [0x31; 32], None, "qpc", 100).unwrap(),
             PairOutcome::Added { .. }
         ));
         assert_eq!(
-            pair_device(directory.path(), &profile(), [0x31; 32], "qpc", 200).unwrap(),
+            pair_device(directory.path(), &profile(), [0x31; 32], None, "qpc", 200).unwrap(),
             PairOutcome::AlreadyPaired
         );
 
@@ -387,8 +408,24 @@ mod tests {
         }
         .save(&path)
         .unwrap();
-        pair_device(directory.path(), &profile(), [0x41; 32], "imac", 1).unwrap();
-        pair_device(directory.path(), &profile(), [0x42; 32], "thinkpad", 2).unwrap();
+        pair_device(
+            directory.path(),
+            &profile(),
+            [0x41; 32],
+            Some([0xa1; 32]),
+            "imac",
+            1,
+        )
+        .unwrap();
+        pair_device(
+            directory.path(),
+            &profile(),
+            [0x42; 32],
+            Some([0xa2; 32]),
+            "thinkpad",
+            2,
+        )
+        .unwrap();
 
         assert!(matches!(
             unpair_device(directory.path(), &profile(), [0x41; 32]).unwrap(),
@@ -406,6 +443,86 @@ mod tests {
         assert_eq!(
             remaining.graph, "personal",
             "unpairing must not disturb the rest of the settings"
+        );
+    }
+
+    #[test]
+    fn unpairing_revokes_write_authority_along_with_reachability() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = owner_settings::settings_path(directory.path(), &profile());
+        OwnerSettings {
+            sync: Some(SyncSettings {
+                graph: "personal".into(),
+                roster_roots: vec![owner_settings::hex32(&[0xc0; 32])],
+                ..SyncSettings::default()
+            }),
+        }
+        .save(&path)
+        .unwrap();
+        pair_device(
+            directory.path(),
+            &profile(),
+            [0x51; 32],
+            Some([0xd1; 32]),
+            "thinkpad",
+            1,
+        )
+        .unwrap();
+
+        let paired = OwnerSettings::load(&path).unwrap().sync.unwrap();
+        let mut roster = paired.roster_root_keys().unwrap();
+        roster.sort_unstable();
+        assert_eq!(
+            roster,
+            vec![[0xc0; 32], [0xd1; 32]],
+            "a paired device's root must join the roster, or its writes are \
+             refused while it looks paired"
+        );
+
+        unpair_device(directory.path(), &profile(), [0x51; 32]).unwrap();
+        let dropped = OwnerSettings::load(&path).unwrap().sync.unwrap();
+        assert_eq!(
+            dropped.roster_root_keys().unwrap(),
+            vec![[0xc0; 32]],
+            "unpairing must revoke write authority too: a root left behind is \
+             authority the owner believes they removed"
+        );
+        assert!(
+            dropped.paired_node_keys().unwrap().is_empty(),
+            "and reachability goes with it"
+        );
+    }
+
+    #[test]
+    fn a_device_paired_without_a_root_is_receive_only_and_says_so() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = owner_settings::settings_path(directory.path(), &profile());
+        OwnerSettings {
+            sync: Some(SyncSettings {
+                graph: "personal".into(),
+                ..SyncSettings::default()
+            }),
+        }
+        .save(&path)
+        .unwrap();
+
+        assert_eq!(
+            pair_device(directory.path(), &profile(), [0x61; 32], None, "reader", 1).unwrap(),
+            PairOutcome::Added {
+                path: path.clone(),
+                receive_only: true
+            }
+        );
+        let stored = OwnerSettings::load(&path).unwrap().sync.unwrap();
+        assert!(
+            stored.roster_root_keys().unwrap().is_empty(),
+            "no root was given, so nothing joins the roster"
+        );
+        assert_eq!(
+            stored.receive_only_devices().len(),
+            1,
+            "and the device is reportable as receive-only rather than looking \
+             like a fully paired peer that mysteriously cannot write"
         );
     }
 
@@ -431,11 +548,27 @@ mod tests {
         .save(&path)
         .unwrap();
 
-        pair_device(directory.path(), &profile(), [0x44; 32], "imac", 1).unwrap();
+        pair_device(
+            directory.path(),
+            &profile(),
+            [0x44; 32],
+            Some([0xa4; 32]),
+            "imac",
+            1,
+        )
+        .unwrap();
         unpair_device(directory.path(), &profile(), [0x44; 32]).unwrap();
         assert!(
             matches!(
-                pair_device(directory.path(), &profile(), [0x44; 32], "imac again", 3).unwrap(),
+                pair_device(
+                    directory.path(),
+                    &profile(),
+                    [0x44; 32],
+                    Some([0xa4; 32]),
+                    "imac again",
+                    3
+                )
+                .unwrap(),
                 PairOutcome::Added { .. }
             ),
             "unpairing must not leave a tombstone that blocks re-pairing"

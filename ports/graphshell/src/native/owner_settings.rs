@@ -125,12 +125,24 @@ pub struct SyncSettings {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct PairedDevice {
-    /// The peer's 64-hex per-graph transport node id.
+    /// Reachability: the peer's 64-hex per-graph transport node id.
     ///
     /// Deliberately not a ticket. A ticket carries the peer's address as of its
     /// last bind and goes stale when that device restarts; a node id is derived
     /// from the peer's master seed and the graph salt, so it keeps working.
     pub node_id: String,
+    /// Authority: the peer's 64-hex Personae master public root.
+    ///
+    /// Reachability and authority are separate facts and a node id cannot
+    /// carry both. The roster is what admits a writer, so a device recorded
+    /// without a root can still receive this graph while its own operations
+    /// are refused as `WriterNotAdmitted`.
+    ///
+    /// That is a real configuration, a device that reads without
+    /// contributing, so it stays representable. It is reported at start-up so
+    /// it cannot become a silent accident.
+    #[serde(default)]
+    pub root: Option<String>,
     #[serde(default)]
     pub label: String,
     #[serde(default)]
@@ -202,9 +214,32 @@ impl OwnerSettings {
 }
 
 impl SyncSettings {
-    /// The roster roots as raw keys.
+    /// Every root admitted to write this graph: the standalone roots plus the
+    /// root recorded against each paired device.
+    ///
+    /// Pairing records both facts together so that one unpair removes both. A
+    /// root left behind after its device was dropped would be write authority
+    /// the owner believes they revoked.
     pub fn roster_root_keys(&self) -> Result<Vec<[u8; 32]>, OwnerSettingsError> {
-        self.roster_roots.iter().map(|r| parse_hex32(r)).collect()
+        self.roster_roots
+            .iter()
+            .map(|root| parse_hex32(root))
+            .chain(
+                self.paired_devices
+                    .iter()
+                    .filter_map(|device| device.root.as_deref())
+                    .map(parse_hex32),
+            )
+            .collect()
+    }
+
+    /// Paired devices with no roster root. They receive this graph; their own
+    /// writes are refused.
+    pub fn receive_only_devices(&self) -> Vec<&PairedDevice> {
+        self.paired_devices
+            .iter()
+            .filter(|device| device.root.is_none())
+            .collect()
     }
 
     /// The paired devices' node ids as raw keys.
@@ -215,9 +250,16 @@ impl SyncSettings {
             .collect()
     }
 
-    /// Record a paired device. Returns false when that node id was already
-    /// present, so re-pairing does not accumulate duplicates.
-    pub fn pair(&mut self, node_id: [u8; 32], label: &str, at_ms: u64) -> bool {
+    /// Record a paired device, with its write authority when known. Returns
+    /// false when that node id was already present, so re-pairing does not
+    /// accumulate duplicates.
+    pub fn pair(
+        &mut self,
+        node_id: [u8; 32],
+        root: Option<[u8; 32]>,
+        label: &str,
+        at_ms: u64,
+    ) -> bool {
         let node_id = hex32(&node_id);
         if self
             .paired_devices
@@ -228,6 +270,7 @@ impl SyncSettings {
         }
         self.paired_devices.push(PairedDevice {
             node_id,
+            root: root.map(|root| hex32(&root)),
             label: label.to_string(),
             added_ms: at_ms,
         });
@@ -300,8 +343,12 @@ impl SyncSettings {
             self.paired_devices = overrides
                 .paired_nodes
                 .into_iter()
+                // --sync-peer-node carries reachability only, so an override
+                // pairs receive-only; write authority comes from --sync-root
+                // or the stored roster.
                 .map(|node_id| PairedDevice {
                     node_id,
+                    root: None,
                     label: String::new(),
                     added_ms: 0,
                 })
@@ -469,12 +516,12 @@ mod tests {
     #[test]
     fn pairing_is_idempotent_and_keyed_on_the_node_id() {
         let mut sync = SyncSettings::default();
-        assert!(sync.pair([0x11; 32], "qpc", 100));
+        assert!(sync.pair([0x11; 32], Some([0xb1; 32]), "qpc", 100));
         assert!(
-            !sync.pair([0x11; 32], "qpc renamed", 200),
+            !sync.pair([0x11; 32], Some([0xb1; 32]), "qpc renamed", 200),
             "re-pairing the same device must not add a second entry"
         );
-        assert!(sync.pair([0x22; 32], "laptop", 300));
+        assert!(sync.pair([0x22; 32], None, "laptop", 300));
         assert_eq!(sync.paired_devices.len(), 2);
         assert_eq!(
             sync.paired_node_keys().unwrap(),
