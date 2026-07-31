@@ -38,6 +38,17 @@ hand where load-bearing.
   which churns hardest in majors; netrender/genet/graft move in the same
   breath), so waiting for vello + a 30.0.1 is deliberate. Fork trigger: vello
   still on 29 after ~a month AND something in wgpu 30 actually pulls us.
+  **Re-verified 2026-07-31, and the trigger is half-armed.** vello 0.9.0 (the
+  latest release, 2026-05-15) still requires `wgpu ^29.0.3`, which
+  semver-excludes 30, and netrender's sole rasterizer is `vello = "0.9"`, so
+  the chain holds. The ~month has now elapsed, satisfying the trigger's first
+  half; **the second half is not met**, because nothing yet needs a wgpu 30
+  feature. So the answer stays 29, on purpose rather than by neglect. Family
+  sweep the same day found **uniform 29** across netrender, genet, mere,
+  isometry, turnstone, woodshed, hocket, wgpu-weld, and wgpu-scry; the new
+  `mesocosm` workspace joined at 29 and declares wgpu once at its workspace
+  root so its crates cannot drift apart. Revisit when vello ships a wgpu-30
+  release, and move the family in one breath.
 - **taffy — gated on stylo_taffy.** genet vendors
   `taffy 0.11.0-experimental-cache-fix.3` with 3 documented re-applyable
   patches. taffy 0.12.1 stable now ships `float_layout`/`block_layout` (the
