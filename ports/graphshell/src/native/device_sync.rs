@@ -180,7 +180,12 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         tracing::info!(address = %note.address, title = %note.title, "authored a node");
     }
 
-    spawn_pairing_watch(Arc::clone(&host), settings_file, paired_nodes);
+    spawn_pairing_watch(
+        Arc::clone(&host),
+        settings_file,
+        paired_nodes,
+        identity.master_public_key().to_bytes(),
+    );
     let cards: DeviceSupplementalCards =
         Arc::new(tokio::sync::RwLock::new(host.supplemental_cards().await?));
     spawn_card_refresh(host, Arc::clone(&cards));
@@ -198,6 +203,7 @@ fn spawn_pairing_watch(
     host: Arc<PersonalSyncHost>,
     settings_file: PathBuf,
     already_applied: Vec<[u8; 32]>,
+    local_root: [u8; 32],
 ) {
     let mut applied: std::collections::HashSet<[u8; 32]> = already_applied.into_iter().collect();
     // Last reported reachability, so the log records transitions rather than
@@ -224,6 +230,25 @@ fn spawn_pairing_watch(
                     continue;
                 }
             };
+
+            // Authority moves with reachability. Tagging a peer onto the
+            // overlay without admitting its root produces a device that
+            // connects and then has everything it sends refused, which is the
+            // most confusing shape this can fail in.
+            match sync.roster_root_keys() {
+                Ok(mut roots) => {
+                    roots.push(local_root);
+                    roots.sort_unstable();
+                    roots.dedup();
+                    let roots_len = roots.len();
+                    let next = SyncRoster::new(roots);
+                    if host.roster().await != next {
+                        host.set_roster(next).await;
+                        tracing::info!(admitted = roots_len, "personal sync roster changed");
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "owner settings hold an unusable roster root"),
+            }
 
             for node in desired.difference(&applied).copied().collect::<Vec<_>>() {
                 match host.pair_node(node).await {

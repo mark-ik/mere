@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use graphshell_protocol::{CardValueV1, PortableCardV1};
 use muniment::RedbBackend;
 use personae::IdentityProvider;
+use std::sync::Arc;
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
-use tokio::sync::Mutex;
+
+use tokio::sync::{Mutex, RwLock};
 use transport::p2panda_transport::KnownPeer;
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::{P2pandaTransport, PeerID, Transport, sync_overlay_topic};
@@ -58,7 +60,7 @@ pub enum PersonalSyncHostError {
 pub struct PersonalSyncHost {
     graph: [u8; 32],
     store_path: PathBuf,
-    roster: SyncRoster,
+    roster: Arc<RwLock<SyncRoster>>,
     replica: Mutex<PersonalGraphReplica<RedbBackend>>,
     joined: JoinedSpace<PersonalGraphExt>,
     transport: P2pandaTransport,
@@ -117,7 +119,12 @@ impl PersonalSyncHost {
         }
         let store = replica.sync_store();
         let accepted = store.clone();
-        let roster = config.roster.clone();
+        // Shared rather than captured by value: pairing a device while the
+        // host runs has to change who is admitted, not only who is reachable.
+        // A roster baked in at open time meant a device could become reachable
+        // and still have every write refused until the next restart.
+        let roster = Arc::new(RwLock::new(config.roster.clone()));
+        let admitting = Arc::clone(&roster);
         let graph = config.graph;
         let (endpoint, gossip) = transport
             .sync_parts()
@@ -125,8 +132,9 @@ impl PersonalSyncHost {
         let joined =
             JoinedSpace::join::<_, u64, _, _>(store, endpoint, gossip, graph, move |operation| {
                 let store = accepted.clone();
-                let roster = roster.clone();
+                let admitting = Arc::clone(&admitting);
                 async move {
+                    let roster = admitting.read().await.clone();
                     match accept_into(&store, graph, &roster, &operation).await {
                         Ok(inserted) => inserted,
                         Err(error) => {
@@ -152,7 +160,7 @@ impl PersonalSyncHost {
         Ok(Self {
             graph,
             store_path: config.store_path,
-            roster: config.roster,
+            roster,
             replica: Mutex::new(replica),
             joined,
             transport,
@@ -163,8 +171,17 @@ impl PersonalSyncHost {
         self.graph
     }
 
-    pub fn roster(&self) -> &SyncRoster {
-        &self.roster
+    pub async fn roster(&self) -> SyncRoster {
+        self.roster.read().await.clone()
+    }
+
+    /// Replace the set of roots admitted to write this graph.
+    ///
+    /// The authority half of [`pair_node`](Self::pair_node). Reachability
+    /// without admission is a device that connects and has everything it sends
+    /// refused, so the two must move together.
+    pub async fn set_roster(&self, roster: SyncRoster) {
+        *self.roster.write().await = roster;
     }
 
     pub fn sync_status(&self) -> SyncStatus {
