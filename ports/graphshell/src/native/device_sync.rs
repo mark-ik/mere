@@ -291,11 +291,22 @@ fn spawn_pairing_watch(
 }
 
 fn spawn_card_refresh(host: Arc<PersonalSyncHost>, cards: DeviceSupplementalCards) {
+    // The projection is otherwise only visible to an admitted browser session,
+    // which means a graph arriving from a peer leaves no trace anywhere an
+    // operator can see. Report the size when it changes, so convergence is
+    // observable rather than merely asserted.
+    let mut reported: Option<usize> = None;
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             match host.supplemental_cards().await {
-                Ok(snapshot) => *cards.write().await = snapshot,
+                Ok(snapshot) => {
+                    if reported != Some(snapshot.len()) {
+                        tracing::info!(cards = snapshot.len(), "personal graph projection changed");
+                        reported = Some(snapshot.len());
+                    }
+                    *cards.write().await = snapshot;
+                }
                 Err(error) => tracing::warn!(%error, "personal sync projection refresh failed"),
             }
         }
