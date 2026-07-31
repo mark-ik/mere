@@ -35,8 +35,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# DateTimeOffset throughout: the host log stamps UTC while Windows reports boot
+# and process start in local time, and PowerShell will not compare the two
+# types. Carrying the offset makes every comparison below unambiguous.
 function Get-LastBoot {
-    (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+    [datetimeoffset](Get-CimInstance Win32_OperatingSystem).LastBootUpTime
 }
 
 function Get-HostProcess {
@@ -130,7 +133,9 @@ $process = Get-HostProcess
 if (-not $process) {
     $failures.Add("no device-host process is running after the reboot")
 } else {
-    $started = [Management.ManagementDateTimeConverter]::ToDateTime($process.CreationDate)
+    # Get-CimInstance already surfaces CreationDate as a DateTime; the DMTF
+    # converter is for the older Get-WmiObject shape and throws on this one.
+    $started = [datetimeoffset]$process.CreationDate
     if ($started -lt $boot) {
         $failures.Add("the device host predates the boot; it did not start from the logon trigger")
     }
@@ -168,7 +173,7 @@ if ($baseline.store_path) {
         $failures.Add("the personal-graph store is gone: $($baseline.store_path)")
     } else {
         $store = Get-Item -LiteralPath $baseline.store_path
-        if ($store.CreationTime -gt $boot) {
+        if ([datetimeoffset]$store.CreationTime -gt $boot) {
             $failures.Add("the store was recreated after the boot rather than reopened")
         }
     }
