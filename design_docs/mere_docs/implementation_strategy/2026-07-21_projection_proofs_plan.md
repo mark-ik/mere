@@ -122,6 +122,7 @@ not collide.**
 | *(future, P4)* adjacency tiling | **Mosaic** | reserved (free) | brand "mosaic"; data-driven tiles, distinct from Penrose |
 | *(future, P5)* geographic | **Atlas** | reserved (free) | brand "atlas"; distinct from isometry's *overmap* surface |
 | *(future)* burn-kinship regions | **Hulls** | reserved | brand "hulls"; ties to the fields/hulls primitive |
+| *(future)* joint-constrained bodies | **Armature** | proposed (await ratify) | positions fixed by attachment frames, never force-settled — the nested-graph-scale sibling of orrery. First consumer: the games wing's live body swatch (a critter's body is a nested graph; see `mesocosm/design_docs/2026-07-30_body_pipeline_and_host_probe_plan.md` §3, 2026-07-31) |
 
 Collision checks (2026-07-22): `mosaic` zero hits stack-wide; `atlas` only a
 "font/SVG atlas" texture ref in graph-kernel; `spiral` only an internal grid
