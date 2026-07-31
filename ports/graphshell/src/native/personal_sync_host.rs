@@ -186,8 +186,13 @@ impl PersonalSyncHost {
     /// The authority half of [`pair_node`](Self::pair_node). Reachability
     /// without admission is a device that connects and has everything it sends
     /// refused, so the two must move together.
+    /// Both copies move together. The replica re-checks stored operations
+    /// against its own roster when projecting, so admitting a writer on intake
+    /// without admitting it here stores the operation and then fails the whole
+    /// projection on the way out.
     pub async fn set_roster(&self, roster: SyncRoster) {
-        *self.roster.write().await = roster;
+        *self.roster.write().await = roster.clone();
+        self.replica.lock().await.set_roster(roster);
     }
 
     pub fn sync_status(&self) -> SyncStatus {

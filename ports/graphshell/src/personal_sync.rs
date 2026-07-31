@@ -543,6 +543,17 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
         }
     }
 
+    /// Replace the roster this replica projects through.
+    ///
+    /// The replica keeps its own copy because projection re-checks every
+    /// stored operation against it. Admission and projection must therefore
+    /// move together: a device admitted on intake but absent here has its
+    /// operations accepted into the store and then refused on the way out,
+    /// which fails the whole projection rather than the one operation.
+    pub fn set_roster(&mut self, roster: SyncRoster) {
+        self.roster = roster;
+    }
+
     pub fn for_identity<P: IdentityProvider + ?Sized>(
         backend: B,
         graph: [u8; 32],
