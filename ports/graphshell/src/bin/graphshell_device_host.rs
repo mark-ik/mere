@@ -55,6 +55,9 @@ struct Args {
     /// Forget a device and exit.
     #[cfg(feature = "personal-sync")]
     unpair: Option<String>,
+    /// Print what the other device needs in order to pair, and exit.
+    #[cfg(feature = "personal-sync")]
+    pairing_facts: bool,
 }
 
 #[cfg(feature = "personal-sync")]
@@ -77,16 +80,17 @@ async fn main() {
     // settings and reports, so it writes to the console rather than the log.
     #[cfg(feature = "personal-sync")]
     {
-        let management = match (&args.pair, &args.unpair) {
-            (Some(_), Some(_)) => {
+        let management = match (&args.pair, &args.unpair, args.pairing_facts) {
+            (Some(_), Some(_), _) => {
                 eprintln!(
                     "graphshell device host: --pair-node and --unpair-node are mutually exclusive"
                 );
                 std::process::exit(2);
             }
-            (Some(request), None) => Some(pair_device(&args, request)),
-            (None, Some(node_id)) => Some(unpair_device(&args, node_id)),
-            (None, None) => None,
+            (Some(request), None, _) => Some(pair_device(&args, request)),
+            (None, Some(node_id), _) => Some(unpair_device(&args, node_id)),
+            (None, None, true) => Some(report_pairing_facts(&args)),
+            (None, None, false) => None,
         };
         if let Some(result) = management {
             match result {
@@ -147,6 +151,8 @@ fn parse_args() -> Result<Args, String> {
     let mut pair_label = String::new();
     #[cfg(feature = "personal-sync")]
     let mut unpair_node = None;
+    #[cfg(feature = "personal-sync")]
+    let mut pairing_facts = false;
     let mut argv = std::env::args().skip(1);
 
     while let Some(arg) = argv.next() {
@@ -229,6 +235,8 @@ fn parse_args() -> Result<Args, String> {
                 pair_label = argv.next().ok_or("--pair-label needs a value")?;
             }
             #[cfg(feature = "personal-sync")]
+            "--pairing-facts" => pairing_facts = true,
+            #[cfg(feature = "personal-sync")]
             "--unpair-node" => {
                 let value = argv.next().ok_or("--unpair-node needs a value")?;
                 owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
@@ -288,7 +296,40 @@ fn parse_args() -> Result<Args, String> {
         }),
         #[cfg(feature = "personal-sync")]
         unpair: unpair_node,
+        #[cfg(feature = "personal-sync")]
+        pairing_facts,
     })
+}
+
+/// Print what the other device needs in order to pair with this one.
+///
+/// Opens the vault but not the store, so it works while the resident host is
+/// running and holding the store's lock.
+#[cfg(feature = "personal-sync")]
+fn report_pairing_facts(args: &Args) -> Result<String, String> {
+    let opened = bootstrap::open_storage(&args.vault_dir, Unlock::from_env())
+        .map_err(|error| error.to_string())?;
+    let (profile, _created) = bootstrap::load_or_create_profile(&*opened.storage, &args.profile)
+        .map_err(|error| error.to_string())?;
+    let vault = IdentityVault::with_profile(opened.storage, profile);
+    let facts =
+        device_sync::pairing_facts(&vault, &owner_settings::default_app_dir(), &args.profile)
+            .map_err(|error| error.to_string())?;
+    let Some(facts) = facts else {
+        return Err(format!(
+            "personal sync is not configured for profile {:?}",
+            args.profile.0
+        ));
+    };
+    Ok(format!(
+        "graph   {}\nnode_id {}\nroot    {}\n\nOn the other device, run:\n  \
+         graphshell_device_host --pair-node {} --pair-root {} --pair-label <name>",
+        owner_settings::hex32(&facts.graph),
+        owner_settings::hex32(&facts.node_id),
+        owner_settings::hex32(&facts.root),
+        owner_settings::hex32(&facts.node_id),
+        owner_settings::hex32(&facts.root),
+    ))
 }
 
 #[cfg(feature = "personal-sync")]
@@ -364,6 +405,7 @@ fn usage() -> &'static str {
      pair and exit: --pair-node <64-hex-node-id> \
      [--pair-root <64-hex-master-root>] [--pair-label <name>]\n\
      unpair and exit: --unpair-node <64-hex-node-id>\n\
+     what the other device needs: --pairing-facts\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }
 

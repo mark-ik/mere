@@ -119,6 +119,44 @@ pub fn pair_device(
     })
 }
 
+/// What the other device needs in order to pair with this one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PairingFacts {
+    pub graph: [u8; 32],
+    /// Reachability. Derived per graph, so it is unlinkable across graphs.
+    pub node_id: [u8; 32],
+    /// Authority. Common to every graph this profile joins, so it is disclosed
+    /// on request rather than logged.
+    pub root: [u8; 32],
+}
+
+/// Compute this device's pairing facts without opening the store.
+///
+/// Both values are derived from the identity and the graph name, so this works
+/// while the resident host is running and holding the store's lock. That is
+/// the point: you need these while the host is up, not instead of it.
+pub fn pairing_facts<P: IdentityProvider + ?Sized>(
+    identity: &P,
+    app_dir: &Path,
+    profile: &ProfileId,
+) -> Result<Option<PairingFacts>, DeviceSyncError> {
+    let stored = OwnerSettings::load(&owner_settings::settings_path(app_dir, profile))?;
+    let Some(sync) = stored.sync.filter(|sync| !sync.graph.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let graph = personal_graph_id(&sync.graph);
+    let transport_key = identity
+        .derive_keypair(&crate::personal_sync::personal_graph_identity_salt(graph))
+        .map_err(|error| {
+            DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string()))
+        })?;
+    Ok(Some(PairingFacts {
+        graph,
+        node_id: transport_key.public_key().to_bytes(),
+        root: identity.master_public_key().to_bytes(),
+    }))
+}
+
 /// Resolve the data root, moving it out of the Personae vault once if it is
 /// still there. An explicit override is the owner naming a location, so it is
 /// taken as given.
@@ -199,15 +237,15 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         )
         .await?,
     );
-    // This line is what the OTHER device needs in order to pair with this one,
-    // so it carries both halves. node_id is reachability and survives
-    // restarts; root is the write authority its roster must admit. Both are
-    // public keys. The ticket is logged too because it still bootstraps across
-    // networks, where mDNS cannot reach.
+    // node_id is per-graph derived, so it is unlinkable across graphs and safe
+    // to leave in a log that sits on disk. The master root is NOT: it is the
+    // one identifier common to every graph this profile joins, so it is
+    // disclosed on request through `pairing_facts` rather than written here on
+    // every start. A peer learns it from the attestation on the wire anyway;
+    // that is a different surface from a plaintext file.
     tracing::info!(
         graph = %owner_settings::hex32(&graph),
         node_id = %owner_settings::hex32(&host.node_id()),
-        root = %owner_settings::hex32(&identity.master_public_key().to_bytes()),
         paired = sync.paired_devices.len(),
         ticket = %host.ticket().await?,
         "personal graph sync listening"
