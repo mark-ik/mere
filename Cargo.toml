@@ -357,7 +357,7 @@ p2panda-store = { git = "https://github.com/mark-ik/p2panda.git", branch = "main
 p2panda-stream = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 p2panda-sync = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 
-# ─── LAN peer discovery (H10): two mDNS fixes not yet released upstream ──────
+# ─── LAN peer discovery (H10): one real mDNS fix, one dead theory ────────────
 # iroh-mdns-address-lookup 0.4.0 joins the multicast group only on the
 # default-route interface, so a multi-homed host (Windows with a WSL/Hyper-V
 # adapter holding the multicast route) never hears LAN mDNS. The fork's `mere`
@@ -365,12 +365,21 @@ p2panda-sync = { git = "https://github.com/mark-ik/p2panda.git", branch = "main"
 # in sync with the host's interfaces via netwatch), taken as-is; drop this
 # patch when a release containing it ships.
 iroh-mdns-address-lookup = { git = "https://github.com/mark-ik/iroh-address-lookups.git", branch = "mere", version = "=0.4.0" }
-# swarm-discovery 0.6.3 keeps its sockets for the life of the process, and on
-# macOS a Wi-Fi state transition leaves pre-existing multicast sockets
-# permanently returning EHOSTUNREACH, silencing the peer (it stops announcing
-# and answering, since answers are sends). The fork's `mere` branch rebuilds an
-# interface socket after three consecutive send failures. Measured on the
-# Intel iMac, where the trigger recurs every few minutes on the eero mesh.
+# swarm-discovery 0.6.3 keeps its sockets for the life of the process. The
+# fork's `mere` branch rebuilds an interface socket after three consecutive
+# send failures, on the theory that a macOS Wi-Fi transition wedges existing
+# multicast sockets into permanent EHOSTUNREACH.
+#
+# That premise is dead (H10 final, dfe95f3e). The rebuild fired 272-350 times
+# against a live wedge and every fresh socket failed identically, while
+# Apple-signed python3 sent 72/72 on the same host in the same seconds. The
+# real cause is macOS policy: an unsigned binary with no responsible GUI app is
+# denied local-network egress on Sequoia and never becomes grantable, so a
+# resident Mere peer must ship as a signed app with the local-network usage
+# declaration.
+#
+# The branch stays pinned because it is harmless, but it is not upstreamed and
+# it fixes nothing. Drop it whenever this pin is next revisited.
 swarm-discovery = { git = "https://github.com/mark-ik/swarm-discovery.git", branch = "mere", version = "=0.6.3" }
 
 # ipc-channel: in-process fork, vendored in genet at support/patches/ipc-channel
