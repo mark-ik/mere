@@ -202,6 +202,7 @@ type AlpnQueues =
 /// right now is a property of what discovery has currently resolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KnownPeer {
+    /// The peer's durable identity. Never changes, unlike its address.
     pub peer: PeerID,
     /// False when the address book holds the identity but no transport
     /// information yet: discovery has named this peer without yet saying how
@@ -559,14 +560,20 @@ impl P2pandaTransport {
     /// pairs on peer id needs to answer "which of my devices can I actually
     /// reach right now", and a peer id alone cannot answer that: the address
     /// book may hold the identity with no transport information yet.
+    ///
+    /// This node is excluded. The address book registers the local node
+    /// against its own subscribed topics, so the raw query returns self as a
+    /// reachable peer, which every caller would have to filter out.
     pub async fn peers_for_topic(&self, topic: [u8; 32]) -> Result<Vec<KnownPeer>, TransportError> {
         let infos = self
             .address_book
             .node_infos_by_topics([Topic::from(topic)])
             .await
             .map_err(|e| TransportError::Backend(format!("node_infos_by_topics: {e}")))?;
+        let local = self.peer_id.to_bytes();
         infos
             .into_iter()
+            .filter(|info| info.node_id.as_bytes() != &local)
             .map(|info| {
                 let peer = PeerID::from_bytes(info.node_id.as_bytes())
                     .map_err(|e| TransportError::Backend(format!("peer id: {e}")))?;

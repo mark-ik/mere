@@ -221,6 +221,9 @@ fn spawn_pairing_watch(
     already_applied: Vec<[u8; 32]>,
 ) {
     let mut applied: std::collections::HashSet<[u8; 32]> = already_applied.into_iter().collect();
+    // Last reported reachability, so the log records transitions rather than
+    // repeating the same line every poll.
+    let mut reported: Option<Vec<(String, bool)>> = None;
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(PAIRING_POLL).await;
@@ -279,6 +282,30 @@ fn spawn_pairing_watch(
                         "could not drop an unpaired device"
                     ),
                 }
+            }
+
+            // Report reachability, not just membership. A paired device that
+            // discovery has never resolved is silently doing nothing, and
+            // "paired" alone cannot distinguish that from a working peer.
+            match host.known_peers().await {
+                Ok(peers) => {
+                    let mut current: Vec<(String, bool)> = peers
+                        .iter()
+                        .map(|peer| (owner_settings::hex32(&peer.peer.to_bytes()), peer.reachable))
+                        .collect();
+                    current.sort();
+                    if reported.as_ref() != Some(&current) {
+                        let reachable = current.iter().filter(|(_, ok)| *ok).count();
+                        tracing::info!(
+                            peers = current.len(),
+                            reachable,
+                            detail = ?current,
+                            "personal sync peer directory changed"
+                        );
+                        reported = Some(current);
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "could not read the peer directory"),
             }
         }
     });
