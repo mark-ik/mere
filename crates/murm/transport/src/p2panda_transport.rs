@@ -195,6 +195,22 @@ impl ProtocolHandler for StreamQueueHandler {
 type AlpnQueues =
     Arc<StdMutex<HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<QueuedStream>>>>>>;
 
+/// A peer the address book associates with a topic.
+///
+/// Identity and reachability are separate facts and this type keeps them so. A
+/// paired device is named by its peer id forever; whether it can be reached
+/// right now is a property of what discovery has currently resolved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KnownPeer {
+    pub peer: PeerID,
+    /// False when the address book holds the identity but no transport
+    /// information yet: discovery has named this peer without yet saying how
+    /// to reach it.
+    pub reachable: bool,
+    /// Whether this node is configured as a discovery bootstrap locally.
+    pub bootstrap: bool,
+}
+
 /// Builder for [`P2pandaTransport`]. Use [`P2pandaTransport::builder`].
 pub struct P2pandaTransportBuilder<'a> {
     signing_seed: [u8; 32],
@@ -534,6 +550,49 @@ impl P2pandaTransport {
             .stream(Topic::from(topic))
             .await
             .map_err(|e| TransportError::Backend(format!("gossip subscribe: {e}")))
+    }
+
+    /// Peers the address book associates with `topic`, however they were
+    /// learned: mDNS, a ticket, or an explicit [`add_peer`](Self::add_peer).
+    ///
+    /// The reporting half of [`set_topics`](Self::set_topics). A host that
+    /// pairs on peer id needs to answer "which of my devices can I actually
+    /// reach right now", and a peer id alone cannot answer that: the address
+    /// book may hold the identity with no transport information yet.
+    pub async fn peers_for_topic(&self, topic: [u8; 32]) -> Result<Vec<KnownPeer>, TransportError> {
+        let infos = self
+            .address_book
+            .node_infos_by_topics([Topic::from(topic)])
+            .await
+            .map_err(|e| TransportError::Backend(format!("node_infos_by_topics: {e}")))?;
+        infos
+            .into_iter()
+            .map(|info| {
+                let peer = PeerID::from_bytes(info.node_id.as_bytes())
+                    .map_err(|e| TransportError::Backend(format!("peer id: {e}")))?;
+                Ok(KnownPeer {
+                    peer,
+                    reachable: info.transports.is_some(),
+                    bootstrap: info.bootstrap,
+                })
+            })
+            .collect()
+    }
+
+    /// Stop treating `peer` as a member of `topic`'s overlay: the inverse of
+    /// [`set_topics`](Self::set_topics) for a single topic.
+    ///
+    /// The peer stays in the address book, so re-pairing later does not have
+    /// to rediscover it. Only the overlay association goes, which is what
+    /// unpairing means: the device is still a device, it is no longer on this
+    /// graph.
+    pub async fn remove_topic(&self, peer: PeerID, topic: [u8; 32]) -> Result<(), TransportError> {
+        let node_id = VerifyingKey::from_bytes(&peer.to_bytes())
+            .map_err(|e| TransportError::Backend(format!("peer key: {e}")))?;
+        self.address_book
+            .remove_topic(node_id, Topic::from(topic))
+            .await
+            .map_err(|e| TransportError::Backend(format!("remove_topic: {e}")))
     }
 
     /// Tag a known peer as interested in the given topics, so gossip can

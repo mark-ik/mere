@@ -7,6 +7,7 @@ use muniment::RedbBackend;
 use personae::IdentityProvider;
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
 use tokio::sync::Mutex;
+use transport::p2panda_transport::KnownPeer;
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::{P2pandaTransport, PeerID, Transport, sync_overlay_topic};
 
@@ -178,16 +179,37 @@ impl PersonalSyncHost {
 
     /// Tag another device onto this graph's overlay on the live transport, so
     /// pairing takes effect without restarting the resident host.
-    ///
-    /// Additive only. The address book has no untag through this seam, so
-    /// removing a device from the settings file takes effect on the next
-    /// start rather than immediately.
     pub async fn pair_node(&self, node_id: [u8; 32]) -> Result<(), PersonalSyncHostError> {
         let peer = PeerID::from_bytes(&node_id).map_err(|error| {
             PersonalSyncHostError::Transport(format!("paired node id: {error}"))
         })?;
         self.transport
             .set_topics(peer, &[sync_overlay_topic(self.graph)])
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+    }
+
+    /// Drop a device from this graph's overlay on the live transport.
+    ///
+    /// The peer stays in the address book, so re-pairing later does not have
+    /// to rediscover it. Only its membership of this graph goes.
+    pub async fn unpair_node(&self, node_id: [u8; 32]) -> Result<(), PersonalSyncHostError> {
+        let peer = PeerID::from_bytes(&node_id).map_err(|error| {
+            PersonalSyncHostError::Transport(format!("paired node id: {error}"))
+        })?;
+        self.transport
+            .remove_topic(peer, sync_overlay_topic(self.graph))
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+    }
+
+    /// Which devices the transport currently associates with this graph.
+    ///
+    /// Pairing records identity; this reports reachability, which is the fact
+    /// a peer id cannot carry on its own.
+    pub async fn known_peers(&self) -> Result<Vec<KnownPeer>, PersonalSyncHostError> {
+        self.transport
+            .peers_for_topic(sync_overlay_topic(self.graph))
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
     }

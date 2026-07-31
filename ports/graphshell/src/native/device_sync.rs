@@ -51,6 +51,35 @@ pub enum PairOutcome {
     AlreadyPaired,
 }
 
+/// What an unpairing attempt did.
+#[derive(Debug, PartialEq, Eq)]
+pub enum UnpairOutcome {
+    Removed { path: PathBuf },
+    NotPaired,
+}
+
+/// Forget a paired device.
+///
+/// The counterpart of [`pair_device`], and like it the only writer. The
+/// resident host notices the removal and drops the device from the live
+/// overlay, so unpairing does not wait for a restart.
+pub fn unpair_device(
+    app_dir: &Path,
+    profile: &ProfileId,
+    node_id: [u8; 32],
+) -> Result<UnpairOutcome, DeviceSyncError> {
+    let path = owner_settings::settings_path(app_dir, profile);
+    let mut settings = OwnerSettings::load(&path)?;
+    let Some(sync) = settings.sync.as_mut() else {
+        return Ok(UnpairOutcome::NotPaired);
+    };
+    if !sync.unpair(node_id) {
+        return Ok(UnpairOutcome::NotPaired);
+    }
+    settings.save(&path)?;
+    Ok(UnpairOutcome::Removed { path })
+}
+
 /// Record a paired device in a profile's settings.
 ///
 /// This is the only writer of the settings file. The resident host reads it
@@ -179,12 +208,13 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     Ok(Some(cards))
 }
 
-/// The pairing loop's second half: `pair_device` writes the file, and this
-/// notices and tags the device onto the live overlay, so a device paired now
-/// starts syncing now.
+/// The pairing loop's second half: `pair_device` and `unpair_device` write the
+/// file, and this reconciles the live overlay against it, so a device paired
+/// or dropped now takes effect now.
 ///
-/// Additive only. The address book has no untag through this seam, so removing
-/// a device takes effect on the next start.
+/// This reconciles in both directions deliberately. An unpair that only took
+/// effect on the next restart would leave a device the owner believes they
+/// removed still receiving the graph until they happened to reboot.
 fn spawn_pairing_watch(
     host: Arc<PersonalSyncHost>,
     settings_file: PathBuf,
@@ -201,33 +231,53 @@ fn spawn_pairing_watch(
                     continue;
                 }
             };
+            // Absent sync means the owner turned it off in the file, which is
+            // not the same as an empty roster; leave the live overlay alone
+            // rather than tearing every device off it on a partial edit.
             let Some(sync) = reloaded.sync else { continue };
-            let nodes = match sync.paired_node_keys() {
-                Ok(nodes) => nodes,
+            let desired: std::collections::HashSet<[u8; 32]> = match sync.paired_node_keys() {
+                Ok(nodes) => nodes.into_iter().collect(),
                 Err(error) => {
                     tracing::warn!(%error, "owner settings hold an unusable node id");
                     continue;
                 }
             };
-            for node in nodes {
-                if !applied.insert(node) {
-                    continue;
-                }
+
+            for node in desired.difference(&applied).copied().collect::<Vec<_>>() {
                 match host.pair_node(node).await {
-                    Ok(()) => tracing::info!(
-                        node = %owner_settings::hex32(&node),
-                        "applied a newly paired device without a restart"
-                    ),
-                    Err(error) => {
-                        // Leave it unapplied so the next pass retries rather
-                        // than silently dropping the pairing.
-                        applied.remove(&node);
-                        tracing::warn!(
-                            %error,
+                    Ok(()) => {
+                        applied.insert(node);
+                        tracing::info!(
                             node = %owner_settings::hex32(&node),
-                            "could not apply a paired device"
+                            "applied a newly paired device without a restart"
                         );
                     }
+                    // Leave it unapplied so the next pass retries rather than
+                    // silently dropping the pairing.
+                    Err(error) => tracing::warn!(
+                        %error,
+                        node = %owner_settings::hex32(&node),
+                        "could not apply a paired device"
+                    ),
+                }
+            }
+
+            for node in applied.difference(&desired).copied().collect::<Vec<_>>() {
+                match host.unpair_node(node).await {
+                    Ok(()) => {
+                        applied.remove(&node);
+                        tracing::info!(
+                            node = %owner_settings::hex32(&node),
+                            "dropped an unpaired device without a restart"
+                        );
+                    }
+                    // Keep it in `applied` so the next pass retries: a device
+                    // the owner removed must not stay on the overlay quietly.
+                    Err(error) => tracing::warn!(
+                        %error,
+                        node = %owner_settings::hex32(&node),
+                        "could not drop an unpaired device"
+                    ),
                 }
             }
         }
@@ -296,6 +346,76 @@ mod tests {
             reloaded.graph, "personal",
             "pairing must not disturb the rest of the settings"
         );
+    }
+
+    #[test]
+    fn unpairing_removes_one_device_and_leaves_the_others() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = owner_settings::settings_path(directory.path(), &profile());
+        OwnerSettings {
+            sync: Some(SyncSettings {
+                graph: "personal".into(),
+                ..SyncSettings::default()
+            }),
+        }
+        .save(&path)
+        .unwrap();
+        pair_device(directory.path(), &profile(), [0x41; 32], "imac", 1).unwrap();
+        pair_device(directory.path(), &profile(), [0x42; 32], "thinkpad", 2).unwrap();
+
+        assert!(matches!(
+            unpair_device(directory.path(), &profile(), [0x41; 32]).unwrap(),
+            UnpairOutcome::Removed { .. }
+        ));
+        assert_eq!(
+            unpair_device(directory.path(), &profile(), [0x41; 32]).unwrap(),
+            UnpairOutcome::NotPaired,
+            "unpairing twice must not be an error"
+        );
+
+        let remaining = OwnerSettings::load(&path).unwrap().sync.unwrap();
+        assert_eq!(remaining.paired_node_keys().unwrap(), vec![[0x42; 32]]);
+        assert_eq!(remaining.paired_devices[0].label, "thinkpad");
+        assert_eq!(
+            remaining.graph, "personal",
+            "unpairing must not disturb the rest of the settings"
+        );
+    }
+
+    #[test]
+    fn unpairing_from_a_profile_with_no_sync_is_not_an_error() {
+        let directory = tempfile::tempdir().unwrap();
+        assert_eq!(
+            unpair_device(directory.path(), &profile(), [0x43; 32]).unwrap(),
+            UnpairOutcome::NotPaired
+        );
+    }
+
+    #[test]
+    fn a_device_can_be_paired_again_after_being_unpaired() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = owner_settings::settings_path(directory.path(), &profile());
+        OwnerSettings {
+            sync: Some(SyncSettings {
+                graph: "personal".into(),
+                ..SyncSettings::default()
+            }),
+        }
+        .save(&path)
+        .unwrap();
+
+        pair_device(directory.path(), &profile(), [0x44; 32], "imac", 1).unwrap();
+        unpair_device(directory.path(), &profile(), [0x44; 32]).unwrap();
+        assert!(
+            matches!(
+                pair_device(directory.path(), &profile(), [0x44; 32], "imac again", 3).unwrap(),
+                PairOutcome::Added { .. }
+            ),
+            "unpairing must not leave a tombstone that blocks re-pairing"
+        );
+        let again = OwnerSettings::load(&path).unwrap().sync.unwrap();
+        assert_eq!(again.paired_devices.len(), 1);
+        assert_eq!(again.paired_devices[0].added_ms, 3);
     }
 
     #[test]

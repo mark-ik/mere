@@ -52,6 +52,9 @@ struct Args {
     /// starting the host.
     #[cfg(feature = "personal-sync")]
     pair: Option<PairRequest>,
+    /// Forget a device and exit.
+    #[cfg(feature = "personal-sync")]
+    unpair: Option<String>,
 }
 
 #[cfg(feature = "personal-sync")]
@@ -72,15 +75,28 @@ async fn main() {
     // Pairing is a management operation, not a run of the host: it edits the
     // settings and reports, so it writes to the console rather than the log.
     #[cfg(feature = "personal-sync")]
-    if let Some(request) = &args.pair {
-        match pair_device(&args, request) {
-            Ok(message) => {
-                println!("{message}");
-                return;
+    {
+        let management = match (&args.pair, &args.unpair) {
+            (Some(_), Some(_)) => {
+                eprintln!(
+                    "graphshell device host: --pair-node and --unpair-node are mutually exclusive"
+                );
+                std::process::exit(2);
             }
-            Err(error) => {
-                eprintln!("graphshell device host: {error}");
-                std::process::exit(1);
+            (Some(request), None) => Some(pair_device(&args, request)),
+            (None, Some(node_id)) => Some(unpair_device(&args, node_id)),
+            (None, None) => None,
+        };
+        if let Some(result) = management {
+            match result {
+                Ok(message) => {
+                    println!("{message}");
+                    return;
+                }
+                Err(error) => {
+                    eprintln!("graphshell device host: {error}");
+                    std::process::exit(1);
+                }
             }
         }
     }
@@ -126,6 +142,8 @@ fn parse_args() -> Result<Args, String> {
     let mut pair_node = None;
     #[cfg(feature = "personal-sync")]
     let mut pair_label = String::new();
+    #[cfg(feature = "personal-sync")]
+    let mut unpair_node = None;
     let mut argv = std::env::args().skip(1);
 
     while let Some(arg) = argv.next() {
@@ -202,6 +220,12 @@ fn parse_args() -> Result<Args, String> {
                 pair_label = argv.next().ok_or("--pair-label needs a value")?;
             }
             #[cfg(feature = "personal-sync")]
+            "--unpair-node" => {
+                let value = argv.next().ok_or("--unpair-node needs a value")?;
+                owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
+                unpair_node = Some(value);
+            }
+            #[cfg(feature = "personal-sync")]
             "--sync-access" => sync_access = true,
             #[cfg(feature = "personal-sync")]
             "--sync-scenes" => sync_scenes = true,
@@ -252,6 +276,24 @@ fn parse_args() -> Result<Args, String> {
             node_id,
             label: pair_label,
         }),
+        #[cfg(feature = "personal-sync")]
+        unpair: unpair_node,
+    })
+}
+
+#[cfg(feature = "personal-sync")]
+fn unpair_device(args: &Args, node_id: &str) -> Result<String, String> {
+    let node = owner_settings::parse_hex32(node_id).map_err(|error| error.to_string())?;
+    let outcome =
+        device_sync::unpair_device(&owner_settings::default_app_dir(), &args.profile, node)
+            .map_err(|error| error.to_string())?;
+    Ok(match outcome {
+        device_sync::UnpairOutcome::Removed { path } => {
+            format!("unpaired {} in {}", node_id, path.display())
+        }
+        device_sync::UnpairOutcome::NotPaired => {
+            format!("{node_id} was not paired; settings unchanged")
+        }
     })
 }
 
@@ -299,6 +341,7 @@ fn usage() -> &'static str {
      [--sync-facet <id>] [--sync-access] [--sync-scenes] \
      [--sync-handlers] [--sync-blobs]\n\
      pair and exit: --pair-node <64-hex-node-id> [--pair-label <name>]\n\
+     unpair and exit: --unpair-node <64-hex-node-id>\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }
 

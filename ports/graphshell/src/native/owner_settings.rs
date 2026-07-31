@@ -233,6 +233,16 @@ impl SyncSettings {
         });
         true
     }
+
+    /// Forget a paired device. Returns false when it was not paired, so
+    /// unpairing twice is not an error.
+    pub fn unpair(&mut self, node_id: [u8; 32]) -> bool {
+        let node_id = hex32(&node_id);
+        let before = self.paired_devices.len();
+        self.paired_devices
+            .retain(|device| !device.node_id.eq_ignore_ascii_case(&node_id));
+        self.paired_devices.len() != before
+    }
 }
 
 /// Command-line overrides for the sync section.
