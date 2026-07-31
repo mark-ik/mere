@@ -140,6 +140,8 @@ fn parse_args() -> Result<Args, String> {
     #[cfg(feature = "personal-sync")]
     let mut sync_peer_nodes = Vec::new();
     #[cfg(feature = "personal-sync")]
+    let mut sync_relays = Vec::new();
+    #[cfg(feature = "personal-sync")]
     let mut sync_facets = Vec::new();
     #[cfg(feature = "personal-sync")]
     let mut sync_access = false;
@@ -208,6 +210,10 @@ fn parse_args() -> Result<Args, String> {
                 let value = argv.next().ok_or("--sync-root needs a value")?;
                 owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
                 sync_roots.push(value);
+            }
+            #[cfg(feature = "personal-sync")]
+            "--sync-relay" => {
+                sync_relays.push(argv.next().ok_or("--sync-relay needs a url")?);
             }
             #[cfg(feature = "personal-sync")]
             "--sync-peer" => {
@@ -296,6 +302,7 @@ fn parse_args() -> Result<Args, String> {
             store_path: sync_store,
             roster_roots: sync_roots,
             paired_nodes: sync_peer_nodes,
+            relay_urls: sync_relays,
             facets: sync_facets,
             access_records: sync_access,
             saved_scenes: sync_scenes,
@@ -415,7 +422,7 @@ fn usage() -> &'static str {
      [--log-file <path>]\n\
      personal sync: [--sync-graph <name>] [--sync-store <path>] \
      [--sync-root <64-hex-public-root>] [--sync-peer-node <64-hex-node-id>] \
-     [--sync-peer <ticket>] \
+     [--sync-peer <ticket>] [--sync-relay <url>] \
      [--sync-facet <id>] [--sync-access] [--sync-scenes] \
      [--sync-handlers] [--sync-blobs]\n\
      pair and exit: --pair-node <64-hex-node-id> \

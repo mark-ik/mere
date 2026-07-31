@@ -116,6 +116,24 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     roots.sort_unstable();
     roots.dedup();
     let paired_nodes = sync.paired_node_keys()?;
+    // A malformed relay url is refused rather than dropped: silently starting
+    // LAN-only when the owner asked for a relay would look like the relay was
+    // configured and simply not helping.
+    let relays = sync
+        .relay_urls
+        .iter()
+        .map(|url| {
+            url.parse::<transport::p2panda_transport::RelayUrl>()
+                .map_err(|error| {
+                    DeviceSyncError::Host(PersonalSyncHostError::Transport(format!(
+                        "relay url {url:?}: {error}"
+                    )))
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if !relays.is_empty() {
+        tracing::info!(relays = relays.len(), "personal sync will register relays");
+    }
     let selection = SyncSelection::default()
         .with_facets(sync.lanes.facets.clone())
         .with_access_records(sync.lanes.access_records)
@@ -133,6 +151,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
                 selection,
                 peer_tickets,
                 paired_nodes: paired_nodes.clone(),
+                relay_urls: relays,
             },
         )
         .await?,

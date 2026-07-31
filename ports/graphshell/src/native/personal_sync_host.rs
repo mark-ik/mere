@@ -9,8 +9,8 @@ use std::sync::Arc;
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
 
 use tokio::sync::{Mutex, RwLock};
-use transport::p2panda_transport::KnownPeer;
 use transport::p2panda_transport::MdnsDiscoveryMode;
+use transport::p2panda_transport::{KnownPeer, RelayUrl};
 use transport::{P2pandaTransport, PeerID, Transport, sync_overlay_topic};
 
 use crate::identity_endpoint::SupplementalCard;
@@ -36,6 +36,8 @@ pub struct PersonalSyncHostConfig {
     /// master seed and this graph's salt, so it is stable; mDNS supplies the
     /// address that the ticket used to carry.
     pub paired_nodes: Vec<[u8; 32]>,
+    /// iroh relays to register. Empty leaves this transport LAN-only.
+    pub relay_urls: Vec<RelayUrl>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -91,9 +93,13 @@ impl PersonalSyncHost {
         // ticket: it populates the address book, so tagging a known peer with
         // the overlay topic is enough to bootstrap gossip. g5_peer proved this
         // path Fedora-to-Windows and Windows-to-Fedora under H10.
-        let transport = P2pandaTransport::builder(&transport_key)
+        let mut builder = P2pandaTransport::builder(&transport_key)
             .gossip()
-            .mdns(MdnsDiscoveryMode::Active)
+            .mdns(MdnsDiscoveryMode::Active);
+        for url in config.relay_urls.clone() {
+            builder = builder.relay_url(url);
+        }
+        let transport = builder
             .bind()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
@@ -400,6 +406,7 @@ mod tests {
             selection: SyncSelection::default().with_blob_availability(true),
             peer_tickets: Vec::new(),
             paired_nodes: Vec::new(),
+            relay_urls: Vec::new(),
         };
         let node = Uuid::from_u128(0x63);
 
@@ -473,6 +480,7 @@ mod tests {
                 selection: SyncSelection::default(),
                 peer_tickets: Vec::new(),
                 paired_nodes: vec![peer_node],
+                relay_urls: Vec::new(),
             },
         )
         .await

@@ -58,6 +58,9 @@ use p2panda_net::gossip::{Gossip, GossipHandle};
 // Re-exported: [`P2pandaTransportBuilder::mdns`] is public but its argument
 // type was not, so no consumer outside this crate could call it.
 pub use p2panda_net::iroh_mdns::MdnsDiscoveryMode;
+// Re-exported so a consumer can configure a relay without taking a direct iroh
+// dependency of its own.
+pub use iroh::RelayUrl;
 use p2panda_net::{AddressBook, Discovery, Endpoint, MdnsDiscovery};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
@@ -220,6 +223,7 @@ pub struct P2pandaTransportBuilder<'a> {
     mdns: Option<MdnsDiscoveryMode>,
     discovery: Option<DiscoveryConfig>,
     gossip: bool,
+    relay_urls: Vec<iroh::RelayUrl>,
 }
 
 impl<'a> P2pandaTransportBuilder<'a> {
@@ -239,7 +243,25 @@ impl<'a> P2pandaTransportBuilder<'a> {
             mdns: self.mdns,
             discovery: self.discovery,
             gossip: self.gossip,
+            relay_urls: self.relay_urls,
         }
+    }
+
+    /// Register an iroh relay, so peers that cannot reach each other directly
+    /// still connect.
+    ///
+    /// p2panda registers no relay by default: the relay map is built purely
+    /// from what is added here, and without one a peer is reachable only at a
+    /// directly routable address that the other side already knows. mDNS
+    /// supplies that on a shared link and nothing supplies it off one, which
+    /// is why an unrelayed transport is a LAN-only transport.
+    ///
+    /// A relay carries connection metadata for whoever operates it. Which
+    /// relay to trust is therefore an owner's decision, not a default worth
+    /// baking in.
+    pub fn relay_url(mut self, url: iroh::RelayUrl) -> Self {
+        self.relay_urls.push(url);
+        self
     }
 
     /// Enable mDNS discovery so peers on the same local network auto-populate
@@ -286,6 +308,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
             self.mdns,
             self.discovery,
             self.gossip,
+            self.relay_urls,
         )
         .await
     }
@@ -318,6 +341,7 @@ impl P2pandaTransport {
             blobs: None,
             mdns: None,
             discovery: None,
+            relay_urls: Vec::new(),
             gossip: false,
         }
     }
@@ -334,6 +358,7 @@ impl P2pandaTransport {
             blobs: None,
             mdns: None,
             discovery: None,
+            relay_urls: Vec::new(),
             gossip: false,
         }
     }
@@ -348,7 +373,7 @@ impl P2pandaTransport {
         signing_seed: [u8; 32],
         alpns: Vec<Alpn>,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(signing_seed, alpns, None, None, None, false).await
+        Self::bind_inner(signing_seed, alpns, None, None, None, false, Vec::new()).await
     }
 
     /// Bind with the given ALPNs and serve iroh-blobs against the provided store.
@@ -357,7 +382,16 @@ impl P2pandaTransport {
         alpns: Vec<Alpn>,
         blobs: Option<&BlobStore>,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(master.to_seed(), alpns, blobs, None, None, false).await
+        Self::bind_inner(
+            master.to_seed(),
+            alpns,
+            blobs,
+            None,
+            None,
+            false,
+            Vec::new(),
+        )
+        .await
     }
 
     async fn bind_inner(
@@ -367,6 +401,7 @@ impl P2pandaTransport {
         mdns: Option<MdnsDiscoveryMode>,
         discovery: Option<DiscoveryConfig>,
         gossip: bool,
+        relay_urls: Vec<iroh::RelayUrl>,
     ) -> Result<Self, TransportError> {
         let signing_key = SigningKey::from_bytes(&signing_seed);
         let peer_id = PeerID::from_bytes(signing_key.verifying_key().as_bytes())
@@ -375,8 +410,11 @@ impl P2pandaTransport {
             .spawn()
             .await
             .map_err(|e| TransportError::Backend(format!("address book: {e}")))?;
-        let endpoint = Endpoint::builder(address_book.clone())
-            .signing_key(signing_key)
+        let mut endpoint_builder = Endpoint::builder(address_book.clone()).signing_key(signing_key);
+        for url in relay_urls {
+            endpoint_builder = endpoint_builder.relay_url(url);
+        }
+        let endpoint = endpoint_builder
             .spawn()
             .await
             .map_err(|e| TransportError::Backend(format!("endpoint: {e}")))?;

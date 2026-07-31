@@ -119,6 +119,18 @@ pub struct SyncSettings {
     pub roster_roots: Vec<String>,
     pub paired_devices: Vec<PairedDevice>,
     pub lanes: LaneSettings,
+    /// iroh relay urls to register.
+    ///
+    /// Empty means this device is LAN-only: p2panda registers no relay by
+    /// default, and without one a peer is reachable only at a directly
+    /// routable address the other side already knows, which mDNS supplies on a
+    /// shared link and nothing supplies off one.
+    ///
+    /// A relay sees which devices talk to each other and when, even though it
+    /// cannot read the contents, so which relay to trust is the owner's
+    /// decision. That is why this is a setting with no default rather than a
+    /// public relay wired in.
+    pub relay_urls: Vec<String>,
 }
 
 /// A device this profile syncs with.
@@ -300,6 +312,7 @@ pub struct SyncOverrides {
     pub store_path: Option<PathBuf>,
     pub roster_roots: Vec<String>,
     pub paired_nodes: Vec<String>,
+    pub relay_urls: Vec<String>,
     pub facets: Vec<String>,
     pub access_records: bool,
     pub saved_scenes: bool,
@@ -314,6 +327,7 @@ impl SyncOverrides {
             && self.store_path.is_none()
             && self.roster_roots.is_empty()
             && self.paired_nodes.is_empty()
+            && self.relay_urls.is_empty()
             && self.facets.is_empty()
             && !self.access_records
             && !self.saved_scenes
@@ -338,6 +352,9 @@ impl SyncSettings {
         }
         if !overrides.roster_roots.is_empty() {
             self.roster_roots = overrides.roster_roots;
+        }
+        if !overrides.relay_urls.is_empty() {
+            self.relay_urls = overrides.relay_urls;
         }
         if !overrides.paired_nodes.is_empty() {
             self.paired_devices = overrides
