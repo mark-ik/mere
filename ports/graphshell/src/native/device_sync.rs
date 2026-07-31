@@ -199,12 +199,15 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         )
         .await?,
     );
-    // node_id is the durable half of this line: a peer pairs with it once and
-    // it survives restarts. The ticket is logged too because it still
-    // bootstraps across networks, where mDNS cannot reach.
+    // This line is what the OTHER device needs in order to pair with this one,
+    // so it carries both halves. node_id is reachability and survives
+    // restarts; root is the write authority its roster must admit. Both are
+    // public keys. The ticket is logged too because it still bootstraps across
+    // networks, where mDNS cannot reach.
     tracing::info!(
         graph = %owner_settings::hex32(&graph),
         node_id = %owner_settings::hex32(&host.node_id()),
+        root = %owner_settings::hex32(&identity.master_public_key().to_bytes()),
         paired = sync.paired_devices.len(),
         ticket = %host.ticket().await?,
         "personal graph sync listening"
