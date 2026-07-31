@@ -7,7 +7,8 @@ use muniment::RedbBackend;
 use personae::IdentityProvider;
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
 use tokio::sync::Mutex;
-use transport::{P2pandaTransport, sync_overlay_topic};
+use transport::p2panda_transport::MdnsDiscoveryMode;
+use transport::{P2pandaTransport, PeerID, Transport, sync_overlay_topic};
 
 use crate::identity_endpoint::SupplementalCard;
 use crate::personal_sync::{
@@ -24,6 +25,14 @@ pub struct PersonalSyncHostConfig {
     pub roster: SyncRoster,
     pub selection: SyncSelection,
     pub peer_tickets: Vec<String>,
+    /// Per-graph transport node ids of paired devices.
+    ///
+    /// This is what pairing persists. A ticket carries the peer's current
+    /// address and is rebuilt on every bind, so a stored ticket goes stale the
+    /// next time that device restarts. A node id is derived from the peer's
+    /// master seed and this graph's salt, so it is stable; mDNS supplies the
+    /// address that the ticket used to carry.
+    pub paired_nodes: Vec<[u8; 32]>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -75,12 +84,26 @@ impl PersonalSyncHost {
             config.selection,
         )?;
         let transport_key = identity.derive_keypair(&personal_graph_identity_salt(config.graph))?;
+        // Active mDNS is what makes a paired node id dialable without a stored
+        // ticket: it populates the address book, so tagging a known peer with
+        // the overlay topic is enough to bootstrap gossip. g5_peer proved this
+        // path Fedora-to-Windows and Windows-to-Fedora under H10.
         let transport = P2pandaTransport::builder(&transport_key)
             .gossip()
+            .mdns(MdnsDiscoveryMode::Active)
             .bind()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         let overlay = sync_overlay_topic(config.graph);
+        for node in &config.paired_nodes {
+            let peer = PeerID::from_bytes(node).map_err(|error| {
+                PersonalSyncHostError::Transport(format!("paired node id: {error}"))
+            })?;
+            transport
+                .set_topics(peer, &[overlay])
+                .await
+                .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        }
         for ticket in &config.peer_tickets {
             let peer = transport
                 .add_peer_ticket(ticket)
@@ -145,6 +168,12 @@ impl PersonalSyncHost {
 
     pub fn sync_status(&self) -> SyncStatus {
         self.joined.sync_status()
+    }
+
+    /// This device's stable per-graph node id: what a peer stores to pair with
+    /// it. Survives restarts, unlike [`ticket`](Self::ticket).
+    pub fn node_id(&self) -> [u8; 32] {
+        self.transport.local_peer_id().to_bytes()
     }
 
     pub async fn ticket(&self) -> Result<String, PersonalSyncHostError> {
@@ -315,6 +344,7 @@ mod tests {
             roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
             selection: SyncSelection::default().with_blob_availability(true),
             peer_tickets: Vec::new(),
+            paired_nodes: Vec::new(),
         };
         let node = Uuid::from_u128(0x63);
 
@@ -349,6 +379,7 @@ mod tests {
                 .iter()
                 .any(|card| card.card.title.starts_with("Blob "))
         );
+        let node_id = host.node_id();
         host.close().await.unwrap();
 
         let reopened = PersonalSyncHost::open(&identity, config()).await.unwrap();
@@ -358,5 +389,46 @@ mod tests {
                 .iter()
                 .any(|card| card.card.title == "Resident graph node")
         );
+        assert_eq!(
+            reopened.node_id(),
+            node_id,
+            "the node id must survive a restart: pairing persists it, and a \
+             peer that stored it has no other way back to this device"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_paired_node_id_is_tagged_onto_the_overlay_without_an_address() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = InMemoryProvider::from_seed([0x71; 32]);
+        let graph = [0x72; 32];
+        // The peer's node id alone, with no ticket and so no address. This is
+        // the whole point of pairing on node id: mDNS supplies the address
+        // later, so opening must not require one now.
+        let peer_node = InMemoryProvider::from_seed([0x73; 32])
+            .master_public_key()
+            .to_bytes();
+
+        let host = PersonalSyncHost::open(
+            &identity,
+            PersonalSyncHostConfig {
+                graph,
+                store_path: directory.path().join("paired.redb"),
+                roster: SyncRoster::new([identity.master_public_key().to_bytes(), peer_node]),
+                selection: SyncSelection::default(),
+                peer_tickets: Vec::new(),
+                paired_nodes: vec![peer_node],
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_ne!(
+            host.node_id(),
+            peer_node,
+            "the host's own node id is derived per graph, so it must not \
+             collide with a roster root"
+        );
+        host.close().await.unwrap();
     }
 }

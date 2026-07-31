@@ -55,6 +55,7 @@ struct SyncArgs {
     store_path: Option<PathBuf>,
     roots: Vec<[u8; 32]>,
     peer_tickets: Vec<String>,
+    peer_nodes: Vec<[u8; 32]>,
     facets: Vec<String>,
     access_records: bool,
     saved_scenes: bool,
@@ -97,6 +98,8 @@ fn parse_args() -> Result<Args, String> {
     let mut sync_roots = Vec::new();
     #[cfg(feature = "personal-sync")]
     let mut sync_peers = Vec::new();
+    #[cfg(feature = "personal-sync")]
+    let mut sync_peer_nodes = Vec::new();
     #[cfg(feature = "personal-sync")]
     let mut sync_facets = Vec::new();
     #[cfg(feature = "personal-sync")]
@@ -159,6 +162,15 @@ fn parse_args() -> Result<Args, String> {
             "--sync-peer" => {
                 sync_peers.push(argv.next().ok_or("--sync-peer needs a value")?);
             }
+            // Prefer this over --sync-peer: a ticket embeds the peer's current
+            // address and is rebuilt on every bind, so a stored one is stale
+            // after that device restarts. A node id is stable.
+            #[cfg(feature = "personal-sync")]
+            "--sync-peer-node" => {
+                sync_peer_nodes.push(parse_public_root(
+                    &argv.next().ok_or("--sync-peer-node needs a value")?,
+                )?);
+            }
             #[cfg(feature = "personal-sync")]
             "--sync-facet" => {
                 sync_facets.push(argv.next().ok_or("--sync-facet needs a value")?);
@@ -201,6 +213,7 @@ fn parse_args() -> Result<Args, String> {
             store_path: sync_store,
             roots: sync_roots,
             peer_tickets: sync_peers,
+            peer_nodes: sync_peer_nodes,
             facets: sync_facets,
             access_records: sync_access,
             saved_scenes: sync_scenes,
@@ -217,7 +230,8 @@ fn usage() -> &'static str {
      [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
      [--log-file <path>]\n\
      personal sync: [--sync-graph <name>] [--sync-store <path>] \
-     [--sync-root <64-hex-public-root>] [--sync-peer <ticket>] \
+     [--sync-root <64-hex-public-root>] [--sync-peer-node <64-hex-node-id>] \
+     [--sync-peer <ticket>] \
      [--sync-facet <id>] [--sync-access] [--sync-scenes] \
      [--sync-handlers] [--sync-blobs]\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
@@ -346,12 +360,17 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                     roster: SyncRoster::new(roots),
                     selection,
                     peer_tickets: sync.peer_tickets,
+                    paired_nodes: sync.peer_nodes,
                 },
             )
             .await?,
         );
+        // node_id is the durable half of this line: a peer pairs with it once
+        // and it survives restarts. The ticket is logged too because it still
+        // bootstraps across networks, where mDNS cannot reach.
         tracing::info!(
             graph = %hex(&graph),
+            node_id = %hex(&personal_sync.node_id()),
             ticket = %personal_sync.ticket().await?,
             "personal graph sync listening"
         );
