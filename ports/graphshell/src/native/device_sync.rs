@@ -11,12 +11,12 @@ use personae::{IdentityProvider, ProfileId};
 
 use crate::native::device_broker::DeviceSupplementalCards;
 use crate::native::owner_settings::{
-    self, DataRootMigration, OwnerSettings, OwnerSettingsError, SyncOverrides, SyncSettings,
+    self, DataRootMigration, OwnerSettings, OwnerSettingsError, SyncOverrides,
 };
 use crate::native::personal_sync_host::{
     PersonalSyncHost, PersonalSyncHostConfig, PersonalSyncHostError,
 };
-use crate::personal_sync::{SyncRoster, SyncSelection};
+use crate::personal_sync::{PersonalGraphEvent, SyncRoster, SyncSelection};
 
 const PERSONAL_GRAPH_DOMAIN: &[u8] = b"mere.graphshell/personal-graph/v1";
 
@@ -44,117 +44,16 @@ pub enum DeviceSyncError {
     NoGraphConfigured { profile: String, path: String },
 }
 
-/// What a pairing attempt did.
-#[derive(Debug, PartialEq, Eq)]
-pub enum PairOutcome {
-    Added {
-        path: PathBuf,
-        /// True when no roster root was supplied, so the device will receive
-        /// this graph but its writes will be refused.
-        receive_only: bool,
-    },
-    AlreadyPaired,
-}
-
-/// What an unpairing attempt did.
-#[derive(Debug, PartialEq, Eq)]
-pub enum UnpairOutcome {
-    Removed { path: PathBuf },
-    NotPaired,
-}
-
-/// Forget a paired device.
+/// A node to author into the graph as the host starts.
 ///
-/// The counterpart of [`pair_device`], and like it the only writer. The
-/// resident host notices the removal and drops the device from the live
-/// overlay, so unpairing does not wait for a restart.
-pub fn unpair_device(
-    app_dir: &Path,
-    profile: &ProfileId,
-    node_id: [u8; 32],
-) -> Result<UnpairOutcome, DeviceSyncError> {
-    let path = owner_settings::settings_path(app_dir, profile);
-    let mut settings = OwnerSettings::load(&path)?;
-    let Some(sync) = settings.sync.as_mut() else {
-        return Ok(UnpairOutcome::NotPaired);
-    };
-    if !sync.unpair(node_id) {
-        return Ok(UnpairOutcome::NotPaired);
-    }
-    settings.save(&path)?;
-    Ok(UnpairOutcome::Removed { path })
-}
-
-/// Record a paired device in a profile's settings.
-///
-/// This is the only writer of the settings file. The resident host reads it
-/// and applies additions to its live transport but never writes back, so two
-/// processes never race to rewrite it.
-pub fn pair_device(
-    app_dir: &Path,
-    profile: &ProfileId,
-    node_id: [u8; 32],
-    root: Option<[u8; 32]>,
-    label: &str,
-    at_ms: u64,
-) -> Result<PairOutcome, DeviceSyncError> {
-    let path = owner_settings::settings_path(app_dir, profile);
-    let mut settings = OwnerSettings::load(&path)?;
-    let sync = settings.sync.get_or_insert_with(SyncSettings::default);
-    // Refuse to record a peer for a graph that does not exist: the pairing
-    // would look accepted and then never join anything.
-    if sync.graph.trim().is_empty() {
-        return Err(DeviceSyncError::NoGraphConfigured {
-            profile: profile.0.clone(),
-            path: path.display().to_string(),
-        });
-    }
-    if !sync.pair(node_id, root, label, at_ms) {
-        return Ok(PairOutcome::AlreadyPaired);
-    }
-    settings.save(&path)?;
-    Ok(PairOutcome::Added {
-        path,
-        receive_only: root.is_none(),
-    })
-}
-
-/// What the other device needs in order to pair with this one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PairingFacts {
-    pub graph: [u8; 32],
-    /// Reachability. Derived per graph, so it is unlinkable across graphs.
-    pub node_id: [u8; 32],
-    /// Authority. Common to every graph this profile joins, so it is disclosed
-    /// on request rather than logged.
-    pub root: [u8; 32],
-}
-
-/// Compute this device's pairing facts without opening the store.
-///
-/// Both values are derived from the identity and the graph name, so this works
-/// while the resident host is running and holding the store's lock. That is
-/// the point: you need these while the host is up, not instead of it.
-pub fn pairing_facts<P: IdentityProvider + ?Sized>(
-    identity: &P,
-    app_dir: &Path,
-    profile: &ProfileId,
-) -> Result<Option<PairingFacts>, DeviceSyncError> {
-    let stored = OwnerSettings::load(&owner_settings::settings_path(app_dir, profile))?;
-    let Some(sync) = stored.sync.filter(|sync| !sync.graph.trim().is_empty()) else {
-        return Ok(None);
-    };
-    let graph = personal_graph_id(&sync.graph);
-    let transport_key = identity
-        .derive_keypair(&crate::personal_sync::personal_graph_identity_salt(graph))
-        .map_err(|error| {
-            DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string()))
-        })?;
-    Ok(Some(PairingFacts {
-        graph,
-        node_id: transport_key.public_key().to_bytes(),
-        root: identity.master_public_key().to_bytes(),
-    }))
+/// A deliberate stopgap. The product path for editing the graph is a typed
+/// intent over the admitted session, which is the H9 lane; until that exists
+/// the resident host is a sync engine with no input, and nothing can be proven
+/// to converge because nothing can be written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SeedNote {
+    pub address: String,
+    pub title: String,
 }
 
 /// Resolve the data root, moving it out of the Personae vault once if it is
@@ -192,6 +91,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     data_root_override: Option<PathBuf>,
     overrides: SyncOverrides,
     peer_tickets: Vec<String>,
+    seed_notes: Vec<SeedNote>,
 ) -> Result<Option<DeviceSupplementalCards>, DeviceSyncError> {
     let settings_file = owner_settings::settings_path(app_dir, profile);
     let stored = OwnerSettings::load(&settings_file)?;
@@ -260,6 +160,24 @@ pub async fn start<P: IdentityProvider + ?Sized>(
             "paired device has no roster root: it will receive this graph, and \
              its own writes will be refused"
         );
+    }
+
+    // Author before the watchers start, so the receipt of a seeded node is
+    // never confused with something that arrived from a peer.
+    //
+    // This runs at start-up rather than as its own command because the store
+    // is single-writer and this process holds its lock: authoring can only
+    // enter through this process, by argv now or by a typed intent over the
+    // admitted session later. There is no third door, and a second binary
+    // writing to the same store would be the wrong answer to that.
+    for note in seed_notes {
+        host.author(vec![PersonalGraphEvent::AddNode {
+            id: uuid::Uuid::new_v4(),
+            address: note.address.clone(),
+            title: note.title.clone(),
+        }])
+        .await?;
+        tracing::info!(address = %note.address, title = %note.title, "authored a node");
     }
 
     spawn_pairing_watch(Arc::clone(&host), settings_file, paired_nodes);
@@ -387,237 +305,6 @@ fn spawn_card_refresh(host: Arc<PersonalSyncHost>, cards: DeviceSupplementalCard
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn profile() -> ProfileId {
-        ProfileId("default".into())
-    }
-
-    #[test]
-    fn pairing_refuses_when_no_graph_is_configured() {
-        let directory = tempfile::tempdir().unwrap();
-        let error =
-            pair_device(directory.path(), &profile(), [0x31; 32], None, "qpc", 1).unwrap_err();
-        assert!(
-            matches!(error, DeviceSyncError::NoGraphConfigured { .. }),
-            "pairing into a profile with no graph must fail rather than \
-             record a peer that could never join anything: {error}"
-        );
-    }
-
-    #[test]
-    fn pairing_writes_once_and_is_idempotent() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = owner_settings::settings_path(directory.path(), &profile());
-        OwnerSettings {
-            sync: Some(SyncSettings {
-                graph: "personal".into(),
-                ..SyncSettings::default()
-            }),
-        }
-        .save(&path)
-        .unwrap();
-
-        assert!(matches!(
-            pair_device(directory.path(), &profile(), [0x31; 32], None, "qpc", 100).unwrap(),
-            PairOutcome::Added { .. }
-        ));
-        assert_eq!(
-            pair_device(directory.path(), &profile(), [0x31; 32], None, "qpc", 200).unwrap(),
-            PairOutcome::AlreadyPaired
-        );
-
-        let reloaded = OwnerSettings::load(&path).unwrap().sync.unwrap();
-        assert_eq!(reloaded.paired_devices.len(), 1);
-        assert_eq!(reloaded.paired_devices[0].label, "qpc");
-        assert_eq!(reloaded.paired_devices[0].added_ms, 100);
-        assert_eq!(reloaded.paired_node_keys().unwrap(), vec![[0x31; 32]]);
-        assert_eq!(
-            reloaded.graph, "personal",
-            "pairing must not disturb the rest of the settings"
-        );
-    }
-
-    #[test]
-    fn unpairing_removes_one_device_and_leaves_the_others() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = owner_settings::settings_path(directory.path(), &profile());
-        OwnerSettings {
-            sync: Some(SyncSettings {
-                graph: "personal".into(),
-                ..SyncSettings::default()
-            }),
-        }
-        .save(&path)
-        .unwrap();
-        pair_device(
-            directory.path(),
-            &profile(),
-            [0x41; 32],
-            Some([0xa1; 32]),
-            "imac",
-            1,
-        )
-        .unwrap();
-        pair_device(
-            directory.path(),
-            &profile(),
-            [0x42; 32],
-            Some([0xa2; 32]),
-            "thinkpad",
-            2,
-        )
-        .unwrap();
-
-        assert!(matches!(
-            unpair_device(directory.path(), &profile(), [0x41; 32]).unwrap(),
-            UnpairOutcome::Removed { .. }
-        ));
-        assert_eq!(
-            unpair_device(directory.path(), &profile(), [0x41; 32]).unwrap(),
-            UnpairOutcome::NotPaired,
-            "unpairing twice must not be an error"
-        );
-
-        let remaining = OwnerSettings::load(&path).unwrap().sync.unwrap();
-        assert_eq!(remaining.paired_node_keys().unwrap(), vec![[0x42; 32]]);
-        assert_eq!(remaining.paired_devices[0].label, "thinkpad");
-        assert_eq!(
-            remaining.graph, "personal",
-            "unpairing must not disturb the rest of the settings"
-        );
-    }
-
-    #[test]
-    fn unpairing_revokes_write_authority_along_with_reachability() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = owner_settings::settings_path(directory.path(), &profile());
-        OwnerSettings {
-            sync: Some(SyncSettings {
-                graph: "personal".into(),
-                roster_roots: vec![owner_settings::hex32(&[0xc0; 32])],
-                ..SyncSettings::default()
-            }),
-        }
-        .save(&path)
-        .unwrap();
-        pair_device(
-            directory.path(),
-            &profile(),
-            [0x51; 32],
-            Some([0xd1; 32]),
-            "thinkpad",
-            1,
-        )
-        .unwrap();
-
-        let paired = OwnerSettings::load(&path).unwrap().sync.unwrap();
-        let mut roster = paired.roster_root_keys().unwrap();
-        roster.sort_unstable();
-        assert_eq!(
-            roster,
-            vec![[0xc0; 32], [0xd1; 32]],
-            "a paired device's root must join the roster, or its writes are \
-             refused while it looks paired"
-        );
-
-        unpair_device(directory.path(), &profile(), [0x51; 32]).unwrap();
-        let dropped = OwnerSettings::load(&path).unwrap().sync.unwrap();
-        assert_eq!(
-            dropped.roster_root_keys().unwrap(),
-            vec![[0xc0; 32]],
-            "unpairing must revoke write authority too: a root left behind is \
-             authority the owner believes they removed"
-        );
-        assert!(
-            dropped.paired_node_keys().unwrap().is_empty(),
-            "and reachability goes with it"
-        );
-    }
-
-    #[test]
-    fn a_device_paired_without_a_root_is_receive_only_and_says_so() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = owner_settings::settings_path(directory.path(), &profile());
-        OwnerSettings {
-            sync: Some(SyncSettings {
-                graph: "personal".into(),
-                ..SyncSettings::default()
-            }),
-        }
-        .save(&path)
-        .unwrap();
-
-        assert_eq!(
-            pair_device(directory.path(), &profile(), [0x61; 32], None, "reader", 1).unwrap(),
-            PairOutcome::Added {
-                path: path.clone(),
-                receive_only: true
-            }
-        );
-        let stored = OwnerSettings::load(&path).unwrap().sync.unwrap();
-        assert!(
-            stored.roster_root_keys().unwrap().is_empty(),
-            "no root was given, so nothing joins the roster"
-        );
-        assert_eq!(
-            stored.receive_only_devices().len(),
-            1,
-            "and the device is reportable as receive-only rather than looking \
-             like a fully paired peer that mysteriously cannot write"
-        );
-    }
-
-    #[test]
-    fn unpairing_from_a_profile_with_no_sync_is_not_an_error() {
-        let directory = tempfile::tempdir().unwrap();
-        assert_eq!(
-            unpair_device(directory.path(), &profile(), [0x43; 32]).unwrap(),
-            UnpairOutcome::NotPaired
-        );
-    }
-
-    #[test]
-    fn a_device_can_be_paired_again_after_being_unpaired() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = owner_settings::settings_path(directory.path(), &profile());
-        OwnerSettings {
-            sync: Some(SyncSettings {
-                graph: "personal".into(),
-                ..SyncSettings::default()
-            }),
-        }
-        .save(&path)
-        .unwrap();
-
-        pair_device(
-            directory.path(),
-            &profile(),
-            [0x44; 32],
-            Some([0xa4; 32]),
-            "imac",
-            1,
-        )
-        .unwrap();
-        unpair_device(directory.path(), &profile(), [0x44; 32]).unwrap();
-        assert!(
-            matches!(
-                pair_device(
-                    directory.path(),
-                    &profile(),
-                    [0x44; 32],
-                    Some([0xa4; 32]),
-                    "imac again",
-                    3
-                )
-                .unwrap(),
-                PairOutcome::Added { .. }
-            ),
-            "unpairing must not leave a tombstone that blocks re-pairing"
-        );
-        let again = OwnerSettings::load(&path).unwrap().sync.unwrap();
-        assert_eq!(again.paired_devices.len(), 1);
-        assert_eq!(again.paired_devices[0].added_ms, 3);
-    }
 
     #[test]
     fn the_data_root_override_is_taken_as_given_and_skips_the_migration() {

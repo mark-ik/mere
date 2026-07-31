@@ -17,6 +17,8 @@ use graphshell::native::device_sync;
 use graphshell::native::identity_ui::SystemNativeIdentityUi;
 #[cfg(feature = "personal-sync")]
 use graphshell::native::owner_settings::{self, SyncOverrides};
+#[cfg(feature = "personal-sync")]
+use graphshell::native::pairing;
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
@@ -58,6 +60,10 @@ struct Args {
     /// Print what the other device needs in order to pair, and exit.
     #[cfg(feature = "personal-sync")]
     pairing_facts: bool,
+    /// Nodes to author as the host starts. See `device_sync::SeedNote`: this
+    /// is a stopgap until typed intents over the admitted session exist.
+    #[cfg(feature = "personal-sync")]
+    seed_notes: Vec<device_sync::SeedNote>,
 }
 
 #[cfg(feature = "personal-sync")]
@@ -153,6 +159,8 @@ fn parse_args() -> Result<Args, String> {
     let mut unpair_node = None;
     #[cfg(feature = "personal-sync")]
     let mut pairing_facts = false;
+    #[cfg(feature = "personal-sync")]
+    let mut seed_notes = Vec::new();
     let mut argv = std::env::args().skip(1);
 
     while let Some(arg) = argv.next() {
@@ -237,6 +245,14 @@ fn parse_args() -> Result<Args, String> {
             #[cfg(feature = "personal-sync")]
             "--pairing-facts" => pairing_facts = true,
             #[cfg(feature = "personal-sync")]
+            "--seed-node" => {
+                let address = argv.next().ok_or("--seed-node needs an address")?;
+                let title = argv
+                    .next()
+                    .ok_or("--seed-node needs a title after the address")?;
+                seed_notes.push(device_sync::SeedNote { address, title });
+            }
+            #[cfg(feature = "personal-sync")]
             "--unpair-node" => {
                 let value = argv.next().ok_or("--unpair-node needs a value")?;
                 owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
@@ -298,6 +314,8 @@ fn parse_args() -> Result<Args, String> {
         unpair: unpair_node,
         #[cfg(feature = "personal-sync")]
         pairing_facts,
+        #[cfg(feature = "personal-sync")]
+        seed_notes,
     })
 }
 
@@ -312,9 +330,8 @@ fn report_pairing_facts(args: &Args) -> Result<String, String> {
     let (profile, _created) = bootstrap::load_or_create_profile(&*opened.storage, &args.profile)
         .map_err(|error| error.to_string())?;
     let vault = IdentityVault::with_profile(opened.storage, profile);
-    let facts =
-        device_sync::pairing_facts(&vault, &owner_settings::default_app_dir(), &args.profile)
-            .map_err(|error| error.to_string())?;
+    let facts = pairing::pairing_facts(&vault, &owner_settings::default_app_dir(), &args.profile)
+        .map_err(|error| error.to_string())?;
     let Some(facts) = facts else {
         return Err(format!(
             "personal sync is not configured for profile {:?}",
@@ -335,14 +352,13 @@ fn report_pairing_facts(args: &Args) -> Result<String, String> {
 #[cfg(feature = "personal-sync")]
 fn unpair_device(args: &Args, node_id: &str) -> Result<String, String> {
     let node = owner_settings::parse_hex32(node_id).map_err(|error| error.to_string())?;
-    let outcome =
-        device_sync::unpair_device(&owner_settings::default_app_dir(), &args.profile, node)
-            .map_err(|error| error.to_string())?;
+    let outcome = pairing::unpair_device(&owner_settings::default_app_dir(), &args.profile, node)
+        .map_err(|error| error.to_string())?;
     Ok(match outcome {
-        device_sync::UnpairOutcome::Removed { path } => {
+        pairing::UnpairOutcome::Removed { path } => {
             format!("unpaired {} in {}", node_id, path.display())
         }
-        device_sync::UnpairOutcome::NotPaired => {
+        pairing::UnpairOutcome::NotPaired => {
             format!("{node_id} was not paired; settings unchanged")
         }
     })
@@ -355,7 +371,7 @@ fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
         Some(value) => Some(owner_settings::parse_hex32(value).map_err(|error| error.to_string())?),
         None => None,
     };
-    let outcome = device_sync::pair_device(
+    let outcome = pairing::pair_device(
         &owner_settings::default_app_dir(),
         &args.profile,
         node,
@@ -365,7 +381,7 @@ fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
     )
     .map_err(|error| error.to_string())?;
     Ok(match outcome {
-        device_sync::PairOutcome::Added { path, receive_only } => format!(
+        pairing::PairOutcome::Added { path, receive_only } => format!(
             "paired {} as {:?} in {}{}",
             request.node_id,
             request.label,
@@ -377,7 +393,7 @@ fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
                 ""
             }
         ),
-        device_sync::PairOutcome::AlreadyPaired => {
+        pairing::PairOutcome::AlreadyPaired => {
             format!("{} was already paired; settings unchanged", request.node_id)
         }
     })
@@ -406,6 +422,7 @@ fn usage() -> &'static str {
      [--pair-root <64-hex-master-root>] [--pair-label <name>]\n\
      unpair and exit: --unpair-node <64-hex-node-id>\n\
      what the other device needs: --pairing-facts\n\
+     seed a node at start: [--seed-node <address> <title>]\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }
 
@@ -510,6 +527,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         args.data_root.clone(),
         args.sync_overrides,
         args.sync_peer_tickets,
+        args.seed_notes,
     )
     .await?;
     #[cfg(feature = "personal-sync")]

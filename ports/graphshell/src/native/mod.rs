@@ -6,6 +6,8 @@ pub mod device_broker;
 pub mod device_sync;
 pub mod identity_ui;
 pub mod owner_settings;
+#[cfg(feature = "personal-sync")]
+pub mod pairing;
 pub mod personae_host;
 #[cfg(feature = "personal-sync")]
 pub mod personal_sync_host;
