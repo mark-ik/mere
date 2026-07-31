@@ -176,6 +176,22 @@ impl PersonalSyncHost {
         self.transport.local_peer_id().to_bytes()
     }
 
+    /// Tag another device onto this graph's overlay on the live transport, so
+    /// pairing takes effect without restarting the resident host.
+    ///
+    /// Additive only. The address book has no untag through this seam, so
+    /// removing a device from the settings file takes effect on the next
+    /// start rather than immediately.
+    pub async fn pair_node(&self, node_id: [u8; 32]) -> Result<(), PersonalSyncHostError> {
+        let peer = PeerID::from_bytes(&node_id).map_err(|error| {
+            PersonalSyncHostError::Transport(format!("paired node id: {error}"))
+        })?;
+        self.transport
+            .set_topics(peer, &[sync_overlay_topic(self.graph)])
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+    }
+
     pub async fn ticket(&self) -> Result<String, PersonalSyncHostError> {
         self.transport
             .ticket()

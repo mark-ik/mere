@@ -10,21 +10,17 @@ use std::sync::Arc;
 use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
 #[cfg(feature = "personal-sync")]
-use graphshell::native::device_broker::{DeviceSupplementalCards, serve_browser_broker_with_cards};
+use graphshell::native::device_broker::serve_browser_broker_with_cards;
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
+#[cfg(feature = "personal-sync")]
+use graphshell::native::device_sync;
 use graphshell::native::identity_ui::SystemNativeIdentityUi;
 #[cfg(feature = "personal-sync")]
-use graphshell::native::owner_settings::{self, DataRootMigration, OwnerSettings, SyncOverrides};
+use graphshell::native::owner_settings::{self, SyncOverrides};
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
-#[cfg(feature = "personal-sync")]
-use graphshell::native::personal_sync_host::{PersonalSyncHost, PersonalSyncHostConfig};
-#[cfg(feature = "personal-sync")]
-use graphshell::personal_sync::{SyncRoster, SyncSelection};
 use graphshell::profile::{default_vault_dir, selected_profile};
-#[cfg(feature = "personal-sync")]
-use personae::IdentityProvider;
 use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
 use personae::{IdentityVault, ProfileId};
 use ssh_agent_lib::agent::listen;
@@ -32,8 +28,6 @@ use ssh_agent_lib::agent::listen;
 const EXTRA_EXTENSIONS_ENV: &str = "GRAPHSHELL_EXTENSION_IDS";
 const DATA_ROOT_ENV: &str = "GRAPHSHELL_DATA_ROOT";
 const SESSION_SECONDS_ENV: &str = "GRAPHSHELL_BROWSER_SESSION_SECONDS";
-#[cfg(feature = "personal-sync")]
-const PERSONAL_GRAPH_DOMAIN: &[u8] = b"mere.graphshell/personal-graph/v1";
 
 enum AgentEndpoint {
     Standard(String),
@@ -54,6 +48,16 @@ struct Args {
     /// valid until that peer rebinds, so storing one would go stale.
     #[cfg(feature = "personal-sync")]
     sync_peer_tickets: Vec<String>,
+    /// Pair a device into this profile's settings and exit, rather than
+    /// starting the host.
+    #[cfg(feature = "personal-sync")]
+    pair: Option<PairRequest>,
+}
+
+#[cfg(feature = "personal-sync")]
+struct PairRequest {
+    node_id: String,
+    label: String,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -65,6 +69,21 @@ async fn main() {
             std::process::exit(2);
         }
     };
+    // Pairing is a management operation, not a run of the host: it edits the
+    // settings and reports, so it writes to the console rather than the log.
+    #[cfg(feature = "personal-sync")]
+    if let Some(request) = &args.pair {
+        match pair_device(&args, request) {
+            Ok(message) => {
+                println!("{message}");
+                return;
+            }
+            Err(error) => {
+                eprintln!("graphshell device host: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
     if let Err(error) = init_logging(args.log_file.as_deref()) {
         eprintln!("graphshell device host: initialize logging: {error}");
         std::process::exit(1);
@@ -103,6 +122,10 @@ fn parse_args() -> Result<Args, String> {
     let mut sync_handlers = false;
     #[cfg(feature = "personal-sync")]
     let mut sync_blobs = false;
+    #[cfg(feature = "personal-sync")]
+    let mut pair_node = None;
+    #[cfg(feature = "personal-sync")]
+    let mut pair_label = String::new();
     let mut argv = std::env::args().skip(1);
 
     while let Some(arg) = argv.next() {
@@ -169,6 +192,16 @@ fn parse_args() -> Result<Args, String> {
                 sync_facets.push(argv.next().ok_or("--sync-facet needs a value")?);
             }
             #[cfg(feature = "personal-sync")]
+            "--pair-node" => {
+                let value = argv.next().ok_or("--pair-node needs a value")?;
+                owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
+                pair_node = Some(value);
+            }
+            #[cfg(feature = "personal-sync")]
+            "--pair-label" => {
+                pair_label = argv.next().ok_or("--pair-label needs a value")?;
+            }
+            #[cfg(feature = "personal-sync")]
             "--sync-access" => sync_access = true,
             #[cfg(feature = "personal-sync")]
             "--sync-scenes" => sync_scenes = true,
@@ -214,7 +247,44 @@ fn parse_args() -> Result<Args, String> {
         },
         #[cfg(feature = "personal-sync")]
         sync_peer_tickets: sync_peers,
+        #[cfg(feature = "personal-sync")]
+        pair: pair_node.map(|node_id| PairRequest {
+            node_id,
+            label: pair_label,
+        }),
     })
+}
+
+#[cfg(feature = "personal-sync")]
+fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
+    let node = owner_settings::parse_hex32(&request.node_id).map_err(|error| error.to_string())?;
+    let outcome = device_sync::pair_device(
+        &owner_settings::default_app_dir(),
+        &args.profile,
+        node,
+        &request.label,
+        now_ms(),
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(match outcome {
+        device_sync::PairOutcome::Added { path } => format!(
+            "paired {} as {:?} in {}",
+            request.node_id,
+            request.label,
+            path.display()
+        ),
+        device_sync::PairOutcome::AlreadyPaired => {
+            format!("{} was already paired; settings unchanged", request.node_id)
+        }
+    })
+}
+
+#[cfg(feature = "personal-sync")]
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[cfg(feature = "personal-sync")]
@@ -228,6 +298,7 @@ fn usage() -> &'static str {
      [--sync-peer <ticket>] \
      [--sync-facet <id>] [--sync-access] [--sync-scenes] \
      [--sync-handlers] [--sync-blobs]\n\
+     pair and exit: --pair-node <64-hex-node-id> [--pair-label <name>]\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }
 
@@ -324,99 +395,16 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         .with_additional(&std::env::var(EXTRA_EXTENSIONS_ENV).unwrap_or_default());
     let agent = listen(agent_listener, personae.agent_session());
     #[cfg(feature = "personal-sync")]
-    let supplemental_cards = {
-        let app_dir = owner_settings::default_app_dir();
-        let settings_file = owner_settings::settings_path(&app_dir, &args.profile);
-        let stored = OwnerSettings::load(&settings_file)?;
-        tracing::info!(
-            path = %settings_file.display(),
-            configured = stored.sync.is_some(),
-            "owner settings"
-        );
-        let resolved = owner_settings::resolve_sync(stored.sync, args.sync_overrides);
-        if let Some(sync) = resolved {
-            let graph = personal_graph_id(&sync.graph);
-            // An explicit --data-root or GRAPHSHELL_DATA_ROOT is the owner
-            // naming a location, so leave it alone. Otherwise take the default
-            // and bring any store still sitting inside the Personae vault with
-            // it, once.
-            let data_root = match args.data_root.clone() {
-                Some(explicit) => explicit,
-                None => {
-                    let current = owner_settings::default_data_root(&app_dir);
-                    let legacy = owner_settings::legacy_data_root(&args.vault_dir);
-                    if let DataRootMigration::Moved { from, to } =
-                        owner_settings::migrate_data_root(&legacy, &current)?
-                    {
-                        tracing::info!(
-                            from = %from.display(),
-                            to = %to.display(),
-                            "moved the Graphshell data root out of the Personae vault"
-                        );
-                    }
-                    current
-                }
-            };
-            let store_path = sync.store_path.clone().unwrap_or_else(|| {
-                data_root
-                    .join("personal-sync")
-                    .join(format!("{}.redb", hex(&graph)))
-            });
-            let mut roots = sync.roster_root_keys()?;
-            roots.push(personae.master_public_key().to_bytes());
-            roots.sort_unstable();
-            roots.dedup();
-            let paired_nodes = sync.paired_node_keys()?;
-            let selection = SyncSelection::default()
-                .with_facets(sync.lanes.facets.clone())
-                .with_access_records(sync.lanes.access_records)
-                .with_saved_scenes(sync.lanes.saved_scenes)
-                .with_handler_preferences(sync.lanes.handler_preferences)
-                .with_blob_availability(sync.lanes.blob_availability);
-            let personal_sync = Arc::new(
-                PersonalSyncHost::open(
-                    personae.as_ref(),
-                    PersonalSyncHostConfig {
-                        graph,
-                        store_path,
-                        roster: SyncRoster::new(roots),
-                        selection,
-                        peer_tickets: args.sync_peer_tickets,
-                        paired_nodes,
-                    },
-                )
-                .await?,
-            );
-            // node_id is the durable half of this line: a peer pairs with it
-            // once and it survives restarts. The ticket is logged too because
-            // it still bootstraps across networks, where mDNS cannot reach.
-            tracing::info!(
-                graph = %hex(&graph),
-                node_id = %hex(&personal_sync.node_id()),
-                paired = sync.paired_devices.len(),
-                ticket = %personal_sync.ticket().await?,
-                "personal graph sync listening"
-            );
-            let cards: DeviceSupplementalCards = Arc::new(tokio::sync::RwLock::new(
-                personal_sync.supplemental_cards().await?,
-            ));
-            let refresh_cards = Arc::clone(&cards);
-            tokio::spawn(async move {
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    match personal_sync.supplemental_cards().await {
-                        Ok(snapshot) => *refresh_cards.write().await = snapshot,
-                        Err(error) => {
-                            tracing::warn!(%error, "personal sync projection refresh failed")
-                        }
-                    }
-                }
-            });
-            Some(cards)
-        } else {
-            None
-        }
-    };
+    let supplemental_cards = device_sync::start(
+        personae.as_ref(),
+        &owner_settings::default_app_dir(),
+        &args.vault_dir,
+        &args.profile,
+        args.data_root.clone(),
+        args.sync_overrides,
+        args.sync_peer_tickets,
+    )
+    .await?;
     #[cfg(feature = "personal-sync")]
     let browser = async {
         match supplemental_cards {
@@ -463,19 +451,6 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             Err("browser device broker ended unexpectedly".into())
         }
     }
-}
-
-#[cfg(feature = "personal-sync")]
-fn personal_graph_id(name: &str) -> [u8; 32] {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(PERSONAL_GRAPH_DOMAIN);
-    hasher.update(name.as_bytes());
-    *hasher.finalize().as_bytes()
-}
-
-#[cfg(feature = "personal-sync")]
-fn hex(bytes: &[u8; 32]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn session_duration_ms() -> u64 {
