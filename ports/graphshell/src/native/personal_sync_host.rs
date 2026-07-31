@@ -103,9 +103,24 @@ impl PersonalSyncHost {
                 let store = accepted.clone();
                 let roster = roster.clone();
                 async move {
-                    accept_into(&store, graph, &roster, &operation)
-                        .await
-                        .unwrap_or(false)
+                    match accept_into(&store, graph, &roster, &operation).await {
+                        Ok(inserted) => inserted,
+                        Err(error) => {
+                            // A refused operation and a failed one both have to
+                            // answer `false` to LogSync, so the cause survives
+                            // only if it is logged here. Without this, a peer
+                            // whose intake is broken looks exactly like a peer
+                            // correctly refusing an off-roster writer.
+                            tracing::warn!(
+                                graph = %short_hex(&graph),
+                                operation = %short_hex(operation.hash.as_bytes()),
+                                writer = %short_hex(operation.header.verifying_key.as_bytes()),
+                                %error,
+                                "personal sync could not process an incoming operation"
+                            );
+                            false
+                        }
+                    }
                 }
             })
             .await?;

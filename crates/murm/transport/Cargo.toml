@@ -36,8 +36,11 @@ tracing = "0.1"
 # iroh 1.0 wraps quinn QUIC. The 1.0.3 floor matters: 1.0.2 exact-pinned
 # ed25519-dalek =3.0.0-rc.0, which blocked the dalek 3.0/5.0 finals from
 # resolving; 1.0.3 relaxed it to a range. personae and retinue have since
-# finished their dalek-3 migration, so one dalek per major now resolves across
-# the graph instead of coexisting majors crossed via raw 32-byte seeds.
+# migrated their own key handling to dalek 3, so iroh, p2panda, personae, and
+# retinue now share one copy. A dalek 2 copy still enters the graph under
+# ssh-key 0.6 (ed25519-dalek 2.2 -> curve25519-dalek 4.1); that lane stays
+# separate, crossed via raw 32-byte seeds, and retires with an ssh-key release
+# on dalek 3.
 iroh = "1.0.3"
 iroh-blobs = "0.103"
 # Shareable connection tickets: serialize this node's `EndpointAddr` to a string
