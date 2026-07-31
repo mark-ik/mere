@@ -82,6 +82,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
         // indexed write reports it as new.
         let accept_store = store.clone();
         let joined = JoinedSpace::join::<_, MeshLogId, _, _>(
+            stickleback::lane_id("mesh/v1", mesh_id),
             store.sync_store(),
             endpoint,
             gossip,

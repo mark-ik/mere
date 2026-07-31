@@ -36,6 +36,17 @@ use p2panda_sync::protocols::TopicLogSyncEvent;
 
 use crate::synced_space::{SyncRound, SyncStatus, SyncedSpace};
 
+/// Derive a lane's sync protocol id from its kind and its space.
+///
+/// One canonical spelling so both peers agree by construction:
+/// `<kind>/<space-hex>`, e.g. `gemot/constitution/v1/6d6d…`. The kind names
+/// the lane's wire grammar and should carry its own version segment; the
+/// space id keeps two spaces of the same kind on one endpoint from colliding.
+pub fn lane_id(kind: &str, space: [u8; 32]) -> String {
+    let hex: String = space.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("{kind}/{hex}")
+}
+
 /// A join failure, staged: session spawn, stream open, subscription, or a
 /// later live publish. Sources are formatted to strings at the boundary so
 /// the error stays free of p2panda's generic parameters.
@@ -79,7 +90,19 @@ where
     /// `topic` takes anything convertible, so a caller passes its raw 32-byte
     /// space id and never names a p2panda type — which is what lets a domain
     /// lane join without importing p2panda at all.
+    ///
+    /// `lane` names this session's sync protocol (its ALPN), and it is
+    /// required rather than defaulted because the endpoint keeps exactly one
+    /// handler per protocol id: two sessions sharing an id means the
+    /// last-joined one silently receives ALL inbound sync and every other
+    /// stops converging (measured, 2026-07-31, gemot's lane-coexistence
+    /// receipt). Scope it to the lane kind AND the space —
+    /// `gemot/constitution/v1/<moot-hex>` — since two spaces of the same kind
+    /// on one endpoint collide identically. Both peers must derive the same
+    /// string; the transport hashes it with the network id before the wire,
+    /// so the readable form never travels.
     pub async fn join<S, L, A, Fut>(
+        lane: impl AsRef<[u8]>,
         store: S,
         endpoint: Endpoint,
         gossip: Gossip,
@@ -98,6 +121,7 @@ where
         Fut: Future<Output = bool> + Send,
     {
         let log_sync = LogSync::<S, L, E>::builder(store, endpoint, gossip)
+            .protocol_id(lane)
             .spawn()
             .await
             .map_err(|e| JoinError::Spawn(e.to_string()))?;

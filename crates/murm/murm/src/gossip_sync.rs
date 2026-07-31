@@ -135,6 +135,7 @@ impl Murm<P2pandaTransport> {
                 let store = self.conversation_engine().sync_store(&cabal_id)?;
                 let accept_engine = Arc::clone(self.conversation_engine());
                 let joined = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("murm/cabal/v1", cabal_id),
                     store,
                     endpoint,
                     gossip_actor,

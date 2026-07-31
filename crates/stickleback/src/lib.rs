@@ -60,7 +60,7 @@ pub use group_session::{
     GroupRecipientId, GroupSession, GroupSessionDispatch, GroupSessionError, GroupSessionId,
     GroupSessionProcess,
 };
-pub use joined_space::{JoinError, JoinedSpace};
+pub use joined_space::{JoinError, JoinedSpace, lane_id};
 pub use p2panda_encryption::data_scheme::GroupSecretId;
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,
