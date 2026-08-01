@@ -33,20 +33,21 @@ native = [
 ]
 # The browser reference-host cone. H0 proves the dependency boundary; H1 adds
 # the local Mere host adapter on top of this selected graph + canvas surface.
+#
+# Holds no browser API of its own. The wasm presenter that consumes this cone
+# is the separate `graphshell-web` crate (`web/Cargo.toml`, whose `[lib] path`
+# is `src/web.rs`), and it names its own JS bindings; the IndexedDB backend it
+# stores through belongs to muniment, beside the redb and zip realizations.
 web = [
     "dep:async-trait",
     "dep:chartulary",
     "dep:eidetic",
-    "dep:futures-channel",
-    "dep:js-sys",
     "dep:mere",
     "dep:muniment",
     "dep:serde",
     "dep:sha2",
     "dep:uuid",
     "dep:url",
-    "dep:wasm-bindgen",
-    "dep:web-sys",
 ]
 # Native device-agent composition for H7 personal graph synchronization. The
 # browser/PWA reaches this authority through its admitted device session.
@@ -64,11 +65,9 @@ async-trait = { version = "0.1", optional = true }
 base64.workspace = true
 chartulary = { workspace = true, optional = true }
 eidetic = { workspace = true, optional = true }
-futures-channel = { version = "0.3", optional = true }
 graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
 graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
 graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
-js-sys = { version = "0.3", optional = true }
 mere = { path = "../../crates/mere", default-features = false, features = ["graph", "canvas"], optional = true }
 muniment = { workspace = true, optional = true }
 sceno.workspace = true
@@ -78,20 +77,6 @@ serde_json.workspace = true
 sha2 = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["v5"], optional = true }
 url = { version = "2", optional = true }
-wasm-bindgen = { version = "=0.2.126", optional = true }
-web-sys = { version = "0.3", features = [
-    "DomException",
-    "DomStringList",
-    "Event",
-    "IdbDatabase",
-    "IdbFactory",
-    "IdbObjectStore",
-    "IdbOpenDbRequest",
-    "IdbRequest",
-    "IdbTransaction",
-    "IdbTransactionMode",
-    "Window",
-], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 blake3 = { workspace = true, optional = true }
@@ -170,7 +155,12 @@ required-features = ["native"]
 [[bin]]
 name = "graphshell_device_host"
 path = "src/bin/graphshell_device_host.rs"
-required-features = ["native"]
+# Not `native`: the resident host is gated on `personal-sync` throughout, so a
+# `native`-only build compiles clean and silently omits sync, pairing, and the
+# settings file, while still installing under the same name and passing the
+# installer's fingerprint check. Requiring the feature makes a default build
+# skip this binary rather than produce a hollow one.
+required-features = ["personal-sync"]
 
 [[bin]]
 name = "h4d_browser_receipt_host"

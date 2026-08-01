@@ -24,8 +24,6 @@ pub mod identity;
 pub mod identity_endpoint;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod identity_projection;
-#[cfg(all(feature = "web", target_arch = "wasm32"))]
-pub mod indexeddb_backend;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod lifecycle;
 #[cfg(feature = "web")]

@@ -12,11 +12,19 @@ path = "../src/web.rs"
 [dependencies]
 graphshell = { path = "..", default-features = false, features = ["web"] }
 mere = { path = "../../../crates/mere", default-features = false, features = ["graph", "canvas"] }
-muniment = { path = "../../../crates/eidetic/muniment" }
+# `indexeddb` supplies the browser realization of muniment's byte-store seam,
+# which this crate hands to `GraphshellApp` as its backend. It lived here until
+# the duplicate showed up; muniment owns the backend family, so it owns this.
+muniment = { path = "../../../crates/eidetic/muniment", features = ["indexeddb"] }
 sceno = { path = "../../../crates/scenograph/sceno" }
 serde.workspace = true
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 genet-layout = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+# The present core, shared with every winit host. Booting wgpu, picking a
+# non-sRGB surface format, and rasterizing a Scene are not browser-specific, so
+# this crate no longer hand-rolls them; only the canvas target and the
+# content-over-chrome composition below are ours.
+genet-render-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 js-sys = "0.3"
 netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }

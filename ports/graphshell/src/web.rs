@@ -26,7 +26,7 @@ use graphshell::capture::{
     BROWSER_HISTORY_HANDLER_PREFIX, BrowserHistoryCapture, BrowserVisit, CaptureOutcome,
     ForgetMode, HistoryCapturePolicy,
 };
-use graphshell::indexeddb_backend::IndexedDbBackend;
+use muniment::IndexedDbBackend;
 use graphshell::mere_host::{
     FIXTURE_DEVICE_TWO_ADDRESS, FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef,
 };
