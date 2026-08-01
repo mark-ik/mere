@@ -10,6 +10,10 @@ description = "Files-in-place authoring endpoint for Mere."
 name = "knot_endpoint"
 path = "src/bin/knot_endpoint.rs"
 
+[[bin]]
+name = "knot_sync_host"
+path = "src/bin/knot_sync_host.rs"
+
 [dependencies]
 blake3.workspace = true
 cambium.workspace = true
@@ -43,7 +47,9 @@ sibylla.workspace = true
 stickleback.workspace = true
 thiserror = "1"
 transport.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 url = "2"
 uuid.workspace = true
 zeroize = { version = "1", features = ["derive"] }
