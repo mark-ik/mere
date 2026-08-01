@@ -27,6 +27,8 @@ pub mod backend;
 pub mod blob;
 pub mod codec;
 pub mod error;
+#[cfg(all(feature = "indexeddb", target_arch = "wasm32"))]
+pub mod indexeddb_backend;
 #[cfg(feature = "redb")]
 pub mod redb_backend;
 pub mod slot;
@@ -38,6 +40,9 @@ pub use blob::{BlobStore, Hash};
 pub use codec::Codec;
 pub use error::StoreError;
 pub use slot::SlotStore;
+
+#[cfg(all(feature = "indexeddb", target_arch = "wasm32"))]
+pub use indexeddb_backend::IndexedDbBackend;
 
 #[cfg(feature = "redb")]
 pub use redb_backend::RedbBackend;

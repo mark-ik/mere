@@ -161,6 +161,12 @@ where
         &self.space
     }
 
+    /// A shared handle on this lane's counters; see
+    /// [`SyncedSpace::status_handle`].
+    pub fn status_handle(&self) -> std::sync::Arc<std::sync::Mutex<SyncStatus>> {
+        self.space.status_handle()
+    }
+
     /// A snapshot of this session's sync activity.
     pub fn sync_status(&self) -> SyncStatus {
         self.space.sync_status()

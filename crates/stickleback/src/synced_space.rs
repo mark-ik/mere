@@ -142,6 +142,16 @@ impl SyncedSpace {
         self.status.lock().unwrap().ops_received
     }
 
+    /// A shared handle on this lane's counters.
+    ///
+    /// For a host watching several lanes for arrivals from a task that cannot
+    /// borrow the handles themselves: sampling through this observes the same
+    /// counter [`sync_status`](Self::sync_status) reports, without holding the
+    /// space alive or duplicating it.
+    pub fn status_handle(&self) -> Arc<Mutex<SyncStatus>> {
+        Arc::clone(&self.status)
+    }
+
     /// Run a manual "sync now" checkpoint and report what arrived.
     ///
     /// LogSync reconciles **continuously**, so this is not a fake spinner and not
