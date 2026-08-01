@@ -9,6 +9,7 @@ mod content_classes;
 mod directory;
 mod editor;
 mod endpoint;
+mod resident;
 mod search;
 mod startup;
 mod sync;
@@ -25,8 +26,9 @@ pub use endpoint::{
     KnotEffectAuthority, KnotEffectFetcher, KnotEffectMode, KnotEffectPolicy, KnotEndpoint,
     KnotWriteGrant,
 };
+pub use resident::{KnotSyncHost, KnotSyncHostConfig, KnotSyncHostError};
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
-pub use startup::{StartupUnlockedPersonalVault, persona_vault_root};
+pub use startup::{StartupUnlockedPersonalVault, local_device_root, persona_vault_root};
 pub use sync::{
     KNOT_COMMONS_ENCRYPTION_PROFILE, KnotAutomaticTextMerge, KnotCheckpointSnapshot,
     KnotDocumentConflict, KnotDocumentProjection, KnotDocumentVersion, KnotEncryptionProfile,

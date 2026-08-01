@@ -131,7 +131,13 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
         "Knot process receipt",
     )
     .unwrap();
-    let authority = knot::StartupUnlockedPersonalVault::open(root.path(), persona).unwrap();
+    let authority = knot::StartupUnlockedPersonalVault::open(
+        root.path(),
+        persona,
+        knot::local_device_root(root.path(), "knot receipt").unwrap(),
+        [],
+    )
+    .unwrap();
     authority
         .author_document(knot::VaultDocument {
             id: "field-note".into(),

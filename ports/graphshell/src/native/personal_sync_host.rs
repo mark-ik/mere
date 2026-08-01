@@ -135,8 +135,15 @@ impl PersonalSyncHost {
         let (endpoint, gossip) = transport
             .sync_parts()
             .ok_or_else(|| PersonalSyncHostError::Transport("gossip is unavailable".into()))?;
-        let joined =
-            JoinedSpace::join::<_, u64, _, _>(store, endpoint, gossip, graph, move |operation| {
+        let joined = JoinedSpace::join::<_, u64, _, _>(
+            // Scoped to kind AND graph: two personal graphs on one endpoint
+            // would otherwise share a protocol id and stop converging.
+            stickleback::lane_id("graphshell/personal-graph/v1", graph),
+            store,
+            endpoint,
+            gossip,
+            graph,
+            move |operation| {
                 let store = accepted.clone();
                 let admitting = Arc::clone(&admitting);
                 async move {
@@ -160,8 +167,9 @@ impl PersonalSyncHost {
                         }
                     }
                 }
-            })
-            .await?;
+            },
+        )
+        .await?;
 
         Ok(Self {
             graph,

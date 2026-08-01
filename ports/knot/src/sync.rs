@@ -1060,6 +1060,9 @@ where
     ) -> Result<JoinedSpace<KnotSyncExt>, JoinError> {
         let accept_store = self.clone();
         JoinedSpace::join::<_, u64, _, _>(
+            // Scoped to kind AND space: a persona's vault space and any other
+            // Knot space on one endpoint would otherwise share a protocol id.
+            stickleback::lane_id("knot/vault-space/v1", self.policy.space_id),
             self.sync_store(),
             endpoint,
             gossip,

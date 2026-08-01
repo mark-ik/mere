@@ -61,6 +61,9 @@ pub use group_session::{
     GroupSessionProcess,
 };
 pub use joined_space::{JoinError, JoinedSpace, lane_id};
+/// The transport parts [`JoinedSpace::join`] takes, re-exported so a domain
+/// crate can offer a join helper without importing a p2panda crate itself.
+pub use p2panda_net::{Endpoint, Gossip};
 pub use p2panda_encryption::data_scheme::GroupSecretId;
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,

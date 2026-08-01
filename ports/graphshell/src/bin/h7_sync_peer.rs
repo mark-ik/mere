@@ -140,8 +140,15 @@ async fn main() -> Result<(), String> {
     let (endpoint, gossip) = transport
         .sync_parts()
         .ok_or("sync transport has no gossip")?;
-    let joined =
-        JoinedSpace::join::<_, u64, _, _>(store, endpoint, gossip, graph, move |operation| {
+    let joined = JoinedSpace::join::<_, u64, _, _>(
+        // Must match the resident host's lane exactly, or this receipt peer
+        // and a real device would talk past each other.
+        stickleback::lane_id("graphshell/personal-graph/v1", graph),
+        store,
+        endpoint,
+        gossip,
+        graph,
+        move |operation| {
             let store = accepted.clone();
             let roster = accepted_roster.clone();
             async move {
@@ -149,9 +156,10 @@ async fn main() -> Result<(), String> {
                     .await
                     .unwrap_or(false)
             }
-        })
-        .await
-        .map_err(|error| error.to_string())?;
+        },
+    )
+    .await
+    .map_err(|error| error.to_string())?;
 
     let projection = tokio::time::timeout(Duration::from_secs(60), async {
         loop {

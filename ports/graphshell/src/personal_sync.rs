@@ -1198,6 +1198,7 @@ mod tests {
         let alice_roster = roster.clone();
         let (alice_endpoint, alice_gossip) = alice_transport.sync_parts().unwrap();
         let alice_space = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("graphshell/personal-graph/v1", GRAPH),
             alice_store,
             alice_endpoint,
             alice_gossip,
@@ -1220,6 +1221,7 @@ mod tests {
         let bob_roster = roster.clone();
         let (bob_endpoint, bob_gossip) = bob_transport.sync_parts().unwrap();
         let bob_space = JoinedSpace::join::<_, u64, _, _>(
+            stickleback::lane_id("graphshell/personal-graph/v1", GRAPH),
             bob_store,
             bob_endpoint,
             bob_gossip,

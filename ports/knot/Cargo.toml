@@ -14,7 +14,7 @@ path = "src/bin/knot_endpoint.rs"
 blake3.workspace = true
 cambium.workspace = true
 chartulary.workspace = true
-eidetic.workspace = true
+eidetic = { workspace = true, features = ["json-schema"] }
 fetch.workspace = true
 graphshell-endpoint.workspace = true
 graphshell-protocol.workspace = true
@@ -42,6 +42,7 @@ session-runtime.workspace = true
 sibylla.workspace = true
 stickleback.workspace = true
 thiserror = "1"
+transport.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 url = "2"
 uuid.workspace = true

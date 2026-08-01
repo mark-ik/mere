@@ -67,11 +67,17 @@ fn main() {
                 .to_string_lossy()
                 .parse::<u64>()
                 .expect("persona-vault byte limit must be an integer");
-            knot::StartupUnlockedPersonalVault::open(PathBuf::from(data_root), persona)
-                .and_then(|authority| {
-                    authority.into_endpoint(knot::KnotWriteGrant::new(max_source_bytes))
-                })
-                .expect("Knot could not startup-unlock the requested persona vault")
+            knot::StartupUnlockedPersonalVault::open(
+                PathBuf::from(data_root),
+                persona,
+                knot::local_device_root(Path::new(data_root), "knot")
+                    .expect("Knot could not open this device identity"),
+                [],
+            )
+            .and_then(|authority| {
+                authority.into_endpoint(knot::KnotWriteGrant::new(max_source_bytes))
+            })
+            .expect("Knot could not startup-unlock the requested persona vault")
         }
         [
             mode,
@@ -90,15 +96,20 @@ fn main() {
                 .parse::<uuid::Uuid>()
                 .map(personae::PersonaId::from_uuid)
                 .expect("persona-vault persona must be a UUID");
-            let mut endpoint =
-                knot::StartupUnlockedPersonalVault::open(PathBuf::from(data_root), persona)
-                    .and_then(|authority| {
-                        authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
-                            max_source_bytes,
-                            "persona-vault byte limit",
-                        )))
-                    })
-                    .expect("Knot could not startup-unlock the requested persona vault");
+            let mut endpoint = knot::StartupUnlockedPersonalVault::open(
+                PathBuf::from(data_root),
+                persona,
+                knot::local_device_root(Path::new(data_root), "knot")
+                    .expect("Knot could not open this device identity"),
+                [],
+            )
+            .and_then(|authority| {
+                authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
+                    max_source_bytes,
+                    "persona-vault byte limit",
+                )))
+            })
+            .expect("Knot could not startup-unlock the requested persona vault");
             endpoint.grant_effects(effect_authority(
                 resolve,
                 run,
