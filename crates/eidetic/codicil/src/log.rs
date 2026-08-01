@@ -30,6 +30,19 @@ pub struct Codicil<T> {
     #[serde(default)]
     provenance: Option<Provenance>,
     entries: Vec<T>,
+    /// Causes, parallel to `entries` and indexed by [`Seq`].
+    ///
+    /// **Stored as a sequence, shaped as a graph.** Entries stay a flat `Vec`
+    /// so append, replay, and persistence are unchanged; the causal structure
+    /// rides alongside for anything that wants to ask about it. See
+    /// [`crate::causal`] for why that is enough, and for the invariant that
+    /// makes the stored order a topological one for free.
+    ///
+    /// Defaulted, so every log written before this existed still loads, with
+    /// no causes claimed. Trailing entries with no parents are not stored, so
+    /// a log that uses none costs nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    parents: Vec<Vec<Seq>>,
 }
 
 impl<T> Default for Codicil<T> {
@@ -38,6 +51,7 @@ impl<T> Default for Codicil<T> {
             id: None,
             provenance: None,
             entries: Vec::new(),
+            parents: Vec::new(),
         }
     }
 }
@@ -54,6 +68,22 @@ impl<T> Codicil<T> {
             id: Some(id),
             ..Self::default()
         }
+    }
+
+    /// The causes recorded for an entry, or nothing.
+    pub(crate) fn parents_of(&self, seq: Seq) -> &[Seq] {
+        self.parents.get(seq.index()).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// Records causes for an already-appended entry.
+    pub(crate) fn set_parents(&mut self, seq: Seq, causes: Vec<Seq>) {
+        if causes.is_empty() {
+            return;
+        }
+        if self.parents.len() <= seq.index() {
+            self.parents.resize_with(seq.index() + 1, Vec::new);
+        }
+        self.parents[seq.index()] = causes;
     }
 
     /// This log's identity, if any.
@@ -139,6 +169,10 @@ impl<T: Clone> Codicil<T> {
                 at: self.next_seq(),
             }),
             entries: self.entries.clone(),
+            // Causality forks with the entries. A fork inherits the graph it
+            // branched from, then diverges; seqs stay valid because the copied
+            // prefix keeps its positions.
+            parents: self.parents.clone(),
         }
     }
 }

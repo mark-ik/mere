@@ -15,4 +15,5 @@ muniment = { path = "../muniment", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 pollster = "0.4"

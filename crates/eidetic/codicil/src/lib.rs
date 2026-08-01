@@ -13,10 +13,24 @@
 //! catch up with [`from`](Codicil::from) / [`replay_from`](Codicil::replay_from).
 //!
 //! codicil is the versioning half over its sibling [`muniment`], the store: a log
-//! persists through a muniment slot. It is transport-neutral (it produces a
-//! replayable sequence; shipping it to peers is the consumer's job) and linear
-//! (a branching edit-tree is a later shape), by deliberate scope.
+//! persists through a muniment slot. It is transport-neutral: it produces a
+//! replayable sequence, and shipping it to peers is the consumer's job.
+//!
+//! # Storage is a sequence; shape is a graph
+//!
+//! Entries are a flat, monotonic list, which is what makes append, replay, and
+//! persistence cheap. Causality rides beside them as parent links, so a log can
+//! also answer what led to an entry, what followed from it, and which entries
+//! were genuinely concurrent. Opt in with
+//! [`append_caused_by`](Codicil::append_caused_by); plain
+//! [`append`](Codicil::append) claims no causes and behaves exactly as before.
+//! See [`causal`] for the invariant that makes this nearly free.
+//!
+//! This replaces the crate's earlier scope note that a branching edit-tree was
+//! a later shape. It is this shape, and it arrived without disturbing the
+//! linear one.
 
+pub mod causal;
 pub mod fork;
 pub mod log;
 pub mod persist;
