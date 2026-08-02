@@ -66,7 +66,37 @@ Three decisions the extraction forced, none of them free:
 
 The blocking surface is unchanged and still the open question for C3.
 
-### C1. The in-memory carrier
+### C1. The in-memory carrier - LANDED 2026-08-02 (crate); K0 consumes it next
+
+`graphshell-local`, a carrier crate parallel to `graphshell-stdio`:
+`LocalCarrier<E, F>` wraps a `CompleteEndpoint` and answers through
+`dispatch_common`. Four receipts, including one whose only job is to fail if a
+message stops round-tripping.
+
+**It serializes, and the decision below stands as recommended.** Every request
+and response goes through the same `serde_json` encoding the wire uses; only
+I/O is skipped.
+
+Three things the implementation settled:
+
+- **`CompleteEndpoint`**, a blanket-implemented supertrait over the four
+  `dispatch_common` already requires, so a carrier says "a complete endpoint"
+  once instead of repeating four bounds at every signature. No adapter
+  implements it directly.
+- **The session plane is refused by name.** `Open`, `Close`, and `Suspend` are
+  the host's to answer and an in-process host has no session plane. Refusing
+  and saying so beats returning a success that means nothing.
+- **`wait_for_notice` does not block.** An in-process endpoint has already
+  produced whatever it will produce by the time the host asks, so a caller
+  that wants to wait owns that loop; only it knows what it waits for and how
+  long is too long. This is the first real evidence for the C3 blocking
+  question: the surface's blocking shape is a stdio assumption, not a
+  protocol one.
+
+The crate is landed and tested; **wiring Turnstone's Knot path onto it is K0**
+in the Knot plan, and that is what retires the subprocess.
+
+### C1 (original scoping)
 
 The degenerate case: endpoint adapter and client in one process, no I/O. This
 is what makes "an embeddable component" and "a projectable remote surface" the

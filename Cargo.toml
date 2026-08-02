@@ -83,6 +83,7 @@ members = [
     "crates/graphshell/graphshell-client",
     "crates/graphshell/graphshell-endpoint",
     "crates/graphshell/graphshell-stdio",
+    "crates/graphshell/graphshell-local",
     "ports/graphshell",
     "ports/graphshell/web",
     "ports/knot",
@@ -154,6 +155,7 @@ vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
 graphshell-protocol = { path = "crates/graphshell/graphshell-protocol" }
 graphshell-client = { path = "crates/graphshell/graphshell-client" }
+graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
 knot = { path = "ports/knot" }

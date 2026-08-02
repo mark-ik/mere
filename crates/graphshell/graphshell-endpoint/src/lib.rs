@@ -8,6 +8,22 @@ use graphshell_protocol::{
     ProjectionSnapshot, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
 };
 
+/// Everything a carrier needs from an endpoint to serve the common verbs.
+///
+/// A name for the bound `dispatch_common` already requires, so a carrier can
+/// say "a complete endpoint" once instead of repeating four traits at every
+/// signature. Blanket-implemented: satisfying the four IS satisfying this,
+/// and no adapter implements it directly.
+pub trait CompleteEndpoint:
+    ProjectionCatalog + ProjectionSource + PresentationSource + IntentSink
+{
+}
+
+impl<T> CompleteEndpoint for T where
+    T: ProjectionCatalog + ProjectionSource + PresentationSource + IntentSink
+{
+}
+
 /// Discovery boundary for a product-neutral host.
 pub trait ProjectionCatalog {
     fn describe(&self) -> EndpointDescriptor;

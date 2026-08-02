@@ -1,0 +1,15 @@
+[package]
+name = "graphshell-local"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "In-process carrier for Graphshell endpoints hosted where their host runs."
+
+[dependencies]
+graphshell-endpoint = { path = "../graphshell-endpoint" }
+graphshell-protocol = { path = "../graphshell-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+[dev-dependencies]
+sceno.workspace = true
