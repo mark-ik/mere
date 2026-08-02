@@ -64,6 +64,11 @@ struct Args {
     /// is a stopgap until typed intents over the admitted session exist.
     #[cfg(feature = "personal-sync")]
     seed_notes: Vec<device_sync::SeedNote>,
+    /// Blob operations to run once as the host starts. Same reason as
+    /// `seed_notes`: this process owns the store and must keep running to
+    /// serve what it stages.
+    #[cfg(feature = "personal-sync")]
+    blob_actions: Vec<device_sync::BlobAction>,
 }
 
 #[cfg(feature = "personal-sync")]
@@ -163,6 +168,8 @@ fn parse_args() -> Result<Args, String> {
     let mut pairing_facts = false;
     #[cfg(feature = "personal-sync")]
     let mut seed_notes = Vec::new();
+    #[cfg(feature = "personal-sync")]
+    let mut blob_actions = Vec::new();
     let mut argv = std::env::args().skip(1);
 
     while let Some(arg) = argv.next() {
@@ -259,6 +266,20 @@ fn parse_args() -> Result<Args, String> {
                 seed_notes.push(device_sync::SeedNote { address, title });
             }
             #[cfg(feature = "personal-sync")]
+            "--stage-blob" => {
+                let path = argv.next().ok_or("--stage-blob needs a file path")?;
+                blob_actions.push(device_sync::BlobAction::Stage {
+                    path: PathBuf::from(path),
+                });
+            }
+            #[cfg(feature = "personal-sync")]
+            "--fetch-blob" => {
+                let value = argv.next().ok_or("--fetch-blob needs a 64-hex hash")?;
+                let blob =
+                    owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
+                blob_actions.push(device_sync::BlobAction::Fetch { blob });
+            }
+            #[cfg(feature = "personal-sync")]
             "--unpair-node" => {
                 let value = argv.next().ok_or("--unpair-node needs a value")?;
                 owner_settings::parse_hex32(&value).map_err(|error| error.to_string())?;
@@ -323,6 +344,8 @@ fn parse_args() -> Result<Args, String> {
         pairing_facts,
         #[cfg(feature = "personal-sync")]
         seed_notes,
+        #[cfg(feature = "personal-sync")]
+        blob_actions,
     })
 }
 
@@ -430,6 +453,7 @@ fn usage() -> &'static str {
      unpair and exit: --unpair-node <64-hex-node-id>\n\
      what the other device needs: --pairing-facts\n\
      seed a node at start: [--seed-node <address> <title>]\n\
+     blobs at start: [--stage-blob <file>] [--fetch-blob <64-hex-hash>]\n\
      receipt only: --receipt-agent-endpoint <isolated-endpoint>"
 }
 
@@ -535,6 +559,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         args.sync_overrides,
         args.sync_peer_tickets,
         args.seed_notes,
+        args.blob_actions,
     )
     .await?;
     #[cfg(feature = "personal-sync")]

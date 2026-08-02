@@ -56,6 +56,23 @@ pub struct SeedNote {
     pub title: String,
 }
 
+/// A blob operation to run once as the host starts.
+///
+/// Here for the same reason [`SeedNote`] is: the blob store and the graph
+/// that advertises it are owned by this process, so a second binary cannot do
+/// this without taking the lock away from the resident host. Stage-then-serve
+/// in particular has to keep running afterwards, which a command that exits
+/// cannot do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BlobAction {
+    /// Read a local file, hold its bytes, and tell paired devices this one has
+    /// them. Logs the hash a sibling needs in order to ask.
+    Stage { path: PathBuf },
+    /// Fetch a blob some paired device has advertised, into this device's
+    /// store. Logs which device supplied it.
+    Fetch { blob: [u8; 32] },
+}
+
 /// Resolve the data root, moving it out of the Personae vault once if it is
 /// still there. An explicit override is the owner naming a location, so it is
 /// taken as given.
@@ -92,6 +109,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     overrides: SyncOverrides,
     peer_tickets: Vec<String>,
     seed_notes: Vec<SeedNote>,
+    blob_actions: Vec<BlobAction>,
 ) -> Result<Option<DeviceSupplementalCards>, DeviceSyncError> {
     let settings_file = owner_settings::settings_path(app_dir, profile);
     let stored = OwnerSettings::load(&settings_file)?;
@@ -197,6 +215,53 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         }])
         .await?;
         tracing::info!(address = %note.address, title = %note.title, "authored a node");
+    }
+
+    // After the seed notes, and still before the watchers, so a staged blob's
+    // advertisement is authored in the same quiet window.
+    //
+    // A failure here is reported and does not stop the host. Staging is a
+    // request to hold and offer bytes; if it fails the host is still a working
+    // sync engine, and exiting would take the graph down over a file that
+    // could not be read. A fetch failure is more often "the holder is not up
+    // yet" than anything permanent, and the record stays, so asking again
+    // later is the recovery.
+    for action in blob_actions {
+        match action {
+            BlobAction::Stage { path } => match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let byte_len = bytes.len();
+                    let container = uuid::Uuid::new_v4();
+                    match host.stage_blob(container, bytes).await {
+                        Ok(blob) => tracing::info!(
+                            path = %path.display(),
+                            byte_len,
+                            container = %container,
+                            blob = %owner_settings::hex32(&blob),
+                            "staged a blob; a paired device can now fetch it by this hash"
+                        ),
+                        Err(error) => {
+                            tracing::error!(path = %path.display(), %error, "could not stage the blob")
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(path = %path.display(), %error, "could not read the file to stage")
+                }
+            },
+            BlobAction::Fetch { blob } => match host.fetch_blob_by_availability(blob).await {
+                Ok(supplier) => tracing::info!(
+                    blob = %owner_settings::hex32(&blob),
+                    supplier = %owner_settings::hex32(&supplier),
+                    "fetched a blob from a paired device"
+                ),
+                Err(error) => tracing::error!(
+                    blob = %owner_settings::hex32(&blob),
+                    %error,
+                    "could not fetch the blob"
+                ),
+            },
+        }
     }
 
     spawn_pairing_watch(

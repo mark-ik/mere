@@ -43,14 +43,28 @@ Four methods. `spawn` is stdio-specific and stays out.
 
 ## Steps
 
-### C0. Extract the trait
+### C0. Extract the trait - DONE 2026-08-02
 
-One trait from the surface above, implemented by `StdioCarrier`, with
-`RetainedEndpointSession` generic or boxed over it. No behaviour change, no new
-carrier, no moved code.
+`graphshell_protocol::Carrier`, implemented by `StdioCarrier`, with
+`RetainedEndpointSession` holding `Option<Box<dyn Carrier>>`. No behaviour
+change, no new carrier, no moved code. graphshell-protocol 81, stdio 10,
+graphshell 5, and Turnstone builds unchanged.
 
-**Done when:** the Knot path works exactly as before, `ports/graphshell` and
-Turnstone both build, and adding a carrier is a matter of writing an impl.
+Three decisions the extraction forced, none of them free:
+
+- **Not `Send + Sync`.** A browser carrier is single-threaded, and requiring
+  thread-safety on the trait would exclude the target the protocol most needs
+  to reach. A host wanting a carrier on another thread owns that choice.
+- **`shutdown` takes `&mut self`, not `self`.** A consuming method cannot live
+  on a trait object, which is the entire point of the seam. `StdioCarrier`'s
+  body only ever needed `&mut self`; the consuming form stays as an inherent
+  method, so existing callers are untouched.
+- **The trait object is `+ 'static` explicitly, everywhere.** `&mut T` is
+  invariant in `T`, so an elided `'_` will not accept the `'static` object the
+  boxed field holds. Writing the lifetime out at every signature is not
+  ceremony; eliding it does not compile.
+
+The blocking surface is unchanged and still the open question for C3.
 
 ### C1. The in-memory carrier
 

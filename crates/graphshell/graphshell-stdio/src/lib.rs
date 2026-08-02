@@ -365,6 +365,37 @@ mod native {
         }
     }
 
+    impl graphshell_protocol::Carrier for StdioCarrier {
+        fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
+            StdioCarrier::request(self, body)
+        }
+
+        fn take_notice(&mut self) -> Option<CarrierNotice> {
+            StdioCarrier::take_notice(self)
+        }
+
+        fn wait_for_notice(&mut self) -> Result<CarrierNotice, String> {
+            StdioCarrier::wait_for_notice(self)
+        }
+
+        /// The same work as the consuming [`StdioCarrier::shutdown`], by
+        /// reference so a boxed carrier can be closed. Dropping the input
+        /// twice is harmless; the second `wait` reports the already-reaped
+        /// child, which a caller closing twice deserves to hear about.
+        fn shutdown(&mut self) -> Result<(), String> {
+            self.input.take();
+            let status = self
+                .child
+                .wait()
+                .map_err(|error| format!("endpoint did not stop cleanly: {error}"))?;
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("endpoint exited with status {status}"))
+            }
+        }
+    }
+
     impl Drop for StdioCarrier {
         fn drop(&mut self) {
             self.input.take();

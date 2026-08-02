@@ -593,6 +593,39 @@ pub enum CarrierOutput {
     Notice(CarrierNotice),
 }
 
+/// How a host reaches one endpoint, whatever sits between them.
+///
+/// The protocol has always described itself as running over an *unspecified*
+/// carrier; this is that seam made real. A carrier moves request and response
+/// bodies and surfaces notices, and knows nothing about what they mean.
+///
+/// Deliberately not `Send + Sync`: a browser carrier is single-threaded, and
+/// requiring thread-safety here would exclude the target the protocol most
+/// needs to reach. A host that wants a carrier on another thread owns that
+/// choice; the trait does not impose it.
+///
+/// The surface is blocking, which is what the first carrier is. A network
+/// carrier will want either an async sibling or a worker thread behind this
+/// same shape, and that is a decision to make when one is written rather than
+/// guessed at now.
+pub trait Carrier {
+    /// Send one request and wait for its response.
+    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String>;
+
+    /// Take one already-received notice, if any is queued. Never blocks.
+    fn take_notice(&mut self) -> Option<CarrierNotice>;
+
+    /// Block until a notice arrives.
+    fn wait_for_notice(&mut self) -> Result<CarrierNotice, String>;
+
+    /// Release whatever the carrier holds open.
+    ///
+    /// `&mut self` rather than `self` so this is callable on a boxed carrier,
+    /// which is the whole point of the seam. Implementations should tolerate a
+    /// second call rather than assuming exactly one.
+    fn shutdown(&mut self) -> Result<(), String>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

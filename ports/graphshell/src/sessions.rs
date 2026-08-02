@@ -9,9 +9,9 @@ use graphshell_client::{
     ClientState, PresentationResolution, ResolvedPresentation, ResumeApplication,
 };
 use graphshell_protocol::{
-    AdvertisedAction, CapabilityProfile, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
-    EndpointDescriptor, IntentInvocation, IntentResult, PresentationCapability, ProjectionSession,
-    ResumeRequest,
+    AdvertisedAction, CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody,
+    CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult,
+    PresentationCapability, ProjectionSession, ResumeRequest,
 };
 use graphshell_stdio::StdioCarrier;
 use sceno::InstanceId;
@@ -33,7 +33,10 @@ pub struct SessionProjectionView {
 /// `close` and `Drop` both release the child carrier and discard every mounted
 /// session, including memory-only editable source.
 pub struct RetainedEndpointSession {
-    carrier: Option<StdioCarrier>,
+    /// Boxed rather than concrete: the protocol has always described itself as
+    /// running over an unspecified carrier, and this is the field that makes
+    /// that true. `spawn` still supplies the stdio one.
+    carrier: Option<Box<dyn Carrier>>,
     client: ClientState,
     profile: CapabilityProfile,
     descriptor: EndpointDescriptor,
@@ -52,7 +55,7 @@ impl RetainedEndpointSession {
             other => return Err(unexpected("descriptor", &other)),
         };
         Ok(Self {
-            carrier: Some(carrier),
+            carrier: Some(Box::new(carrier)),
             client: ClientState::default(),
             profile,
             descriptor,
@@ -212,7 +215,7 @@ impl RetainedEndpointSession {
         let notice = self.carrier_mut()?.wait_for_notice()?;
         let carrier = self
             .carrier
-            .as_mut()
+            .as_deref_mut()
             .ok_or_else(|| "endpoint carrier is closed".to_string())?;
         resume_after_notice(carrier, &mut self.client, &notice)
     }
@@ -230,13 +233,13 @@ impl RetainedEndpointSession {
         }
         let mut changed = false;
         loop {
-            let notice = self.carrier.as_mut().and_then(StdioCarrier::take_notice);
+            let notice = self.carrier.as_mut().and_then(|carrier| carrier.take_notice());
             let Some(notice) = notice else {
                 break;
             };
             let carrier = self
                 .carrier
-                .as_mut()
+                .as_deref_mut()
                 .ok_or_else(|| "endpoint carrier is closed".to_string())?;
             changed |= resume_after_notice(carrier, &mut self.client, &notice)?;
         }
@@ -262,9 +265,9 @@ impl RetainedEndpointSession {
         carrier_result
     }
 
-    fn carrier_mut(&mut self) -> Result<&mut StdioCarrier, String> {
+    fn carrier_mut(&mut self) -> Result<&mut (dyn Carrier + 'static), String> {
         self.carrier
-            .as_mut()
+            .as_deref_mut()
             .ok_or_else(|| "endpoint carrier is closed".to_string())
     }
 
@@ -363,7 +366,7 @@ pub fn wait_for_session_change(
 }
 
 pub fn resume_after_notice(
-    carrier: &mut StdioCarrier,
+    carrier: &mut (dyn Carrier + 'static),
     client: &mut ClientState,
     notice: &CarrierNotice,
 ) -> Result<bool, String> {
@@ -405,7 +408,7 @@ pub fn resume_request_for_notice(
 }
 
 fn invoke_advertised_actions(
-    carrier: &mut StdioCarrier,
+    carrier: &mut (dyn Carrier + 'static),
     client: &ClientState,
     session: &ProjectionSession,
     presentations: &[ResolvedPresentation],
