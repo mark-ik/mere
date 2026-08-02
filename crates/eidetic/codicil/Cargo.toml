@@ -16,4 +16,7 @@ serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+# Matches muniment's codec, so the positional-encoding test exercises the
+# format a consumer would actually persist with.
+postcard = { version = "1", features = ["alloc"] }
 pollster = "0.4"

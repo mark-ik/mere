@@ -38,10 +38,14 @@ pub struct Codicil<T> {
     /// [`crate::causal`] for why that is enough, and for the invariant that
     /// makes the stored order a topological one for free.
     ///
-    /// Defaulted, so every log written before this existed still loads, with
-    /// no causes claimed. Trailing entries with no parents are not stored, so
-    /// a log that uses none costs nothing.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Defaulted, so every log written before this existed still loads with no
+    /// causes claimed. A log that records none keeps this empty, so it costs a
+    /// length prefix and nothing more.
+    ///
+    /// **Not skipped when empty.** muniment's codec is pluggable and postcard
+    /// is positional, so a field written conditionally cannot be read back:
+    /// a causeless log would serialize three fields and fail to decode four.
+    #[serde(default)]
     parents: Vec<Vec<Seq>>,
 }
 

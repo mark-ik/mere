@@ -299,6 +299,11 @@ mod compatibility {
     /// A log serialized before causality existed, byte for byte.
     const OLD: &str = r#"{"id":null,"provenance":null,"entries":["a","b"]}"#;
 
+    /// The same log as this build writes it. The added field is compatible in
+    /// both directions for a self-describing codec: absent reads as empty, and
+    /// a reader that predates it ignores what it does not know.
+    const NOW: &str = r#"{"id":null,"provenance":null,"entries":["a","b"],"parents":[]}"#;
+
     #[test]
     fn a_log_written_before_causality_still_loads() {
         // Four crates persist these through muniment slots. A field that could
@@ -312,14 +317,28 @@ mod compatibility {
     }
 
     #[test]
-    fn a_log_that_claims_no_causes_serializes_as_it_used_to() {
-        // The other direction: adding the field must not bloat every log that
-        // does not use it, or four consumers pay for a feature none asked for.
+    fn a_log_that_claims_no_causes_stays_small() {
+        // Adding the field must not bloat logs that do not use it. An empty
+        // vec is a length prefix, which is the honest floor.
         let mut log: Codicil<String> = Codicil::new();
         log.append("a".into());
         log.append("b".into());
 
-        assert_eq!(serde_json::to_string(&log).unwrap(), OLD);
+        assert_eq!(serde_json::to_string(&log).unwrap(), NOW);
+    }
+
+    #[test]
+    fn a_causeless_log_survives_a_positional_codec() {
+        // The bug this replaces. `skip_serializing_if` writes three fields and
+        // reads four, which a self-describing codec forgives and postcard does
+        // not. muniment's codec is pluggable, so this was live for anyone
+        // persisting a causeless log as postcard.
+        let mut log: Codicil<String> = Codicil::new();
+        log.append("a".into());
+
+        let bytes = postcard::to_allocvec(&log).expect("encodes");
+        let back: Codicil<String> = postcard::from_bytes(&bytes).expect("and decodes");
+        assert_eq!(back, log);
     }
 
     #[test]
