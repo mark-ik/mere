@@ -12,6 +12,10 @@ use tokio::sync::{Mutex, RwLock};
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::p2panda_transport::{KnownPeer, RelayUrl};
 use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID, Transport, sync_overlay_topic};
+use uuid::Uuid;
+
+use crate::native::browser_host::now_ms;
+use crate::native::owner_settings::parse_hex32;
 
 use crate::identity_endpoint::SupplementalCard;
 use crate::personal_sync::{
@@ -198,11 +202,198 @@ impl PersonalSyncHost {
             replica: Mutex::new(replica),
             joined,
             transport,
+            blobs,
         })
     }
 
     pub fn graph(&self) -> [u8; 32] {
         self.graph
+    }
+
+    /// This device's blob store: what it serves to siblings, and where a
+    /// fetched blob lands.
+    pub fn blobs(&self) -> &BlobStore {
+        &self.blobs
+    }
+
+    /// Fetch a blob from a paired device that has advertised holding it.
+    ///
+    /// `node` is the peer's per-graph transport node id, the same identifier
+    /// pairing persists and the overlay dials. On success the bytes are in the
+    /// local store and flushed, so a restart before the caller applies them
+    /// does not cost a second transfer.
+    ///
+    /// Refuses a peer this host has not paired with. Reachability is not
+    /// authority, and a blob hash names bytes rather than a right to them; the
+    /// paired set is what says whose advertisement this device will act on.
+    pub async fn fetch_blob(
+        &self,
+        node: [u8; 32],
+        blob: [u8; 32],
+    ) -> Result<(), PersonalSyncHostError> {
+        let hash = BlobHash::from_bytes(blob);
+        if self
+            .blobs
+            .has(hash)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?
+        {
+            return Ok(());
+        }
+        let peer = PeerID::from_bytes(&node)
+            .map_err(|error| PersonalSyncHostError::Transport(format!("peer node id: {error}")))?;
+        if !self.is_paired(&peer).await {
+            return Err(PersonalSyncHostError::Transport(format!(
+                "{} is not a paired device of this graph",
+                short_hex(&node)
+            )));
+        }
+        self.blobs
+            .fetch_from(&self.transport, peer, hash)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blobs
+            .flush()
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        tracing::info!(
+            peer = %short_hex(&node),
+            blob = %short_hex(&blob),
+            "fetched a blob from a paired device"
+        );
+        Ok(())
+    }
+
+    /// Whether this peer is one this host has been told to reach for this
+    /// graph. `known_peers` is the live view, so a device paired since open
+    /// counts without a restart.
+    ///
+    /// A transport that cannot answer is treated as "not paired": refusing a
+    /// fetch is recoverable, fetching from an unverified peer is not.
+    async fn is_paired(&self, peer: &PeerID) -> bool {
+        match self.known_peers().await {
+            Ok(peers) => peers.iter().any(|known| &known.peer == peer),
+            Err(error) => {
+                tracing::warn!(%error, "could not list paired devices; refusing the fetch");
+                false
+            }
+        }
+    }
+
+    /// Hold bytes for `container`, and tell the graph this device has them.
+    ///
+    /// The observation names this device by its per-graph node id rather than
+    /// a human label, because the only consumer that matters is a sibling
+    /// deciding whom to dial, and a label is not dialable. The label a person
+    /// reads belongs to the paired-device record, which already carries one.
+    ///
+    /// Flushes before authoring, so the claim is never published ahead of the
+    /// bytes it promises.
+    pub async fn stage_blob(
+        &self,
+        container: Uuid,
+        bytes: Vec<u8>,
+    ) -> Result<[u8; 32], PersonalSyncHostError> {
+        let hash = self
+            .blobs
+            .put_bytes(bytes)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blobs
+            .flush()
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        let blob = hash.to_bytes();
+        self.author(vec![PersonalGraphEvent::ObserveBlobAvailability {
+            observation: crate::personal_sync::BlobAvailabilityObservation {
+                record_id: Uuid::new_v4(),
+                container_id: container,
+                blob,
+                device: hex(&self.node_id()),
+                available: true,
+                at_ms: now_ms(),
+            },
+        }])
+        .await?;
+        tracing::info!(
+            blob = %short_hex(&blob),
+            container = %container,
+            "staged a blob and advertised it to paired devices"
+        );
+        Ok(blob)
+    }
+
+    /// Devices the graph says currently hold `blob`, newest observation first.
+    ///
+    /// Only entries naming a dialable node id are returned. An observation
+    /// written before devices identified themselves this way carries a human
+    /// label, which cannot be dialed and is dropped here rather than surfacing
+    /// as a peer that never answers.
+    pub async fn blob_holders(
+        &self,
+        blob: [u8; 32],
+    ) -> Result<Vec<[u8; 32]>, PersonalSyncHostError> {
+        let projection = self.replica.lock().await.projection().await?;
+        let mut observations = projection
+            .blob_availability
+            .iter()
+            .filter(|observation| observation.blob == blob && observation.available)
+            .collect::<Vec<_>>();
+        observations.sort_by_key(|observation| std::cmp::Reverse(observation.at_ms));
+        let mut holders = Vec::new();
+        for observation in observations {
+            let Ok(node) = parse_hex32(&observation.device) else {
+                continue;
+            };
+            if node != self.node_id() && !holders.contains(&node) {
+                holders.push(node);
+            }
+        }
+        Ok(holders)
+    }
+
+    /// Fetch `blob` from whichever paired device advertised holding it.
+    ///
+    /// Tries holders newest-observation first and stops at the first success,
+    /// so a device that has since gone offline costs a dial rather than the
+    /// transfer. Returns the node that supplied the bytes.
+    pub async fn fetch_blob_by_availability(
+        &self,
+        blob: [u8; 32],
+    ) -> Result<[u8; 32], PersonalSyncHostError> {
+        if self
+            .blobs
+            .has(BlobHash::from_bytes(blob))
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?
+        {
+            return Ok(self.node_id());
+        }
+        let holders = self.blob_holders(blob).await?;
+        if holders.is_empty() {
+            return Err(PersonalSyncHostError::Transport(format!(
+                "no paired device has advertised blob {}",
+                short_hex(&blob)
+            )));
+        }
+        let mut last = None;
+        for node in &holders {
+            match self.fetch_blob(*node, blob).await {
+                Ok(()) => return Ok(*node),
+                Err(error) => {
+                    tracing::warn!(
+                        peer = %short_hex(node),
+                        blob = %short_hex(&blob),
+                        %error,
+                        "a device that advertised this blob did not supply it"
+                    );
+                    last = Some(error);
+                }
+            }
+        }
+        Err(last.unwrap_or_else(|| {
+            PersonalSyncHostError::Transport(format!("blob {} is unreachable", short_hex(&blob)))
+        }))
     }
 
     pub async fn roster(&self) -> SyncRoster {
@@ -524,6 +715,128 @@ mod tests {
             peer_node,
             "the host's own node id is derived per graph, so it must not \
              collide with a roster root"
+        );
+        host.close().await.unwrap();
+    }
+
+    /// S1: bytes staged on one device are fetched, byte-identical, by a paired
+    /// sibling that learned of them only through the graph.
+    ///
+    /// Two hosts on one graph, paired by node id. The source stages bytes; the
+    /// destination is told nothing but the hash, resolves the holder from the
+    /// replicated availability record, and fetches over the same endpoint the
+    /// graph syncs on.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_staged_blob_is_fetched_by_a_paired_device_from_the_graph_alone() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = [0x81; 32];
+        let source_identity = InMemoryProvider::from_seed([0x82; 32]);
+        let destination_identity = InMemoryProvider::from_seed([0x83; 32]);
+        let roster = SyncRoster::new([
+            source_identity.master_public_key().to_bytes(),
+            destination_identity.master_public_key().to_bytes(),
+        ]);
+        let container = Uuid::from_u128(0x84);
+        let payload = b"the bytes that have to cross a real endpoint".to_vec();
+
+        let source = PersonalSyncHost::open(
+            &source_identity,
+            PersonalSyncHostConfig {
+                graph,
+                store_path: directory.path().join("source.redb"),
+                roster: roster.clone(),
+                selection: SyncSelection::default().with_blob_availability(true),
+                peer_tickets: Vec::new(),
+                paired_nodes: Vec::new(),
+                relay_urls: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+        let destination = PersonalSyncHost::open(
+            &destination_identity,
+            PersonalSyncHostConfig {
+                graph,
+                store_path: directory.path().join("destination.redb"),
+                roster,
+                selection: SyncSelection::default().with_blob_availability(true),
+                peer_tickets: vec![source.ticket().await.unwrap()],
+                paired_nodes: Vec::new(),
+                relay_urls: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+        source.pair_node(destination.node_id()).await.unwrap();
+
+        let blob = source
+            .stage_blob(container, payload.clone())
+            .await
+            .unwrap();
+
+        // The destination learns the holder from the replicated observation,
+        // never from the test. Give sync a moment to deliver it.
+        let mut holders = Vec::new();
+        for _ in 0..50 {
+            holders = destination.blob_holders(blob).await.unwrap();
+            if !holders.is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(
+            holders,
+            vec![source.node_id()],
+            "the availability record must name the source by a dialable node id"
+        );
+
+        let supplier = destination.fetch_blob_by_availability(blob).await.unwrap();
+        assert_eq!(supplier, source.node_id());
+        assert_eq!(
+            destination
+                .blobs()
+                .get_bytes(BlobHash::from_bytes(blob))
+                .await
+                .unwrap(),
+            payload,
+            "the fetched bytes must be the staged bytes"
+        );
+
+        source.close().await.unwrap();
+        destination.close().await.unwrap();
+    }
+
+    /// Reachability is not authority. A blob hash names bytes, not a right to
+    /// them, so an unpaired peer is refused before any dial.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn fetching_from_an_unpaired_device_is_refused() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = InMemoryProvider::from_seed([0x91; 32]);
+        let stranger = InMemoryProvider::from_seed([0x92; 32])
+            .master_public_key()
+            .to_bytes();
+        let host = PersonalSyncHost::open(
+            &identity,
+            PersonalSyncHostConfig {
+                graph: [0x93; 32],
+                store_path: directory.path().join("lonely.redb"),
+                roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
+                selection: SyncSelection::default().with_blob_availability(true),
+                peer_tickets: Vec::new(),
+                paired_nodes: Vec::new(),
+                relay_urls: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let error = host
+            .fetch_blob(stranger, [0x94; 32])
+            .await
+            .expect_err("an unpaired device must not be dialed");
+        assert!(
+            error.to_string().contains("not a paired device"),
+            "the refusal must name the reason, got: {error}"
         );
         host.close().await.unwrap();
     }
