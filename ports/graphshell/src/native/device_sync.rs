@@ -56,6 +56,12 @@ pub struct SeedNote {
     pub title: String,
 }
 
+/// How long a startup fetch waits for the graph to name a holder. Long enough
+/// for a first sync on a cold join, short enough that a genuinely absent
+/// advertisement is reported while the operator is still watching.
+const BLOB_FETCH_WAIT_TICK: std::time::Duration = std::time::Duration::from_secs(2);
+const BLOB_FETCH_WAIT_TICKS: u64 = 30;
+
 /// A blob operation to run once as the host starts.
 ///
 /// Here for the same reason [`SeedNote`] is: the blob store and the graph
@@ -249,18 +255,45 @@ pub async fn start<P: IdentityProvider + ?Sized>(
                     tracing::error!(path = %path.display(), %error, "could not read the file to stage")
                 }
             },
-            BlobAction::Fetch { blob } => match host.fetch_blob_by_availability(blob).await {
-                Ok(supplier) => tracing::info!(
-                    blob = %owner_settings::hex32(&blob),
-                    supplier = %owner_settings::hex32(&supplier),
-                    "fetched a blob from a paired device"
-                ),
-                Err(error) => tracing::error!(
-                    blob = %owner_settings::hex32(&blob),
-                    %error,
-                    "could not fetch the blob"
-                ),
-            },
+            BlobAction::Fetch { blob } => {
+                // Wait for the graph to say who holds this before asking.
+                //
+                // These actions run before the watchers start, which is early:
+                // on a host that has only just joined, the advertisement has
+                // not arrived yet, so an immediate attempt would report "no
+                // paired device has advertised" for a blob that is on its way.
+                // Waiting for the record is what a fetch means here, since the
+                // graph is how this device learns where bytes are.
+                let mut holders = Vec::new();
+                for _ in 0..BLOB_FETCH_WAIT_TICKS {
+                    holders = host.blob_holders(blob).await.unwrap_or_default();
+                    if !holders.is_empty() {
+                        break;
+                    }
+                    tokio::time::sleep(BLOB_FETCH_WAIT_TICK).await;
+                }
+                if holders.is_empty() {
+                    tracing::error!(
+                        blob = %owner_settings::hex32(&blob),
+                        waited_s = BLOB_FETCH_WAIT_TICKS * BLOB_FETCH_WAIT_TICK.as_secs(),
+                        "no paired device advertised this blob; is the \
+                         blob-availability lane enabled on both devices?"
+                    );
+                    continue;
+                }
+                match host.fetch_blob_by_availability(blob).await {
+                    Ok(supplier) => tracing::info!(
+                        blob = %owner_settings::hex32(&blob),
+                        supplier = %owner_settings::hex32(&supplier),
+                        "fetched a blob from a paired device"
+                    ),
+                    Err(error) => tracing::error!(
+                        blob = %owner_settings::hex32(&blob),
+                        %error,
+                        "could not fetch the blob"
+                    ),
+                }
+            }
         }
     }
 
