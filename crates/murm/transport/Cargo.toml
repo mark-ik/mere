@@ -67,5 +67,7 @@ required-features = ["notochord"]
 
 [dev-dependencies]
 notochord = { workspace = true, features = ["tokio"] }
+# A scratch root for the disk-backed blob store's reopen test.
+tempfile = "3"
 tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"

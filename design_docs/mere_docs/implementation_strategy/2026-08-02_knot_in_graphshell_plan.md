@@ -1,9 +1,10 @@
 # Knot in Graphshell Plan
 
 **Date:** 2026-08-02
-**Status:** scoped, not started. Supersedes nothing; it decides what
-[T4](../../../../turnstone/design_docs/2026-07-28_turnstone_place_port_plan.md)
-means and unblocks it.
+**Status:** scoped; **K1 decided 2026-08-02 in favour of Option A** (Mark).
+Shared documents are projected, personal documents replicate. T4's done
+condition is replaced accordingly, and the shared-Knot authority question it
+recorded is closed as dissolved rather than answered.
 **Related:** the
 [carrier seam plan](./2026-08-01_graphshell_carrier_seam_plan.md), which this
 converges with — see "Why these are one move".
@@ -68,7 +69,7 @@ condition assumes replication.
 The choice, stated plainly because it is a product decision and not a
 technical one:
 
-### Option A (recommended): shared documents are projected
+### Option A — CHOSEN 2026-08-02: shared documents are projected
 
 A document belongs to the mere that holds it. Peers in a place edit it live
 through projection, sending intents; the holder remains the single authority.
@@ -89,14 +90,17 @@ projection, the holder's revisions remain authoritative, and a disconnected
 visitor is told the document is unavailable rather than shown a stale copy it
 cannot save.*
 
-### Option B: shared documents replicate too
+### Option B — not chosen: shared documents replicate too
 
-Keeps offline co-authoring. Requires the shared Knot space to have
-place-scoped admission, which is the question T4 currently records as open,
-and a second fold that must agree with Gemot about membership.
+Kept offline co-authoring, and kept the authority question with it: a
+place-scoped admission model for the shared Knot space, and a second fold that
+must agree with Gemot about membership.
 
-Strictly more capable and strictly more expensive. Choose it only if offline
-co-authoring in a shared place is a requirement rather than a nicety.
+Recorded rather than deleted, because the thing that would reopen it is
+specific and worth naming: **a requirement for offline co-authoring in a
+shared place.** Wanting a document to stay readable while its holder is away
+is not that requirement, and is better served by an explicit copy-into-my-vault
+gesture than by making every shared document a replica.
 
 ## What projection does not replace
 
@@ -118,8 +122,9 @@ Done when a Knot document opens with no subprocess and no
 `TURNSTONE_KNOT_ROOT`, through the same protocol messages the stdio carrier
 sends today.
 
-**K1. Decide A or B**, and rewrite T4's done condition to match. This is the
-gate; K2 cannot start without it.
+**K1. ~~Decide A or B~~ DONE 2026-08-02: Option A.** T4's done condition is
+replaced by the one stated above, and the shared-Knot authority question is
+closed as dissolved. K2 is unblocked.
 
 **K2. Project a place-held document.** Under A: the holder's mere serves the
 document to place members over the endpoint, negotiating `EditableText`.
@@ -133,13 +138,71 @@ no live consumer, the stdio carrier and `bin/knot_endpoint.rs` are a
 deployment option rather than the default. Decide with evidence, not by
 attrition.
 
+## Knot search on the hybrid seam
+
+**Approved 2026-08-02 (Mark).** Independent of hosting: it is about what Knot
+recalls, not where Knot runs, and neither step below blocks or is blocked by
+K0-K3.
+
+### The actual defect
+
+Knot's `search.rs` calls `sibylla::SemanticSearch` with a
+`LexicalEmbeddingProvider`, which is hash-bucket embeddings: bag-of-words
+hashed into a vector of a configured dimension. So Knot has **one** recall
+engine wearing lexical clothing, not two.
+
+That matters more than the quality of either. `eidetic_search::fuse` exists
+precisely to combine two rankings, and with one engine there is nothing to
+fuse. Knot is not off the seam by oversight; it has never had the second
+input the seam requires.
+
+### What is reusable, and what is not
+
+- `fuse(lexical, vector, k, weights) -> Vec<FusedHit>` is a **pure function
+  over two rankings of strings**, engine-agnostic by construction and reusable
+  as-is. Reciprocal-rank fusion, so the two engines' incomparable score scales
+  never meet, and the weights are a setting rather than a constant.
+- `TrailIndex` is **not** reusable: it is tantivy over `BrowsingTrace` events
+  and imports `eidetic::browsing::BrowsingTrace`. A different corpus, not a
+  configurable one.
+
+So the seam is free and the lexical input is the work.
+
+### Steps
+
+**S0. A real lexical index over Knot documents.** BM25, tantivy, keyed by
+something stable enough to fuse on. `fuse` keys on `String`, and Knot results
+already carry a `SearchLane` (`Disk` or `Vault`), so the key must distinguish a
+file-in-place from a vault document rather than collapsing them.
+
+**Decision inside S0:** does the tantivy machinery generalise out of
+`TrailIndex` into a corpus-agnostic index that both use, or does Knot get its
+own index type? Generalising is the better instinct if the schemas are close;
+it is worse if it contorts the trail index to serve a second shape. Read both
+schemas before choosing, and put the answer wherever it lands **in
+`eidetic-search`, not in `ports/knot`** — search machinery belongs in the
+search crate. Note that doing so widens that crate's stated charter beyond
+"eidetic browsing memory", which is a rename or a charter edit, not a silent
+drift.
+
+**S1. Fuse.** Knot's search returns `fuse`'s output over its lexical and
+semantic rankings, with `k` and the weights exposed as settings per the
+configurability rule.
+
+Done when a Knot query returns hits neither engine ranked first alone, and the
+weights demonstrably move the ranking.
+
+### Not part of this
+
+Replacing `LexicalEmbeddingProvider` with a real embedding provider. Sibylla
+has a BERT provider; whether Knot's semantic side uses it is a separate
+quality question, and hash-bucket vectors remain a legitimate cheap default
+for the vector input once a real lexical input exists beside them.
+
 ## Not in scope
 
-- **Search.** Knot's `search.rs` drives `sibylla::SemanticSearch` with a
-  `LexicalEmbeddingProvider`, while `eidetic-search` is real tantivy BM25 with
-  an explicit engine-agnostic hybrid-fusion seam. Knot approximating lexical
-  search with an embedding stand-in, beside a fusion seam built for exactly
-  this pairing, is worth its own pass. Unrelated to where Knot is hosted.
+- **Wasm.** Same reasoning as the carrier plan: the argument is portability,
+  not sandboxing, because Knot is first-party.
 - **Wasm.** Same reasoning as the carrier plan: the argument is portability,
   not sandboxing, because Knot is first-party.
 - **The DCGKA carrier**, still open under the place port's T3b and untouched

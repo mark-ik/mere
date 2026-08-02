@@ -11,7 +11,7 @@ use stickleback::{JoinError, JoinedSpace, SyncStatus};
 use tokio::sync::{Mutex, RwLock};
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::p2panda_transport::{KnownPeer, RelayUrl};
-use transport::{P2pandaTransport, PeerID, Transport, sync_overlay_topic};
+use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID, Transport, sync_overlay_topic};
 
 use crate::identity_endpoint::SupplementalCard;
 use crate::personal_sync::{
@@ -66,6 +66,14 @@ pub struct PersonalSyncHost {
     replica: Mutex<PersonalGraphReplica<RedbBackend>>,
     joined: JoinedSpace<PersonalGraphExt>,
     transport: P2pandaTransport,
+    /// Bytes this device serves to its paired siblings, and the bytes it has
+    /// fetched from them.
+    ///
+    /// Disk-backed rather than in memory: this store IS the durable copy for
+    /// a transfer in flight, so a host restart between "fetched" and "applied"
+    /// must not send the bytes back over the wire. It is also why a device can
+    /// still answer for a blob after the session that received it ended.
+    blobs: BlobStore,
 }
 
 impl PersonalSyncHost {
@@ -89,13 +97,25 @@ impl PersonalSyncHost {
             config.selection,
         )?;
         let transport_key = identity.derive_keypair(&personal_graph_identity_salt(config.graph))?;
+        // Beside the graph store and named for the same graph, so the two
+        // halves of one device's state cannot be moved apart by accident.
+        let blob_root = config.store_path.with_extension("blobs");
+        let blobs = BlobStore::open(&blob_root)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         // Active mDNS is what makes a paired node id dialable without a stored
         // ticket: it populates the address book, so tagging a known peer with
         // the overlay topic is enough to bootstrap gossip. g5_peer proved this
         // path Fedora-to-Windows and Windows-to-Fedora under H10.
+        //
+        // `.blobs` serves the iroh-blobs ALPN off this same endpoint, so a
+        // sibling reaches bytes through the pairing it already has. Without it
+        // the lane replicated `ObserveBlobAvailability` records saying which
+        // device held which blob, and offered no way to ask for one.
         let mut builder = P2pandaTransport::builder(&transport_key)
             .gossip()
-            .mdns(MdnsDiscoveryMode::Active);
+            .mdns(MdnsDiscoveryMode::Active)
+            .blobs(&blobs);
         for url in config.relay_urls.clone() {
             builder = builder.relay_url(url);
         }

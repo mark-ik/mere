@@ -10,15 +10,28 @@
 //!
 //! ## Scope
 //!
-//! - Local in-memory store via `iroh_blobs::store::mem::MemStore`.
+//! - Local store, in memory ([`BlobStore::new`]) or on disk
+//!   ([`BlobStore::open`]). Both back the same `iroh_blobs` `Store` API, so
+//!   every operation below behaves identically either way.
 //! - `put_bytes(...) -> BlobHash`, `get_bytes(hash) -> Bytes`, `has(hash) -> bool`.
 //! - **Network transfer**: [`BlobStore::fetch_from`] downloads a blob
 //!   from a peer via [`P2pandaTransport`](crate::P2pandaTransport). The peer
 //!   must have been constructed with
 //!   [`P2pandaTransport::bind_with_blobs`](crate::P2pandaTransport::bind_with_blobs)
 //!   so its router serves the iroh-blobs protocol.
+//!
+//! ## Choosing a backing
+//!
+//! Memory is right for a process whose blobs are already durable elsewhere,
+//! and for tests. Disk is right for a resident host, where the store IS the
+//! durable copy: a transfer interrupted by a restart resumes against bytes
+//! already on disk instead of refetching from the peer, and a device can
+//! still serve a blob to a sibling after the process that received it exited.
+
+use std::path::Path;
 
 use bytes::Bytes;
+use iroh_blobs::store::fs::FsStore;
 use iroh_blobs::store::mem::MemStore;
 use iroh_blobs::{Hash, api::Store};
 use thiserror::Error;
@@ -73,20 +86,52 @@ pub enum BlobError {
     Backend(String),
 }
 
+/// Which store holds the bytes. Both variants deref to the same
+/// `iroh_blobs` `Store`, so this choice never reaches the operations.
+enum Backing {
+    Memory(MemStore),
+    File(FsStore),
+}
+
 /// Local content-addressed blob store.
 ///
-/// Wraps an in-memory `iroh_blobs` store. Holds bytes; returns stable
-/// BLAKE3 hashes.
+/// Wraps an `iroh_blobs` store, in memory or on disk. Holds bytes; returns
+/// stable BLAKE3 hashes.
 pub struct BlobStore {
-    store: MemStore,
+    store: Backing,
 }
 
 impl BlobStore {
-    /// Construct a new in-memory blob store.
+    /// Construct a new in-memory blob store. Bytes live as long as the
+    /// process does.
     pub fn new() -> Self {
         Self {
-            store: MemStore::new(),
+            store: Backing::Memory(MemStore::new()),
         }
+    }
+
+    /// Open (or create) a blob store rooted at `root` on disk.
+    ///
+    /// Survives process restart, which is what makes this the resident
+    /// host's choice: an interrupted transfer resumes against the bytes
+    /// already written rather than refetching them.
+    pub async fn open(root: impl AsRef<Path>) -> Result<Self, BlobError> {
+        let root = root.as_ref();
+        if let Some(parent) = root.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| BlobError::Backend(format!("create blob root: {e}")))?;
+        }
+        let store = FsStore::load(root)
+            .await
+            .map_err(|e| BlobError::Backend(format!("open blob store at {}: {e:?}", root.display())))?;
+        Ok(Self {
+            store: Backing::File(store),
+        })
+    }
+
+    /// Whether this store survives a restart.
+    pub fn is_persistent(&self) -> bool {
+        matches!(self.store, Backing::File(_))
     }
 
     /// Borrow the underlying `iroh_blobs` `Store` API. Exposed for
@@ -96,7 +141,43 @@ impl BlobStore {
     /// Most consumers should use the safer `put_bytes` / `get_bytes`
     /// helpers above.
     pub fn store(&self) -> &Store {
-        &self.store
+        match &self.store {
+            Backing::Memory(store) => store,
+            Backing::File(store) => store,
+        }
+    }
+
+    /// Flush pending metadata to disk. A no-op worth calling on a memory
+    /// store, so a caller never has to branch on the backing.
+    ///
+    /// The resident host calls this after staging a transfer's bytes, so a
+    /// crash between "fetched" and "applied" leaves the bytes findable.
+    pub async fn flush(&self) -> Result<(), BlobError> {
+        match &self.store {
+            Backing::Memory(_) => Ok(()),
+            Backing::File(store) => store
+                .sync_db()
+                .await
+                .map_err(|e| BlobError::Backend(format!("sync blob db: {e:?}"))),
+        }
+    }
+
+    /// Shut the store down cleanly, flushing first. Only meaningful for a
+    /// disk-backed store.
+    pub async fn shutdown(&self) -> Result<(), BlobError> {
+        match &self.store {
+            Backing::Memory(_) => Ok(()),
+            Backing::File(store) => {
+                store
+                    .sync_db()
+                    .await
+                    .map_err(|e| BlobError::Backend(format!("sync blob db: {e:?}")))?;
+                store
+                    .shutdown()
+                    .await
+                    .map_err(|e| BlobError::Backend(format!("shutdown blob store: {e:?}")))
+            }
+        }
     }
 
     /// Put bytes into the store and return the BLAKE3 hash.
@@ -105,7 +186,7 @@ impl BlobStore {
         let bytes: Bytes = bytes.into();
         let byte_count = bytes.len();
         let tag = self
-            .store
+            .store()
             .blobs()
             .add_bytes(bytes)
             .with_tag()
@@ -126,7 +207,7 @@ impl BlobStore {
         if !self.has(hash).await? {
             return Err(BlobError::NotFound(hash));
         }
-        self.store
+        self.store()
             .blobs()
             .get_bytes(hash.0)
             .await
@@ -136,7 +217,7 @@ impl BlobStore {
     /// Whether the given hash is present in the local store.
     #[tracing::instrument(level = "debug", skip(self), fields(?hash))]
     pub async fn has(&self, hash: BlobHash) -> Result<bool, BlobError> {
-        self.store
+        self.store()
             .blobs()
             .has(hash.0)
             .await
@@ -167,7 +248,7 @@ impl BlobStore {
             .connect_raw(peer, iroh_blobs::ALPN)
             .await
             .map_err(|e| BlobError::Backend(format!("connect blobs: {e}")))?;
-        self.store
+        self.store()
             .remote()
             .fetch(conn, hash.0)
             .complete()
@@ -243,6 +324,41 @@ mod tests {
         let hash = store.put_bytes(Bytes::new()).await.unwrap();
         let got = store.get_bytes(hash).await.unwrap();
         assert!(got.is_empty());
+    }
+
+    /// The reason the disk backing exists: bytes outlive the process that
+    /// wrote them. Dropping the store and reopening the same root is the
+    /// closest a test gets to a host restart.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn disk_backed_blobs_survive_a_reopen() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("blobs");
+        let payload = Bytes::from_static(b"this must outlive the process");
+
+        let hash = {
+            let store = BlobStore::open(&root).await.expect("open");
+            assert!(store.is_persistent());
+            let hash = store.put_bytes(payload.clone()).await.expect("put");
+            store.shutdown().await.expect("shutdown");
+            hash
+        };
+
+        let reopened = BlobStore::open(&root).await.expect("reopen");
+        assert!(
+            reopened.has(hash).await.expect("has"),
+            "a restart must not lose staged bytes"
+        );
+        assert_eq!(reopened.get_bytes(hash).await.expect("get"), payload);
+    }
+
+    /// A memory store answers the durability verbs rather than making every
+    /// caller branch on the backing first.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn memory_store_is_not_persistent_but_still_flushes() {
+        let store = BlobStore::new();
+        assert!(!store.is_persistent());
+        store.flush().await.expect("flush is a no-op");
+        store.shutdown().await.expect("shutdown is a no-op");
     }
 
     #[test]
