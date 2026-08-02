@@ -90,17 +90,51 @@ projection, the holder's revisions remain authoritative, and a disconnected
 visitor is told the document is unavailable rather than shown a stale copy it
 cannot save.*
 
-### Option B — not chosen: shared documents replicate too
+### Option B — not chosen, and much cheaper than first recorded
 
-Kept offline co-authoring, and kept the authority question with it: a
-place-scoped admission model for the shared Knot space, and a second fold that
-must agree with Gemot about membership.
+Keeps offline co-authoring, at the cost of a shared Knot space with
+place-scoped admission.
 
-Recorded rather than deleted, because the thing that would reopen it is
-specific and worth naming: **a requirement for offline co-authoring in a
-shared place.** Wanting a document to stay readable while its holder is away
-is not that requirement, and is better served by an explicit copy-into-my-vault
-gesture than by making every shared document a replica.
+**Cost corrected 2026-08-02 after reading `sync.rs`.** Two costs originally
+recorded against this option do not exist, and the correction matters because
+a wrong estimate in a plan is worse than none.
+
+- **"It needs group keys, which are blocked on the DCGKA carrier."** Wrong.
+  `KnotSyncCipher::CommonsData(&DataKeyring)` and
+  `KnotEncryptionProfile::CommonsDataV1` are implemented, with a communal
+  variant of every operation — `author_communal`, `communal_projection`,
+  `resolve_communal_conflict`, `save_communal_checkpoint`,
+  `communal_epoch_pruning_proposal`, `restore_communal_keyring`. Tested:
+  `commons_documents_use_group_epochs_instead_of_personal_vault_keys`, plus
+  two communal epoch-pruning receipts. Knot already speaks the Stickleback
+  group keyring that Commons chat uses.
+
+- **"Knot models multi-writer as a conflict, not a merge."** Wrong, and this
+  was the claim that made the option look expensive.
+  `independent_text_edits_merge_and_a_later_put_makes_them_durable` says
+  independent edits **merge**. Only `overlapping_text_edits_remain_an_explicit_conflict`,
+  and concurrent whole-document puts, become conflicts. Resolution is an
+  authored, replicated `KnotSyncEvent::Resolve { id, supersedes, document }`,
+  guarded by `a_resolution_does_not_erase_an_unseen_concurrent_version` and
+  `a_resolution_cannot_name_a_version_outside_its_causal_history`.
+
+  That is a proper collaborative document model: merge what is independent,
+  surface what genuinely collides, and make the choice explicit and
+  attributable rather than silently picking a winner. For prose that is
+  arguably better than opaque CRDT convergence.
+
+**What actually remains.** One thing: admission is a static allowlist.
+`KnotSyncStore` takes `writers: BTreeSet<[u8; 32]>` at construction and
+rejects anything else as `unrecognized-knot-writer`. A place's membership
+changes as the Moot changes, so the work is replacing that allowlist with a
+Gemot capability query — exactly what Moots already answer for Commons graph
+and chat, over a Knot lane in the place's lane set, `lane_id` and per-lane
+ALPN like every other.
+
+**So the reopening bar is low, and the two compose.** Projection stays the
+default for visiting a document; a Moot-scoped Knot lane is a small increment
+whenever offline co-authoring in a place is actually wanted. Choosing A did
+not close B; it chose which one is the default.
 
 ## What projection does not replace
 
