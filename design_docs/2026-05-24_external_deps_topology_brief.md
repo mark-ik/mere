@@ -57,21 +57,32 @@ fast lib suites, `-KeepGoing` collects all failures; logs land in
 `target/smoke/` (gitignored). Run it after pulling or landing cross-repo
 work. First run 2026-06-12: green across the lattice, ~3 minutes warm.
 
-## Local Cargo config and Meerkat CLI (added 2026-06-29)
+## Local Cargo config (added 2026-06-29, corrected 2026-08-01)
 
 Local overrides are repo-scoped. Do not put `paths = [...]` overrides in
 `Code/.cargo/config.toml`; Cargo inherits that parent config into every repo
 under `Code/`, so a package-name match can affect unrelated workspaces. Mere's
 ignored `repos/mere/.cargo/config.toml` owns its local edit loop with
-source-specific `[patch."https://github.com/mark-ik/<repo>.git"]` entries for
-genet, netrender, netfetcher, errand, wgpu-scry, and wgpu-graft, plus
-`build.target-dir = "C:/t/meerkat-target"`.
+source-specific `[patch."https://github.com/merely-made/<repo>.git"]` entries
+for genet, netrender, wgpu-scry, wgpu-graft, and retinue.
 
-The blessed Meerkat local runner is
-[`repos/mere/scripts/meerkat.ps1`](../scripts/meerkat.ps1). Short wrappers cover
-the common commands: `check-meerkat.ps1`, `test-roster.ps1`, and
-`drive-meerkat.ps1`. Use these instead of assuming `target/debug/meerkat.exe` or
-following a stale `graphshell-target` cache path.
+**The patch table's URL must match the dependency's URL exactly, owner
+included.** A table naming a different owner is not an error; Cargo simply does
+not apply it and the build silently resolves from git instead of the local
+checkout. This has already cost real time twice, so it is worth stating: the
+owner moved `mark-ik` → `merely-made`, and on 2026-08-01
+`ports/graphshell/web/.cargo/config.toml` was still naming `mark-ik` for both
+genet and netrender, so every patch in it had been inert and the committed
+103 MB wasm artifact was built against the remotes rather than the sibling
+checkouts. Cargo does say so, as `patch ... was not used in the crate graph`.
+Read that warning; `scripts/cross-repo-smoke.ps1` now fails on it.
+
+Note that these configs are gitignored, so a correction on one machine does not
+reach the others. Check each machine's own copy.
+
+The Meerkat runner scripts that this section used to describe
+(`scripts/meerkat.ps1` and its wrappers) were removed on 2026-08-01 with the
+app itself; `scripts/cross-repo-smoke.ps1` is the surviving local net.
 
 ## Path-dep convention (`repos/` → `crates/`)
 

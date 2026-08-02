@@ -912,6 +912,73 @@ blocks a transfer intent, and interruption resumes without restarting the
 whole transfer. **Met 2026-07-29** by the H6c data-contract receipt and H6d
 Windows-to-<remote-host> carrier receipt.
 
+#### H6 addendum (2026-08-02): the product path
+
+The receipts above were earned by `h6_transfer_peer`, a rehearsal binary. No
+shipped surface can invoke the lane. The 2026-08-02 sweep found the byte layer
+already built and idle in the libs: `transport::blobs::BlobStore` serves the
+iroh-blobs ALPN off the same endpoint the sync lane binds and fetches by hash
+with native BLAKE3 verification (`fetch_from`); `eidetic::BlobSource::Iroh`
+plus `eidetic-iroh-fetcher` resolve manifest blobs by `node-id/hash` ticket;
+`ObserveBlobAvailability` already replicates which device holds which blob.
+What is missing is composition in the resident host and a product surface.
+This does not depend on the carrier seam plan's C3: stage-and-forward makes
+apply local, so the sync lane plus the admitted browser broker suffice.
+
+**Settled model (hybrid, ruled with Mark 2026-08-02):**
+
+- Browser Muniment remains product truth, so `apply_transfer` runs intact
+  where the receipts proved it. The browser owns graph-to-blob references.
+- The resident host's iroh store is a durable recovery replica and serving
+  cache with explicit pins. The host owns durable byte availability. It is
+  not a second truth.
+- An apply receipt promotes destination staging into a recovery pin rather
+  than deleting it. Unapplied or unreferenced staging expires by policy.
+- Pin release requires evidence of non-reference: each browser profile
+  publishes its blob-reference set over the broker (new intent pair). A
+  silent profile retains its pins; release on silence is data loss, release
+  on explicit profile retirement is a user action. Fail toward retention.
+- Blob bytes cross the broker as explicit chunks, about 512 KiB raw before
+  base64, with acknowledgements and a small bounded in-flight window under
+  the existing `MAX_NATIVE_MESSAGE_BYTES` frame cap. Interleaving with card
+  and identity traffic is scheduled, not assumed.
+- `navigator.storage.persist()` is advisory. Record whether persistence was
+  granted and present unpersisted browser storage honestly; the recovery
+  replica is what makes refusal survivable.
+- Grant: pairing is the authorization for same-persona replicate, bound to a
+  `pairing_id` minted at pair time (a new `PairedDevice` field; `node_id`
+  revives across re-pair and `added_ms` is a clock, so neither can carry it).
+  Unpair retires the id; re-pair mints fresh; a queued transfer under a
+  retired id is refused at apply. Whether a receive-only device may send is a
+  roster rule the transfer lane states explicitly.
+- The manifest travels as a record on its own stickleback lane, so the
+  personal graph lane's wire format does not change.
+
+**Slices:**
+
+- **S1 bytes.** Fs-backed option for the transport blob store; the sync host
+  binds `.blobs()`; fetch by availability. Done when a blob put on one device
+  is fetched byte-identical on a second through the existing pairing, over
+  mDNS and over relay with the relay leg on the Mac, surviving a host restart
+  between put and fetch.
+- **S2 manifest.** Transfer lane record plus incoming-transfer card. Done
+  when a manifest prepared on one device appears as a card on a second,
+  naming the selection and blob count.
+- **S3 apply.** Chunked broker delivery, browser apply, staging promotion.
+  Done when a selection chosen in the browser on one device lands merged in
+  the browser on a second with blobs verified and ids per replicate
+  semantics. This is a new product-path receipt: H6c/H6d stand for the lane,
+  but chunk ordering, duplicate delivery, restart and resume, the recorded
+  persistence grant, and staging promotion are new surface and are receipted
+  fresh.
+
+**Not in scope:** cross-persona copy authorization UX; the carrier seam
+plan's C3 (independent, about projection sessions); Turnstone (holds no
+MereHost; revisit after the carrier plan's C2 rules on where the session
+machinery lives); a hocket-handoff-style signed offline envelope (manifest
+plus bytes in one addressed artifact) as a carrier-free fallback, noted for
+later.
+
 ### H7. Add continuous personal-device sync
 
 Evaluate the existing Chartulary, Stickleback, and Commons-spine seams against
