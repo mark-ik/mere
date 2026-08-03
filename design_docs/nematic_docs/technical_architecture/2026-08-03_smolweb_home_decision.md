@@ -140,3 +140,37 @@ grammar's final home instead of needing a second move. WS1 has not started.
   under `--no-default-features` with an empty dependency tree; the smolweb
   workspace is green. Not published, so errand still carries its own copy and
   nothing downstream has changed yet.
+- **2026-08-03 (later)**: **The first two moves are complete, end to end.**
+  Mark authorised publishing and asked that the successors be supported in the
+  same crates, so both went out carrying them:
+  - **`gopher-protocol` 0.1.0**, published, now with **Gopher+**: the
+    fifth-field marker, the response header (`+<count>`, `+-1`, `+-2`, `--1`),
+    attribute blocks, `+VIEWS` alternates, and `+ASK` forms. Gopher+ is a
+    superset, so it is modelled as one: a plain RFC 1436 menu is simply a menu
+    with no markers. Gopher-II is left unimplemented and said so.
+  - **`finger-protocol` 0.1.0**, published, with **WebFinger** (RFC 7033)
+    beside RFC 1288. WebFinger ships as request construction plus JRD parsing
+    and *no HTTP client*: the GET belongs to the caller, which keeps the crate
+    light and lets errand take the classic protocol alone.
+  - **errand 0.2.0** consumes both. `gopher.rs`, `finger.rs`,
+    `parse/gopher.rs` and `plain.rs` fell from roughly 500 lines to 89 of
+    mapping. `parse::gopher` re-exports the grammar, so nematic and
+    cambium-nematic needed **no edits**, which is the re-export shield working
+    as designed.
+
+  Two things worth keeping. The successor support was landed *before*
+  publishing rather than after, because Gopher+ adds a field to `GopherItem`
+  and shipping 0.1.0 without it would have meant breaking the API within the
+  day. And the ordering rule above held: the grammar reached its final home
+  before anything enriched it.
+
+  **A silent bypass surfaced during the re-point.** `cambium-nematic` declared
+  `errand = "0.1.3"` as a bare version rather than `workspace = true`, so it
+  resolved to the *published* errand instead of this workspace's copy: local
+  errand changes never reached those views, and its tests were quietly
+  exercising crates.io. Fixed, and the lock now holds one errand instead of
+  two. Worth a sweep for other bare-version declarations of workspace members.
+
+  **Still open**: the nex de-duplication, and gemini (with gemtext bundled).
+  errand is not republished; genet builds it by path, so only an external
+  consumer would need that.
