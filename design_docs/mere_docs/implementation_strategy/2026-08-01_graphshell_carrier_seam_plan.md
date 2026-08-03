@@ -128,14 +128,43 @@ down rather than left as drift.
 
 ### C3. A network carrier
 
-The remaining carrier, and the one that makes remote projection real rather
-than architectural.
+The remaining carrier, the one that makes remote projection real rather than
+architectural, and **the blocker for the Knot plan's K2**: projecting a
+place-held document needs a member to reach the holder's endpoint, and stdio
+and local both only reach this machine.
 
-**Decision needed first:** the surface above is blocking (`wait_for_notice`).
-A network carrier wants async, or the same blocking shape driven on a worker
-thread. Both work; they differ in what they impose on every existing caller.
-Settle it before C3 and not before C0, because C0 and C1 are unaffected either
-way.
+**It is smaller than it looks.** No new transport is needed.
+`P2pandaTransport::connect_raw(peer, alpn) -> Connection` already exists, and
+a place already holds a live transport to its members with their peer ids
+known. A graphshell carrier opens a stream over its own ALPN beside the seven
+lanes, reusing everything the place established for admission and reachability.
+Framing is already solved too: stdio's newline-delimited JSON is carrier-shaped
+rather than stdio-specific.
+
+**Decision, settled 2026-08-02: keep the blocking surface, drive async behind
+it.**
+
+C1 supplied the evidence the scoping asked for, and it cuts both ways. The
+in-process carrier does not block at all — `wait_for_notice` has nothing to
+wait for, because an in-process endpoint has already produced whatever it
+will. So blocking is a stdio assumption, not a protocol truth, and an async
+trait would not be wrong in principle.
+
+It is still the wrong move now, for a reason about callers rather than
+carriers. `run_hub` is already a dedicated thread doing a blocking
+`recv_timeout`, and Turnstone's place worker already owns a tokio runtime
+inside a synchronous worker. A network carrier fits that shape with a runtime
+of its own and no churn anywhere above it. Making the trait async instead
+would colour `RetainedEndpointSession`, `KnotHub`, and every hub caller, to
+serve one carrier that can perfectly well own its runtime.
+
+**What would reopen it**, named so it is recognised rather than rediscovered:
+**a browser reaching a *remote* endpoint.** Blocking is impossible on the web's
+main thread, and a worker thread is not the same escape hatch there. Today
+`graphshell-web` hosts its endpoint locally and needs no carrier at all, so
+the case does not exist yet. When it does, the answer is an async sibling
+trait rather than a conversion — the blocking one still suits every native
+caller, and two shapes beat one shape that fits neither.
 
 ## Not in scope
 

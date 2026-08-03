@@ -190,6 +190,18 @@ closed as dissolved. K2 is unblocked.
 document to place members over the endpoint, negotiating `EditableText`.
 Authority is the holder's, so no new admission model appears.
 
+**Blocked on the carrier plan's C3, discovered 2026-08-02.** Only two carriers
+exist, stdio and local, and both only reach this machine. A place member
+reaching the holder's endpoint is remote projection by definition, so K2
+cannot start until a network carrier does.
+
+Worth stating because it is easy to misread as an authority problem and is
+not: Option A already settled who may write. What is missing is purely
+reach. C3 is also smaller than it looks —
+`P2pandaTransport::connect_raw(peer, alpn)` exists and a place already holds a
+live transport to its members — so this is a queue-order fact rather than a
+setback.
+
 Done when two peers edit one document concurrently and the holder's projection
 is what both see.
 
