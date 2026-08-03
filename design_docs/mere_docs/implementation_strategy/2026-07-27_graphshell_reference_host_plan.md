@@ -961,6 +961,33 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   is fetched byte-identical on a second through the existing pairing, over
   mDNS and over relay with the relay leg on the Mac, surviving a host restart
   between put and fetch.
+
+  **Met 2026-08-03, except the relay leg.** An 11,317-byte file staged on O-PC
+  at 22:59:54 by a one-off process was served after a restart by the
+  task-managed process from 23:00:10, and fetched by the ThinkPad at 07:19:39
+  and by Q-PC at 07:30:12, both naming `supplier=9b662f09…`. Each destination
+  was told only a hash and resolved the holder from the replicated
+  `ObserveBlobAvailability` record. Byte-identity is independent, not the
+  protocol's own word: BLAKE3 of the source file computed separately is
+  `734bfbcb9d7bee7a77509f66c1334678d283ca99e4a24f3e7c4d266fca73851e`, the hash
+  each fetch completed against.
+
+  **The relay leg is NOT proven.** Q-PC selected its home relay at 07:30:12.895,
+  0.9s AFTER its fetch finished at 07:30:12.016, so the bytes crossed a direct
+  LAN path from the address in O-PC's ticket. Q-PC's mDNS is dead (errno 65,
+  `No route to host`, every interface, unsigned binary), so with no ticket it
+  would have had only the relay. Proving that leg means re-running it with no
+  `--sync-peer`, which is a clean experiment and not yet done.
+
+  What the run actually cost was not this lane. Two Windows Firewall **Block**
+  rules on the Private profile (`{A223E208-…}`, `{30891486-…}`) had been
+  dropping all inbound QUIC to O-PC, while the only Allow rules were scoped to
+  Public. Graph sync between these devices was dead, not just blobs, and the
+  host reported `reachable=1` throughout because `known_peers` is address-book
+  membership rather than a live connection. **A resident sync host that cannot
+  receive a packet looked healthy for hours.** The peer directory should
+  separate configured from connected, and a host with no established connection
+  should say so; until it does, `reachable` is not the check it appears to be.
 - **S2 manifest.** Transfer lane record plus incoming-transfer card. Done
   when a manifest prepared on one device appears as a card on a second,
   naming the selection and blob count.
