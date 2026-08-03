@@ -273,12 +273,41 @@ pub async fn start<P: IdentityProvider + ?Sized>(
                     tokio::time::sleep(BLOB_FETCH_WAIT_TICK).await;
                 }
                 if holders.is_empty() {
-                    tracing::error!(
-                        blob = %owner_settings::hex32(&blob),
-                        waited_s = BLOB_FETCH_WAIT_TICKS * BLOB_FETCH_WAIT_TICK.as_secs(),
-                        "no paired device advertised this blob; is the \
-                         blob-availability lane enabled on both devices?"
-                    );
+                    // Say which of the two causes it is. The first version of
+                    // this blamed the lane, and cost an hour on a device whose
+                    // lane was on and which simply had no route to its peer:
+                    // no relay configured, and mDNS not announcing. Those need
+                    // opposite fixes, so guessing between them is worse than
+                    // saying nothing.
+                    //
+                    // `known_peers` reports address-book membership rather than
+                    // a live connection, so it cannot promise reachability; it
+                    // can still separate "no peer is even configured" from
+                    // "a peer is configured and told us nothing".
+                    let known = host.known_peers().await.map(|p| p.len()).unwrap_or(0);
+                    let waited_s = BLOB_FETCH_WAIT_TICKS * BLOB_FETCH_WAIT_TICK.as_secs();
+                    if known == 0 {
+                        tracing::error!(
+                            blob = %owner_settings::hex32(&blob),
+                            waited_s,
+                            "no device is paired onto this graph's overlay, so \
+                             nothing could advertise this blob"
+                        );
+                    } else {
+                        tracing::error!(
+                            blob = %owner_settings::hex32(&blob),
+                            waited_s,
+                            known_peers = known,
+                            "paired devices exist but none advertised this blob. \
+                             Either the holder never staged it with the \
+                             blob-availability lane enabled, or this device has \
+                             no route to it: check the log for a relay line \
+                             (`home is now relay ...`) and for an established \
+                             connection. A device with no relay_urls that also \
+                             cannot announce over mDNS will sit here reporting \
+                             peers it can never reach."
+                        );
+                    }
                     continue;
                 }
                 match host.fetch_blob_by_availability(blob).await {
