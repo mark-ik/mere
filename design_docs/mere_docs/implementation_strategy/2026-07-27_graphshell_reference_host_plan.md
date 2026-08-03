@@ -1011,6 +1011,35 @@ apply local, so the sync lane plus the admitted browser broker suffice.
 - **S2 manifest.** Transfer lane record plus incoming-transfer card. Done
   when a manifest prepared on one device appears as a card on a second,
   naming the selection and blob count.
+
+  **Shape corrected 2026-08-03 before building.** "Its own stickleback lane"
+  costs more than it reads, for two reasons found in the code rather than
+  guessed:
+
+  1. `MunimentStore` keys are `op/{hash}` and `log/{author}/{log}/` with no
+     lane or extension namespace, so two extension types over one backend
+     collide. A second lane implies a THIRD store file beside `<graph>.redb`
+     and `<graph>.blobs`.
+  2. `to_operation`, `from_operation`, and `stable_subject` are hardcoded to
+     `PersonalGraphExt`/`PersonalGraphRecord`. A second lane means
+     generalising them over `<E, R>` (a refactor of the sync core) or
+     duplicating them, and duplication is against doctrine.
+
+  Neither is required to meet the goal. The goal was **"the personal graph
+  lane's wire format does not change"**, and `SetFacet { node, facet, value }`
+  already carries arbitrary JSON under a per-facet selection filter, so a new
+  facet id is DATA on an existing variant, not a wire change. An offer is
+  therefore a facet (`graphshell.transfer-offer/v1`) carrying the manifest's
+  blob hash and a card summary; the manifest itself is staged as a blob and
+  moves by S1's proven, BLAKE3-verified path.
+
+  This also keeps the lane-selection property that matters: a device that has
+  not enabled the transfer-offer facet neither authors nor projects offers,
+  exactly as `blob_availability` gates S1.
+
+  A separate lane remains the right answer if offers ever need a different
+  admission policy from the graph, or retention independent of it. Revisit
+  then, with the two costs above priced in.
 - **S3 apply.** Chunked broker delivery, browser apply, staging promotion.
   Done when a selection chosen in the browser on one device lands merged in
   the browser on a second with blobs verified and ids per replicate
