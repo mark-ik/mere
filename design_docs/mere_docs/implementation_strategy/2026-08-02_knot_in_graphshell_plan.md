@@ -149,12 +149,30 @@ assuming it also had to answer the shared-place question.
 
 ## Steps
 
-**K0. Host `KnotEndpoint` in-process.** Behind the carrier plan's C1. No new
-Knot code; Turnstone stops spawning and starts hosting.
+**K0. Host `KnotEndpoint` in-process** — landed 2026-08-02 for the plain
+directory mode. No new Knot code, exactly as predicted: `KnotEndpoint` already
+implements every trait `LocalCarrier` needs, including
+`ProjectionNoticeSource`.
 
-Done when a Knot document opens with no subprocess and no
-`TURNSTONE_KNOT_ROOT`, through the same protocol messages the stdio carrier
-sends today.
+`RetainedEndpointSession::over(Box<dyn Carrier>, profile)` is the general form
+`spawn` is now one case of, and `KnotHub::host` is the in-process peer of
+`KnotHub::connect`. Past construction the two are identical — `run_hub` never
+learns which it got, which is the seam doing its job.
+
+`from_env` hosts by default and spawns only when `TURNSTONE_KNOT_ENDPOINT`
+explicitly names a program.
+
+**Honestly partial.** Only `directory-write` without effects hosts today. The
+vault and effects modes still spawn, because their endpoints take injected
+identity, grants, and evaluators that this branch does not yet assemble.
+That is unfinished wiring rather than a decision: `KnotEndpoint` already has
+`open_with_identity`, `open_writable`, and the effect-policy constructors
+waiting. Finishing it is mechanical and should not be mistaken for blocked.
+
+Note the root is still `TURNSTONE_KNOT_ROOT`, and correctly so — it names
+*which directory is your vault*, which is real configuration rather than
+deployment accident. What the env var no longer decides is whether a
+subprocess exists.
 
 **K1. ~~Decide A or B~~ DONE 2026-08-02: Option A.** T4's done condition is
 replaced by the one stated above, and the shared-Knot authority question is

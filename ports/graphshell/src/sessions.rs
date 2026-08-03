@@ -49,13 +49,27 @@ impl RetainedEndpointSession {
         args: impl IntoIterator<Item = impl AsRef<OsStr>>,
         profile: CapabilityProfile,
     ) -> Result<Self, String> {
-        let mut carrier = StdioCarrier::spawn(program, args).map_err(|error| error.to_string())?;
+        let carrier = StdioCarrier::spawn(program, args).map_err(|error| error.to_string())?;
+        Self::over(Box::new(carrier), profile)
+    }
+
+    /// Mount an endpoint over any carrier.
+    ///
+    /// The general form `spawn` is one case of. A host embedding an endpoint
+    /// passes a `LocalCarrier`; a host reaching a remote one passes whatever
+    /// carries it. Everything after discovery is identical, which is the point
+    /// of the seam: where the endpoint runs stops being a different code path
+    /// and becomes a different argument.
+    pub fn over(
+        mut carrier: Box<dyn Carrier>,
+        profile: CapabilityProfile,
+    ) -> Result<Self, String> {
         let descriptor = match carrier.request(CarrierRequestBody::Discover)? {
             CarrierResponseBody::Descriptor(descriptor) => descriptor,
             other => return Err(unexpected("descriptor", &other)),
         };
         Ok(Self {
-            carrier: Some(Box::new(carrier)),
+            carrier: Some(carrier),
             client: ClientState::default(),
             profile,
             descriptor,
