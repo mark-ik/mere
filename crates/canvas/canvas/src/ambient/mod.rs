@@ -3,6 +3,14 @@
 
 //! Ambient-sim backdrops: small standalone simulations painted behind the graph for liveliness the
 //! rapier solver should not carry (the "ambient separate-sim backdrop" tier, physics scenes P5).
+//!
+//! **Ambient is the subtype, not the family** (ruled 2026-08-03, games-wing taxonomy round). A
+//! *backdrop* names where a layer sits: behind the actors. It does not promise passivity - a
+//! backdrop may carry props with hulls and fields with physical implications, projecting world
+//! truth the simulation reasons about. An *ambient background* is the non-interactive subtype:
+//! pure context, nothing in it collides, exerts, or answers. Everything in this module is
+//! ambient. An interactive backdrop is not a richer AmbientSim; it is a projection of world
+//! state and enters through a scene lane, not this seam.
 //! Non-rapier and host-side (cheap, no actor offload), advanced and painted each frame as the bottom
 //! backdrop layer. They share the [`AmbientSim`] seam (advance + paint), so the canvas holds one
 //! `Box<dyn AmbientSim>` and the catalog grows without touching the host. Each is painted in a
