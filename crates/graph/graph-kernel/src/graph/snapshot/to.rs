@@ -371,6 +371,9 @@ impl Graph {
                     FieldExtent::AttachedToNode(id) => {
                         PersistedFieldExtent::AttachedToNode(id.to_string())
                     }
+                    FieldExtent::Polygon { points } => PersistedFieldExtent::Polygon {
+                        points: points.clone(),
+                    },
                 },
                 lifecycle: match f.lifecycle {
                     FieldLifecycle::Active => PersistedFieldLifecycle::Active,

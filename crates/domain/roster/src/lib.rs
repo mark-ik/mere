@@ -744,6 +744,7 @@ pub fn field_extent_label(extent: &FieldExtent) -> String {
             min_x, min_y, max_x, max_y
         ),
         FieldExtent::AttachedToNode(id) => format!("Attached {}", short_id(*id)),
+        FieldExtent::Polygon { points } => format!("Polygon ({} pts)", points.len()),
     }
 }
 

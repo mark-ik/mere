@@ -38,6 +38,8 @@ pub enum PersistedFieldExtent {
         max_y: f32,
     },
     AttachedToNode(String),
+    /// A closed world-space polygon (the hulls extent).
+    Polygon { points: Vec<(f32, f32)> },
 }
 
 impl Default for PersistedFieldExtent {

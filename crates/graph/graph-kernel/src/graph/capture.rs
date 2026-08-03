@@ -563,6 +563,9 @@ pub(crate) fn persisted_field_from_field(field: &Field) -> PersistedField {
                 max_y: *max_y,
             },
             FieldExtent::AttachedToNode(id) => PersistedFieldExtent::AttachedToNode(id.to_string()),
+            FieldExtent::Polygon { points } => PersistedFieldExtent::Polygon {
+                points: points.clone(),
+            },
         },
         lifecycle: match field.lifecycle {
             FieldLifecycle::Active => PersistedFieldLifecycle::Active,
@@ -590,6 +593,9 @@ pub(crate) fn field_from_persisted(pfield: &PersistedField) -> Option<Field> {
         PersistedFieldExtent::AttachedToNode(s) => Uuid::parse_str(s)
             .map(FieldExtent::AttachedToNode)
             .unwrap_or(FieldExtent::Global),
+        PersistedFieldExtent::Polygon { points } => FieldExtent::Polygon {
+            points: points.clone(),
+        },
     };
     let mut field = Field::new(FieldId::from_uuid(id), definition).with_extent(extent);
     if let Some(name) = &pfield.name {

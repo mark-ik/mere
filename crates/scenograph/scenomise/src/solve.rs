@@ -1,8 +1,8 @@
 //! Product-free analytic score realization.
 
 use sceno::{
-    Arrangement, Board, Footprint, Geographic, Placement, ProjectedItem, Rect, Scene, Score,
-    ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
+    Arrangement, Board, Footprint, Geographic, Hulls, Placement, ProjectedItem, Rect, Region,
+    Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
 };
 
 /// The golden-angle spiral's nearest neighbours are roughly 0.9 of the scale
@@ -37,6 +37,7 @@ pub fn solve(score: &Score) -> Scene {
             Arrangement::Spiral(spiral) => spiral_position(spiral, effective_spacing, rank),
             Arrangement::Board(board) => board_position(board, item, rank),
             Arrangement::Geographic(geographic) => geographic_position(geographic, item),
+            Arrangement::Hulls(hulls) => hulls_position(hulls, item),
         };
         let source = scene.intern_source(item.source.clone());
         let instance = ProjectedItem {
@@ -58,8 +59,118 @@ pub fn solve(score: &Score) -> Scene {
         }
         scene.items.push(instance);
     }
+
+    // Hulls emits the partition after every site is placed, because a cell is
+    // defined against all the others: the part of the bounds nearer this site
+    // than any of them.
+    if let Arrangement::Hulls(hulls) = &score.arrangement {
+        partition(hulls, &mut scene);
+        bounds = Some(match bounds {
+            Some(old) => old.union(hulls.bounds),
+            None => hulls.bounds,
+        });
+    }
+
     scene.bounds = bounds.unwrap_or_default();
     scene
+}
+
+/// One scene [`Region`] per placed site: the bounds clipped by the
+/// perpendicular-bisector half-plane against every other site. Exact rather
+/// than sampled, and quadratic in sites, which place-graph counts never
+/// stress.
+fn partition(hulls: &Hulls, scene: &mut Scene) {
+    let sites: Vec<(sceno::InstanceId, Vec2)> = scene
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| item.visible)
+        .map(|(index, item)| {
+            (
+                sceno::InstanceId(index as u32),
+                Vec2::new(item.transform.translate.x, item.transform.translate.y),
+            )
+        })
+        .collect();
+
+    for (id, site) in &sites {
+        let mut cell = rect_polygon(hulls.bounds);
+        for (other_id, other) in &sites {
+            if other_id == id {
+                continue;
+            }
+            cell = clip_nearer(cell, *site, *other);
+            if cell.len() < 3 {
+                break;
+            }
+        }
+        if cell.len() < 3 {
+            // Coincident sites can starve a cell to nothing. An empty region
+            // would be a lie about coverage, so it is simply not emitted.
+            continue;
+        }
+        scene.regions.push(Region {
+            members: vec![*id],
+            space: Scene::WORLD,
+            contour: Some(Footprint::Polygon { points: cell }),
+            label: None,
+            confidence: 1.0,
+        });
+    }
+}
+
+fn rect_polygon(rect: Rect) -> Vec<Vec2> {
+    let (x, y) = (rect.origin.x, rect.origin.y);
+    let (w, h) = (rect.size.w, rect.size.h);
+    vec![
+        Vec2::new(x, y),
+        Vec2::new(x + w, y),
+        Vec2::new(x + w, y + h),
+        Vec2::new(x, y + h),
+    ]
+}
+
+/// Sutherland-Hodgman against the half-plane of points nearer `site` than
+/// `other`: keep everything on `site`'s side of their perpendicular bisector.
+fn clip_nearer(polygon: Vec<Vec2>, site: Vec2, other: Vec2) -> Vec<Vec2> {
+    let mid = Vec2::new((site.x + other.x) / 2.0, (site.y + other.y) / 2.0);
+    let away = Vec2::new(other.x - site.x, other.y - site.y);
+    // Signed distance along `away`: negative is nearer `site`.
+    let side = |p: Vec2| (p.x - mid.x) * away.x + (p.y - mid.y) * away.y;
+
+    let mut out = Vec::with_capacity(polygon.len() + 1);
+    for (index, &current) in polygon.iter().enumerate() {
+        let previous = polygon[(index + polygon.len() - 1) % polygon.len()];
+        let (d_prev, d_cur) = (side(previous), side(current));
+        if d_prev <= 0.0 && d_cur > 0.0 || d_prev > 0.0 && d_cur <= 0.0 {
+            // The edge crosses the bisector; keep the crossing point.
+            let t = d_prev / (d_prev - d_cur);
+            out.push(Vec2::new(
+                previous.x + (current.x - previous.x) * t,
+                previous.y + (current.y - previous.y) * t,
+            ));
+        }
+        if d_cur <= 0.0 {
+            out.push(current);
+        }
+    }
+    out
+}
+
+fn hulls_position(hulls: &Hulls, item: &ScoreItem) -> Vec2 {
+    let coordinate = match item.placement {
+        Placement::Coordinate(coordinate) => coordinate,
+        // A site is somewhere by definition; anything undisclosed sits at the
+        // origin rather than being invented a position.
+        _ => Vec2::ZERO,
+    };
+    Vec2::new(
+        hulls.origin.x + coordinate.x * hulls.units_per_coordinate,
+        hulls.origin.y
+            + coordinate.y
+                * hulls.units_per_coordinate
+                * if hulls.invert_y { -1.0 } else { 1.0 },
+    )
 }
 
 fn spiral_position(spiral: &Spiral, spacing: f32, ordinal: usize) -> Vec2 {
@@ -142,6 +253,150 @@ mod tests {
             && b.origin.x < a.origin.x + a.size.w
             && a.origin.y < b.origin.y + b.size.h
             && b.origin.y < a.origin.y + a.size.h
+    }
+
+    fn site(id: u32, x: f32, y: f32) -> ScoreItem {
+        ScoreItem {
+            source: SourceRef::new("fixture", id.to_string()),
+            ordinal: id,
+            footprint: Footprint::Point,
+            representation: Representation::Glyph,
+            placement: Placement::Coordinate(Vec2::new(x, y)),
+            layer: 0,
+            visible: true,
+        }
+    }
+
+    fn hulls_score(sites: &[(f32, f32)]) -> Score {
+        let mut score = Score::new(Arrangement::Hulls(Hulls {
+            origin: Vec2::ZERO,
+            units_per_coordinate: 1.0,
+            invert_y: false,
+            bounds: Rect::new(Vec2::new(-100.0, -100.0), Size2::new(200.0, 200.0)),
+        }));
+        for (index, (x, y)) in sites.iter().enumerate() {
+            score.items.push(site(index as u32, *x, *y));
+        }
+        score
+    }
+
+    fn polygon_area(points: &[Vec2]) -> f32 {
+        let mut doubled = 0.0;
+        for (index, a) in points.iter().enumerate() {
+            let b = points[(index + 1) % points.len()];
+            doubled += a.x * b.y - b.x * a.y;
+        }
+        (doubled / 2.0).abs()
+    }
+
+    fn contains(points: &[Vec2], p: Vec2) -> bool {
+        // Even-odd ray cast, good enough for convex cells in a test.
+        let mut inside = false;
+        for (index, a) in points.iter().enumerate() {
+            let b = points[(index + 1) % points.len()];
+            if (a.y > p.y) != (b.y > p.y)
+                && p.x < a.x + (b.x - a.x) * (p.y - a.y) / (b.y - a.y)
+            {
+                inside = !inside;
+            }
+        }
+        inside
+    }
+
+    #[test]
+    fn one_site_owns_the_whole_bounds() {
+        let scene = solve(&hulls_score(&[(10.0, -5.0)]));
+        assert_eq!(scene.regions.len(), 1);
+        let Some(Footprint::Polygon { points }) = &scene.regions[0].contour else {
+            panic!("a cell is a polygon");
+        };
+        assert!((polygon_area(points) - 200.0 * 200.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn cells_tile_the_bounds() {
+        // Cover without overlap: the areas of the cells sum to the area of the
+        // bounds, which a halo arrangement could never promise.
+        let scene = solve(&hulls_score(&[(-40.0, -40.0), (60.0, 10.0), (0.0, 55.0), (-20.0, 80.0)]));
+        assert_eq!(scene.regions.len(), 4);
+
+        let total: f32 = scene
+            .regions
+            .iter()
+            .map(|region| match &region.contour {
+                Some(Footprint::Polygon { points }) => polygon_area(points),
+                _ => panic!("every cell is a polygon"),
+            })
+            .sum();
+        assert!((total - 200.0 * 200.0).abs() < 1.0, "cells sum to {total}");
+    }
+
+    #[test]
+    fn a_cell_is_the_nearest_site_rule_made_visible() {
+        // The property that makes hulls over Mesocosm's places exact: any
+        // sampled point lies in the cell of the site it is nearest.
+        let sites = [(-40.0, -40.0), (60.0, 10.0), (0.0, 55.0)];
+        let scene = solve(&hulls_score(&sites));
+
+        for sample in [
+            Vec2::new(-70.0, -70.0),
+            Vec2::new(80.0, 20.0),
+            Vec2::new(5.0, 90.0),
+            Vec2::new(-10.0, -3.0),
+        ] {
+            let nearest = (0..sites.len())
+                .min_by(|a, b| {
+                    let d = |i: usize| {
+                        (sample.x - sites[i].0).powi(2) + (sample.y - sites[i].1).powi(2)
+                    };
+                    d(*a).total_cmp(&d(*b))
+                })
+                .unwrap();
+            let holder = scene
+                .regions
+                .iter()
+                .position(|region| match &region.contour {
+                    Some(Footprint::Polygon { points }) => contains(points, sample),
+                    _ => false,
+                })
+                .expect("every point in bounds is in some cell");
+            assert_eq!(
+                scene.regions[holder].members,
+                vec![sceno::InstanceId(nearest as u32)],
+                "the cell holding {sample:?} belongs to the nearest site"
+            );
+        }
+    }
+
+    #[test]
+    fn each_cell_contains_its_own_site() {
+        let sites = [(-40.0, -40.0), (60.0, 10.0), (0.0, 55.0), (-20.0, 80.0)];
+        let scene = solve(&hulls_score(&sites));
+        for region in &scene.regions {
+            let Some(Footprint::Polygon { points }) = &region.contour else {
+                panic!("polygon");
+            };
+            let site = &scene.items[region.members[0].0 as usize];
+            assert!(contains(
+                points,
+                Vec2::new(site.transform.translate.x, site.transform.translate.y)
+            ));
+        }
+    }
+
+    #[test]
+    fn an_invisible_item_is_not_a_site() {
+        let mut score = hulls_score(&[(-40.0, 0.0), (40.0, 0.0)]);
+        score.items[1].visible = false;
+        let scene = solve(&score);
+        assert_eq!(scene.regions.len(), 1, "only the visible site got a cell");
+    }
+
+    #[test]
+    fn a_hulls_score_round_trips() {
+        let score = hulls_score(&[(1.0, 2.0)]);
+        let json = serde_json::to_string(&score).unwrap();
+        assert_eq!(serde_json::from_str::<Score>(&json).unwrap(), score);
     }
 
     #[test]

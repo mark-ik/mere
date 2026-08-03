@@ -418,6 +418,9 @@ impl Graph {
                     Ok(node_id) => FieldExtent::AttachedToNode(node_id),
                     Err(_) => FieldExtent::Global,
                 },
+                PersistedFieldExtent::Polygon { points } => FieldExtent::Polygon {
+                    points: points.clone(),
+                },
             };
             let mut field = Field::new(FieldId::from_uuid(id), definition).with_extent(extent);
             if let Some(name) = &pfield.name {

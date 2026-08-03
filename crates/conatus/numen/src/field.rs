@@ -87,6 +87,102 @@ pub enum FieldExtent {
     },
     /// Travels with a node (its `Node.id`).
     AttachedToNode(Uuid),
+    /// Applies within a closed world-space polygon.
+    ///
+    /// The hulls extent: a place-graph cell, a drawn hull, a map region. Kept
+    /// as bare point pairs for the same rkyv-friendliness reason `Region` is
+    /// four scalars. Fewer than three points is a degenerate extent that
+    /// contains nothing.
+    Polygon { points: Vec<(f32, f32)> },
+}
+
+impl FieldExtent {
+    /// Whether a world-space point falls inside this extent.
+    ///
+    /// `None` for [`AttachedToNode`](FieldExtent::AttachedToNode), which only
+    /// a graph can answer: the extent travels with a node this type cannot
+    /// see. Callers with a graph resolve that arm themselves.
+    pub fn contains(&self, x: f32, y: f32) -> Option<bool> {
+        match self {
+            FieldExtent::Global => Some(true),
+            FieldExtent::Region {
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+            } => Some(x >= *min_x && x <= *max_x && y >= *min_y && y <= *max_y),
+            FieldExtent::AttachedToNode(_) => None,
+            FieldExtent::Polygon { points } => Some(polygon_contains(points, x, y)),
+        }
+    }
+
+    /// Distance from a point to the extent's boundary, for falloff shaping.
+    ///
+    /// Positive inside, negative outside, `None` where boundaries make no
+    /// sense (`Global` has none; `AttachedToNode` needs a graph).
+    pub fn boundary_distance(&self, x: f32, y: f32) -> Option<f32> {
+        match self {
+            FieldExtent::Global => None,
+            FieldExtent::AttachedToNode(_) => None,
+            FieldExtent::Region {
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+            } => {
+                let inside =
+                    (x - min_x).min(max_x - x).min(y - min_y).min(max_y - y);
+                Some(inside)
+            }
+            FieldExtent::Polygon { points } => {
+                if points.len() < 3 {
+                    return None;
+                }
+                let nearest = points
+                    .iter()
+                    .enumerate()
+                    .map(|(index, a)| {
+                        let b = points[(index + 1) % points.len()];
+                        segment_distance(*a, b, (x, y))
+                    })
+                    .fold(f32::INFINITY, f32::min);
+                Some(if polygon_contains(points, x, y) {
+                    nearest
+                } else {
+                    -nearest
+                })
+            }
+        }
+    }
+}
+
+/// Even-odd ray cast. Winding is not significant, matching the scene
+/// contract's polygon footprint.
+fn polygon_contains(points: &[(f32, f32)], x: f32, y: f32) -> bool {
+    if points.len() < 3 {
+        return false;
+    }
+    let mut inside = false;
+    for (index, a) in points.iter().enumerate() {
+        let b = points[(index + 1) % points.len()];
+        if (a.1 > y) != (b.1 > y) && x < a.0 + (b.0 - a.0) * (y - a.1) / (b.1 - a.1) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+fn segment_distance(a: (f32, f32), b: (f32, f32), p: (f32, f32)) -> f32 {
+    let (abx, aby) = (b.0 - a.0, b.1 - a.1);
+    let (apx, apy) = (p.0 - a.0, p.1 - a.1);
+    let length_sq = abx * abx + aby * aby;
+    let t = if length_sq <= f32::EPSILON {
+        0.0
+    } else {
+        ((apx * abx + apy * aby) / length_sq).clamp(0.0, 1.0)
+    };
+    let (dx, dy) = (apx - abx * t, apy - aby * t);
+    (dx * dx + dy * dy).sqrt()
 }
 
 /// Field lifecycle state. Mirrors the spirit of `NodeLifecycle`: a field is
@@ -168,6 +264,53 @@ mod tests {
         assert_eq!(f.extent, FieldExtent::Global);
         assert!(f.is_active());
         assert!(f.name.is_none());
+    }
+
+    #[test]
+    fn a_polygon_extent_contains_and_measures() {
+        // A triangle. Containment is even-odd; boundary distance is signed,
+        // positive inside, so falloffs can shape against the edge.
+        let extent = FieldExtent::Polygon {
+            points: vec![(0.0, 0.0), (10.0, 0.0), (0.0, 10.0)],
+        };
+
+        assert_eq!(extent.contains(2.0, 2.0), Some(true));
+        assert_eq!(extent.contains(9.0, 9.0), Some(false));
+        assert!(extent.boundary_distance(2.0, 2.0).unwrap() > 0.0);
+        assert!(extent.boundary_distance(20.0, 20.0).unwrap() < 0.0);
+        // On an axis edge, distance to the nearest boundary is the y height.
+        let inside = extent.boundary_distance(3.0, 1.0).unwrap();
+        assert!((inside - 1.0).abs() < 1e-4, "got {inside}");
+    }
+
+    #[test]
+    fn a_degenerate_polygon_contains_nothing() {
+        let extent = FieldExtent::Polygon {
+            points: vec![(0.0, 0.0), (10.0, 0.0)],
+        };
+        assert_eq!(extent.contains(5.0, 0.0), Some(false));
+        assert_eq!(extent.boundary_distance(5.0, 0.0), None);
+    }
+
+    #[test]
+    fn attachment_is_a_question_for_a_graph() {
+        // The honest None: this type cannot know where a node is.
+        let extent = FieldExtent::AttachedToNode(sample_uuid(9));
+        assert_eq!(extent.contains(0.0, 0.0), None);
+        assert_eq!(extent.boundary_distance(0.0, 0.0), None);
+    }
+
+    #[test]
+    fn a_polygon_extent_round_trips() {
+        let field = Field::new(
+            FieldId::from_uuid(sample_uuid(7)),
+            FieldDefinition::Scalar(ScalarField::Const(1.0)),
+        )
+        .with_extent(FieldExtent::Polygon {
+            points: vec![(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+        });
+        let json = serde_json::to_string(&field).unwrap();
+        assert_eq!(serde_json::from_str::<Field>(&json).unwrap(), field);
     }
 
     #[test]
