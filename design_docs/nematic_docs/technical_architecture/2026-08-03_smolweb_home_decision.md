@@ -76,8 +76,67 @@ crate.
 - Both plans name pelt and meerkat as consumers. Meerkat is deleted; the app
   is Turnstone. Consumer references read as Turnstone/mere hosts.
 
+## Findings from the first extraction (2026-08-03)
+
+Four facts the `gopher-protocol` move established, each of which changes the
+plan above.
+
+**1. The publish gate is the real constraint.** errand is itself a published
+crate (`publish = true`, 0.1.3), and a published crate may not carry git
+dependencies. So errand cannot consume an extracted crate until that crate is
+on crates.io. Every extraction is therefore a three-step chain with an
+irreversible middle: stage the crate in the smolweb workspace, **publish it**,
+then re-point errand and bump it. Staging is free and reversible; the publish
+is Mark's call and gates everything downstream of it.
+
+**2. `gemtext` is taken on crates.io** (v0.2.1, "A gemini client and server for
+Rust", last published October 2020), so the shared grammar cannot have the
+obvious name. It does not need one: gemtext and gemini are defined by the same
+spec document, so the grammar bundles into `gemini-protocol` behind a
+dependency-free feature, and consumers that only parse bodies (spartan, guppy,
+scroll, misfin) take it with `default-features = false`. `gemini-protocol` and
+`gopher-protocol` are both available.
+
+**3. The nex grammar is duplicated, not missing.** `nex-protocol` already ships
+a listing parser (`listing.rs`, `parse_listing` into `ListingLine`), and errand
+independently implements the same grammar in `parse/nex.rs` with directory
+detection and base-URL resolution on top. That move is a de-duplication:
+upstream errand's extras into `nex-protocol` and delete the copy. Decide which
+implementation is the survivor by reading both, rather than assuming errand's
+is richer because it is longer.
+
+**4. Feature-gate the transport, not the grammar.** Verified on gopher: with
+`default-features = false` the dependency tree is the crate alone, zero
+dependencies, while the client pulls tokio and url. This matters because the
+consumers of these grammars are *renderers* (cambium-nematic parses gophermaps
+to draw them) that have no business pulling an async runtime. Every extracted
+crate should follow this shape.
+
+**Blast radius is small and shieldable.** Only genet consumes `errand::parse`:
+four nematic engines (`gemtext.rs`, `gopher.rs`, `nex.rs`, `feed.rs`) and
+`cambium-nematic/src/views.rs`. mere and turnstone reference it nowhere. errand
+can re-export each extracted grammar under its existing `errand::parse::*` path,
+so those five files need no change at all and the moves stay invisible
+downstream.
+
 ## Sequencing
 
-Extraction is deliberate, not urgent: each move is a crates.io publish plus a
-genet re-point, and gemini's TOFU seam is mid-flight in the fidelity plan's
-WS2. Do it protocol-by-protocol when a lane is next touched, not as a sweep.
+Extraction is deliberate, not urgent, and now has a fixed shape per protocol:
+stage in the smolweb workspace (free, reversible), publish (Mark), re-point
+errand behind a re-export (invisible downstream), bump errand.
+
+Do it protocol-by-protocol when a lane is next touched, not as a sweep. One
+ordering correction: doing a move **before** the fidelity plan's WS1 touches a
+grammar is better than after, because WS1's enrichment then lands in the
+grammar's final home instead of needing a second move. WS1 has not started.
+
+## Progress
+
+- **2026-08-03**: Decision recorded. `gopher-protocol` staged in the smolweb
+  workspace as the first move and the template for the rest: `menu` (the RFC
+  1436 parser, dependency-free, always compiled) plus `client` (TCP fetch,
+  default feature), with its own `Response`/`ClientError` mapped by errand the
+  way `spartan-protocol` already is. 11 tests plus doctests green, 7 of them
+  under `--no-default-features` with an empty dependency tree; the smolweb
+  workspace is green. Not published, so errand still carries its own copy and
+  nothing downstream has changed yet.
