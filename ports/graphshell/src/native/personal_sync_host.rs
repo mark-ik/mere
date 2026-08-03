@@ -32,6 +32,12 @@ pub struct PersonalSyncHostConfig {
     pub roster: SyncRoster,
     pub selection: SyncSelection,
     pub peer_tickets: Vec<String>,
+    /// Stored dial hints: each paired device's last known endpoint ticket, as
+    /// persisted by the cached-address rung. Unlike `peer_tickets`, applied
+    /// best-effort: an argument the owner just typed should fail loudly, but a
+    /// hint recorded last week must degrade to "discovery will have to find
+    /// them" rather than stop the host from opening.
+    pub peer_hints: Vec<String>,
     /// Per-graph transport node ids of paired devices.
     ///
     /// This is what pairing persists. A ticket carries the peer's current
@@ -146,6 +152,23 @@ impl PersonalSyncHost {
                 .set_topics(peer, &[overlay])
                 .await
                 .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        }
+        // Best-effort, unlike the loop above, and the difference is the
+        // provenance of the string: an argument the owner just typed should
+        // fail loudly, a hint recorded weeks ago must degrade. A device whose
+        // stored hint has rotted still opens, still serves, and still reaches
+        // anything discovery can find; it has only lost the shortcut.
+        for hint in &config.peer_hints {
+            match transport.add_peer_ticket(hint).await {
+                Ok(peer) => {
+                    if let Err(error) = transport.set_topics(peer, &[overlay]).await {
+                        tracing::warn!(%error, "could not tag a stored dial hint onto the overlay");
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "a stored dial hint did not parse; skipping it");
+                }
+            }
         }
         let store = replica.sync_store();
         let accepted = store.clone();
@@ -468,6 +491,20 @@ impl PersonalSyncHost {
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
     }
 
+    /// Where the endpoint currently believes `node` lives, as a ticket, if it
+    /// holds any addresses for it. The value the cached-address rung persists.
+    pub async fn peer_ticket(
+        &self,
+        node: [u8; 32],
+    ) -> Result<Option<String>, PersonalSyncHostError> {
+        let peer = PeerID::from_bytes(&node)
+            .map_err(|error| PersonalSyncHostError::Transport(format!("peer node id: {error}")))?;
+        self.transport
+            .peer_ticket(peer)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+    }
+
     pub async fn author(
         &self,
         events: Vec<PersonalGraphEvent>,
@@ -629,6 +666,7 @@ mod tests {
             roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
             selection: SyncSelection::default().with_blob_availability(true),
             peer_tickets: Vec::new(),
+            peer_hints: Vec::new(),
             paired_nodes: Vec::new(),
             relay_urls: Vec::new(),
         };
@@ -703,6 +741,7 @@ mod tests {
                 roster: SyncRoster::new([identity.master_public_key().to_bytes(), peer_node]),
                 selection: SyncSelection::default(),
                 peer_tickets: Vec::new(),
+                peer_hints: Vec::new(),
                 paired_nodes: vec![peer_node],
                 relay_urls: Vec::new(),
             },
@@ -747,6 +786,7 @@ mod tests {
                 roster: roster.clone(),
                 selection: SyncSelection::default().with_blob_availability(true),
                 peer_tickets: Vec::new(),
+                peer_hints: Vec::new(),
                 paired_nodes: Vec::new(),
                 relay_urls: Vec::new(),
             },
@@ -761,6 +801,7 @@ mod tests {
                 roster,
                 selection: SyncSelection::default().with_blob_availability(true),
                 peer_tickets: vec![source.ticket().await.unwrap()],
+                peer_hints: Vec::new(),
                 paired_nodes: Vec::new(),
                 relay_urls: Vec::new(),
             },
@@ -823,6 +864,7 @@ mod tests {
                 roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
                 selection: SyncSelection::default().with_blob_availability(true),
                 peer_tickets: Vec::new(),
+                peer_hints: Vec::new(),
                 paired_nodes: Vec::new(),
                 relay_urls: Vec::new(),
             },

@@ -142,6 +142,8 @@ pub struct PairedDevice {
     /// Deliberately not a ticket. A ticket carries the peer's address as of its
     /// last bind and goes stale when that device restarts; a node id is derived
     /// from the peer's master seed and the graph salt, so it keeps working.
+    /// The identity lives here; [`last_endpoint`](Self::last_endpoint) is only
+    /// ever a disposable hint about where that identity was last seen.
     pub node_id: String,
     /// Authority: the peer's 64-hex Personae master public root.
     ///
@@ -159,6 +161,25 @@ pub struct PairedDevice {
     pub label: String,
     #[serde(default)]
     pub added_ms: u64,
+    /// The identity of THIS pairing, as opposed to the device: minted when the
+    /// pair is recorded, retired by unpair, minted fresh by re-pair. The
+    /// transfer grant binds to it (H6 addendum) precisely so unpair-then-repair
+    /// cannot revive old queued transfers; a `node_id` revives across re-pair
+    /// and `added_ms` is a clock, so neither can carry that meaning. `None` on
+    /// records written before 2026-08-03.
+    #[serde(default)]
+    pub pairing_id: Option<String>,
+    /// The peer's last known endpoint ticket: a relay-tagged address set as of
+    /// the last time this device actually talked to it. The cached-address
+    /// rung of the resolver ladder, and the reason a device whose mDNS is dead
+    /// can still redial a sibling after both ends restart.
+    ///
+    /// A hint, never identity: it is seeded into the transport best-effort at
+    /// open (a stale or garbled value is logged and skipped, not fatal) and
+    /// refreshed while the peer is connected. Stale costs a failed dial
+    /// candidate, not a wrong belief.
+    #[serde(default)]
+    pub last_endpoint: Option<String>,
 }
 
 /// Which lanes leave this device.
@@ -285,8 +306,27 @@ impl SyncSettings {
             root: root.map(|root| hex32(&root)),
             label: label.to_string(),
             added_ms: at_ms,
+            pairing_id: Some(uuid::Uuid::new_v4().to_string()),
+            last_endpoint: None,
         });
         true
+    }
+
+    /// Record where a paired device was last actually reached. Returns whether
+    /// anything changed, so the caller saves only when there is something new
+    /// to save.
+    pub fn record_endpoint(&mut self, node_id: &[u8; 32], ticket: &str) -> bool {
+        let node_id = hex32(node_id);
+        for device in &mut self.paired_devices {
+            if device.node_id.eq_ignore_ascii_case(&node_id) {
+                if device.last_endpoint.as_deref() == Some(ticket) {
+                    return false;
+                }
+                device.last_endpoint = Some(ticket.to_string());
+                return true;
+            }
+        }
+        false
     }
 
     /// Forget a paired device. Returns false when it was not paired, so
@@ -368,6 +408,10 @@ impl SyncSettings {
                     root: None,
                     label: String::new(),
                     added_ms: 0,
+                    // A one-off argument is not a recorded pairing: nothing
+                    // should bind to it, and it has no history to hint from.
+                    pairing_id: None,
+                    last_endpoint: None,
                 })
                 .collect();
         }

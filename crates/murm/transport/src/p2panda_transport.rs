@@ -706,6 +706,40 @@ impl P2pandaTransport {
             .map(|g| (self.endpoint.clone(), g.clone()))
     }
 
+    /// The peer's current dialable address set as a ticket, if the endpoint
+    /// holds any addresses for it. `None` when the peer is only a name.
+    ///
+    /// This is what makes an address survivable: the ticket a peer HANDS OUT
+    /// describes itself as of its last bind, but the endpoint's own view of a
+    /// peer it has talked to is fresher than any handed-out ticket, because
+    /// every path change updates it. Persisting this after real contact is the
+    /// cached-address rung of the resolver ladder: a device that has connected
+    /// once can redial through the relay after both ends restart, with no
+    /// discovery working at all.
+    ///
+    /// Addresses are sorted before serializing so the same address set always
+    /// yields the same ticket string, letting a caller compare tickets to
+    /// decide whether anything actually changed.
+    pub async fn peer_ticket(&self, peer: PeerID) -> Result<Option<String>, TransportError> {
+        let endpoint = self
+            .endpoint
+            .endpoint()
+            .await
+            .map_err(|e| TransportError::Backend(format!("endpoint: {e}")))?;
+        let id = iroh::PublicKey::from_bytes(&peer.to_bytes())
+            .map_err(|e| TransportError::Backend(format!("peer key: {e}")))?;
+        let Some(info) = endpoint.remote_info(id).await else {
+            return Ok(None);
+        };
+        let mut addrs: Vec<_> = info.into_addrs().map(|addr| addr.into_addr()).collect();
+        if addrs.is_empty() {
+            return Ok(None);
+        }
+        addrs.sort_by_key(|addr| format!("{addr:?}"));
+        let addr = EndpointAddr::from_parts(id, addrs);
+        Ok(Some(EndpointTicket::from(addr).to_string()))
+    }
+
     /// Open a raw iroh `Connection` to a peer for an arbitrary ALPN.
     ///
     /// Lower-level than [`Transport::connect`]; used by

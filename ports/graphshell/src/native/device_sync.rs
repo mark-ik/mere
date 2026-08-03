@@ -165,6 +165,18 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         .with_handler_preferences(sync.lanes.handler_preferences)
         .with_blob_availability(sync.lanes.blob_availability);
 
+    // The cached-address rung: every hint recorded by a previous run rides in
+    // as a best-effort address, so a device that has connected once can redial
+    // through the relay after both ends restart, with no discovery working.
+    // This is what turns the paired-device record from a name into a route.
+    let peer_hints: Vec<String> = sync
+        .paired_devices
+        .iter()
+        .filter_map(|device| device.last_endpoint.clone())
+        .collect();
+    if !peer_hints.is_empty() {
+        tracing::info!(hints = peer_hints.len(), "seeding stored dial hints");
+    }
     let host = Arc::new(
         PersonalSyncHost::open(
             identity,
@@ -174,6 +186,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
                 roster: SyncRoster::new(roots),
                 selection,
                 peer_tickets,
+                peer_hints,
                 paired_nodes: paired_nodes.clone(),
                 relay_urls: relays,
             },
@@ -456,6 +469,55 @@ fn spawn_pairing_watch(
             // looked healthy while nothing replicated at all (2026-08-03).
             match host.known_peers().await {
                 Ok(peers) => {
+                    // Refresh the cached dial hints while the truth is live.
+                    // Only connected peers: an address the endpoint holds for
+                    // a peer it is NOT talking to may be exactly the stale
+                    // route a working hint would replace, so writing it back
+                    // would overwrite good information with bad.
+                    for peer in peers.iter().filter(|peer| peer.connected) {
+                        let node = peer.peer.to_bytes();
+                        let ticket = match host.peer_ticket(node).await {
+                            Ok(Some(ticket)) => ticket,
+                            Ok(None) => continue,
+                            Err(error) => {
+                                tracing::warn!(%error, "could not read a peer's current address");
+                                continue;
+                            }
+                        };
+                        let stored = sync
+                            .paired_devices
+                            .iter()
+                            .find(|device| {
+                                device.node_id.eq_ignore_ascii_case(&owner_settings::hex32(&node))
+                            })
+                            .and_then(|device| device.last_endpoint.as_deref());
+                        if stored == Some(ticket.as_str()) {
+                            continue;
+                        }
+                        // Load-modify-save through the same atomic path every
+                        // other settings write uses, so a concurrent pair or
+                        // unpair edit is not clobbered by this refresh.
+                        match OwnerSettings::load(&settings_file) {
+                            Ok(mut latest) => {
+                                let Some(live) = latest.sync.as_mut() else { continue };
+                                if live.record_endpoint(&node, &ticket) {
+                                    match latest.save(&settings_file) {
+                                        Ok(()) => tracing::info!(
+                                            node = %owner_settings::hex32(&node),
+                                            "recorded a fresh dial hint for a connected device"
+                                        ),
+                                        Err(error) => tracing::warn!(
+                                            %error,
+                                            "could not persist a refreshed dial hint"
+                                        ),
+                                    }
+                                }
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "could not reload settings to refresh a hint");
+                            }
+                        }
+                    }
                     let mut current: Vec<(String, bool, bool)> = peers
                         .iter()
                         .map(|peer| {

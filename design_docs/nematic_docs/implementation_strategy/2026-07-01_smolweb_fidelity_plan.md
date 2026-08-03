@@ -8,6 +8,12 @@ with scroll, link nav, per-site/app theming). This one recovers the
 spec-faithfulness the flavour-neutral pipeline collapses, and closes the security
 posture the native lane currently drops.
 
+> **Home refinement, 2026-08-03**: WS1's AST enrichment lands wherever the
+> grammar lives at the time, per the
+> [smolweb home decision](../technical_architecture/2026-08-03_smolweb_home_decision.md)
+> (spec-accurate grammars follow the wire crates into the smolweb workspace;
+> WS2/WS3 are implementation-side and stay in genet/cambium-nematic).
+
 **The three principles** (Mark's call, 2026-07-01):
 
 1. **Share the synonymous parts through the box substrate.** A gemtext paragraph

@@ -4,6 +4,14 @@
 **Status**: planning (with Mark). Net-new architecture; greenfield on the genet
 side (no existing smolweb render in genet or pelt, code-verified).
 
+> **Home refinement, 2026-08-03**: the §5 crate-home diagram predates the genet
+> adoption of errand/nematic and the smolweb workspace. Crate homes now read
+> through the
+> [smolweb home decision](../technical_architecture/2026-08-03_smolweb_home_decision.md):
+> spec-accurate wire + grammar implementations extract to the smolweb
+> workspace; enrichment and rendering stay in genet or cambium-nematic.
+> Consumer references to pelt/meerkat read as Turnstone/mere hosts.
+
 **Thesis**: render every smolweb format natively and idiomatically, the way
 [Lagrange](https://gmi.skyjake.fi/lagrange/) (gemtext typesetter, SDL) and
 [Geopard](https://github.com/ranfdev/Geopard) (gemtext into GTK/adwaita widgets)
