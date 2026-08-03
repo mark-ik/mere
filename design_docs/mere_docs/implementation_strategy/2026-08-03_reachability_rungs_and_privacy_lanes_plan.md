@@ -69,6 +69,33 @@ a failed dial candidate, not a wrong belief.
 `--sync-peer`, mDNS dead on the fetching side, and the fetch succeeds through
 the cached hint alone.
 
+**Met 2026-08-03, same day.** Seed session at 21:20 (first contact, ticket
+carried on purpose: the rung is reconnect AFTER first contact); hint verified
+in the Mac's settings; O-PC restarted to a fresh process and a fresh ticket;
+receipt run at 21:24 with no ticket and mDNS dead fetched `60a7b29c…` from
+`9b662f09…` 0.3 seconds after bind. Two details worth their lines: the
+availability record had replicated into the Mac's durable store during the
+seed session, so the holder resolved locally and the whole wait design never
+engaged; and five seconds after the fetch, the refresh loop replaced the
+cached hint with O-PC's post-restart address unprompted, which is the
+self-healing property observed rather than asserted. One precision for later:
+this LAN's direct IPs are stable across restarts, so the receipt does not
+isolate WHICH component of the hint (direct address or relay) carried the
+dial; the relay component alone is what an off-LAN reconnect would lean on,
+and that isolation belongs to the first genuinely remote receipt.
+
+Also confirmed in passing on O-PC: the new host cached the ThinkPad's hint
+within seconds of starting, with no operator action. The rung is on for every
+paired device, not just the receipt path.
+
+Recorded during the audit, deliberate rather than accidental: existing
+pairing records never receive a `pairing_id` (pair() is idempotent and will
+not re-mint; S2 should mint at grant creation for legacy records); the
+resident host is now a second writer of the settings file, with a
+milliseconds-wide lost-update window against concurrent CLI pair/unpair,
+tolerable at the 5s cadence, generation counter if it ever bites; and Knot's
+lane has the same bare-node-id gap R1 just closed for Graphshell, untouched.
+
 ## R2. Announce-carried dial hints (the sovereign discovery rung)
 
 The retinue announce already binds authenticated app data (peer id plus
