@@ -591,6 +591,59 @@ mod tests {
     }
 
     #[test]
+    fn pairing_mints_an_identity_and_repairing_mints_a_fresh_one() {
+        let mut sync = SyncSettings::default();
+        sync.pair([0x41; 32], None, "first", 100);
+        let first = sync.paired_devices[0]
+            .pairing_id
+            .clone()
+            .expect("a recorded pairing mints an id");
+        // Unpair then re-pair the same node. The device is the same; the
+        // PAIRING is not, and a grant bound to the old id must not revive.
+        assert!(sync.unpair([0x41; 32]));
+        sync.pair([0x41; 32], None, "again", 200);
+        let second = sync.paired_devices[0]
+            .pairing_id
+            .clone()
+            .expect("re-pairing mints again");
+        assert_ne!(first, second, "re-pair must not revive the old pairing id");
+    }
+
+    #[test]
+    fn a_record_written_before_the_new_fields_still_loads() {
+        // A settings file from before 2026-08-03: no pairing_id, no
+        // last_endpoint. deny_unknown_fields cuts the other way (new file, old
+        // binary), so this direction has to be explicit about defaulting.
+        let json = r#"{"sync":{"graph":"personal","paired_devices":[
+            {"node_id":"aa","root":null,"label":"old","added_ms":5}]}}"#;
+        let parsed: OwnerSettings = serde_json::from_str(json).unwrap();
+        let device = &parsed.sync.as_ref().unwrap().paired_devices[0];
+        assert_eq!(device.pairing_id, None);
+        assert_eq!(device.last_endpoint, None);
+    }
+
+    #[test]
+    fn a_dial_hint_is_recorded_once_per_value_and_only_for_paired_devices() {
+        let mut sync = SyncSettings::default();
+        sync.pair([0x51; 32], None, "sibling", 100);
+        assert!(sync.record_endpoint(&[0x51; 32], "endpoint-ticket-one"));
+        assert!(
+            !sync.record_endpoint(&[0x51; 32], "endpoint-ticket-one"),
+            "an unchanged hint must report no change, so the caller does not \
+             rewrite the file every poll"
+        );
+        assert!(sync.record_endpoint(&[0x51; 32], "endpoint-ticket-two"));
+        assert_eq!(
+            sync.paired_devices[0].last_endpoint.as_deref(),
+            Some("endpoint-ticket-two")
+        );
+        assert!(
+            !sync.record_endpoint(&[0x52; 32], "endpoint-ticket-three"),
+            "a hint for an unpaired node has nowhere to live"
+        );
+    }
+
+    #[test]
     fn a_profile_id_cannot_escape_the_settings_directory() {
         let app = Path::new("/app");
         let escaped = settings_path(app, &ProfileId("../../evil".into()));

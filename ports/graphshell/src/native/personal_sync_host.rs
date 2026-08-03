@@ -847,6 +847,31 @@ mod tests {
         destination.close().await.unwrap();
     }
 
+    /// A rotted dial hint must cost the shortcut, never the host: the hint is
+    /// what a previous run believed, and this run has no way to check it other
+    /// than by trying.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_garbled_stored_dial_hint_does_not_stop_the_host_opening() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = InMemoryProvider::from_seed([0xa1; 32]);
+        let host = PersonalSyncHost::open(
+            &identity,
+            PersonalSyncHostConfig {
+                graph: [0xa2; 32],
+                store_path: directory.path().join("hinted.redb"),
+                roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
+                selection: SyncSelection::default(),
+                peer_tickets: Vec::new(),
+                peer_hints: vec!["not a ticket at all".into(), String::new()],
+                paired_nodes: Vec::new(),
+                relay_urls: Vec::new(),
+            },
+        )
+        .await
+        .expect("a stored hint is best-effort; garbage must not stop the host");
+        host.close().await.unwrap();
+    }
+
     /// Reachability is not authority. A blob hash names bytes, not a right to
     /// them, so an unpaired peer is refused before any dial.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

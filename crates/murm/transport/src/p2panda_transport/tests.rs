@@ -396,4 +396,19 @@ async fn the_peer_directory_separates_a_known_address_from_a_live_path() {
         connected,
         "a peer the endpoint holds an active path to must report connected"
     );
+
+    // The cached-address rung rides on this: a connected peer's current
+    // address set serializes to a ticket that round-trips back into the
+    // address book and names the same peer. This is what a device persists
+    // and reseeds after a restart.
+    let ticket = alice
+        .peer_ticket(bob_id)
+        .await
+        .expect("ticket query")
+        .expect("a connected peer has addresses to serialize");
+    let parsed = alice
+        .add_peer_ticket(&ticket)
+        .await
+        .expect("the cached hint must round-trip through the ticket codec");
+    assert_eq!(parsed, bob_id, "the ticket names the peer it was cached for");
 }
