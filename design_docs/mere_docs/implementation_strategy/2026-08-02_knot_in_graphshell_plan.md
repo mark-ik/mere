@@ -195,12 +195,18 @@ exist, stdio and local, and both only reach this machine. A place member
 reaching the holder's endpoint is remote projection by definition, so K2
 cannot start until a network carrier does.
 
-Worth stating because it is easy to misread as an authority problem and is
-not: Option A already settled who may write. What is missing is purely
-reach. C3 is also smaller than it looks —
-`P2pandaTransport::connect_raw(peer, alpn)` exists and a place already holds a
-live transport to its members — so this is a queue-order fact rather than a
-setback.
+Two things this does **not** mean, both easy to misread:
+
+- **Not an authority problem.** Option A already settled who may write.
+- **Not a connectivity problem.** Machines already reach each other: tickets
+  are proven in the place port's T3a receipt, mDNS exists, and relays work —
+  relay was the first path that connected the ThinkPad and the iMac. NAT
+  traversal, discovery, and peer identity are done.
+
+What is missing is only that the graphshell protocol has never been spoken
+over one of those connections. C3 is an ALPN and a framing loop, both with
+templates on either side. This is a queue-order fact, not a setback, and not
+a networking project.
 
 Done when two peers edit one document concurrently and the holder's projection
 is what both see.

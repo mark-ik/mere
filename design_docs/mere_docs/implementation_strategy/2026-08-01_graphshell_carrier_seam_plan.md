@@ -133,13 +133,34 @@ architectural, and **the blocker for the Knot plan's K2**: projecting a
 place-held document needs a member to reach the holder's endpoint, and stdio
 and local both only reach this machine.
 
-**It is smaller than it looks.** No new transport is needed.
-`P2pandaTransport::connect_raw(peer, alpn) -> Connection` already exists, and
-a place already holds a live transport to its members with their peer ids
-known. A graphshell carrier opens a stream over its own ALPN beside the seven
-lanes, reusing everything the place established for admission and reachability.
-Framing is already solved too: stdio's newline-delimited JSON is carrier-shaped
-rather than stdio-specific.
+**It is much smaller than it looks, and the hard part is already proven on real
+hardware.** Cross-machine connectivity is not the work here and never was:
+
+- **Tickets** carry a peer across a network today. The place port's T3a receipt
+  joins two peers over one, and that is a passing test, not a plan.
+- **mDNS** exists (`MdnsDiscoveryMode`, and the `iroh-mdns-address-lookup`
+  fork), with the macOS unsigned-binary limitation already recorded.
+- **Relays** are supported (`relay_url` on the builder), and the transport
+  documents the consequence plainly: "an unrelayed transport is a LAN-only
+  transport". Relay was the first path that worked between the ThinkPad and
+  the iMac.
+
+So NAT traversal, hole-punching, discovery, and peer identity are done and
+exercised across two real machines. C3 inherits all of it for free.
+
+What is actually missing is narrow: **an ALPN and a framing loop.** Both sides
+already have templates.
+
+- **Client:** `connect_raw(peer, alpn) -> Connection`, then a bi-stream.
+- **Server:** the transport already routes per-ALPN through `StreamQueueHandler`
+  into queues `Transport::accept` drains, and ALPNs are first-class
+  (`Alpn::new("mere/cable/v1")`). A graphshell ALPN sits beside the existing
+  ones.
+- **Framing:** stdio's newline-delimited JSON is carrier-shaped rather than
+  stdio-specific, and moves onto a stream unchanged.
+
+Calling this "a network carrier" overstates it. It is the graphshell protocol
+spoken over a connection the place already has.
 
 **Decision, settled 2026-08-02: keep the blocking surface, drive async behind
 it.**
