@@ -284,28 +284,36 @@ pub async fn start<P: IdentityProvider + ?Sized>(
                     // a live connection, so it cannot promise reachability; it
                     // can still separate "no peer is even configured" from
                     // "a peer is configured and told us nothing".
-                    let known = host.known_peers().await.map(|p| p.len()).unwrap_or(0);
+                    let peers = host.known_peers().await.unwrap_or_default();
+                    let connected = peers.iter().filter(|peer| peer.connected).count();
                     let waited_s = BLOB_FETCH_WAIT_TICKS * BLOB_FETCH_WAIT_TICK.as_secs();
-                    if known == 0 {
+                    if peers.is_empty() {
                         tracing::error!(
                             blob = %owner_settings::hex32(&blob),
                             waited_s,
                             "no device is paired onto this graph's overlay, so \
                              nothing could advertise this blob"
                         );
+                    } else if connected == 0 {
+                        tracing::error!(
+                            blob = %owner_settings::hex32(&blob),
+                            waited_s,
+                            peers = peers.len(),
+                            "no paired device has a live path, so no \
+                             advertisement could arrive. This is a connectivity \
+                             failure, not a missing blob: check a firewall on \
+                             either end, then whether a relay is configured and \
+                             reachable"
+                        );
                     } else {
                         tracing::error!(
                             blob = %owner_settings::hex32(&blob),
                             waited_s,
-                            known_peers = known,
-                            "paired devices exist but none advertised this blob. \
-                             Either the holder never staged it with the \
-                             blob-availability lane enabled, or this device has \
-                             no route to it: check the log for a relay line \
-                             (`home is now relay ...`) and for an established \
-                             connection. A device with no relay_urls that also \
-                             cannot announce over mDNS will sit here reporting \
-                             peers it can never reach."
+                            peers = peers.len(),
+                            connected,
+                            "a device is connected but none advertised this \
+                             blob. The holder most likely never staged it, or \
+                             staged it with the blob-availability lane disabled"
                         );
                     }
                     continue;
@@ -354,7 +362,10 @@ fn spawn_pairing_watch(
     let mut applied: std::collections::HashSet<[u8; 32]> = already_applied.into_iter().collect();
     // Last reported reachability, so the log records transitions rather than
     // repeating the same line every poll.
-    let mut reported: Option<Vec<(String, bool)>> = None;
+    // (node, has an address, has a live path). Connectivity is in the compared
+    // tuple deliberately: a peer going silent while keeping its address is a
+    // change worth logging, and was previously invisible.
+    let mut reported: Option<Vec<(String, bool, bool)>> = None;
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(PAIRING_POLL).await;
@@ -434,24 +445,52 @@ fn spawn_pairing_watch(
                 }
             }
 
-            // Report reachability, not just membership. A paired device that
-            // discovery has never resolved is silently doing nothing, and
-            // "paired" alone cannot distinguish that from a working peer.
+            // Report connectedness, not just membership or a known address. A
+            // paired device discovery never resolved is silently doing
+            // nothing, and one with an address it cannot actually reach looks
+            // identical unless the two are named apart.
+            //
+            // They were not, and it cost hours: a firewall dropped every
+            // inbound packet to a peer while its address stayed in the book,
+            // so this line read `reachable=1` the whole time and the host
+            // looked healthy while nothing replicated at all (2026-08-03).
             match host.known_peers().await {
                 Ok(peers) => {
-                    let mut current: Vec<(String, bool)> = peers
+                    let mut current: Vec<(String, bool, bool)> = peers
                         .iter()
-                        .map(|peer| (owner_settings::hex32(&peer.peer.to_bytes()), peer.reachable))
+                        .map(|peer| {
+                            (
+                                owner_settings::hex32(&peer.peer.to_bytes()),
+                                peer.reachable,
+                                peer.connected,
+                            )
+                        })
                         .collect();
                     current.sort();
                     if reported.as_ref() != Some(&current) {
-                        let reachable = current.iter().filter(|(_, ok)| *ok).count();
+                        let addressed = current.iter().filter(|(_, ok, _)| *ok).count();
+                        let connected = current.iter().filter(|(_, _, live)| *live).count();
                         tracing::info!(
                             peers = current.len(),
-                            reachable,
+                            addressed,
+                            connected,
                             detail = ?current,
                             "personal sync peer directory changed"
                         );
+                        // The state that looks fine and is not: peers exist,
+                        // every one has an address, and not one is talking.
+                        // Say it plainly rather than leaving it to be inferred
+                        // from a count nobody reads as connectivity.
+                        if connected == 0 && !current.is_empty() {
+                            tracing::warn!(
+                                peers = current.len(),
+                                addressed,
+                                "no paired device has a live path: this host is \
+                                 replicating nothing. Check a firewall on either \
+                                 end, then whether a relay is configured and \
+                                 reachable"
+                            );
+                        }
                         reported = Some(current);
                     }
                 }

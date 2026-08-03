@@ -210,9 +210,22 @@ pub struct KnownPeer {
     /// False when the address book holds the identity but no transport
     /// information yet: discovery has named this peer without yet saying how
     /// to reach it.
+    ///
+    /// This is knowledge of an address, NOT a live link. A peer can be
+    /// `reachable` for hours while every packet to it is dropped; read
+    /// [`connected`](Self::connected) for the question most callers mean.
     pub reachable: bool,
     /// Whether this node is configured as a discovery bootstrap locally.
     pub bootstrap: bool,
+    /// Whether the endpoint currently holds an ACTIVE path to this peer.
+    ///
+    /// The honest answer to "are we talking to it", as opposed to "do we know
+    /// where it lives". Distinguishing these is not pedantry: a firewall rule
+    /// silently dropped every inbound packet to one of these devices for
+    /// hours, and because the address book still held an address, the host
+    /// reported the peer as reachable throughout and looked healthy while
+    /// nothing whatsoever replicated (2026-08-03).
+    pub connected: bool,
 }
 
 /// Builder for [`P2pandaTransport`]. Use [`P2pandaTransport::builder`].
@@ -609,19 +622,41 @@ impl P2pandaTransport {
             .await
             .map_err(|e| TransportError::Backend(format!("node_infos_by_topics: {e}")))?;
         let local = self.peer_id.to_bytes();
-        infos
-            .into_iter()
-            .filter(|info| info.node_id.as_bytes() != &local)
-            .map(|info| {
-                let peer = PeerID::from_bytes(info.node_id.as_bytes())
-                    .map_err(|e| TransportError::Backend(format!("peer id: {e}")))?;
-                Ok(KnownPeer {
-                    peer,
-                    reachable: info.transports.is_some(),
-                    bootstrap: info.bootstrap,
-                })
-            })
-            .collect()
+        // One handle for the whole sweep. A failure to obtain it is reported
+        // as "nothing is connected" rather than as an error: the address-book
+        // half of this answer is still worth returning, and a caller that
+        // cannot tell "not connected" from "could not ask" is exactly the
+        // problem this field exists to end.
+        let endpoint = self.endpoint.endpoint().await.ok();
+        let mut peers = Vec::new();
+        for info in infos {
+            if info.node_id.as_bytes() == &local {
+                continue;
+            }
+            let peer = PeerID::from_bytes(info.node_id.as_bytes())
+                .map_err(|e| TransportError::Backend(format!("peer id: {e}")))?;
+            let connected = match &endpoint {
+                Some(endpoint) => endpoint
+                    .remote_info(iroh::PublicKey::from_bytes(info.node_id.as_bytes()).map_err(
+                        |e| TransportError::Backend(format!("peer key for remote_info: {e}")),
+                    )?)
+                    .await
+                    .map(|remote| {
+                        remote.addrs().any(|addr| {
+                            matches!(addr.usage(), iroh::endpoint::TransportAddrUsage::Active)
+                        })
+                    })
+                    .unwrap_or(false),
+                None => false,
+            };
+            peers.push(KnownPeer {
+                peer,
+                reachable: info.transports.is_some(),
+                bootstrap: info.bootstrap,
+                connected,
+            });
+        }
+        Ok(peers)
     }
 
     /// Stop treating `peer` as a member of `topic`'s overlay: the inverse of

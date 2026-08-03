@@ -303,3 +303,97 @@ async fn gossip_propagates_ops_between_subscribed_peers() {
         "bob received exactly what alice published"
     );
 }
+
+/// A known address is not a live path, and the peer directory must say which
+/// it has.
+///
+/// This is the distinction that hid a dead link for hours on 2026-08-03: a
+/// firewall dropped every inbound packet to a device while its address stayed
+/// in the address book, so the host reported the peer as reachable and looked
+/// healthy while nothing replicated. `reachable` answers "do we know where it
+/// lives"; `connected` answers "are we talking to it".
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_peer_directory_separates_a_known_address_from_a_live_path() {
+    use tokio_stream::StreamExt;
+
+    let topic = [0x5b; 32];
+    let (alice_kp, alice_id) = make_inputs(90);
+    let (bob_kp, bob_id) = make_inputs(91);
+
+    let alice = P2pandaTransport::builder(&alice_kp)
+        .gossip()
+        .bind()
+        .await
+        .expect("bind alice");
+    let bob = P2pandaTransport::builder(&bob_kp)
+        .gossip()
+        .bind()
+        .await
+        .expect("bind bob");
+
+    // Alice learns where Bob lives, and does not speak to him. This is the
+    // state a paired-but-unreachable device sits in, and the state that used
+    // to be indistinguishable from a working peer.
+    alice
+        .add_peer(bob.endpoint_addr().await.unwrap())
+        .await
+        .unwrap();
+    alice.set_topics(bob_id, &[topic]).await.unwrap();
+
+    let known = alice
+        .peers_for_topic(topic)
+        .await
+        .expect("directory")
+        .into_iter()
+        .find(|peer| peer.peer == bob_id)
+        .expect("a peer with a registered address is in the directory");
+    assert!(known.reachable, "his address is known");
+    assert!(
+        !known.connected,
+        "knowing an address is not a live path: nothing has been sent yet"
+    );
+
+    // Now actually talk to him, over the gossip overlay rather than a
+    // hand-rolled ALPN: a dial to a protocol the peer does not serve is
+    // refused, which produces no path and would prove nothing.
+    bob.add_peer(alice.endpoint_addr().await.unwrap())
+        .await
+        .unwrap();
+    bob.set_topics(alice_id, &[topic]).await.unwrap();
+    let alice_handle = alice.subscribe(topic).await.expect("alice subscribe");
+    let bob_handle = bob.subscribe(topic).await.expect("bob subscribe");
+    let mut bob_rx = bob_handle.subscribe();
+    let payload = b"traffic that forms a real path".to_vec();
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            alice_handle.publish(payload.clone()).await.expect("publish");
+            tokio::select! {
+                msg = bob_rx.next() => {
+                    if let Some(Ok(bytes)) = msg && bytes == payload { break }
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_millis(250)) => {}
+            }
+        }
+    })
+    .await
+    .expect("the overlay carried a message, so a path exists");
+
+    let connected = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            let directory = alice.peers_for_topic(topic).await.expect("directory");
+            if let Some(peer) = directory.iter().find(|peer| peer.peer == bob_id)
+                && peer.connected
+            {
+                break true;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    })
+    .await
+    .unwrap_or(false);
+
+    assert!(
+        connected,
+        "a peer the endpoint holds an active path to must report connected"
+    );
+}
