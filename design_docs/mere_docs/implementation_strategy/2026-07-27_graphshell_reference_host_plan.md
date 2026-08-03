@@ -972,12 +972,32 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   `734bfbcb9d7bee7a77509f66c1334678d283ca99e4a24f3e7c4d266fca73851e`, the hash
   each fetch completed against.
 
-  **The relay leg is NOT proven.** Q-PC selected its home relay at 07:30:12.895,
-  0.9s AFTER its fetch finished at 07:30:12.016, so the bytes crossed a direct
-  LAN path from the address in O-PC's ticket. Q-PC's mDNS is dead (errno 65,
-  `No route to host`, every interface, unsigned binary), so with no ticket it
-  would have had only the relay. Proving that leg means re-running it with no
-  `--sync-peer`, which is a clean experiment and not yet done.
+  **The relay leg is NOT proven, and the experiment that would have proven it
+  disproved the mechanism (2026-08-03).** Q-PC's first fetch finished 0.9s
+  before it had selected a home relay, so those bytes crossed a direct LAN
+  path from the address in O-PC's ticket. The clean re-run, a fresh blob
+  (`60a7b29c…`) and no `--sync-peer`, gave the host only what a restarted
+  paired device actually has: O-PC's node id from settings, plus a relay URL.
+  It selected its relay within 0.4s and then heard nothing for the full
+  60-second window. No advertisement arrived and no session formed.
+
+  The conclusion is structural, not a flake: a bare node id is not dialable.
+  Registering a relay makes THIS endpoint reachable; it resolves nothing about
+  the peer, because no mechanism maps a node id to an address. The address
+  book is per-process, so every route learned in one run dies with it. Of the
+  resolver ladder (mDNS, cached address, relay, holepunch), exactly one rung
+  exists today: pairing works where multicast works, or where a fresh ticket
+  is hand-carried. The Mac, whose mDNS is dead (errno 65, unsigned binary),
+  has NO durable path to its siblings between restarts.
+
+  The rung to build first is the cached address: persist the peer's last
+  known relay-tagged `EndpointAddr` on the paired-device record, refreshed on
+  every successful connection, so a device that has connected once can redial
+  through the relay after both ends restart. That is the Syncthing shape
+  (device id + cached addresses + global discovery + relays), minus the
+  global-discovery server; iroh's n0 DNS discovery is the opt-in equivalent
+  when true off-LAN reachability is wanted, with the third-party-visibility
+  trade that implies.
 
   What the run actually cost was not this lane. Two Windows Firewall **Block**
   rules on the Private profile (`{A223E208-…}`, `{30891486-…}`) had been
