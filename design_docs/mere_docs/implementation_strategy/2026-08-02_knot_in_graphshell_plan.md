@@ -162,12 +162,20 @@ learns which it got, which is the seam doing its job.
 `from_env` hosts by default and spawns only when `TURNSTONE_KNOT_ENDPOINT`
 explicitly names a program.
 
-**Honestly partial.** Only `directory-write` without effects hosts today. The
-vault and effects modes still spawn, because their endpoints take injected
-identity, grants, and evaluators that this branch does not yet assemble.
-That is unfinished wiring rather than a decision: `KnotEndpoint` already has
-`open_with_identity`, `open_writable`, and the effect-policy constructors
-waiting. Finishing it is mechanical and should not be mistaken for blocked.
+**Both directory modes host**, with and without effects. The effects grant
+needed no change in Knot at all: `KnotEffectPolicy`, `KnotEffectAuthority`,
+and `KnotWriteGrant` are already exported, so the host builds the policy
+directly. Hosting also drops a round trip the spawned path pays — effect
+settings travel as CLI strings the endpoint binary reparses, while a hosted
+endpoint receives them typed on both sides of a call that no longer crosses a
+process.
+
+**Still spawning: the persona-vault modes.** Their endpoint unlocks through a
+device identity that `KnotAuthoringEngine::from_env` never receives. Hosting
+them needs an identity threaded into that constructor, which is a signature
+change rather than more wiring at the branch — Turnstone has the identity, it
+simply is not passed here. Unfinished, not blocked, and the shape of the fix
+is known.
 
 Note the root is still `TURNSTONE_KNOT_ROOT`, and correctly so — it names
 *which directory is your vault*, which is real configuration rather than
