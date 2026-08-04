@@ -220,6 +220,61 @@ The corollary for our side: fifteen nematic engines is not fifteen crates.
 Most of those fifteen are *lanes over shared grammars*, and the lane is ours
 while the grammar is the spec's.
 
+## Serving: already in scope, and no `smolnet` sibling (2026-08-04)
+
+Mark asked whether serving capsules belongs in `smolweb` or in a sibling
+`smolnet`. The workspace has already answered the first half: **four of its
+seven crates ship a server and a CLI** (misfin, spartan-protocol,
+nex-protocol, guppy-protocol), and the README's stated shape is "an embeddable
+library plus, where it makes sense, a CLI". Serving is the wire layer spoken
+in the other direction, so it was never out of scope.
+
+**The three client-only crates are the anomaly, not the rule.**
+`gopher-protocol`, `finger-protocol` and `gemini-protocol` are new, and they
+are client-only for an accidental reason: they were extracted from errand,
+which is a *client* integration, so only the client half existed to move.
+That is a gap to close, not a boundary to defend.
+
+**Do not create a `smolnet` sibling.** "Smolnet" is the community's name for
+the *whole space* — the [Gemini FAQ](https://geminiprotocol.net/docs/faq-section-6.gmi)
+and ArchiveTeam both use it as a synonym for the small internet, not as a
+layer within it. Two sibling repos called `smolweb` and `smolnet` would be
+indistinguishable to anyone outside this workspace, and a name nobody can
+resolve from the outside is worse than no split.
+
+### Terminology, since it varies by protocol
+
+| Protocol | What a served collection is called |
+|---|---|
+| Gemini | **capsule** |
+| Gopher | **gopherhole** (in gopherspace) |
+| Spartan, nex, text, scroll | no established term; too young and too small |
+| Misfin | **mailbox** |
+| Finger | the served content is a **`.plan`** |
+
+The Gemini FAQ puts it plainly: a capsule is "the same thing as a 'website' on
+the web, or a 'gopherhole' in Gopherspace". There is no umbrella word for
+"served collection" across the family, so anything we build to serve several
+at once has to bring its own noun rather than borrow one.
+
+### Where the second thing does live
+
+There *is* a real second concern, and it is not the protocol servers: the
+**multi-protocol self-serve application** that takes content and serves it
+over several protocols at once, with certificates, configuration and logging.
+That is **composition**, and the home rule already says composition is ours.
+It is the server-side twin of errand: errand goes out and fetches by scheme,
+its twin stays home and serves by scheme.
+
+**Not to be minted speculatively.** Per the module/crate/publish rule, a crate
+wants an enforced wall, a portability subset, a real consumer, or an external
+audience. The real consumer here is the moot-projection work
+([moots as publishers](../../mere_docs/technical_architecture/2026-08-04_moots_as_smolweb_publishers.md)),
+so the ordering is: protocol servers first, in the crates that lack them,
+because that is where the community value is and it is spec work; then the
+composition layer when something actually needs to serve two protocols at
+once.
+
 ## Expansion: what else is out there (surveyed 2026-08-03)
 
 From [dbohdan's small-internet roundup](http://dbohdan.sdf.org/smolnet/) and
