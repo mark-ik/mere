@@ -537,6 +537,14 @@ impl PersonalSyncHost {
         Ok(())
     }
 
+    /// Whether this host can advertise bytes to its paired devices.
+    ///
+    /// Staging without it holds bytes no sibling can learn to ask for, so
+    /// callers that are about to move bytes check this first.
+    pub async fn serves_blobs(&self) -> bool {
+        self.replica.lock().await.serves_blob_availability()
+    }
+
     /// Transfers waiting for this device, oldest first, plus the ones it sent.
     ///
     /// Reads the projection, so an offer addressed elsewhere is absent here

@@ -1092,6 +1092,44 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   persistence grant, and staging promotion are new surface and are receipted
   fresh.
 
+  **Device-to-device half met 2026-08-04.** `native::transfer_staging` composes
+  the pieces S1 and S2 left sitting next to each other. `offer_transfer` stages
+  a prepared manifest's blobs and then the manifest itself into the serving
+  store, and only then authors the offer, so a destination acting the instant
+  the offer lands finds bytes rather than a promise. `receive_transfer` fetches
+  the manifest, decodes it, fetches every blob it names, and writes them into
+  the destination's product store.
+
+  Receipt: `a_transfer_applies_after_its_source_is_gone` closes the source sync
+  host and drops its blob store **before** calling `apply_transfer`, and passes
+  the destination's store as both the source and destination argument. Two ids
+  preserved, both tag sets, one `Cites` relation. That is stage-and-forward
+  demonstrated rather than asserted: if any byte were still being read across
+  the wire the test could not pass.
+
+  Three BLAKE3 addressings meet in this path (`eidetic::Hash` for manifest
+  descriptors, `muniment::Hash` for the product store, `transport::BlobHash`
+  for the iroh store). They agree, and the code checks rather than assumes it,
+  because a silent disagreement would advertise blobs under hashes no
+  destination can ask for.
+
+  **A coupling surfaced and was made explicit.** Staging authors one
+  `ObserveBlobAvailability` per blob, so a device with the offer facet enabled
+  but the blob-availability lane off failed partway through with bytes already
+  written and nothing advertised. `offer_transfer` now refuses up front
+  (`StagingError::BlobLaneDisabled`), receipted by
+  `offering_without_the_blob_lane_is_refused_before_any_byte_is_staged`. A
+  transfer needs both lanes; the settings surface should say so rather than let
+  the combination look valid.
+
+  Still open in S3, all browser-facing: chunked broker delivery under
+  `MAX_NATIVE_MESSAGE_BYTES` with acknowledgements and a bounded in-flight
+  window; the recorded `navigator.storage.persist()` grant; promotion of
+  destination staging into a recovery pin; and the blob-reference-set intent
+  pair that pin release depends on. Also unbatched: staging authors one
+  operation per blob, which is fine for a handful and worth batching before a
+  transfer carries many.
+
 **Not in scope:** cross-persona copy authorization UX; the carrier seam
 plan's C3 (independent, about projection sessions); Turnstone (holds no
 MereHost; revisit after the carrier plan's C2 rules on where the session

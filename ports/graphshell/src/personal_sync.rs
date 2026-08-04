@@ -658,6 +658,16 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
         &self.roster
     }
 
+    /// Whether this device authors and projects blob-availability records.
+    ///
+    /// Anything that stages bytes for a sibling depends on this: without it,
+    /// the bytes are held but never advertised, so no peer can learn to ask
+    /// for them. Callers check it before staging rather than discovering it as
+    /// a refused event afterwards.
+    pub fn serves_blob_availability(&self) -> bool {
+        self.selection.blob_availability
+    }
+
     pub async fn author(
         &mut self,
         events: Vec<PersonalGraphEvent>,
