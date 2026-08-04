@@ -201,6 +201,48 @@ The right move where the two worlds meet is a bridge at the *message* level
 (misfin ↔ LXMF), deliberately, with provenance preserved, and not a silent
 transcoding.
 
+## Revision: a better catalogue, and two protocols we missed (2026-08-04)
+
+Mark surfaced
+[zzo38computer.org's small-web catalogue](https://dbohdan.com/archive/scorpion/zzo38computer.org/smallweb.txt/),
+which carries real wire detail where the earlier sources carried names. It
+supersedes the seventeen-item list above, and it adds two protocols that were
+not on it at all:
+
+| Protocol | Port | Encryption | Notes |
+|---|---|---|---|
+| **Kepler** | 2009 / 10009 | optional | Gemini plus **caching**: the request carries `last_cached` and a language, the response carries content length, last-updated and expires. |
+| **Demarkus** | 6309 (**UDP**) | mandatory | Markdown-only, **capability tokens** for auth, and **version control**. |
+
+And it corrects several entries above:
+
+- **Scorpion** (port 1517, optional TLS) is a **binary** format with **range
+  requests and uploads**, not merely a richer document format.
+- **Scroll** (port 5699, TLS mandatory) does **language negotiation** and
+  carries **Universal Decimal Classification**.
+- **Text Protocol** (ports 1961/1965/1968) makes TLS *or* **Noise** optional
+  and supports **DNS Service Discovery**.
+- **SuperTXT** runs over **SSH** (port 22) and executes **WebAssembly**
+  ("WA-Nine"), which puts it in a category of its own rather than with the
+  plain-stream group.
+- **Molerat** the catalogue describes, in its own words, as "badly designed in
+  many ways" — worth knowing before investing in it.
+- **FSP** is port 21 **UDP**, FTP-like, transferring unformatted files.
+
+**Effect on the categories.** Kepler joins category A (clean stream port).
+Demarkus joins category C with guppy and fsp: it is UDP, so a Reticulum link
+would duplicate reliability it already arranges. SuperTXT is neither, since
+SSH is a stream but brings its own authentication, so carrying it over a link
+would mean two identity systems, which is the misfin problem in a different
+costume.
+
+**Two of these are interesting to us beyond compatibility.** Kepler's caching
+metadata is the only cache model in the whole family, and a browser that
+stores fetched documents as graph nodes has an obvious use for expiry and
+last-updated. Demarkus's **capability tokens** rhyme directly with the
+participant gate and tessera, which is worth a look even though the protocol
+itself is UDP and awkward for us.
+
 ## Correction: terse is a design sketch, not a protocol (2026-08-04)
 
 Listing `terse` as "unsurveyed, probably category A" was a guess, and it was

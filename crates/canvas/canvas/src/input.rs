@@ -131,12 +131,19 @@ impl Canvas {
     /// take the front-most (largest projected ground depth). (Isometric camera — picking.)
     pub(crate) fn pick_at(&self, cursor: (f32, f32)) -> Option<NodeKey> {
         if !(self.is_isometric() || self.height_by_degree()) {
-            return self.view.hit_test(self.screen_to_world(cursor));
+            return self
+                .view
+                .hit_test(self.screen_to_world(cursor))
+                .filter(|&key| self.node_visible_in_canvas(key));
         }
         let z = self.camera.zoom;
         let (s, c) = self.camera.yaw.sin_cos();
         let mut best: Option<(NodeKey, f32)> = None;
-        for (key, pos) in self.view.positions() {
+        for (key, pos) in self
+            .view
+            .positions()
+            .filter(|(key, _)| self.node_visible_in_canvas(*key))
+        {
             let (ax, ay) = self.camera.to_screen(PortablePoint::new(pos.x, pos.y));
             let lift = self.node_height(key) * z;
             let half = self.node_size(key) * 0.5 * z;
@@ -165,6 +172,8 @@ impl Canvas {
                     // Alt+left begins an orbit drag (yaw + tilt the camera); it owns the gesture,
                     // so no node pick / field grab / marquee starts. (Isometric camera — orbit.)
                     self.orbit_drag = Some(self.cursor);
+                } else if let Some(fold) = self.fold_summary_at_screen(self.cursor) {
+                    self.fold_press = Some((fold, self.cursor));
                 } else if let Some(node) = self.pick_at(self.cursor) {
                     self.drag = Some(Drag {
                         node,
@@ -200,6 +209,12 @@ impl Canvas {
                 if self.orbit_drag.take().is_some() {
                     return true;
                 }
+                if let Some((fold, press)) = self.fold_press.take() {
+                    if (self.cursor.0 - press.0).hypot(self.cursor.1 - press.1) <= CLICK_SLOP {
+                        return self.expand_fold(fold);
+                    }
+                    return true;
+                }
                 // End a field move / resize drag: re-aim already happened live; just
                 // settle the layout into the new well and persist. (Field regions.)
                 if self.end_field_drag() {
@@ -233,10 +248,18 @@ impl Canvas {
                             self.screen_to_world(self.cursor),
                         ]);
                         let sel = self.view.rect_select(region);
-                        self.selected = sel.nodes.into_iter().collect();
+                        self.selected = sel
+                            .nodes
+                            .into_iter()
+                            .filter(|&key| self.node_visible_in_canvas(key))
+                            .collect();
                         self.selected_edges =
                             edge_cells_in_rect(&self.graph, &self.view, &self.hidden_edges, region)
                                 .into_iter()
+                                .filter(|cell| {
+                                    self.node_visible_in_canvas(cell.from)
+                                        && self.node_visible_in_canvas(cell.to)
+                                })
                                 .collect();
                     } else if !self.shift {
                         // A bare empty click clears the selection (and may pick an
@@ -252,7 +275,11 @@ impl Canvas {
                             &self.hidden_edges,
                             world,
                             tol,
-                        ) {
+                        )
+                        .filter(|cell| {
+                            self.node_visible_in_canvas(cell.from)
+                                && self.node_visible_in_canvas(cell.to)
+                        }) {
                             self.selected_edges.insert(cell);
                         }
                     }

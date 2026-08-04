@@ -59,9 +59,11 @@ pub(crate) fn relation_cell_overlay(
     graph: &Graph,
     view: &LayoutView,
     hidden_edges: &HashSet<EdgeCell>,
+    node_visible: impl Fn(NodeKey) -> bool,
 ) -> Vec<PaintCmd> {
     visible_edge_cell_segments(graph, view, hidden_edges)
         .into_iter()
+        .filter(|segment| node_visible(segment.cell.from) && node_visible(segment.cell.to))
         .map(|segment| stroke(segment.from, segment.to, relation_color(segment.kind), 1.8))
         .collect()
 }
@@ -73,10 +75,15 @@ pub(crate) fn selected_edge_overlay(
     view: &LayoutView,
     hidden_edges: &HashSet<EdgeCell>,
     selected_edges: &HashSet<EdgeCell>,
+    node_visible: impl Fn(NodeKey) -> bool,
 ) -> Vec<PaintCmd> {
     visible_edge_cell_segments(graph, view, hidden_edges)
         .into_iter()
-        .filter(|segment| selected_edges.contains(&segment.cell))
+        .filter(|segment| {
+            selected_edges.contains(&segment.cell)
+                && node_visible(segment.cell.from)
+                && node_visible(segment.cell.to)
+        })
         .map(|segment| {
             stroke(
                 segment.from,
@@ -189,8 +196,12 @@ fn stroke(from: Point2D<f32>, to: Point2D<f32>, color: ColorF, width: f32) -> Pa
     })
 }
 
-fn relation_color(kind: RelationKind) -> ColorF {
-    match kind.family() {
+pub(crate) fn relation_color(kind: RelationKind) -> ColorF {
+    relation_family_color(kind.family())
+}
+
+pub(crate) fn relation_family_color(family: EdgeFamily) -> ColorF {
+    match family {
         EdgeFamily::Semantic => ColorF::new(0.93, 0.70, 0.34, 0.76),
         EdgeFamily::Traversal => ColorF::new(0.55, 0.72, 0.92, 0.62),
         EdgeFamily::Containment => ColorF::new(0.47, 0.80, 0.58, 0.70),

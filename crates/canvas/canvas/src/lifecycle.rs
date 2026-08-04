@@ -185,6 +185,8 @@ impl Canvas {
             arrangement_pull: seiche::DEFAULT_ANCHOR_STIFFNESS,
             restored_score_hold: None,
             scope: None,
+            fold: None,
+            fold_press: None,
             render_gnodes_as_dom: false,
         }
     }

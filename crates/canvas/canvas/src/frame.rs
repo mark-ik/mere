@@ -17,7 +17,7 @@ use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
     ImageItem, ImageKey, ImageRendering, ImageResource, LayoutPoint, LayoutRect, LayoutSize,
     LayoutTransform, PaintCmd, PaintList, PathCommand, PathData, PathItem, RadialGradientItem,
-    RadialGradientPayload, RectItem, StrokeCap, StrokeJoin, StrokeStyle, TransformKind,
+    RadialGradientPayload, RectItem, StrokeCap, StrokeItem, StrokeJoin, StrokeStyle, TransformKind,
     TransformSpec,
 };
 use paint_list_render::{CompositeLayer, composite_paint_layers};
@@ -27,8 +27,67 @@ use super::build::{
     NODE_SHEET, background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay,
     marquee_rect_cmds, set_class, set_style,
 };
-use super::edge_cells::{edge_cell_for_relation, relation_cell_overlay, selected_edge_overlay};
+use super::edge_cells::{
+    edge_cell_for_relation, relation_cell_overlay, relation_family_color, selected_edge_overlay,
+};
+use super::fold_projection::{FOLD_SUMMARY_RADIUS, FoldProjection};
 use super::{Canvas, NodeShape, NodeState, PAN_DECAY};
+
+/// Paint a fold's boundary bundles and its synthetic summary body. These are
+/// world-space commands only: neither the summary nor its boundary cells enter
+/// the source graph, layout view, or physics simulation.
+fn fold_summary_overlay(
+    fold: &FoldProjection,
+    positions: &HashMap<NodeKey, PortablePoint>,
+    summary_color: ColorF,
+) -> Vec<PaintCmd> {
+    let Some(center) = fold.summary_center(|key| positions.get(&key).copied()) else {
+        return Vec::new();
+    };
+    let mut commands = Vec::with_capacity(fold.boundary_bundles.len() + 1);
+    for bundle in &fold.boundary_bundles {
+        let Some(outside) = positions.get(&bundle.outside).copied() else {
+            continue;
+        };
+        let dx = outside.x - center.x;
+        let dy = outside.y - center.y;
+        let length = (dx * dx + dy * dy).sqrt();
+        if length <= f32::EPSILON {
+            continue;
+        }
+        let ux = dx / length;
+        let uy = dy / length;
+        let from = LayoutPoint::new(
+            center.x + ux * FOLD_SUMMARY_RADIUS,
+            center.y + uy * FOLD_SUMMARY_RADIUS,
+        );
+        let to = LayoutPoint::new(outside.x - ux * 18.0, outside.y - uy * 18.0);
+        let bounds = LayoutRect::new(
+            LayoutPoint::new(from.x.min(to.x), from.y.min(to.y)),
+            LayoutPoint::new(from.x.max(to.x), from.y.max(to.y)),
+        );
+        commands.push(PaintCmd::DrawStroke(StrokeItem {
+            placement: CommonPlacement::new(bounds),
+            path: PathData {
+                commands: vec![PathCommand::MoveTo(from), PathCommand::LineTo(to)],
+            },
+            color: relation_family_color(bundle.family),
+            width: 2.0 + (bundle.count.saturating_sub(1).min(4) as f32),
+            cap: StrokeCap::Round,
+            join: StrokeJoin::Round,
+            dash: None,
+        }));
+    }
+    let radius = FOLD_SUMMARY_RADIUS;
+    commands.push(PaintCmd::DrawRect(RectItem {
+        placement: CommonPlacement::new(LayoutRect::new(
+            LayoutPoint::new(center.x - radius, center.y - radius),
+            LayoutPoint::new(center.x + radius, center.y + radius),
+        )),
+        color: summary_color,
+    }));
+    commands
+}
 
 impl Canvas {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -120,18 +179,32 @@ impl Canvas {
         // gnode loop). `None` shows the whole graph. (Curated canvas.)
         let scoped: Option<HashSet<NodeKey>> =
             self.scope.as_ref().map(|s| s.iter().copied().collect());
-        if let Some(sc) = &scoped {
-            on_screen.retain(|k| sc.contains(k));
-        }
+        let fold = self.active_fold_projection();
+        let folded_members = fold
+            .as_ref()
+            .map(|projection| &projection.members)
+            .cloned()
+            .unwrap_or_default();
+        let node_visible = |key: NodeKey| {
+            scoped.as_ref().is_none_or(|scope| scope.contains(&key))
+                && !folded_members.contains(&key)
+        };
+        on_screen.retain(|key| node_visible(*key));
+        let visible_keys: Vec<NodeKey> = self
+            .graph
+            .nodes()
+            .map(|(key, _)| key)
+            .filter(|key| node_visible(*key))
+            .collect();
 
         // Route the underlay through the canvas's forme arrangement — the full
         // read-through Identity arrangement, or a curated arrangement of just the
         // scope. Either way the canvas renders as a Cartography projection of an
         // arrangement (the spine's "two projections of one arrangement"); a scoped
         // arrangement is exactly the shape a stored/compare arrangement would take.
-        let arrangement = match &self.scope {
-            Some(keys) => crate::underlay::arrangement_of_keys(&self.graph, keys),
-            None => identity_arrangement(&self.graph),
+        let arrangement = match (&self.scope, &fold) {
+            (None, None) => identity_arrangement(&self.graph),
+            _ => crate::underlay::arrangement_of_keys(&self.graph, &visible_keys),
         };
         let mut underlay = canvas_paint_list_demoted_from_arrangement(
             &self.graph,
@@ -167,7 +240,15 @@ impl Canvas {
             &self.graph,
             &self.view,
             &self.hidden_edges,
+            &node_visible,
         ));
+        if let Some(fold) = &fold {
+            underlay.splice_world_overlays(fold_summary_overlay(
+                fold,
+                &positions,
+                self.style.node_color,
+            ));
+        }
         // Highlight selected edges by splicing thicker strokes inside the
         // underlay's camera transform (world space — no transform replication).
         if !self.selected_edges.is_empty() {
@@ -176,6 +257,7 @@ impl Canvas {
                 &self.view,
                 &self.hidden_edges,
                 &self.selected_edges,
+                &node_visible,
             ));
         }
         // Community rings: a halo per node in its community's colour, spliced into the same
@@ -233,7 +315,7 @@ impl Canvas {
         for (key, gnode) in gnodes {
             // Scope lens: hide a non-scoped node's DOM child (the underlay already
             // excludes it), so a scoped canvas shows only its subset. (Curated canvas.)
-            if scoped.as_ref().is_some_and(|sc| !sc.contains(&key)) {
+            if !node_visible(key) {
                 set_style(&mut self.node_dom, gnode, "display: none;");
                 continue;
             }

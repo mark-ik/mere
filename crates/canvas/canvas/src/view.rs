@@ -185,12 +185,15 @@ impl Canvas {
         })
     }
 
-    /// Whether `key` is within the active scope lens (always true when unscoped). The
-    /// host's gnode builder filters on this so a scoped canvas (a branch window)
-    /// shows only its scoped members, matching the `frame()` scene's own scope filter.
-    /// (Curated canvas — host gnode path.)
+    /// Whether `key` is individually visible in the current Canvas view. The
+    /// scope lens is applied first; an active fold then substitutes its source
+    /// members with a synthetic summary body. The host's gnode builder uses this
+    /// too, so its DOM path matches the scene paint path. (Graph curation C3.)
     pub fn node_in_scope(&self, key: NodeKey) -> bool {
         self.scope.as_ref().is_none_or(|s| s.contains(&key))
+            && self
+                .active_fold_projection()
+                .is_none_or(|projection| !projection.members.contains(&key))
     }
 
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.

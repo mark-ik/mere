@@ -141,8 +141,8 @@ pub use geometry::CartographyGeometry;
 pub mod palette;
 
 mod edge_cells;
-pub mod fold_projection;
 mod fields;
+pub mod fold_projection;
 mod frame;
 mod input;
 mod resolved_image_cache;
@@ -577,6 +577,14 @@ pub struct Canvas {
     /// curated subset), projecting through a curated forme arrangement instead of the
     /// full Identity one. `None` shows the whole graph. (Curated canvas.)
     scope: Option<Vec<NodeKey>>,
+    /// One view-local fold currently rendered as a synthetic summary object. Its
+    /// members stay in the source graph and the physics layout; only this Canvas
+    /// projection replaces them visually. (Graph view curation C3.)
+    fold: Option<forme::FoldRecord>,
+    /// A pending summary-object click. Keeping this separate from node dragging
+    /// lets a click expand the fold without ever making the synthetic summary a
+    /// source-graph node.
+    fold_press: Option<(forme::FoldId, (f32, f32))>,
     /// When set, the scene omits the on-screen gnode + favicon layers: the host renders
     /// those gnodes as DOM elements in the shell document instead (the focused canvas only;
     /// secondary panes keep their in-scene gnodes). Edges + demoted dots stay as the underlay.

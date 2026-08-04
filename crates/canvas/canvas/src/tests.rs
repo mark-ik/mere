@@ -39,6 +39,71 @@ fn first_edge_cell_between(
 }
 
 #[test]
+fn fold_selection_projects_a_summary_and_click_expands_without_mutating_graph() {
+    let mut canvas = Canvas::new();
+    let a = canvas.open_member_as_new_node(None, "https://fold-a.test");
+    let b = canvas.open_member_as_new_node(None, "https://fold-b.test");
+    let outside = canvas.open_member_as_new_node(None, "https://fold-outside.test");
+    let ak = canvas.graph().get_node_by_id(a).unwrap().0;
+    let bk = canvas.graph().get_node_by_id(b).unwrap().0;
+    let outside_key = canvas.graph().get_node_by_id(outside).unwrap().0;
+    assert!(canvas.assert_relation_between_members(a, b, SemanticSubKind::UserGrouped));
+    assert!(canvas.assert_relation_between_members(a, outside, SemanticSubKind::Cites));
+    assert!(canvas.assert_relation_between_members(b, outside, SemanticSubKind::Quotes));
+    canvas
+        .view
+        .set_position(ak, euclid::default::Point2D::new(0.0, 0.0));
+    canvas
+        .view
+        .set_position(bk, euclid::default::Point2D::new(100.0, 0.0));
+    canvas
+        .view
+        .set_position(outside_key, euclid::default::Point2D::new(200.0, 0.0));
+    canvas.select_only(ak);
+    assert!(canvas.toggle_select_member(b));
+    let source_nodes = canvas.graph().nodes().count();
+    let source_relations = canvas.graph().relations().count();
+
+    let fold_id = canvas
+        .fold_selected("canvas:test")
+        .expect("two selected nodes make a fold");
+    let projection = canvas
+        .active_fold_projection()
+        .expect("the current graph projects the fold");
+    let record = canvas
+        .fold_record()
+        .cloned()
+        .expect("the current fold remains a durable view record");
+    assert_eq!(projection.members.len(), 2);
+    assert_eq!(projection.internal_relation_count, 1);
+    assert_eq!(projection.boundary_bundles.len(), 1);
+    assert_eq!(projection.boundary_bundles[0].count, 2);
+    assert!(!canvas.node_in_scope(ak));
+    assert!(!canvas.node_in_scope(bk));
+    assert!(canvas.node_in_scope(outside_key));
+    assert_eq!(canvas.graph().nodes().count(), source_nodes);
+    assert_eq!(canvas.graph().relations().count(), source_relations);
+
+    let center = canvas
+        .camera
+        .to_screen(euclid::default::Point2D::new(50.0, 0.0));
+    canvas.pointer_down(PointerButton::Left, center.0, center.1);
+    assert!(canvas.pointer_up(PointerButton::Left, center.0, center.1));
+    assert!(canvas.active_fold_projection().is_none());
+    assert_eq!(canvas.selected, HashSet::from([ak, bk]));
+    assert!(canvas.restore_fold(None));
+    assert!(canvas.restore_fold(Some(record)));
+    assert!(canvas.active_fold_projection().is_some());
+    assert!(canvas.expand_active_fold());
+    assert_eq!(canvas.graph().nodes().count(), source_nodes);
+    assert_eq!(canvas.graph().relations().count(), source_relations);
+    assert!(
+        !canvas.expand_fold(fold_id),
+        "the summary is already expanded"
+    );
+}
+
+#[test]
 fn edge_cell_hit_test_picks_fanned_parallel_relation_cells() {
     let mut canvas = Canvas::new();
     let a = canvas.open_member_as_new_node(None, "https://fan-a.test");
