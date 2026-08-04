@@ -275,6 +275,57 @@ because that is where the community value is and it is spec work; then the
 composition layer when something actually needs to serve two protocols at
 once.
 
+### And that composition layer is errand (Mark, 2026-08-04)
+
+**Settled: errand takes both halves, exactly as each protocol crate does.** If
+the spec crates hold client and server per protocol, the layer above holds
+client and server per *scheme*, and inventing a second crate to sit beside
+errand would split one routing table across two homes.
+
+**First, three directions, because two of them are already built and calling
+them all "write" would muddle this.**
+
+| | What it is | errand today |
+|---|---|---|
+| **Fetch** | get a document from someone's server | `fetch`, scheme-routed |
+| **Send** | push a document to someone *else's* server | `titan_upload`, `misfin_send` |
+| **Serve** | *be* the server, and answer others' requests | absent |
+
+So errand is already bidirectional in the send sense. What is missing is the
+third thing, and it is genuinely different: send reaches out, serve stays home
+and answers the door.
+
+**Why it belongs here rather than beside here.** The serving half is the exact
+mirror of what errand already does, and the symmetry is not decorative:
+
+> errand takes N protocols and **normalizes** them into one `Response`.
+> A server takes one source and **denormalizes** it into N protocol shapes.
+
+Same table, same vocabulary, opposite direction. Adding a protocol should be
+one change in one crate that teaches errand to both speak and answer it, not
+two changes in two places that can drift.
+
+**Two conditions, and the first is not optional.**
+
+1. **Feature-gate it.** A browser must never carry listeners, server TLS
+   config, or certificate handling it will never run. errand is deliberately
+   light and most of its consumers only fetch. The crate is the layer; the
+   *feature* names the direction, which is exactly how `gemini-protocol`
+   already works (`client`, `tls`) and keeps one convention across both
+   levels.
+2. **The content source is a trait, not a path.** The interesting half of
+   serving is projecting one source into each protocol's native format, and
+   there are at least two sources already in view: a directory of files, and
+   a moot projection. Assuming the filesystem would mean bolting the moot case
+   on afterwards, which is the harder order.
+
+**A naming tension, recorded rather than acted on.** An errand is something you
+go out and run; minding the shop is a different activity, and the crate is
+published under that name already. The feature-names-the-direction convention
+absorbs most of it (`errand` with `serve` reads fine), so this is not blocking.
+Worth settling before the serving half exists rather than after, since renaming
+a published crate only gets more expensive.
+
 ## Expansion: what else is out there (surveyed 2026-08-03)
 
 From [dbohdan's small-internet roundup](http://dbohdan.sdf.org/smolnet/) and
