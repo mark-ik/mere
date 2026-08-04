@@ -30,6 +30,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use forme::FoldRecord;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -114,6 +115,10 @@ impl Default for CameraSnapshot {
 pub struct ViewIntent {
     #[serde(default)]
     pub hidden_relations: BTreeSet<HiddenRelationRecord>,
+    /// Local collapsed summaries. Their members remain source graph members;
+    /// this record only tells a projection to replace them with a summary node.
+    #[serde(default)]
+    pub folds: Vec<FoldRecord>,
     /// Substrate camera snapshot (pan + zoom). `None` when the pane
     /// has no saved camera (fresh pane → host falls back to
     /// `CameraSnapshot::IDENTITY`). Save path uses `None` for
@@ -150,6 +155,7 @@ impl ViewIntent {
     /// path returns `Ok(None)` and the host falls back to default.
     pub fn is_empty(&self) -> bool {
         self.hidden_relations.is_empty()
+            && self.folds.is_empty()
             && self.camera.is_none()
             && self.focus.is_none()
             && self.strategy.is_none()
@@ -286,6 +292,25 @@ mod tests {
         save_view_intent(&dir, &frame, 1, &intent).unwrap();
         let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
         assert_eq!(restored.focus.as_deref(), Some("https://example.com/page"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn folds_round_trip_as_durable_view_state() {
+        let dir = temp_session_dir("folds");
+        let frame = fixture_frame();
+        let mut intent = ViewIntent::new();
+        intent.folds.push(
+            forme::FoldRecord::from_selection(
+                "session:alpha/graph:current",
+                [Uuid::from_u128(7), Uuid::from_u128(3)],
+            )
+            .expect("two members form a fold"),
+        );
+        assert!(!intent.is_empty(), "a fold alone is worth persisting");
+        save_view_intent(&dir, &frame, 1, &intent).unwrap();
+        let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
+        assert_eq!(restored.folds, intent.folds);
         fs::remove_dir_all(&dir).ok();
     }
 

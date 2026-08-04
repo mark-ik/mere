@@ -35,7 +35,7 @@ in-memory duplex with no TCP and no TLS.
 | **A. Clean stream port** | gemini, gopher, Gopher+, finger, spartan, nex, titan, text, SuperText, mercury, scroll, scorpion, molerat | 13 | Works unchanged. A link is a byte stream. |
 | **B. Encryption made redundant** | gophers | 1 | Degenerates: `gophers` is gopher-over-TLS, and a link is already encrypted, so the honest answer is *gopher over Reticulum*. |
 | **C. Datagram-shaped** | guppy, fsp | 2 | Possible but architecturally silly: both are UDP with their own chunking, acks, and retransmission, which Reticulum already provides. Carrying them means running two reliability layers. |
-| **D. Unsurveyed** | terse | 1 | Read the spec. Probably A. |
+| **D. Not a protocol** | terse | 1 | Corrected below: there is no wire protocol to be compatible with. |
 
 Separately, **misfin** (mail, which we also implement) is the one genuinely
 interesting case, and it belongs to none of these. See below.
@@ -114,6 +114,71 @@ The right move where the two worlds meet is a bridge at the *message* level
 (misfin ↔ LXMF), deliberately, with provenance preserved, and not a silent
 transcoding.
 
+## Correction: terse is a design sketch, not a protocol (2026-08-04)
+
+Listing `terse` as "unsurveyed, probably category A" was a guess, and it was
+wrong. Reading [TerseNet's README](https://github.com/runvnc/tersenet)
+directly: it specifies **no transport, no port, no request or response
+format**. The author says plainly that after two days the prototype is "a
+janky RST viewer that only knows about headings and paragraphs. Not useable
+for anything," and that everything beyond that "is just an idea -- not
+actually coded yet."
+
+So terse is not a protocol we could implement faithfully even if we wanted to.
+It is a document-format sketch (a restricted reStructuredText subset), a URI
+scheme, and a set of design intentions. It should come out of any protocol
+count and be read as design kin instead.
+
+## Design kin: what TerseNet independently arrived at
+
+Worth recording because it is a convergence signal rather than a borrowing
+opportunity. TerseNet's sketch reaches, from a standing start, most of the
+architecture this workspace has been building:
+
+| TerseNet | Ours |
+|---|---|
+| "Unlike Chrome or Firefox, which incorporate a full bloated operating system", a relatively simple system | The W3C knockout strategy and genet's decomposition |
+| Multiple implementations by individuals or small teams, so no corporation controls the platform | Merely's posture, and why the spec crates are published separately |
+| Three browser tiers: Info, Media Application (wasm), Extended Application (wasm plus device-driver-like extensions) | The engine picker's rung ladder ([engine adoption plan](../../../../turnstone/design_docs/2026-08-03_turnstone_engine_adoption_plan.md)) |
+| Attachments and applications never load without explicit user selection; separate Media and Applications tabs | The participant gate, and the UA taxonomy plan's downloads and permissions rows |
+| Peer-to-peer distribution with full-text search across the peer network | Turnstone's places, plus the Knot search fusion that is the intel family's first real consumer |
+| Bounded pages: 5KiB text, 1KiB attachment listings, 10KB default image cap | Bounded documents suit a graph canvas, where every node is a document |
+| Links only to other terse pages | A closed link graph, which is a fully navigable bounded graph for a graph browser |
+
+None of this is adoptable, because none of it is built. It is corroboration
+that the shape is a natural attractor, which is a different and cheaper kind
+of useful.
+
+## The one actionable thing: IconVG
+
+TerseNet embeds [IconVG](https://github.com/google/iconvg) between paragraphs,
+and IconVG is the part that is real, specified, and independent of TerseNet
+entirely: a compact binary format for icons, logos, glyphs and emoji by Nigel
+Tao, deliberately far simpler than SVG (no text, multimedia, interactivity,
+scripting, animation, DOM).
+
+**It maps onto our painting stack exactly, which is verified rather than
+hoped.** IconVG's model is "define geometry from linear, quadratic and cubic
+Bézier segments; define paint as flat colors or gradients; fill the geometry
+with the paint." Our `paint_list_api` already carries a `Path` item built from
+a Bézier command sequence plus `LinearGradient`, `RadialGradient` and
+`ConicGradient` payloads, and sprigging's custom-paint `Path` leaf already has
+`move_to` / `line_to` / `quad_to` / `cubic_to` / `close` / `arc`. So an IconVG
+decoder needs **no new rendering capability at all**; it decodes into paint
+items we already emit.
+
+`iconvg` is available on crates.io and there appears to be no Rust
+implementation (the known ones are Go).
+
+Where it would actually earn its place is **node faces in the graph canvas**.
+Nodes are content-type-coded shapes carrying favicons, and IconVG is purpose-built
+for exactly that payload: vector, tiny, resolution-independent, no scripting
+surface, and a fraction of the attack surface of SVG. That is a better fit for
+our canvas than for any smolweb protocol, terse included.
+
+Not scheduled. Recorded because it is the rare case where an outside format
+lands precisely on capability we already have.
+
 ## Homes
 
 The rule stays the one already recorded, and carrier independence does not
@@ -171,8 +236,8 @@ verification we do not have.
    this page that fixes something broken rather than adding surface.
 3. `text` / SuperText — one small crate, trivially A.
 4. `scorpion`, `molerat` — real work, because each brings a document format.
-5. `terse`, `fsp` — read the specs first; `fsp` is category C and may simply
-   not be worth carrying.
+5. `fsp` — read the spec first; it is category C and may simply not be worth
+   carrying. `terse` is off the list entirely, per the correction above.
 
 Reticulum support, on this analysis, is not step six. It is a property the
 `client` layer already gives every one of them, plus the addressing decision,

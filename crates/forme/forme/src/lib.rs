@@ -35,6 +35,7 @@
 
 // ── v1 canonical core ────────────────────────────────────────────────────────
 pub mod arrangement;
+pub mod fold;
 pub mod forme_document;
 
 /// Native on-disk persistence of [`FormeDocument`]s. Gated by the `store`
@@ -47,6 +48,7 @@ pub use arrangement::{
     Arrangement, ArrangementEdge, ArrangementEdgeKind, ArrangementNode, ArrangementNodeId,
     ArrangementNodeKind, GraphMemberId,
 };
+pub use fold::{FOLD_RECORD_VERSION, FoldBoundaryPolicy, FoldId, FoldRecord};
 pub use forme_document::{FormeDocument, FormeId, FormeRef};
 
 // ── Parked graphshell-era machinery (git-revivable; pending removal) ─────────
