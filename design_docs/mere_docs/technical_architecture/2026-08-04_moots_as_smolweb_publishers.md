@@ -76,6 +76,102 @@ what a document assembled from parts needs.
 So: knot is a smolweb **format** (in an inert profile) and is not a smolweb
 **protocol**.
 
+## Assembly on activation: the transclusion objection, resolved (Mark, 2026-08-04)
+
+The objection above was aimed slightly wrong, and Mark's reframing fixes it.
+Gemtext's rule is not *never fetch another document*. It is **never fetch
+without being asked**. A link is a link, not a booby trap. What makes
+transclusion hostile is not that a part arrives, it is that it arrives
+unasked.
+
+So `include` does not have to be removed. It has to be **deferred**: rendered
+as an affordance rather than as content, fetched when the reader activates it,
+exactly like following a link. A knot document becomes a **manifest of parts**
+you assemble by activating blocks, and the assembled result is a document built
+like lego rather than a page that phoned six servers before you finished
+reading the title.
+
+That inverts the earlier conclusion in a good way: knot-inert keeps
+transclusion and loses only the *automatic* part of it.
+
+**Three borrowings make the assembly model real,** two of them from protocols
+Mark surfaced:
+
+- **Caching, from Kepler.** Kepler is the only protocol in the family with a
+  cache model (`last_cached` in the request; content length, last-updated and
+  expires in the response). An activated part should be stored, so assembly is
+  paid for once and re-assembly is local. Without this, "activate to expand"
+  costs a fetch every time and the model is a nuisance.
+- **Version control, from Demarkus.** A part referenced by revision makes an
+  assembly **reproducible**: the same manifest yields the same document, and a
+  changed part is a visible change rather than a silent one. Codicil's
+  append-only log and chartulary's content addressing already provide the
+  substrate.
+- **Tessera**, for parts that are not public. A gated part is served against a
+  trust receipt rather than an ACL, which keeps it in character: tessera says
+  *this reader is vouched for*, not *this reader has permission to read row 7*.
+
+**The constraint that keeps it honest, and it is not optional:** the base
+document must stand alone. A fifty-line client that knows nothing of
+activation, caching or tessera must see a complete, readable document, with
+unassembled parts appearing as links it can follow or ignore. Parts *enrich*;
+they never carry the meaning. The moment a knot document is unreadable without
+assembly, it has stopped being a smolweb format and become an application.
+
+**One line that must not be crossed.** Assembly-on-activation is about
+*fetching*, not *evaluating*. Activating a fetch is a reader asking for a
+document, which is ordinary. Activating an evaluator on content someone else
+wrote is running a stranger's program, which no amount of clicking makes safe.
+Evaluation stays as it already is: available for content you authored or
+trust, inert for content you received.
+
+## Self-serve: projection is not the same as template
+
+Mark's question — should a gemtext capsule be a moot template, or is that only
+for formats we own? — has a clean answer, and getting it wrong would import
+exactly the heaviness the small web exists to reject.
+
+**A capsule is one author.** A directory of files, served. It has no
+coordination problem, so it needs no coordination machinery: no membership, no
+delegation certificates, no merge. Putting a moot under a personal capsule
+would be paying Gemot's whole cost to solve problems that do not exist there.
+
+So the two concepts separate:
+
+| | What it is | Who needs it |
+|---|---|---|
+| **Projection** | how content is served: a gemtext capsule, a dict database, a gophermap | **any node**, moot or not, including a solo user with none |
+| **Template** | a preconfigured governance shape: content classes, authority rules, projection config | only where there is coordination to govern |
+
+> **Single-author publishing needs no moot. A moot earns its place at the
+> second writer.**
+
+"Serve my knot notes as a gemtext capsule" must work with no moot anywhere in
+the picture. "Instantiate the dictionary template" is a moot, because a
+dictionary many people add to is a governance problem wearing a content
+schema. Mark's dictionary is the second case and a personal capsule is the
+first, and they should not be made to share a mechanism.
+
+This also rhymes with a decision already taken: under the Knot-in-graphshell
+plan's Option A, personal documents replicate while shared documents project.
+Same shape. The solo case stays lighter.
+
+### And formats we own versus formats we do not
+
+The [home rule](../../nematic_docs/technical_architecture/2026-08-03_smolweb_home_decision.md)
+applies to publishing exactly as it does to parsing:
+
+- **Formats we own** (knot): we may innovate — assembly, caching, revisions —
+  provided the inert base degrades gracefully for everyone else.
+- **Formats we do not** (gemtext, gophermaps, dict databases): we project into
+  them **faithfully and add nothing**. A capsule we serve should be
+  indistinguishable from a capsule anyone else serves. No extensions, no
+  private conventions, no markers announcing which software produced it.
+
+That second rule is what keeps self-serve honest. The small web's whole
+proposition is that the format is small enough that anyone can implement it,
+and a publisher who quietly extends the format they publish takes that back.
+
 ## Moots as publishers: the dictionary idea generalises
 
 Mark's framing — "an aggregate peer-to-peer dictionary people can add to...
