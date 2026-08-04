@@ -141,6 +141,7 @@ pub use geometry::CartographyGeometry;
 pub mod palette;
 
 mod edge_cells;
+pub mod fold_projection;
 mod fields;
 mod frame;
 mod input;

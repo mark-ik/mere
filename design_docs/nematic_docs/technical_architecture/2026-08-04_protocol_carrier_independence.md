@@ -79,6 +79,93 @@ link handshake proves. Both are "trust the key you actually talked to", so the
 ladder maps, but the posture needs its own name rather than borrowing TOFU's,
 and the fidelity plan's trust descriptor is where it lands.
 
+## The semantics: when a protocol is defined by its medium (Mark, 2026-08-04)
+
+Carrier independence is a claim about **code**, not about **meaning**. The
+question is never "can this run over carrier X"; it is "what does it *mean*
+over carrier X". Getting that wrong is how broad protocol support turns into
+misinformation, because a client that reports the same posture regardless of
+what carried the bytes is lying about at least one of them.
+
+A protocol can depend on its medium at four separate layers, and they behave
+differently:
+
+| Layer | Medium-dependent? | Consequence |
+|---|---|---|
+| **Syntax** — the bytes on the wire | Almost never | This is what carrier independence makes shareable. A request line is a request line. |
+| **Security** — confidentiality, authentication | Almost always | Must be re-described per carrier. See the correction below. |
+| **Identity** — who the peer is, how they are named | Sometimes protocol-defined, sometimes carrier-defined | When both define it, they conflict. Bridge, do not port. |
+| **Purpose** — why the protocol exists at all | Sometimes | When the carrier negates the purpose, the port is possible and pointless. Do not offer it. |
+
+So the rule, stated once:
+
+> **A protocol's implementation is carrier-independent. Its description is
+> not.** Posture, identity, and addressing are properties of the
+> *(protocol, carrier)* pair, and must be computed from the carrier that
+> actually carried the bytes, never looked up from the scheme.
+
+### The defect this exposes, and it is ours
+
+The [fidelity plan](../implementation_strategy/2026-07-01_smolweb_fidelity_plan.md)'s
+WS2 maps **protocol to posture**: gemini to TOFU, gopher and finger and nex and
+spartan to Insecure, misfin to Trusted-with-signer. Under carrier independence
+that table is simply **wrong**, and it would ship a lie:
+
+- **gopher over Reticulum is not Insecure.** The link is encrypted and the peer
+  is proven by its destination key. Reporting "unauthenticated by design"
+  because the scheme is `gopher://` would understate the actual security by a
+  wide margin.
+- **gemini over Reticulum is not TOFU.** There is no certificate and no pin.
+  Reporting a pin state would be reporting a thing that does not exist.
+
+The fix is small and structural: the trust descriptor is produced by the
+**carrier**, and the protocol contributes only what it adds on top (misfin's
+signed sender, gemini's client certificate). This is the same shape as the
+existing WS2 finding that trust originates at the transport; it just has to
+mean *the actual transport*, not the one the scheme implies.
+
+### Identity, when both sides define it
+
+Misfin is the clean example. Its sender identity *is* an X.509 client
+certificate, and a Reticulum sender's identity *is* its destination key. Both
+are complete identity systems, so carrying misfin over Reticulum does not
+compose them; it forces a choice, and either choice produces something that is
+no longer misfin. That is the signature of a case that wants a **bridge**
+rather than a port.
+
+Gemini's `6x` client-certificate flow is the same case in miniature, which is
+why the "unchanged" claim covers gemini's ordinary path and not that one.
+
+### Purpose, when the carrier negates it
+
+Guppy exists *because* it is UDP: it is meant to run on a microcontroller with
+no TCP stack, which is why it carries its own chunking, acks, and
+retransmission. Over a Reticulum link, all three are already provided, and the
+one property that justified the protocol is gone. It would still function.
+It would no longer be for anything. The honest response is not to offer that
+combination rather than to offer it and let someone discover the pointlessness
+themselves.
+
+### Addressing has the same shape
+
+A URL's authority means "DNS name and port" over TCP and "destination hash, or
+a name resolved against announces" over Reticulum. Identical syntax, different
+referent. So resolution is also a *(protocol, carrier)* function, and it is the
+single shared adapter named earlier rather than per-protocol work.
+
+### What this actually costs retinue
+
+Small, and now quantified. Retinue already supplies the hard part, a link that
+is `AsyncRead + AsyncWrite`, so it inherits the whole stream family at once.
+What is left is not per-protocol:
+
+1. the addressing adapter (how an authority names a destination);
+2. a posture vocabulary for what a link proves, distinct from TOFU's;
+3. optionally, Resources for bulk bodies, which is how Nomad Network already
+   serves pages.
+
+Three pieces, once, for thirteen protocols.
+
 ## The distinction that matters: two different bridges
 
 Conflating these is the trap, and keeping them apart is what stops broad

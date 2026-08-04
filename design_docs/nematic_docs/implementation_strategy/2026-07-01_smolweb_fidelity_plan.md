@@ -176,6 +176,19 @@ same whether shown as a card or a focused tile.
   not a new ladder. Mapping: gemini matched-pin → Trusted or Tofu, mismatch → Broken;
   gopher / finger / nex / spartan → Insecure (unauthenticated by design); misfin →
   Trusted + `signer` when the sender identity verifies.
+
+  > **Correction, 2026-08-04: that mapping is keyed on the wrong thing.** It reads
+  > posture off the *scheme*, and posture is a property of the **carrier**. Once a
+  > protocol can run over more than one carrier (see
+  > [carrier independence](../technical_architecture/2026-08-04_protocol_carrier_independence.md)),
+  > the table above ships a falsehood in both directions: gopher over a Reticulum
+  > link is **not** Insecure, because the link is encrypted and the peer is proven
+  > by its destination key; and gemini over that same link is **not** Tofu, because
+  > there is no certificate and no pin to have a state about. The descriptor must be
+  > produced by the transport that actually carried the bytes, with the protocol
+  > contributing only what it adds on top (misfin's signed sender, gemini's client
+  > certificate). The mapping above stays correct for the TCP/TLS carrier, which is
+  > the only one wired today; it must not be read as a scheme lookup.
 - **Carry through the view.** `SmolwebDocument` gains `trust: DocumentTrustState`
   (+ optional `signer`). The native view body does not change; the host reads the
   field.
