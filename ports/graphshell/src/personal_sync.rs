@@ -144,11 +144,35 @@ impl SyncRoster {
     }
 }
 
+/// One class of synthetic node: a node that exists only to carry a facet.
+///
+/// `AddNode` is otherwise ungated, so a carrier materializes on every admitted
+/// device even where its facet is filtered out, leaving a titled node with
+/// nothing on it. A rule ties the carrier to the facet it exists for.
+///
+/// This is presentation, not confidentiality. The personal lane is plaintext,
+/// so a device that declines to project a carrier still receives and stores
+/// the operation. The roster is what bounds who can read a personal graph.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyntheticAddressRule {
+    /// Address prefix that marks the carrier, e.g. `mere://transfer/`.
+    pub prefix: String,
+    /// The facet whose selection the carrier follows.
+    pub facet: String,
+    /// When set, the carrier projects only where the address names the local
+    /// device as one of its path segments. A device that has not been told its
+    /// own key projects every carrier, so a missed setting over-shows rather
+    /// than silently hiding the feature.
+    pub device_scoped: bool,
+}
+
 /// Local, user-owned projection settings. Operations remain retained so a
 /// later settings change can reproject without asking peers to resend them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SyncSelection {
     facets: BTreeSet<String>,
+    synthetic: Vec<SyntheticAddressRule>,
+    local_device: Option<String>,
     pub access_records: bool,
     pub saved_scenes: bool,
     pub handler_preferences: bool,
@@ -181,8 +205,24 @@ impl SyncSelection {
         self
     }
 
+    pub fn with_synthetic_addresses(
+        mut self,
+        rules: impl IntoIterator<Item = SyntheticAddressRule>,
+    ) -> Self {
+        self.synthetic = rules.into_iter().collect();
+        self
+    }
+
+    /// Tell this replica its own device key, so device-scoped carriers
+    /// addressed elsewhere stay out of the projection.
+    pub fn with_local_device(mut self, device: impl Into<String>) -> Self {
+        self.local_device = Some(device.into());
+        self
+    }
+
     fn projects(&self, event: &PersonalGraphEvent) -> bool {
         match event {
+            PersonalGraphEvent::AddNode { address, .. } => self.projects_node(address),
             PersonalGraphEvent::SetFacet { facet, .. }
             | PersonalGraphEvent::RemoveFacet { facet, .. } => self.facets.contains(facet),
             PersonalGraphEvent::AppendAccess { .. } => self.access_records,
@@ -191,6 +231,31 @@ impl SyncSelection {
             PersonalGraphEvent::ObserveBlobAvailability { .. } => self.blob_availability,
             _ => true,
         }
+    }
+
+    /// Whether a node address materializes here. Plain addresses always do;
+    /// a carrier follows its [`SyntheticAddressRule`].
+    ///
+    /// A filtered carrier takes its facet with it: the facet event replays as
+    /// `ReplaySetNodeFacetById`, which the kernel drops when the node is
+    /// absent, so one gate covers both events.
+    fn projects_node(&self, address: &str) -> bool {
+        let Some(rule) = self
+            .synthetic
+            .iter()
+            .find(|rule| address.starts_with(&rule.prefix))
+        else {
+            return true;
+        };
+        if !self.facets.contains(&rule.facet) {
+            return false;
+        }
+        let Some(local) = self.local_device.as_deref().filter(|_| rule.device_scoped) else {
+            return true;
+        };
+        address[rule.prefix.len()..]
+            .split('/')
+            .any(|segment| segment.eq_ignore_ascii_case(local))
     }
 }
 

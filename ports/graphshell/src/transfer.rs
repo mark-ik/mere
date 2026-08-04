@@ -1590,4 +1590,41 @@ mod tests {
             );
         });
     }
+
+    #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+    #[test]
+    fn an_offer_summarizes_the_manifest_it_names() {
+        use crate::personal_sync::PersonalGraphEvent;
+
+        pollster::block_on(async {
+            let source = source_fixture().await;
+            let manifest = package(&source, TransferOperation::Copy, FIXTURE_PERSONA_ADDRESS).await;
+            let manifest_bytes = serde_json::to_vec(&manifest).unwrap();
+            let offer = crate::transfer_offer::offer_for(
+                &manifest,
+                Hash::of(&manifest_bytes),
+                manifest_bytes.len() as u64,
+                "pairing-1",
+                1_700_000_002_000,
+            )
+            .unwrap();
+
+            // The counts are advisory, so they are worth pinning against what
+            // applying the same manifest actually produces (2 nodes, 1
+            // relation above). A summary that drifts is worse than none.
+            assert_eq!(offer.nodes, 2);
+            assert_eq!(offer.relations, 1);
+            assert_eq!(offer.blobs, manifest.blobs.len() as u64);
+            assert_eq!(offer.blob_bytes, source.file_bytes.len() as u64);
+            assert_eq!(offer.transfer_id, manifest.transfer_id);
+            assert_eq!(offer.destination.device, FIXTURE_DEVICE_TWO_ADDRESS);
+
+            let events = crate::transfer_offer::offer_events(&offer).unwrap();
+            assert!(matches!(
+                &events[0],
+                PersonalGraphEvent::AddNode { id, address, .. }
+                    if *id == manifest.transfer_id && address.contains("phone/laptop")
+            ));
+        });
+    }
 }

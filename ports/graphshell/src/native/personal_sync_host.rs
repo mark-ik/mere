@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::native::browser_host::now_ms;
 use crate::native::owner_settings::parse_hex32;
+use crate::transfer_offer::{TransferOfferV1, offers_in, transfer_offer_rule};
 
 use crate::identity_endpoint::SupplementalCard;
 use crate::personal_sync::{
@@ -99,14 +100,26 @@ impl PersonalSyncHost {
             PersonalSyncHostError::Store(muniment::StoreError::Backend(error.to_string()))
         })?;
         let backend = RedbBackend::open(&config.store_path)?;
+        let transport_key = identity.derive_keypair(&personal_graph_identity_salt(config.graph))?;
+        // The host knows which device it is; callers should not have to say so.
+        // Leaving this to the caller is what makes an addressed-object filter
+        // quietly inert, which is worse than absent because the lane still
+        // looks configured. The transfer rule registers unconditionally: it
+        // governs how a carrier node behaves when its facet is *not* selected,
+        // so gating the rule on the lane would disable exactly the case it is
+        // for. One carrier class exists today; a second composes here.
+        let device = hex(&transport_key.public_key().to_bytes());
+        let selection = config
+            .selection
+            .with_local_device(&device)
+            .with_synthetic_addresses([transfer_offer_rule()]);
         let replica = PersonalGraphReplica::for_identity(
             backend,
             config.graph,
             identity,
             config.roster.clone(),
-            config.selection,
+            selection,
         )?;
-        let transport_key = identity.derive_keypair(&personal_graph_identity_salt(config.graph))?;
         // Beside the graph store and named for the same graph, so the two
         // halves of one device's state cannot be moved apart by accident.
         let blob_root = config.store_path.with_extension("blobs");
@@ -133,6 +146,16 @@ impl PersonalSyncHost {
             .bind()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        // The selection above was stamped with a device key derived before the
+        // bind. If the transport ever named itself differently, offers would be
+        // filtered against an identity no peer addresses, and the symptom would
+        // be an empty inbox rather than an error.
+        if transport.local_peer_id().to_bytes() != transport_key.public_key().to_bytes() {
+            return Err(PersonalSyncHostError::Transport(format!(
+                "transport bound as {} but this device addresses itself as {device}",
+                hex(&transport.local_peer_id().to_bytes())
+            )));
+        }
         let overlay = sync_overlay_topic(config.graph);
         for node in &config.paired_nodes {
             let peer = PeerID::from_bytes(node).map_err(|error| {
@@ -514,6 +537,17 @@ impl PersonalSyncHost {
         Ok(())
     }
 
+    /// Transfers waiting for this device, oldest first, plus the ones it sent.
+    ///
+    /// Reads the projection, so an offer addressed elsewhere is absent here
+    /// even though this device holds the operation that carries it. That is a
+    /// display boundary, not a confidentiality one: the personal lane is
+    /// plaintext to every device the roster admits.
+    pub async fn offers(&self) -> Result<Vec<TransferOfferV1>, PersonalSyncHostError> {
+        let projection = self.replica.lock().await.projection().await?;
+        Ok(offers_in(&projection))
+    }
+
     /// Leave live sync and wait until the durable store can be reopened.
     pub async fn close(self) -> Result<(), PersonalSyncHostError> {
         let store_path = self.store_path.clone();
@@ -652,6 +686,7 @@ fn short_hex(bytes: &[u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transfer_offer::TRANSFER_OFFER_FACET;
     use personae::{IdentityProvider, InMemoryProvider};
     use uuid::Uuid;
 
@@ -810,10 +845,7 @@ mod tests {
         .unwrap();
         source.pair_node(destination.node_id()).await.unwrap();
 
-        let blob = source
-            .stage_blob(container, payload.clone())
-            .await
-            .unwrap();
+        let blob = source.stage_blob(container, payload.clone()).await.unwrap();
 
         // The destination learns the holder from the replicated observation,
         // never from the test. Give sync a moment to deliver it.
@@ -845,6 +877,107 @@ mod tests {
 
         source.close().await.unwrap();
         destination.close().await.unwrap();
+    }
+
+    /// The filter has to hold on the product path, not only in the module that
+    /// defines it. Three resident hosts on one roster, one offer: the addressee
+    /// and the sender project it, the third device does not, and none of them
+    /// were configured by hand to make that happen.
+    #[tokio::test]
+    async fn an_offer_over_live_sync_reaches_its_addressee_and_not_a_third_device() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = [0x91; 32];
+        let identities = [
+            InMemoryProvider::from_seed([0x92; 32]),
+            InMemoryProvider::from_seed([0x93; 32]),
+            InMemoryProvider::from_seed([0x94; 32]),
+        ];
+        let roster = SyncRoster::new(
+            identities
+                .iter()
+                .map(|identity| identity.master_public_key().to_bytes()),
+        );
+        // Every device selects the offer facet. What differs is who they are.
+        let selection = || SyncSelection::default().with_facets([TRANSFER_OFFER_FACET]);
+
+        let mut hosts = Vec::new();
+        for (index, identity) in identities.iter().enumerate() {
+            let peer_tickets = match hosts.first() {
+                Some(first) => vec![PersonalSyncHost::ticket(first).await.unwrap()],
+                None => Vec::new(),
+            };
+            hosts.push(
+                PersonalSyncHost::open(
+                    identity,
+                    PersonalSyncHostConfig {
+                        graph,
+                        store_path: directory.path().join(format!("device-{index}.redb")),
+                        roster: roster.clone(),
+                        selection: selection(),
+                        peer_tickets,
+                        peer_hints: Vec::new(),
+                        paired_nodes: Vec::new(),
+                        relay_urls: Vec::new(),
+                    },
+                )
+                .await
+                .unwrap(),
+            );
+        }
+        for node in [hosts[1].node_id(), hosts[2].node_id()] {
+            hosts[0].pair_node(node).await.unwrap();
+        }
+
+        let offer = TransferOfferV1 {
+            schema: TRANSFER_OFFER_FACET.to_string(),
+            transfer_id: Uuid::from_u128(0x95),
+            operation: crate::transfer::TransferOperation::Copy,
+            source: endpoint_for(&hosts[0]),
+            destination: endpoint_for(&hosts[1]),
+            pairing_id: "pairing-live".to_string(),
+            manifest_blob: eidetic::Hash::of(b"manifest"),
+            manifest_byte_len: 2048,
+            nodes: 2,
+            relations: 1,
+            blobs: 1,
+            blob_bytes: 44,
+            offered_at_ms: now_ms(),
+        };
+        hosts[0]
+            .author(crate::transfer_offer::offer_events(&offer).unwrap())
+            .await
+            .unwrap();
+
+        let mut addressed = Vec::new();
+        for _ in 0..50 {
+            addressed = hosts[1].offers().await.unwrap();
+            if !addressed.is_empty() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(addressed, vec![offer.clone()]);
+        assert_eq!(
+            hosts[0].offers().await.unwrap(),
+            vec![offer],
+            "a source sees what it sent"
+        );
+        assert!(
+            hosts[2].offers().await.unwrap().is_empty(),
+            "a third device on the same roster is not the addressee"
+        );
+
+        for host in hosts {
+            host.close().await.unwrap();
+        }
+    }
+
+    fn endpoint_for(host: &PersonalSyncHost) -> crate::transfer::TransferEndpointV1 {
+        crate::transfer::TransferEndpointV1 {
+            graph: format!("graphshell://graph/{}", hex(&host.graph())),
+            persona: "personae://persona/owner".to_string(),
+            device: format!("personae://device/{}", hex(&host.node_id())),
+        }
     }
 
     /// A rotted dial hint must cost the shortcut, never the host: the hint is

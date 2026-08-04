@@ -1040,6 +1040,50 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   A separate lane remains the right answer if offers ever need a different
   admission policy from the graph, or retention independent of it. Revisit
   then, with the two costs above priced in.
+
+  **Met 2026-08-04**, with one hole found and closed during the build. A facet
+  needs a node to hang on, and `AddNode` was the one event `projects()` did not
+  gate (`_ => true`), so the carrier node for an offer would have materialized
+  on every admitted device even where the offer facet was filtered out: a
+  titled node with nothing on it, on devices the transfer does not concern.
+
+  Closed with a mechanism in the sync layer rather than a transfer-specific
+  branch. `SyntheticAddressRule { prefix, facet, device_scoped }` ties a
+  carrier address to the facet it exists for, and `SyncSelection` learned
+  `local_device`. `mere://transfer/<destination>/<source>/<id>` names both
+  endpoints, so one rule covers three cases: the addressee projects it, the
+  sender projects what it sent, and a third device on the same roster does
+  not. Because `ReplaySetNodeFacetById` is guarded by
+  `get_node_key_by_id(...).is_some_and(...)`, dropping the carrier drops its
+  facet too, so the single gate leaves no orphan.
+
+  **This is presentation, not confidentiality, and the distinction is load
+  bearing.** The personal lane has no cipher: `personal_sync.rs` encrypts
+  nothing, so every operation is plaintext to every device the roster admits.
+  A filtered device still receives and stores the offer and could read it by
+  flipping one flag in its own settings, because the filter is enforced by the
+  reader about itself. **The personal graph's confidentiality boundary is the
+  roster, not the projection filter.** Knot next door already runs
+  `KnotSyncCipher::{Personal, CommonsData}` over a `DataKeyring`; per-recipient
+  encryption here would be that pattern applied to this lane, and it is a real
+  feature rather than a filter tweak. Recorded as an open lane item below.
+
+  Wired at `PersonalSyncHost::open` rather than left to callers: the host
+  derives its own device key from the transport keypair and stamps the
+  selection itself, then asserts after bind that the transport named itself the
+  same way. A filter configured against an identity no peer addresses would
+  present as an empty inbox rather than an error, which is the failure mode
+  this whole plan exists to stop finding late.
+
+  Receipts: `an_offer_over_live_sync_reaches_its_addressee_and_not_a_third_device`
+  runs three resident hosts on one roster over real transport;
+  `an_offer_summarizes_the_manifest_it_names` pins the offer's advisory counts
+  against what applying the same manifest actually produces.
+
+  Two limits carried forward. A device that has not been told its own key
+  projects every offer, chosen deliberately so a missed setting over-shows
+  rather than silently hiding the feature. And the summary's counts are
+  advisory: the manifest governs, and S3 verifies against it.
 - **S3 apply.** Chunked broker delivery, browser apply, staging promotion.
   Done when a selection chosen in the browser on one device lands merged in
   the browser on a second with blobs verified and ids per replicate
@@ -1615,6 +1659,16 @@ browser, two-device network, and real RF are different claims.
 8. Which identity facet vocabulary promotes out of Graphshell after a second
    application consumes it. Keep the first projection local and delete it when
    the shared replacement lands.
+9. Whether the personal lane gets per-recipient encryption. Today it has none,
+   so the roster is its only confidentiality boundary and every admitted device
+   can read everything (made explicit while building H6's S2). This is
+   tolerable for facets a device already syncs, and it is worth deciding
+   deliberately before S3, because the blobs a manifest names carry file
+   contents and any paired device can already fetch any advertised blob by
+   hash. Knot's `KnotSyncCipher` over a `DataKeyring` is the pattern to apply;
+   the cost is key distribution on pairing and re-encryption on roster change.
+   Do not let a projection filter stand in for this: filters decide what a
+   device shows, not what it can read.
 
 None of these decisions changes the product boundary or requires a new
 repository.

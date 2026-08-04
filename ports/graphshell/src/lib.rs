@@ -47,6 +47,8 @@ pub mod sessions;
 pub mod transfer;
 #[cfg(feature = "web")]
 pub mod transfer_endpoint;
+#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+pub mod transfer_offer;
 pub mod view;
 
 pub use graphshell_client as client;
