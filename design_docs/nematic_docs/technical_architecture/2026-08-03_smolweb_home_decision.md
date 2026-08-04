@@ -171,6 +171,88 @@ grammar's final home instead of needing a second move. WS1 has not started.
   exercising crates.io. Fixed, and the lock now holds one errand instead of
   two. Worth a sweep for other bare-version declarations of workspace members.
 
-  **Still open**: the nex de-duplication, and gemini (with gemtext bundled).
   errand is not republished; genet builds it by path, so only an external
   consumer would need that.
+- **2026-08-03 (third move)**: **`gemini-protocol` 0.1.0**, published, carrying
+  gemini, the gemtext grammar, TOFU pinning, and titan. errand's `gemini.rs`,
+  `tls.rs`, `tofu.rs`, `titan.rs` and `parse/gemtext.rs` left; the crate is
+  down from 2786 lines to 1612. Downstream needed no edits again: the grammar
+  re-exports under `errand::parse::gemtext` and the TOFU types under
+  `errand::`, so the hosts that install a trust store still call
+  `errand::set_trust_store(errand::InMemoryTofu::new())`.
+
+  Two fidelity gains. Gemini's temporary (`4x`) and permanent (`5x`) failure
+  are now **distinct** in the spec crate, since retrying one is reasonable and
+  retrying the other is not; errand still flattens them to its cross-protocol
+  `Failure`, but that flattening is now an explicit, tested mapping rather than
+  a silent one, and the exact code survives on `raw_status`. An undefined
+  status class is refused rather than passed along.
+
+## The grouping rule (Mark, 2026-08-03)
+
+Group associated protocols and formats in one crate; keep the architectural
+boundary at *intent*, not at *artifact count*. Three shapes have come up, and
+they resolve differently:
+
+- **A successor that is a superset** lives in the same crate as its ancestor,
+  because splitting them would make every consumer reassemble one protocol
+  from two dependencies. Gopher and Gopher+ are one crate; a plain RFC 1436
+  menu is simply a Gopher+ menu with no markers.
+- **A format its protocol defines** lives with that protocol. Gemtext is not a
+  format that happens to travel over gemini; it is the format gemini's spec
+  defines, and titan is the write half of the same document space. One spec,
+  one crate.
+- **A successor that is a different protocol answering the same question**
+  gets its own feature in the same crate. WebFinger is HTTP and JSON where
+  finger is a line of text over TCP, so it ships beside finger but behind
+  `webfinger`, and errand takes the crate without it.
+
+What makes the grouping safe is that **the cost is feature-gated, not
+crate-gated**. Every grammar is dependency-free and always compiled; every
+transport rides a feature. So `gemini-protocol` with
+`default-features = false` is a zero-dependency gemtext parser, which matters
+because **five other smolweb formats serve `text/gemini` bodies** (spartan,
+guppy, scroll, misfin, titan) and none of them should pull a TLS stack to
+read one. Verified per crate, not assumed: the dependency tree in that
+configuration is the crate alone.
+
+The corollary for our side: fifteen nematic engines is not fifteen crates.
+Most of those fifteen are *lanes over shared grammars*, and the lane is ours
+while the grammar is the spec's.
+
+## Expansion: what else is out there (surveyed 2026-08-03)
+
+From [dbohdan's small-internet roundup](http://dbohdan.sdf.org/smolnet/) and
+the [ArchiveTeam SmolNet page](https://wiki.archiveteam.org/index.php/SmolNet),
+the protocol set is: gemini, gopher, Gopher+, gophers, finger, spartan, text,
+SuperText, nex, scorpion, mercury, titan, guppy, scroll, molerat, terse, fsp.
+
+**We have nine**: gemini, gopher, Gopher+, finger, spartan, nex, titan, guppy,
+plus misfin for mail.
+
+**Not yet spoken**, with the shape each would take under the grouping rule:
+
+| Protocol | Shape | Note |
+|---|---|---|
+| `gophers` | a feature on `gopher-protocol` | gopher over TLS; the successor-is-a-superset case again |
+| `mercury` | its own crate, or a feature beside spartan | gemini without TLS, so it is close kin to spartan |
+| `scorpion` | its own crate, protocol **and** format | richer document format than gemtext, and does not mandate encryption |
+| `scroll` | its own crate, protocol **and** format | see the gap below |
+| `text`, SuperText | one small crate | simpler than gemini, no interactivity |
+| `molerat`, `terse`, `fsp` | unsurveyed | read the specs before committing |
+
+**A fidelity gap this survey exposes.** Scroll and scorpion each define a
+document format *richer than gemtext*, and nematic's `scroll` engine currently
+delegates to `GemtextEngine`. So scroll content is being flattened into
+gemtext's line model, which is exactly the collapse the
+[fidelity plan](../implementation_strategy/2026-07-01_smolweb_fidelity_plan.md)
+exists to catch, and it is a parse-layer loss of the kind that plan's §1
+identifies. Note also that scroll has a nematic engine but **no errand
+transport**, so it is currently a format we half-read and cannot fetch.
+
+**Still open**: the nex de-duplication. `nex-protocol` already ships a listing
+parser (`listing.rs`, `ListingLine`) and errand independently implements the
+same grammar with directory detection and base-URL resolution on top
+(`parse/nex.rs`). Unlike the moves so far this is not a lift-and-shift: it
+needs a decision about which shape is the survivor on an already-published
+crate, so it wants a deliberate read of both rather than a rushed unification.

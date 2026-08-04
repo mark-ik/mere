@@ -87,18 +87,7 @@ impl Canvas {
                     self.physics.set_dragging(true);
                 }
                 let world = self.screen_to_world(new);
-                self.physics.pin(d.node, world);
-                // Track the cursor in the view immediately (the actor lags a frame).
-                self.view.set_position(d.node, world);
-                // A paused analytic arrangement is reapplied after every frame.
-                // Move its slot with the user's drag so that overlay does not
-                // immediately erase the manual placement.
-                if let Some(positions) = self.strategy_positions.as_mut()
-                    && let Some((_, position)) =
-                        positions.iter_mut().find(|(node, _)| *node == d.node)
-                {
-                    *position = PortablePoint::new(world.x, world.y);
-                }
+                self.place_pinned_node(d.node, world);
                 redraw = true;
             }
             self.drag = Some(d);
@@ -181,6 +170,7 @@ impl Canvas {
                         node,
                         press: self.cursor,
                         moved: false,
+                        was_pinned: self.pinned_nodes.contains(&node),
                     });
                 } else if self.begin_field_drag(self.screen_to_world(self.cursor)) {
                     // Grabbed a field's box edge (move) or corner (resize) — the deep
@@ -218,10 +208,12 @@ impl Canvas {
                 }
                 if let Some(d) = self.drag.take() {
                     if d.moved {
-                        self.physics.unpin(d.node);
                         self.physics.set_dragging(false);
-                        self.sync_anchor_force();
-                        self.settle_physics(SETTLE_TICKS / 3);
+                        if !d.was_pinned {
+                            self.physics.unpin(d.node);
+                            self.sync_anchor_force();
+                            self.settle_physics(SETTLE_TICKS / 3);
+                        }
                     } else if self.shift {
                         // Shift-click toggles the node in the selection (multi-select).
                         if !self.selected.remove(&d.node) {
@@ -282,6 +274,73 @@ impl Canvas {
         self.physics.seed(seeds);
         self.settle_physics(SETTLE_TICKS);
         true
+    }
+
+    /// Hold the single focused node at its current visual position. This is
+    /// view-local curation: it does not write coordinates into the graph.
+    pub fn pin_focused(&mut self) -> bool {
+        let Some(key) = self.focused_key() else {
+            return false;
+        };
+        let Some(position) = self.view.position_of(key) else {
+            return false;
+        };
+        self.pinned_nodes.insert(key);
+        self.place_pinned_node(key, position);
+        true
+    }
+
+    /// Nudge the single focused node in world coordinates, holding it in its
+    /// new position. Hosts map keyboard arrows into their chosen world step.
+    /// The node stays held until [`release_focused`](Self::release_focused).
+    pub fn nudge_focused(&mut self, dx: f32, dy: f32) -> bool {
+        let Some(key) = self.focused_key() else {
+            return false;
+        };
+        let Some(position) = self.view.position_of(key) else {
+            return false;
+        };
+        let next = Point2D::new(position.x + dx, position.y + dy);
+        self.pinned_nodes.insert(key);
+        self.place_pinned_node(key, next);
+        self.settle_physics(SETTLE_TICKS / 3);
+        true
+    }
+
+    /// Screen-space twin of [`nudge_focused`](Self::nudge_focused). Keyboard
+    /// hosts normally want a stable visual increment even while zoomed; this
+    /// converts their pixel step into the canvas's world coordinates.
+    pub fn nudge_focused_screen(&mut self, dx: f32, dy: f32) -> bool {
+        let zoom = self.camera.zoom.max(f32::EPSILON);
+        self.nudge_focused(dx / zoom, dy / zoom)
+    }
+
+    /// Return the single focused node from an explicit pin to dynamic layout.
+    /// The solver gets a short settle budget so adjacent nodes visibly respond.
+    pub fn release_focused(&mut self) -> bool {
+        let Some(key) = self.focused_key() else {
+            return false;
+        };
+        if !self.pinned_nodes.remove(&key) {
+            return false;
+        }
+        self.physics.unpin(key);
+        self.sync_anchor_force();
+        self.settle_physics(SETTLE_TICKS / 3);
+        true
+    }
+
+    /// Pin a node in the solver, update the local read model immediately, and
+    /// preserve a paused analytic arrangement's slot. The graph remains
+    /// position-free throughout.
+    fn place_pinned_node(&mut self, node: NodeKey, world: Point2D<f32>) {
+        self.physics.pin(node, world);
+        self.view.set_position(node, world);
+        if let Some(positions) = self.strategy_positions.as_mut()
+            && let Some((_, position)) = positions.iter_mut().find(|(key, _)| *key == node)
+        {
+            *position = PortablePoint::new(world.x, world.y);
+        }
     }
 
     /// Visit `url`: if a node with that URL already exists (URL identity), select

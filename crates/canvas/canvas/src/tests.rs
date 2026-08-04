@@ -831,6 +831,58 @@ fn dragging_a_node_updates_its_active_strategy_slot() {
 }
 
 #[test]
+fn focused_keyboard_nudge_is_local_and_requires_explicit_release() {
+    let mut canvas = Canvas::new();
+    let id = canvas.open_member_as_new_node(None, "https://curation.example");
+    let key = canvas.graph().get_node_by_id(id).expect("added node").0;
+    canvas.select_member(id);
+    let before = canvas.view.position_of(key).expect("placed node");
+    let relation_count = canvas.graph().relations().count();
+
+    assert!(canvas.pin_focused());
+    assert!(canvas.pinned_nodes.contains(&key));
+    assert!(canvas.nudge_focused(32.0, -16.0));
+    let moved = canvas.view.position_of(key).expect("nudged node");
+    assert_eq!(moved, Point2D::new(before.x + 32.0, before.y - 16.0));
+    assert!(canvas.pinned_nodes.contains(&key));
+    assert_eq!(
+        canvas.graph().relations().count(),
+        relation_count,
+        "moving a view node does not edit graph relations"
+    );
+    assert_eq!(
+        canvas.graph().get_node(key).map(|node| node.id),
+        Some(id),
+        "moving a view node does not replace graph membership"
+    );
+
+    assert!(canvas.release_focused());
+    assert!(!canvas.pinned_nodes.contains(&key));
+    assert!(!canvas.release_focused(), "release is explicit and idempotent");
+}
+
+#[test]
+fn pointer_pull_preserves_an_existing_explicit_pin() {
+    let mut canvas = Canvas::new();
+    let id = canvas.open_member_as_new_node(None, "https://held.example");
+    let key = canvas.graph().get_node_by_id(id).expect("added node").0;
+    canvas.select_member(id);
+    assert!(canvas.pin_focused());
+    let start = canvas.view.position_of(key).expect("placed node");
+    let start = canvas.camera.to_screen(PortablePoint::new(start.x, start.y));
+
+    canvas.pointer_down(PointerButton::Left, start.0, start.1);
+    canvas.cursor_moved(start.0 + 48.0, start.1 + 12.0);
+    canvas.pointer_up(PointerButton::Left, start.0 + 48.0, start.1 + 12.0);
+
+    assert!(
+        canvas.pinned_nodes.contains(&key),
+        "a transient pointer pull does not undo an explicit pin"
+    );
+    assert!(canvas.release_focused());
+}
+
+#[test]
 fn node_face_defaults_to_favicon_and_takes_a_per_node_override() {
     let mut graph = Graph::new();
     graph.add_node(

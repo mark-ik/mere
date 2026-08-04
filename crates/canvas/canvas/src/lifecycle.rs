@@ -72,6 +72,7 @@ impl Canvas {
         self.node_recency.clear();
         self.community_cache = None;
         self.drag = None;
+        self.pinned_nodes.clear();
         self.field_drag = None;
         self.marquee = None;
         self.middle_drag = None;
@@ -118,6 +119,7 @@ impl Canvas {
             middle_drag: None,
             orbit_drag: None,
             drag: None,
+            pinned_nodes: HashSet::new(),
             field_drag: None,
             selected: HashSet::new(),
             selected_edges: HashSet::new(),
@@ -311,6 +313,8 @@ impl Canvas {
         self.physics.sync_nodes(nodes);
         self.physics
             .sync_edges(visible_relation_edges(&self.graph, &self.hidden_edges));
+        self.pinned_nodes
+            .retain(|key| self.graph.get_node(*key).is_some());
         // Re-resolve field couplings against the new node set, so a field gathers
         // nodes added after it was placed (its targets snapshot at build time).
         // (Field regions — rebuild-on-mutation / new-node capture.)

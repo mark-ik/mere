@@ -104,6 +104,7 @@ impl Canvas {
         let key = *self.selected.iter().next()?;
         let id = self.graph.get_node(key)?.id;
         let _ = apply_graph_delta(&mut self.graph, GraphDelta::RemoveNode { key });
+        self.pinned_nodes.remove(&key);
         self.selected.clear();
         self.selected_edges.clear();
         self.reconcile_derived();

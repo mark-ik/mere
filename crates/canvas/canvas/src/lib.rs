@@ -219,6 +219,10 @@ struct Drag {
     press: (f32, f32),
     /// Set once the pointer has moved past the slop — a real drag.
     moved: bool,
+    /// Whether the node was deliberately pinned before this transient pull
+    /// began. Releasing the pointer preserves that explicit pin; an ordinary
+    /// pull returns to dynamic layout.
+    was_pinned: bool,
 }
 
 /// The canvas content-root: the graph, its physics, the camera, and the abs-pos
@@ -272,6 +276,10 @@ pub struct Canvas {
     orbit_drag: Option<(f32, f32)>,
     /// An in-progress left-button node click/drag, if any.
     drag: Option<Drag>,
+    /// Nodes deliberately held in place by a user command or keyboard nudge.
+    /// This is local view curation, never graph truth. Pointer pulls may update
+    /// a held node, but only an explicit release returns it to the solver.
+    pinned_nodes: HashSet<NodeKey>,
     /// An in-progress field move / resize drag, if any. (Field regions.)
     field_drag: Option<fields::FieldDrag>,
     /// Currently-selected nodes (click selects one; marquee selects many).

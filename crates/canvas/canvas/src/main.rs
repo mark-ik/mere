@@ -13,7 +13,8 @@
 //! cursor-anchored zoom, middle-drag = pan, all with inertia. Left-drag grabs +
 //! pins the node under the cursor; a click selects it; a left-drag on empty space
 //! marquee-selects; a click near an edge picks it; a bare empty click clears.
-//! Space re-seeds the layout and replays the settle.
+//! Space re-seeds the layout and replays the settle. Arrow keys nudge the
+//! focused node, `v` holds it, and `r` releases that explicit hold.
 
 use std::sync::Arc;
 
@@ -224,6 +225,40 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     match &event.logical_key {
+                        // Keyboard curation mirrors pointer pull without putting
+                        // geometry into graph truth. Arrows are a stable 24px at
+                        // every zoom; `v` holds a node and `r` returns it to the
+                        // solver.
+                        WinitKey::Named(WinitNamedKey::ArrowLeft) => {
+                            if self.canvas.nudge_focused_screen(-24.0, 0.0) {
+                                self.request_redraw();
+                            }
+                        }
+                        WinitKey::Named(WinitNamedKey::ArrowRight) => {
+                            if self.canvas.nudge_focused_screen(24.0, 0.0) {
+                                self.request_redraw();
+                            }
+                        }
+                        WinitKey::Named(WinitNamedKey::ArrowUp) => {
+                            if self.canvas.nudge_focused_screen(0.0, -24.0) {
+                                self.request_redraw();
+                            }
+                        }
+                        WinitKey::Named(WinitNamedKey::ArrowDown) => {
+                            if self.canvas.nudge_focused_screen(0.0, 24.0) {
+                                self.request_redraw();
+                            }
+                        }
+                        WinitKey::Character(s) if s.as_str() == "v" => {
+                            if self.canvas.pin_focused() {
+                                self.request_redraw();
+                            }
+                        }
+                        WinitKey::Character(s) if s.as_str() == "r" => {
+                            if self.canvas.release_focused() {
+                                self.request_redraw();
+                            }
+                        }
                         // Space re-seeds the central spiral and replays the settle.
                         WinitKey::Named(WinitNamedKey::Space) => {
                             if self.canvas.reseed() {
