@@ -1190,9 +1190,45 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   transfer accepted mid-session becomes pullable on the next one, which is the
   timing cards have always had.
 
-  Still open in S3: **the accept gesture**. Every piece is joined except the
-  moment a person says yes, which is what should call `released_blobs_for` and
-  put the result on the surface. Then the recorded
+  **The accept gesture landed 2026-08-04.** A transfer offer already rendered
+  as a card, because its carrier node is an ordinary graph node and the
+  `mere.graph` adapter cards every projected node. What was missing was an
+  action, and supplemental cards were action-free by construction.
+
+  That door is now open narrowly rather than removed: `SupplementalCard.actions`
+  defaults empty, and only the offer card fills it. Keeping the default empty
+  is what stops "supplemental" from becoming a second, unaudited action
+  surface. The transfer id is bound into the action's payload when the card is
+  composed, so the decision names one transfer rather than "the" transfer,
+  which would be ambiguous the moment two are waiting.
+
+  A supplemental card's intent is routed away from `PersonaeHost::apply_intent`
+  explicitly. Sending it there would either fail confusingly or grow into a
+  path where a composed card can reach the vault.
+
+  **Accepting records a decision; it does not perform one.** The gesture is
+  answered synchronously and fetching bytes is not, so `invoke` pushes a
+  `TransferDecision` onto a queue and returns. What the person agreed to is
+  durable the moment they agree; the work it implies happens in
+  `spawn_accept_watch`, where awaiting is possible. Accepting is idempotent by
+  transfer id, so a double-click or a browser retrying after a dropped reply
+  does not queue the same transfer twice. A failed accept is logged and
+  dropped rather than retried forever: the offer stays on the graph, so the
+  person can accept again once whatever blocked it has changed.
+
+  The queue is a `std::sync::Mutex` inside `DeviceSurface`, so cloning the
+  surface for a session hands that session the same queue the host drains
+  rather than a copy. The watcher takes the queue handle out before locking
+  it, so the surface lock is never held while the decision lock is.
+
+  Receipts: `accepting_a_transfer_records_one_decision_and_never_reaches_the_vault`
+  covers advertisement gating, idempotence, and refusal on a card that did not
+  advertise it; `accepting_without_a_place_to_record_it_is_refused` covers a
+  surface composed without a queue, which must refuse rather than report an
+  accept nothing will act on.
+
+  Still open in S3: the browser extension's own UI for the action, which is
+  outside this repo. Then the recorded
   `navigator.storage.persist()` grant, promotion of destination staging into a
   recovery pin, and the blob-reference-set intent pair that pin release
   depends on. Also unbatched: staging authors one operation per blob, which is

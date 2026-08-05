@@ -20,7 +20,7 @@ use crate::browser_carrier::{
     AllowedExtensions, BrowserCarrierError, BrowserLauncher, read_native_message_async,
     write_native_message_async,
 };
-use crate::identity_endpoint::SupplementalCard;
+use crate::identity_endpoint::{SupplementalCard, TransferDecisions};
 use crate::native::browser_host::{BrowserHostError, serve_identity_native_messages_with_cards};
 use crate::native::identity_ui::NativeIdentityUi;
 use crate::native::personae_host::PersonaeHost;
@@ -43,6 +43,10 @@ pub struct DeviceSurface {
     /// Blobs an accepted transfer released to this device's browser. Empty
     /// unless a transfer is waiting to be applied.
     pub released_blobs: Vec<(ContentHash, Vec<u8>)>,
+    /// Where a person's accept lands. Shared rather than snapshotted: cloning
+    /// the surface for a session must hand that session the same queue the
+    /// resident host drains, not a copy of it.
+    pub decisions: TransferDecisions,
 }
 
 pub type DeviceSurfaceHandle = Arc<RwLock<DeviceSurface>>;

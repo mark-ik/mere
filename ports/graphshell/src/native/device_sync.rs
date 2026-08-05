@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use personae::{IdentityProvider, ProfileId};
 
+use crate::identity_endpoint::TransferDecision;
 use crate::native::device_broker::{DeviceSurface, DeviceSurfaceHandle};
 use crate::native::owner_settings::{
     self, DataRootMigration, OwnerSettings, OwnerSettingsError, SyncOverrides,
@@ -16,6 +17,7 @@ use crate::native::owner_settings::{
 use crate::native::personal_sync_host::{
     PersonalSyncHost, PersonalSyncHostConfig, PersonalSyncHostError,
 };
+use crate::native::transfer_staging::{receive_transfer, released_blobs_for};
 use crate::personal_sync::{PersonalGraphEvent, SyncRoster, SyncSelection};
 
 const PERSONAL_GRAPH_DOMAIN: &[u8] = b"mere.graphshell/personal-graph/v1";
@@ -356,8 +358,10 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     let surface: DeviceSurfaceHandle = Arc::new(tokio::sync::RwLock::new(DeviceSurface {
         cards: host.supplemental_cards().await?,
         released_blobs: Vec::new(),
+        decisions: Default::default(),
     }));
-    spawn_card_refresh(host, Arc::clone(&surface));
+    spawn_card_refresh(Arc::clone(&host), Arc::clone(&surface));
+    spawn_accept_watch(host, Arc::clone(&surface));
     Ok(Some(surface))
 }
 
@@ -566,6 +570,81 @@ fn spawn_pairing_watch(
             }
         }
     });
+}
+
+/// Act on transfers a person has accepted.
+///
+/// The gesture is answered synchronously by the endpoint, which records it and
+/// returns; fetching the bytes it implies cannot happen there. This is where
+/// awaiting is possible, so this is where the decision becomes bytes.
+///
+/// A failed accept is logged and dropped rather than retried forever: the
+/// offer stays on the graph, so the person can accept again once whatever
+/// blocked it (a peer that is offline, bytes that are too large) has changed.
+fn spawn_accept_watch(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            // Take the queue handle out first, so the surface lock is not held
+            // while the decision lock is. Two locks held in one order here and
+            // the other order anywhere else is how a deadlock is written.
+            let decisions = surface.read().await.decisions.clone();
+            let accepted = match decisions.lock() {
+                Ok(mut queue) => std::mem::take(&mut *queue),
+                Err(_) => {
+                    tracing::warn!("transfer decisions are unreadable; accepts will not be served");
+                    continue;
+                }
+            };
+            for decision in accepted {
+                match serve_accepted_transfer(&host, &decision).await {
+                    Ok(released) => {
+                        let blobs = released.len();
+                        surface.write().await.released_blobs = released;
+                        tracing::info!(
+                            transfer = %decision.transfer_id,
+                            blobs,
+                            "accepted transfer is staged and released to the browser"
+                        );
+                    }
+                    Err(error) => tracing::warn!(
+                        transfer = %decision.transfer_id,
+                        %error,
+                        "accepted transfer could not be served; the offer remains"
+                    ),
+                }
+            }
+        }
+    });
+}
+
+/// Fetch one accepted transfer and produce the blobs a browser may pull.
+async fn serve_accepted_transfer(
+    host: &PersonalSyncHost,
+    decision: &TransferDecision,
+) -> Result<Vec<(graphshell_protocol::ContentHash, Vec<u8>)>, DeviceSyncError> {
+    let offers = host.offers().await.map_err(DeviceSyncError::Host)?;
+    let offer = offers
+        .into_iter()
+        .find(|offer| offer.transfer_id.to_string() == decision.transfer_id)
+        .ok_or_else(|| {
+            DeviceSyncError::Host(PersonalSyncHostError::Transport(format!(
+                "no offer named {} is addressed to this device",
+                decision.transfer_id
+            )))
+        })?;
+    // Staging writes into the host's own store, which is also what apply will
+    // read. A browser-side apply reads the released bytes instead, so the
+    // product store here is the same one either path uses.
+    let staging = muniment::BlobStore::new(muniment::MemoryBackend::new());
+    let manifest = receive_transfer(host, &staging, &offer)
+        .await
+        .map_err(|error| {
+            DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string()))
+        })?;
+    released_blobs_for(host, &manifest)
+        .await
+        .map_err(|error| DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string())))
 }
 
 fn spawn_card_refresh(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle) {

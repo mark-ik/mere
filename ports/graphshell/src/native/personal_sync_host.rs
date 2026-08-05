@@ -18,7 +18,8 @@ use crate::native::browser_host::now_ms;
 use crate::native::owner_settings::parse_hex32;
 use crate::transfer_offer::{TransferOfferV1, offers_in, transfer_offer_rule};
 
-use crate::identity_endpoint::SupplementalCard;
+use crate::identity_endpoint::{SupplementalCard, TRANSFER_ACCEPT_INTENT, TRANSFER_ACCEPT_SCHEMA};
+use crate::identity_projection::IdentityProjectionAction;
 use crate::personal_sync::{
     PersonalGraphError, PersonalGraphEvent, PersonalGraphExt, PersonalGraphIdentityError,
     PersonalGraphReplica, SyncRoster, SyncSelection, accept_into, personal_graph_identity_salt,
@@ -605,8 +606,10 @@ impl PersonalSyncHost {
                 badges: vec!["Durable".into(), "Personae admitted".into()],
                 media: Vec::new(),
             },
+            actions: Vec::new(),
         }];
 
+        let offers = offers_in(&projection);
         let mut nodes = projection
             .graph
             .nodes()
@@ -639,6 +642,25 @@ impl PersonalSyncHost {
                     badges: vec!["Synced graph node".into()],
                     media: Vec::new(),
                 },
+                // A waiting transfer is the one graph node a person can act
+                // on: everything else here is a view of state that already
+                // happened. The transfer id is bound into the payload, so the
+                // decision names one transfer rather than "the" transfer.
+                actions: offers
+                    .iter()
+                    .find(|offer| offer.transfer_id == node.id)
+                    .map(|offer| {
+                        vec![IdentityProjectionAction {
+                            intent: TRANSFER_ACCEPT_INTENT,
+                            schema: TRANSFER_ACCEPT_SCHEMA,
+                            label: "Accept transfer",
+                            payload: Some(serde_json::json!({
+                                "transfer_id": offer.transfer_id.to_string(),
+                            })),
+                            native_only: true,
+                        }]
+                    })
+                    .unwrap_or_default(),
             });
         }
 
@@ -669,6 +691,7 @@ impl PersonalSyncHost {
                     ],
                     media: Vec::new(),
                 },
+                actions: Vec::new(),
             });
         }
 

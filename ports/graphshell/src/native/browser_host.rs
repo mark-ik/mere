@@ -163,6 +163,7 @@ where
     };
     let mut endpoint =
         IdentityEndpoint::for_admitted_with_cards(Arc::clone(&personae), &authority, surface.cards);
+    endpoint.with_decisions(surface.decisions);
     // A transfer whose bytes are too large to hold resident is refused here
     // rather than part-served: the session continues without it, and the
     // reason is logged where the operator can see it. Serving half a transfer
@@ -332,6 +333,7 @@ mod tests {
                 badges: vec!["Durable".into()],
                 media: Vec::new(),
             },
+            actions: Vec::new(),
         };
         let (host_stream, browser_stream) = tokio::io::duplex(64 * 1024);
         let (mut host_reader, mut host_writer) = tokio::io::split(host_stream);
@@ -349,6 +351,7 @@ mod tests {
             DeviceSurface {
                 cards: vec![supplemental],
                 released_blobs: Vec::new(),
+                decisions: Default::default(),
             },
         );
         let browser = async {

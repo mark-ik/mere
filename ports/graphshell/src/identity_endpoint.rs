@@ -29,17 +29,70 @@ use crate::identity_projection::{
     IdentityProjectionAction, SIGNING_APPROVE_IDLE_INTENT, SIGNING_APPROVE_ONCE_INTENT,
     SIGNING_DENY_INTENT, project_identity,
 };
+use crate::native::browser_host::now_ms;
 use crate::native::personae_host::PersonaeHost;
 
 pub const IDENTITY_SESSION: &str = "native:personae";
 
-/// One public, action-free card composed beside the Personae surface.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// One card composed beside the Personae surface.
+///
+/// Read-only by default: `actions` is empty unless the composer has something
+/// the person can actually decide, which today is accepting a waiting
+/// transfer. Keeping the default empty is what stops "supplemental" from
+/// quietly becoming a second, unaudited action surface.
+#[derive(Clone, Debug, PartialEq)]
 pub struct SupplementalCard {
     pub adapter: String,
     pub source_id: String,
     pub card: PortableCardV1,
+    pub actions: Vec<IdentityProjectionAction>,
 }
+
+impl SupplementalCard {
+    /// A card that shows and does nothing.
+    pub fn read_only(
+        adapter: impl Into<String>,
+        source_id: impl Into<String>,
+        card: PortableCardV1,
+    ) -> Self {
+        Self {
+            adapter: adapter.into(),
+            source_id: source_id.into(),
+            card,
+            actions: Vec::new(),
+        }
+    }
+}
+
+/// Intent a person invokes to accept a waiting transfer.
+pub const TRANSFER_ACCEPT_INTENT: &str = "graphshell.transfer.accept/v1";
+pub const TRANSFER_ACCEPT_SCHEMA: &str = "graphshell.TransferAcceptIntent/v1";
+
+/// The payload the accept action carries. Bound into the card when it is
+/// composed, so the browser invokes a decision about one named transfer
+/// rather than "the transfer", which would be ambiguous the moment two are
+/// waiting.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct TransferAcceptIntentV1 {
+    pub transfer_id: String,
+}
+
+/// One accepted transfer, recorded for the resident host to act on.
+///
+/// The gesture is synchronous and fetching bytes is not, so accepting records
+/// a decision rather than performing it. What the person agreed to is durable
+/// the moment they agree; the work it implies happens where awaiting is
+/// possible.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TransferDecision {
+    pub transfer_id: String,
+    pub at_ms: u64,
+}
+
+/// Decisions waiting for the resident host. A `std::sync::Mutex` rather than
+/// tokio's, because the endpoint that pushes cannot await and the critical
+/// section is a push or a drain.
+pub type TransferDecisions = std::sync::Arc<std::sync::Mutex<Vec<TransferDecision>>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IdentityEndpointError {
@@ -84,6 +137,10 @@ pub struct IdentityEndpoint<S: IdentityStorage> {
     released: BTreeMap<ContentHash, Vec<u8>>,
     instance_actions: Vec<BTreeSet<String>>,
     supplemental_cards: Vec<SupplementalCard>,
+    /// Where an accepted transfer is recorded. `None` leaves the accept action
+    /// unserved, so a surface composed without it refuses rather than
+    /// pretending to accept.
+    decisions: Option<TransferDecisions>,
 }
 
 impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
@@ -121,7 +178,56 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
             released: BTreeMap::new(),
             instance_actions: Vec::new(),
             supplemental_cards: Vec::new(),
+            decisions: None,
         }
+    }
+
+    /// Where this endpoint records a person's accept.
+    pub fn with_decisions(&mut self, decisions: TransferDecisions) {
+        self.decisions = Some(decisions);
+    }
+
+    /// Record one accept. The intent gating upstream has already confirmed
+    /// this action was advertised on the card the person acted on.
+    ///
+    /// Idempotent by transfer: a double-click, or a browser retrying after a
+    /// dropped reply, must not queue the same transfer twice.
+    fn accept_transfer(&self, payload: &[u8]) -> IntentResult {
+        let Some(decisions) = self.decisions.as_ref() else {
+            return IntentResult::Rejected {
+                reason: "this device is not composing transfers, so it cannot accept one"
+                    .to_string(),
+            };
+        };
+        let accepted: TransferAcceptIntentV1 = match serde_json::from_slice(payload) {
+            Ok(accepted) => accepted,
+            Err(error) => {
+                return IntentResult::Rejected {
+                    reason: format!("accept payload was not understood: {error}"),
+                };
+            }
+        };
+        let mut queue = match decisions.lock() {
+            Ok(queue) => queue,
+            // A poisoned queue means another thread panicked mid-decision.
+            // Refusing is right: the person can act again, and pushing onto
+            // state of unknown shape is not recoverable by them.
+            Err(_) => {
+                return IntentResult::Rejected {
+                    reason: "transfer decisions are unavailable on this device".to_string(),
+                };
+            }
+        };
+        if !queue
+            .iter()
+            .any(|decision| decision.transfer_id == accepted.transfer_id)
+        {
+            queue.push(TransferDecision {
+                transfer_id: accepted.transfer_id,
+                at_ms: now_ms(),
+            });
+        }
+        IntentResult::Accepted
     }
 
     /// Make one accepted transfer's blobs pullable by this admitted browser.
@@ -224,7 +330,7 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
                 supplemental.adapter,
                 supplemental.source_id,
                 supplemental.card,
-                Vec::new(),
+                supplemental.actions,
             )
         }));
         let mut scene = Scene::new();
@@ -453,6 +559,13 @@ impl<S: IdentityStorage + 'static> IntentSink for IdentityEndpoint<S> {
             });
         }
 
+        // A supplemental card's action is not the identity authority's to
+        // answer. Routing it there would either fail confusingly or, worse,
+        // grow into a path where a composed card can reach the vault.
+        if intent.intent == TRANSFER_ACCEPT_INTENT {
+            return Ok(self.accept_transfer(&intent.payload));
+        }
+
         match self.host.apply_intent(&intent.intent, &intent.payload) {
             Ok(_) => {
                 self.mark_changed();
@@ -617,6 +730,7 @@ mod tests {
                 badges: vec!["Durable".into()],
                 media: Vec::new(),
             },
+            actions: Vec::new(),
         }];
 
         let snapshot = endpoint.snapshot(endpoint.request()).unwrap();
@@ -751,5 +865,116 @@ mod tests {
             0,
             "a refused release must leave nothing servable"
         );
+    }
+
+    /// Accepting is a decision, not the work it implies. The endpoint answers
+    /// synchronously and records what the person agreed to; the resident host
+    /// fetches later, where awaiting is possible.
+    #[test]
+    fn accepting_a_transfer_records_one_decision_and_never_reaches_the_vault() {
+        let (mut endpoint, _) = endpoint_with_private_sentinel();
+        let decisions: TransferDecisions = Default::default();
+        endpoint.with_decisions(Arc::clone(&decisions));
+
+        let transfer = "3f6b1e28-0000-4000-8000-00000000ffee";
+        let payload = serde_json::to_vec(&TransferAcceptIntentV1 {
+            transfer_id: transfer.to_string(),
+        })
+        .unwrap();
+
+        // Composed with the accept action, the way the sync host composes an
+        // offer card. Without it the intent is not advertised and is refused.
+        endpoint.supplemental_cards = vec![SupplementalCard {
+            adapter: "mere.graph".into(),
+            source_id: transfer.into(),
+            card: PortableCardV1 {
+                title: "Transfer from o-pc".into(),
+                values: Vec::new(),
+                badges: Vec::new(),
+                media: Vec::new(),
+            },
+            actions: vec![IdentityProjectionAction {
+                intent: TRANSFER_ACCEPT_INTENT,
+                schema: TRANSFER_ACCEPT_SCHEMA,
+                label: "Accept transfer",
+                payload: None,
+                native_only: true,
+            }],
+        }];
+        let snapshot = endpoint.snapshot(endpoint.request()).unwrap();
+        let target = snapshot
+            .presentation
+            .bindings
+            .iter()
+            .find(|binding| {
+                snapshot
+                    .presentation
+                    .offers_for(binding.instance)
+                    .is_some_and(|offers| {
+                        offers.iter().any(|offer| {
+                            offer.semantics.actions.iter().any(|action| {
+                                action.intent == IntentReference(TRANSFER_ACCEPT_INTENT.into())
+                            })
+                        })
+                    })
+            })
+            .expect("the offer card advertises accept")
+            .instance;
+
+        let invoke =
+            |endpoint: &mut IdentityEndpoint<InMemoryStorage>, instance, payload: &[u8]| {
+                endpoint.invoke(IntentInvocation {
+                    session: endpoint.session(),
+                    target: instance,
+                    intent: TRANSFER_ACCEPT_INTENT.to_string(),
+                    payload: payload.to_vec(),
+                    observed_epoch: SceneEpoch(endpoint.epoch),
+                    observed_revision: Revision(endpoint.revision),
+                })
+            };
+
+        assert!(matches!(
+            invoke(&mut endpoint, target, &payload).unwrap(),
+            IntentResult::Accepted
+        ));
+        // A double-click, or a browser retrying after a dropped reply, must
+        // not queue the same transfer twice.
+        assert!(matches!(
+            invoke(&mut endpoint, target, &payload).unwrap(),
+            IntentResult::Accepted
+        ));
+        let queued = decisions.lock().unwrap();
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].transfer_id, transfer);
+        drop(queued);
+
+        // A card that did not advertise accept cannot be used to accept.
+        let unadvertised = snapshot
+            .presentation
+            .bindings
+            .iter()
+            .map(|binding| binding.instance)
+            .find(|instance| *instance != target)
+            .expect("the identity cards are still there");
+        assert!(matches!(
+            invoke(&mut endpoint, unadvertised, &payload).unwrap(),
+            IntentResult::Rejected { .. }
+        ));
+        assert_eq!(decisions.lock().unwrap().len(), 1);
+    }
+
+    /// A surface composed without a decision queue must refuse rather than
+    /// report an accept nothing will act on.
+    #[test]
+    fn accepting_without_a_place_to_record_it_is_refused() {
+        let (endpoint, _) = endpoint_with_private_sentinel();
+        let payload = serde_json::to_vec(&TransferAcceptIntentV1 {
+            transfer_id: "whatever".into(),
+        })
+        .unwrap();
+        assert!(matches!(
+            endpoint.accept_transfer(&payload),
+            IntentResult::Rejected { .. }
+        ));
     }
 }
