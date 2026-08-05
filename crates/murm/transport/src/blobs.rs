@@ -121,9 +121,9 @@ impl BlobStore {
             std::fs::create_dir_all(parent)
                 .map_err(|e| BlobError::Backend(format!("create blob root: {e}")))?;
         }
-        let store = FsStore::load(root)
-            .await
-            .map_err(|e| BlobError::Backend(format!("open blob store at {}: {e:?}", root.display())))?;
+        let store = FsStore::load(root).await.map_err(|e| {
+            BlobError::Backend(format!("open blob store at {}: {e:?}", root.display()))
+        })?;
         Ok(Self {
             store: Backing::File(store),
         })
@@ -212,6 +212,61 @@ impl BlobStore {
             .get_bytes(hash.0)
             .await
             .map_err(|e| BlobError::Backend(format!("get_bytes: {e:?}")))
+    }
+
+    /// Read at most `length` bytes starting at `offset`, with the blob's total
+    /// length.
+    ///
+    /// For serving a blob in pieces to something that cannot take it whole.
+    /// Reading through [`get_bytes`](Self::get_bytes) once per piece is
+    /// quadratic in the blob's size, which a large transfer notices; this
+    /// seeks instead.
+    ///
+    /// Returns the total length alongside the bytes so a caller can tell a
+    /// short read at the end of a blob from a truncated one without asking
+    /// again. An `offset` at or past the end yields no bytes rather than an
+    /// error, so a caller stepping to the end stops rather than failing.
+    ///
+    /// A partially fetched blob reads as [`BlobError::NotFound`]. Its later
+    /// bytes are absent and its content has not been verified as a whole, so
+    /// serving a prefix would hand out bytes nothing has vouched for.
+    #[tracing::instrument(level = "debug", skip(self), fields(?hash))]
+    pub async fn read_range(
+        &self,
+        hash: BlobHash,
+        offset: u64,
+        length: usize,
+    ) -> Result<(Bytes, u64), BlobError> {
+        use iroh_blobs::api::blobs::BlobStatus;
+        use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
+        // One call for both questions: is it wholly here, and how big is it.
+        // The reader cannot seek from the end, so the size has to come from
+        // the store rather than from the stream.
+        let status = self
+            .store()
+            .blobs()
+            .status(hash.0)
+            .await
+            .map_err(|error| BlobError::Backend(format!("read_range status: {error:?}")))?;
+        let BlobStatus::Complete { size: total } = status else {
+            return Err(BlobError::NotFound(hash));
+        };
+        if offset >= total {
+            return Ok((Bytes::new(), total));
+        }
+        let mut reader = self.store().blobs().reader(hash.0);
+        reader
+            .seek(std::io::SeekFrom::Start(offset))
+            .await
+            .map_err(|error| BlobError::Backend(format!("read_range seek to {offset}: {error}")))?;
+        let want = length.min((total - offset) as usize);
+        let mut buffer = vec![0u8; want];
+        reader
+            .read_exact(&mut buffer)
+            .await
+            .map_err(|error| BlobError::Backend(format!("read_range read {want}: {error}")))?;
+        Ok((Bytes::from(buffer), total))
     }
 
     /// Whether the given hash is present in the local store.
@@ -426,5 +481,43 @@ mod tests {
         assert!(bob_blobs.has(hash).await.unwrap());
         let got = bob_blobs.get_bytes(hash).await.unwrap();
         assert_eq!(got, payload);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn read_range_walks_a_blob_without_rereading_it() {
+        let blobs = BlobStore::new();
+        let payload: Vec<u8> = (0..10_000u32).map(|index| (index % 251) as u8).collect();
+        let hash = blobs.put_bytes(payload.clone()).await.unwrap();
+
+        // Walk it in pieces the way a chunked reader does.
+        let mut assembled = Vec::new();
+        loop {
+            let (piece, total) = blobs
+                .read_range(hash, assembled.len() as u64, 3_000)
+                .await
+                .unwrap();
+            assert_eq!(total, payload.len() as u64);
+            if piece.is_empty() {
+                break;
+            }
+            assembled.extend_from_slice(&piece);
+        }
+        assert_eq!(assembled, payload);
+
+        // A short tail is reported as itself, not padded or refused.
+        let (tail, total) = blobs.read_range(hash, 9_990, 500).await.unwrap();
+        assert_eq!(tail.len(), 10);
+        assert_eq!(total, payload.len() as u64);
+
+        // Past the end stops a walker rather than failing it.
+        let (past, _) = blobs.read_range(hash, 10_000, 64).await.unwrap();
+        assert!(past.is_empty());
+
+        // A blob that is not held is a distinct, nameable error.
+        let absent = BlobHash::from_bytes([0x9f; 32]);
+        assert!(matches!(
+            blobs.read_range(absent, 0, 8).await,
+            Err(BlobError::NotFound(_))
+        ));
     }
 }
