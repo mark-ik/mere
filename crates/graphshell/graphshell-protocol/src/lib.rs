@@ -378,18 +378,39 @@ impl ResourceChunkResponse {
     /// end yields an empty final chunk rather than an error, so a client that
     /// raced a shrinking resource stops instead of retrying forever.
     pub fn slice(whole: &ResourceResponse, offset: u64, length: u32) -> Self {
-        let total_len = whole.bytes.len() as u64;
+        Self::from_slice(
+            whole.session.clone(),
+            whole.resource,
+            &whole.bytes,
+            offset,
+            length,
+        )
+    }
+
+    /// Cut one reply from bytes held by reference.
+    ///
+    /// The form to use when the whole resource is already in hand: taking it
+    /// as a slice means serving N chunks copies the resource once, not N
+    /// times.
+    pub fn from_slice(
+        session: ProjectionSession,
+        resource: ContentHash,
+        whole: &[u8],
+        offset: u64,
+        length: u32,
+    ) -> Self {
+        let total_len = whole.len() as u64;
         let start = offset.min(total_len) as usize;
         let want = if length == 0 {
             MAX_RESOURCE_CHUNK_BYTES
         } else {
             length.min(MAX_RESOURCE_CHUNK_BYTES)
         } as usize;
-        let end = start.saturating_add(want).min(whole.bytes.len());
-        let slice = &whole.bytes[start..end];
+        let end = start.saturating_add(want).min(whole.len());
+        let slice = &whole[start..end];
         Self {
-            session: whole.session.clone(),
-            resource: whole.resource,
+            session,
+            resource,
             offset: start as u64,
             total_len,
             chunk: ContentHash::of(slice),

@@ -15,7 +15,7 @@ use graphshell_protocol::{
     PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
     PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics,
     ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
-    ResourceRequest, ResourceResponse, SemanticRole,
+    ResourceChunkRequest, ResourceChunkResponse, ResourceRequest, ResourceResponse, SemanticRole,
 };
 use personae::IdentityStorage;
 use sceno::{
@@ -53,7 +53,22 @@ pub enum IdentityEndpointError {
     WrongSession,
     #[error("identity resource was not disclosed by this session")]
     MissingResource,
+    #[error(
+        "transfer holds {bytes} bytes, over the {ceiling}-byte ceiling for \
+         blobs released to a browser; this transfer needs the streaming path"
+    )]
+    TransferTooLarge { bytes: usize, ceiling: usize },
 }
+
+/// Most bytes one accepted transfer may hold resident for a browser to pull.
+///
+/// A ceiling exists because these bytes stay in memory until the browser has
+/// them: the endpoint trait is synchronous, so it cannot read a blob store on
+/// demand, and the resident host loads them ahead of time instead. Sized for
+/// the documents and images a person moves between their own devices, not for
+/// archives. Raising it trades memory for reach; removing the ceiling wants
+/// the streaming path rather than a bigger number.
+pub const MAX_RELEASED_TRANSFER_BYTES: usize = 64 * 1024 * 1024;
 
 /// Native identity authority exposed through Graphshell's ordinary endpoint
 /// vocabulary.
@@ -64,6 +79,9 @@ pub struct IdentityEndpoint<S: IdentityStorage> {
     revision: u64,
     last_public_snapshot: Option<Vec<u8>>,
     resources: BTreeMap<ContentHash, Vec<u8>>,
+    /// Blobs granted to this browser by an accepted transfer, kept out of
+    /// `resources` because a projection refresh replaces that map wholesale.
+    released: BTreeMap<ContentHash, Vec<u8>>,
     instance_actions: Vec<BTreeSet<String>>,
     supplemental_cards: Vec<SupplementalCard>,
 }
@@ -100,9 +118,60 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
             revision: 1,
             last_public_snapshot: None,
             resources: BTreeMap::new(),
+            released: BTreeMap::new(),
             instance_actions: Vec::new(),
             supplemental_cards: Vec::new(),
         }
+    }
+
+    /// Make one accepted transfer's blobs pullable by this admitted browser.
+    ///
+    /// Held apart from `resources`, which a projection refresh replaces
+    /// wholesale, and which is derived from identity rather than granted.
+    /// Keeping them in separate maps is what makes "which bytes has this
+    /// browser been given access to" a question with an answer.
+    ///
+    /// Nothing outside this set is servable, whether or not the device holds
+    /// it. An admitted extension knowing a hash is not authorization to read
+    /// the bytes behind it.
+    ///
+    /// Refuses rather than truncates past [`MAX_RELEASED_TRANSFER_BYTES`]:
+    /// these bytes stay resident until the browser has pulled them, which is
+    /// the cost of an endpoint that cannot await a store read. A transfer over
+    /// the ceiling needs the streaming path, and should say so rather than
+    /// half-arrive.
+    pub fn release_transfer(
+        &mut self,
+        blobs: Vec<(ContentHash, Vec<u8>)>,
+    ) -> Result<(), IdentityEndpointError> {
+        let total: usize = blobs.iter().map(|(_, bytes)| bytes.len()).sum();
+        if total > MAX_RELEASED_TRANSFER_BYTES {
+            return Err(IdentityEndpointError::TransferTooLarge {
+                bytes: total,
+                ceiling: MAX_RELEASED_TRANSFER_BYTES,
+            });
+        }
+        self.released = blobs.into_iter().collect();
+        Ok(())
+    }
+
+    /// Drop every released blob. Called once a transfer has been applied, so
+    /// the grant does not outlive the reason for it.
+    pub fn retire_released(&mut self) {
+        self.released.clear();
+    }
+
+    pub fn released_count(&self) -> usize {
+        self.released.len()
+    }
+
+    /// Identity resources first, then blobs released by an accepted transfer.
+    /// Both are readable by an admitted browser; only the second was granted.
+    fn bytes_for(&self, resource: &ContentHash) -> Option<&[u8]> {
+        self.resources
+            .get(resource)
+            .or_else(|| self.released.get(resource))
+            .map(Vec::as_slice)
     }
 
     pub fn host(&self) -> &Arc<PersonaeHost<S>> {
@@ -323,15 +392,37 @@ impl<S: IdentityStorage + 'static> PresentationSource for IdentityEndpoint<S> {
             return Err(IdentityEndpointError::WrongSession);
         }
         let bytes = self
-            .resources
-            .get(&request.resource)
-            .cloned()
-            .ok_or(IdentityEndpointError::MissingResource)?;
+            .bytes_for(&request.resource)
+            .ok_or(IdentityEndpointError::MissingResource)?
+            .to_vec();
         Ok(ResourceResponse {
             session: request.session,
             resource: request.resource,
             bytes,
         })
+    }
+
+    /// Overridden so serving a blob in N pieces copies it once rather than N
+    /// times. The default reads the whole resource per chunk, which is right
+    /// but quadratic, and a released transfer blob is exactly the case where
+    /// that shows.
+    fn resource_chunk(
+        &mut self,
+        request: ResourceChunkRequest,
+    ) -> Result<ResourceChunkResponse, Self::Error> {
+        if request.session != self.session() {
+            return Err(IdentityEndpointError::WrongSession);
+        }
+        let bytes = self
+            .bytes_for(&request.resource)
+            .ok_or(IdentityEndpointError::MissingResource)?;
+        Ok(ResourceChunkResponse::from_slice(
+            request.session,
+            request.resource,
+            bytes,
+            request.offset,
+            request.length,
+        ))
     }
 }
 
@@ -377,6 +468,7 @@ impl<S: IdentityStorage + 'static> IntentSink for IdentityEndpoint<S> {
 #[cfg(test)]
 mod tests {
     use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
+    use graphshell_protocol::ResourceAssembly;
     use personae::{Ed25519Keypair, IdentityVault, InMemoryStorage, Profile, ProfileId};
     use ssh_key::{Algorithm, LineEnding};
 
@@ -549,6 +641,115 @@ mod tests {
             !String::from_utf8(response.bytes)
                 .unwrap()
                 .contains(&private_openssh)
+        );
+    }
+
+    /// The release set is the boundary. An admitted browser knowing a hash is
+    /// not authorization to read the bytes behind it, so a blob the device
+    /// holds but has not released must be indistinguishable from one it does
+    /// not hold at all.
+    #[test]
+    fn only_released_blobs_are_servable_and_they_arrive_in_verified_chunks() {
+        let (mut endpoint, _) = endpoint_with_private_sentinel();
+        let session = endpoint.session();
+        let payload: Vec<u8> = (0..200_000u32).map(|index| (index % 241) as u8).collect();
+        let granted = ContentHash::of(&payload);
+        let withheld = ContentHash::of(b"a blob this device holds but did not release");
+
+        assert!(
+            endpoint
+                .resource_chunk(ResourceChunkRequest {
+                    session: session.clone(),
+                    resource: granted,
+                    offset: 0,
+                    length: 1024,
+                })
+                .is_err(),
+            "nothing is servable before a transfer is accepted"
+        );
+
+        endpoint
+            .release_transfer(vec![(granted, payload.clone())])
+            .unwrap();
+        assert_eq!(endpoint.released_count(), 1);
+
+        let mut assembly = ResourceAssembly::new();
+        let mut frames = 0;
+        let pulled = loop {
+            let chunk = endpoint
+                .resource_chunk(ResourceChunkRequest {
+                    session: session.clone(),
+                    resource: granted,
+                    offset: assembly.received(),
+                    length: 64 * 1024,
+                })
+                .unwrap();
+            frames += 1;
+            if let Some(bytes) = assembly.accept(&chunk).unwrap() {
+                break bytes;
+            }
+        };
+        assert_eq!(pulled, payload);
+        assert!(
+            frames > 1,
+            "the point is that it did not arrive in one frame"
+        );
+
+        assert!(
+            endpoint
+                .resource_chunk(ResourceChunkRequest {
+                    session: session.clone(),
+                    resource: withheld,
+                    offset: 0,
+                    length: 1024,
+                })
+                .is_err(),
+            "an unreleased hash must not be servable"
+        );
+
+        // A different session must not reach another one's grant.
+        assert!(
+            endpoint
+                .resource_chunk(ResourceChunkRequest {
+                    session: ProjectionSession("native:someone-else".into()),
+                    resource: granted,
+                    offset: 0,
+                    length: 1024,
+                })
+                .is_err()
+        );
+
+        endpoint.retire_released();
+        assert_eq!(endpoint.released_count(), 0);
+        assert!(
+            endpoint
+                .resource(ResourceRequest {
+                    session,
+                    resource: granted,
+                })
+                .is_err(),
+            "retiring the grant must actually revoke it"
+        );
+    }
+
+    /// Resident bytes are the cost of a synchronous endpoint, so the ceiling
+    /// refuses rather than half-arriving. A partial release would look like a
+    /// transfer that worked.
+    #[test]
+    fn a_transfer_over_the_ceiling_is_refused_whole() {
+        let (mut endpoint, _) = endpoint_with_private_sentinel();
+        let oversized = vec![0u8; MAX_RELEASED_TRANSFER_BYTES + 1];
+        let refused = endpoint
+            .release_transfer(vec![(ContentHash::of(&oversized), oversized)])
+            .unwrap_err();
+        assert!(matches!(
+            refused,
+            IdentityEndpointError::TransferTooLarge { .. }
+        ));
+        assert_eq!(
+            endpoint.released_count(),
+            0,
+            "a refused release must leave nothing servable"
         );
     }
 }
