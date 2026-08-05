@@ -1122,13 +1122,46 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   transfer needs both lanes; the settings surface should say so rather than let
   the combination look valid.
 
-  Still open in S3, all browser-facing: chunked broker delivery under
-  `MAX_NATIVE_MESSAGE_BYTES` with acknowledgements and a bounded in-flight
-  window; the recorded `navigator.storage.persist()` grant; promotion of
-  destination staging into a recovery pin; and the blob-reference-set intent
-  pair that pin release depends on. Also unbatched: staging authors one
-  operation per blob, which is fine for a handful and worth batching before a
-  transfer carries many.
+  **Chunked delivery landed 2026-08-04 at the protocol layer.**
+  `ResourceRequest` was whole-resource only, and `ResourceResponse.bytes` is a
+  `Vec<u8>` that JSON renders as a number array at roughly 4x, so a resource
+  over about 250 KiB could not cross a 1 MiB native-messaging frame at all.
+  That is why the ruling said base64.
+
+  Added as `CarrierRequestBody::ResourceChunk` rather than a range on the
+  existing verb. `ResourceResponse.resource` is the address *of its bytes*,
+  checked by `has_valid_address`; a partial reply would make that field either
+  wrong or ambiguous, so chunks address themselves separately and both checks
+  stay honest. A chunk carries two hashes: `resource` says which whole thing
+  it belongs to, `chunk` says these bytes arrived intact. `ResourceAssembly`
+  verifies each frame, refuses an out-of-order or duplicate one, and verifies
+  the assembled whole before releasing it.
+
+  **Acknowledgement is the next request.** Mark's ruling asked for
+  acknowledgements and a bounded in-flight window; pull-based chunk requests
+  satisfy both without separate ack frames, because asking for the chunk at
+  offset N acknowledges everything below N, and the window is simply how many
+  requests a client leaves outstanding. Interleaving with card and identity
+  traffic comes free: each chunk is an ordinary request/response pair the
+  existing loop already multiplexes by id.
+
+  `PresentationSource::resource_chunk` is **defaulted**, so every endpoint
+  written before chunking existed serves large resources correctly the moment
+  a client asks, receipted by
+  `an_endpoint_that_only_serves_whole_resources_still_serves_chunks`. An
+  endpoint that can seek should override it.
+  `base64_keeps_a_full_chunk_inside_the_native_message_frame` asserts a full
+  chunk framed as a `CarrierResponse` stays under
+  `browser_carrier::MAX_NATIVE_MESSAGE_BYTES`, so raising the chunk size
+  without the frame cap fails in a test rather than in a browser.
+
+  Still open in S3: **the browser-side consumer is not wired yet**, so nothing
+  in the product asks for a chunk today; that seam is a Graphshell endpoint
+  exposing the sync host's staged blobs as resources. Then the recorded
+  `navigator.storage.persist()` grant, promotion of destination staging into a
+  recovery pin, and the blob-reference-set intent pair that pin release
+  depends on. Also unbatched: staging authors one operation per blob, which is
+  fine for a handful and worth batching before a transfer carries many.
 
 **Not in scope:** cross-persona copy authorization UX; the carrier seam
 plan's C3 (independent, about projection sessions); Turnstone (holds no

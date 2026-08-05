@@ -60,10 +60,7 @@ impl RetainedEndpointSession {
     /// carries it. Everything after discovery is identical, which is the point
     /// of the seam: where the endpoint runs stops being a different code path
     /// and becomes a different argument.
-    pub fn over(
-        mut carrier: Box<dyn Carrier>,
-        profile: CapabilityProfile,
-    ) -> Result<Self, String> {
+    pub fn over(mut carrier: Box<dyn Carrier>, profile: CapabilityProfile) -> Result<Self, String> {
         let descriptor = match carrier.request(CarrierRequestBody::Discover)? {
             CarrierResponseBody::Descriptor(descriptor) => descriptor,
             other => return Err(unexpected("descriptor", &other)),
@@ -247,7 +244,10 @@ impl RetainedEndpointSession {
         }
         let mut changed = false;
         loop {
-            let notice = self.carrier.as_mut().and_then(|carrier| carrier.take_notice());
+            let notice = self
+                .carrier
+                .as_mut()
+                .and_then(|carrier| carrier.take_notice());
             let Some(notice) = notice else {
                 break;
             };
@@ -490,6 +490,7 @@ fn unexpected(expected: &str, actual: &CarrierResponseBody) -> String {
             CarrierResponseBody::Descriptor(_) => "a descriptor",
             CarrierResponseBody::Snapshot(_) => "a snapshot",
             CarrierResponseBody::Resource(_) => "a resource",
+            CarrierResponseBody::ResourceChunk(_) => "a resource chunk",
             CarrierResponseBody::Resume(_) => "a resume reply",
             CarrierResponseBody::Intent(_) => "an intent result",
             CarrierResponseBody::Opened(_) => "an opened session",

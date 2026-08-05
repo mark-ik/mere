@@ -5,7 +5,8 @@ use std::fmt::Display;
 use graphshell_protocol::{
     CarrierFailure, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponse,
     CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
-    ProjectionSnapshot, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
+    ProjectionSnapshot, ResourceChunkRequest, ResourceChunkResponse, ResourceRequest,
+    ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
 };
 
 /// Everything a carrier needs from an endpoint to serve the common verbs.
@@ -43,6 +44,29 @@ pub trait PresentationSource {
     type Error;
 
     fn resource(&mut self, request: ResourceRequest) -> Result<ResourceResponse, Self::Error>;
+
+    /// Serve one slice of a resource, for resources larger than a carrier
+    /// frame.
+    ///
+    /// Defaulted so every existing endpoint can serve large resources
+    /// correctly the moment a client asks, without being rewritten. The
+    /// default reads the whole resource and cuts one chunk from it, which is
+    /// right but not cheap; an endpoint that can seek should override it and
+    /// read only the requested range.
+    fn resource_chunk(
+        &mut self,
+        request: ResourceChunkRequest,
+    ) -> Result<ResourceChunkResponse, Self::Error> {
+        let whole = self.resource(ResourceRequest {
+            session: request.session,
+            resource: request.resource,
+        })?;
+        Ok(ResourceChunkResponse::slice(
+            &whole,
+            request.offset,
+            request.length,
+        ))
+    }
 }
 
 /// Reconnect and acknowledgement boundary. An endpoint may replay contiguous
@@ -105,6 +129,10 @@ where
             .resource(request)
             .map(CarrierResponseBody::Resource)
             .map_err(|error| error.to_string()),
+        CarrierRequestBody::ResourceChunk(request) => endpoint
+            .resource_chunk(request)
+            .map(|chunk| CarrierResponseBody::ResourceChunk(Box::new(chunk)))
+            .map_err(|error| error.to_string()),
         CarrierRequestBody::Resume(request) => {
             resume(endpoint, request).map(CarrierResponseBody::Resume)
         }
@@ -157,4 +185,78 @@ pub enum SessionPlaneVerb {
     Close,
     /// Going away, but keep the session resumable.
     Suspend,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use graphshell_protocol::{
+        ContentHash, MAX_RESOURCE_CHUNK_BYTES, ProjectionSession, ResourceAssembly,
+    };
+
+    /// An endpoint that knows only how to hand over a whole resource, which is
+    /// every endpoint written before chunking existed.
+    struct WholeResourceOnly {
+        bytes: Vec<u8>,
+    }
+
+    impl PresentationSource for WholeResourceOnly {
+        type Error = String;
+
+        fn resource(&mut self, request: ResourceRequest) -> Result<ResourceResponse, Self::Error> {
+            let response = ResourceResponse::new(request.session, self.bytes.clone());
+            (response.resource == request.resource)
+                .then_some(response)
+                .ok_or_else(|| "unknown resource".to_string())
+        }
+    }
+
+    /// The default is the whole point of putting chunking on the trait: an
+    /// endpoint that never heard of it still serves a resource larger than a
+    /// carrier frame, correctly and verifiably, without being rewritten.
+    #[test]
+    fn an_endpoint_that_only_serves_whole_resources_still_serves_chunks() {
+        let bytes: Vec<u8> = (0..(MAX_RESOURCE_CHUNK_BYTES as usize + 1_234))
+            .map(|index| (index % 253) as u8)
+            .collect();
+        let session = ProjectionSession("fixture:legacy".into());
+        let resource = ContentHash::of(&bytes);
+        let mut endpoint = WholeResourceOnly {
+            bytes: bytes.clone(),
+        };
+
+        let mut assembly = ResourceAssembly::new();
+        let mut frames = 0;
+        let assembled = loop {
+            let chunk = endpoint
+                .resource_chunk(ResourceChunkRequest {
+                    session: session.clone(),
+                    resource,
+                    offset: assembly.received(),
+                    length: 0,
+                })
+                .unwrap();
+            frames += 1;
+            if let Some(done) = assembly.accept(&chunk).unwrap() {
+                break done;
+            }
+        };
+
+        assert_eq!(assembled, bytes);
+        assert_eq!(frames, 2, "one full chunk and one short tail");
+    }
+
+    #[test]
+    fn a_chunk_request_for_an_unknown_resource_fails_rather_than_serving_bytes() {
+        let mut endpoint = WholeResourceOnly {
+            bytes: b"real".to_vec(),
+        };
+        let refused = endpoint.resource_chunk(ResourceChunkRequest {
+            session: ProjectionSession("fixture:legacy".into()),
+            resource: ContentHash::of(b"something else"),
+            offset: 0,
+            length: 16,
+        });
+        assert!(refused.is_err());
+    }
 }

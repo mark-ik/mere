@@ -53,6 +53,10 @@ pub(crate) fn summarize(body: &graphshell_protocol::CarrierResponseBody) -> Stri
             format!("snapshot of {} item(s)", snapshot.scene.active_item_count())
         }
         B::Resource(_) => "resource".to_string(),
+        B::ResourceChunk(chunk) => format!(
+            "resource chunk at {} of {} byte(s)",
+            chunk.offset, chunk.total_len
+        ),
         // Which reply matters: replayed diffs are the thing that makes this a
         // resume rather than a reconnect that started over.
         B::Resume(reply) => match reply {

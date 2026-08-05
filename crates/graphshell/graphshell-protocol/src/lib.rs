@@ -322,6 +322,177 @@ impl ResourceResponse {
     }
 }
 
+/// Most raw bytes one resource chunk carries before encoding.
+///
+/// Sized against the native-messaging frame cap rather than chosen round.
+/// `bytes` is base64 in the chunk reply, which costs 4/3, so 512 KiB raw
+/// arrives as about 683 KiB and leaves room for the rest of the frame under a
+/// 1 MiB cap. Serializing raw `Vec<u8>` through JSON instead would cost
+/// roughly 4x and put a single chunk over the cap on its own, which is why
+/// this reply carries text where [`ResourceResponse`] carries bytes.
+pub const MAX_RESOURCE_CHUNK_BYTES: u32 = 512 * 1024;
+
+/// Read part of a resource, for resources too large for one carrier frame.
+///
+/// Deliberately not a range on [`ResourceRequest`]. That reply's `resource`
+/// is the address *of its bytes*, checked by
+/// [`has_valid_address`](ResourceResponse::has_valid_address); a partial reply
+/// would make that field either wrong or ambiguous. Chunks address themselves
+/// separately instead, so both checks stay honest.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceChunkRequest {
+    pub session: ProjectionSession,
+    /// The whole resource being read, not this chunk.
+    pub resource: ContentHash,
+    pub offset: u64,
+    /// Most bytes this client will accept back. `0` lets the endpoint choose;
+    /// any value is clamped to [`MAX_RESOURCE_CHUNK_BYTES`]. A zero-length
+    /// reply below the end of a resource would strand a client in a loop, so
+    /// the endpoint never sends one.
+    pub length: u32,
+}
+
+/// One addressed slice of a resource.
+///
+/// Carries two hashes because they answer different questions: `resource`
+/// says which whole thing this belongs to, and `chunk` says these particular
+/// bytes arrived intact. A client verifies `chunk` per frame and the assembled
+/// `resource` once at the end.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceChunkResponse {
+    pub session: ProjectionSession,
+    pub resource: ContentHash,
+    pub offset: u64,
+    /// Length of the whole resource, so a client can size its buffer and know
+    /// when it is finished without waiting for a sentinel frame.
+    pub total_len: u64,
+    pub chunk: ContentHash,
+    /// Base64 (standard alphabet, padded). See [`MAX_RESOURCE_CHUNK_BYTES`].
+    pub bytes: String,
+}
+
+impl ResourceChunkResponse {
+    /// Cut one reply out of a whole resource already in hand.
+    ///
+    /// The default path for any endpoint that cannot seek. An offset past the
+    /// end yields an empty final chunk rather than an error, so a client that
+    /// raced a shrinking resource stops instead of retrying forever.
+    pub fn slice(whole: &ResourceResponse, offset: u64, length: u32) -> Self {
+        let total_len = whole.bytes.len() as u64;
+        let start = offset.min(total_len) as usize;
+        let want = if length == 0 {
+            MAX_RESOURCE_CHUNK_BYTES
+        } else {
+            length.min(MAX_RESOURCE_CHUNK_BYTES)
+        } as usize;
+        let end = start.saturating_add(want).min(whole.bytes.len());
+        let slice = &whole.bytes[start..end];
+        Self {
+            session: whole.session.clone(),
+            resource: whole.resource,
+            offset: start as u64,
+            total_len,
+            chunk: ContentHash::of(slice),
+            bytes: base64_encode(slice),
+        }
+    }
+
+    /// The raw bytes, if this frame is intact. `None` when the payload is not
+    /// valid base64 or does not match `chunk`.
+    pub fn decode(&self) -> Option<Vec<u8>> {
+        let bytes = base64_decode(&self.bytes)?;
+        (ContentHash::of(&bytes) == self.chunk).then_some(bytes)
+    }
+
+    /// Whether this frame reaches the end of the resource.
+    pub fn is_final(&self, decoded_len: usize) -> bool {
+        self.offset.saturating_add(decoded_len as u64) >= self.total_len
+    }
+}
+
+/// Reassembles a resource from sequential chunk replies.
+///
+/// Sequential on purpose: chunks are requested one window at a time, so an
+/// out-of-order or duplicated frame is a protocol fault to report rather than
+/// a case to reorder around. The whole-resource hash is verified once at the
+/// end, so a corrupted frame that somehow passed its own check still cannot
+/// be delivered as the resource.
+#[derive(Clone, Debug, Default)]
+pub struct ResourceAssembly {
+    bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AssemblyError {
+    /// The frame failed its own `chunk` address, or was not valid base64.
+    CorruptChunk,
+    /// The frame did not begin where the previous one ended.
+    OutOfOrder { expected: u64, found: u64 },
+    /// Every byte arrived, but the whole does not match `resource`.
+    WrongResource,
+}
+
+impl fmt::Display for AssemblyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CorruptChunk => write!(formatter, "resource chunk failed its own address"),
+            Self::OutOfOrder { expected, found } => {
+                write!(formatter, "expected chunk at {expected}, received {found}")
+            }
+            Self::WrongResource => {
+                write!(
+                    formatter,
+                    "assembled bytes do not match the resource address"
+                )
+            }
+        }
+    }
+}
+
+impl ResourceAssembly {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Bytes received so far; also the offset of the next chunk to request.
+    pub fn received(&self) -> u64 {
+        self.bytes.len() as u64
+    }
+
+    /// Take one reply. `Ok(Some(bytes))` means the resource is complete and
+    /// verified; `Ok(None)` means keep going from [`received`](Self::received).
+    pub fn accept(
+        &mut self,
+        response: &ResourceChunkResponse,
+    ) -> Result<Option<Vec<u8>>, AssemblyError> {
+        let decoded = response.decode().ok_or(AssemblyError::CorruptChunk)?;
+        if response.offset != self.received() {
+            return Err(AssemblyError::OutOfOrder {
+                expected: self.received(),
+                found: response.offset,
+            });
+        }
+        self.bytes.extend_from_slice(&decoded);
+        if !response.is_final(decoded.len()) {
+            return Ok(None);
+        }
+        if ContentHash::of(&self.bytes) != response.resource {
+            return Err(AssemblyError::WrongResource);
+        }
+        Ok(Some(std::mem::take(&mut self.bytes)))
+    }
+}
+
+fn base64_encode(bytes: &[u8]) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.decode(text).ok()
+}
+
 /// The payload for a native Graphshell glyph resource.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NativeGlyphV1 {
@@ -534,6 +705,10 @@ pub enum CarrierRequestBody {
     Discover,
     Snapshot(ProjectionRequest),
     Resource(ResourceRequest),
+    /// Read part of a resource. Requesting the next chunk is what
+    /// acknowledges the last one, so flow control is the client's outstanding
+    /// request count and needs no separate ack frame.
+    ResourceChunk(ResourceChunkRequest),
     Resume(ResumeRequest),
     Intent(IntentInvocation),
     /// Negotiate version and capabilities on an already-admitted carrier.
@@ -555,6 +730,7 @@ pub enum CarrierResponseBody {
     Descriptor(EndpointDescriptor),
     Snapshot(Box<ProjectionSnapshot>),
     Resource(ResourceResponse),
+    ResourceChunk(Box<ResourceChunkResponse>),
     Resume(ResumeReply),
     Intent(IntentResult),
     Opened(Box<SessionOpened>),
@@ -923,6 +1099,138 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<CarrierResponse>(&json).unwrap(),
             response
+        );
+    }
+
+    fn resource(bytes: Vec<u8>) -> ResourceResponse {
+        ResourceResponse::new(ProjectionSession("fixture:blobs".into()), bytes)
+    }
+
+    /// Pull a whole resource the way a client does: request, accept, repeat
+    /// from wherever the assembly says it is.
+    fn pull(whole: &ResourceResponse, window: u32) -> Result<Vec<u8>, AssemblyError> {
+        let mut assembly = ResourceAssembly::new();
+        loop {
+            let chunk = ResourceChunkResponse::slice(whole, assembly.received(), window);
+            if let Some(bytes) = assembly.accept(&chunk)? {
+                return Ok(bytes);
+            }
+        }
+    }
+
+    #[test]
+    fn a_resource_larger_than_one_frame_arrives_whole_and_verified() {
+        // Deliberately not a multiple of the window, so the last chunk is short.
+        let bytes: Vec<u8> = (0..300_000u32).map(|index| (index % 251) as u8).collect();
+        let whole = resource(bytes.clone());
+        assert_eq!(pull(&whole, 64 * 1024).unwrap(), bytes);
+        // A window of one proves the loop terminates on the awkward sizes too.
+        assert_eq!(pull(&resource(vec![7; 5]), 1).unwrap(), vec![7; 5]);
+        // Zero means "endpoint chooses" rather than an infinite stall.
+        assert_eq!(pull(&whole, 0).unwrap(), bytes);
+    }
+
+    #[test]
+    fn an_empty_resource_completes_in_one_chunk() {
+        let whole = resource(Vec::new());
+        let chunk = ResourceChunkResponse::slice(&whole, 0, 1024);
+        assert_eq!(chunk.total_len, 0);
+        assert_eq!(
+            ResourceAssembly::new().accept(&chunk).unwrap(),
+            Some(Vec::new())
+        );
+    }
+
+    #[test]
+    fn a_client_request_is_clamped_rather_than_trusted() {
+        let whole = resource(vec![0; 4 * 1024 * 1024]);
+        let chunk = ResourceChunkResponse::slice(&whole, 0, u32::MAX);
+        assert_eq!(
+            chunk.decode().unwrap().len(),
+            MAX_RESOURCE_CHUNK_BYTES as usize,
+            "a client asking for everything must not get a frame over the cap"
+        );
+    }
+
+    #[test]
+    fn base64_keeps_a_full_chunk_inside_the_native_message_frame() {
+        let whole = resource(vec![0xa5; MAX_RESOURCE_CHUNK_BYTES as usize]);
+        let chunk = ResourceChunkResponse::slice(&whole, 0, MAX_RESOURCE_CHUNK_BYTES);
+        let framed = serde_json::to_vec(&CarrierResponse {
+            id: 1,
+            body: Ok(CarrierResponseBody::ResourceChunk(Box::new(chunk))),
+        })
+        .unwrap();
+        // The 1 MiB cap is browser_carrier's MAX_NATIVE_MESSAGE_BYTES. This is
+        // the assertion that keeps the chunk size and the frame cap in step;
+        // raising one without the other should fail here rather than in a
+        // browser.
+        assert!(
+            framed.len() < 1024 * 1024,
+            "a full chunk framed to {} bytes, over the native-messaging cap",
+            framed.len()
+        );
+    }
+
+    #[test]
+    fn a_damaged_or_misordered_chunk_is_refused_rather_than_assembled() {
+        let whole = resource(vec![1, 2, 3, 4, 5, 6, 7, 8]);
+        let mut assembly = ResourceAssembly::new();
+
+        let mut corrupt = ResourceChunkResponse::slice(&whole, 0, 4);
+        corrupt.bytes = base64_encode(b"xxxx");
+        assert_eq!(
+            assembly.accept(&corrupt),
+            Err(AssemblyError::CorruptChunk),
+            "a frame that fails its own address must not enter the assembly"
+        );
+
+        let skipped = ResourceChunkResponse::slice(&whole, 4, 4);
+        assert_eq!(
+            assembly.accept(&skipped),
+            Err(AssemblyError::OutOfOrder {
+                expected: 0,
+                found: 4
+            })
+        );
+
+        // Intact frames, but the whole they claim to form is another resource.
+        let mut first = ResourceChunkResponse::slice(&whole, 0, 8);
+        first.resource = ContentHash::of(b"a different resource entirely");
+        assert_eq!(
+            assembly.accept(&first),
+            Err(AssemblyError::WrongResource),
+            "per-frame checks passing must not be mistaken for the whole verifying"
+        );
+    }
+
+    #[test]
+    fn a_chunk_reply_round_trips_through_the_carrier_envelope() {
+        let whole = resource(b"round trip".to_vec());
+        let response = CarrierResponse {
+            id: 11,
+            body: Ok(CarrierResponseBody::ResourceChunk(Box::new(
+                ResourceChunkResponse::slice(&whole, 0, 4),
+            ))),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert_eq!(
+            serde_json::from_str::<CarrierResponse>(&json).unwrap(),
+            response
+        );
+        let request = CarrierRequest {
+            id: 12,
+            body: CarrierRequestBody::ResourceChunk(ResourceChunkRequest {
+                session: ProjectionSession("fixture:blobs".into()),
+                resource: whole.resource,
+                offset: 4,
+                length: 4,
+            }),
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert_eq!(
+            serde_json::from_str::<CarrierRequest>(&json).unwrap(),
+            request
         );
     }
 }
