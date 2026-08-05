@@ -459,6 +459,7 @@ fn advertised_action(action: &IdentityProjectionAction) -> AdvertisedAction {
             "Runs in the disclosing identity authority.".to_string()
         },
         payload_schema: action.schema.to_string(),
+        input_form: None,
         effect: if signing_decision {
             IntentEffect::ExternalEffect
         } else {

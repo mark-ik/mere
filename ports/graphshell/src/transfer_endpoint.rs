@@ -184,6 +184,7 @@ impl TransferSourceEndpoint {
                             "Disclose this prepared selection and its addressed content blobs."
                                 .to_string(),
                         payload_schema: TRANSFER_BEGIN_SCHEMA.to_string(),
+                        input_form: None,
                         effect: IntentEffect::ExternalEffect,
                     }],
                 },

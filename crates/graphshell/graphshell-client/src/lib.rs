@@ -833,6 +833,7 @@ mod tests {
             label: "Save".into(),
             explanation: "Save this document through its endpoint.".into(),
             payload_schema: EDITABLE_TEXT_SAVE_SCHEMA.into(),
+            input_form: None,
             effect: IntentEffect::DomainTruth,
         });
         let mut snapshot = snapshot_with_offer(

@@ -6,20 +6,30 @@ use graphshell_client::{
 };
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use graphshell_protocol::{
-    AdvertisedAction, BoundsRelationship, CachePolicy, CapabilityProfile, CardValueV1, ContentHash,
-    EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
-    NativeGlyphV1, PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
-    PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics,
-    ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
-    ResourceRequest, ResourceResponse, SemanticRole,
+    ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, AdvertisedAction, BoundsRelationship,
+    CachePolicy, CapabilityProfile, CardValueV1, ContentHash, EndpointDescriptor, IntentEffect,
+    IntentInvocation, IntentReference, IntentResult, NativeGlyphV1, PortableCardV1,
+    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
+    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionOffer,
+    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
+    ResourceResponse, SemanticRole,
 };
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene, Score, Size2,
     SourceRef, Transform2, Vec2,
 };
 use scenotime::{Revision, SceneEpoch, SceneSnapshot};
+use serde::Deserialize;
 
 const FIXTURE_SESSION: &str = "loopback:g1-presentation";
+const INSPECT_TILE_SCHEMA: &str = "graphshell.fixture/inspect-tile/v1";
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InspectTilePayload {
+    schema: String,
+    inspection_scope: String,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanaryError {
@@ -110,13 +120,27 @@ impl FixtureEndpoint {
             label: "Open field note".into(),
             explanation: "Open the disclosed note in its owning application.".into(),
             payload_schema: "graphshell.fixture/open-note/v1".into(),
+            input_form: None,
             effect: IntentEffect::DomainTruth,
         };
         let inspect_map = AdvertisedAction {
             intent: IntentReference("fixture.inspect-tile".into()),
             label: "Inspect map tile".into(),
             explanation: "Inspect the disclosed map tile without changing source truth.".into(),
-            payload_schema: "graphshell.fixture/inspect-tile/v1".into(),
+            payload_schema: INSPECT_TILE_SCHEMA.into(),
+            input_form: Some(
+                ActionFormV1::new(INSPECT_TILE_SCHEMA).with_field(
+                    ActionFormFieldV1::choice(
+                        "inspection_scope",
+                        "Inspect",
+                        [
+                            ActionFormChoiceV1::new("outline", "Coast outline"),
+                            ActionFormChoiceV1::new("coordinates", "Field coordinates"),
+                        ],
+                    )
+                    .with_description("Choose the disclosed map detail to inspect."),
+                ),
+            ),
             effect: IntentEffect::Curation,
         };
 
@@ -313,7 +337,23 @@ impl IntentSink for FixtureEndpoint {
             });
         }
         Ok(match intent.intent.as_str() {
-            "fixture.open-note" | "fixture.inspect-tile" => IntentResult::Accepted,
+            "fixture.open-note" => IntentResult::Accepted,
+            "fixture.inspect-tile" => {
+                match serde_json::from_slice::<InspectTilePayload>(&intent.payload) {
+                    Ok(payload)
+                        if payload.schema == INSPECT_TILE_SCHEMA
+                            && matches!(
+                                payload.inspection_scope.as_str(),
+                                "outline" | "coordinates"
+                            ) =>
+                    {
+                        IntentResult::Accepted
+                    }
+                    _ => IntentResult::Rejected {
+                        reason: "inspect tile requires one advertised inspection scope".into(),
+                    },
+                }
+            }
             _ => IntentResult::Rejected {
                 reason: "intent was not advertised by this projection".into(),
             },
@@ -427,5 +467,44 @@ mod tests {
             assert_eq!(tree.children[0].actions[0].label, "Open field note");
             assert_eq!(tree.children[1].actions[0].label, "Inspect map tile");
         }
+    }
+
+    #[test]
+    fn fixture_rechecks_the_advertised_choice_before_accepting_it() {
+        let mut endpoint = FixtureEndpoint::new();
+        let snapshot = endpoint.snapshot(endpoint.request()).unwrap();
+        let action = snapshot
+            .presentation
+            .offers
+            .get(&PresentationKey("fixture:map".into()))
+            .expect("map offer")
+            .first()
+            .expect("map presentation")
+            .semantics
+            .actions
+            .first()
+            .expect("map action");
+        let payload = action
+            .compose_payload(&BTreeMap::from([(
+                "inspection_scope".to_string(),
+                "coordinates".to_string(),
+            )]))
+            .expect("advertised choice composes");
+        let invoke = |payload| IntentInvocation {
+            session: snapshot.session.clone(),
+            target: InstanceId(1),
+            observed_epoch: snapshot.scene.epoch,
+            observed_revision: snapshot.scene.revision,
+            intent: action.intent.0.clone(),
+            payload,
+        };
+        assert_eq!(
+            endpoint.invoke(invoke(payload)).unwrap(),
+            IntentResult::Accepted
+        );
+        assert!(matches!(
+            endpoint.invoke(invoke(Vec::new())).unwrap(),
+            IntentResult::Rejected { .. }
+        ));
     }
 }

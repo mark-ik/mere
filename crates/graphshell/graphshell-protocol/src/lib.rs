@@ -127,8 +127,297 @@ pub struct AdvertisedAction {
     pub label: String,
     pub explanation: String,
     pub payload_schema: String,
+    /// A small endpoint-authored input contract for this action, when the
+    /// payload can be composed from exact string values. Its absence preserves
+    /// the existing opaque-payload path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_form: Option<ActionFormV1>,
     pub effect: IntentEffect,
 }
+
+impl AdvertisedAction {
+    /// Build this action's JSON payload from its advertised input form.
+    ///
+    /// Actions without a form keep their established payload path: an empty
+    /// value map produces no payload, while nonempty values are refused rather
+    /// than silently inventing an encoding.
+    pub fn compose_payload(
+        &self,
+        values: &BTreeMap<String, String>,
+    ) -> Result<Vec<u8>, ActionFormError> {
+        match &self.input_form {
+            Some(form) => form.compose_payload(&self.payload_schema, values),
+            None if values.is_empty() => Ok(Vec::new()),
+            None => Err(ActionFormError::NoInputForm),
+        }
+    }
+}
+
+/// A bounded, endpoint-authored input form for one advertised action.
+///
+/// Version one deliberately composes only a JSON object with a mandatory
+/// `schema` string and named endpoint-supplied choices. It is enough for exact
+/// selections such as saved-record IDs or digests, without turning Graphshell
+/// into a generic JSON editor or asking a host to interpret application truth.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionFormV1 {
+    /// Must exactly equal the advertised action's `payload_schema`.
+    pub schema: String,
+    pub fields: Vec<ActionFormFieldV1>,
+}
+
+impl ActionFormV1 {
+    pub fn new(schema: impl Into<String>) -> Self {
+        Self {
+            schema: schema.into(),
+            fields: Vec::new(),
+        }
+    }
+
+    pub fn with_field(mut self, field: ActionFormFieldV1) -> Self {
+        self.fields.push(field);
+        self
+    }
+
+    /// Check static form facts before a host exposes the action.
+    pub fn validate(&self) -> Result<(), ActionFormError> {
+        if self.schema.trim().is_empty() {
+            return Err(ActionFormError::EmptyFormSchema);
+        }
+        let mut names = BTreeSet::new();
+        for field in &self.fields {
+            if field.name.trim().is_empty() {
+                return Err(ActionFormError::EmptyFieldName);
+            }
+            if field.name == "schema" {
+                return Err(ActionFormError::ReservedFieldName);
+            }
+            if !names.insert(field.name.clone()) {
+                return Err(ActionFormError::DuplicateField(field.name.clone()));
+            }
+            if field.label.trim().is_empty() {
+                return Err(ActionFormError::EmptyFieldLabel(field.name.clone()));
+            }
+            if field.choices.is_empty() {
+                return Err(ActionFormError::EmptyChoices(field.name.clone()));
+            }
+            let mut values = BTreeSet::new();
+            for choice in &field.choices {
+                if choice.value.trim().is_empty() {
+                    return Err(ActionFormError::EmptyChoiceValue(field.name.clone()));
+                }
+                if choice.label.trim().is_empty() {
+                    return Err(ActionFormError::EmptyChoiceLabel(field.name.clone()));
+                }
+                if !values.insert(choice.value.clone()) {
+                    return Err(ActionFormError::DuplicateChoiceValue {
+                        field: field.name.clone(),
+                        value: choice.value.clone(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Build the version-one JSON payload after checking the endpoint's form.
+    pub fn compose_payload(
+        &self,
+        expected_schema: &str,
+        values: &BTreeMap<String, String>,
+    ) -> Result<Vec<u8>, ActionFormError> {
+        self.validate()?;
+        if self.schema != expected_schema {
+            return Err(ActionFormError::SchemaMismatch {
+                expected: expected_schema.to_string(),
+                form: self.schema.clone(),
+            });
+        }
+
+        for name in values.keys() {
+            if !self.fields.iter().any(|field| field.name == *name) {
+                return Err(ActionFormError::UnknownField(name.clone()));
+            }
+        }
+        for field in &self.fields {
+            let value = values.get(&field.name);
+            if field.required && value.is_none_or(|value| value.is_empty()) {
+                return Err(ActionFormError::MissingField(field.name.clone()));
+            }
+            let Some(value) = value else {
+                continue;
+            };
+            if !field.choices.iter().any(|choice| choice.value == *value) {
+                return Err(ActionFormError::InvalidChoice {
+                    field: field.name.clone(),
+                    value: value.clone(),
+                });
+            }
+        }
+
+        #[derive(Serialize)]
+        struct Payload<'a> {
+            schema: &'a str,
+            #[serde(flatten)]
+            values: &'a BTreeMap<String, String>,
+        }
+
+        serde_json::to_vec(&Payload {
+            schema: &self.schema,
+            values,
+        })
+        .map_err(|error| ActionFormError::Encode(error.to_string()))
+    }
+}
+
+/// One named input in an [`ActionFormV1`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionFormFieldV1 {
+    /// JSON property name. `schema` is reserved for the form schema marker.
+    pub name: String,
+    pub label: String,
+    pub description: String,
+    #[serde(default = "required_action_form_field")]
+    pub required: bool,
+    pub choices: Vec<ActionFormChoiceV1>,
+}
+
+const fn required_action_form_field() -> bool {
+    true
+}
+
+impl ActionFormFieldV1 {
+    pub fn choice(
+        name: impl Into<String>,
+        label: impl Into<String>,
+        choices: impl IntoIterator<Item = ActionFormChoiceV1>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            label: label.into(),
+            description: String::new(),
+            required: true,
+            choices: choices.into_iter().collect(),
+        }
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = description.into();
+        self
+    }
+
+    pub fn optional(mut self) -> Self {
+        self.required = false;
+        self
+    }
+}
+
+/// One exact selectable value supplied by the endpoint.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ActionFormChoiceV1 {
+    /// Opaque payload value. Hosts display the label and return this exact value.
+    pub value: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+impl ActionFormChoiceV1 {
+    pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
+        Self {
+            value: value.into(),
+            label: label.into(),
+            description: None,
+        }
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+}
+
+/// Reasons a host must not compose an action payload.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ActionFormError {
+    NoInputForm,
+    EmptyFormSchema,
+    SchemaMismatch { expected: String, form: String },
+    EmptyFieldName,
+    ReservedFieldName,
+    DuplicateField(String),
+    EmptyFieldLabel(String),
+    EmptyChoices(String),
+    EmptyChoiceValue(String),
+    EmptyChoiceLabel(String),
+    DuplicateChoiceValue { field: String, value: String },
+    MissingField(String),
+    UnknownField(String),
+    InvalidChoice { field: String, value: String },
+    Encode(String),
+}
+
+impl fmt::Display for ActionFormError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoInputForm => write!(formatter, "action has no advertised input form"),
+            Self::EmptyFormSchema => write!(formatter, "action form schema is empty"),
+            Self::SchemaMismatch { expected, form } => {
+                write!(
+                    formatter,
+                    "action schema {expected} does not match form schema {form}"
+                )
+            }
+            Self::EmptyFieldName => write!(formatter, "action form field name is empty"),
+            Self::ReservedFieldName => {
+                write!(formatter, "action form field name schema is reserved")
+            }
+            Self::DuplicateField(field) => write!(formatter, "action form repeats field {field}"),
+            Self::EmptyFieldLabel(field) => {
+                write!(formatter, "action form field {field} has no label")
+            }
+            Self::EmptyChoices(field) => {
+                write!(formatter, "action form field {field} has no choices")
+            }
+            Self::EmptyChoiceValue(field) => {
+                write!(
+                    formatter,
+                    "action form field {field} has an empty choice value"
+                )
+            }
+            Self::EmptyChoiceLabel(field) => {
+                write!(
+                    formatter,
+                    "action form field {field} has an empty choice label"
+                )
+            }
+            Self::DuplicateChoiceValue { field, value } => {
+                write!(
+                    formatter,
+                    "action form field {field} repeats choice value {value}"
+                )
+            }
+            Self::MissingField(field) => write!(formatter, "action form requires field {field}"),
+            Self::UnknownField(field) => {
+                write!(formatter, "action form does not define field {field}")
+            }
+            Self::InvalidChoice { field, value } => {
+                write!(
+                    formatter,
+                    "action form field {field} does not offer choice {value}"
+                )
+            }
+            Self::Encode(error) => {
+                write!(formatter, "could not encode action form payload: {error}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ActionFormError {}
 
 /// The semantic role available before any resource bytes arrive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -825,8 +1114,125 @@ pub trait Carrier {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use sceno::{Arrangement, Scene, Spiral};
+
+    fn form_action(form: ActionFormV1) -> AdvertisedAction {
+        AdvertisedAction {
+            intent: IntentReference("fixture.save-pair".into()),
+            label: "Save pair".into(),
+            explanation: "Record the selected values together.".into(),
+            payload_schema: "fixture.intent.save-pair/v1".into(),
+            input_form: Some(form),
+            effect: IntentEffect::DomainTruth,
+        }
+    }
+
+    #[test]
+    fn action_form_composes_exact_selected_values_under_its_schema() {
+        let action = form_action(
+            ActionFormV1::new("fixture.intent.save-pair/v1")
+                .with_field(
+                    ActionFormFieldV1::choice(
+                        "facts_digest",
+                        "Astrology facts",
+                        [
+                            ActionFormChoiceV1::new("facts-a", "Morning facts"),
+                            ActionFormChoiceV1::new("facts-b", "Evening facts"),
+                        ],
+                    )
+                    .with_description("Choose one saved fact set."),
+                )
+                .with_field(ActionFormFieldV1::choice(
+                    "reading_session_id",
+                    "Reading session",
+                    [ActionFormChoiceV1::new("session-7", "Three-card cast")],
+                )),
+        );
+        let values = BTreeMap::from([
+            ("facts_digest".to_string(), "facts-b".to_string()),
+            ("reading_session_id".to_string(), "session-7".to_string()),
+        ]);
+
+        let payload: serde_json::Value = serde_json::from_slice(
+            &action
+                .compose_payload(&values)
+                .expect("valid selected values"),
+        )
+        .expect("form output is JSON");
+        assert_eq!(
+            payload,
+            serde_json::json!({
+                "schema": "fixture.intent.save-pair/v1",
+                "facts_digest": "facts-b",
+                "reading_session_id": "session-7",
+            })
+        );
+    }
+
+    #[test]
+    fn action_form_refuses_missing_unknown_and_unadvertised_values() {
+        let action = form_action(ActionFormV1::new("fixture.intent.save-pair/v1").with_field(
+            ActionFormFieldV1::choice(
+                "facts_digest",
+                "Astrology facts",
+                [ActionFormChoiceV1::new("facts-a", "Morning facts")],
+            ),
+        ));
+        assert_eq!(
+            action.compose_payload(&BTreeMap::new()),
+            Err(ActionFormError::MissingField("facts_digest".into()))
+        );
+        assert_eq!(
+            action.compose_payload(&BTreeMap::from([(
+                "facts_digest".to_string(),
+                "facts-missing".to_string(),
+            )])),
+            Err(ActionFormError::InvalidChoice {
+                field: "facts_digest".into(),
+                value: "facts-missing".into(),
+            })
+        );
+        assert_eq!(
+            action.compose_payload(&BTreeMap::from([(
+                "unexpected".to_string(),
+                "value".to_string(),
+            )])),
+            Err(ActionFormError::UnknownField("unexpected".into()))
+        );
+    }
+
+    #[test]
+    fn an_action_without_input_form_keeps_the_existing_empty_payload_path() {
+        let action = AdvertisedAction {
+            intent: IntentReference("fixture.open".into()),
+            label: "Open".into(),
+            explanation: "Open a fixture.".into(),
+            payload_schema: "fixture.open/v1".into(),
+            input_form: None,
+            effect: IntentEffect::ExternalEffect,
+        };
+        assert_eq!(action.compose_payload(&BTreeMap::new()), Ok(Vec::new()));
+        assert_eq!(
+            action.compose_payload(&BTreeMap::from([("title".to_string(), "x".to_string())])),
+            Err(ActionFormError::NoInputForm)
+        );
+        let legacy = r#"{
+            "intent":"fixture.open",
+            "label":"Open",
+            "explanation":"Open a fixture.",
+            "payload_schema":"fixture.open/v1",
+            "effect":"ExternalEffect"
+        }"#;
+        assert!(
+            serde_json::from_str::<AdvertisedAction>(legacy)
+                .expect("old action wire remains readable")
+                .input_form
+                .is_none()
+        );
+    }
 
     #[test]
     fn a_revision_notice_is_distinct_from_a_keyed_response() {

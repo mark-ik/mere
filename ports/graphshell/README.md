@@ -63,8 +63,10 @@ cargo test -p graphshell --no-default-features --features web
 
 H2 adds the real browser presenter as a separate `graphshell-web` workspace
 package. It composes the H1 host with Mere Canvas, Cambium over Genet's neutral
-DOM/layout seam, and NetRender over an asynchronous WebGPU canvas. The
-browser-only stack does not enter the portable `graphshell` crate.
+DOM/layout seam, and NetRender over an asynchronous WebGPU canvas. The painted
+chrome is a Cambium view; its separate semantic browser controls remain
+hand-wired. The browser-only stack does not enter the portable `graphshell`
+crate.
 
 ```powershell
 $env:CARGO_TARGET_DIR = 'target-plan-graphshell-web'
