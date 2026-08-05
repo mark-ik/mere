@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use personae::{IdentityProvider, ProfileId};
 
-use crate::native::device_broker::DeviceSupplementalCards;
+use crate::native::device_broker::{DeviceSurface, DeviceSurfaceHandle};
 use crate::native::owner_settings::{
     self, DataRootMigration, OwnerSettings, OwnerSettingsError, SyncOverrides,
 };
@@ -116,7 +116,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     peer_tickets: Vec<String>,
     seed_notes: Vec<SeedNote>,
     blob_actions: Vec<BlobAction>,
-) -> Result<Option<DeviceSupplementalCards>, DeviceSyncError> {
+) -> Result<Option<DeviceSurfaceHandle>, DeviceSyncError> {
     let settings_file = owner_settings::settings_path(app_dir, profile);
     let stored = OwnerSettings::load(&settings_file)?;
     tracing::info!(
@@ -353,10 +353,12 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         paired_nodes,
         identity.master_public_key().to_bytes(),
     );
-    let cards: DeviceSupplementalCards =
-        Arc::new(tokio::sync::RwLock::new(host.supplemental_cards().await?));
-    spawn_card_refresh(host, Arc::clone(&cards));
-    Ok(Some(cards))
+    let surface: DeviceSurfaceHandle = Arc::new(tokio::sync::RwLock::new(DeviceSurface {
+        cards: host.supplemental_cards().await?,
+        released_blobs: Vec::new(),
+    }));
+    spawn_card_refresh(host, Arc::clone(&surface));
+    Ok(Some(surface))
 }
 
 /// The pairing loop's second half: `pair_device` and `unpair_device` write the
@@ -488,7 +490,9 @@ fn spawn_pairing_watch(
                             .paired_devices
                             .iter()
                             .find(|device| {
-                                device.node_id.eq_ignore_ascii_case(&owner_settings::hex32(&node))
+                                device
+                                    .node_id
+                                    .eq_ignore_ascii_case(&owner_settings::hex32(&node))
                             })
                             .and_then(|device| device.last_endpoint.as_deref());
                         if stored == Some(ticket.as_str()) {
@@ -499,7 +503,9 @@ fn spawn_pairing_watch(
                         // unpair edit is not clobbered by this refresh.
                         match OwnerSettings::load(&settings_file) {
                             Ok(mut latest) => {
-                                let Some(live) = latest.sync.as_mut() else { continue };
+                                let Some(live) = latest.sync.as_mut() else {
+                                    continue;
+                                };
                                 if live.record_endpoint(&node, &ticket) {
                                     match latest.save(&settings_file) {
                                         Ok(()) => tracing::info!(
@@ -562,7 +568,7 @@ fn spawn_pairing_watch(
     });
 }
 
-fn spawn_card_refresh(host: Arc<PersonalSyncHost>, cards: DeviceSupplementalCards) {
+fn spawn_card_refresh(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle) {
     // The projection is otherwise only visible to an admitted browser session,
     // which means a graph arriving from a peer leaves no trace anywhere an
     // operator can see. Report the size when it changes, so convergence is
@@ -577,7 +583,10 @@ fn spawn_card_refresh(host: Arc<PersonalSyncHost>, cards: DeviceSupplementalCard
                         tracing::info!(cards = snapshot.len(), "personal graph projection changed");
                         reported = Some(snapshot.len());
                     }
-                    *cards.write().await = snapshot;
+                    // Only the cards: released blobs are granted by
+                    // accepting a transfer, not derived from the projection,
+                    // so a refresh must not revoke them.
+                    surface.write().await.cards = snapshot;
                 }
                 Err(error) => tracing::warn!(%error, "personal sync projection refresh failed"),
             }

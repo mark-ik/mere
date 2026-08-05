@@ -1155,9 +1155,44 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   `browser_carrier::MAX_NATIVE_MESSAGE_BYTES`, so raising the chunk size
   without the frame cap fails in a test rather than in a browser.
 
-  Still open in S3: **the browser-side consumer is not wired yet**, so nothing
-  in the product asks for a chunk today; that seam is a Graphshell endpoint
-  exposing the sync host's staged blobs as resources. Then the recorded
+  **The browser-facing seam landed 2026-08-04, with one ruling.** Serving a
+  staged blob needs an `await`, and endpoints cannot: `PresentationSource` is
+  synchronous and `dispatch_common` runs inside the async session loop. Three
+  ways out were weighed (async `resource_chunk` on the trait; an async hook
+  beside the endpoint in the session loop; the host pre-loading bytes the sync
+  endpoint then serves). **Ruled with Mark: pre-load, with an explicit
+  ceiling.** It matches the pattern already there, since supplemental cards are
+  precomputed by the async host and served by the sync endpoint, and it commits
+  to no architecture before a large transfer has proven one necessary. The
+  async-trait refactor is the answer when a real transfer exceeds the ceiling.
+
+  **Authorization is an explicit release set, also ruled.** An admitted browser
+  knowing a hash is not authorization to read the bytes behind it. Only blobs an
+  accepted transfer releases are servable; an unreleased hash is refused whether
+  or not the device holds it. Held in their own map, apart from the identity
+  resources a projection refresh replaces wholesale, so "which bytes was this
+  browser granted" has an answer. `retire_released` revokes.
+
+  `MAX_RELEASED_TRANSFER_BYTES` (64 MiB) refuses rather than truncating: a
+  partial release would look to a browser like a transfer that worked.
+  `resource_chunk` is overridden on `IdentityEndpoint` because the default
+  re-reads the whole resource per chunk, so serving N pieces would copy the
+  blob N times; `ResourceChunkResponse::from_slice` takes it by reference.
+  `BlobStore::read_range` seeks rather than re-reading, sized from
+  `blobs().status()`, and treats a partially fetched blob as absent because its
+  content has not been verified as a whole.
+
+  The broker's `DeviceSupplementalCards` became `DeviceSurface`, carrying cards
+  and released blobs together: both are refreshed by the same host and read at
+  the same moment, and a second `Arc<RwLock<_>>` per kind is how plumbing
+  multiplies. The card refresh updates only `cards`, so a projection change
+  cannot revoke a grant. The surface is read once at session start, so a
+  transfer accepted mid-session becomes pullable on the next one, which is the
+  timing cards have always had.
+
+  Still open in S3: **the accept gesture**. Every piece is joined except the
+  moment a person says yes, which is what should call `released_blobs_for` and
+  put the result on the surface. Then the recorded
   `navigator.storage.persist()` grant, promotion of destination staging into a
   recovery pin, and the blob-reference-set intent pair that pin release
   depends on. Also unbatched: staging authors one operation per blob, which is

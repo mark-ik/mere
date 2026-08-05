@@ -16,6 +16,7 @@
 //! destination can ask for.
 
 use eidetic::Hash;
+use graphshell_protocol::ContentHash;
 use muniment::{Backend, BlobStore};
 use transport::BlobHash;
 
@@ -162,6 +163,42 @@ pub async fn receive_transfer<B: Backend + Clone + Send + Sync + 'static>(
         "staged a transfer locally; apply no longer needs the source"
     );
     Ok(manifest)
+}
+
+/// The blobs a staged transfer needs handed to the browser, ready to release.
+///
+/// Read from the local store, so this is only callable after
+/// [`receive_transfer`] has put every byte here. Returned rather than released
+/// directly because releasing is a grant: what makes bytes reachable from a
+/// browser is a person accepting the transfer, not this device holding them.
+pub async fn released_blobs_for(
+    host: &PersonalSyncHost,
+    manifest: &TransferManifestV1,
+) -> Result<Vec<(ContentHash, Vec<u8>)>, StagingError> {
+    let mut released = Vec::with_capacity(manifest.blobs.len());
+    for descriptor in &manifest.blobs {
+        let blob = *descriptor.content_hash.as_bytes();
+        let bytes = host
+            .blobs()
+            .get_bytes(BlobHash::from_bytes(blob))
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?
+            .to_vec();
+        // The browser addresses resources by its own hash type. Deriving it
+        // from the bytes rather than converting the manifest's hash means a
+        // disagreement surfaces here instead of as a resource the browser
+        // asks for and never receives.
+        let resource = ContentHash::of(&bytes);
+        if resource.0 != blob {
+            return Err(StagingError::HashDisagreement {
+                context: "releasing a transfer blob to a browser",
+                staged: format!("{resource}"),
+                named: descriptor.content_hash.to_hex(),
+            });
+        }
+        released.push((resource, bytes));
+    }
+    Ok(released)
 }
 
 /// Whether this offer may be applied here at all, before any bytes move.
@@ -465,6 +502,20 @@ mod tests {
                 .1
                 .tags
                 .contains("file")
+        );
+
+        // The bytes a browser would pull are the bytes that were applied.
+        // Derived from the local store, so this also proves the release list
+        // survives the source being gone.
+        let released = released_blobs_for(&destination_sync, &fetched)
+            .await
+            .unwrap();
+        assert_eq!(released.len(), 1);
+        assert_eq!(released[0].1, FILE_BYTES);
+        assert_eq!(
+            released[0].0,
+            graphshell_protocol::ContentHash::of(FILE_BYTES),
+            "the browser addresses this blob by its own hash of the same bytes"
         );
 
         destination_sync.close().await.unwrap();

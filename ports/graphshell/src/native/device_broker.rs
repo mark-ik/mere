@@ -24,10 +24,28 @@ use crate::identity_endpoint::SupplementalCard;
 use crate::native::browser_host::{BrowserHostError, serve_identity_native_messages_with_cards};
 use crate::native::identity_ui::NativeIdentityUi;
 use crate::native::personae_host::PersonaeHost;
+use graphshell_protocol::ContentHash;
 
 pub const DEVICE_ENDPOINT_ENV: &str = "GRAPHSHELL_DEVICE_ENDPOINT";
 const BROKER_HELLO_SCHEMA: &str = "mere.graphshell/device-broker-hello/v1";
-pub type DeviceSupplementalCards = Arc<RwLock<Vec<SupplementalCard>>>;
+
+/// What the resident host offers an admitted browser beyond the identity
+/// projection.
+///
+/// One structure rather than a handle per kind: both parts are refreshed by
+/// the same host and read at the same moment, and threading a second
+/// `Arc<RwLock<_>>` through the broker for each new kind is how plumbing
+/// multiplies.
+#[derive(Clone, Debug, Default)]
+pub struct DeviceSurface {
+    /// Public, read-only cards composed beside the Personae surface.
+    pub cards: Vec<SupplementalCard>,
+    /// Blobs an accepted transfer released to this device's browser. Empty
+    /// unless a transfer is waiting to be applied.
+    pub released_blobs: Vec<(ContentHash, Vec<u8>)>,
+}
+
+pub type DeviceSurfaceHandle = Arc<RwLock<DeviceSurface>>;
 
 #[cfg(windows)]
 const DEFAULT_WINDOWS_DEVICE_ENDPOINT: &str = r"\\.\pipe\graphshell-device-browser";
@@ -148,7 +166,7 @@ pub async fn serve_browser_broker_with_cards<S, U>(
     native_ui: Arc<U>,
     allowlist: AllowedExtensions,
     session_duration_ms: u64,
-    supplemental_cards: DeviceSupplementalCards,
+    surface: DeviceSurfaceHandle,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -160,7 +178,7 @@ where
         native_ui,
         allowlist,
         session_duration_ms,
-        Some(supplemental_cards),
+        Some(surface),
     )
     .await
 }
@@ -172,7 +190,7 @@ async fn serve_connection<S, U, R, W>(
     native_ui: Arc<U>,
     allowlist: &AllowedExtensions,
     session_duration_ms: u64,
-    supplemental_cards: Option<DeviceSupplementalCards>,
+    surface: Option<DeviceSurfaceHandle>,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -185,9 +203,12 @@ where
         .ok_or(DeviceBrokerError::MissingHello)?;
     let launcher = hello.accept()?;
     allowlist.admit(&launcher)?;
-    let supplemental_cards = match supplemental_cards {
-        Some(cards) => cards.read().await.clone(),
-        None => Vec::new(),
+    // Read once, at session start. A transfer accepted while a browser is
+    // already connected becomes pullable on its next session rather than
+    // mid-stream, which is the same timing the cards have always had.
+    let surface = match surface {
+        Some(surface) => surface.read().await.clone(),
+        None => DeviceSurface::default(),
     };
     let summary = serve_identity_native_messages_with_cards(
         personae.as_ref(),
@@ -197,7 +218,7 @@ where
         reader,
         writer,
         session_duration_ms,
-        supplemental_cards,
+        surface,
     )
     .await?;
     if let Some(summary) = summary {
@@ -224,7 +245,7 @@ async fn serve<S, U>(
     native_ui: Arc<U>,
     allowlist: AllowedExtensions,
     session_duration_ms: u64,
-    supplemental_cards: Option<DeviceSupplementalCards>,
+    surface: Option<DeviceSurfaceHandle>,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -243,7 +264,7 @@ where
         let personae = Arc::clone(&personae);
         let native_ui = Arc::clone(&native_ui);
         let allowlist = allowlist.clone();
-        let supplemental_cards = supplemental_cards.clone();
+        let surface = surface.clone();
         tokio::spawn(async move {
             if let Err(error) = verify_same_user(&connection) {
                 tracing::warn!(%error, "browser device broker rejected a different user");
@@ -257,7 +278,7 @@ where
                 native_ui,
                 &allowlist,
                 session_duration_ms,
-                supplemental_cards,
+                surface,
             )
             .await
             {
@@ -387,7 +408,7 @@ async fn serve<S, U>(
     native_ui: Arc<U>,
     allowlist: AllowedExtensions,
     session_duration_ms: u64,
-    supplemental_cards: Option<DeviceSupplementalCards>,
+    surface: Option<DeviceSurfaceHandle>,
 ) -> Result<(), DeviceBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -403,7 +424,7 @@ where
         let personae = Arc::clone(&personae);
         let native_ui = Arc::clone(&native_ui);
         let allowlist = allowlist.clone();
-        let supplemental_cards = supplemental_cards.clone();
+        let surface = surface.clone();
         tokio::spawn(async move {
             let (mut reader, mut writer) = tokio::io::split(connection);
             if let Err(error) = serve_connection(
@@ -413,7 +434,7 @@ where
                 native_ui,
                 &allowlist,
                 session_duration_ms,
-                supplemental_cards,
+                surface,
             )
             .await
             {

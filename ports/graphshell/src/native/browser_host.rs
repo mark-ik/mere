@@ -21,8 +21,9 @@ use crate::browser_carrier::{
     BrowserMessage, NativeIdentityFailure, NativeIdentityResult, admit_browser_session,
     read_native_message_async, write_native_message_async,
 };
-use crate::identity_endpoint::{IdentityEndpoint, SupplementalCard};
+use crate::identity_endpoint::IdentityEndpoint;
 use crate::lifecycle::SessionAuthority;
+use crate::native::device_broker::DeviceSurface;
 use crate::native::identity_ui::{NativeIdentityUi, apply_native_identity_action};
 use crate::native::personae_host::PersonaeHost;
 use crate::session_loop::{SessionLoopError, SessionSummary, serve_admitted_session};
@@ -72,7 +73,7 @@ where
         reader,
         writer,
         session_duration_ms,
-        Vec::new(),
+        DeviceSurface::default(),
     )
     .await
 }
@@ -87,7 +88,7 @@ pub(crate) async fn serve_identity_native_messages_with_cards<P, S, U, R, W>(
     reader: &mut R,
     writer: &mut W,
     session_duration_ms: u64,
-    supplemental_cards: Vec<SupplementalCard>,
+    surface: DeviceSurface,
 ) -> Result<Option<SessionSummary>, BrowserHostError>
 where
     P: IdentityProvider,
@@ -160,11 +161,19 @@ where
         subject: base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(authority.principal().subject),
     };
-    let mut endpoint = IdentityEndpoint::for_admitted_with_cards(
-        Arc::clone(&personae),
-        &authority,
-        supplemental_cards,
-    );
+    let mut endpoint =
+        IdentityEndpoint::for_admitted_with_cards(Arc::clone(&personae), &authority, surface.cards);
+    // A transfer whose bytes are too large to hold resident is refused here
+    // rather than part-served: the session continues without it, and the
+    // reason is logged where the operator can see it. Serving half a transfer
+    // would look to the browser like a transfer that worked.
+    if !surface.released_blobs.is_empty() {
+        let count = surface.released_blobs.len();
+        match endpoint.release_transfer(surface.released_blobs) {
+            Ok(()) => tracing::info!(blobs = count, "released transfer blobs to this browser"),
+            Err(error) => tracing::warn!(%error, "transfer blobs were not released"),
+        }
+    }
     let server = tokio::spawn(async move {
         let revocations = RwLock::new(revocations);
         let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {
@@ -314,7 +323,7 @@ mod tests {
         let launcher =
             BrowserLauncher::parse(&[format!("chrome-extension://{CHROMIUM_EXTENSION_ID}/")])
                 .unwrap();
-        let supplemental = SupplementalCard {
+        let supplemental = crate::identity_endpoint::SupplementalCard {
             adapter: "graphshell.personal-sync".into(),
             source_id: "receipt-graph".into(),
             card: PortableCardV1 {
@@ -337,7 +346,10 @@ mod tests {
             &mut host_reader,
             &mut host_writer,
             60_000,
-            vec![supplemental],
+            DeviceSurface {
+                cards: vec![supplemental],
+                released_blobs: Vec::new(),
+            },
         );
         let browser = async {
             let challenge =
