@@ -336,6 +336,21 @@ SuperText, nex, scorpion, mercury, titan, guppy, scroll, molerat, terse, fsp.
 **We have nine**: gemini, gopher, Gopher+, finger, spartan, nex, titan, guppy,
 plus misfin for mail.
 
+**Completing the set is the goal, and it is not expansion for its own sake**
+(Mark, 2026-08-04, correcting a framing of mine). A browser with a ragged,
+partial set of protocols is annoying to use and annoying to reason about;
+finishing the set is what removes that. This is also not a new position: the
+2026-05-08 commit that first ported these engines titled its slice **"smolweb
+completionist"**. The working order below is therefore about *sequencing* the
+finish, not about deciding which ones are worth doing.
+
+**Sequence by spec availability, not by appeal.** The one hard constraint this
+session established three times is that a wire format is never guessed. So the
+order is: protocols whose specification is in hand, then those whose
+specification is reachable, then the blocked ones. `kepler`'s spec was read in
+full this session; `dict` is RFC 2229; `fsp`, `molerat` and `demarkus` have
+reachable specs; `scroll` is blocked on a dead host and waits.
+
 **Not yet spoken**, with the shape each would take under the grouping rule:
 
 | Protocol | Shape | Note |
@@ -366,16 +381,29 @@ gemtext, because its dispatch sent everything that was not markdown to
 through gemtext, since a degraded document beats a blank one, but it carries a
 `DegradedRendering` diagnostic naming what was lost.
 
-**Invented.** The engine's own module documentation described a scroll response
-as "a binary envelope (sender / signature / timestamp / content-type)" and
-emitted a diagnostic that signature verification had not been performed. **No
-source supports any of that**, and a test asserted the diagnostic, so the
-fabrication was load-bearing. Scroll is line-oriented text whose *first four
-lines are metadata* (author and dates), not a binary envelope, and nothing
-describes cryptographic signatures. Corrected, and the test that encoded the
-claim was deleted with it. Worth remembering that invented detail in a doc
-comment survives longer than invented detail in prose, because tests grow
-around it.
+**Wrong, but inherited rather than invented** (this entry corrected again,
+2026-08-04, after Mark pushed back on the first diagnosis). The engine's module
+documentation described a scroll response as "a binary envelope (sender /
+signature / timestamp / content-type)" and emitted a diagnostic that signature
+verification had not been performed. No reachable source supports that, and a
+test asserted the diagnostic, so the wrong claim was load-bearing. Both are
+removed, and a test now forbids any diagnostic from mentioning signatures or
+envelopes.
+
+But calling it invented was itself an over-claim. Git history says where it
+came from: the 2026-05-08 commit that introduced the file describes its slice
+as porting **"the donor's smolweb stub formats (scroll, misfin, nex, guppy) as
+protocol-spec-faithful body engines"**. So the description was inherited from
+graphbrowserapp's `middlenet-core`, and note which format sits beside scroll in
+that list: **misfin**, whose sender identity genuinely *is* a client
+certificate. Contamination from an adjacent format during a stub port explains
+it far better than fabrication does.
+
+Two lessons, and the second is the sharper one. Wrong detail in a doc comment
+outlives wrong detail in prose, because tests grow around it. And a confident
+verdict about *how* something got wrong is itself a claim needing evidence:
+"invented" was reached without checking the history that was sitting right
+there.
 
 **What is actually known** (zzo38computer.org's catalogue, the only reachable
 source with wire detail):
