@@ -356,6 +356,47 @@ exists to catch, and it is a parse-layer loss of the kind that plan's §1
 identifies. Note also that scroll has a nematic engine but **no errand
 transport**, so it is currently a format we half-read and cannot fetch.
 
+### Scroll, investigated 2026-08-04: half confirmed, half was invented
+
+Going to fix the flattening turned up something worse than the flattening.
+
+**Confirmed.** `text/scroll` is real, and the engine did silently read it as
+gemtext, because its dispatch sent everything that was not markdown to
+`GemtextEngine`. That is now explicit: a `text/scroll` body still renders
+through gemtext, since a degraded document beats a blank one, but it carries a
+`DegradedRendering` diagnostic naming what was lost.
+
+**Invented.** The engine's own module documentation described a scroll response
+as "a binary envelope (sender / signature / timestamp / content-type)" and
+emitted a diagnostic that signature verification had not been performed. **No
+source supports any of that**, and a test asserted the diagnostic, so the
+fabrication was load-bearing. Scroll is line-oriented text whose *first four
+lines are metadata* (author and dates), not a binary envelope, and nothing
+describes cryptographic signatures. Corrected, and the test that encoded the
+claim was deleted with it. Worth remembering that invented detail in a doc
+comment survives longer than invented detail in prose, because tests grow
+around it.
+
+**What is actually known** (zzo38computer.org's catalogue, the only reachable
+source with wire detail):
+
+- port 5699, TLS mandatory, client certificates usable;
+- the request is the full URL, a space, then acceptable languages in BCP47
+  separated by commas;
+- the first four lines of the response are metadata;
+- the document format is "a bit more complicated than Gemini, and the inline
+  formatting means that escaping will be required";
+- document abstracts (Gopher+-like) and Universal Decimal Classification;
+- URL fragments are meaningful.
+
+**Blocked, and deliberately not worked around.** `scrollprotocol.us.to` refuses
+connections and `web.archive.org` is unreachable from here, so the exact
+metadata lines, status codes, and inline grammar are unknown. That is not
+enough to write a spec-accurate parser, and this workspace has now declined to
+guess a wire format three times (gopher's introductory page, terse, and this),
+which is the standard rather than an exception. Revisit when the spec host is
+up.
+
 **Still open**: the nex de-duplication. `nex-protocol` already ships a listing
 parser (`listing.rs`, `ListingLine`) and errand independently implements the
 same grammar with directory detection and base-URL resolution on top
