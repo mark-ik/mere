@@ -115,6 +115,20 @@ impl ResidentEndpointCatalog {
             .collect()
     }
 
+    /// Register an endpoint that already implements the erased catalog
+    /// contract. This is the escape hatch for product-specific carrier
+    /// behavior such as projection resume.
+    pub fn register_erased(
+        &mut self,
+        id: impl Into<String>,
+        label: impl Into<String>,
+        factory: impl FnMut(&AdmittedEndpointContext) -> Result<Box<dyn ResidentEndpoint>, String>
+        + Send
+        + 'static,
+    ) -> Result<(), ResidentEndpointCatalogError> {
+        self.insert(id.into(), label.into(), factory)
+    }
+
     /// Register a silent endpoint factory. The factory runs once when this
     /// catalog selects the route for an already-admitted session.
     pub fn register<E, F>(
@@ -130,7 +144,7 @@ impl ResidentEndpointCatalog {
         <E as IntentSink>::Error: Display,
         F: FnMut(&AdmittedEndpointContext) -> Result<E, String> + Send + 'static,
     {
-        self.insert(id.into(), label.into(), move |context| {
+        self.register_erased(id, label, move |context| {
             let endpoint = factory(context)?;
             Ok(Box::new(TypedResidentEndpoint::silent(endpoint)))
         })
@@ -158,7 +172,7 @@ impl ResidentEndpointCatalog {
         <E as ProjectionNoticeSource>::Error: Display,
         F: FnMut(&AdmittedEndpointContext) -> Result<E, String> + Send + 'static,
     {
-        self.insert(id.into(), label.into(), move |context| {
+        self.register_erased(id, label, move |context| {
             let endpoint = factory(context)?;
             Ok(Box::new(TypedResidentEndpoint::notifying(endpoint)))
         })
