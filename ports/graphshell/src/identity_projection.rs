@@ -6,7 +6,7 @@
 
 use std::fmt::Write;
 
-use graphshell_protocol::{CardValueV1, PortableCardV1};
+use graphshell_protocol::{ActionFormV1, CardValueV1, PortableCardV1};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -89,6 +89,10 @@ pub struct IdentityProjectionAction {
     pub payload: Option<Value>,
     /// H4b actions are local authority controls, not remote projection grants.
     pub native_only: bool,
+    /// A bounded input contract the admitted browser can render and compose
+    /// against. `None` keeps the opaque-payload path an identity control uses,
+    /// where the native host collects the fields itself.
+    pub input_form: Option<ActionFormV1>,
 }
 
 /// One portable card plus the actions Graphshell may place beside it.
@@ -120,6 +124,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 label: "Generate SSH key…",
                 payload: None,
                 native_only: true,
+                input_form: None,
             },
             IdentityProjectionAction {
                 intent: SSH_IMPORT_NATIVE_INTENT,
@@ -127,6 +132,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 label: "Import SSH key…",
                 payload: None,
                 native_only: true,
+                input_form: None,
             },
         ],
     }];
@@ -214,6 +220,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 .expect("SSH removal payload is always serializable"),
             ),
             native_only: true,
+            input_form: None,
         }],
     }));
 
@@ -238,6 +245,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                     .expect("device revocation payload is always serializable"),
                 ),
                 native_only: true,
+                input_form: None,
             }]
         };
         IdentityProjectionCard {
@@ -316,6 +324,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                         .expect("signing decision payload is always serializable"),
                 ),
                 native_only: true,
+                input_form: None,
             },
             IdentityProjectionAction {
                 intent: SIGNING_DENY_INTENT,
@@ -326,6 +335,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                         .expect("signing decision payload is always serializable"),
                 ),
                 native_only: true,
+                input_form: None,
             },
         ];
         if matches!(
@@ -343,6 +353,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                             .expect("signing decision payload is always serializable"),
                     ),
                     native_only: true,
+                    input_form: None,
                 },
             );
         }

@@ -68,12 +68,17 @@ impl SupplementalCard {
 pub const TRANSFER_ACCEPT_INTENT: &str = "graphshell.transfer.accept/v1";
 pub const TRANSFER_ACCEPT_SCHEMA: &str = "graphshell.TransferAcceptIntent/v1";
 
-/// The payload the accept action carries. Bound into the card when it is
-/// composed, so the browser invokes a decision about one named transfer
-/// rather than "the transfer", which would be ambiguous the moment two are
-/// waiting.
+/// The payload the accept action carries.
+///
+/// The transfer id is an advertised choice on the action's bounded form, so
+/// the browser composes a decision about one named transfer rather than "the
+/// transfer", which would be ambiguous the moment two are waiting.
+///
+/// `schema` is the form's own marker, carried so a payload composed against a
+/// different or stale form is refused rather than read as an accept.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TransferAcceptIntentV1 {
+    pub schema: String,
     pub transfer_id: String,
 }
 
@@ -207,6 +212,21 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
                 };
             }
         };
+        // Everything the payload can be wrong about is settled before the
+        // queue is touched, so a refusal never holds the lock.
+        if accepted.schema != TRANSFER_ACCEPT_SCHEMA {
+            return IntentResult::Rejected {
+                reason: format!(
+                    "accept payload names schema {}, not {TRANSFER_ACCEPT_SCHEMA}",
+                    accepted.schema
+                ),
+            };
+        }
+        if accepted.transfer_id.trim().is_empty() {
+            return IntentResult::Rejected {
+                reason: "accept payload names no transfer".to_string(),
+            };
+        }
         let mut queue = match decisions.lock() {
             Ok(queue) => queue,
             // A poisoned queue means another thread panicked mid-decision.
@@ -459,7 +479,10 @@ fn advertised_action(action: &IdentityProjectionAction) -> AdvertisedAction {
             "Runs in the disclosing identity authority.".to_string()
         },
         payload_schema: action.schema.to_string(),
-        input_form: None,
+        // Carried through rather than dropped. An action whose payload the
+        // browser must compose is unusable without its form: the button either
+        // does not render or submits a payload naming nothing.
+        input_form: action.input_form.clone(),
         effect: if signing_decision {
             IntentEffect::ExternalEffect
         } else {
@@ -879,6 +902,7 @@ mod tests {
 
         let transfer = "3f6b1e28-0000-4000-8000-00000000ffee";
         let payload = serde_json::to_vec(&TransferAcceptIntentV1 {
+            schema: TRANSFER_ACCEPT_SCHEMA.to_string(),
             transfer_id: transfer.to_string(),
         })
         .unwrap();
@@ -900,6 +924,7 @@ mod tests {
                 label: "Accept transfer",
                 payload: None,
                 native_only: true,
+                input_form: None,
             }],
         }];
         let snapshot = endpoint.snapshot(endpoint.request()).unwrap();
@@ -970,6 +995,7 @@ mod tests {
     fn accepting_without_a_place_to_record_it_is_refused() {
         let (endpoint, _) = endpoint_with_private_sentinel();
         let payload = serde_json::to_vec(&TransferAcceptIntentV1 {
+            schema: TRANSFER_ACCEPT_SCHEMA.to_string(),
             transfer_id: "whatever".into(),
         })
         .unwrap();

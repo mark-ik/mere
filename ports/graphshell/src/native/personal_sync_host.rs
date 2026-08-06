@@ -2,7 +2,9 @@
 
 use std::path::PathBuf;
 
-use graphshell_protocol::{CardValueV1, PortableCardV1};
+use graphshell_protocol::{
+    ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, CardValueV1, PortableCardV1,
+};
 use muniment::RedbBackend;
 use personae::IdentityProvider;
 use std::sync::Arc;
@@ -654,10 +656,36 @@ impl PersonalSyncHost {
                             intent: TRANSFER_ACCEPT_INTENT,
                             schema: TRANSFER_ACCEPT_SCHEMA,
                             label: "Accept transfer",
-                            payload: Some(serde_json::json!({
-                                "transfer_id": offer.transfer_id.to_string(),
-                            })),
+                            // `payload` pre-binds fields for the *native*
+                            // identity UI. The browser composes this one from
+                            // the form below, so pre-binding here would be a
+                            // value nothing reads.
+                            payload: None,
                             native_only: true,
+                            // One field, one advertised choice: this card's
+                            // transfer. The id has to travel as an advertised
+                            // value because that is the only thing the bridge
+                            // will put in a payload, and a decision that does
+                            // not name its transfer is ambiguous the moment
+                            // two are waiting.
+                            input_form: Some(
+                                ActionFormV1::new(TRANSFER_ACCEPT_SCHEMA).with_field(
+                                    ActionFormFieldV1::choice(
+                                        "transfer_id",
+                                        "Transfer",
+                                        [ActionFormChoiceV1::new(
+                                            offer.transfer_id.to_string(),
+                                            format!(
+                                                "{} object(s), {} blob(s)",
+                                                offer.nodes, offer.blobs
+                                            ),
+                                        )],
+                                    )
+                                    .with_description(
+                                        "Confirm which waiting transfer to bring onto this device.",
+                                    ),
+                                ),
+                            ),
                         }]
                     })
                     .unwrap_or_default(),
@@ -1069,6 +1097,98 @@ mod tests {
             error.to_string().contains("not a paired device"),
             "the refusal must name the reason, got: {error}"
         );
+        host.close().await.unwrap();
+    }
+
+    /// The counterpart to `smoke-transfer-accept.mjs`. That checks the bridge
+    /// turns this form into the payload the host expects back; this checks the
+    /// host emits the form at all.
+    ///
+    /// Both halves are needed because the failure is silent from either side:
+    /// a card whose action carries no form renders no control, and an action
+    /// whose form advertises no transfer submits a decision naming nothing.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_waiting_transfer_advertises_an_accept_form_naming_that_transfer() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = InMemoryProvider::from_seed([0xb1; 32]);
+        let host = PersonalSyncHost::open(
+            &identity,
+            PersonalSyncHostConfig {
+                graph: [0xb2; 32],
+                store_path: directory.path().join("accept-form.redb"),
+                roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
+                selection: SyncSelection::default().with_facets([TRANSFER_OFFER_FACET]),
+                peer_tickets: Vec::new(),
+                peer_hints: Vec::new(),
+                paired_nodes: Vec::new(),
+                relay_urls: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let device = format!("personae://device/{}", hex(&host.node_id()));
+        let offer = TransferOfferV1 {
+            schema: TRANSFER_OFFER_FACET.to_string(),
+            transfer_id: Uuid::from_u128(0xb3),
+            operation: crate::transfer::TransferOperation::Copy,
+            source: crate::transfer::TransferEndpointV1 {
+                graph: "graphshell://graph/accept".to_string(),
+                persona: "personae://persona/owner".to_string(),
+                device: device.clone(),
+            },
+            destination: crate::transfer::TransferEndpointV1 {
+                graph: "graphshell://graph/accept".to_string(),
+                persona: "personae://persona/owner".to_string(),
+                device,
+            },
+            pairing_id: "pairing-accept".to_string(),
+            manifest_blob: eidetic::Hash::of(b"manifest"),
+            manifest_byte_len: 512,
+            nodes: 2,
+            relations: 1,
+            blobs: 1,
+            blob_bytes: 44,
+            offered_at_ms: 1_700_000_000_000,
+        };
+        host.author(crate::transfer_offer::offer_events(&offer).unwrap())
+            .await
+            .unwrap();
+
+        let cards = host.supplemental_cards().await.unwrap();
+        let accept = cards
+            .iter()
+            .flat_map(|card| card.actions.iter())
+            .find(|action| action.intent == TRANSFER_ACCEPT_INTENT)
+            .expect("a waiting transfer advertises accept");
+
+        let form = accept
+            .input_form
+            .as_ref()
+            .expect("the browser can only compose a payload it was given a form for");
+        form.validate().expect("the advertised form is well formed");
+        assert_eq!(form.schema, accept.schema);
+        assert_eq!(form.fields.len(), 1);
+        assert_eq!(form.fields[0].name, "transfer_id");
+        assert_eq!(
+            form.fields[0]
+                .choices
+                .iter()
+                .map(|choice| choice.value.as_str())
+                .collect::<Vec<_>>(),
+            [offer.transfer_id.to_string().as_str()],
+            "the only accept-able transfer is the one this card is about"
+        );
+
+        // Every other card stays read-only. Opening the action door for one
+        // card must not open it for the projection at large.
+        assert!(
+            cards
+                .iter()
+                .filter(|card| card.source_id != offer.transfer_id.to_string())
+                .all(|card| card.actions.is_empty())
+        );
+
         host.close().await.unwrap();
     }
 }

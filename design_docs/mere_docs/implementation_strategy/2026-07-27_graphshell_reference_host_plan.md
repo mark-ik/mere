@@ -1227,8 +1227,38 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   surface composed without a queue, which must refuse rather than report an
   accept nothing will act on.
 
-  Still open in S3: the browser extension's own UI for the action, which is
-  outside this repo. Then the recorded
+  **Corrected same day: the gesture was host-complete and browser-dead.** Two
+  defects, both silent. `advertised_action` set `input_form: None`
+  unconditionally and never carried `IdentityProjectionAction::payload`, so the
+  bound transfer id was discarded before it reached the browser. And
+  `renderCard`'s action loop has arms for native-import, confirmed-identity,
+  bounded-form, and `graphshell.identity.signing.*`, and `continue`s past
+  anything else, so the accept action rendered no control at all. A device
+  recording accepts nothing could send: the receipt-binary pattern, at the UI
+  layer, introduced while auditing it.
+
+  Fixed by using G11's bounded-form path (2026-08-06) rather than adding a
+  fifth render arm, so **`bridge.js` is unchanged**. `IdentityProjectionAction`
+  gained `input_form`, `advertised_action` carries it through, and the accept
+  action advertises one field with exactly one choice: this card's transfer.
+  That is the only way the id can reach a payload, because an advertised choice
+  is the only thing the bridge will compose from. `payload` stays `None` on
+  this action, since it pre-binds fields for the *native* identity UI, which
+  this action does not use.
+
+  The payload carries the form's `schema` marker and it is checked, so a
+  payload composed against a different or stale form is refused rather than
+  read as an accept. Validation happens before the decision queue is locked, so
+  a refusal never holds the lock.
+
+  Receipts are paired on purpose, because either half failing is invisible from
+  the other side: `a_waiting_transfer_advertises_an_accept_form_naming_that_transfer`
+  asserts the host emits the form and that no other card gained an action, and
+  `smoke-transfer-accept.mjs` asserts the bridge turns that exact shape into the
+  payload the host expects, and refuses an empty selection, an unadvertised
+  transfer id, an unadvertised field, and a mismatched schema.
+
+  Still open in S3: the recorded
   `navigator.storage.persist()` grant, promotion of destination staging into a
   recovery pin, and the blob-reference-set intent pair that pin release
   depends on. Also unbatched: staging authors one operation per blob, which is
