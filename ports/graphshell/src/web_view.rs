@@ -9,7 +9,7 @@ use genet_scripted_dom::ScriptedDom;
 use netrender::Scene;
 use paint_list_api::PaintList as _;
 
-use graphshell::action_draft::ActionDraftSemantics;
+use graphshell::client::ActionDraftSemantics;
 
 type ChromeChild = Box<dyn AnyView<(), (), GenetCtx, GenetElement>>;
 

@@ -1,5 +1,14 @@
 # Settings / Config Consolidation via the pelt Settings lane
 
+> **SUPERSEDED 2026-08-06** by the
+> [configuration_ownership_settings_projection_plan](../../mere_docs/implementation_strategy/2026-08-06_configuration_ownership_settings_projection_plan.md).
+> The P1-P3 work below landed in meerkat, which was deleted at the Turnstone
+> founding; the settings-as-nodes model (P1) was ruled out by the pane-taxonomy
+> revision (turnstone/src/apparatus_pane.rs header). The durable pieces (the
+> pelt `SettingsRef` lane, the deep-config-vs-quick-gesture line, the
+> diagnostics split) are carried forward in the successor's "Carried forward"
+> section. Historical record only.
+
 **Date**: 2026-06-21
 **Status**: P1 landed (the host settings-lane render arm, 2026-06-21). P2 core landed (the
 overlay + apparatus settings sections retired into `pelt/*`, tab cap on `pelt/appearance`,

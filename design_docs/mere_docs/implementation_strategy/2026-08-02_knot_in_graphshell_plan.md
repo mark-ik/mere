@@ -190,10 +190,20 @@ closed as dissolved. K2 is unblocked.
 document to place members over the endpoint, negotiating `EditableText`.
 Authority is the holder's, so no new admission model appears.
 
-**Blocked on the carrier plan's C3, discovered 2026-08-02.** Only two carriers
-exist, stdio and local, and both only reach this machine. A place member
-reaching the holder's endpoint is remote projection by definition, so K2
-cannot start until a network carrier does.
+**~~Blocked on the carrier plan's C3~~ UNBLOCKED 2026-08-06.** C3 landed: a
+place member can now reach the holder's endpoint over the transport, and the
+served session can ring when the document moves. What was blocked was reach,
+and reach exists.
+
+The block, as recorded on 2026-08-02: only two carriers existed, stdio and
+local, and both only reached this machine. A place member reaching the
+holder's endpoint is remote projection by definition.
+
+One thing C3 changed about K2's shape rather than merely unblocking it. The
+notice lane did not exist on an admitted session until C3 added it, so
+"concurrent editing" was going to arrive as polling whether or not anyone
+chose that. It now arrives as a bell, which is what makes the done condition
+below reachable without a client asking on a timer.
 
 Two things this does **not** mean, both easy to misread:
 

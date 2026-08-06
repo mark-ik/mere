@@ -360,8 +360,7 @@ impl IntentSink for FixtureEndpoint {
             OPEN_LIVE_VIEW_INTENT => Ok(resolve_live_view_reference(&intent.payload, self)),
             "fixture.inspect-tile" => {
                 match serde_json::from_slice::<serde_json::Value>(&intent.payload) {
-                    Ok(payload) if valid_inspect_tile_payload(&payload) =>
-                    {
+                    Ok(payload) if valid_inspect_tile_payload(&payload) => {
                         // The endpoint, not the host, advances the projection after
                         // accepting the bounded inspection request. The host must
                         // ask for and apply a fresh snapshot before it can invoke

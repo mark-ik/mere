@@ -43,8 +43,8 @@ use identity::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::device_settings_store;
 use crate::engine_profile_store::PERSONAS_DIR;
-use crate::settings_store;
 
 /// Top-level directory holding identity-scoped wallet state.
 pub const IDENTITY_DIR: &str = "identity";
@@ -484,7 +484,7 @@ fn set_runtime_manual_unlock(data_root: &Path, active: bool) {
 }
 
 fn wallet_startup_unlock_mode(data_root: &Path) -> StartupUnlockMode {
-    settings_store::load_settings(data_root)
+    device_settings_store::load_device_settings(data_root)
         .ok()
         .flatten()
         .map(|settings| settings.startup_unlock_mode)
@@ -1109,7 +1109,7 @@ fn save_bytes_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings_store::{PersistedSettings, save_settings};
+    use crate::device_settings_store::{DeviceSettings, save_device_settings};
     use identity::{IdentityProvider, InMemoryProvider};
 
     fn temp_data_root(tag: &str) -> PathBuf {
@@ -1665,11 +1665,10 @@ mod tests {
         let root = temp_data_root("bootstrap-locked-copy");
         let persona = fixture_persona();
         ensure_wallet_state(&root, persona, "Studio PC").unwrap();
-        save_settings(
+        save_device_settings(
             &root,
-            &PersistedSettings {
+            &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Locked,
-                ..PersistedSettings::default()
             },
         )
         .unwrap();
@@ -1689,11 +1688,10 @@ mod tests {
         let root = temp_data_root("bootstrap-locked-delegated");
         let persona = fixture_persona();
         ensure_local_device_identity(&root, "Pocket Meerkat").unwrap();
-        save_settings(
+        save_device_settings(
             &root,
-            &PersistedSettings {
+            &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Prompt,
-                ..PersistedSettings::default()
             },
         )
         .unwrap();
@@ -1711,11 +1709,10 @@ mod tests {
         let root = temp_data_root("explicit-auto-os-unlock");
         let persona = fixture_persona();
         ensure_wallet_state(&root, persona, "Studio PC").unwrap();
-        save_settings(
+        save_device_settings(
             &root,
-            &PersistedSettings {
+            &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Locked,
-                ..PersistedSettings::default()
             },
         )
         .unwrap();
@@ -1727,7 +1724,7 @@ mod tests {
         assert!(!wallet_local_secrets_locked(&root));
         assert!(load_identity_seed(&root).unwrap().is_some());
         assert_eq!(
-            settings_store::load_settings(&root)
+            device_settings_store::load_device_settings(&root)
                 .unwrap()
                 .unwrap_or_default()
                 .startup_unlock_mode,
@@ -1743,11 +1740,10 @@ mod tests {
         let root = temp_data_root("manual-relock");
         let persona = fixture_persona();
         ensure_wallet_state(&root, persona, "Studio PC").unwrap();
-        save_settings(
+        save_device_settings(
             &root,
-            &PersistedSettings {
+            &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Prompt,
-                ..PersistedSettings::default()
             },
         )
         .unwrap();

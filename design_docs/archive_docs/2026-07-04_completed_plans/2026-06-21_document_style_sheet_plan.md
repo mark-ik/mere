@@ -33,7 +33,7 @@ question, §6), [engine_picker_and_pluggability_plan](2026-06-15_engine_picker_a
 (sibling inker plan; per-engine profile pattern this borrows),
 [apparatus_pane_and_theme_switcher_plan](../../mere_docs/implementation_strategy/2026-06-08_apparatus_pane_and_theme_switcher_plan.md)
 + `register-theme` (the theme token source for §4),
-[settings_lane_consolidation_plan](../../mere_docs/implementation_strategy/2026-06-21_settings_lane_consolidation_plan.md)
+[settings_lane_consolidation_plan](../2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md)
 (the `pelt` provider appearance page where the customization surface lands, §5).
 
 ---
@@ -194,7 +194,7 @@ parallel palette. Ties to
 The sheet is `Serialize`/`Deserialize` (as `StyleConfig` already is), so it is
 TOML-shaped out of the box. Expose it through the settings lane's `pelt`
 (global appearance) provider per
-[settings_lane_consolidation_plan](../../mere_docs/implementation_strategy/2026-06-21_settings_lane_consolidation_plan.md):
+[settings_lane_consolidation_plan](../2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md):
 font-per-role pickers, size/scale, line-height, link adornment, plus the theme
 selection that drives §4. This is exactly Geopard's `~/.config/geopard/`
 config, given a UI.

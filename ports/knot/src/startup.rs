@@ -172,7 +172,7 @@ pub fn persona_vault_root(data_root: &Path, persona: PersonaId) -> PathBuf {
 #[cfg(all(test, windows))]
 mod tests {
     use graphshell_endpoint::{ProjectionCatalog, ProjectionSource};
-    use session_runtime::settings_store::{PersistedSettings, save_settings};
+    use session_runtime::{DeviceSettings, save_device_settings};
     use tempfile::tempdir;
 
     use super::*;
@@ -181,11 +181,10 @@ mod tests {
     fn auto_os_unlock_opens_signed_sealed_persona_truth() {
         let root = tempdir().unwrap();
         let persona = PersonaId::new();
-        let settings = PersistedSettings {
+        let settings = DeviceSettings {
             startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
-            ..PersistedSettings::default()
         };
-        save_settings(root.path(), &settings).unwrap();
+        save_device_settings(root.path(), &settings).unwrap();
         wallet_store::ensure_wallet_state(root.path(), persona, "Knot receipt").unwrap();
 
         let authority = StartupUnlockedPersonalVault::open(

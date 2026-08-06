@@ -23,7 +23,7 @@ Strophe, **and Mere** as the intended consumers.
 
 Related: [apparatus_pane_and_theme_switcher_plan](2026-06-08_apparatus_pane_and_theme_switcher_plan.md)
 (A1/A2 shipped the runtime switcher + chrome/orrery theming this builds on),
-[settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md)
+[settings_lane_consolidation_plan](../2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md)
 (the `pelt` appearance page is the authoring UI's home),
 [document_style_sheet_plan](../../inker_docs/implementation_strategy/2026-06-21_document_style_sheet_plan.md)
 (P3 already derives the document palette from `ThemeTokenSet.chrome`, so documents

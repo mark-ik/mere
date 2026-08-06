@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::fs;
 
 use graphshell::client::ResolvedContent;
-use graphshell::sessions::RetainedEndpointSession;
+use graphshell::sessions::spawn_endpoint_session;
 use graphshell_protocol::{
     CapabilityProfile, CarrierRequestBody, CarrierResponseBody, IntentResult,
     PresentationCapability, ResumeReply, ResumeRequest, SaveTextV1,
@@ -73,7 +73,7 @@ fn a_retained_graphshell_session_saves_a_real_knot_file() {
         root.path().as_os_str(),
         OsStr::new("4096"),
     ];
-    let mut retained = RetainedEndpointSession::spawn(
+    let mut retained = spawn_endpoint_session(
         env!("CARGO_BIN_EXE_knot_endpoint"),
         args,
         CapabilityProfile::new([
@@ -120,11 +120,10 @@ fn a_retained_graphshell_session_saves_a_real_knot_file() {
 fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
     let root = tempdir().unwrap();
     let persona = personae::PersonaId::new();
-    let settings = session_runtime::settings_store::PersistedSettings {
+    let settings = session_runtime::DeviceSettings {
         startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
-        ..session_runtime::settings_store::PersistedSettings::default()
     };
-    session_runtime::settings_store::save_settings(root.path(), &settings).unwrap();
+    session_runtime::save_device_settings(root.path(), &settings).unwrap();
     session_runtime::wallet_store::ensure_wallet_state(
         root.path(),
         persona,
@@ -159,7 +158,7 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
         PresentationCapability::PortableCard,
     ]);
     let mut retained =
-        RetainedEndpointSession::spawn(env!("CARGO_BIN_EXE_knot_endpoint"), &args, profile.clone())
+        spawn_endpoint_session(env!("CARGO_BIN_EXE_knot_endpoint"), &args, profile.clone())
             .unwrap();
     let session = retained.mount(0).unwrap();
     let (target, editable, action) = retained
@@ -194,8 +193,7 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
     retained.close().unwrap();
 
     let mut reopened =
-        RetainedEndpointSession::spawn(env!("CARGO_BIN_EXE_knot_endpoint"), &args, profile)
-            .unwrap();
+        spawn_endpoint_session(env!("CARGO_BIN_EXE_knot_endpoint"), &args, profile).unwrap();
     let session = reopened.mount(0).unwrap();
     let source = reopened
         .resolve_all(&session)

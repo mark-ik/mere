@@ -1,7 +1,9 @@
 # Graphshell Carrier Seam Plan
 
 **Date:** 2026-08-01
-**Status:** scoped, not started.
+**Status:** complete. C0, C1, and C3 landed; C2 followed on C3's evidence and
+moved the session machinery to `graphshell-client` and the carrier body to a
+new `graphshell-network`. Ready to archive once K2 has consumed it.
 **Depends on:** nothing. Every step below is independent of the authority
 decisions open under Turnstone's place port (the DCGKA carrier and the shared
 Knot space), which is the reason to do this now.
@@ -126,7 +128,115 @@ Decide after C0/C1, when the trait has shown what actually generalises: either
 it moves to `graphshell-client`, or it stays and the layering note is written
 down rather than left as drift.
 
-### C3. A network carrier
+**What C3 showed, 2026-08-06.** The line does not fall where the module
+boundary does. `NetworkCarrier` itself, the framing and the notice queue,
+needs `graphshell-protocol` and tokio and nothing else; it is generic over any
+`AsyncRead + AsyncWrite` and never learns who its peer is. Its two companions
+in the same file, `dial_projection_session` and `projection_binding`, need the
+ALPN and the admission vocabulary, which are the port's.
+
+So the port currently holds one crate-shaped thing and one port-shaped thing
+in one module, which is the same complaint C2 records about
+`RetainedEndpointSession`, now with a second instance and a clean seam through
+it:
+
+- crate-shaped: `NetworkCarrier`, `CarrierRuntime`, and the session machinery
+  `RetainedEndpointSession` already is. A `graphshell-network` crate parallel
+  to `-stdio` and `-local` is the obvious home, and the three would then be
+  the same shape as each other.
+- port-shaped: `dial_projection_session` and `projection_binding`, which
+  belong beside `accept_projection_session` because they share its ALPN and
+  its admission vocabulary. The dialling half and the accepting half of one
+  service want to stay adjacent.
+
+**DONE 2026-08-06 (Mark's call).** The split above is the split that landed.
+
+- **`graphshell-network`** is founded, beside `-stdio` and `-local`, holding
+  `NetworkCarrier` and `CarrierRuntime`. Its whole dependency list is
+  `graphshell-protocol`, `serde_json`, and `tokio`; it never learns who dialled
+  or which ALPN they asked for. The port keeps `dial_projection_session` and
+  `projection_binding` and re-exports the carrier types, so a caller still gets
+  a projection carrier from one place.
+- **`RetainedEndpointSession` moved to `graphshell-client`**, with
+  `resume_after_notice`, `resume_request_for_notice`, and `unexpected`. C2's
+  original complaint is answered: Turnstone now names the crate layer
+  (`graphshell::client::RetainedEndpointSession`) rather than another product's
+  port.
+- **`action_draft` moved with it**, because the session type constructs drafts
+  and there was no seam between them worth inventing. The port's `web.rs` was
+  already consuming it from a wasm target, which is the second consumer that
+  makes it crate-shaped rather than merely movable.
+
+Two things the move settled that scoping had not:
+
+- **`spawn` could not come along.** It built a `StdioCarrier`, and a session
+  type that holds `Box<dyn Carrier>` has no business knowing processes exist.
+  It is now `graphshell::sessions::spawn_endpoint_session`, a free function in
+  the port beside the other stdio deployment code, and `over` is the type's
+  only constructor. That is the honest shape: constructing a carrier is the
+  host's business, and each carrier needs different things to construct.
+- **`carrier_mut` had to become public.** The G4 receipt harness drives every
+  advertised action through the raw carrier, which the wrapper does not model.
+  It is documented as an escape hatch whose caller owns client-state
+  consistency, rather than pretending the wrapper covers every verb.
+
+What stayed in the port is what needs it: the stdio deployment, the receipt
+views, and the G4 harness. Nothing moved that a second host would not want.
+
+### C3. A network carrier - LANDED 2026-08-06; K2 is unblocked
+
+Four things this settled, two of them unscoped when C3 was written.
+
+**Most of the server half already existed, and the client half did not exist
+at all.** `carrier.rs` has accepted admitted projection sessions since G5d,
+and `session_loop.rs` has served NDJSON over them just as long. What was
+missing was the dialling side: exactly two `Carrier` implementations existed,
+stdio and local, and the code that dials, handshakes, and speaks the protocol
+lived hand-rolled inside the `g5_peer` receipt binary, where nothing could
+consume it. `ports/graphshell/src/network_carrier.rs` is that binary's inner
+loop, made into the third `Carrier`.
+
+**The notice lane did not exist on an admitted session, and K2 needs it.**
+`serve_admitted_session` never polled `ProjectionNoticeSource`, so a remote
+client calling `wait_for_notice` would have waited on a frame the server was
+never going to send. Stdio has had this since `serve_resumable_notifying`;
+the admitted loop simply never grew it, and nothing noticed because no remote
+client existed to be kept waiting. Two peers editing one document is precisely
+the case that breaks without it: the second peer would see the first peer's
+edit only when it next happened to ask. `session_notices.rs` adds it as one
+poller passed into the existing loop, not a second loop, so authority
+rechecks, lapse handling, and the session plane keep one owner.
+
+Two details worth keeping, because both were nearly got wrong:
+
+- **Poll before each read as well as on the timeout.** A peer sending faster
+  than the poll interval never lets the timeout arm fire, so a loop that rang
+  only on timeout would go silent for exactly the busy client that most needs
+  the bell.
+- **Drain, rather than one notice per wake.** An endpoint that moved several
+  revisions while the peer was quiet has all of them pending, and delivering
+  one per wake lets a busy source outrun its own bell.
+
+**The two server halves already agreed on the wire, by a fortunate accident.**
+Stdio writes a `CarrierOutput` envelope and the admitted loop writes a bare
+`CarrierResponse`, which reads like a divergence. It is not: `CarrierOutput`
+is `#[serde(untagged)]` and its two variants are structurally disjoint, so one
+client decode reads both framings. Recorded because the next reader will spot
+the asymmetry and reach for a fix that is not needed.
+
+**The blocking decision held, and cost nothing.** No caller changed. The
+carrier holds a runtime handle and blocks against it, which requires only that
+the calling thread not be a runtime worker; that is what every caller already
+is. `tokio::io::Lines::next_line` being cancel safe is what lets the poll arm
+wrap a read in `tokio::time::timeout` without risking a partial frame.
+
+**Proven by** `ports/graphshell/tests/projection_round_trip.rs`: a viewer
+dials, the owner's policy admits it, the served loop answers `Open` and rings,
+and a blocking `NetworkCarrier` on its own thread drives all of it over one
+transport, with no subprocess and no stdio anywhere. Eleven further unit tests
+cover the framing, the id matching, the queueing, and the drain.
+
+### C3 (original scoping)
 
 The remaining carrier, the one that makes remote projection real rather than
 architectural, and **the blocker for the Knot plan's K2**: projecting a

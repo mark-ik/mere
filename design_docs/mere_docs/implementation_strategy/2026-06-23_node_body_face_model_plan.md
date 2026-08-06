@@ -119,7 +119,7 @@ designer: add / remove / move vertices, snap to primitives (ball / box / rounded
 the material parameters (sliders), with an optional sprite underlay as a tracing aid. This is the
 [gloss_navigator_design](../design/2026-06-07_gloss_navigator_design.md) §2b swatch editing its
 scoped element, where the element is now the node's body. It surfaces in the `node:<id>` facet
-pane ([settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md)) and
+pane ([settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md)) and
 compactly as object-card widgets.
 
 Done when a user can author a node's hull from scratch (not only by tracing a sprite), pick a
@@ -179,12 +179,12 @@ Open representation threads, each with its home, so closing the predecessor plan
 - **Scene-wide representation defaults (Decision 6).** The scene-wide form-by-content-type mapping,
   default arrangement, and edge / field styling, distinct from the per-node overrides. The "scene
   pane" of Decision 6 is the settings-lane global page; owned by
-  [settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md) (`pelt` /
+  [settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md) (`pelt` /
   `pelt/orrery`), with per-node overrides on the `node:<id>` provider.
 - **Facets-panel structure + scope (probe Q4).** Which per-node facets the deep editor exposes and
   in what order, and which scattered context-menu toggles it consolidates (Form / Face / size /
   material / tags / engine pin / relations). The panel is owned by
-  [settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md)'s `node:<id>`
+  [settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md)'s `node:<id>`
   provider; the compact in-canvas form is [object_card_plan](2026-06-21_object_card_plan.md). This
   plan supplies the Body / Face / material setters those surfaces bind.
 - **Arrangement surface + persistence (Decision 7, P3).** Per-scene arrangement *persistence* is
@@ -204,7 +204,7 @@ Open representation threads, each with its home, so closing the predecessor plan
   owned by [object_card_plan](2026-06-21_object_card_plan.md); this plan supplies the underlying
   setters it binds.
 - **The `node:<id>` facet pane** (the deep editor's home) is owned by
-  [settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md).
+  [settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md).
 
 This plan is the **represent** layer of the
 [interaction_model_spine](../technical_architecture/2026-06-18_interaction_model_spine.md),

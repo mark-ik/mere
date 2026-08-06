@@ -17,7 +17,7 @@ coming from the live theme; this plan owns everything else on the sheet.
 Related: the sheet type ([style_sheet.rs](../../../crates/inker/document-canvas/src/style_sheet.rs),
 already `Serialize`/`Deserialize` and complete), the content-actor palette seam
 (P3, [content.rs](../../../crates/meerkat/src/content.rs)),
-[settings_lane_consolidation_plan](../../mere_docs/implementation_strategy/2026-06-21_settings_lane_consolidation_plan.md)
+[settings_lane_consolidation_plan](../2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md)
 (the `pelt` provider this adds a page to).
 
 ---

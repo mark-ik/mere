@@ -21,7 +21,7 @@ Sibling / converging docs:
 - [node_representation_arrangement_plan](2026-06-18_node_representation_arrangement_plan.md):
   the resize-tier control (its P0 size work) is the card's first widget; the card is where
   per-node representation, size, and physical-characteristic config live.
-- [settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md): the
+- [settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md): the
   card is the **compact, in-canvas face of the per-object settings lane** (the `node:<id>`
   provider). One per-object settings model, two presentations.
 - [node_editor_customization_probe](../research/2026-06-21_node_editor_customization_probe.md):

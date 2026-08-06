@@ -4,6 +4,7 @@ pub mod browser_host;
 pub mod device_broker;
 #[cfg(feature = "personal-sync")]
 pub mod device_sync;
+pub mod endpoint_catalog;
 pub mod identity_ui;
 pub mod owner_settings;
 #[cfg(feature = "personal-sync")]

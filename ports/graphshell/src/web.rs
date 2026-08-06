@@ -8,7 +8,8 @@ mod web_view;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use graphshell::action_draft::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
+use graphshell::browser_storage::{StoragePersistence, decide, status_line};
+use graphshell::client::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
 use graphshell::endpoint::{IntentSink, ProjectionSource};
 use graphshell::protocol::{
     CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession,
@@ -18,6 +19,7 @@ use netrender::Scene;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{Document, Element, HtmlCanvasElement, Window};
 
 use graphshell::access::{AccessRecord, AccessRecordFilter, query_access_records};
@@ -115,6 +117,7 @@ struct BrowserHost {
     height: u32,
     product_status: String,
     storage_status: String,
+    storage_persistence: StoragePersistence,
     layout_id: String,
     physics_paused: bool,
     physics_damping: f32,
@@ -493,6 +496,45 @@ impl BrowserHost {
             _ => None,
         }
     }
+}
+
+/// Ask the browser whether this origin's storage is kept, requesting it when
+/// it is not.
+///
+/// Every failure path lands on `Unknown` with its reason rather than on
+/// `Refused`. An insecure context and a browser that declined are different
+/// facts, and only one of them changes if the person installs the resident
+/// host.
+async fn resolve_storage_persistence() -> StoragePersistence {
+    let Ok(window) = window() else {
+        return StoragePersistence::Unknown("browser window is unavailable".to_string());
+    };
+    let manager = window.navigator().storage();
+    let persisted = match manager.persisted() {
+        Ok(promise) => match JsFuture::from(promise).await {
+            Ok(value) => value
+                .as_bool()
+                .ok_or_else(|| "persisted() did not answer with a boolean".to_string()),
+            Err(error) => Err(format!("persisted() failed: {error:?}")),
+        },
+        Err(error) => Err(format!("storage persistence is unavailable: {error:?}")),
+    };
+    // `decide` takes the request as a closure so it is never made when the
+    // answer is already yes; awaiting inside one needs the future built first.
+    let requested = if matches!(persisted, Ok(false)) {
+        match manager.persist() {
+            Ok(promise) => match JsFuture::from(promise).await {
+                Ok(value) => value
+                    .as_bool()
+                    .ok_or_else(|| "persist() did not answer with a boolean".to_string()),
+                Err(error) => Err(format!("persist() failed: {error:?}")),
+            },
+            Err(error) => Err(format!("persist() is unavailable: {error:?}")),
+        }
+    } else {
+        Ok(false)
+    };
+    decide(persisted, move || requested)
 }
 
 fn window() -> Result<Window, String> {
@@ -1005,6 +1047,10 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         .map_err(|_| "could not expose action count")?;
     body.set_attribute("data-storage", &host.storage_status)
         .map_err(|_| "could not expose storage state")?;
+    // A stable token beside the sentence, so a scenario checks a state rather
+    // than parsing prose that is allowed to change.
+    body.set_attribute("data-storage-persistence", host.storage_persistence.token())
+        .map_err(|_| "could not expose storage persistence")?;
     document.set_title("GRAPHSHELL H3 READY");
     Ok(())
 }
@@ -1033,12 +1079,16 @@ async fn run() -> Result<(), String> {
     let mut app = GraphshellApp::open_or_fixture(backend, selected_persona)
         .await
         .map_err(|error| error.to_string())?;
-    let storage_status = if app.host.was_reopened() {
+    let store_state = if app.host.was_reopened() {
         "IndexedDB reopened"
     } else {
         "IndexedDB seeded"
-    }
-    .to_string();
+    };
+    // Asked once, at open. A browser decides this on heuristics that change
+    // with how established the profile looks, so the answer is recorded rather
+    // than assumed, and a refusal is reported rather than hidden.
+    let storage_persistence = resolve_storage_persistence().await;
+    let storage_status = status_line(store_state, &storage_persistence);
     let now_secs = (js_sys::Date::now() / 1_000.0) as u64;
     let capture_input = initial_capture_input(&window()?)?;
     let capture_policy = capture_input
@@ -1133,6 +1183,7 @@ async fn run() -> Result<(), String> {
         height,
         product_status,
         storage_status,
+        storage_persistence,
         layout_id: "phyllotaxis.default".to_string(),
         physics_paused: false,
         physics_damping: 0.82,

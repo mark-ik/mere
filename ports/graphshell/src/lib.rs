@@ -5,13 +5,14 @@
 
 #[cfg(feature = "web")]
 pub mod access;
-pub mod action_draft;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod admission;
 #[cfg(feature = "web")]
 pub mod app;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod browser_carrier;
+#[cfg(feature = "web")]
+pub mod browser_storage;
 pub mod canary;
 #[cfg(feature = "web")]
 pub mod capture;
@@ -31,6 +32,8 @@ pub mod lifecycle;
 pub mod mere_host;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod native;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod network_carrier;
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod personal_sync;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
@@ -42,6 +45,8 @@ pub mod profile;
 pub mod resume;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod session_loop;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub mod session_notices;
 pub mod sessions;
 #[cfg(feature = "web")]
 pub mod transfer;

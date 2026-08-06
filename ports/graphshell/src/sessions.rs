@@ -1,33 +1,35 @@
-//! Product-neutral local session mounting for the G4 cross-product proof.
+//! The G4 cross-product proof: mount several endpoints and render them behind
+//! one switcher.
+//!
+//! The session state machine this used to hold now lives in
+//! [`graphshell_client::RetainedEndpointSession`], which is where a product
+//! reaching an endpoint should find it. What stays here is what needs the
+//! port: the stdio deployment, the receipt views, and the harness that drives
+//! every advertised action to prove a projection is live rather than rendered.
 
-use std::collections::{BTreeMap, BTreeSet};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use std::collections::BTreeSet;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use std::ffi::OsStr;
 use std::fmt::Write;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use std::path::{Path, PathBuf};
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use graphshell_client::{
-    ClientState, PresentationResolution, ResolvedPresentation, ResumeApplication,
+    ClientState, ResolvedPresentation, RetainedEndpointSession, resume_after_notice, unexpected,
 };
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-use graphshell_protocol::PresentationCapability;
-#[cfg(any(feature = "native", feature = "web"))]
-use graphshell_protocol::{AdvertisedAction, IntentInvocation};
 use graphshell_protocol::{
-    CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
-    EndpointDescriptor, IntentResult, ProjectionRequest, ProjectionSession, ResumeRequest,
+    CapabilityProfile, Carrier, CarrierRequestBody, CarrierResponseBody, IntentInvocation,
+    IntentResult, PresentationCapability, ProjectionSession,
 };
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use graphshell_stdio::StdioCarrier;
-use sceno::InstanceId;
-#[cfg(any(feature = "native", feature = "web"))]
-use serde::Serialize;
 
-use crate::action_draft::{ActionDraft, ActionDraftTarget};
-use crate::view::{render_projection_receipt, ProjectionReceiptView};
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use crate::view::{IntentReceiptView, ProjectionLayoutView};
+use crate::view::{ProjectionReceiptView, render_projection_receipt};
 
 /// One mounted endpoint projection and the label used by Graphshell's switcher.
 pub struct SessionProjectionView {
@@ -35,388 +37,21 @@ pub struct SessionProjectionView {
     pub projection: ProjectionReceiptView,
 }
 
-/// One retained local endpoint process and its Graphshell client state.
+/// Mount an endpoint that runs as a child process.
 ///
-/// Resource bytes remain in `ClientState` only for this object's lifetime.
-/// `close` and `Drop` both release the child carrier and discard every mounted
-/// session, including memory-only editable source.
-pub struct RetainedEndpointSession {
-    /// Boxed rather than concrete: the protocol has always described itself as
-    /// running over an unspecified carrier, and this is the field that makes
-    /// that true. `spawn` still supplies the stdio one.
-    carrier: Option<Box<dyn Carrier>>,
-    client: ClientState,
+/// A free function rather than a constructor, because spawning is a property
+/// of one carrier rather than of a mounted session:
+/// [`RetainedEndpointSession`] holds a `Box<dyn Carrier>` and has no business
+/// knowing that processes exist. A host embedding an endpoint or dialling a
+/// remote one builds its own carrier and calls `over` directly.
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+pub fn spawn_endpoint_session(
+    program: impl AsRef<OsStr>,
+    args: impl IntoIterator<Item = impl AsRef<OsStr>>,
     profile: CapabilityProfile,
-    descriptor: EndpointDescriptor,
-    mounted: BTreeSet<ProjectionSession>,
-    requests: BTreeMap<ProjectionSession, ProjectionRequest>,
-}
-
-impl RetainedEndpointSession {
-    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-    pub fn spawn(
-        program: impl AsRef<OsStr>,
-        args: impl IntoIterator<Item = impl AsRef<OsStr>>,
-        profile: CapabilityProfile,
-    ) -> Result<Self, String> {
-        let carrier = StdioCarrier::spawn(program, args).map_err(|error| error.to_string())?;
-        Self::over(Box::new(carrier), profile)
-    }
-
-    /// Mount an endpoint over any carrier.
-    ///
-    /// The general form `spawn` is one case of. A host embedding an endpoint
-    /// passes a `LocalCarrier`; a host reaching a remote one passes whatever
-    /// carries it. Everything after discovery is identical, which is the point
-    /// of the seam: where the endpoint runs stops being a different code path
-    /// and becomes a different argument.
-    pub fn over(mut carrier: Box<dyn Carrier>, profile: CapabilityProfile) -> Result<Self, String> {
-        let descriptor = match carrier.request(CarrierRequestBody::Discover)? {
-            CarrierResponseBody::Descriptor(descriptor) => descriptor,
-            other => return Err(unexpected("descriptor", &other)),
-        };
-        Ok(Self {
-            carrier: Some(carrier),
-            client: ClientState::default(),
-            profile,
-            descriptor,
-            mounted: BTreeSet::new(),
-            requests: BTreeMap::new(),
-        })
-    }
-
-    pub fn descriptor(&self) -> &EndpointDescriptor {
-        &self.descriptor
-    }
-
-    pub fn client(&self) -> &ClientState {
-        &self.client
-    }
-
-    pub fn profile(&self) -> &CapabilityProfile {
-        &self.profile
-    }
-
-    /// Forget one mounted projection and every resource cached beneath it.
-    ///
-    /// The endpoint process may remain alive for another document, but a
-    /// closed editor must not leave its memory-only source in client state.
-    pub fn forget(&mut self, session: &ProjectionSession) {
-        self.mounted.remove(session);
-        self.requests.remove(session);
-        self.client.forget_session(session);
-    }
-
-    /// Mount one discovered projection without resolving resources or invoking
-    /// any of its actions.
-    pub fn mount(&mut self, offer_index: usize) -> Result<ProjectionSession, String> {
-        let request = self
-            .descriptor
-            .projections
-            .get(offer_index)
-            .map(|offer| offer.request.clone())
-            .ok_or_else(|| format!("endpoint has no projection {offer_index}"))?;
-        let snapshot = match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Snapshot(request.clone()))?
-        {
-            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
-            other => return Err(unexpected("snapshot", &other)),
-        };
-        self.apply_snapshot(snapshot, request)
-    }
-
-    /// Request a fresh full snapshot using the same projection request that
-    /// mounted this session. This is the simple, source-authoritative recovery
-    /// path after an accepted action when a host is not waiting on notices.
-    pub fn resnapshot(&mut self, session: &ProjectionSession) -> Result<(), String> {
-        let request = self
-            .requests
-            .get(session)
-            .cloned()
-            .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?;
-        let snapshot = match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Snapshot(request.clone()))?
-        {
-            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
-            other => return Err(unexpected("snapshot", &other)),
-        };
-        if snapshot.session != *session {
-            return Err(format!(
-                "endpoint resnapshot changed session {} to {}",
-                session.0, snapshot.session.0
-            ));
-        }
-        self.apply_snapshot(snapshot, request).map(|_| ())
-    }
-
-    /// Open one endpoint-advertised bounded action form at the client's
-    /// current acknowledgement. The action remains endpoint-authored; this
-    /// method only captures the exact action and the snapshot position that
-    /// may submit it.
-    pub fn open_action_draft(
-        &self,
-        session: &ProjectionSession,
-        target: InstanceId,
-        intent: &str,
-    ) -> Result<(ActionDraft, ActionDraftTarget), String> {
-        let tree = self
-            .client
-            .accessibility_tree(session, &self.profile)
-            .map_err(|error| format!("could not inspect {}: {error:?}", session.0))?;
-        let action = tree
-            .children
-            .iter()
-            .find(|item| item.instance == target)
-            .and_then(|item| item.actions.iter().find(|action| action.intent.0 == intent))
-            .cloned()
-            .ok_or_else(|| {
-                format!(
-                    "intent {intent} was not advertised for {} in {}",
-                    target.0, session.0
-                )
-            })?;
-        if action.input_form.is_none() {
-            return Err(format!(
-                "intent {intent} does not advertise a bounded action form"
-            ));
-        }
-        let acknowledgement = self
-            .client
-            .acknowledgement(session)
-            .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
-        Ok((
-            ActionDraft::new(action),
-            ActionDraftTarget {
-                session: session.clone(),
-                target,
-                observed_epoch: acknowledgement.epoch,
-                observed_revision: acknowledgement.revision,
-            },
-        ))
-    }
-
-    /// Submit a draft composed from endpoint-advertised values. Missing or
-    /// invalid local selections fail before the carrier is touched; endpoint
-    /// authorization, replay, and stale checks remain authoritative.
-    pub fn submit_action_draft(
-        &mut self,
-        target: &ActionDraftTarget,
-        draft: &mut ActionDraft,
-    ) -> Result<IntentResult, String> {
-        if !self.mounted.contains(&target.session) {
-            return Err(format!("Graphshell did not mount {}", target.session.0));
-        }
-        let invocation = draft
-            .invocation(target)
-            .map_err(|error| format!("could not compose advertised action: {error}"))?;
-        match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Intent(invocation))?
-        {
-            CarrierResponseBody::Intent(result) => Ok(result),
-            other => Err(unexpected("intent result", &other)),
-        }
-    }
-
-    fn apply_snapshot(
-        &mut self,
-        snapshot: graphshell_protocol::ProjectionSnapshot,
-        request: ProjectionRequest,
-    ) -> Result<ProjectionSession, String> {
-        let session = snapshot.session.clone();
-        self.client
-            .apply_snapshot(snapshot)
-            .map_err(|error| format!("Graphshell rejected {session:?}: {error:?}"))?;
-        self.mounted.insert(session.clone());
-        self.requests.insert(session.clone(), request);
-        Ok(session)
-    }
-
-    /// Resolve one presentation on demand, fetching only the selected
-    /// capability's resource.
-    pub fn resolve(
-        &mut self,
-        session: &ProjectionSession,
-        instance: InstanceId,
-    ) -> Result<ResolvedPresentation, String> {
-        loop {
-            match self
-                .client
-                .resolve(session, instance, &self.profile)
-                .map_err(|error| format!("could not resolve {}: {error:?}", session.0))?
-            {
-                PresentationResolution::Ready(presentation) => return Ok(presentation),
-                PresentationResolution::NeedsResource(request) => {
-                    let response = match self
-                        .carrier_mut()?
-                        .request(CarrierRequestBody::Resource(request))?
-                    {
-                        CarrierResponseBody::Resource(response) => response,
-                        other => return Err(unexpected("resource", &other)),
-                    };
-                    self.client
-                        .apply_resource(response)
-                        .map_err(|error| format!("resource was rejected: {error:?}"))?;
-                }
-            }
-        }
-    }
-
-    pub fn resolve_all(
-        &mut self,
-        session: &ProjectionSession,
-    ) -> Result<Vec<(InstanceId, ResolvedPresentation)>, String> {
-        let instances = self
-            .client
-            .mounted(session)
-            .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?
-            .scene
-            .active_items_in_order()
-            .into_iter()
-            .map(|(instance, _)| instance)
-            .collect::<Vec<_>>();
-        instances
-            .into_iter()
-            .map(|instance| {
-                self.resolve(session, instance)
-                    .map(|value| (instance, value))
-            })
-            .collect()
-    }
-
-    /// Invoke an action exactly as advertised, using the current client
-    /// acknowledgement and a typed, versioned payload.
-    #[cfg(any(feature = "native", feature = "web"))]
-    pub fn invoke<T: Serialize>(
-        &mut self,
-        session: &ProjectionSession,
-        target: InstanceId,
-        action: &AdvertisedAction,
-        payload: &T,
-    ) -> Result<IntentResult, String> {
-        let advertised = self
-            .client
-            .mounted(session)
-            .and_then(|mounted| mounted.presentation.offers_for(target))
-            .and_then(|offers| {
-                offers
-                    .iter()
-                    .find(|offer| self.profile.supports(offer.requires))
-            })
-            .is_some_and(|offer| {
-                offer
-                    .semantics
-                    .actions
-                    .iter()
-                    .any(|candidate| candidate == action)
-            });
-        if !advertised {
-            return Err("intent was not advertised for the selected presentation".into());
-        }
-        let ack = self
-            .client
-            .acknowledgement(session)
-            .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
-        let payload = serde_json::to_vec(payload)
-            .map_err(|error| format!("could not encode intent payload: {error}"))?;
-        match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Intent(IntentInvocation {
-                session: session.clone(),
-                target,
-                observed_epoch: ack.epoch,
-                observed_revision: ack.revision,
-                intent: action.intent.0.clone(),
-                payload,
-            }))? {
-            CarrierResponseBody::Intent(result) => Ok(result),
-            other => Err(unexpected("intent result", &other)),
-        }
-    }
-
-    /// Block for one revision bell and recover through the ordinary resume
-    /// path. Source bytes never travel in the notice.
-    pub fn wait_for_change(&mut self) -> Result<bool, String> {
-        let notice = self.carrier_mut()?.wait_for_notice()?;
-        let carrier = self
-            .carrier
-            .as_deref_mut()
-            .ok_or_else(|| "endpoint carrier is closed".to_string())?;
-        resume_after_notice(carrier, &mut self.client, &notice)
-    }
-
-    /// Pump the stdio carrier without waiting for a notice.
-    ///
-    /// The discovery request is a harmless round trip that lets the carrier
-    /// collect any notices already written by the endpoint. This is intended
-    /// for a background owner that polls on a short cadence while its UI
-    /// remains entirely local.
-    pub fn poll_for_change(&mut self) -> Result<bool, String> {
-        match self.carrier_mut()?.request(CarrierRequestBody::Discover)? {
-            CarrierResponseBody::Descriptor(_) => {}
-            other => return Err(unexpected("descriptor", &other)),
-        }
-        let mut changed = false;
-        loop {
-            let notice = self
-                .carrier
-                .as_mut()
-                .and_then(|carrier| carrier.take_notice());
-            let Some(notice) = notice else {
-                break;
-            };
-            let carrier = self
-                .carrier
-                .as_deref_mut()
-                .ok_or_else(|| "endpoint carrier is closed".to_string())?;
-            changed |= resume_after_notice(carrier, &mut self.client, &notice)?;
-        }
-        Ok(changed)
-    }
-
-    pub fn close(mut self) -> Result<(), String> {
-        let carrier_result = if let Some(mut carrier) = self.carrier.take() {
-            let response = carrier.request(CarrierRequestBody::Close);
-            let close = match response {
-                Ok(CarrierResponseBody::Closed) => Ok(()),
-                Ok(other) => Err(unexpected("session close", &other)),
-                Err(error) => Err(error),
-            };
-            let shutdown = carrier
-                .shutdown()
-                .map_err(|error| format!("endpoint did not stop cleanly: {error}"));
-            close.and(shutdown)
-        } else {
-            Ok(())
-        };
-        self.purge();
-        carrier_result
-    }
-
-    fn carrier_mut(&mut self) -> Result<&mut (dyn Carrier + 'static), String> {
-        self.carrier
-            .as_deref_mut()
-            .ok_or_else(|| "endpoint carrier is closed".to_string())
-    }
-
-    fn purge(&mut self) {
-        for session in std::mem::take(&mut self.mounted) {
-            self.client.forget_session(&session);
-        }
-        self.requests.clear();
-    }
-}
-
-impl Drop for RetainedEndpointSession {
-    fn drop(&mut self) {
-        self.purge();
-        // Dropping StdioCarrier closes stdin and waits for the child. Taking it
-        // makes the order explicit: source bytes are purged before the process
-        // boundary is released.
-        drop(self.carrier.take());
-    }
+) -> Result<RetainedEndpointSession, String> {
+    let carrier = StdioCarrier::spawn(program, args).map_err(|error| error.to_string())?;
+    RetainedEndpointSession::over(Box::new(carrier), profile)
 }
 
 /// Spawn endpoint processes, discover their projections, and mount each one
@@ -439,7 +74,7 @@ fn mount_endpoint_process(program: &Path) -> Result<Vec<SessionProjectionView>, 
         PresentationCapability::NativeGlyph,
         PresentationCapability::Image,
     ]);
-    let mut retained = RetainedEndpointSession::spawn(program, std::iter::empty::<&str>(), profile)
+    let mut retained = spawn_endpoint_session(program, std::iter::empty::<&str>(), profile)
         .map_err(|error| format!("could not start {}: {error}", program.display()))?;
     let views = mount_descriptor(&mut retained);
     let shutdown = retained.close();
@@ -498,48 +133,6 @@ pub fn wait_for_session_change(
 ) -> Result<bool, String> {
     let notice = carrier.wait_for_notice()?;
     resume_after_notice(carrier, client, &notice)
-}
-
-pub fn resume_after_notice(
-    carrier: &mut (dyn Carrier + 'static),
-    client: &mut ClientState,
-    notice: &CarrierNotice,
-) -> Result<bool, String> {
-    let Some(mut request) = resume_request_for_notice(client, notice)? else {
-        return Ok(false);
-    };
-    for _ in 0..4 {
-        let reply = match carrier.request(CarrierRequestBody::Resume(request))? {
-            CarrierResponseBody::Resume(reply) => reply,
-            other => return Err(unexpected("resume reply", &other)),
-        };
-        match client
-            .apply_resume(&notice.session, reply)
-            .map_err(|error| {
-                format!(
-                    "Graphshell rejected resume for {}: {error:?}",
-                    notice.session.0
-                )
-            })? {
-            ResumeApplication::Current(_) | ResumeApplication::Applied(_) => return Ok(true),
-            ResumeApplication::Resynchronize(next) => request = next,
-        }
-    }
-    Err("endpoint did not produce an applicable resume after four attempts".into())
-}
-
-pub fn resume_request_for_notice(
-    client: &mut ClientState,
-    notice: &CarrierNotice,
-) -> Result<Option<ResumeRequest>, String> {
-    let acknowledged = client
-        .acknowledgement(&notice.session)
-        .ok_or_else(|| format!("revision notice names unknown session {}", notice.session.0))?;
-    if notice.epoch == acknowledged.epoch && notice.revision <= acknowledged.revision {
-        return Ok(None);
-    }
-    client.mark_stale(&notice.session);
-    Ok(client.resume_request(&notice.session))
 }
 
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
@@ -606,23 +199,6 @@ fn intent_receipt(label: String, result: IntentResult) -> IntentReceiptView {
     }
 }
 
-fn unexpected(expected: &str, actual: &CarrierResponseBody) -> String {
-    format!(
-        "endpoint returned {} while Graphshell expected {expected}",
-        match actual {
-            CarrierResponseBody::Descriptor(_) => "a descriptor",
-            CarrierResponseBody::Snapshot(_) => "a snapshot",
-            CarrierResponseBody::Resource(_) => "a resource",
-            CarrierResponseBody::ResourceChunk(_) => "a resource chunk",
-            CarrierResponseBody::Resume(_) => "a resume reply",
-            CarrierResponseBody::Intent(_) => "an intent result",
-            CarrierResponseBody::Opened(_) => "an opened session",
-            CarrierResponseBody::Closed => "a session close",
-            CarrierResponseBody::Suspended => "a session suspend",
-        }
-    )
-}
-
 /// Render independently mounted projections behind keyboard-reachable session
 /// tabs. Each panel uses the existing responsive projection receipt unchanged.
 pub fn render_session_switch_receipt(sessions: &[SessionProjectionView]) -> String {
@@ -681,8 +257,9 @@ fn escape(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use graphshell_client::resume_request_for_notice;
     use graphshell_protocol::{
-        CachePolicy, PresentationManifest, ProjectionSnapshot, ProtocolVersion,
+        CachePolicy, CarrierNotice, PresentationManifest, ProjectionSnapshot, ProtocolVersion,
     };
     use sceno::Scene;
     use scenotime::{Revision, SceneEpoch, SceneSnapshot};

@@ -13,6 +13,7 @@ default = ["native"]
 # binaries. This remains the default so current native callers keep working.
 native = [
     "dep:blake3",
+    "dep:graphshell-network",
     "dep:graphshell-stdio",
     "dep:light-file-dialog",
     "dep:notochord",
@@ -80,6 +81,7 @@ url = { version = "2", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 blake3 = { workspace = true, optional = true }
+graphshell-network = { path = "../../crates/graphshell/graphshell-network", optional = true }
 graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio", optional = true }
 light-file-dialog = { version = "3.21.3", optional = true }
 # The application composes Personae: the profile Graphshell speaks as. The

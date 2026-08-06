@@ -84,6 +84,7 @@ members = [
     "crates/graphshell/graphshell-endpoint",
     "crates/graphshell/graphshell-stdio",
     "crates/graphshell/graphshell-local",
+    "crates/graphshell/graphshell-network",
     "ports/graphshell",
     "ports/graphshell/web",
     "ports/knot",
@@ -158,6 +159,7 @@ graphshell-client = { path = "crates/graphshell/graphshell-client" }
 graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
+graphshell-network = { path = "crates/graphshell/graphshell-network" }
 knot = { path = "ports/knot" }
 # Shared pins the graphshell crates inherit.
 base64 = "0.22"

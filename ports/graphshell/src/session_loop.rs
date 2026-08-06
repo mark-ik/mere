@@ -32,12 +32,13 @@ use graphshell_endpoint::{
     dispatch_common,
 };
 use graphshell_protocol::{
-    CarrierFailure, CarrierRequest, CarrierResponse, CarrierResponseBody, ResumeReply,
-    ResumeRequest, SessionOpened, SessionStatus,
+    CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest, CarrierResponse,
+    CarrierResponseBody, ResumeReply, ResumeRequest, SessionOpened, SessionStatus,
 };
 use notochord::{AdmittedSession, RevocationLedger};
 use std::fmt::Display;
 use std::sync::RwLock;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::lifecycle::{Lapse, SessionAuthority};
@@ -81,7 +82,20 @@ pub enum SessionLoopError {
     /// The socket failed.
     #[error("session transport failed: {0}")]
     Transport(#[from] std::io::Error),
+    /// The endpoint could not say whether it had a notice to send.
+    ///
+    /// Distinct from a transport failure because it is the endpoint that
+    /// broke, not the link, and a log that conflates the two sends whoever
+    /// reads it to the wrong half.
+    #[error("endpoint notice source failed: {0}")]
+    Notices(String),
 }
+
+/// The poller a session without a notice lane passes.
+///
+/// Never called; a bare function pointer is only there to give the absent
+/// case a concrete type.
+pub(crate) type NoNotices<E> = fn(&mut E) -> Result<Option<CarrierNotice>, String>;
 
 /// Serve one admitted session until it closes, suspends, or lapses.
 ///
@@ -107,12 +121,69 @@ where
     F: FnMut(&mut E, ResumeRequest) -> Result<ResumeReply, String>,
     N: Fn() -> u64,
 {
+    serve_admitted_session_with(
+        session,
+        authority,
+        revocations,
+        endpoint,
+        resume,
+        now_ms,
+        None::<(Duration, NoNotices<E>)>,
+    )
+    .await
+}
+
+/// The loop both entry points share.
+///
+/// `notices` is the only difference between a session that can ring and one
+/// that cannot: given a poll interval and a poller, the loop writes a notice
+/// frame before each read and again whenever the peer falls quiet for the
+/// interval. Polling in both places is what makes a busy client and an idle
+/// one behave the same: a peer sending faster than the interval would
+/// otherwise never let the timeout arm fire.
+pub(crate) async fn serve_admitted_session_with<E, S, F, N, P>(
+    session: &mut AdmittedSession<S>,
+    authority: &SessionAuthority,
+    revocations: &RwLock<RevocationLedger>,
+    endpoint: &mut E,
+    resume: &mut F,
+    now_ms: N,
+    mut notices: Option<(Duration, P)>,
+) -> Result<SessionSummary, SessionLoopError>
+where
+    E: ProjectionCatalog + ProjectionSource + PresentationSource + IntentSink,
+    <E as ProjectionSource>::Error: Display,
+    <E as PresentationSource>::Error: Display,
+    <E as IntentSink>::Error: Display,
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: FnMut(&mut E, ResumeRequest) -> Result<ResumeReply, String>,
+    N: Fn() -> u64,
+    P: FnMut(&mut E) -> Result<Option<CarrierNotice>, String>,
+{
     let (reader, mut writer) = tokio::io::split(&mut session.stream);
     let mut lines = BufReader::new(reader).lines();
     let mut answered = 0u64;
 
     let end = loop {
-        let Some(line) = lines.next_line().await? else {
+        // Before blocking on the peer: anything the endpoint produced while
+        // the last request was being served goes out now.
+        if let Some((_, poll)) = notices.as_mut() {
+            while let Some(notice) = poll(endpoint).map_err(SessionLoopError::Notices)? {
+                write_notice(&mut writer, &notice).await?;
+            }
+        }
+
+        let read = match notices.as_ref() {
+            None => lines.next_line().await?,
+            // `Lines::next_line` is cancel safe, so a timed-out read keeps
+            // whatever it had buffered and the next call resumes the same
+            // line. A partial frame is never lost or re-read.
+            Some((interval, _)) => match tokio::time::timeout(*interval, lines.next_line()).await {
+                Ok(read) => read?,
+                Err(_elapsed) => continue,
+            },
+        };
+        let Some(line) = read else {
             // The peer stopped without a verb. Not an error: a dropped link
             // and a rude client look identical from here, and neither is this
             // module's to judge.
@@ -226,6 +297,24 @@ where
     W: AsyncWrite + Unpin,
 {
     let mut line = serde_json::to_vec(response).map_err(std::io::Error::other)?;
+    line.push(b'\n');
+    writer.write_all(&line).await?;
+    writer.flush().await?;
+    Ok(())
+}
+
+/// Write one revision bell.
+///
+/// The envelope is stated rather than implied. `CarrierOutput` is untagged, so
+/// these are the same bytes a bare notice would produce; naming the variant is
+/// what tells the next reader that a notice is a distinct kind of frame and
+/// not a response that lost its id.
+async fn write_notice<W>(writer: &mut W, notice: &CarrierNotice) -> Result<(), SessionLoopError>
+where
+    W: AsyncWrite + Unpin,
+{
+    let mut line = serde_json::to_vec(&CarrierOutput::Notice(notice.clone()))
+        .map_err(std::io::Error::other)?;
     line.push(b'\n');
     writer.write_all(&line).await?;
     writer.flush().await?;

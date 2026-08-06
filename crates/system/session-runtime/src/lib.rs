@@ -41,6 +41,9 @@
 // the concrete backend). Persists fetched pages / subresources so a reload need
 // not re-fetch.
 pub mod content_store;
+// Application-scoped preferences live under the host's data root rather than
+// in one session's settings sidecar.
+pub mod application_settings_store;
 // Durable content-addressed store for node preview imagery (favicons, previews,
 // snapshots) — the sibling of content_store, keyed by BLAKE3 digest so identical
 // images dedup. The pixels live here; the kernel Node holds only an ImageRef.
@@ -59,6 +62,9 @@ pub mod web_facets;
 // a facet bundle on the node, in facets.json. Supersedes the transitional
 // denizen_bindings.json sidecar (removed before any host wrote one).
 pub mod denizen_facets;
+// Device-local policy, including startup unlock behavior, lives beside the
+// install-local data root and never travels with a session.
+pub mod device_settings_store;
 // Per-node facet-store sidecar (facets.json): the runtime tier of the one-node
 // facet system — typed per-node metadata keyed by node UUID, persisted beside
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
@@ -129,6 +135,11 @@ pub mod view_intent_store;
 pub mod wallet_grant;
 pub mod wallet_store;
 
+pub use application_settings_store::{
+    APPLICATION_SETTINGS_DIR, APPLICATION_SETTINGS_FILENAME, ApplicationSettings, ShellbarEdge,
+    application_settings_exist, application_settings_path, load_application_settings,
+    save_application_settings,
+};
 pub use arrangement_facets::{
     ARRANGEMENT_FACE, ARRANGEMENT_MATERIAL, ARRANGEMENT_POSITION, ARRANGEMENT_SIZE,
     ARRANGEMENT_SPRITE, ARRANGEMENT_SPRITE_HULL, arrangement_position_facet,
@@ -141,6 +152,10 @@ pub use arrangement_facets::{
 pub use denizen_facets::{
     DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
     read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
+};
+pub use device_settings_store::{
+    DEVICE_SETTINGS_DIR, DEVICE_SETTINGS_FILENAME, DeviceSettings, device_settings_exist,
+    device_settings_path, load_device_settings, save_device_settings,
 };
 pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
@@ -186,7 +201,10 @@ pub use session_service_runner::{
     InMemoryRunner, NullRunner, SessionServiceRunner, WorkerHandle, WorkerStartError, WorkerState,
     WorkerStatus, WorkerStopError,
 };
-pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
+pub use settings_store::{
+    LegacySettingsMigration, PersistedSettings, SETTINGS_FILENAME, SettingsLoad,
+    load_settings_with_legacy,
+};
 pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
     build_switcher_thumbnail_with,

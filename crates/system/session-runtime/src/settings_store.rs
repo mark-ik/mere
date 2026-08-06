@@ -3,12 +3,9 @@
 
 //! Session-wide settings sidecar — `<session_dir>/settings.json`.
 //!
-//! Small, user-tunable preferences that are neither graph truth nor per-pane
-//! view intent: the active-tab cap today, more (theme, edge-family visibility)
-//! as their controls land. One flat JSON document beside `graph.json`, mirroring
-//! the [view-intent sidecar](crate::view_intent_store)'s I/O shape — typed record
-//! plus `save` / `load` / `exists`, atomic write (tmp + rename), `Ok(None)` when
-//! absent so the host falls back to defaults.
+//! Session/dataspace policy that is neither graph truth nor per-pane view intent.
+//! Application preferences and device policy have separate owners and stores;
+//! they must not travel with this sidecar.
 //!
 //! Each field is `#[serde(default)]`-friendly, so adding a preference later reads
 //! older files without a migration — an unknown-to-old / missing-in-new field
@@ -18,29 +15,14 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use identity::StartupUnlockMode;
 use kernel::permissions::Permission;
 use serde::{Deserialize, Serialize};
 
+use crate::application_settings_store::{ApplicationSettings, ShellbarEdge};
+use crate::device_settings_store::DeviceSettings;
+
 /// Filename for the session-wide settings sidecar (sibling to `graph.json`).
 pub const SETTINGS_FILENAME: &str = "settings.json";
-
-/// The default active-tab cap — the most warm content actors the pool keeps
-/// before LRU eviction. Mirrors the chrome's `Settings::default`.
-fn default_tab_cap() -> usize {
-    12
-}
-
-/// Which window edge the shellbar strip is docked to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ShellbarEdge {
-    #[default]
-    Left,
-    Right,
-    Top,
-    Bottom,
-}
 
 /// Per-capability **Session-scope** permission opinions for DocumentScripts
 /// (§11.4, the document-script substrate). `None` on a capability = no opinion at
@@ -60,139 +42,115 @@ pub struct ScriptPermissionPrefs {
     pub net: Option<Permission>,
 }
 
-/// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
-/// with the runtime theme switcher. Future preferences join as their controls
-/// land, each with a serde default so old files keep parsing.
-// Not `Eq`: `ui_zoom` is an `f32`. `PartialEq` is all the `==` checks need.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// Persistable session/dataspace policy.
+// Not `Eq`: this record contains no floats, but `PartialEq` matches the older
+// settings API and keeps callers from acquiring a stronger contract here.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PersistedSettings {
-    /// The most warm tabs the actor pool keeps before LRU eviction.
-    #[serde(default = "default_tab_cap")]
-    pub tab_cap: usize,
-    /// The active theme id (e.g. `theme:dark`); `None` falls back to the
-    /// registry's default theme.
-    #[serde(default)]
-    pub theme_id: Option<String>,
-    /// The active theme MODE — the derivation profile over the theme's seeds —
-    /// as a stable key (`light` / `dark` / `hc_light` / `hc_dark` /
-    /// `custom:<id>`). `None` re-seeds from the active theme's own def at
-    /// boot. (Theme-modes plan.)
-    #[serde(default)]
-    pub theme_mode: Option<String>,
-    /// Which window edge the shellbar is docked to. Defaults to Left.
-    #[serde(default)]
-    pub shellbar_edge: ShellbarEdge,
-    /// Whether the shellbar is hidden on this (primary) window. Defaults to shown.
-    /// Distinct from a leaf window's slim chrome (which always omits the shellbar);
-    /// this is the user's explicit hide toggle, restored across restart and revealed
-    /// again from the command palette / `>shellbar`. (Hide-shellbar.)
-    #[serde(default)]
-    pub shellbar_hidden: bool,
-    // `physics_damping` left the app-wide settings store: linear damping is
-    // scene-scoped (a property of one graph scene, not the app), so it lives as
-    // a `scene.physics_damping` container facet now (see `scene_facets`). A
-    // legacy settings.json still carrying the field just ignores it on load.
-    /// Globally deactivated engine ids (e.g. `scrying.web`). A present-but-disabled
-    /// engine is never routed to and spawns no actors; the picker shows it as off.
-    /// Empty = every engine the build carries is active. (engine-picker Phase 1.)
-    #[serde(default)]
-    pub disabled_engines: Vec<String>,
-    /// The user's document typography (a serialized `DocumentStyleSheet`), stored
-    /// as embedded JSON so this low-level crate need not depend on the document
-    /// engine — the host owns the (de)serialization. `None` = the built-in look.
-    /// (Document typography surface.)
-    #[serde(default)]
-    pub document_typography: Option<serde_json::Value>,
-    /// Session-scope DocumentScript capability permissions (§11.4). Default = no
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=ordinary/private policy. Session-scope DocumentScript capability
+    /// permissions (§11.4). Default = no
     /// opinion (the App-scope `Allow` default stands); set `document: Deny` to forbid
     /// any attached script from mutating the page this session.
-    #[serde(default)]
     pub script_permissions: ScriptPermissionPrefs,
-    /// The crawl scope a `>crawl` roams under, as a stable key (`same_host` /
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=ordinary. The crawl scope a `>crawl` roams under, as a stable key (`same_host` /
     /// `same_domain` / `any_host`). `None` = the same-host default. (Crawl controls.)
-    #[serde(default)]
     pub crawl_scope: Option<String>,
-    /// The crawl depth (link-hops from the seed) a `>crawl` reaches. `None` = the
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=ordinary. The crawl depth (link-hops from the seed) a `>crawl` reaches. `None` = the
     /// default 2-hop depth. (Crawl controls.)
-    #[serde(default)]
     pub crawl_depth: Option<u32>,
-    /// "Crawl whole site" mode: seed from the site's `sitemap.xml` rather than only the
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=ordinary. "Crawl whole site" mode: seed from the site's `sitemap.xml` rather than only the
     /// seed page's links. `None` = off (focused neighborhood). (Crawl controls.)
-    #[serde(default)]
     pub crawl_sitemap: Option<bool>,
-    /// The hard page cap a `>crawl` stops at (the runaway backstop). `None` = the default
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=ordinary. The hard page cap a `>crawl` stops at (the runaway backstop). `None` = the default
     /// 50-page cap. (Crawl controls.)
-    #[serde(default)]
     pub crawl_max_pages: Option<usize>,
-    /// The browse-capture consent level (capture/provenance/consent plan C4), as a
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=private policy. The browse-capture consent level (capture/provenance/consent plan C4), as a
     /// stable key (`off` / `corridor` / `full`). `None` = the `full` default (the
     /// pre-consent behaviour): governs whether the live recorder writes traces and
     /// at what granularity.
-    #[serde(default)]
     pub capture_consent: Option<String>,
-    /// The browse-trace retention cap (capture/provenance/consent plan C4): the
+    /// scope=session/dataspace; movement=local-only; mutability=live;
+    /// security=ordinary. The browse-trace retention cap (capture/provenance/consent plan C4): the
     /// number of most-recent traces kept; older ones age out on a per-launch quota
     /// pass. `None` = the host default (generous; traces are tiny).
-    #[serde(default)]
     pub retention_keep_n: Option<usize>,
-    /// The user's chrome zoom multiplier (Ctrl +/-/0). Composed with the display's DPI
-    /// factor into the effective UI scale the chrome sheet is built at. Defaults to 1.1
-    /// — the baseline "a point or two larger" bump. (UI scale.)
-    #[serde(default = "default_ui_zoom")]
-    pub ui_zoom: f32,
-    /// Startup unlock policy for device-local wallet secrets. Defaults to `auto_os`
-    /// until the prompt/locked flows grow real chrome.
-    #[serde(default)]
-    pub startup_unlock_mode: StartupUnlockMode,
-    /// Whether the idle-cadence pass redeposits open workbench-tile thumbnails while
-    /// the app sits idle, on top of the always-on boundary-triggered deposits (tile
-    /// close, blur, navigation-away, app suspend). Defaults on. (Node/card summoning
-    /// design, §5 item 4 — "update while idle".)
-    #[serde(default = "default_snapshot_idle_refresh")]
-    pub snapshot_idle_refresh: bool,
-    /// The per-session cap, in megabytes, on thumbnail bytes the idle-refresh pass
-    /// will write before it stops depositing further snapshots this session.
-    /// Boundary-triggered deposits are never capped — they are the correctness-
-    /// critical path the summoning-design fix depends on; this only bounds the
-    /// extra, optional idle refresh. `None` = the host default. (Node/card summoning
-    /// design, §5 item 4 — the "per-session thumbnail byte cap".)
-    #[serde(default)]
-    pub snapshot_byte_cap_mb: Option<u32>,
 }
 
-/// The baseline chrome zoom: a touch larger than 1.0 so default text reads a point or
-/// two bigger, before the display's DPI factor is applied. (UI scale.)
-fn default_ui_zoom() -> f32 {
-    1.1
+/// Values found in a legacy session `settings.json` that now belong to an
+/// application or device store. `None` means the old file did not mention that
+/// owner at all; a host can then preserve the new store's existing value.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LegacySettingsMigration {
+    pub application: Option<ApplicationSettings>,
+    pub device: Option<DeviceSettings>,
 }
 
-/// The idle-cadence snapshot refresh defaults on: it is what makes the preview
-/// card honest for tiles that sit open a long time without a boundary crossing.
-fn default_snapshot_idle_refresh() -> bool {
-    true
+/// The combined result of reading a session sidecar during the transition.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SettingsLoad {
+    pub settings: PersistedSettings,
+    pub legacy: LegacySettingsMigration,
 }
 
-impl Default for PersistedSettings {
-    fn default() -> Self {
-        Self {
-            tab_cap: default_tab_cap(),
-            theme_id: None,
-            theme_mode: None,
-            shellbar_edge: ShellbarEdge::default(),
-            shellbar_hidden: false,
-            disabled_engines: Vec::new(),
-            document_typography: None,
-            script_permissions: ScriptPermissionPrefs::default(),
-            crawl_scope: None,
-            crawl_depth: None,
-            crawl_sitemap: None,
-            crawl_max_pages: None,
-            capture_consent: None,
-            retention_keep_n: None,
-            ui_zoom: default_ui_zoom(),
-            startup_unlock_mode: StartupUnlockMode::default(),
-            snapshot_idle_refresh: default_snapshot_idle_refresh(),
-            snapshot_byte_cap_mb: None,
+#[derive(Default, Deserialize)]
+struct LegacySettingsFields {
+    tab_cap: Option<usize>,
+    theme_id: Option<String>,
+    theme_mode: Option<String>,
+    shellbar_edge: Option<ShellbarEdge>,
+    shellbar_hidden: Option<bool>,
+    disabled_engines: Option<Vec<String>>,
+    document_typography: Option<serde_json::Value>,
+    ui_zoom: Option<f32>,
+    startup_unlock_mode: Option<identity::StartupUnlockMode>,
+    snapshot_idle_refresh: Option<bool>,
+    snapshot_byte_cap_mb: Option<u32>,
+}
+
+impl LegacySettingsFields {
+    fn migration(self) -> LegacySettingsMigration {
+        let application_present = self.tab_cap.is_some()
+            || self.theme_id.is_some()
+            || self.theme_mode.is_some()
+            || self.shellbar_edge.is_some()
+            || self.shellbar_hidden.is_some()
+            || self.disabled_engines.is_some()
+            || self.document_typography.is_some()
+            || self.ui_zoom.is_some()
+            || self.snapshot_idle_refresh.is_some()
+            || self.snapshot_byte_cap_mb.is_some();
+        let application = application_present.then(|| {
+            let defaults = ApplicationSettings::default();
+            ApplicationSettings {
+                tab_cap: self.tab_cap.unwrap_or(defaults.tab_cap),
+                theme_id: self.theme_id,
+                theme_mode: self.theme_mode,
+                shellbar_edge: self.shellbar_edge.unwrap_or(defaults.shellbar_edge),
+                shellbar_hidden: self.shellbar_hidden.unwrap_or(defaults.shellbar_hidden),
+                disabled_engines: self.disabled_engines.unwrap_or(defaults.disabled_engines),
+                document_typography: self.document_typography,
+                ui_zoom: self.ui_zoom.unwrap_or(defaults.ui_zoom),
+                snapshot_idle_refresh: self
+                    .snapshot_idle_refresh
+                    .unwrap_or(defaults.snapshot_idle_refresh),
+                snapshot_byte_cap_mb: self.snapshot_byte_cap_mb,
+            }
+        });
+        let device = self
+            .startup_unlock_mode
+            .map(|startup_unlock_mode| DeviceSettings {
+                startup_unlock_mode,
+            });
+        LegacySettingsMigration {
+            application,
+            device,
         }
     }
 }
@@ -218,18 +176,30 @@ pub fn save_settings(session_dir: &Path, settings: &PersistedSettings) -> io::Re
     Ok(())
 }
 
-/// Read `<session_dir>/settings.json` and parse it as [`PersistedSettings`].
-/// Returns `Ok(None)` when the file doesn't exist (fresh session — the host falls
-/// back to `PersistedSettings::default()`).
-pub fn load_settings(session_dir: &Path) -> io::Result<Option<PersistedSettings>> {
+/// Read a session sidecar and expose both its current session policy and any
+/// fields that were written before the C1 ownership split.
+pub fn load_settings_with_legacy(session_dir: &Path) -> io::Result<Option<SettingsLoad>> {
     let path = settings_path(session_dir);
     if !path.exists() {
         return Ok(None);
     }
     let text = fs::read_to_string(&path)?;
-    let settings: PersistedSettings =
-        serde_json::from_str(&text).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    Ok(Some(settings))
+    let settings: PersistedSettings = serde_json::from_str(&text)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let legacy: LegacySettingsFields = serde_json::from_str(&text)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    Ok(Some(SettingsLoad {
+        settings,
+        legacy: legacy.migration(),
+    }))
+}
+
+/// Read `<session_dir>/settings.json` and parse its session policy.
+/// Returns `Ok(None)` when the file doesn't exist. Legacy application/device
+/// fields are intentionally ignored here; callers that own the data root can
+/// use [`load_settings_with_legacy`] to migrate them explicitly.
+pub fn load_settings(session_dir: &Path) -> io::Result<Option<PersistedSettings>> {
+    Ok(load_settings_with_legacy(session_dir)?.map(|loaded| loaded.settings))
 }
 
 /// True when the settings sidecar exists for this session.
@@ -257,13 +227,6 @@ mod tests {
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
         let original = PersistedSettings {
-            tab_cap: 7,
-            theme_id: None,
-            theme_mode: Some("dark".to_string()),
-            shellbar_edge: ShellbarEdge::Left,
-            shellbar_hidden: false,
-            disabled_engines: vec!["scrying.web".into()],
-            document_typography: None,
             script_permissions: ScriptPermissionPrefs {
                 log: None,
                 document: Some(Permission::Deny),
@@ -275,10 +238,6 @@ mod tests {
             crawl_max_pages: None,
             capture_consent: None,
             retention_keep_n: None,
-            ui_zoom: 1.1,
-            startup_unlock_mode: StartupUnlockMode::Prompt,
-            snapshot_idle_refresh: true,
-            snapshot_byte_cap_mb: None,
         };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir)
@@ -312,13 +271,6 @@ mod tests {
         save_settings(
             &dir,
             &PersistedSettings {
-                tab_cap: 3,
-                theme_id: None,
-                theme_mode: None,
-                shellbar_edge: ShellbarEdge::Left,
-                shellbar_hidden: false,
-                disabled_engines: Vec::new(),
-                document_typography: None,
                 script_permissions: ScriptPermissionPrefs::default(),
                 crawl_scope: None,
                 crawl_depth: None,
@@ -326,23 +278,12 @@ mod tests {
                 crawl_max_pages: None,
                 capture_consent: None,
                 retention_keep_n: None,
-                ui_zoom: 1.1,
-                startup_unlock_mode: StartupUnlockMode::AutoOs,
-                snapshot_idle_refresh: true,
-                snapshot_byte_cap_mb: None,
             },
         )
         .unwrap();
         save_settings(
             &dir,
             &PersistedSettings {
-                tab_cap: 24,
-                theme_id: None,
-                theme_mode: None,
-                shellbar_edge: ShellbarEdge::Right,
-                shellbar_hidden: false,
-                disabled_engines: Vec::new(),
-                document_typography: None,
                 script_permissions: ScriptPermissionPrefs::default(),
                 crawl_scope: None,
                 crawl_depth: None,
@@ -350,10 +291,6 @@ mod tests {
                 crawl_max_pages: None,
                 capture_consent: None,
                 retention_keep_n: None,
-                ui_zoom: 1.1,
-                startup_unlock_mode: StartupUnlockMode::Locked,
-                snapshot_idle_refresh: true,
-                snapshot_byte_cap_mb: None,
             },
         )
         .unwrap();
@@ -372,6 +309,30 @@ mod tests {
         fs::write(settings_path(&dir), "{}").unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored, PersistedSettings::default());
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn legacy_application_and_device_fields_are_exposed_for_migration() {
+        let dir = temp_session_dir("legacy-migration");
+        fs::write(
+            settings_path(&dir),
+            r#"{
+                "tab_cap": 7,
+                "theme_id": "theme:dark",
+                "startup_unlock_mode": "locked",
+                "crawl_depth": 4
+            }"#,
+        )
+        .unwrap();
+
+        let loaded = load_settings_with_legacy(&dir).unwrap().unwrap();
+        assert_eq!(loaded.settings.crawl_depth, Some(4));
+        assert_eq!(loaded.legacy.application.unwrap().tab_cap, 7);
+        assert_eq!(
+            loaded.legacy.device.unwrap().startup_unlock_mode,
+            identity::StartupUnlockMode::Locked
+        );
         fs::remove_dir_all(&dir).ok();
     }
 

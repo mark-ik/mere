@@ -12,7 +12,7 @@ user-curated subset of commands persisted as persona profile config.*
 `views.rs` + `lib.rs`; the context menu in `menus.rs`; drains in `command_drain.rs` + `menus.rs`),
 `crates/persona/identity` (`PersonaId`), the persona settings location.
 **Related**:
-[settings_lane_consolidation_plan](2026-06-21_settings_lane_consolidation_plan.md) (P2b surfaced this),
+[settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md) (P2b surfaced this),
 [persona_model_brief](../research/2026-05-14_persona_model_brief.md) (the `<persona_id>/settings/`
 home, which already names "palette" as persona-scoped). Supersedes the abandoned
 `archive_docs/.../2026-05-11_typed_action_bus_plan.md` framing.
