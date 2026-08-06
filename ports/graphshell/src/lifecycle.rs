@@ -102,6 +102,48 @@ pub struct SessionAuthority {
     chain: Vec<SignedDelegationCertificate>,
 }
 
+/// The narrow identity and projection-session handoff an admitted endpoint
+/// receives from its composing host.
+///
+/// This is deliberately not an admission proof or a bearer credential. It
+/// carries neither delegation certificates nor a transport. The enclosing
+/// [`SessionAuthority`] and session loop remain responsible for admission,
+/// expiry, and revocation; a product endpoint uses this only to name the
+/// already-admitted projection and attribute its own scoped work.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdmittedEndpointContext {
+    session: ProjectionSession,
+    subject: [u8; 32],
+}
+
+impl AdmittedEndpointContext {
+    /// Construct one in-process composition handoff from already-verified
+    /// facts. This constructor performs no authentication.
+    pub fn new(session: ProjectionSession, subject: [u8; 32]) -> Self {
+        Self { session, subject }
+    }
+
+    /// The transcript-derived projection session the endpoint must serve.
+    pub fn session(&self) -> &ProjectionSession {
+        &self.session
+    }
+
+    /// The already-admitted public-key subject for product-scoped work.
+    pub fn subject(&self) -> [u8; 32] {
+        self.subject
+    }
+}
+
+/// Let a product endpoint bind itself to a session that Graphshell already
+/// admitted.
+///
+/// Implementors must not treat [`AdmittedEndpointContext`] as a replacement
+/// for carrier admission. It is a typed handoff inside a host that continues
+/// to serve through [`SessionAuthority`].
+pub trait BindAdmittedSession: Sized {
+    fn bind_admitted_session(self, context: &AdmittedEndpointContext) -> Self;
+}
+
 impl SessionAuthority {
     /// Retain the authority carried by an admitted service session.
     ///
@@ -136,6 +178,11 @@ impl SessionAuthority {
     /// Who was admitted, and for what.
     pub fn principal(&self) -> &AdmittedPrincipal {
         &self.principal
+    }
+
+    /// Create the bounded product handoff for this already-admitted session.
+    pub fn endpoint_context(&self) -> AdmittedEndpointContext {
+        AdmittedEndpointContext::new(self.session.clone(), self.principal.subject)
     }
 
     /// When this session's authority runs out, if it does.
@@ -429,6 +476,22 @@ mod tests {
         mount(&mut client, first.session(), CachePolicy::default());
         assert!(client.mounted(first.session()).is_some());
         assert!(client.mounted(second.session()).is_none());
+    }
+
+    #[test]
+    fn endpoint_context_carries_only_the_admitted_session_and_subject() {
+        let authority = authority();
+        let context = authority.endpoint_context();
+
+        assert_eq!(context.session(), authority.session());
+        assert_eq!(context.subject(), authority.principal().subject);
+        assert_eq!(
+            context,
+            AdmittedEndpointContext::new(
+                authority.session().clone(),
+                authority.principal().subject,
+            )
+        );
     }
 
     // --- expiry ---------------------------------------------------------

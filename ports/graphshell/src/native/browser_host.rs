@@ -154,12 +154,13 @@ where
     .await?;
 
     let authority = SessionAuthority::retain_admitted(&admitted);
-    let session = authority.session().0.clone();
+    let endpoint_context = authority.endpoint_context();
+    let session = endpoint_context.session().0.clone();
     let connected = BrowserHostMessage::Connected {
         launcher,
         session: session.clone(),
         subject: base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(authority.principal().subject),
+            .encode(endpoint_context.subject()),
     };
     let mut endpoint =
         IdentityEndpoint::for_admitted_with_cards(Arc::clone(&personae), &authority, surface.cards);
