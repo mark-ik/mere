@@ -84,6 +84,7 @@ euclid = "0.22"
 genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main", optional = true }
 winit = { workspace = true, optional = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"], optional = true }
+png = "0.18"
 
 [lints]
 workspace = true

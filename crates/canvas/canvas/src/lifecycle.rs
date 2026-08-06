@@ -76,6 +76,10 @@ impl Canvas {
         self.field_drag = None;
         self.marquee = None;
         self.middle_drag = None;
+        self.fold = None;
+        self.fold_press = None;
+        self.fold_undo.clear();
+        self.fold_redo.clear();
         self.reconcile_derived();
         let positions: Vec<(NodeKey, Point2D<f32>)> = self
             .graph
@@ -187,6 +191,8 @@ impl Canvas {
             scope: None,
             fold: None,
             fold_press: None,
+            fold_undo: Vec::new(),
+            fold_redo: Vec::new(),
             render_gnodes_as_dom: false,
         }
     }

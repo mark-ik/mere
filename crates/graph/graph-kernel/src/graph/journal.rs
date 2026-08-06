@@ -32,6 +32,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use super::Graph;
 use super::capture::{CapturedDelta, replay_captured_deltas, replay_captured_deltas_onto};
+use super::source_time::{SourceExtent, SourceTime};
 
 /// The author every trusted-UI edit records under. Denizen runs scope their
 /// own author (the subject's hex) via [`GraphJournal::set_author`]; entries
@@ -151,6 +152,55 @@ impl GraphJournal {
         self.log.next_seq()
     }
 
+    /// The earliest source-time cursor: the empty graph before the first
+    /// captured delta. Journal source time is a **prefix cursor**, so this is
+    /// intentionally `Seq(0)` even though no entry is addressed there yet.
+    pub const fn earliest_cursor(&self) -> Seq {
+        Seq(0)
+    }
+
+    /// The current live source-time cursor: the prefix immediately after the
+    /// newest captured delta. Appending later deltas never changes the graph a
+    /// previously returned cursor replays to.
+    pub fn live_cursor(&self) -> Seq {
+        self.next_seq()
+    }
+
+    /// Materialize graph truth at a journal prefix cursor without changing the
+    /// journal or its current live graph. `Seq(n)` replays exactly the first
+    /// `n` entries; `Seq(0)` is empty and [`live_cursor`](Self::live_cursor)
+    /// replays every current entry. A cursor beyond the known prefix is stale
+    /// and is refused rather than silently clamped to live.
+    pub fn snapshot_at(&self, cursor: Seq) -> Option<Graph> {
+        let end = cursor.index();
+        (end <= self.log.len()).then(|| {
+            replay_captured_deltas(
+                self.log.entries()[..end]
+                    .iter()
+                    .map(|entry| entry.delta.clone()),
+            )
+        })
+    }
+
+    /// Stable, evenly distributed prefix cursors for a compact scrubber. This
+    /// uses sequence order alone: journal history has no required wall-clock
+    /// timestamp. `max_points == 1` yields only the current live cursor;
+    /// larger requests always include both earliest and live when distinct.
+    pub fn sequence_ticks(&self, max_points: usize) -> Vec<Seq> {
+        let live = self.live_cursor();
+        if max_points == 0 {
+            return Vec::new();
+        }
+        if max_points == 1 || live.0 == 0 {
+            return vec![live];
+        }
+        let points = max_points.min(live.0 as usize + 1);
+        let denominator = (points - 1) as u64;
+        (0..points)
+            .map(|index| Seq((index as u64 * live.0) / denominator))
+            .collect()
+    }
+
     /// This journal's log identity, if any.
     pub fn id(&self) -> Option<&LogId> {
         self.log.id()
@@ -216,6 +266,26 @@ impl GraphJournal {
     }
 }
 
+impl SourceTime for GraphJournal {
+    type Cursor = Seq;
+    type Snapshot = Graph;
+
+    fn source_extent(&self) -> SourceExtent<Self::Cursor> {
+        SourceExtent {
+            earliest: self.earliest_cursor(),
+            current: self.live_cursor(),
+        }
+    }
+
+    fn source_ticks(&self, max_points: usize) -> Vec<Self::Cursor> {
+        self.sequence_ticks(max_points)
+    }
+
+    fn source_snapshot(&self, cursor: &Self::Cursor) -> Option<Self::Snapshot> {
+        self.snapshot_at(*cursor)
+    }
+}
+
 /// A shared journal plus a capture hook that records every emitted
 /// [`CapturedDelta`] into it. Install the hook with
 /// [`set_captured_delta_hook`](super::set_captured_delta_hook) and keep the handle
@@ -249,7 +319,7 @@ mod tests {
     use super::*;
     use crate::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
     use crate::graph::set_captured_delta_hook;
-    use crate::graph::{EdgeAssertion, SemanticSubKind};
+    use crate::graph::{EdgeAssertion, SemanticSubKind, SourceExtent, SourceTime};
     use euclid::default::Point2D;
     use uuid::Uuid;
 
@@ -309,6 +379,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn source_time_contract_selects_immutable_journal_prefixes() {
+        let mut journal = GraphJournal::new();
+        journal.record(add(1, "https://one.test/"));
+        journal.record(add(2, "https://two.test/"));
+
+        assert_eq!(
+            journal.source_extent(),
+            SourceExtent {
+                earliest: Seq(0),
+                current: Seq(2),
+            }
+        );
+        assert_eq!(journal.source_ticks(3), [Seq(0), Seq(1), Seq(2)]);
+        assert_eq!(
+            journal
+                .source_snapshot(&Seq(1))
+                .expect("known source cursor")
+                .node_count(),
+            1
+        );
+        assert!(journal.source_snapshot(&Seq(3)).is_none());
+        assert_eq!(
+            journal.replay().node_count(),
+            2,
+            "scrubbing leaves live truth intact"
+        );
+    }
+
     /// A pre-envelope bare log migrates one-way with the `pre-gate` author.
     #[test]
     fn a_bare_log_migrates_as_pre_gate() {
@@ -346,6 +445,41 @@ mod tests {
             .get_node_by_id(Uuid::from_u128(1))
             .expect("node a present");
         assert_eq!(node.title, "Paper A", "the content edit replayed too");
+    }
+
+    #[test]
+    fn prefix_cursors_replay_historical_graphs_without_touching_live_history() {
+        let mut journal = GraphJournal::new();
+        journal.record(add(1, "https://a.test/"));
+        journal.record(add(2, "https://b.test/"));
+        journal.record(CapturedDelta::ReplayAssertRelationByIds {
+            from_id: Uuid::from_u128(1).to_string(),
+            to_id: Uuid::from_u128(2).to_string(),
+            assertion: EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::Cites,
+                label: None,
+                decay_progress: None,
+            },
+        });
+
+        assert_eq!(journal.earliest_cursor(), Seq(0));
+        assert_eq!(journal.live_cursor(), Seq(3));
+        assert_eq!(journal.snapshot_at(Seq(0)).unwrap().node_count(), 0);
+        assert_eq!(journal.snapshot_at(Seq(1)).unwrap().node_count(), 1);
+        let historical = journal.snapshot_at(Seq(2)).expect("known prefix");
+        assert_eq!(historical.node_count(), 2);
+        assert_eq!(historical.relations().count(), 0);
+        assert_eq!(journal.snapshot_at(Seq(3)).unwrap().relations().count(), 1);
+        assert!(
+            journal.snapshot_at(Seq(4)).is_none(),
+            "stale cursors refuse"
+        );
+        assert_eq!(
+            journal.replay().relations().count(),
+            1,
+            "live history remains live"
+        );
+        assert_eq!(journal.sequence_ticks(3), vec![Seq(0), Seq(1), Seq(3)]);
     }
 
     #[test]

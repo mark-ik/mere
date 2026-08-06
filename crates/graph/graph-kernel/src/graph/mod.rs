@@ -67,6 +67,7 @@ pub mod import_records;
 pub mod node;
 pub mod node_facets;
 pub mod node_props;
+pub mod source_time;
 // chartulary capability-trait impls for `Node` (graph re-base, G5).
 mod chart;
 
@@ -116,9 +117,10 @@ pub use capture::{
     set_captured_delta_hook,
 };
 pub use journal::{AttributedDelta, GraphJournal, USER_AUTHOR, journal_capture_hook};
+pub use source_time::{SourceExtent, SourceTime};
 // The borne-graph identity type (`Node.nested`): part of the node's public
 // surface, re-exported so consumers name it without a direct codicil dep.
-pub use codicil::LogId;
+pub use codicil::{LogId, Seq};
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
     SemanticData, SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal,

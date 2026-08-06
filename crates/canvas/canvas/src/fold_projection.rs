@@ -7,13 +7,13 @@
 //! membership and relation accounting explicit before a synthetic summary node
 //! is introduced into Canvas paint, hit-testing, or physics.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use forme::{FoldId, FoldRecord, FOLD_RECORD_VERSION};
+use forme::{FOLD_RECORD_VERSION, FoldId, FoldRecord};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeFamily, Graph, NodeKey};
 
-use crate::Canvas;
+use crate::{Canvas, FoldViewState};
 
 /// The synthetic summary body's radius in Canvas world pixels. It deliberately
 /// reads larger than an ordinary node because it stands for several members.
@@ -24,6 +24,14 @@ pub(crate) const FOLD_SUMMARY_RADIUS: f32 = 30.0;
 pub enum FoldBoundaryDirection {
     Incoming,
     Outgoing,
+}
+
+/// The chosen direction through an explicitly selected hierarchy family when a
+/// Canvas collapses a root with its descendants or ancestors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FoldTraversalDirection {
+    Outgoing,
+    Incoming,
 }
 
 /// Cells crossing a fold boundary, bundled only by their outside endpoint,
@@ -70,6 +78,37 @@ impl FoldProjection {
 }
 
 impl Canvas {
+    fn fold_view_state(&self) -> FoldViewState {
+        FoldViewState {
+            fold: self.fold.clone(),
+            selected: self.selected.clone(),
+            selected_edges: self.selected_edges.clone(),
+        }
+    }
+
+    fn push_fold_undo(&mut self) {
+        self.fold_undo.push(self.fold_view_state());
+        self.fold_redo.clear();
+    }
+
+    fn apply_fold_view_state(&mut self, state: FoldViewState) {
+        self.fold = state.fold;
+        self.fold_press = None;
+        self.selected = state.selected;
+        self.selected_edges = state.selected_edges;
+    }
+
+    fn fold_view_state_is_current(&self, state: &FoldViewState) -> bool {
+        state
+            .fold
+            .as_ref()
+            .is_none_or(|record| project_fold(&self.graph, record).is_some())
+            && state
+                .selected
+                .iter()
+                .all(|&key| self.graph.get_node(key).is_some())
+    }
+
     /// Collapse the current multi-selection into one synthetic Canvas summary.
     ///
     /// The returned id is durable view-state identity. This method never adds,
@@ -84,6 +123,51 @@ impl Canvas {
             .filter_map(|&key| self.graph.get_node(key).map(|node| node.id));
         let record = FoldRecord::from_selection(source_scope, members)?;
         let id = record.id;
+        self.push_fold_undo();
+        self.fold = Some(record);
+        self.selected.clear();
+        self.selected_edges.clear();
+        Some(id)
+    }
+
+    /// Fold one root and every node reachable through the explicitly supplied
+    /// relation family and direction. This does not guess hierarchy from the
+    /// rest of the graph: callers must choose both the family and traversal.
+    pub fn collapse_descendants(
+        &mut self,
+        root: NodeKey,
+        hierarchy_family: EdgeFamily,
+        direction: FoldTraversalDirection,
+        source_scope: impl Into<String>,
+    ) -> Option<FoldId> {
+        if self.fold.is_some() || self.graph.get_node(root).is_none() {
+            return None;
+        }
+        let mut members = BTreeSet::from([root]);
+        let mut pending = VecDeque::from([root]);
+        while let Some(current) = pending.pop_front() {
+            for relation in self.graph.relations() {
+                if relation.kind.family() != hierarchy_family {
+                    continue;
+                }
+                let next = match direction {
+                    FoldTraversalDirection::Outgoing if relation.from == current => relation.to,
+                    FoldTraversalDirection::Incoming if relation.to == current => relation.from,
+                    _ => continue,
+                };
+                if members.insert(next) {
+                    pending.push_back(next);
+                }
+            }
+        }
+        let record = FoldRecord::from_selection(
+            source_scope,
+            members
+                .iter()
+                .filter_map(|&key| self.graph.get_node(key).map(|node| node.id)),
+        )?;
+        let id = record.id;
+        self.push_fold_undo();
         self.fold = Some(record);
         self.selected.clear();
         self.selected_edges.clear();
@@ -102,6 +186,7 @@ impl Canvas {
         let Some(projection) = project_fold(&self.graph, record) else {
             return false;
         };
+        self.push_fold_undo();
         self.fold = None;
         self.fold_press = None;
         self.selected = projection.members.into_iter().collect();
@@ -115,6 +200,33 @@ impl Canvas {
             return false;
         };
         self.expand_fold(id)
+    }
+
+    /// Revert the last local fold or expand. The source graph and its physics
+    /// have never changed, so this only restores a prior curation projection.
+    pub fn undo_fold(&mut self) -> bool {
+        let Some(previous) = self.fold_undo.pop() else {
+            return false;
+        };
+        if !self.fold_view_state_is_current(&previous) {
+            return false;
+        }
+        self.fold_redo.push(self.fold_view_state());
+        self.apply_fold_view_state(previous);
+        true
+    }
+
+    /// Reapply a previously undone fold or expand.
+    pub fn redo_fold(&mut self) -> bool {
+        let Some(next) = self.fold_redo.pop() else {
+            return false;
+        };
+        if !self.fold_view_state_is_current(&next) {
+            return false;
+        }
+        self.fold_undo.push(self.fold_view_state());
+        self.apply_fold_view_state(next);
+        true
     }
 
     /// The current fold's source accounting, if it is still valid against the
@@ -332,5 +444,67 @@ mod tests {
         )
         .expect("two ids in the durable record");
         assert!(project_fold(&graph, &fold).is_none());
+    }
+
+    #[test]
+    fn collapsing_descendants_follows_only_the_explicit_family_and_direction() {
+        let mut graph = Graph::new();
+        let root = graph.add_node("https://root".into(), Point2D::new(0.0, 0.0));
+        let child = graph.add_node("https://child".into(), Point2D::new(1.0, 0.0));
+        let grandchild = graph.add_node("https://grandchild".into(), Point2D::new(2.0, 0.0));
+        let linked = graph.add_node("https://linked".into(), Point2D::new(3.0, 0.0));
+        graph.assert_relation(
+            root,
+            child,
+            EdgeAssertion::Containment {
+                sub_kind: ContainmentSubKind::Domain,
+            },
+        );
+        graph.assert_relation(
+            child,
+            grandchild,
+            EdgeAssertion::Containment {
+                sub_kind: ContainmentSubKind::Domain,
+            },
+        );
+        graph.assert_relation(
+            child,
+            linked,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::Cites,
+                label: None,
+                decay_progress: None,
+            },
+        );
+        let source_nodes = graph.nodes().count();
+        let source_relations = graph.relations().count();
+        let mut canvas = Canvas::with_graph(graph);
+
+        let id = canvas
+            .collapse_descendants(
+                root,
+                EdgeFamily::Containment,
+                FoldTraversalDirection::Outgoing,
+                "canvas:hierarchy-test",
+            )
+            .expect("the containment descendants form a fold");
+        let projection = canvas
+            .active_fold_projection()
+            .expect("current fold projects");
+        assert_eq!(projection.fold_id, id);
+        assert_eq!(
+            projection.members,
+            BTreeSet::from([root, child, grandchild])
+        );
+        assert_eq!(projection.internal_relation_count, 2);
+        assert_eq!(projection.boundary_bundles.len(), 1);
+        assert_eq!(projection.boundary_bundles[0].outside, linked);
+        assert_eq!(projection.boundary_bundles[0].family, EdgeFamily::Semantic);
+        assert_eq!(canvas.graph().nodes().count(), source_nodes);
+        assert_eq!(canvas.graph().relations().count(), source_relations);
+        assert!(canvas.undo_fold(), "collapse is a reversible view action");
+        assert!(canvas.active_fold_projection().is_none());
+        assert!(canvas.redo_fold(), "redo restores the same hierarchy fold");
+        assert_eq!(canvas.active_fold_projection().unwrap().fold_id, id);
     }
 }

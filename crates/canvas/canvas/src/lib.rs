@@ -226,6 +226,15 @@ struct Drag {
     was_pinned: bool,
 }
 
+/// The reversible, view-local portion of a fold action. Graph nodes, relation
+/// cells, and physics positions deliberately do not participate.
+#[derive(Clone)]
+struct FoldViewState {
+    fold: Option<forme::FoldRecord>,
+    selected: HashSet<NodeKey>,
+    selected_edges: HashSet<EdgeCell>,
+}
+
 /// The canvas content-root: the graph, its physics, the camera, and the abs-pos
 /// node-children pool. Window-agnostic — see the module docs.
 pub struct Canvas {
@@ -585,6 +594,10 @@ pub struct Canvas {
     /// lets a click expand the fold without ever making the synthetic summary a
     /// source-graph node.
     fold_press: Option<(forme::FoldId, (f32, f32))>,
+    /// Fold/expand curation history. This stays local to one Canvas and is
+    /// discarded on a graph switch, just like selection and other view state.
+    fold_undo: Vec<FoldViewState>,
+    fold_redo: Vec<FoldViewState>,
     /// When set, the scene omits the on-screen gnode + favicon layers: the host renders
     /// those gnodes as DOM elements in the shell document instead (the focused canvas only;
     /// secondary panes keep their in-scene gnodes). Edges + demoted dots stay as the underlay.
@@ -604,8 +617,11 @@ mod gloss;
 mod lifecycle;
 mod nodes;
 mod selection;
+mod source_time;
 mod strategy;
 mod view;
+
+pub use source_time::{SourceTimeCanvas, SourceTimeSelection};
 
 #[cfg(test)]
 mod tests;
