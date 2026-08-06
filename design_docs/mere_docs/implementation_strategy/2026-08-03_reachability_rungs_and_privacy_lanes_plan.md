@@ -96,6 +96,33 @@ milliseconds-wide lost-update window against concurrent CLI pair/unpair,
 tolerable at the 5s cadence, generation counter if it ever bites; and Knot's
 lane has the same bare-node-id gap R1 just closed for Graphshell, untouched.
 
+**Knot's half closed 2026-08-06.** `KnotSyncSettings.paired_writers` was a
+flat `Vec<String>` of hex keys, so it carried identity and no route at all.
+It is now `Vec<PairedWriter>` with an optional `last_endpoint`, seeded into
+the transport at open through `add_peer_ticket` exactly as Graphshell's
+`device_sync` does, with a parse or dial failure logged and skipped rather
+than fatal.
+
+The migration is backward-compatible by construction: a hand-written
+`Deserialize` accepts both the old bare-string form and the new struct form,
+so an existing settings file keeps loading and upgrades the next time it is
+saved. Refusing the old form would have silently unpaired every device on
+upgrade, which is exactly the failure mode this plan's own doctrine warns
+about, so there is a test pinning it.
+
+Three rules the API enforces rather than documents: a hint for an unpaired
+writer is **ignored**, because a route must never create an admission;
+re-pairing does **not** discard a learned route; and unpairing **does** drop
+it, since an unpaired device's route is not ours to keep. `remember_endpoint`
+returns whether anything changed, so the caller only pays a settings write on
+change, matching R1's refresh discipline.
+
+Still open on this lane, and deliberately not done here: nothing yet *writes*
+the hint back. Graphshell refreshes from `remote_info` while a peer is
+connected; Knot's resident has no equivalent refresh loop, so hints currently
+arrive only if something else records them. That is the remaining half, and it
+is a resident-loop change rather than a schema one.
+
 ## R2. Announce-carried dial hints (the sovereign discovery rung)
 
 The retinue announce already binds authenticated app data (peer id plus

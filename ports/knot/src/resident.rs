@@ -36,6 +36,14 @@ pub struct KnotSyncHostConfig {
     /// iroh relays. Empty leaves this device LAN-only: p2panda registers no
     /// relay by default.
     pub relay_urls: Vec<RelayUrl>,
+    /// Endpoint tickets recorded from previous runs, seeded at open as
+    /// best-effort dial candidates.
+    ///
+    /// Hints, not arguments: a ticket that fails to parse or dial is logged
+    /// and skipped, because a route learned last week must degrade quietly
+    /// where a value the owner just typed should fail loudly. Identity stays
+    /// the writer key; this only turns a paired record into a route.
+    pub peer_hints: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -83,6 +91,20 @@ impl KnotSyncHost {
                 .set_topics(peer, &[overlay])
                 .await
                 .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
+        }
+
+        // The cached-address rung, as Graphshell has it: a device that has
+        // connected once can redial after both ends restart with no discovery
+        // working at all.
+        for hint in &config.peer_hints {
+            match transport.add_peer_ticket(hint).await {
+                Ok(peer) => {
+                    tracing::debug!(peer = %crate::hex32(&peer.to_bytes()), "seeded a stored dial hint")
+                },
+                Err(error) => {
+                    tracing::warn!(%error, "a stored dial hint was unusable; skipping it")
+                },
+            }
         }
 
         let (endpoint, gossip) = transport

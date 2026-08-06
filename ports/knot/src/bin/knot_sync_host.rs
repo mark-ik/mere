@@ -161,6 +161,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         KnotSyncHostConfig {
             paired_writers: admitted,
             relay_urls: relays,
+            peer_hints: sync.dial_hints(),
         },
     )
     .await?;

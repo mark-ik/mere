@@ -41,13 +41,16 @@ pub enum KnotSettingsError {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct KnotSyncSettings {
-    /// The other devices' writer keys, 64-hex.
+    /// The other devices this persona syncs with.
     ///
-    /// One value serves twice: it is the key admitted to write this space and
-    /// the transport node id dialled to reach that device. Knot binds its
+    /// A writer key serves twice: it is the key admitted to write this space
+    /// and the transport node id dialled to reach that device. Knot binds its
     /// transport with the writer seed, so the two cannot drift apart the way
     /// they can in the personal graph.
-    pub paired_writers: Vec<String>,
+    ///
+    /// Older settings files stored this as a flat list of hex strings and
+    /// still load: see [`PairedWriter`].
+    pub paired_writers: Vec<PairedWriter>,
     /// iroh relay urls. Empty leaves this device LAN-only, since p2panda
     /// registers no relay by default.
     pub relay_urls: Vec<String>,
@@ -109,37 +112,126 @@ impl KnotSettings {
     }
 }
 
+/// One paired device: the writer key that identifies it, and a disposable
+/// hint for reaching it.
+///
+/// The split is the point. `key` is identity and is never guessed at; the
+/// hint is a route that was true once. A stale hint costs a failed dial
+/// candidate, never a wrong belief about who someone is, which is why a hint
+/// that fails to parse or dial is skipped rather than fatal.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub struct PairedWriter {
+    /// The device's writer key, 64-hex. Both what it may write and what is
+    /// dialled to reach it.
+    pub key: String,
+    /// The peer's last known endpoint ticket, seeded at open as a best-effort
+    /// dial candidate. `None` until this device has connected once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_endpoint: Option<String>,
+}
+
+impl PairedWriter {
+    /// A newly paired device, with no route learned yet.
+    pub fn new(key: String) -> Self {
+        Self {
+            key,
+            last_endpoint: None,
+        }
+    }
+}
+
+/// Accepts both the flat `"hex"` form written before dial hints existed and
+/// the `{ "key": … }` form written since, so an existing settings file keeps
+/// loading and is upgraded the next time it is saved.
+impl<'de> Deserialize<'de> for PairedWriter {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Bare(String),
+            Full {
+                key: String,
+                #[serde(default)]
+                last_endpoint: Option<String>,
+            },
+        }
+        Ok(match Repr::deserialize(deserializer)? {
+            Repr::Bare(key) => Self::new(key),
+            Repr::Full { key, last_endpoint } => Self { key, last_endpoint },
+        })
+    }
+}
+
 impl KnotSyncSettings {
     /// The paired writers as raw keys.
     pub fn paired_writer_keys(&self) -> Result<Vec<[u8; 32]>, KnotSettingsError> {
         self.paired_writers
             .iter()
-            .map(|key| parse_hex32(key))
+            .map(|writer| parse_hex32(&writer.key))
             .collect()
     }
 
+    /// Every dial hint recorded so far, for seeding at open.
+    pub fn dial_hints(&self) -> Vec<String> {
+        self.paired_writers
+            .iter()
+            .filter_map(|writer| writer.last_endpoint.clone())
+            .collect()
+    }
+
+    /// The hint recorded for one device, if any.
+    pub fn endpoint_for(&self, writer: &[u8; 32]) -> Option<&str> {
+        let writer = hex32(writer);
+        self.paired_writers
+            .iter()
+            .find(|known| known.key.eq_ignore_ascii_case(&writer))
+            .and_then(|known| known.last_endpoint.as_deref())
+    }
+
+    /// Record where a device was last reachable. Returns whether anything
+    /// changed, so a caller only pays a settings write when it did.
+    ///
+    /// Pairing is not implied: a hint for an unpaired device is ignored,
+    /// because a route may never create an admission.
+    pub fn remember_endpoint(&mut self, writer: [u8; 32], ticket: &str) -> bool {
+        let writer = hex32(&writer);
+        let Some(known) = self
+            .paired_writers
+            .iter_mut()
+            .find(|known| known.key.eq_ignore_ascii_case(&writer))
+        else {
+            return false;
+        };
+        if known.last_endpoint.as_deref() == Some(ticket) {
+            return false;
+        }
+        known.last_endpoint = Some(ticket.to_string());
+        true
+    }
+
     /// Record another device. False when already present, so re-pairing does
-    /// not accumulate duplicates.
+    /// not accumulate duplicates or discard a learned route.
     pub fn pair(&mut self, writer: [u8; 32]) -> bool {
         let writer = hex32(&writer);
         if self
             .paired_writers
             .iter()
-            .any(|known| known.eq_ignore_ascii_case(&writer))
+            .any(|known| known.key.eq_ignore_ascii_case(&writer))
         {
             return false;
         }
-        self.paired_writers.push(writer);
+        self.paired_writers.push(PairedWriter::new(writer));
         true
     }
 
     /// Forget a device. False when it was not paired, so unpairing twice is
-    /// not an error.
+    /// not an error. The hint goes with it: an unpaired device's route is not
+    /// ours to keep.
     pub fn unpair(&mut self, writer: [u8; 32]) -> bool {
         let writer = hex32(&writer);
         let before = self.paired_writers.len();
         self.paired_writers
-            .retain(|known| !known.eq_ignore_ascii_case(&writer));
+            .retain(|known| !known.key.eq_ignore_ascii_case(&writer));
         self.paired_writers.len() != before
     }
 }
@@ -240,6 +332,87 @@ mod tests {
             path.parent(),
             crate::persona_vault_root(Path::new("/data"), persona).parent(),
             "a persona's Knot settings and its vault must not drift apart"
+        );
+    }
+
+    #[test]
+    fn an_older_flat_writer_list_still_loads() {
+        // The form written before dial hints existed. Refusing it would
+        // silently unpair every device on upgrade.
+        let json = r#"{"sync":{"paired_writers":["6161616161616161616161616161616161616161616161616161616161616161","6262626262626262626262626262626262626262626262626262626262626262"],"relay_urls":[],"device_label":""}}"#;
+        let settings: KnotSettings = serde_json::from_str(json).unwrap();
+        let sync = settings.sync.unwrap();
+
+        assert_eq!(sync.paired_writers.len(), 2);
+        assert_eq!(sync.paired_writers[0].key, "61".repeat(32));
+        assert_eq!(sync.paired_writers[0].last_endpoint, None);
+        assert_eq!(sync.paired_writer_keys().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn the_new_form_round_trips_through_a_save_and_load() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("knot.json");
+
+        let mut sync = KnotSyncSettings::default();
+        assert!(sync.pair([0xAB; 32]));
+        assert!(sync.remember_endpoint([0xAB; 32], "ticket-one"));
+        let settings = KnotSettings { sync: Some(sync) };
+        settings.save(&path).unwrap();
+
+        let loaded = KnotSettings::load(&path).unwrap().sync.unwrap();
+        assert_eq!(loaded.endpoint_for(&[0xAB; 32]), Some("ticket-one"));
+        assert_eq!(loaded.dial_hints(), vec!["ticket-one".to_string()]);
+    }
+
+    #[test]
+    fn a_hint_is_only_written_when_it_changes() {
+        // The caller pays a settings write only on change, so an unchanged
+        // refresh must report false.
+        let mut sync = KnotSyncSettings::default();
+        sync.pair([0x01; 32]);
+
+        assert!(sync.remember_endpoint([0x01; 32], "first"));
+        assert!(!sync.remember_endpoint([0x01; 32], "first"), "unchanged");
+        assert!(sync.remember_endpoint([0x01; 32], "second"), "changed");
+        assert_eq!(sync.endpoint_for(&[0x01; 32]), Some("second"));
+    }
+
+    #[test]
+    fn a_route_never_creates_an_admission() {
+        // A hint for a device that was never paired is ignored: routes do not
+        // grant write access.
+        let mut sync = KnotSyncSettings::default();
+        assert!(!sync.remember_endpoint([0x09; 32], "uninvited"));
+        assert!(sync.paired_writers.is_empty());
+        assert_eq!(sync.endpoint_for(&[0x09; 32]), None);
+    }
+
+    #[test]
+    fn re_pairing_keeps_a_learned_route_and_unpairing_drops_it() {
+        let mut sync = KnotSyncSettings::default();
+        sync.pair([0x02; 32]);
+        sync.remember_endpoint([0x02; 32], "learned");
+
+        assert!(!sync.pair([0x02; 32]), "already paired");
+        assert_eq!(
+            sync.endpoint_for(&[0x02; 32]),
+            Some("learned"),
+            "re-pairing must not discard the route"
+        );
+
+        assert!(sync.unpair([0x02; 32]));
+        assert_eq!(sync.endpoint_for(&[0x02; 32]), None);
+        assert!(sync.dial_hints().is_empty());
+    }
+
+    #[test]
+    fn hints_are_absent_until_a_device_has_connected() {
+        let mut sync = KnotSyncSettings::default();
+        sync.pair([0x03; 32]);
+        assert!(
+            sync.dial_hints().is_empty(),
+            "a freshly paired device has no route yet"
         );
     }
 }
