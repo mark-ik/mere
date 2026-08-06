@@ -4,9 +4,9 @@ use std::fmt::Display;
 
 use graphshell_protocol::{
     CarrierFailure, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponse,
-    CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
-    ProjectionSnapshot, ResourceChunkRequest, ResourceChunkResponse, ResourceRequest,
-    ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
+    CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, LiveViewReferenceV1,
+    ProjectionRequest, ProjectionSnapshot, ResourceChunkRequest, ResourceChunkResponse,
+    ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
 };
 
 /// Everything a carrier needs from an endpoint to serve the common verbs.
@@ -194,6 +194,58 @@ mod tests {
         ContentHash, MAX_RESOURCE_CHUNK_BYTES, ProjectionSession, ResourceAssembly,
     };
 
+    struct FixtureLiveViewGate {
+        answer: Result<(), LiveViewReferenceRefusal>,
+        opened: Vec<String>,
+    }
+
+    impl LiveViewReferenceGate for FixtureLiveViewGate {
+        fn open_live_view_reference(
+            &mut self,
+            reference: &LiveViewReferenceV1,
+        ) -> Result<(), LiveViewReferenceRefusal> {
+            self.opened.push(reference.record.clone());
+            self.answer.clone()
+        }
+    }
+
+    #[test]
+    fn participant_gate_refuses_unreadable_live_view_without_a_redacted_scene() {
+        let payload = LiveViewReferenceV1::new("eidetic:private-view-record")
+            .encode()
+            .expect("reference serializes");
+        let mut gate = FixtureLiveViewGate {
+            answer: Err(LiveViewReferenceRefusal::AccessDenied),
+            opened: Vec::new(),
+        };
+        assert_eq!(
+            resolve_live_view_reference(&payload, &mut gate),
+            IntentResult::Rejected {
+                reason: "the recipient is not authorized to read this live-view source".to_string()
+            }
+        );
+        assert_eq!(gate.opened, vec!["eidetic:private-view-record"]);
+    }
+
+    #[test]
+    fn malformed_live_view_reference_is_rejected_before_the_gate() {
+        let mut gate = FixtureLiveViewGate {
+            answer: Ok(()),
+            opened: Vec::new(),
+        };
+        assert!(matches!(
+            resolve_live_view_reference(
+                br#"{"schema":"mere.live-view-reference/v1","record":"file:C:/secret"}"#,
+                &mut gate
+            ),
+            IntentResult::Rejected { .. }
+        ));
+        assert!(
+            gate.opened.is_empty(),
+            "malformed input never reaches source authority"
+        );
+    }
+
     /// An endpoint that knows only how to hand over a whole resource, which is
     /// every endpoint written before chunking existed.
     struct WholeResourceOnly {
@@ -258,5 +310,70 @@ mod tests {
             length: 16,
         });
         assert!(refused.is_err());
+    }
+}
+
+/// The participant-gate boundary for a producer-owned live-view record. The
+/// reference has crossed Graphshell as opaque bytes; only this source owner can
+/// decide whether its scope and cursor may be read by the recipient.
+pub trait LiveViewReferenceGate {
+    fn open_live_view_reference(
+        &mut self,
+        reference: &LiveViewReferenceV1,
+    ) -> Result<(), LiveViewReferenceRefusal>;
+}
+
+/// A source owner's explicit reason for refusing an opaque live-view record.
+/// These are intentionally not represented as a redacted scene.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LiveViewReferenceRefusal {
+    MissingSource,
+    StaleCursor,
+    AccessDenied,
+    UnsupportedArrangement,
+}
+
+impl std::fmt::Display for LiveViewReferenceRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingSource => {
+                write!(formatter, "the requested live-view source is unavailable")
+            }
+            Self::StaleCursor => write!(formatter, "the requested live-view cursor is unavailable"),
+            Self::AccessDenied => write!(
+                formatter,
+                "the recipient is not authorized to read this live-view source"
+            ),
+            Self::UnsupportedArrangement => write!(
+                formatter,
+                "the requested live-view arrangement is unsupported"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LiveViewReferenceRefusal {}
+
+/// Decode one `mere.live-view-reference/v1` intent payload and ask the
+/// participant gate to open it. Callers still perform their normal
+/// epoch/revision stale check before this function, exactly as for every other
+/// Graphshell intent.
+pub fn resolve_live_view_reference(
+    payload: &[u8],
+    gate: &mut impl LiveViewReferenceGate,
+) -> IntentResult {
+    let reference = match LiveViewReferenceV1::decode(payload) {
+        Ok(reference) => reference,
+        Err(error) => {
+            return IntentResult::Rejected {
+                reason: error.to_string(),
+            };
+        }
+    };
+    match gate.open_live_view_reference(&reference) {
+        Ok(()) => IntentResult::Accepted,
+        Err(refusal) => IntentResult::Rejected {
+            reason: refusal.to_string(),
+        },
     }
 }

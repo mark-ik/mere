@@ -529,6 +529,220 @@ pub struct ProjectionSnapshot {
     pub cache_policy: CachePolicy,
 }
 
+/// First frozen-scene wire shape. A frozen scene is delivery truth, not a
+/// source-time cursor: it reproduces this exact Scenotime table snapshot and
+/// its separately addressed presentation resources.
+pub const FROZEN_SCENE_VERSION: u16 = 1;
+
+/// A portable, immutable scene capture. The session identity and cache policy
+/// are intentionally absent: neither contributes to the realized scene.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FrozenSceneV1 {
+    pub version: u16,
+    pub scene: SceneSnapshot,
+    #[serde(default)]
+    pub presentation: PresentationManifest,
+}
+
+/// A rejected frozen-scene capture or load.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FrozenSceneError {
+    UnsupportedVersion { found: u16 },
+    InvalidScene(String),
+    MissingPresentationResource(ContentHash),
+    Decode(String),
+    Encode(String),
+}
+
+impl fmt::Display for FrozenSceneError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedVersion { found } => {
+                write!(formatter, "unsupported frozen-scene version {found}")
+            }
+            Self::InvalidScene(error) => write!(formatter, "invalid frozen scene: {error}"),
+            Self::MissingPresentationResource(resource) => write!(
+                formatter,
+                "frozen scene presentation resource {resource} is unavailable"
+            ),
+            Self::Decode(error) => write!(formatter, "could not decode frozen scene: {error}"),
+            Self::Encode(error) => write!(formatter, "could not encode frozen scene: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for FrozenSceneError {}
+
+impl FrozenSceneV1 {
+    /// Freeze one already-authorized projection snapshot. This preserves the
+    /// Scenotime epoch and revision, but does not claim they are source history.
+    pub fn from_projection(snapshot: &ProjectionSnapshot) -> Result<Self, FrozenSceneError> {
+        let frozen = Self {
+            version: FROZEN_SCENE_VERSION,
+            scene: snapshot.scene.clone(),
+            presentation: snapshot.presentation.clone(),
+        };
+        frozen.validate()?;
+        Ok(frozen)
+    }
+
+    /// Every separately-addressed resource the frozen presentation requires.
+    pub fn presentation_resources(&self) -> BTreeSet<ContentHash> {
+        self.presentation
+            .offers
+            .values()
+            .flatten()
+            .map(|offer| offer.resource)
+            .collect()
+    }
+
+    /// Reject malformed tables before disclosure or persistence.
+    pub fn validate(&self) -> Result<(), FrozenSceneError> {
+        if self.version != FROZEN_SCENE_VERSION {
+            return Err(FrozenSceneError::UnsupportedVersion {
+                found: self.version,
+            });
+        }
+        self.scene
+            .validate()
+            .map_err(|error| FrozenSceneError::InvalidScene(format!("{error:?}")))
+    }
+
+    /// Ensure each named presentation resource can be read before a recipient
+    /// is told the frozen scene is available.
+    pub fn verify_resources(
+        &self,
+        mut available: impl FnMut(ContentHash) -> bool,
+    ) -> Result<(), FrozenSceneError> {
+        self.validate()?;
+        for resource in self.presentation_resources() {
+            if !available(resource) {
+                return Err(FrozenSceneError::MissingPresentationResource(resource));
+            }
+        }
+        Ok(())
+    }
+
+    /// Stable serialized bytes used for persistence or a carrier resource.
+    pub fn encode(&self) -> Result<Vec<u8>, FrozenSceneError> {
+        self.validate()?;
+        serde_json::to_vec(self).map_err(|error| FrozenSceneError::Encode(error.to_string()))
+    }
+
+    /// Decode and validate a frozen scene before it reaches a renderer.
+    pub fn decode(bytes: &[u8]) -> Result<Self, FrozenSceneError> {
+        let frozen = serde_json::from_slice::<Self>(bytes)
+            .map_err(|error| FrozenSceneError::Decode(error.to_string()))?;
+        frozen.validate()?;
+        Ok(frozen)
+    }
+
+    /// The frozen scene's content address. A resource carrier may use this as
+    /// its resource key without knowing any source graph or live session.
+    pub fn content_address(&self) -> Result<ContentHash, FrozenSceneError> {
+        Ok(ContentHash::of(&self.encode()?))
+    }
+}
+
+/// Schema for an opaque reference to a producer-owned live-view record. The
+/// carrier transports this reference without parsing source truth or gaining
+/// authority over it; the receiving endpoint's participant gate resolves it.
+pub const LIVE_VIEW_REFERENCE_SCHEMA: &str = "mere.live-view-reference/v1";
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LiveViewReferenceV1 {
+    pub schema: String,
+    pub record: String,
+}
+
+impl LiveViewReferenceV1 {
+    pub fn new(record: impl Into<String>) -> Self {
+        Self {
+            schema: LIVE_VIEW_REFERENCE_SCHEMA.to_string(),
+            record: record.into(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), LiveViewReferenceError> {
+        if self.schema != LIVE_VIEW_REFERENCE_SCHEMA {
+            return Err(LiveViewReferenceError::UnsupportedSchema {
+                found: self.schema.clone(),
+            });
+        }
+        if self.record.trim().is_empty() {
+            return Err(LiveViewReferenceError::MissingRecord);
+        }
+        if !is_opaque_live_view_reference(&self.record) {
+            return Err(LiveViewReferenceError::InvalidOpaqueReference);
+        }
+        Ok(())
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, LiveViewReferenceError> {
+        self.validate()?;
+        serde_json::to_vec(self).map_err(|error| LiveViewReferenceError::Encode(error.to_string()))
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<Self, LiveViewReferenceError> {
+        let reference = serde_json::from_slice::<Self>(bytes)
+            .map_err(|error| LiveViewReferenceError::Decode(error.to_string()))?;
+        reference.validate()?;
+        Ok(reference)
+    }
+}
+
+fn is_opaque_live_view_reference(reference: &str) -> bool {
+    let Some((scheme, identifier)) = reference.split_once(':') else {
+        return false;
+    };
+    !scheme.is_empty()
+        && !identifier.is_empty()
+        && reference.len() <= 256
+        && scheme
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && identifier
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LiveViewReferenceError {
+    UnsupportedSchema { found: String },
+    MissingRecord,
+    InvalidOpaqueReference,
+    Decode(String),
+    Encode(String),
+}
+
+impl fmt::Display for LiveViewReferenceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedSchema { found } => {
+                write!(
+                    formatter,
+                    "unsupported live-view reference schema {found:?}"
+                )
+            }
+            Self::MissingRecord => write!(formatter, "live-view record reference is missing"),
+            Self::InvalidOpaqueReference => write!(
+                formatter,
+                "live-view record reference must be an opaque scheme:identifier value"
+            ),
+            Self::Decode(error) => {
+                write!(formatter, "could not decode live-view reference: {error}")
+            }
+            Self::Encode(error) => {
+                write!(formatter, "could not encode live-view reference: {error}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for LiveViewReferenceError {}
+
 /// Presentation and cache changes that accompany a Scenotime scene diff.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PresentationChange {
@@ -1128,6 +1342,87 @@ mod tests {
             input_form: Some(form),
             effect: IntentEffect::DomainTruth,
         }
+    }
+
+    fn frozen_scene_fixture() -> FrozenSceneV1 {
+        let resource = ContentHash::of(b"frozen presentation");
+        let presentation = PresentationManifest {
+            bindings: Vec::new(),
+            offers: BTreeMap::from([(
+                PresentationKey("fixture:scene".to_string()),
+                vec![PresentationOffer {
+                    codec: PresentationCodec::PortableCardV1,
+                    resource,
+                    byte_size: 19,
+                    requires: PresentationCapability::PortableCard,
+                    semantics: PresentationSemantics {
+                        label: "Frozen fixture".to_string(),
+                        role: SemanticRole::Graphic,
+                        bounds: BoundsRelationship::FitWithinFootprint,
+                        actions: Vec::new(),
+                    },
+                }],
+            )]),
+        };
+        FrozenSceneV1 {
+            version: FROZEN_SCENE_VERSION,
+            scene: SceneSnapshot::from_dense(SceneEpoch(9), Revision(4), Scene::new())
+                .expect("fixture scene is valid"),
+            presentation,
+        }
+    }
+
+    #[test]
+    fn frozen_scene_replays_same_tables_bounds_and_presentation_addresses() {
+        let frozen = frozen_scene_fixture();
+        let bytes = frozen.encode().expect("freeze serializes");
+        let restored = FrozenSceneV1::decode(&bytes).expect("frozen scene reopens");
+        assert_eq!(restored.scene.tables, frozen.scene.tables);
+        assert_eq!(restored.scene.tables.bounds, frozen.scene.tables.bounds);
+        assert_eq!(
+            restored.presentation_resources(),
+            frozen.presentation_resources()
+        );
+        assert_eq!(
+            restored.content_address().expect("address"),
+            frozen.content_address().expect("address"),
+            "the same frozen scene has the same content address"
+        );
+        assert!(
+            restored
+                .verify_resources(|resource| frozen.presentation_resources().contains(&resource))
+                .is_ok(),
+            "all named presentation resources are available"
+        );
+        let missing = restored
+            .verify_resources(|_| false)
+            .expect_err("a missing resource must not be silently omitted");
+        assert!(matches!(
+            missing,
+            FrozenSceneError::MissingPresentationResource(_)
+        ));
+    }
+
+    #[test]
+    fn opaque_live_view_reference_round_trips_without_source_disclosure() {
+        let reference = LiveViewReferenceV1::new("eidetic:6f2a4c");
+        let restored =
+            LiveViewReferenceV1::decode(&reference.encode().expect("encode")).expect("decode");
+        assert_eq!(restored, reference);
+        assert!(
+            !serde_json::to_string(&restored)
+                .expect("serialize")
+                .contains("session:fixture"),
+            "the carrier receives an opaque record reference, not source truth"
+        );
+        assert!(matches!(
+            LiveViewReferenceV1::new(" ").validate(),
+            Err(LiveViewReferenceError::MissingRecord)
+        ));
+        assert!(matches!(
+            LiveViewReferenceV1::new("file:C:/private/graph.json").validate(),
+            Err(LiveViewReferenceError::InvalidOpaqueReference)
+        ));
     }
 
     #[test]

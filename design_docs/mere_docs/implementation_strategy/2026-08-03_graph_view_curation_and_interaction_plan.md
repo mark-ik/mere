@@ -1,9 +1,32 @@
 # Graph View Curation and Interaction Plan
 
 **Date:** 2026-08-03  
-**Status:** Planned with Mark. The shared slices described here have not landed.
-The baseline mechanisms listed below are implemented; their wiring level is
-stated individually.
+**Status:** C3's root-Canvas fold is landed; its Swatch proof remains pending.
+C4 is complete: the source-time contract has journal-prefix and Git-authority
+adapters, plus a real second source in Isometry's pre-log `GameSnapshot` and
+authority `GameEvent` Codicil. Its Overmap Swatch has a Cambium slider that
+selects disposable historical snapshots, preserves local curation, disables
+world actions while historical, and returns to untouched live truth. The native
+root Canvas has a painted source rail with pointer scrubbing plus Home/End and
+Page Up/Page Down, rather than a fictional Cambium widget. Historical Canvas
+and Swatch headed captures exist. The receipt matrix verifies every current
+Canvas arrangement against a journal prefix and all seven public repository
+arrangements against an available Git checkpoint, then verifies return to the
+retained live source. Joined clients and pre-origin checkpoints remain live-only
+until the session handshake carries a verified origin plus public log. C5 is
+complete: Mer3ly publishes reduced, commit-pinned public history from
+Graphshell through the former WebRender-wgpu fork and the current authority.
+Its native headed smoke records ready desktop and mobile source playback,
+arrangement changes at a past cursor, keyboard stepping, archive appearance and
+closure, and Return to live.
+C6 is complete: Mer3ly's versioned public fragment reopens the same historical
+source, arrangement, and selection on desktop and mobile without private
+references; Mere persists a versioned, content-addressed local live-view recipe
+and lets its source owner explicitly refuse missing, stale, denied, or
+unsupported requests; Graphshell carries an opaque record reference through its
+participant gate; and a frozen scene serializes validated Scenotime tables plus
+each presentation-resource address, so a replay verifies identical tables and
+visual bounds before rendering.
 
 ## Outcome
 
@@ -343,9 +366,11 @@ Introduce the smallest source-time trait after implementing two adapters:
 The exact trait name is decided from those implementations. It must be usable
 without Scenotime and must not require wall-clock timestamps.
 
-Build the Cambium scrubber from its existing continuous slider and pointer
-capture. Bind it to root Canvas and `GraphCanvasSwatch`. Keep arrangement
-selection unchanged while the source snapshot changes.
+Build the Swatch scrubber from Cambium's existing continuous slider and pointer
+capture. Bind it to `GraphCanvasSwatch`; the native root Canvas owns no Cambium
+DOM, so it renders the same source-prefix selection as a painted rail with
+pointer and keyboard controls. Keep arrangement selection unchanged while the
+source snapshot changes.
 
 If human-readable timestamps are needed for journal entries, add a versioned
 metadata envelope or side index. Do not replace `CapturedDelta`, silently

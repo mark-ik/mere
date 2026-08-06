@@ -4,15 +4,19 @@ use graphshell_client::{
     AccessibilityTree, ClientState, PresentationResolution, ResolutionError, ResolvedPresentation,
     ResourceCacheError, SnapshotApplyError,
 };
-use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
+use graphshell_endpoint::{
+    IntentSink, LiveViewReferenceGate, LiveViewReferenceRefusal, PresentationSource,
+    ProjectionCatalog, ProjectionSource, resolve_live_view_reference,
+};
 use graphshell_protocol::{
     ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, AdvertisedAction, BoundsRelationship,
     CachePolicy, CapabilityProfile, CardValueV1, ContentHash, EndpointDescriptor, IntentEffect,
-    IntentInvocation, IntentReference, IntentResult, NativeGlyphV1, PortableCardV1,
-    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
-    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionOffer,
-    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
-    ResourceResponse, SemanticRole,
+    IntentInvocation, IntentReference, IntentResult, LIVE_VIEW_REFERENCE_SCHEMA,
+    LiveViewReferenceV1, NativeGlyphV1, PortableCardV1, PresentationBinding,
+    PresentationCapability, PresentationCodec, PresentationKey, PresentationManifest,
+    PresentationOffer, PresentationSemantics, ProjectionOffer, ProjectionRequest,
+    ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse,
+    SemanticRole,
 };
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene, Score, Size2,
@@ -23,6 +27,8 @@ use serde::Deserialize;
 
 const FIXTURE_SESSION: &str = "loopback:g1-presentation";
 const INSPECT_TILE_SCHEMA: &str = "graphshell.fixture/inspect-tile/v1";
+const OPEN_LIVE_VIEW_INTENT: &str = "fixture.open-live-view";
+const FIXTURE_PUBLIC_LIVE_VIEW: &str = "eidetic:fixture-public-view";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -143,6 +149,16 @@ impl FixtureEndpoint {
             ),
             effect: IntentEffect::Curation,
         };
+        let open_live_view = AdvertisedAction {
+            intent: IntentReference(OPEN_LIVE_VIEW_INTENT.into()),
+            label: "Open saved live view".into(),
+            explanation:
+                "Reproject a producer-owned saved view when this recipient may read its source."
+                    .into(),
+            payload_schema: LIVE_VIEW_REFERENCE_SCHEMA.into(),
+            input_form: None,
+            effect: IntentEffect::Curation,
+        };
 
         let card = PortableCardV1 {
             title: "Projection boundary".into(),
@@ -200,7 +216,7 @@ impl FixtureEndpoint {
                         label: "Projection boundary card".into(),
                         role: SemanticRole::Article,
                         bounds: BoundsRelationship::FillFootprint,
-                        actions: vec![open_note.clone()],
+                        actions: vec![open_note.clone(), open_live_view.clone()],
                     },
                 },
                 PresentationOffer {
@@ -212,7 +228,7 @@ impl FixtureEndpoint {
                         label: "Projection boundary glyph".into(),
                         role: SemanticRole::Graphic,
                         bounds: BoundsRelationship::FitWithinFootprint,
-                        actions: vec![open_note],
+                        actions: vec![open_note, open_live_view],
                     },
                 },
             ],
@@ -321,6 +337,17 @@ impl PresentationSource for FixtureEndpoint {
     }
 }
 
+impl LiveViewReferenceGate for FixtureEndpoint {
+    fn open_live_view_reference(
+        &mut self,
+        reference: &LiveViewReferenceV1,
+    ) -> Result<(), LiveViewReferenceRefusal> {
+        (reference.record == FIXTURE_PUBLIC_LIVE_VIEW)
+            .then_some(())
+            .ok_or(LiveViewReferenceRefusal::AccessDenied)
+    }
+}
+
 impl IntentSink for FixtureEndpoint {
     type Error = CanaryError;
 
@@ -338,6 +365,7 @@ impl IntentSink for FixtureEndpoint {
         }
         Ok(match intent.intent.as_str() {
             "fixture.open-note" => IntentResult::Accepted,
+            OPEN_LIVE_VIEW_INTENT => resolve_live_view_reference(&intent.payload, self),
             "fixture.inspect-tile" => {
                 match serde_json::from_slice::<InspectTilePayload>(&intent.payload) {
                     Ok(payload)
@@ -506,5 +534,51 @@ mod tests {
             endpoint.invoke(invoke(Vec::new())).unwrap(),
             IntentResult::Rejected { .. }
         ));
+    }
+
+    #[test]
+    fn fixture_refuses_a_live_view_when_the_recipient_cannot_read_its_source() {
+        let mut endpoint = FixtureEndpoint::new();
+        let before = endpoint
+            .snapshot(endpoint.request())
+            .expect("fixture snapshot");
+        let accepted = endpoint
+            .invoke(IntentInvocation {
+                session: before.session.clone(),
+                target: InstanceId(0),
+                observed_epoch: before.scene.epoch,
+                observed_revision: before.scene.revision,
+                intent: OPEN_LIVE_VIEW_INTENT.to_string(),
+                payload: LiveViewReferenceV1::new(FIXTURE_PUBLIC_LIVE_VIEW)
+                    .encode()
+                    .expect("public reference serializes"),
+            })
+            .expect("the endpoint admits its disclosed record");
+        assert_eq!(accepted, IntentResult::Accepted);
+        let result = endpoint
+            .invoke(IntentInvocation {
+                session: before.session.clone(),
+                target: InstanceId(0),
+                observed_epoch: before.scene.epoch,
+                observed_revision: before.scene.revision,
+                intent: OPEN_LIVE_VIEW_INTENT.to_string(),
+                payload: LiveViewReferenceV1::new("eidetic:private-view")
+                    .encode()
+                    .expect("reference serializes"),
+            })
+            .expect("the endpoint answers with a bounded refusal");
+        assert_eq!(
+            result,
+            IntentResult::Rejected {
+                reason: "the recipient is not authorized to read this live-view source".to_string()
+            }
+        );
+        let after = endpoint
+            .snapshot(endpoint.request())
+            .expect("fixture remains live");
+        assert_eq!(
+            after.scene.tables, before.scene.tables,
+            "a refusal never substitutes an empty scene"
+        );
     }
 }

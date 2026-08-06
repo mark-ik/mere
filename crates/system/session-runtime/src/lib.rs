@@ -81,6 +81,9 @@ pub mod scene_facets;
 // filesystem). Save redacts private fields by default; open thaws read-only.
 pub mod engram_seal;
 pub mod graph_engram;
+// Producer-owned, content-addressed recipes for reopening a source at a
+// cursor with existing durable curation. Source resolution stays at the host.
+pub mod live_view;
 // Snapshot-level merge for engram compose (Alembic tail B7): union two graph
 // snapshots by URL identity, retaining per-member provenance. Pure; the engram
 // compose op (`graph_engram::compose_graph_engrams`) layers on top.
@@ -149,6 +152,12 @@ pub use facet_store::{
     copy_node_facets, load_node_facets, node_facets_path, save_node_facets,
 };
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
+pub use live_view::{
+    LIVE_VIEW_RECORD_SCHEMA_ID, LIVE_VIEW_RECORD_VERSION, LiveViewCursor, LiveViewRecord,
+    LiveViewRecordError, LiveViewSource, LiveViewSourceError, LiveViewSourceResolver,
+    live_view_schema_ref, load_live_view_record, load_live_view_record_sealed,
+    open_live_view_record, save_live_view_record, save_live_view_record_sealed,
+};
 pub use manifest::{
     EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
     SessionPolicy, SessionPolicyOverride, WorkerKind,
