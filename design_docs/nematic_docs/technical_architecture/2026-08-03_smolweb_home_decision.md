@@ -417,13 +417,46 @@ source with wire detail):
 - document abstracts (Gopher+-like) and Universal Decimal Classification;
 - URL fragments are meaningful.
 
-**Blocked, and deliberately not worked around.** `scrollprotocol.us.to` refuses
-connections and `web.archive.org` is unreachable from here, so the exact
-metadata lines, status codes, and inline grammar are unknown. That is not
-enough to write a spec-accurate parser, and this workspace has now declined to
-guess a wire format three times (gopher's introductory page, terse, and this),
-which is the standard rather than an exception. Revisit when the spec host is
-up.
+**Blocked, and deliberately not worked around** *(superseded 2026-08-06, next
+entry)*. `scrollprotocol.us.to` refuses connections and `web.archive.org` is
+unreachable from here, so the exact metadata lines, status codes, and inline
+grammar are unknown. That is not enough to write a spec-accurate parser, and
+this workspace has now declined to guess a wire format three times (gopher's
+introductory page, terse, and this), which is the standard rather than an
+exception. Revisit when the spec host is up.
+
+### Scroll, unblocked (2026-08-06)
+
+Mark surfaced [michael-lazar/smolnet-portal](https://github.com/michael-lazar/smolnet-portal),
+which settles it two ways at once: the repo **vendors the spec text itself**
+(`docs/scroll_spec.txt`, by Christian Lee Seibold, modification date
+2024-08-03), and it carries a **working proxy implementation** that
+interoperates with live scroll servers, which is the cross-check a lone spec
+cannot give. The DeepWiki page layered on top of that repo is an AI-generated
+summary and got the usual grain of salt; the repo underneath is primary
+source. Worth generalising: for a smolweb protocol, the durable copy of a
+spec is as likely to live in an interoperating client's repo as on the
+author's host.
+
+The spec confirms both earlier corrections in full: a success response is a
+mimetype line then **author, publish date, modification date** (no envelope,
+no signatures), and `text/scroll` is a real format richer than gemtext
+(five heading levels with numbered sections, nested lists with verbatim
+ordered markers, tagged code blocks, input links, link relations, inline
+markup with precise toggle rules, linetype escaping).
+
+**`scroll-protocol` 0.1.0 is published**: dep-free wire grammar and
+scrolltext parser (the spec's own examples are tests), client with language
+negotiation, metadata/abstract requests, and UDC classification. The TLS
+half rides `gemini_protocol::tofu_connect` (new in gemini-protocol 0.1.2),
+since scroll's spec declares gemini's trust posture in so many words, so one
+installed trust store covers both protocols. Provenance is stated plainly in
+the crate, including that the spec titles itself *speculative*.
+
+**Still open on the genet side**: nematic's scroll engine still reads
+`text/scroll` as gemtext with a `DegradedRendering` diagnostic; it can now be
+rewired onto `scroll_protocol::scrolltext` (and errand can gain the scroll
+scheme), which retires the last knowingly-degraded lane.
 
 **Still open**: the nex de-duplication. `nex-protocol` already ships a listing
 parser (`listing.rs`, `ListingLine`) and errand independently implements the
