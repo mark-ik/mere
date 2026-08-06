@@ -6,6 +6,7 @@ const disconnectButton = document.querySelector("#disconnect");
 const port = extensionApi.runtime.connectNative("org.mere.graphshell");
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const actionForms = globalThis.GraphshellActionForm;
 
 let nextId = 1;
 let projection = null;
@@ -205,6 +206,82 @@ function invokeIntent(action, item, payload) {
   }, { type: "intent", label: action.label });
 }
 
+function renderBoundedActionForm(action, item, actionsNode) {
+  if (!action.input_form || !actionForms) {
+    return false;
+  }
+  const controls = document.createElement("form");
+  controls.className = "action-form";
+  const selects = new Map();
+  const error = document.createElement("p");
+  error.className = "action-form-error";
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+
+  for (const [fieldIndex, field] of (action.input_form.fields ?? []).entries()) {
+    if (!field || typeof field.name !== "string" || !Array.isArray(field.choices)) {
+      continue;
+    }
+    const label = document.createElement("label");
+    label.textContent = field.label || field.name;
+    const select = document.createElement("select");
+    select.name = field.name;
+    select.setAttribute("aria-label", field.label || field.name);
+    if (field.description) {
+      const description = document.createElement("span");
+      const descriptionId = `action-field-${item.binding.instance}-${fieldIndex}`;
+      description.id = descriptionId;
+      description.className = "action-form-description";
+      description.textContent = field.description;
+      select.setAttribute("aria-describedby", descriptionId);
+      label.append(description);
+    }
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Choose an advertised value";
+    select.append(empty);
+    for (const choice of field.choices) {
+      if (!choice || typeof choice.value !== "string") {
+        continue;
+      }
+      const option = document.createElement("option");
+      option.value = choice.value;
+      option.textContent = choice.label || choice.value;
+      if (choice.description) {
+        option.title = choice.description;
+      }
+      select.append(option);
+    }
+    selects.set(field.name, select);
+    label.append(select);
+    controls.append(label);
+  }
+
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.textContent = action.label;
+  submit.dataset.intent = action.intent;
+  controls.append(error, submit);
+  controls.addEventListener("submit", (event) => {
+    event.preventDefault();
+    try {
+      const values = Object.fromEntries(
+        [...selects].map(([name, select]) => [name, select.value]),
+      );
+      invokeIntent(action, item, actionForms.composePayload(action, values));
+      error.hidden = true;
+      error.textContent = "";
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      error.textContent = message;
+      error.hidden = false;
+      setStatus(message, "failed");
+    }
+  });
+  actionsNode.append(controls);
+  return true;
+}
+
 function renderNativeImportAction(action, actionsNode) {
   const controls = document.createElement("div");
   controls.className = "native-import";
@@ -320,6 +397,9 @@ function renderCard(card, item) {
       continue;
     }
     if (renderConfirmedIdentityAction(action, card, item, actionsNode)) {
+      continue;
+    }
+    if (renderBoundedActionForm(action, item, actionsNode)) {
       continue;
     }
     if (!action.intent.startsWith("graphshell.identity.signing.")) {

@@ -75,20 +75,23 @@ h1 {
   margin-top: 16px;
 }
 
-.native-import {
+.native-import,
+.action-form {
   display: grid;
   width: 100%;
   gap: 8px;
 }
 
-.native-import label {
+.native-import label,
+.action-form label {
   display: grid;
   gap: 4px;
   color: #8fbab1;
 }
 
 .native-import select,
-.native-import input {
+.native-import input,
+.action-form select {
   box-sizing: border-box;
   width: 100%;
   padding: 7px 9px;
@@ -97,6 +100,16 @@ h1 {
   background: #091a18;
   color: #e7f0ec;
   font: inherit;
+}
+
+.action-form-description {
+  color: #b8d1ca;
+  font-size: 0.86rem;
+}
+
+.action-form-error {
+  margin: 0;
+  color: #ff9c91;
 }
 
 button {

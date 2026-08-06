@@ -48,8 +48,12 @@ injected by the composing host. The reference package displays and records its
 stable reference pair. It does not infer an active browsing identity from the
 selected Personae vault profile or a device-roster entry.
 
-`bridge.html` remains the admitted native Identity surface and is linked from
-the graph portal.
+`bridge.html` remains the admitted native surface and is linked from the graph
+portal. Identity signing and key import retain their native-only controls.
+An endpoint may also advertise a bounded `input_form`: the bridge renders its
+endpoint-supplied labels and advertised choices, then serializes only the
+matching declared schema and selected values. It does not infer defaults,
+invent values, or interpret a product's reading data.
 
 ## Development package
 
