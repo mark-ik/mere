@@ -3,11 +3,15 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use cambium::{GenetAppRunner, GenetCtx, GenetElement, View, el, text};
+use cambium::{AnyView, GenetAppRunner, GenetCtx, GenetElement, View, el, text};
 use genet_layout::{NoImageLoader, ScrollOffsets};
 use genet_scripted_dom::ScriptedDom;
 use netrender::Scene;
 use paint_list_api::PaintList as _;
+
+use graphshell::action_draft::ActionDraftSemantics;
+
+type ChromeChild = Box<dyn AnyView<(), (), GenetCtx, GenetElement>>;
 
 #[derive(Clone)]
 pub(crate) struct ChromeModel {
@@ -21,10 +25,84 @@ pub(crate) struct ChromeModel {
     pub product_status: String,
     pub arrangement: String,
     pub physics_paused: bool,
+    pub action_draft: Option<ActionDraftSemantics>,
 }
 
 fn pill(label: String, active: bool) -> impl View<(), (), GenetCtx, Element = GenetElement> {
     el("div", text(label)).attr("class", if active { "pill active" } else { "pill" })
+}
+
+/// A painted projection of the same draft that supplies browser and native
+/// semantics. Input reaches the browser semantic controls, while the canvas
+/// chrome mirrors choices, labels, descriptions, errors, and selection state.
+fn action_form_view(draft: Option<&ActionDraftSemantics>) -> ChromeChild {
+    let Some(draft) = draft else {
+        return Box::new(el("div", text("")).attr("class", "action-form hidden"));
+    };
+    let fields: Vec<ChromeChild> = draft
+        .fields
+        .iter()
+        .map(|field| {
+            let choices: Vec<ChromeChild> = field
+                .choices
+                .iter()
+                .map(|choice| {
+                    let marker = if choice.selected { "(o)" } else { "( )" };
+                    let description = choice
+                        .description
+                        .as_deref()
+                        .map(|description| format!(" · {description}"))
+                        .unwrap_or_default();
+                    Box::new(
+                        el(
+                            "div",
+                            text(format!("{marker} {}{description}", choice.label)),
+                        )
+                        .attr(
+                            "class",
+                            if choice.selected {
+                                "action-choice selected"
+                            } else {
+                                "action-choice"
+                            },
+                        ),
+                    ) as ChromeChild
+                })
+                .collect();
+            let required = if field.required {
+                "required"
+            } else {
+                "optional"
+            };
+            Box::new(
+                el(
+                    "div",
+                    (
+                        el("div", text(format!("{} · {required}", field.label)))
+                            .attr("class", "action-field-label"),
+                        el("div", text(field.description.clone())).attr("class", "action-help"),
+                        el("div", choices).attr("class", "action-choices"),
+                    ),
+                )
+                .attr("class", "action-field"),
+            ) as ChromeChild
+        })
+        .collect();
+    let error = draft.error.clone().unwrap_or_default();
+    Box::new(
+        el(
+            "div",
+            (
+                el("div", text(draft.label.clone())).attr("class", "action-form-title"),
+                el("div", text(draft.explanation.clone())).attr("class", "action-help"),
+                el("div", fields).attr("class", "action-fields"),
+                el("div", text(error)).attr("class", "action-form-error"),
+                el("div", text(format!("Submit · {}", draft.submit_label)))
+                    .attr("class", "action-submit"),
+            ),
+        )
+        .attr("class", "action-form"),
+    )
 }
 
 fn chrome_view(model: ChromeModel) -> impl View<(), (), GenetCtx, Element = GenetElement> {
@@ -88,6 +166,7 @@ fn chrome_view(model: ChromeModel) -> impl View<(), (), GenetCtx, Element = Gene
                     el("div", text(model.selection.clone())).attr("class", "detail-title"),
                     el("div", text(model.detail_address)).attr("class", "address"),
                     el("div", text("Open with Graphshell Inspect")).attr("class", "action"),
+                    action_form_view(model.action_draft.as_ref()),
                     el("div", text(model.action_status)).attr("class", "action-status"),
                 ),
             )
@@ -167,6 +246,18 @@ fn stylesheet(width: u32, height: u32) -> String {
 .action {{ background-color: #d39b4a; color: #152028; padding: 9px 12px;
   border-radius: 7px; margin-bottom: 9px; }}
 .action-status {{ color: #8db8a4; font-size: 11px; }}
+.action-form {{ margin-top: 10px; padding-top: 10px; border-top: 1px solid #35505b; }}
+.action-form.hidden {{ display: none; }}
+.action-form-title {{ color: #f5e7c4; font-size: 13px; margin-bottom: 5px; }}
+.action-help {{ color: #789099; font-size: 10px; margin-bottom: 7px; }}
+.action-field {{ margin-top: 8px; }}
+.action-field-label {{ color: #a9c7ba; font-size: 11px; }}
+.action-choices {{ margin-top: 4px; }}
+.action-choice {{ color: #9fb1b7; font-size: 11px; padding: 2px 0px; }}
+.action-choice.selected {{ color: #f0c674; }}
+.action-form-error {{ color: #e99387; font-size: 10px; margin-top: 7px; }}
+.action-submit {{ margin-top: 8px; background-color: #d39b4a; color: #152028; padding: 7px 9px;
+  border-radius: 6px; font-size: 10px; }}
 .product-proof {{ position: absolute; left: 300px; bottom: 12px; max-width: 520px;
   padding: 8px 12px; border-radius: 10px; background-color: #101820;
   border: 1px solid #29404a; }}

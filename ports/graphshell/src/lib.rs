@@ -5,6 +5,7 @@
 
 #[cfg(feature = "web")]
 pub mod access;
+pub mod action_draft;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod admission;
 #[cfg(feature = "web")]

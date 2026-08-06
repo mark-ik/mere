@@ -8,9 +8,10 @@ mod web_view;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use graphshell::action_draft::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
 use graphshell::endpoint::{IntentSink, ProjectionSource};
 use graphshell::protocol::{
-    CapabilityProfile, IntentInvocation, IntentResult, PresentationCapability, ProjectionSession,
+    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession,
 };
 use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
 use netrender::Scene;
@@ -26,11 +27,11 @@ use graphshell::capture::{
     BROWSER_HISTORY_HANDLER_PREFIX, BrowserHistoryCapture, BrowserVisit, CaptureOutcome,
     ForgetMode, HistoryCapturePolicy,
 };
-use muniment::IndexedDbBackend;
 use graphshell::mere_host::{
     FIXTURE_DEVICE_TWO_ADDRESS, FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef,
 };
 use graphshell::product::{RelationFamilyFilter, SavedSceneV1};
+use muniment::IndexedDbBackend;
 use uuid::Uuid;
 use web_events::{install_events, schedule_frames};
 use web_gpu::GpuPresenter;
@@ -106,6 +107,10 @@ struct BrowserHost {
     detail_open: bool,
     action_count: u32,
     action_status: String,
+    action_draft: Option<ActionDraft>,
+    action_draft_target: Option<ActionDraftTarget>,
+    rendered_action_draft: Option<ActionDraftSemantics>,
+    action_draft_semantics_ready: bool,
     width: u32,
     height: u32,
     product_status: String,
@@ -177,6 +182,7 @@ impl BrowserHost {
             product_status,
             arrangement,
             physics_paused,
+            action_draft: self.action_draft.as_ref().map(ActionDraft::semantics),
         }
     }
 
@@ -282,6 +288,7 @@ impl BrowserHost {
             }
             "close-detail" => self.detail_open = false,
             "invoke-action" => self.invoke_action(),
+            "submit-action-draft" => self.submit_action_draft(),
             "zoom-in" => self.zoom(40.0),
             "zoom-out" => self.zoom(-40.0),
             "pan-left" => self.pan(-42.0, 0.0),
@@ -315,6 +322,11 @@ impl BrowserHost {
     }
 
     fn invoke_action(&mut self) {
+        if self.active == ActiveSession::Remote {
+            self.open_remote_action_draft();
+            self.detail_open = true;
+            return;
+        }
         self.handler_id =
             web_product::selected_handler().unwrap_or_else(|_| self.handler_id.clone());
         let address = self
@@ -322,13 +334,10 @@ impl BrowserHost {
             .and_then(|id| self.app.host.graph().get_node_by_id(id))
             .map(|(_, node)| node.url().to_string())
             .unwrap_or_else(|| FIXTURE_WEB_ADDRESS.to_string());
-        let result = match self.active {
-            ActiveSession::Local => self
-                .app
-                .open_address(&address, &self.handler_id)
-                .map_err(|error| error.to_string()),
-            ActiveSession::Remote => self.invoke_remote_action(),
-        };
+        let result = self
+            .app
+            .open_address(&address, &self.handler_id)
+            .map_err(|error| error.to_string());
         self.action_count = self.action_count.saturating_add(1);
         self.action_status = match result {
             Ok(IntentResult::Accepted)
@@ -354,35 +363,118 @@ impl BrowserHost {
         self.detail_open = true;
     }
 
-    fn invoke_remote_action(&mut self) -> Result<IntentResult, String> {
-        let mounted = self
+    fn open_remote_action_draft(&mut self) {
+        let Some((observed_epoch, observed_revision)) = self
             .app
             .client
             .mounted(&self.remote_session)
-            .ok_or("remote projection is not mounted")?;
-        let tree = self
-            .app
-            .client
-            .accessibility_tree(
-                &self.remote_session,
-                &CapabilityProfile::new([
-                    PresentationCapability::PortableCard,
-                    PresentationCapability::Image,
-                ]),
-            )
-            .map_err(|error| format!("{error:?}"))?;
-        let item = tree.children.first().ok_or("remote tree is empty")?;
-        let action = item.actions.first().ok_or("remote item has no action")?;
-        self.remote
-            .invoke(IntentInvocation {
-                session: self.remote_session.clone(),
-                target: item.instance,
-                observed_epoch: mounted.scene.epoch,
-                observed_revision: mounted.scene.revision,
-                intent: action.intent.0.clone(),
-                payload: Vec::new(),
-            })
-            .map_err(|error| error.to_string())
+            .map(|mounted| (mounted.scene.epoch, mounted.scene.revision))
+        else {
+            self.action_status = "Failed · remote projection is not mounted".to_string();
+            return;
+        };
+        let tree = match self.app.client.accessibility_tree(
+            &self.remote_session,
+            &CapabilityProfile::new([
+                PresentationCapability::PortableCard,
+                PresentationCapability::Image,
+            ]),
+        ) {
+            Ok(tree) => tree,
+            Err(error) => {
+                self.action_status = format!("Failed · remote accessibility tree: {error:?}");
+                return;
+            }
+        };
+        let Some((target, action)) = tree.children.iter().find_map(|item| {
+            item.actions
+                .iter()
+                .find(|action| action.input_form.is_some())
+                .cloned()
+                .map(|action| (item.instance, action))
+        }) else {
+            self.action_status =
+                "Failed · remote projection advertises no bounded action form".to_string();
+            return;
+        };
+        self.action_status = format!("Choose values · {}", action.label);
+        self.action_draft = Some(ActionDraft::new(action));
+        self.action_draft_target = Some(ActionDraftTarget {
+            session: self.remote_session.clone(),
+            target,
+            observed_epoch,
+            observed_revision,
+        });
+    }
+
+    fn choose_action_draft(&mut self, field: &str, value: &str) {
+        let Some(draft) = self.action_draft.as_mut() else {
+            self.action_status = "Failed · no remote action draft is open".to_string();
+            return;
+        };
+        self.action_status = match draft.choose(field, value) {
+            Ok(()) => format!("Selected {field}"),
+            Err(error) => format!("Choose values · {error}"),
+        };
+        self.chrome_dirty = true;
+    }
+
+    fn submit_action_draft(&mut self) {
+        let Some(target) = self.action_draft_target.clone() else {
+            self.action_status = "Failed · no remote action draft target is open".to_string();
+            return;
+        };
+        let Some(draft) = self.action_draft.as_mut() else {
+            self.action_status = "Failed · no remote action draft is open".to_string();
+            return;
+        };
+        let invocation = match draft.invocation(&target) {
+            Ok(invocation) => invocation,
+            Err(error) => {
+                self.action_status = format!("Choose required values · {error}");
+                self.detail_open = true;
+                return;
+            }
+        };
+        self.action_count = self.action_count.saturating_add(1);
+        match self.remote.invoke(invocation) {
+            Ok(IntentResult::Accepted) => match self.remote.snapshot(self.remote.request()) {
+                Ok(snapshot) => match self.app.mount_remote(snapshot) {
+                    Ok(_) => {
+                        let revision = self
+                            .app
+                            .client
+                            .mounted(&self.remote_session)
+                            .map(|mounted| mounted.scene.revision.0)
+                            .unwrap_or_default();
+                        self.action_status = format!(
+                            "Accepted · resnapshotted revision {revision} · {} invocation(s)",
+                            self.action_count
+                        );
+                        self.action_draft = None;
+                        self.action_draft_target = None;
+                    }
+                    Err(error) => {
+                        self.action_status =
+                            format!("Accepted · failed to mount resnapshot: {error}");
+                    }
+                },
+                Err(error) => {
+                    self.action_status =
+                        format!("Accepted · failed to request resnapshot: {error}");
+                }
+            },
+            Ok(IntentResult::Stale { .. }) => {
+                self.action_status = "Stale · reopen the remote action form".to_string();
+                self.action_draft = None;
+                self.action_draft_target = None;
+            }
+            Ok(IntentResult::Rejected { reason }) => {
+                self.action_status = format!("Rejected · {reason}");
+            }
+            Err(error) => self.action_status = format!("Failed · {error}"),
+        }
+        self.detail_open = true;
     }
 
     fn pointer_position(&self, x: i32, y: i32) -> (f32, f32) {
@@ -429,6 +521,178 @@ fn set_attr(element: &Element, name: &str, value: &str) -> Result<(), String> {
     element
         .set_attribute(name, value)
         .map_err(|_| format!("could not set {name} on #{}", element.id()))
+}
+
+/// Rebuild the browser's semantic controls from the same renderer-neutral
+/// draft that Cambium paints. Endpoint fields and choices stay opaque values;
+/// this bridge only gives their advertised labels a native HTML control.
+fn update_action_draft_semantics(
+    document: &Document,
+    draft: Option<&ActionDraftSemantics>,
+) -> Result<(), String> {
+    let surface = element(document, "action-draft-surface")?;
+    surface.set_text_content(None);
+    let body = document.body().ok_or("document has no body")?;
+    let Some(draft) = draft else {
+        surface
+            .set_attribute("hidden", "")
+            .map_err(|_| "could not hide action draft surface")?;
+        surface
+            .set_attribute("aria-hidden", "true")
+            .map_err(|_| "could not hide action draft semantics")?;
+        body.set_attribute("data-action-draft-open", "false")
+            .map_err(|_| "could not expose closed action draft")?;
+        body.remove_attribute("data-action-draft-fields")
+            .map_err(|_| "could not clear action draft fields")?;
+        body.remove_attribute("data-action-draft-error")
+            .map_err(|_| "could not clear action draft error")?;
+        return Ok(());
+    };
+    surface
+        .remove_attribute("hidden")
+        .map_err(|_| "could not show action draft surface")?;
+    surface
+        .set_attribute("aria-hidden", "false")
+        .map_err(|_| "could not expose action draft semantics")?;
+    let title = document
+        .create_element("h2")
+        .map_err(|_| "could not create action draft title")?;
+    title.set_text_content(Some(&draft.label));
+    surface
+        .append_child(&title)
+        .map_err(|_| "could not append action draft title")?;
+    let explanation = document
+        .create_element("p")
+        .map_err(|_| "could not create action draft explanation")?;
+    explanation.set_text_content(Some(&draft.explanation));
+    surface
+        .append_child(&explanation)
+        .map_err(|_| "could not append action draft explanation")?;
+
+    for (field_index, field) in draft.fields.iter().enumerate() {
+        let fieldset = document
+            .create_element("fieldset")
+            .map_err(|_| "could not create action field")?;
+        let legend = document
+            .create_element("legend")
+            .map_err(|_| "could not create action field label")?;
+        let requirement = if field.required {
+            "required"
+        } else {
+            "optional"
+        };
+        legend.set_text_content(Some(&format!("{} ({requirement})", field.label)));
+        fieldset
+            .append_child(&legend)
+            .map_err(|_| "could not append action field label")?;
+        let description_id = format!("action-draft-help-{field_index}");
+        let description = document
+            .create_element("p")
+            .map_err(|_| "could not create action field description")?;
+        description
+            .set_attribute("id", &description_id)
+            .map_err(|_| "could not name action field description")?;
+        description.set_text_content(Some(&field.description));
+        fieldset
+            .append_child(&description)
+            .map_err(|_| "could not append action field description")?;
+        let select = document
+            .create_element("select")
+            .map_err(|_| "could not create action field select")?;
+        select
+            .set_attribute("data-action-draft-field", &field.name)
+            .map_err(|_| "could not name action field select")?;
+        select
+            .set_attribute("aria-label", &field.label)
+            .map_err(|_| "could not label action field select")?;
+        select
+            .set_attribute("aria-describedby", &description_id)
+            .map_err(|_| "could not describe action field select")?;
+        if field.required {
+            select
+                .set_attribute("required", "")
+                .map_err(|_| "could not require action field select")?;
+        }
+        if !field.choices.iter().any(|choice| choice.selected) {
+            let placeholder = document
+                .create_element("option")
+                .map_err(|_| "could not create action choice placeholder")?;
+            placeholder
+                .set_attribute("value", "")
+                .map_err(|_| "could not set action choice placeholder")?;
+            placeholder
+                .set_attribute("disabled", "")
+                .map_err(|_| "could not disable action choice placeholder")?;
+            placeholder
+                .set_attribute("selected", "")
+                .map_err(|_| "could not select action choice placeholder")?;
+            placeholder.set_text_content(Some("Choose an advertised value"));
+            select
+                .append_child(&placeholder)
+                .map_err(|_| "could not append action choice placeholder")?;
+        }
+        for choice in &field.choices {
+            let option = document
+                .create_element("option")
+                .map_err(|_| "could not create action choice")?;
+            option
+                .set_attribute("value", &choice.value)
+                .map_err(|_| "could not set action choice value")?;
+            if choice.selected {
+                option
+                    .set_attribute("selected", "")
+                    .map_err(|_| "could not select action choice")?;
+            }
+            option.set_text_content(Some(&choice.label));
+            select
+                .append_child(&option)
+                .map_err(|_| "could not append action choice")?;
+        }
+        fieldset
+            .append_child(&select)
+            .map_err(|_| "could not append action field select")?;
+        surface
+            .append_child(&fieldset)
+            .map_err(|_| "could not append action field")?;
+    }
+    if let Some(error) = &draft.error {
+        let error_node = document
+            .create_element("p")
+            .map_err(|_| "could not create action draft error")?;
+        error_node
+            .set_attribute("role", "alert")
+            .map_err(|_| "could not identify action draft error")?;
+        error_node.set_text_content(Some(error));
+        surface
+            .append_child(&error_node)
+            .map_err(|_| "could not append action draft error")?;
+    }
+    let submit = document
+        .create_element("button")
+        .map_err(|_| "could not create action draft submit")?;
+    submit
+        .set_attribute("type", "button")
+        .map_err(|_| "could not set action draft submit type")?;
+    submit
+        .set_attribute("data-action-draft-submit", "")
+        .map_err(|_| "could not identify action draft submit")?;
+    submit.set_text_content(Some(&draft.submit_label));
+    surface
+        .append_child(&submit)
+        .map_err(|_| "could not append action draft submit")?;
+
+    body.set_attribute("data-action-draft-open", "true")
+        .map_err(|_| "could not expose open action draft")?;
+    body.set_attribute("data-action-draft-fields", &draft.fields.len().to_string())
+        .map_err(|_| "could not expose action draft fields")?;
+    if let Some(error) = &draft.error {
+        body.set_attribute("data-action-draft-error", error)
+            .map_err(|_| "could not expose action draft error")?;
+    } else {
+        body.remove_attribute("data-action-draft-error")
+            .map_err(|_| "could not clear action draft error")?;
+    }
+    Ok(())
 }
 
 fn global_json(window: &Window, name: &str) -> Result<Option<String>, String> {
@@ -658,6 +922,13 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     set_text(&document, "detail-title", &model.selection);
     set_text(&document, "detail-address", &model.detail_address);
     set_text(&document, "action-status", &host.action_status);
+    if !host.action_draft_semantics_ready
+        || model.action_draft != host.rendered_action_draft
+    {
+        update_action_draft_semantics(&document, model.action_draft.as_ref())?;
+        host.rendered_action_draft = model.action_draft.clone();
+        host.action_draft_semantics_ready = true;
+    }
     set_text(
         &document,
         "capture-attribution",
@@ -838,6 +1109,7 @@ async fn run() -> Result<(), String> {
         product_status: product_status.clone(),
         arrangement: "phyllotaxis.default".to_string(),
         physics_paused: false,
+        action_draft: None,
     };
     let chrome_scene = build_chrome_scene(initial_model, width, height)?;
     let state = Rc::new(RefCell::new(BrowserHost {
@@ -853,6 +1125,10 @@ async fn run() -> Result<(), String> {
         detail_open: false,
         action_count: 0,
         action_status: "Ready".to_string(),
+        action_draft: None,
+        action_draft_target: None,
+        rendered_action_draft: None,
+        action_draft_semantics_ready: false,
         width,
         height,
         product_status,

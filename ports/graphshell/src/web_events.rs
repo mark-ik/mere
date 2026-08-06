@@ -5,7 +5,9 @@ use std::rc::Rc;
 
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::Closure;
-use web_sys::{Element, Event, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent};
+use web_sys::{
+    Element, Event, HtmlSelectElement, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent,
+};
 
 use super::{ActiveSession, BrowserHost, document, update_semantics, window};
 
@@ -103,6 +105,12 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         else {
             return;
         };
+        if target.has_attribute("data-action-draft-submit") {
+            let mut host = click_state.borrow_mut();
+            host.run_command("submit-action-draft");
+            let _ = update_semantics(&mut host);
+            return;
+        }
         let Some(command) = target.get_attribute("data-command") else {
             return;
         };
@@ -115,8 +123,38 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         .map_err(|_| "could not attach command listener")?;
     click.forget();
 
+    let change_state = state.clone();
+    let change = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+        let Some(select) = event
+            .target()
+            .and_then(|target| target.dyn_into::<HtmlSelectElement>().ok())
+        else {
+            return;
+        };
+        let Some(field) = select.get_attribute("data-action-draft-field") else {
+            return;
+        };
+        let mut host = change_state.borrow_mut();
+        host.choose_action_draft(&field, &select.value());
+        let _ = update_semantics(&mut host);
+    });
+    document()?
+        .add_event_listener_with_callback("change", change.as_ref().unchecked_ref())
+        .map_err(|_| "could not attach action-draft change listener")?;
+    change.forget();
+
     let key_state = state.clone();
     let keydown = Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {
+        if event
+            .target()
+            .and_then(|target| target.dyn_into::<Element>().ok())
+            .is_some_and(|target| {
+                target.has_attribute("data-action-draft-field")
+                    || target.has_attribute("data-action-draft-submit")
+            })
+        {
+            return;
+        }
         let command = match event.key().as_str() {
             "ArrowLeft" => "pan-left",
             "ArrowRight" => "pan-right",

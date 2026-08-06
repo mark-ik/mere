@@ -25,7 +25,7 @@ archived donor rename required by G0.
 - byte-for-byte comparison of fresh output with
   [`receipts/g1_loopback.html`](receipts/g1_loopback.html)
 - headed browser inspection at 1440 × 1000 and 390 × 844: equal desktop
-  columns, stacked narrow columns, four tabbable actions, decoded map image,
+  columns, stacked narrow columns, six tabbable actions, decoded map image,
   zero horizontal overflow, and zero browser warnings or errors
 
 ## Deliberate limits

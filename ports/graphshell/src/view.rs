@@ -449,6 +449,10 @@ mod tests {
         assert!(html.contains("Image capability unavailable"));
         assert_eq!(html.matches("data-intent=\"fixture.open-note\"").count(), 2);
         assert_eq!(
+            html.matches("data-intent=\"fixture.open-live-view\"").count(),
+            2
+        );
+        assert_eq!(
             html.matches("data-intent=\"fixture.inspect-tile\"").count(),
             2
         );

@@ -23,19 +23,11 @@ use sceno::{
     SourceRef, Transform2, Vec2,
 };
 use scenotime::{Revision, SceneEpoch, SceneSnapshot};
-use serde::Deserialize;
 
 const FIXTURE_SESSION: &str = "loopback:g1-presentation";
 const INSPECT_TILE_SCHEMA: &str = "graphshell.fixture/inspect-tile/v1";
 const OPEN_LIVE_VIEW_INTENT: &str = "fixture.open-live-view";
 const FIXTURE_PUBLIC_LIVE_VIEW: &str = "eidetic:fixture-public-view";
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct InspectTilePayload {
-    schema: String,
-    inspection_scope: String,
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanaryError {
@@ -363,30 +355,44 @@ impl IntentSink for FixtureEndpoint {
                 current_revision: self.snapshot.scene.revision,
             });
         }
-        Ok(match intent.intent.as_str() {
-            "fixture.open-note" => IntentResult::Accepted,
-            OPEN_LIVE_VIEW_INTENT => resolve_live_view_reference(&intent.payload, self),
+        match intent.intent.as_str() {
+            "fixture.open-note" => Ok(IntentResult::Accepted),
+            OPEN_LIVE_VIEW_INTENT => Ok(resolve_live_view_reference(&intent.payload, self)),
             "fixture.inspect-tile" => {
-                match serde_json::from_slice::<InspectTilePayload>(&intent.payload) {
-                    Ok(payload)
-                        if payload.schema == INSPECT_TILE_SCHEMA
-                            && matches!(
-                                payload.inspection_scope.as_str(),
-                                "outline" | "coordinates"
-                            ) =>
+                match serde_json::from_slice::<serde_json::Value>(&intent.payload) {
+                    Ok(payload) if valid_inspect_tile_payload(&payload) =>
                     {
-                        IntentResult::Accepted
+                        // The endpoint, not the host, advances the projection after
+                        // accepting the bounded inspection request. The host must
+                        // ask for and apply a fresh snapshot before it can invoke
+                        // another action at this position.
+                        self.snapshot.scene.revision.0 += 1;
+                        Ok(IntentResult::Accepted)
                     }
-                    _ => IntentResult::Rejected {
+                    _ => Ok(IntentResult::Rejected {
                         reason: "inspect tile requires one advertised inspection scope".into(),
-                    },
+                    }),
                 }
             }
-            _ => IntentResult::Rejected {
+            _ => Ok(IntentResult::Rejected {
                 reason: "intent was not advertised by this projection".into(),
-            },
-        })
+            }),
+        }
     }
+}
+
+fn valid_inspect_tile_payload(payload: &serde_json::Value) -> bool {
+    let Some(object) = payload.as_object() else {
+        return false;
+    };
+    object.len() == 2
+        && object.get("schema").and_then(serde_json::Value::as_str) == Some(INSPECT_TILE_SCHEMA)
+        && matches!(
+            object
+                .get("inspection_scope")
+                .and_then(serde_json::Value::as_str),
+            Some("outline" | "coordinates")
+        )
 }
 
 /// The result of one complete in-memory projection and resource exchange.
@@ -530,8 +536,18 @@ mod tests {
             endpoint.invoke(invoke(payload)).unwrap(),
             IntentResult::Accepted
         );
+        let fresh = endpoint.snapshot(endpoint.request()).unwrap();
         assert!(matches!(
-            endpoint.invoke(invoke(Vec::new())).unwrap(),
+            endpoint
+                .invoke(IntentInvocation {
+                    session: fresh.session.clone(),
+                    target: InstanceId(1),
+                    observed_epoch: fresh.scene.epoch,
+                    observed_revision: fresh.scene.revision,
+                    intent: action.intent.0.clone(),
+                    payload: Vec::new(),
+                })
+                .unwrap(),
             IntentResult::Rejected { .. }
         ));
     }
