@@ -1258,11 +1258,43 @@ apply local, so the sync lane plus the admitted browser broker suffice.
   payload the host expects, and refuses an empty selection, an unadvertised
   transfer id, an unadvertised field, and a mismatched schema.
 
-  Still open in S3: the recorded
-  `navigator.storage.persist()` grant, promotion of destination staging into a
-  recovery pin, and the blob-reference-set intent pair that pin release
-  depends on. Also unbatched: staging authors one operation per blob, which is
-  fine for a handful and worth batching before a transfer carries many.
+  **The persistence grant landed 2026-08-06** (in commit `5216915f`, whose
+  message is about carriers: two agents shared one working tree and this rode
+  along, so it is recorded here rather than findable by log message).
+
+  `storage_status` already reached the DOM as `data-storage`, but it reported
+  which store was open, not whether the browser would keep it. "IndexedDB
+  reopened" reads as durable and is not.
+
+  `browser_storage` holds the part with no browser in it, because `web.rs` has
+  no test harness and cannot grow one without a browser. Three states, not
+  two: `Granted`, `Refused`, and `Unknown(reason)`. An insecure context, an
+  older browser, and a call that rejected are all "we could not ask", which is
+  a different fact from "the browser said no", and reporting the second as the
+  first is a guess presented as knowledge. `is_durable()` is true only for
+  `Granted`, asserted, because treating an unanswered question as a yes is the
+  failure the type exists to prevent.
+
+  Wording follows the ruling that unpersisted storage be presented honestly: a
+  refusal reads "not persistent, may be evicted" rather than "not persisted",
+  which sounds like a setting somebody forgot rather than bytes that can
+  vanish. `status_line` always pairs the store with its durability, since
+  either half alone misleads. A `data-storage-persistence` attribute carries a
+  stable token beside the sentence, so a scenario reads a state rather than
+  parsing prose that is allowed to change.
+
+  Asked once at open, and not re-asked when already granted. The recovery
+  replica is what makes a refusal survivable, which is why refusing is
+  reported rather than treated as a failure to start.
+
+  Still open in S3: promotion of destination staging into a recovery pin, and
+  the blob-reference-set intent pair that pin release depends on. That work is
+  larger than it reads: `put_bytes` tags every blob permanently and no GC is
+  wired, so there is exactly one state today and everything is kept forever.
+  Introducing pins means introducing the *distinction*, then wiring collection
+  to honour it, with the reference-set intent working before GC ever runs.
+  Also unbatched: staging authors one operation per blob, which is fine for a
+  handful and worth batching before a transfer carries many.
 
 **Not in scope:** cross-persona copy authorization UX; the carrier seam
 plan's C3 (independent, about projection sessions); Turnstone (holds no
