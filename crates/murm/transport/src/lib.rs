@@ -48,6 +48,8 @@ pub mod memory;
 pub mod notochord;
 pub mod p2panda_transport;
 mod peer_id;
+#[cfg(feature = "noise")]
+pub mod noise_transport;
 #[cfg(feature = "reticulum")]
 pub mod reticulum_transport;
 mod transport;

@@ -985,6 +985,7 @@ impl KnotEndpoint {
                     label: "Save".into(),
                     explanation: "Write this document through Knot authority.".into(),
                     payload_schema: EDITABLE_TEXT_SAVE_SCHEMA.into(),
+                    input_form: None,
                     effect: IntentEffect::DomainTruth,
                 });
                 editable_semantics.actions.push(AdvertisedAction {
@@ -994,6 +995,7 @@ impl KnotEndpoint {
                         "Append a semantic clip with structured source provenance through Knot authority."
                             .into(),
                     payload_schema: KNOT_CLIP_INSERT_SCHEMA.into(),
+                    input_form: None,
                     effect: IntentEffect::DomainTruth,
                 });
                 if self.effects.as_ref().is_some_and(|effects| {
@@ -1006,6 +1008,7 @@ impl KnotEndpoint {
                             "Fetch admitted include fences into a temporary derived preview."
                                 .into(),
                         payload_schema: KNOT_TRANSCLUSION_RESOLVE_SCHEMA.into(),
+                        input_form: None,
                         effect: IntentEffect::ExternalEffect,
                     });
                 }
@@ -1026,6 +1029,7 @@ impl KnotEndpoint {
                             "Evaluate admitted code fences into a temporary derived preview."
                                 .into(),
                         payload_schema: KNOT_BLOCK_RUN_SCHEMA.into(),
+                        input_form: None,
                         effect: IntentEffect::ExternalEffect,
                     });
                 }

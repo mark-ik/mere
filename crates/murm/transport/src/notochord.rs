@@ -20,6 +20,9 @@ fn carrier_of(transport: TransportKind) -> CarrierKind {
         TransportKind::Memory => CarrierKind::Memory,
         TransportKind::P2panda => CarrierKind::P2panda,
         TransportKind::Reticulum => CarrierKind::Reticulum,
+        // notochord has no Noise-specific vocabulary, and inventing one here
+        // would claim knowledge that crate does not have.
+        TransportKind::Noise => CarrierKind::Other,
     }
 }
 

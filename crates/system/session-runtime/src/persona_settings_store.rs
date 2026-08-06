@@ -1,8 +1,9 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Per-persona UI settings — the persona-scoped configuration the shell's UI reads and
-//! writes, distinct from the app-scoped [`settings_store`](crate::settings_store) sidecar.
+//! Per-persona UI settings — persona-scoped configuration the shell's UI reads and
+//! writes, distinct from the session/dataspace [`settings_store`](crate::settings_store)
+//! sidecar and the application/device stores.
 //!
 //! Path: `<data_root>/personas/<persona_id>/settings/ui.json`, under the same
 //! `personas/<id>/` root the engine-profile boundary uses (so a persona's engine UDFs,
@@ -23,7 +24,7 @@ use crate::engine_profile_store::PERSONAS_DIR;
 use crate::manifest::PersonaId;
 use crate::memory_levels::EvictionPolicy;
 
-/// Subdirectory under a persona holding its UI / app settings.
+/// Subdirectory under a persona holding persona settings.
 pub const PERSONA_SETTINGS_DIR: &str = "settings";
 
 /// The persona UI settings file under [`PERSONA_SETTINGS_DIR`].
@@ -33,27 +34,31 @@ pub const PERSONA_UI_FILENAME: &str = "ui.json";
 /// file still parses and falls back to the host's defaults.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonaSettings {
-    /// The context menu's command ids, in order — the user's curated menu (command registry
-    /// P4). `None` = the host's default menu; `Some(list)` = this persona's curation. Each id
-    /// is a registry id (a `Command` verb or a context-action id).
+    /// scope=persona; movement=persona-synced opt-in; mutability=live;
+    /// security=ordinary. The context menu's command ids, in order — the user's curated menu
+    /// (command registry P4). `None` = the host's default menu; `Some(list)` = this persona's
+    /// curation. Each id is a registry id (a `Command` verb or a context-action id).
     #[serde(default)]
     pub menu_actions: Option<Vec<String>>,
-    /// How many times each registry command has been invoked — the frequency signal behind the
-    /// context menu's auto-suggestions (command registry S3). Keyed by registry id (a `Command`
-    /// verb or a context-action id), a `BTreeMap` for a deterministic on-disk order. Empty until
-    /// the first command runs.
+    /// scope=persona; movement=persona-synced opt-in; mutability=live;
+    /// security=ordinary. How many times each registry command has been invoked — the frequency
+    /// signal behind the context menu's auto-suggestions (command registry S3). Keyed by registry
+    /// id (a `Command` verb or a context-action id), a `BTreeMap` for deterministic on-disk order.
+    /// Empty until the first command runs.
     #[serde(default)]
     pub command_usage: std::collections::BTreeMap<String, u32>,
-    /// The short-term memory eviction policy (the Alembic Recent header's editable control,
-    /// B4). Absent / older file falls back to the host default (`KeepDays(30)`).
+    /// scope=persona; movement=persona-synced opt-in; mutability=live;
+    /// security=ordinary. The short-term memory eviction policy (the Alembic Recent header's
+    /// editable control, B4). Absent / older file falls back to the host default (`KeepDays(30)`).
     #[serde(default)]
     pub eviction_policy: EvictionPolicy,
-    /// The number of times this persona's app has launched, incremented once at boot and
-    /// saved back immediately (not on a debounce — a crash between increment and save
-    /// just under-counts by one launch, never duplicates a count). The host stamps each
-    /// navigated node's [`PersistedNode::last_session_visited`](kernel::persistence::PersistedNode::last_session_visited)
-    /// with this value, so `0` is reserved for "never stamped" and the first real launch
-    /// is `1`. (Alembic B5 — by-sessions eviction.)
+    /// scope=persona; movement=local-only; mutability=live; security=ordinary. Runtime
+    /// bookkeeping riding in the persona settings file: incremented once at boot and saved back
+    /// immediately. A crash between increment and save just under-counts by one launch, never
+    /// duplicates a count. The host stamps each navigated node's
+    /// [`PersistedNode::last_session_visited`](kernel::persistence::PersistedNode::last_session_visited)
+    /// with this value, so `0` is reserved for "never stamped" and the first real launch is `1`.
+    /// (Alembic B5 — by-sessions eviction.)
     #[serde(default)]
     pub session_count: u64,
 }

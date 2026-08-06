@@ -193,6 +193,9 @@ pub struct LaneSettings {
     pub facets: Vec<String>,
     pub access_records: bool,
     pub saved_scenes: bool,
+    /// scope=persona; movement=persona-synced opt-in; mutability=live;
+    /// security=ordinary. Handler preferences are public ids, never secret
+    /// material.
     pub handler_preferences: bool,
     pub blob_availability: bool,
 }

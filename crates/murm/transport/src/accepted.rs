@@ -35,6 +35,9 @@ pub enum TransportKind {
     P2panda,
     /// Reticulum, over any retinue interface (TCP, direct PHY, ...).
     Reticulum,
+    /// Noise over plain TCP: encrypted and mutually authenticated with no
+    /// certificate machinery.
+    Noise,
 }
 
 /// Opaque local identifier for the interface a session arrived on.
@@ -74,6 +77,12 @@ impl IngressContext {
     /// Context for a p2panda connection.
     pub fn p2panda() -> Self {
         Self::bare(TransportKind::P2panda)
+    }
+
+    /// Context for a Noise session. Noise over TCP has neither an interface
+    /// number nor a link identity, so both stay absent rather than invented.
+    pub fn noise() -> Self {
+        Self::bare(TransportKind::Noise)
     }
 
     /// Context for a Reticulum link, carrying the interface it arrived on and

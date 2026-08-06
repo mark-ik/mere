@@ -15,6 +15,10 @@ categories = ["network-programming"]
 # default; enable to build and test `ReticulumTransport`. Backed by `retinue`,
 # Mark's own RNS implementation; `hkdf`/`sha2` derive the retinue identity.
 reticulum = ["dep:retinue", "dep:hkdf", "dep:sha2"]
+# A Noise carrier over plain TCP: encrypted and mutually authenticated with no
+# certificate machinery. Off by default; it is an alternative to the iroh and
+# reticulum lanes, not a dependency of them.
+noise = ["dep:snow", "dep:hkdf", "dep:sha2"]
 # Conversion from this crate's acceptance record into the notochord
 # layer's carrier facts. The dependency runs in this direction on purpose:
 # `notochord` stays carrier-neutral and never learns about iroh, p2panda,
@@ -31,6 +35,7 @@ path = "src/lib.rs"
 identity.workspace = true
 # `time` paces `endpoint_addr`'s brief wait for iroh's interface discovery.
 tokio = { version = "1", features = ["io-util", "sync", "rt", "macros", "time"] }
+snow = { version = "0.10", optional = true }
 thiserror = "1"
 tracing = "0.1"
 # iroh 1.0 wraps quinn QUIC. The 1.0.3 floor matters: 1.0.2 exact-pinned

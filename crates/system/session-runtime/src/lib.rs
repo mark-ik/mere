@@ -115,15 +115,17 @@ pub mod manifest_store;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod session_graph_store;
 pub mod session_service_runner;
-// Session-wide settings sidecar (settings.json). A flat JSON document beside
-// graph.json; the host loads it on launch and saves on change.
+// Session/dataspace settings sidecar (settings.json). A flat JSON document beside
+// graph.json; the host loads it on launch and saves on change. Application and
+// device preferences have their own stores and must not travel with it.
 pub mod settings_store;
 // DocumentScript origin->component bindings sidecar (script-bindings.json): the
 // auto-attach list (§11.4 follow-on #2). Native-only (filesystem).
 #[cfg(not(target_arch = "wasm32"))]
 pub mod script_bindings_store;
 // Per-persona UI settings (`personas/<id>/settings/ui.json`) — persona-scoped config
-// distinct from the app-scoped settings_store; first field is the configurable menu.
+// distinct from the session/dataspace settings_store and the application/device
+// stores; first field is the configurable menu.
 pub mod persona_settings_store;
 pub mod switcher_thumbnail;
 // The tear-out payload types (PaneDragPayload/TileDragPayload) moved out

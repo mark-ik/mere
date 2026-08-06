@@ -92,6 +92,9 @@ pub enum PersonalGraphEvent {
         node: Uuid,
         scene: SavedSceneV1,
     },
+    /// scope=persona; movement=persona-synced opt-in; mutability=live;
+    /// security=ordinary. The handler id is a preference, not a credential or
+    /// a secret-bearing payload.
     SetHandlerPreference {
         key: String,
         handler: String,
@@ -175,6 +178,8 @@ pub struct SyncSelection {
     local_device: Option<String>,
     pub access_records: bool,
     pub saved_scenes: bool,
+    /// Opt-in persona preference lane. Disabled by default, so a device can
+    /// retain the operation without projecting the preference locally.
     pub handler_preferences: bool,
     pub blob_availability: bool,
 }
@@ -1388,6 +1393,77 @@ mod tests {
         assert!(alice_projection.conflicts.is_empty());
         assert!(alice_space.sync_status().sync_rounds > 0);
         assert!(bob_space.sync_status().sync_rounds > 0);
+    }
+
+    #[tokio::test]
+    async fn persona_handler_preference_is_opt_in_and_secret_free() {
+        let alice_seed = [0x41; 32];
+        let bob_seed = [0x42; 32];
+        let alice_subject = *SigningKey::from_bytes(&alice_seed)
+            .verifying_key()
+            .as_bytes();
+        let bob_subject = *SigningKey::from_bytes(&bob_seed).verifying_key().as_bytes();
+        let roster = SyncRoster::new([alice_subject, bob_subject]);
+        let mut alice = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            alice_seed,
+            roster.clone(),
+            SyncSelection::default().with_handler_preferences(true),
+        );
+        let bob = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            bob_seed,
+            roster.clone(),
+            SyncSelection::default().with_handler_preferences(true),
+        );
+        let bystander = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            [0x43; 32],
+            roster,
+            SyncSelection::default(),
+        );
+
+        let operation = alice
+            .author(vec![PersonalGraphEvent::SetHandlerPreference {
+                key: "https".into(),
+                handler: "turnstone".into(),
+            }])
+            .await
+            .unwrap();
+        bob.accept(&operation).await.unwrap();
+        bystander.accept(&operation).await.unwrap();
+
+        assert_eq!(
+            bob.projection()
+                .await
+                .unwrap()
+                .handler_preferences
+                .get("https")
+                .map(String::as_str),
+            Some("turnstone")
+        );
+        assert!(
+            bystander
+                .projection()
+                .await
+                .unwrap()
+                .handler_preferences
+                .is_empty(),
+            "the ordinary preference remains opt-in at projection time"
+        );
+
+        let secret = alice
+            .author(vec![PersonalGraphEvent::SetFacet {
+                node: A,
+                facet: "personae.vault-root/v1".into(),
+                value: serde_json::json!("never"),
+            }])
+            .await
+            .unwrap_err();
+        assert!(matches!(secret, PersonalGraphError::Excluded(_)));
     }
 
     #[tokio::test]

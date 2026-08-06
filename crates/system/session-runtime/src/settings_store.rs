@@ -286,7 +286,7 @@ mod tests {
             &PersistedSettings {
                 script_permissions: ScriptPermissionPrefs::default(),
                 crawl_scope: None,
-                crawl_depth: None,
+                crawl_depth: Some(24),
                 crawl_sitemap: None,
                 crawl_max_pages: None,
                 capture_consent: None,
@@ -295,7 +295,7 @@ mod tests {
         )
         .unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
-        assert_eq!(restored.tab_cap, 24);
+        assert_eq!(restored.crawl_depth, Some(24));
         let tmp = settings_path(&dir).with_extension("json.tmp");
         assert!(!tmp.exists(), "no leftover tmp from the atomic write");
         fs::remove_dir_all(&dir).ok();
@@ -303,7 +303,7 @@ mod tests {
 
     #[test]
     fn missing_field_takes_its_default() {
-        // An empty document parses to the default cap (forward-compat: a field
+        // An empty document parses to the default session policy (forward-compat: a field
         // added later still reads an old file).
         let dir = temp_session_dir("default-field");
         fs::write(settings_path(&dir), "{}").unwrap();
