@@ -42,7 +42,6 @@ pub mod profile;
 pub mod resume;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod session_loop;
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod sessions;
 #[cfg(feature = "web")]
 pub mod transfer;

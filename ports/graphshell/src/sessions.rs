@@ -1,25 +1,33 @@
 //! Product-neutral local session mounting for the G4 cross-product proof.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use std::ffi::OsStr;
 use std::fmt::Write;
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use std::path::{Path, PathBuf};
 
 use graphshell_client::{
     ClientState, PresentationResolution, ResolvedPresentation, ResumeApplication,
 };
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use graphshell_protocol::PresentationCapability;
+#[cfg(any(feature = "native", feature = "web"))]
+use graphshell_protocol::{AdvertisedAction, IntentInvocation};
 use graphshell_protocol::{
-    AdvertisedAction, CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody,
-    CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult,
-    PresentationCapability, ProjectionSession, ResumeRequest,
+    CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
+    EndpointDescriptor, IntentResult, ProjectionRequest, ProjectionSession, ResumeRequest,
 };
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use graphshell_stdio::StdioCarrier;
 use sceno::InstanceId;
+#[cfg(any(feature = "native", feature = "web"))]
 use serde::Serialize;
 
-use crate::view::{
-    IntentReceiptView, ProjectionLayoutView, ProjectionReceiptView, render_projection_receipt,
-};
+use crate::action_draft::{ActionDraft, ActionDraftTarget};
+use crate::view::{render_projection_receipt, ProjectionReceiptView};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use crate::view::{IntentReceiptView, ProjectionLayoutView};
 
 /// One mounted endpoint projection and the label used by Graphshell's switcher.
 pub struct SessionProjectionView {
@@ -41,9 +49,11 @@ pub struct RetainedEndpointSession {
     profile: CapabilityProfile,
     descriptor: EndpointDescriptor,
     mounted: BTreeSet<ProjectionSession>,
+    requests: BTreeMap<ProjectionSession, ProjectionRequest>,
 }
 
 impl RetainedEndpointSession {
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     pub fn spawn(
         program: impl AsRef<OsStr>,
         args: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -71,6 +81,7 @@ impl RetainedEndpointSession {
             profile,
             descriptor,
             mounted: BTreeSet::new(),
+            requests: BTreeMap::new(),
         })
     }
 
@@ -92,30 +103,134 @@ impl RetainedEndpointSession {
     /// closed editor must not leave its memory-only source in client state.
     pub fn forget(&mut self, session: &ProjectionSession) {
         self.mounted.remove(session);
+        self.requests.remove(session);
         self.client.forget_session(session);
     }
 
     /// Mount one discovered projection without resolving resources or invoking
     /// any of its actions.
     pub fn mount(&mut self, offer_index: usize) -> Result<ProjectionSession, String> {
-        let offer = self
+        let request = self
             .descriptor
             .projections
             .get(offer_index)
-            .cloned()
+            .map(|offer| offer.request.clone())
             .ok_or_else(|| format!("endpoint has no projection {offer_index}"))?;
         let snapshot = match self
             .carrier_mut()?
-            .request(CarrierRequestBody::Snapshot(offer.request))?
+            .request(CarrierRequestBody::Snapshot(request.clone()))?
         {
             CarrierResponseBody::Snapshot(snapshot) => *snapshot,
             other => return Err(unexpected("snapshot", &other)),
         };
+        self.apply_snapshot(snapshot, request)
+    }
+
+    /// Request a fresh full snapshot using the same projection request that
+    /// mounted this session. This is the simple, source-authoritative recovery
+    /// path after an accepted action when a host is not waiting on notices.
+    pub fn resnapshot(&mut self, session: &ProjectionSession) -> Result<(), String> {
+        let request = self
+            .requests
+            .get(session)
+            .cloned()
+            .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?;
+        let snapshot = match self
+            .carrier_mut()?
+            .request(CarrierRequestBody::Snapshot(request.clone()))?
+        {
+            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
+            other => return Err(unexpected("snapshot", &other)),
+        };
+        if snapshot.session != *session {
+            return Err(format!(
+                "endpoint resnapshot changed session {} to {}",
+                session.0, snapshot.session.0
+            ));
+        }
+        self.apply_snapshot(snapshot, request).map(|_| ())
+    }
+
+    /// Open one endpoint-advertised bounded action form at the client's
+    /// current acknowledgement. The action remains endpoint-authored; this
+    /// method only captures the exact action and the snapshot position that
+    /// may submit it.
+    pub fn open_action_draft(
+        &self,
+        session: &ProjectionSession,
+        target: InstanceId,
+        intent: &str,
+    ) -> Result<(ActionDraft, ActionDraftTarget), String> {
+        let tree = self
+            .client
+            .accessibility_tree(session, &self.profile)
+            .map_err(|error| format!("could not inspect {}: {error:?}", session.0))?;
+        let action = tree
+            .children
+            .iter()
+            .find(|item| item.instance == target)
+            .and_then(|item| item.actions.iter().find(|action| action.intent.0 == intent))
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "intent {intent} was not advertised for {} in {}",
+                    target.0, session.0
+                )
+            })?;
+        if action.input_form.is_none() {
+            return Err(format!(
+                "intent {intent} does not advertise a bounded action form"
+            ));
+        }
+        let acknowledgement = self
+            .client
+            .acknowledgement(session)
+            .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
+        Ok((
+            ActionDraft::new(action),
+            ActionDraftTarget {
+                session: session.clone(),
+                target,
+                observed_epoch: acknowledgement.epoch,
+                observed_revision: acknowledgement.revision,
+            },
+        ))
+    }
+
+    /// Submit a draft composed from endpoint-advertised values. Missing or
+    /// invalid local selections fail before the carrier is touched; endpoint
+    /// authorization, replay, and stale checks remain authoritative.
+    pub fn submit_action_draft(
+        &mut self,
+        target: &ActionDraftTarget,
+        draft: &mut ActionDraft,
+    ) -> Result<IntentResult, String> {
+        if !self.mounted.contains(&target.session) {
+            return Err(format!("Graphshell did not mount {}", target.session.0));
+        }
+        let invocation = draft
+            .invocation(target)
+            .map_err(|error| format!("could not compose advertised action: {error}"))?;
+        match self
+            .carrier_mut()?
+            .request(CarrierRequestBody::Intent(invocation))?
+        {
+            CarrierResponseBody::Intent(result) => Ok(result),
+            other => Err(unexpected("intent result", &other)),
+        }
+    }
+
+    fn apply_snapshot(
+        &mut self,
+        snapshot: graphshell_protocol::ProjectionSnapshot,
+        request: ProjectionRequest,
+    ) -> Result<ProjectionSession, String> {
         let session = snapshot.session.clone();
         self.client
             .apply_snapshot(snapshot)
             .map_err(|error| format!("Graphshell rejected {session:?}: {error:?}"))?;
         self.mounted.insert(session.clone());
+        self.requests.insert(session.clone(), request);
         Ok(session)
     }
 
@@ -173,6 +288,7 @@ impl RetainedEndpointSession {
 
     /// Invoke an action exactly as advertised, using the current client
     /// acknowledgement and a typed, versioned payload.
+    #[cfg(any(feature = "native", feature = "web"))]
     pub fn invoke<T: Serialize>(
         &mut self,
         session: &ProjectionSession,
@@ -289,6 +405,7 @@ impl RetainedEndpointSession {
         for session in std::mem::take(&mut self.mounted) {
             self.client.forget_session(&session);
         }
+        self.requests.clear();
     }
 }
 
@@ -304,6 +421,7 @@ impl Drop for RetainedEndpointSession {
 
 /// Spawn endpoint processes, discover their projections, and mount each one
 /// through the same Graphshell client state machine.
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub fn mount_endpoint_processes(
     programs: &[PathBuf],
 ) -> Result<Vec<SessionProjectionView>, String> {
@@ -314,6 +432,7 @@ pub fn mount_endpoint_processes(
     Ok(sessions)
 }
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 fn mount_endpoint_process(program: &Path) -> Result<Vec<SessionProjectionView>, String> {
     let profile = CapabilityProfile::new([
         PresentationCapability::PortableCard,
@@ -331,6 +450,7 @@ fn mount_endpoint_process(program: &Path) -> Result<Vec<SessionProjectionView>, 
     }
 }
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 fn mount_descriptor(
     retained: &mut RetainedEndpointSession,
 ) -> Result<Vec<SessionProjectionView>, String> {
@@ -371,6 +491,7 @@ fn mount_descriptor(
 
 /// Block for one endpoint revision bell, mark the mounted scene stale, and
 /// recover through the ordinary revision-addressed resume path.
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub fn wait_for_session_change(
     carrier: &mut StdioCarrier,
     client: &mut ClientState,
@@ -421,6 +542,7 @@ pub fn resume_request_for_notice(
     Ok(client.resume_request(&notice.session))
 }
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 fn invoke_advertised_actions(
     carrier: &mut (dyn Carrier + 'static),
     client: &ClientState,
@@ -463,6 +585,7 @@ fn invoke_advertised_actions(
     Ok(receipts)
 }
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 fn intent_receipt(label: String, result: IntentResult) -> IntentReceiptView {
     match result {
         IntentResult::Accepted => IntentReceiptView {
