@@ -217,6 +217,26 @@ impl GraphKeyGroup {
     }
 }
 
+/// Which group member belongs to a Personae root, read off the lane.
+///
+/// Unpairing knows a device by its transport node id and its Personae root;
+/// the key group knows it by a recipient id derived from its pre-key. Nothing
+/// persists that mapping, and nothing needs to: pre-keys are plaintext and
+/// retained, so the lane can always be asked again. A device that re-publishes
+/// simply resolves again.
+///
+/// A root with no pre-key on the lane is `None`, which is the ordinary state
+/// of a device that was paired but never joined the key group.
+pub fn recipient_for_root(steps: &[KeyAgreementStep], root: [u8; 32]) -> Option<GroupRecipientId> {
+    steps.iter().rev().find_map(|step| {
+        let KeyAgreementEvent::Prekey(bundle) = &step.step else {
+            return None;
+        };
+        let bundle = GroupPrekeyBundle::from_bytes(bundle).ok()?;
+        (bundle.personae_root().ok()? == root).then_some(bundle.recipient)
+    })
+}
+
 /// What one pass over the lane's key traffic changed.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AbsorbReport {
@@ -476,5 +496,43 @@ mod tests {
             author_root: identity.master_public_key().to_bytes(),
             step: inner,
         }
+    }
+
+    /// Unpair knows a root; the key group knows a recipient. The lane is what
+    /// joins them, and it can always be asked again.
+    #[test]
+    fn a_root_resolves_to_the_recipient_that_published_for_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let (owner_identity, owner) = open_device(0xa5, dir.path());
+        let (sibling_identity, sibling) = open_device(0xa6, other.path());
+
+        let published: Vec<KeyAgreementStep> = [
+            (&owner_identity, owner.publish.unwrap()),
+            (&sibling_identity, sibling.publish.unwrap()),
+        ]
+        .into_iter()
+        .map(|(identity, bundle)| {
+            step(
+                identity,
+                &PersonalGraphEvent::PublishPrekey {
+                    bundle: bundle.to_bytes().unwrap(),
+                },
+            )
+        })
+        .collect();
+
+        use personae::IdentityProvider;
+        assert_eq!(
+            recipient_for_root(&published, sibling_identity.master_public_key().to_bytes()),
+            Some(sibling.group.member())
+        );
+        assert_eq!(
+            recipient_for_root(&published, owner_identity.master_public_key().to_bytes()),
+            Some(owner.group.member())
+        );
+        // A device paired but never joined has nothing to revoke, which is not
+        // an error: it is the ordinary state of most paired devices.
+        assert_eq!(recipient_for_root(&published, [0xff; 32]), None);
     }
 }
