@@ -28,7 +28,7 @@ boundary. The radio, Reticulum, and queue work lands in the Retinue workspace.
 ## Related work
 
 - The
-  [`2026-07-26_notochord_session_policy_spine_plan.md`](./2026-07-26_notochord_session_policy_spine_plan.md)
+  [`2026-07-26_notochord_session_policy_spine_plan.md`](../../archive_docs/2026-08-06_completed_plans/2026-07-26_notochord_session_policy_spine_plan.md)
   took the landed V3-V7 session-admission pieces through a shared facts and
   admitted-session boundary. Its two-consumer gate passed and `notochord` is
   now the authoritative package name.
@@ -1003,7 +1003,7 @@ authenticated announce that exceeded the PHY cap, a best-effort stream
 relay that emitted a 435-byte packet despite a negotiated 255-byte MTU, and
 use of best-effort delivery for a multi-frame policy handshake on LoRa. The
 full receipt and evidence boundary are in
-[`2026-07-27_murm_v7_direct_phy_acceptance.md`](./2026-07-27_murm_v7_direct_phy_acceptance.md).
+[`2026-07-27_murm_v7_direct_phy_acceptance.md`](../../archive_docs/2026-08-06_completed_plans/2026-07-27_murm_v7_direct_phy_acceptance.md).
 
 This is not power evidence. Both boards remained USB-powered in their
 development personalities; UART Light-sleep, DIO1 wake, current, and energy
@@ -1022,7 +1022,7 @@ post. A different authenticated endpoint presenting an otherwise valid
 member-signed hello and grant is refused with `SubjectNotTransportPeer` at
 both ends, and the conversation stays empty. The full receipt and loopback
 evidence boundary are in
-[`2026-07-27_murm_v7_p2panda_acceptance.md`](./2026-07-27_murm_v7_p2panda_acceptance.md).
+[`2026-07-27_murm_v7_p2panda_acceptance.md`](../../archive_docs/2026-08-06_completed_plans/2026-07-27_murm_v7_p2panda_acceptance.md).
 
 **V7's carrier and policy matrix is closed.** The original sleeping-radio
 qualifier remains a V0/V2 power and wake proof; the USB-powered direct-PHY

@@ -3,7 +3,7 @@
 **Status: passed on 2026-07-27.**
 
 This receipt closes the p2panda carrier arm of V7 in the
-[low-power managed-network plan](./2026-07-24_low_power_managed_network_plan.md).
+[low-power managed-network plan](../../mere_docs/implementation_strategy/2026-07-24_low_power_managed_network_plan.md).
 It exercises Murm's real session listener over p2panda-net's authenticated Iroh
 endpoint rather than supplying carrier facts from a fixture.
 

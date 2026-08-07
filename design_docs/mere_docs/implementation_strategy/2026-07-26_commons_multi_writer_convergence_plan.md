@@ -6,7 +6,7 @@
 which asked for "a written merge rule under which two offline members editing
 the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice". Decision 2 is answered by the
-[follow-on plan](2026-07-27_commons_authority_keys_consumers_plan.md) and
+[follow-on plan](../../archive_docs/2026-08-06_completed_plans/2026-07-27_commons_authority_keys_consumers_plan.md) and
 [Commons profile](../design/2026-07-27_commons_profile_v1.md), rather than by
 this convergence plan. The tracked `commons-spine` receipt was promoted to
 the workspace package at `crates/moot/commons` when Turnstone became its

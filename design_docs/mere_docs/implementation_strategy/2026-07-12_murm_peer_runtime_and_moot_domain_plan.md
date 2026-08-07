@@ -7,8 +7,8 @@
 `crates/stickleback`, promoted because Murm, Mesh, Moot, and transport all
 consume it. The boundary this plan drew is unchanged — only the name and path
 moved. See the
-[promotion plan](2026-07-26_stickleback_replication_promotion_plan.md) and its
-[S0 receipt](2026-07-26_stickleback_s0_contract_freeze_receipt.md). The old
+[promotion plan](../../archive_docs/2026-08-06_completed_plans/2026-07-26_stickleback_replication_promotion_plan.md) and its
+[S0 receipt](../../archive_docs/2026-08-06_completed_plans/2026-07-26_stickleback_s0_contract_freeze_receipt.md). The old
 package spelling is retained below as part of this plan's evidence.
 **Scope**: Recast Murm as the reusable peer-exchange family, make Moot a
 governed-space domain over Murm's replication foundation, and remove p2panda
@@ -20,7 +20,7 @@ purity rule and host-composition target are retired.
 **Related**:
 
 - The
-  [`2026-07-26_stickleback_replication_promotion_plan.md`](./2026-07-26_stickleback_replication_promotion_plan.md)
+  [`2026-07-26_stickleback_replication_promotion_plan.md`](../../archive_docs/2026-08-06_completed_plans/2026-07-26_stickleback_replication_promotion_plan.md)
   promotes the shared `murm-replication` machinery under its earned neutral
   name. This plan's completed receipts retain the historical package name.
 - [`../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md`](../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md)

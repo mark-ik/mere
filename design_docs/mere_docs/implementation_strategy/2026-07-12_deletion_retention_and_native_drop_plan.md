@@ -8,7 +8,7 @@ name and path cutover only — no stored bytes, topic ids, drop formats, or
 receipt hashes changed, so the receipts below stand as written. This plan's
 remaining work (group encryption, live peer command wiring, durable reopen, the
 Moot mapping, reference tracing, the constitution fold) is unaffected. See the
-[promotion plan](2026-07-26_stickleback_replication_promotion_plan.md).
+[promotion plan](../../archive_docs/2026-08-06_completed_plans/2026-07-26_stickleback_replication_promotion_plan.md).
 **Scope**: Give Mere's p2panda-backed spaces one deletion and retention law,
 then define a transport-independent native drop format for moving the same
 accepted operations, checkpoints, proofs, and payloads over Iroh, Retinue,

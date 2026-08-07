@@ -93,7 +93,7 @@ part was the moot-level contract: key agreement per shared space, rotation on
 membership change, and byte-identical carriage.
 
 **Answered** by the
-[authority, keys, and consumers plan](../implementation_strategy/2026-07-27_commons_authority_keys_consumers_plan.md)
+[authority, keys, and consumers plan](../../archive_docs/2026-08-06_completed_plans/2026-07-27_commons_authority_keys_consumers_plan.md)
 and the Commons profile. Mere adopts the `p2panda-encryption` engine rather
 than `p2panda-spaces`. Gemot's converged member set supplies its DGM seam.
 Profiles choose Data Encryption for retained knowledge or Message Encryption

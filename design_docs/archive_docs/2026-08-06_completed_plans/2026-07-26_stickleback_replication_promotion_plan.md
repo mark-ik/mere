@@ -14,7 +14,7 @@ The promotion stays inside the Mere repository. It is a domain-neutral
 boundary and name cutover, not a new sibling repository or a new replication
 implementation.
 **Refines:** the
-[Murm peer runtime and Moot domain plan](./2026-07-12_murm_peer_runtime_and_moot_domain_plan.md).
+[Murm peer runtime and Moot domain plan](../../mere_docs/implementation_strategy/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md).
 
 ## Why the promotion is earned
 

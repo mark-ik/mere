@@ -6,9 +6,9 @@
 session-admission spine, then promote it to `notochord` after two real service
 carriers consume the shared context.
 **Refines:** the
-[low-power radio and managed-network plan](./2026-07-24_low_power_managed_network_plan.md)
+[low-power radio and managed-network plan](../../mere_docs/implementation_strategy/2026-07-24_low_power_managed_network_plan.md)
 and Graphshell's G5 admission lane in the
-[remote projection host plan](./2026-07-22_graphshell_remote_projection_host_plan.md).
+[remote projection host plan](../../mere_docs/implementation_strategy/2026-07-22_graphshell_remote_projection_host_plan.md).
 
 ## Current evidence
 

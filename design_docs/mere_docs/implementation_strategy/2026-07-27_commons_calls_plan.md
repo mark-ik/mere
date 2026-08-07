@@ -10,7 +10,7 @@ the headed two-window receipt, not merely the existence of a place port or a
 shared place" was already true at T2, when nothing was live.
 **Depends on:** the
 [Commons profile](../design/2026-07-27_commons_profile_v1.md), the
-[Notochord session spine](./2026-07-26_notochord_session_policy_spine_plan.md),
+[Notochord session spine](../../archive_docs/2026-08-06_completed_plans/2026-07-26_notochord_session_policy_spine_plan.md),
 the real `mere-transport` carriers, and Turnstone's
 [peer-web reframe](../../../../turnstone/design_docs/2026-07-28_turnstone_peer_web_reframe.md).
 

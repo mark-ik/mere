@@ -1,11 +1,16 @@
-# Archived-plan tails — deferred items spun out of the 2026-07-03 archive pass
+# Archived-plan tails — deferred items spun out of the archive passes
 
-**Date**: 2026-07-03.
+**Date**: 2026-07-03, extended 2026-08-06.
 **Status**: backlog holder. Each item below was explicitly deferred by a plan that
-is otherwise complete and now lives in
-[`archive_docs/2026-07-03_completed_plans/`](../../archive_docs/2026-07-03_completed_plans/).
-None of these gate anything today; pick up when the relevant lane is quiet. Items
-already tracked by an active plan are *not* repeated here.
+is otherwise complete and now lives under
+[`archive_docs/`](../../archive_docs/), in the checkpoint folder named by the
+section it sits under. None of these gate anything today; pick up when the
+relevant lane is quiet. Items already tracked by an active plan are *not*
+repeated here.
+
+This holds the tails from every pass rather than one per pass: a deferred item
+is easier to find in one backlog than across a folder of dated stubs, and the
+sections say which plan each came from.
 
 ## From native_surface_compositing (complete 2026-06-21)
 
@@ -133,3 +138,13 @@ active tearout_gestures plan).
 - **2026-07-04** — second archive pass: 11 more completed plans moved to
   `archive_docs/2026-07-04_completed_plans/` (joining the concurrently-archived
   misfin promotion plan); their tails added in the 2026-07-04 section above.
+
+## From stickleback_replication_promotion (complete 2026-07-27, archived 2026-08-06)
+
+- **A sibling repository for `stickleback`, gated on a real external consumer.**
+  The promotion deliberately stopped inside Mere: `stickleback` 0.1.0 is
+  published from this repository under MIT OR Apache-2.0, and S3 passed the
+  publishable-boundary review, so nothing technical blocks the move. What is
+  missing is a reason. The plan's own rule was that a domain-neutral crate earns
+  a sibling repo when someone outside this workspace depends on it, not when it
+  merely could. Revisit when an external consumer appears, and not before.

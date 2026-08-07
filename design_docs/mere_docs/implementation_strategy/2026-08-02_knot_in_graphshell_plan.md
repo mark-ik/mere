@@ -13,7 +13,7 @@ exercises every layer but the physical one, and the reachability work the
 receipt depends on lives in its own plan. The Knot search section below is
 independent of K0-K3 and does not block archiving of the hosting work.
 **Related:** the
-[carrier seam plan](./2026-08-01_graphshell_carrier_seam_plan.md), which this
+[carrier seam plan](../../archive_docs/2026-08-06_completed_plans/2026-08-01_graphshell_carrier_seam_plan.md), which this
 converges with — see "Why these are one move".
 
 ## The finding

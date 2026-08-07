@@ -3,7 +3,7 @@
 **Status: passed headed on 2026-07-27.**
 
 This receipt closes the direct-PHY/RF arm of V7 in the
-[low-power managed-network plan](./2026-07-24_low_power_managed_network_plan.md).
+[low-power managed-network plan](../../mere_docs/implementation_strategy/2026-07-24_low_power_managed_network_plan.md).
 It does not close the V0/V2 power and sleep measurements.
 
 ## Hardware

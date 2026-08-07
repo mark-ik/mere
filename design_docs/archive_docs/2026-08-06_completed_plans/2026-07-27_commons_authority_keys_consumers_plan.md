@@ -6,11 +6,11 @@ receipts. C6's direct-PHY RF carriage passed on real T114 and Heltec V4
 hardware 2026-07-27.
 
 **Companions:** the
-[shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md),
+[shared-engram commons brief](../../mere_docs/research/2026-07-24_shared_engram_commons_brief.md),
 the
-[multi-writer convergence plan](2026-07-26_commons_multi_writer_convergence_plan.md),
-the [Knot port plan](2026-07-25_knot_port_plan.md), and the
-[deletion, retention, and native-drop plan](2026-07-12_deletion_retention_and_native_drop_plan.md).
+[multi-writer convergence plan](../../mere_docs/implementation_strategy/2026-07-26_commons_multi_writer_convergence_plan.md),
+the [Knot port plan](../../mere_docs/implementation_strategy/2026-07-25_knot_port_plan.md), and the
+[deletion, retention, and native-drop plan](../../mere_docs/implementation_strategy/2026-07-12_deletion_retention_and_native_drop_plan.md).
 
 ## 1. Rulings
 
@@ -257,7 +257,7 @@ The same 1,177-byte operation then crossed from a Nordic T114 to a Heltec V4
 through a Retinue Resource over direct PHY. The receiver independently verified
 the p2panda operation identity and signature, decrypted the Stickleback group
 ciphertext, and recovered the expected `commons.message`. See the
-[direct-PHY RF receipt](2026-07-27_commons_direct_phy_rf_receipt.md).
+[direct-PHY RF receipt](./2026-07-27_commons_direct_phy_rf_receipt.md).
 
 ### C7. Product policy and profile — DONE 2026-07-27
 
