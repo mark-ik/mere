@@ -1923,10 +1923,62 @@ browser, two-device network, and real RF are different claims.
    - A pre-key that does not authenticate back to a Personae root is refused at
      intake rather than when somebody tries to use it.
 
-   Still to build: the `GroupSession` lifecycle in the resident host, its state
-   in Personae sealed storage (it holds long-term private keys), create/add on
-   pair, remove-and-rotate on unpair, and epoch retention so the keyring does
-   not grow without bound.
+   **The host lifecycle landed 2026-08-07, and the lane is usable end to end.**
+
+   `native::graph_keys` holds this device's seat: session state in Personae's
+   sealed store under a per-graph derivation, since it carries long-term
+   private keys and ratchet state. `PersonalSyncHost` opens it beside the graph
+   and its blobs, catches up on the lane's key agreement **before anything is
+   projected** (until it does, a device may hold sealed operations it has the
+   key for and not know it), and publishes its pre-key once the lane is joined.
+   Intake reads the keyring live rather than capturing it, so a device keyed
+   while the host runs starts reading without a restart.
+
+   `sync.encrypted` is the surface, sitting with the other lane settings
+   because pairing works the same way. Settings are per device and unsynced, so
+   the flag naturally lands on one: that device creates the group and admits
+   the others as their pre-keys arrive. A device that can already see a group
+   **on the lane** waits to be added rather than starting a second one, and the
+   check is against the lane rather than local state because the question is
+   about the graph, not the device. Two groups on one graph cannot read each
+   other and nothing would say which was meant.
+
+   The flag creates the group and nothing else. Once a device is in the group
+   it seals what it writes regardless of the flag, deliberately: a keyed device
+   still writing in the clear would leave the graph half sealed, which is the
+   same as not sealed.
+
+   Keying and revocation happen on the pairing watch, on the same pass and
+   deliberately so. A host that keyed devices by itself but waited to be told
+   to revoke would widen the reader set on its own and narrow it only when
+   asked, which is exactly the gap the unpair-rotates ruling closes. Revocation
+   needed a mapping nothing held: unpair knows a node id and a Personae root,
+   the key group knows a recipient derived from a pre-key, and the settings
+   record is gone by the time removal is noticed. The watch remembers the root
+   alongside the node id, and the recipient resolves off the lane where
+   pre-keys are plaintext and retained. Nothing persists that mapping and
+   nothing needs to.
+
+   Receipts: `a_paired_device_is_keyed_over_live_sync_and_reads_what_was_sealed`
+   runs two resident hosts over real transport with nothing passing between
+   them outside the lane, ending by sealing a node on one and reading it on the
+   other, which a device that had not been keyed would refuse rather than
+   materialize. `a_device_that_sees_a_key_group_does_not_start_another` covers
+   the split-brain guard. `a_second_device_becomes_readable_through_lane_events_alone`
+   and five siblings cover the group itself.
+
+   Two facts the build produced rather than the design: **every device
+   publishes a pre-key, the creator included**, because a member cannot process
+   control frames from a device whose pre-key it never registered, so a creator
+   that kept its bundle would key nobody. And **a receive-only device cannot be
+   keyed as built**: it has no roster root, so it cannot author, so it cannot
+   publish a pre-key. That is a gap against the readers-superset ruling, named
+   in the host's warning rather than left silent.
+
+   Still to build: the receive-only path, which wants the pre-key carried with
+   `PairingFacts` out of band as `node_id` and `root` already are; and epoch
+   retention (`forget_authorized`), which matters more now that unpair rotates
+   automatically and every rotation adds an epoch.
 
 None of these decisions changes the product boundary or requires a new
 repository.
