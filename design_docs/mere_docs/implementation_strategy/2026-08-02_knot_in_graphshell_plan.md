@@ -294,10 +294,43 @@ Until it is decided, the proof above serves both sessions on one task with
 `join!`, which needs no `Send` at all. That is a real deployment shape, not
 only a test convenience, but it is not the resident host.
 
-Still open for K2: the catalog decision above, registering `KnotEndpoint` on
-the route once it is made, the visitor-side open path in Turnstone, the
-disconnected-visitor message the revised done condition's third clause names,
-and the two-machine receipt over real hardware rather than a paired fixture.
+**The third clause needs a seam change, and here is why nobody hit it before.**
+The done condition ends with *a disconnected visitor is told the document is
+unavailable rather than shown a stale copy it cannot save*.
+`ClientState::mark_disconnected` already exists and does exactly that. Nothing
+in the live path calls it: its only callers are a unit test and the resume
+fixture, so a visitor whose holder vanishes keeps a `Live` mounted scene, which
+is precisely the state the clause forbids.
+
+The reason is in the seam. `Carrier::request` returns
+`Result<CarrierResponseBody, String>`, and two unrelated outcomes arrive as
+`Err(String)` through it:
+
+- the endpoint answered and its answer was a refusal, from
+  `response.body.map_err(|failure| failure.message)`;
+- the link died, from a failed write or an `endpoint closed without an output
+  frame`.
+
+Both stdio and the network carrier flatten them the same way, so a caller
+cannot mark a session disconnected without also marking it disconnected every
+time an endpoint says no. Wiring `mark_disconnected` against today's signature
+would be worse than leaving it unwired.
+
+`wait_for_notice` is the one unambiguous case, since a notice is never a
+refusal, so `wait_for_change` failing is a real disconnection signal and could
+be wired now. That closes the common case (a visitor sitting with a document
+open when the holder goes away) and leaves the general one open, which is a
+half-measure worth naming as such rather than shipping quietly.
+
+The fuller answer is a carrier error that distinguishes the two, something like
+`Refused(String)` against `Disconnected(String)`. It touches
+`graphshell-protocol`, all three carriers, and every caller, which is why it
+wants a decision rather than a drive-by.
+
+Still open for K2: the `Send` decision above, registering `KnotEndpoint` on the
+route once it is made, the carrier error decision just recorded, the
+visitor-side open path in Turnstone, and the two-machine receipt over real
+hardware rather than a paired fixture.
 
 **K3. Retire the spawn path or keep it deliberately.** If the remote case has
 no live consumer, the stdio carrier and `bin/knot_endpoint.rs` are a
