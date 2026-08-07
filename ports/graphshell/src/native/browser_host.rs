@@ -24,9 +24,14 @@ use crate::browser_carrier::{
 use crate::identity_endpoint::IdentityEndpoint;
 use crate::lifecycle::SessionAuthority;
 use crate::native::device_broker::DeviceSurface;
+use crate::native::endpoint_catalog::{
+    ResidentEndpointCatalog, ResidentEndpointCatalogError, ResidentEndpointRoute,
+    ResidentEndpointSession,
+};
 use crate::native::identity_ui::{NativeIdentityUi, apply_native_identity_action};
 use crate::native::personae_host::PersonaeHost;
 use crate::session_loop::{SessionLoopError, SessionSummary, serve_admitted_session};
+use crate::session_notices::serve_admitted_session_notifying;
 
 const NETWORK_DOMAIN: &[u8] = b"mere.graphshell/local-browser-network/v1";
 const ROOT_DOMAIN: &[u8] = b"mere.graphshell/local-browser-root/v1";
@@ -40,6 +45,8 @@ pub enum BrowserHostError {
     Delegation(#[from] DelegationError),
     #[error(transparent)]
     Session(#[from] SessionLoopError),
+    #[error(transparent)]
+    Catalog(#[from] ResidentEndpointCatalogError),
     #[error("browser session task failed: {0}")]
     Task(#[from] tokio::task::JoinError),
 }
@@ -89,6 +96,84 @@ pub(crate) async fn serve_identity_native_messages_with_cards<P, S, U, R, W>(
     writer: &mut W,
     session_duration_ms: u64,
     surface: DeviceSurface,
+) -> Result<Option<SessionSummary>, BrowserHostError>
+where
+    P: IdentityProvider,
+    S: IdentityStorage + 'static,
+    U: NativeIdentityUi,
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    serve_native_messages(
+        identity,
+        personae,
+        native_ui,
+        launcher,
+        reader,
+        writer,
+        session_duration_ms,
+        BrowserSessionEndpoint::Identity { surface },
+    )
+    .await
+}
+
+/// Serve one browser-native session through a host-configured catalog route.
+///
+/// The browser first completes ordinary native-message admission. Only then
+/// does the host open `route` from `catalog`, using the resulting admitted
+/// context. The route is supplied by the host process, never by the browser.
+#[allow(clippy::too_many_arguments)]
+pub async fn serve_catalog_native_messages<P, S, U, R, W>(
+    identity: &P,
+    personae: Arc<PersonaeHost<S>>,
+    native_ui: &U,
+    launcher: BrowserLauncher,
+    reader: &mut R,
+    writer: &mut W,
+    session_duration_ms: u64,
+    catalog: ResidentEndpointCatalog,
+    route: ResidentEndpointRoute,
+) -> Result<Option<SessionSummary>, BrowserHostError>
+where
+    P: IdentityProvider,
+    S: IdentityStorage + 'static,
+    U: NativeIdentityUi,
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    serve_native_messages(
+        identity,
+        personae,
+        native_ui,
+        launcher,
+        reader,
+        writer,
+        session_duration_ms,
+        BrowserSessionEndpoint::Catalog { catalog, route },
+    )
+    .await
+}
+
+enum BrowserSessionEndpoint {
+    Identity {
+        surface: DeviceSurface,
+    },
+    Catalog {
+        catalog: ResidentEndpointCatalog,
+        route: ResidentEndpointRoute,
+    },
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn serve_native_messages<P, S, U, R, W>(
+    identity: &P,
+    personae: Arc<PersonaeHost<S>>,
+    native_ui: &U,
+    launcher: BrowserLauncher,
+    reader: &mut R,
+    writer: &mut W,
+    session_duration_ms: u64,
+    selected_endpoint: BrowserSessionEndpoint,
 ) -> Result<Option<SessionSummary>, BrowserHostError>
 where
     P: IdentityProvider,
@@ -162,35 +247,68 @@ where
         subject: base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(endpoint_context.subject()),
     };
-    let mut endpoint =
-        IdentityEndpoint::for_admitted_with_cards(Arc::clone(&personae), &authority, surface.cards);
-    endpoint.with_decisions(surface.decisions);
-    // A transfer whose bytes are too large to hold resident is refused here
-    // rather than part-served: the session continues without it, and the
-    // reason is logged where the operator can see it. Serving half a transfer
-    // would look to the browser like a transfer that worked.
-    if !surface.released_blobs.is_empty() {
-        let count = surface.released_blobs.len();
-        match endpoint.release_transfer(surface.released_blobs) {
-            Ok(()) => tracing::info!(blobs = count, "released transfer blobs to this browser"),
-            Err(error) => tracing::warn!(%error, "transfer blobs were not released"),
+    let server = match selected_endpoint {
+        BrowserSessionEndpoint::Identity { surface } => {
+            let mut endpoint = IdentityEndpoint::for_admitted_with_cards(
+                Arc::clone(&personae),
+                &authority,
+                surface.cards,
+            );
+            endpoint.with_decisions(surface.decisions);
+            // A transfer whose bytes are too large to hold resident is refused
+            // here rather than part-served: the session continues without it,
+            // and the reason is logged where the operator can see it. Serving
+            // half a transfer would look to the browser like a transfer that
+            // worked.
+            if !surface.released_blobs.is_empty() {
+                let count = surface.released_blobs.len();
+                match endpoint.release_transfer(surface.released_blobs) {
+                    Ok(()) => {
+                        tracing::info!(blobs = count, "released transfer blobs to this browser")
+                    }
+                    Err(error) => tracing::warn!(%error, "transfer blobs were not released"),
+                }
+            }
+            tokio::spawn(async move {
+                let revocations = RwLock::new(revocations);
+                let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {
+                    Err("identity resume is not implemented".to_string())
+                };
+                serve_admitted_session(
+                    &mut admitted,
+                    &authority,
+                    &revocations,
+                    &mut endpoint,
+                    &mut resume,
+                    now_ms,
+                )
+                .await
+            })
         }
-    }
-    let server = tokio::spawn(async move {
-        let revocations = RwLock::new(revocations);
-        let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {
-            Err("identity resume is not implemented".to_string())
-        };
-        serve_admitted_session(
-            &mut admitted,
-            &authority,
-            &revocations,
-            &mut endpoint,
-            &mut resume,
-            now_ms,
-        )
-        .await
-    });
+        BrowserSessionEndpoint::Catalog { mut catalog, route } => {
+            // Route selection occurs after admission and before `Connected`.
+            // A missing route therefore never yields a live browser session,
+            // and the endpoint only sees the narrow admitted context.
+            let mut endpoint = catalog.open(route.id(), &endpoint_context)?;
+            tokio::spawn(async move {
+                let revocations = RwLock::new(revocations);
+                let mut resume = |endpoint: &mut ResidentEndpointSession,
+                                  request: ResumeRequest| {
+                    endpoint.resume(request)
+                };
+                serve_admitted_session_notifying(
+                    &mut admitted,
+                    &authority,
+                    &revocations,
+                    &mut endpoint,
+                    &mut resume,
+                    now_ms,
+                    route.notice_poll_interval(),
+                )
+                .await
+            })
+        }
+    };
     write_native_message_async(writer, &connected).await?;
 
     while let Some(message) = read_native_message_async::<_, BrowserMessage>(reader).await? {
@@ -296,9 +414,13 @@ fn local_browser_grant<P: IdentityProvider>(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+    use std::time::Duration;
+
     use graphshell_protocol::{
-        CapabilityProfile, CarrierRequest, PortableCardV1, ProtocolVersion, ResourceRequest,
-        SessionOpen,
+        CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponseBody,
+        EndpointDescriptor, IntentInvocation, IntentResult, PortableCardV1, ProjectionRequest,
+        ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, SessionOpen,
     };
     use personae::{
         Ed25519Keypair, IdentityVault, InMemoryProvider, InMemoryStorage, Profile, ProfileId,
@@ -307,7 +429,32 @@ mod tests {
     use super::*;
     use crate::browser_carrier::{BrowserHostMessage, CHROMIUM_EXTENSION_ID};
     use crate::identity::VaultProtectionView;
+    use crate::lifecycle::AdmittedEndpointContext;
+    use crate::native::endpoint_catalog::ResidentEndpoint;
     use crate::native::identity_ui::UnavailableNativeIdentityUi;
+
+    struct CatalogFixtureEndpoint;
+
+    impl ResidentEndpoint for CatalogFixtureEndpoint {
+        fn describe(&self) -> EndpointDescriptor {
+            EndpointDescriptor {
+                label: "Catalog fixture".to_string(),
+                projections: Vec::new(),
+            }
+        }
+
+        fn snapshot(&mut self, _: ProjectionRequest) -> Result<ProjectionSnapshot, String> {
+            Err("fixture has no projection".to_string())
+        }
+
+        fn resource(&mut self, _: ResourceRequest) -> Result<ResourceResponse, String> {
+            Err("fixture has no resources".to_string())
+        }
+
+        fn invoke(&mut self, _: IntentInvocation) -> Result<IntentResult, String> {
+            Err("fixture has no intents".to_string())
+        }
+    }
 
     #[tokio::test]
     async fn admitted_browser_receives_resident_personal_sync_cards() {
@@ -501,6 +648,150 @@ mod tests {
 
         let (summary, card) = tokio::join!(host, browser);
         assert_eq!(card.title, "Personal graph sync");
+        assert!(summary.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn browser_route_opens_a_catalog_endpoint_only_after_admission() {
+        let identity = InMemoryProvider::from_seed([0x91; 32]);
+        let profile = Profile::new(
+            ProfileId("default".into()),
+            "Default",
+            Ed25519Keypair::from_seed([0x92; 32]),
+        );
+        let personae = Arc::new(PersonaeHost::new(
+            IdentityVault::with_profile(InMemoryStorage::new(), profile),
+            None,
+            VaultProtectionView::Ephemeral,
+        ));
+        let launcher =
+            BrowserLauncher::parse(&[format!("chrome-extension://{CHROMIUM_EXTENSION_ID}/")])
+                .unwrap();
+        let seen = Arc::new(Mutex::new(None::<AdmittedEndpointContext>));
+        let factory_seen = Arc::clone(&seen);
+        let mut catalog = ResidentEndpointCatalog::new();
+        catalog
+            .register_erased("fixture", "Catalog fixture", move |context| {
+                *factory_seen.lock().unwrap() = Some(context.clone());
+                Ok(Box::new(CatalogFixtureEndpoint))
+            })
+            .unwrap();
+        let route = ResidentEndpointRoute::new("fixture", Duration::from_millis(10)).unwrap();
+        let (host_stream, browser_stream) = tokio::io::duplex(64 * 1024);
+        let (mut host_reader, mut host_writer) = tokio::io::split(host_stream);
+        let (mut browser_reader, mut browser_writer) = tokio::io::split(browser_stream);
+        let ui = UnavailableNativeIdentityUi;
+
+        let host = serve_catalog_native_messages(
+            &identity,
+            personae,
+            &ui,
+            launcher,
+            &mut host_reader,
+            &mut host_writer,
+            60_000,
+            catalog,
+            route,
+        );
+        let browser = async {
+            let challenge =
+                match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                {
+                    BrowserHostMessage::Challenge { challenge } => challenge,
+                    other => panic!("expected browser challenge, got {other:?}"),
+                };
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Connect {
+                    schema: "mere.graphshell/browser-connect/v1".into(),
+                    host_nonce: challenge.host_nonce,
+                    client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD
+                        .encode([0x93; 32]),
+                },
+            )
+            .await
+            .unwrap();
+            let (session, subject) =
+                match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                {
+                    BrowserHostMessage::Connected {
+                        session, subject, ..
+                    } => (session, subject),
+                    other => panic!("expected connected browser session, got {other:?}"),
+                };
+            let context = seen
+                .lock()
+                .unwrap()
+                .clone()
+                .expect("the host opened the catalog only after admission");
+            assert_eq!(context.session().0, session);
+            let subject: [u8; 32] = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(subject)
+                .unwrap()
+                .try_into()
+                .unwrap();
+            assert_eq!(context.subject(), subject);
+
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Request {
+                    request: CarrierRequest {
+                        id: 1,
+                        body: CarrierRequestBody::Open(Box::new(SessionOpen {
+                            version: ProtocolVersion { major: 1, minor: 0 },
+                            capabilities: CapabilityProfile::default(),
+                        })),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            match read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                .await
+                .unwrap()
+                .unwrap()
+            {
+                BrowserHostMessage::Response { response } => match response.body.unwrap() {
+                    CarrierResponseBody::Opened(opened) => {
+                        assert_eq!(opened.descriptor.label, "Catalog fixture")
+                    }
+                    other => panic!("expected catalog endpoint descriptor, got {other:?}"),
+                },
+                other => panic!("expected carrier response, got {other:?}"),
+            }
+
+            write_native_message_async(
+                &mut browser_writer,
+                &BrowserMessage::Request {
+                    request: CarrierRequest {
+                        id: 2,
+                        body: CarrierRequestBody::Close,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            assert!(matches!(
+                read_native_message_async::<_, BrowserHostMessage>(&mut browser_reader)
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                BrowserHostMessage::Response {
+                    response: graphshell_protocol::CarrierResponse {
+                        body: Ok(CarrierResponseBody::Closed),
+                        ..
+                    }
+                }
+            ));
+        };
+
+        let (summary, ()) = tokio::join!(host, browser);
         assert!(summary.unwrap().is_some());
     }
 }

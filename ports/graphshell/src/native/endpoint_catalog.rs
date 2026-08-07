@@ -8,6 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Display;
+use std::time::Duration;
 
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
@@ -78,6 +79,53 @@ struct Registration {
 pub struct ResidentEndpointOffer {
     pub id: String,
     pub label: String,
+}
+
+/// A host-configured catalog route for one browser or resident session.
+///
+/// The route is selected by the host after it admits the carrier. It is never
+/// accepted from a browser request, so the browser cannot switch itself to an
+/// endpoint the host did not choose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResidentEndpointRoute {
+    id: String,
+    notice_poll_interval: Duration,
+}
+
+impl ResidentEndpointRoute {
+    pub fn new(
+        id: impl Into<String>,
+        notice_poll_interval: Duration,
+    ) -> Result<Self, ResidentEndpointRouteError> {
+        let id = id.into();
+        if id.is_empty() || id.chars().any(char::is_whitespace) {
+            return Err(ResidentEndpointRouteError::InvalidId { id });
+        }
+        if notice_poll_interval.is_zero() {
+            return Err(ResidentEndpointRouteError::ZeroNoticePollInterval);
+        }
+        Ok(Self {
+            id,
+            notice_poll_interval,
+        })
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn notice_poll_interval(&self) -> Duration {
+        self.notice_poll_interval
+    }
+}
+
+/// Why a host's configured resident route is unusable before admission.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum ResidentEndpointRouteError {
+    #[error("resident endpoint route id is empty or contains whitespace: {id:?}")]
+    InvalidId { id: String },
+    #[error("resident endpoint route notice poll interval must be non-zero")]
+    ZeroNoticePollInterval,
 }
 
 /// Why resident endpoint selection failed before the session loop started.
@@ -476,5 +524,24 @@ mod tests {
             ),
             Err(ResidentEndpointCatalogError::Unknown { .. })
         ));
+    }
+
+    #[test]
+    fn host_route_rejects_an_ambiguous_id_or_busy_notice_loop() {
+        assert!(matches!(
+            ResidentEndpointRoute::new("not a route", std::time::Duration::from_millis(1)),
+            Err(ResidentEndpointRouteError::InvalidId { .. })
+        ));
+        assert!(matches!(
+            ResidentEndpointRoute::new("fixture", std::time::Duration::ZERO),
+            Err(ResidentEndpointRouteError::ZeroNoticePollInterval)
+        ));
+        let route =
+            ResidentEndpointRoute::new("fixture", std::time::Duration::from_millis(25)).unwrap();
+        assert_eq!(route.id(), "fixture");
+        assert_eq!(
+            route.notice_poll_interval(),
+            std::time::Duration::from_millis(25)
+        );
     }
 }
