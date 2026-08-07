@@ -22,7 +22,7 @@ request, projection), `crates/forme` (topology, SplitPanes), numen `field.rs`/`c
 - [data_oriented_doctrine_brief](../../2026-07-02_data_oriented_doctrine_brief.md): the §5 model
   (typed snapshots in, scene values out, deltas between) is the doctrine at the scene boundary.
 - [one_node_facets_layer_map](../technical_architecture/2026-07-18_one_node_facets_layer_map.md)
-  and [node_dissolution_facets_plan](../implementation_strategy/2026-07-18_node_dissolution_facets_plan.md):
+  and [node_dissolution_facets_plan](../../archive_docs/2026-08-06_completed_plans/2026-07-18_node_dissolution_facets_plan.md):
   the facet system §5's source-fact modeling rides. **S2 is complete** (2026-07-19, `631b852`):
   the kernel `Node` carries no geometry; placement persists as `arrangement.position` facets.
 - [participant_gate_packs_plan](../implementation_strategy/2026-07-17_participant_gate_packs_plan.md):

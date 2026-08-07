@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-20
 **Status**: **RUNGS COMPLETE 2026-07-20** (O0-O3 landed; held items dispositioned below). Executes the overmap ruling (Mark, 2026-07-19 — recorded in
-the [node-dissolution facets plan](2026-07-18_node_dissolution_facets_plan.md),
+the [node-dissolution facets plan](../../archive_docs/2026-08-06_completed_plans/2026-07-18_node_dissolution_facets_plan.md),
 "The overmap" section): sessions are container nodes in a graph one level up;
 fork is node lineage at that level; the switcher becomes a graph view.
 **Parents**: that ruling; [tearout G4-R](2026-06-24_tearout_gestures_plan.md)

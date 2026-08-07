@@ -155,7 +155,7 @@ the end-state side of every line drawn here.
   snapshot columns and v1 graph engrams migrate on read. The north-star
   extraction boundary is now settled in code, so its 5.1 question is closed.
 - **2026-07-18 (later):** Implementation plan founded:
-  [node dissolution + facets plan](../implementation_strategy/2026-07-18_node_dissolution_facets_plan.md)
+  [node dissolution + facets plan](../../archive_docs/2026-08-06_completed_plans/2026-07-18_node_dissolution_facets_plan.md)
   (lanes F/S/D, the D-gate rkyv measurement, the full `Node` field-by-field
   destination table; D0 identified as the image externalization plan's
   already-designed phase 2).

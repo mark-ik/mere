@@ -338,7 +338,7 @@ Verified against the code, 2026-07-06:
 
 - **2026-07-26 — Phases 2 and 3 landed; phase 4 has its seam, not its cache.**
   Executed as lane D0 of the
-  [node dissolution plan](2026-07-18_node_dissolution_facets_plan.md), after
+  [node dissolution plan](../../archive_docs/2026-08-06_completed_plans/2026-07-18_node_dissolution_facets_plan.md), after
   its D-gate measured inline imagery at 18x the snapshot size and 3.8x its
   load time.
 
