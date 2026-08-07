@@ -55,7 +55,7 @@ agent walk the graph halo by halo and then watch its attention move down the pag
 
 Picking a document element is picking a document element, whether your cursor does it or an
 operator's focus does. The web-clip inspector (planned, the
-[djot editor plan](2026-06-24_djot_editor_knot_nodes_plan.md) P4/P5: hover-pick an element
+[djot editor plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md) P4/P5: hover-pick an element
 on a live scrying tile via `elementFromPoint`, capture its HTML subtree, crop its rect,
 `build_clip_knot`, assert `ProvenanceSubKind::ClippedFrom`) **is the element-highlight UI**.
 So three features share one element-targeting primitive:

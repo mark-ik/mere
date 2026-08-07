@@ -34,8 +34,8 @@ intentional:
 | Concern | Current home | Disposition |
 | --- | --- | --- |
 | Text editing, highlighting, outline/fold derivation, and preview readout | Genet: Cambium's editor primitives plus `components/inker/knot-editor-host` | Built. `ports/knot::KnotEditor` consumes this stack. Do not build another editor core in Mere or Turnstone. |
-| File identity, source truth, format-aware writes, vaults, search, sync, conflicts, and communal encryption | Mere `ports/knot` | K0 through K7 are complete under the [Knot port plan](2026-07-25_knot_port_plan.md). Files and vault documents replace the old inline `Node.body` store. |
-| Product composition and authoring UX | [Knot authoring consumer plan](2026-07-27_knot_authoring_consumer_plan.md): Graphshell protocol with a Turnstone/Cambium pane | Open. The live Knot endpoint discloses a read-only directory and rejects intents. The dedicated plan owns the authorized editable resource, Save intent, retained session, pane, and receipts. |
+| File identity, source truth, format-aware writes, vaults, search, sync, conflicts, and communal encryption | Mere `ports/knot` | K0 through K7 are complete under the [Knot port plan](../../mere_docs/implementation_strategy/2026-07-25_knot_port_plan.md). Files and vault documents replace the old inline `Node.body` store. |
+| Product composition and authoring UX | [Knot authoring consumer plan](../../mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md): Graphshell protocol with a Turnstone/Cambium pane | Open. The live Knot endpoint discloses a read-only directory and rejects intents. The dedicated plan owns the authorized editable resource, Save intent, retained session, pane, and receipts. |
 | Semantic web clipping and `ClippedFrom` provenance | Mere `crates/import::web_clip`; Turnstone Inspector/content lane | The host-neutral producer survived. The Meerkat command did not. A current Inspector selection-to-Knot write path is open. |
 | Outline and folds in the product | Genet readout plus a consumer-pulled Cambium tree/outline; Turnstone Gloss/Inspector | Outline data exists; a Knot authoring consumer and interactive tree are open. This is shared component work, not a Knot parser fork. |
 | Query, agent, diagram, and Wasm blocks | [polyglot block resolver plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md) | Separate resolver work. It is not unfinished Phase 3 editor work. |
@@ -44,7 +44,7 @@ intentional:
 
 ### Surviving product slices
 
-The [Knot authoring consumer plan](2026-07-27_knot_authoring_consumer_plan.md)
+The [Knot authoring consumer plan](../../mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md)
 is the executable owner for these slices. This list records how the historical
 plan decomposed; it is not a second queue.
 
@@ -519,7 +519,7 @@ Four moves, most primitives present.
 ### Query blocks and agent nodes
 
 Two knot-node kinds beyond the plain note and the clip, harvested from the
-[borrowed-ideas brief](../research/2026-06-25_borrowed_ideas_brief.md) (Mark
+[borrowed-ideas brief](../../mere_docs/research/2026-06-25_borrowed_ideas_brief.md) (Mark
 graduated both into near-term editor work).
 
 - **`=query` block.** A polyglot block (` ```=query `) whose body is a graph query,
@@ -527,10 +527,10 @@ graduated both into near-term editor work).
   count). The in-note form of a Tinderbox agent. It rides an existing primitive: the
   gloss design elevates the Navigator swatch to a view "usable in a node facet pane,
   a menu, a djot script block, or an orrery card"
-  ([gloss_navigator_design](../design/2026-06-07_gloss_navigator_design.md) §2a), so
+  ([gloss_navigator_design](../../mere_docs/design/2026-06-07_gloss_navigator_design.md) §2a), so
   the `=query` block is a swatch embedded by a fence, its (scope, lens, filters) the
   query. Edge-config filtering and the result set ride the
-  [graph signals layer](2026-06-22_graph_signals_layer_plan.md).
+  [graph signals layer](../../mere_docs/implementation_strategy/2026-06-22_graph_signals_layer_plan.md).
 - **Agent node.** Promote a `=query` to a whole knot node: its body is the query or
   policy, its edges are the materialized, continuously-maintained result set (a
   Tinderbox agent made spatial). The editor authors the body, the orrery materializes
@@ -802,22 +802,22 @@ This plan extends, and does not re-scope, the following owners:
 - [2026-06-12 knot evaluation and export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md):
   the eval and include passes, the HTML fragment fidelity tier (K4), and richer
   span fidelity. Phase 6 fidelity work belongs there.
-- [2026-06-23 gloss outline lens plan](2026-06-23_gloss_outline_lens_plan.md):
+- [2026-06-23 gloss outline lens plan](../../mere_docs/implementation_strategy/2026-06-23_gloss_outline_lens_plan.md):
   owns the graph-outline-as-editable-knot payoff at its P4 and the outline surface.
   The editor here is the shared writing surface that P4 also uses.
-- [2026-06-23 node body face model plan](2026-06-23_node_body_face_model_plan.md):
+- [2026-06-23 node body face model plan](../../mere_docs/implementation_strategy/2026-06-23_node_body_face_model_plan.md):
   owns the node's Body and Face presentation. The clip swatch kind composes with
   it.
-- [2026-06-21 command registry configurable menus plan](2026-06-21_command_registry_configurable_menus_plan.md):
+- [2026-06-21 command registry configurable menus plan](../../mere_docs/implementation_strategy/2026-06-21_command_registry_configurable_menus_plan.md):
   every editor action and the clip gesture register as command ids here.
-- [2026-06-10 scrying tile plan](2026-06-10_scrying_tile_plan.md) and
-  [2026-06-23 render ladder and extraction plan](2026-06-23_render_ladder_and_extraction_plan.md):
+- [2026-06-10 scrying tile plan](../../mere_docs/implementation_strategy/2026-06-10_scrying_tile_plan.md) and
+  [2026-06-23 render ladder and extraction plan](../../mere_docs/implementation_strategy/2026-06-23_render_ladder_and_extraction_plan.md):
   own the live tile and the parse-and-extract axis the clip path draws on.
-- [2026-06-23 browser extension companion plan](2026-06-23_browser_extension_companion_plan.md):
+- [2026-06-23 browser extension companion plan](../../mere_docs/implementation_strategy/2026-06-23_browser_extension_companion_plan.md):
   the consented-capture sink; the web clip is one driver of it.
-- [2026-06-15 in-the-wings and browser-bar audit](../research/2026-06-15_in_the_wings_and_browser_bar_audit.md),
+- [2026-06-15 in-the-wings and browser-bar audit](../../mere_docs/research/2026-06-15_in_the_wings_and_browser_bar_audit.md),
   synergy 4: names the new-note wire as the dominant gap.
-- [2026-06-18 interaction model spine](../technical_architecture/2026-06-18_interaction_model_spine.md):
+- [2026-06-18 interaction model spine](../../mere_docs/technical_architecture/2026-06-18_interaction_model_spine.md):
   djot is a definitely-support format on the spine; this plan is its write stage.
 
 ---
@@ -1127,7 +1127,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   surface; genet `6a3ceace`) and tinct's `syntax` palette (themed contrast-gated
   colours; tincture `03661ce`). The highlight core's promotion to a standalone sibling
   lexer crate (**illume**) and the full text-legibility architecture are spun out to
-  their own plan, [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md): the
+  their own plan, [illume text lexer plan](../../mere_docs/implementation_strategy/2026-06-26_illume_text_lexer_plan.md): the
   editor consumes illume (lexer: text → spans) + tinct (palette: role → colour) + the
   genet styled field (renderer), with the host owning the `SyntaxKind` → `SyntaxRole`
   seam. Three editor-architecture fixes resolved there: #1 colours derive from tinct
@@ -1231,7 +1231,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   render refresh, inline clip decoration anchors, and autosave/history polish.
 - **2026-07-01, status-refresh correction.** Re-verified this plan's own "remaining"
   claims against the code and against the
-  [illume text lexer plan](2026-06-26_illume_text_lexer_plan.md), which this plan
+  [illume text lexer plan](../../mere_docs/implementation_strategy/2026-06-26_illume_text_lexer_plan.md), which this plan
   had spun highlight work out to on 2026-06-26 but never synced back. Finding:
   "richer source highlighting" was stale everywhere it appeared (top status, Reframe
   slice 4, What is net-new, Phase 2 remaining, and the prior progress bullet) — the
@@ -1293,7 +1293,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   grouping, and the Phase 3 structural/authoring layers.
 - **2026-07-08, highlight bridge moved to genet (+ Phase 2 live-refresh/toggle in flight).**
   While starting the Phase 2 tail, Mark raised promoting the editor for Isometry to
-  consume. Outcome (tracked in the [illume plan](2026-06-26_illume_text_lexer_plan.md)
+  consume. Outcome (tracked in the [illume plan](../../mere_docs/implementation_strategy/2026-06-26_illume_text_lexer_plan.md)
   point 8): illume extracted to its own public repo, and the highlight bridge
   (`meerkat/knot_highlight.rs`) dissolved *into* xilem-serval's new `highlight` feature —
   so the editor field is now `xilem_serval::highlighted_textarea(t, Highlight::Note)` and

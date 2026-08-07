@@ -114,7 +114,7 @@ layer** is the underlay (edges / fields) in the WebGPU Scene.
 - `glossary` (`outline_djot` / `graph_metrics`, the
   [gloss outline lens](2026-06-23_gloss_outline_lens_plan.md)), feeds the sidebar.
 - `netrender`, lowers the underlay Scene to WebGPU; the relational neighborhood is
-  the [relational-browse](2026-06-23_relational_browse_graphlet_plan.md) link graph.
+  the [relational-browse](../../archive_docs/2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md) link graph.
 
 **New glue (the "browser as pelt" adapter, the real work):**
 
@@ -190,7 +190,7 @@ Nova/Boa, the companion (deferred with sync).
 - [eidetic Phase 7](../../eidetic_docs/implementation_strategy/2026-06-09_eidetic_deferred_phases_plan.md)
   (the OPFS Store this lane activates; gates measured, pack small blobs).
 - [gloss outline lens](2026-06-23_gloss_outline_lens_plan.md),
-  [relational browse](2026-06-23_relational_browse_graphlet_plan.md),
+  [relational browse](../../archive_docs/2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md),
   [node-body/face](2026-06-23_node_body_face_model_plan.md),
   [document-script substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
   (the reused pieces).

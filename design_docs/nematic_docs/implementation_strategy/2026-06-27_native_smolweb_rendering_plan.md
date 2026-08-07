@@ -21,7 +21,7 @@ rest their own view. `Block` stops being the universal renderer and keeps
 the two jobs it is actually good at: knot **capture** and uniform **cards**.
 
 **Relation to the djot plan**: this is the smolweb half of the same conclusion the
-[djot editor plan](../../mere_docs/implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md)
+[djot editor plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md)
 reached for notes (its 2026-06-27 reframe): build the view tree directly as
 `xilem_serval` views, no serialize-to-HTML round-trip, source-as-truth for edit.
 The djot reframe renders `EngineDocument` → `xilem_serval` views → `ScriptedDom`
@@ -254,7 +254,7 @@ Built so each phase stands alone and the early ones are genet-local and small.
 ## Cross-references
 
 - [smolweb fidelity plan](2026-07-01_smolweb_fidelity_plan.md) — the successor that tracks this plan's spec-faithfulness gaps: enrich the parse ASTs (the losses are at parse time, not paint time), trust in the native lane (the genet lane drops the `DocumentTrustState` the card lane carries), and bespoke (regime B) rendering only where a format's line model is genuinely not box-shaped, gopher first. The A/B/C regime frame and the code-verified collapse inventory live there.
-- [djot editor + knot nodes plan](../../mere_docs/implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md) — owns the document-family block→view mapper (Phase D); its 2026-06-27 reframe set the direct-to-genet-views render path this plan shares.
+- [djot editor + knot nodes plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md) — owns the document-family block→view mapper (Phase D); its 2026-06-27 reframe set the direct-to-genet-views render path this plan shares.
 - [illume text lexer plan](../../mere_docs/implementation_strategy/2026-06-26_illume_text_lexer_plan.md) — the portable-core + tinct + genet-renderer + host-bridge pattern this mirrors; the entity pass reused inside gemtext prose.
 - [polyglot knot design](2026-05-08_polyglot_knot_design.md) — the knot format the capture path lowers into; `knot/expand.rs` shares the smolweb parse functions.
 - [knot evaluation + export plan](2026-06-12_knot_evaluation_export_plan.md) — the `to_gemtext` / gophermap exporters on the capture/round-trip side of `Block`.

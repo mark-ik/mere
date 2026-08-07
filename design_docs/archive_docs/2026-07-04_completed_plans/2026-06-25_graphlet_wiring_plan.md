@@ -33,7 +33,7 @@ persistence (a new sidecar) and the tear-out branch op.
 **Consumers** (why this is worth building, beyond branch): the tear-out **branch**
 operation (G3) is the immediate one, but the same per-session graphlet index is what
 **document-groups** and the
-[relational-browse front-end](2026-06-23_relational_browse_graphlet_plan.md) both want —
+[relational-browse front-end](../2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md) both want —
 a named sub-structure over the graph that the workbench and orrery can scope to.
 
 ---
@@ -369,7 +369,7 @@ plain data types, and a consumer reads the same index — all without `GraphTree
 
 - **Relational-browse consumer (potential, not wired)** — the bird's-eye crawl neighborhood
   *could* be a Linked Ego/Component that grows with the crawl, but the
-  [relational-browse plan](2026-06-23_relational_browse_graphlet_plan.md) as written
+  [relational-browse plan](../2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md) as written
   materializes **real nodes** and does not use the graphlet mechanism (its "graphlet" is
   colloquial). Making a browse *mint* a Linked graphlet is an open decision (ruling 7 in the
   [scope model reconciliation](../design/2026-06-27_scope_model_reconciliation.md)); the index

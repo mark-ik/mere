@@ -13,10 +13,12 @@ use stickleback::{JoinError, JoinedSpace, SyncStatus};
 use tokio::sync::{Mutex, RwLock};
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::p2panda_transport::{KnownPeer, RelayUrl};
+use stickleback::DataKeyring;
 use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID, Transport, sync_overlay_topic};
 use uuid::Uuid;
 
 use crate::native::browser_host::now_ms;
+use crate::native::graph_keys::{GraphKeyGroup, GraphKeyError};
 use crate::native::owner_settings::parse_hex32;
 use crate::transfer_offer::{TransferOfferV1, offers_in, transfer_offer_rule};
 
@@ -88,6 +90,12 @@ pub struct PersonalSyncHost {
     /// must not send the bytes back over the wire. It is also why a device can
     /// still answer for a blob after the session that received it ended.
     blobs: BlobStore,
+    /// This device's seat in the graph's key group.
+    key_group: Mutex<GraphKeyGroup>,
+    /// The keyring intake reads. Shared rather than captured, for the same
+    /// reason the roster is: a device keyed while the host runs must start
+    /// reading sealed operations without a restart.
+    keys: Arc<RwLock<Option<Arc<DataKeyring>>>>,
 }
 
 impl PersonalSyncHost {
@@ -116,7 +124,7 @@ impl PersonalSyncHost {
             .selection
             .with_local_device(&device)
             .with_synthetic_addresses([transfer_offer_rule()]);
-        let replica = PersonalGraphReplica::for_identity(
+        let mut replica = PersonalGraphReplica::for_identity(
             backend,
             config.graph,
             identity,
@@ -125,6 +133,38 @@ impl PersonalSyncHost {
         )?;
         // Beside the graph store and named for the same graph, so the two
         // halves of one device's state cannot be moved apart by accident.
+        // Beside the graph and its blobs, named for the same graph. Sealed by
+        // Personae under a per-graph derivation, because it holds long-term
+        // private keys and ratchet state.
+        let key_root = config.store_path.with_extension("keys");
+        let opened = GraphKeyGroup::open(identity, config.graph, &key_root)
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        let mut key_group = opened.group;
+        // Catch up on whatever the lane already said about keys. This runs
+        // before anything is projected, because until it does this device may
+        // hold sealed operations it has the key for and does not know it.
+        let caught_up = crate::personal_sync::key_agreement(&replica.sync_store(), config.graph)
+            .await
+            .map_err(|error| PersonalSyncHostError::Graph(error))?;
+        if !caught_up.is_empty() {
+            match key_group.absorb(&caught_up) {
+                Ok(report) => tracing::info!(
+                    steps = caught_up.len(),
+                    installed = report.installed,
+                    unreadable = report.unreadable,
+                    "read the graph's key agreement"
+                ),
+                Err(error) => tracing::warn!(%error, "could not read the graph's key agreement"),
+            }
+        }
+        let keyring = key_group
+            .keyring()
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        if let Some(keyring) = keyring.clone() {
+            replica.set_keyring(keyring);
+            tracing::info!(graph = %hex(&config.graph), "this device holds the graph's key");
+        }
+        let keys = Arc::new(RwLock::new(keyring));
         let blob_root = config.store_path.with_extension("blobs");
         let blobs = BlobStore::open(&blob_root)
             .await
@@ -204,6 +244,7 @@ impl PersonalSyncHost {
         // and still have every write refused until the next restart.
         let roster = Arc::new(RwLock::new(config.roster.clone()));
         let admitting = Arc::clone(&roster);
+        let intake_keys = Arc::clone(&keys);
         let graph = config.graph;
         let (endpoint, gossip) = transport
             .sync_parts()
@@ -219,13 +260,14 @@ impl PersonalSyncHost {
             move |operation| {
                 let store = accepted.clone();
                 let admitting = Arc::clone(&admitting);
+                let intake_keys = Arc::clone(&intake_keys);
                 async move {
                     let roster = admitting.read().await.clone();
-                    // No keyring here yet: this host writes and reads
-                    // plaintext until keys are distributed, and a sealed
-                    // operation from a sibling is refused loudly rather than
-                    // stored unread.
-                    match accept_into(&store, graph, &roster, None, &operation).await {
+                    // Read live. A sealed operation arriving before this device
+                    // is keyed is refused rather than stored unread, and the
+                    // peer will offer it again once the key lands.
+                    let keyring = intake_keys.read().await.clone();
+                    match accept_into(&store, graph, &roster, keyring.as_ref(), &operation).await {
                         Ok(inserted) => inserted,
                         Err(error) => {
                             // A refused operation and a failed one both have to
@@ -248,7 +290,7 @@ impl PersonalSyncHost {
         )
         .await?;
 
-        Ok(Self {
+        let host = Self {
             graph,
             store_path: config.store_path,
             roster,
@@ -256,7 +298,31 @@ impl PersonalSyncHost {
             joined,
             transport,
             blobs,
-        })
+            key_group: Mutex::new(key_group),
+            keys,
+        };
+        // Publish last, because it needs the joined lane. A device that never
+        // publishes can never be added, so a failure here is reported rather
+        // than swallowed; it is not fatal, since the next open tries again.
+        if let Some(bundle) = opened.publish {
+            match bundle.to_bytes() {
+                Ok(bytes) => {
+                    if let Err(error) = host
+                        .author(vec![PersonalGraphEvent::PublishPrekey { bundle: bytes }])
+                        .await
+                    {
+                        tracing::warn!(
+                            %error,
+                            "this device could not publish its group pre-key, so no member can                              key it yet; a receive-only device cannot author at all and needs its                              pre-key carried with its pairing facts instead"
+                        );
+                    } else {
+                        tracing::info!(graph = %hex(&graph), "published this device's group pre-key");
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "group pre-key would not encode"),
+            }
+        }
+        Ok(host)
     }
 
     pub fn graph(&self) -> [u8; 32] {

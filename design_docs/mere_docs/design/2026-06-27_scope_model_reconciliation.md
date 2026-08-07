@@ -22,7 +22,7 @@ latent rule-defined views, including the **chronological** chain (§3).
   — the **selection UX** (reveal → classify → project → frontier → crystallize).
 - [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
   — the **build** (branch + Linked graphlets, kernel derivation, drift, selectors).
-- [relational browse plan](../implementation_strategy/2026-06-23_relational_browse_graphlet_plan.md)
+- [relational browse plan](../../archive_docs/2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md)
   — a **consumer** (link materializer + crawl).
 
 ---

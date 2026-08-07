@@ -30,7 +30,7 @@ eidetic concern. It does **not** re-derive the eidetic stack or the front-end.
   the **live caller** that E1 left to a consumer, answers E1's open question on
   trace granularity, and routes page text into E3's index (the parked
   "genet-side text-extraction seam" trigger, now satisfied by `genet-extract`).
-- [Relational Browse Graphlet](2026-06-23_relational_browse_graphlet_plan.md)
+- [Relational Browse Graphlet](../../archive_docs/2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md)
   — V1 (single-hop materializer) + V2 (crawl actor) are **built**. Its **V3**
   (relational capture into eidetic) is **moved here** and generalized: V3 was the
   candidate-set enrichment alone; this plan unifies it with the live recorder,

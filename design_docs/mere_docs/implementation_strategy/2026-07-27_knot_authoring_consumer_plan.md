@@ -12,7 +12,7 @@ explicit selector without inventing one.
 
 **Companions:** the completed [Knot port plan](2026-07-25_knot_port_plan.md),
 the reconciled
-[Djot editor and clipping plan](2026-06-24_djot_editor_knot_nodes_plan.md),
+[Djot editor and clipping plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md),
 the [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md),
 Genet's `docs/2026-07-25_text_editing_primitive_plan.md`, and the reconciled
 [evaluation/export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md).

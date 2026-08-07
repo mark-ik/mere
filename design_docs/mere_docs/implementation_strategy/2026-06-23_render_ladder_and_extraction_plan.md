@@ -18,7 +18,7 @@ principled profile ladder and the "analyze the web, don't just render it" goal.
 rung taxonomy), the
 [engine picker plan](../../inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md)
 (the rung selector), the
-[relational-browse graphlet plan](2026-06-23_relational_browse_graphlet_plan.md) and the
+[relational-browse graphlet plan](../../archive_docs/2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md) and the
 [eidetic browsing derivation plan](../../eidetic_docs/implementation_strategy/2026-06-12_eidetic_browsing_derivation_plan.md)
 (the extraction front-end + sink), and the
 [native session store plan](2026-06-23_native_session_store_plan.md) (the cookie/storage

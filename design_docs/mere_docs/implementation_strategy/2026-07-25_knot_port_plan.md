@@ -22,7 +22,7 @@ the [application prospects brief](../../2026-07-24_application_prospects_brief.m
 (knot as page content class and the settled convergence/key decisions), and the
 [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md)
 (the protocol this port serves). The reconciled
-[historical authoring and clipping plan](2026-06-24_djot_editor_knot_nodes_plan.md),
+[historical authoring and clipping plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md),
 the dedicated
 [Knot authoring consumer plan](2026-07-27_knot_authoring_consumer_plan.md), and
 [evaluation/export plan](../../nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md)

@@ -5,7 +5,7 @@
 `VirtualWindow`) is already built in genet; this plan is the editor that consumes it,
 so the knot editor can fold sections, show a gutter, and scale to large files. The one
 gating decision (the text-editing layer) is called out below and wants a call before the
-large build. Grew out of the [djot editor plan](2026-06-24_djot_editor_knot_nodes_plan.md)
+large build. Grew out of the [djot editor plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md)
 Phase 3 (folds), which is blocked on this.
 
 ## Why (what the textarea cannot do)
@@ -135,7 +135,7 @@ B stays the door if pixel-exact editing control is ever wanted.
 
 ## Cross-references
 
-- [djot editor plan](2026-06-24_djot_editor_knot_nodes_plan.md): Phase 3 folds/gutter,
+- [djot editor plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md): Phase 3 folds/gutter,
   blocked on this; the illume `folds`/`outline`/container-tree the model reads.
 - genet `docs/2026-07-08_chisel_widget_catalog.md`: the editor ladder + the arrangement /
   `VirtualWindow` tier-3 mechanism this consumes.

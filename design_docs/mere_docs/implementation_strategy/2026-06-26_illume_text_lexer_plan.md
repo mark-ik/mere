@@ -162,7 +162,7 @@ illume's first non-editor consumer.
 
 ## Cross-references
 
-- [djot editor + knot nodes plan](2026-06-24_djot_editor_knot_nodes_plan.md): the editor
+- [djot editor + knot nodes plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md): the editor
   that illume's highlight core grew out of; its Phase 2/3 highlight + injection work is
   illume's seed.
 - [borrowed-ideas brief](../research/2026-06-25_borrowed_ideas_brief.md): the `=query`

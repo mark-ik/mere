@@ -54,7 +54,7 @@ complete), user zoom shipped, auto-DPI planned.
 - **Undo/redo, then the event log and Timeline**
   ([event_log_timeline](../implementation_strategy/2026-07-01_event_log_timeline_plan.md):
   undo ships first, with zero storage).
-- **The write side of knots**: the [djot editor](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md)
+- **The write side of knots**: the [djot editor](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md)
   (jotdown + logos injection, pure Rust, wasm-safe), with
   [illume / tinct](../implementation_strategy/2026-06-26_illume_text_lexer_plan.md)
   extraction as publishable siblings.

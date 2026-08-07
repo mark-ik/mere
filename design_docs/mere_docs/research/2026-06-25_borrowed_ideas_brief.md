@@ -5,7 +5,7 @@
 (spatial canvases, local-first / p2p stacks, agentic tools), filtered through
 Mere's three distinguishing properties and through Mark's curation of a longer
 brainstorm. This is the architecture-level companion to the grammar-level
-[carve syntax harvest](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md#syntax-harvest-from-carve-extensions-over-djot).
+[carve syntax harvest](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md#syntax-harvest-from-carve-extensions-over-djot).
 Each item carries its source project, Mark's framing, and a status (net-new,
 already-scoped-elsewhere, or dependency-gated). Same discipline as carve: take
 the idea, fit it to Mere's substrate, do not import a foreign product's shape.
@@ -124,7 +124,7 @@ current configuration. That keeps the region honest. Ties to the
 [graph signals layer](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
 for the edge config. The `=query` polyglot block is the in-note form of the same
 idea, a live query rendered inline, which slots into the
-[knot editor](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md)
+[knot editor](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md)
 fence architecture.
 
 ### P2P x spatial: multiplayer presence [already scoped]
@@ -144,7 +144,7 @@ feature in itself:**
 
 - Live Potluck / Inkbase blocks: a script fence's output renders inline and stays
   manipulable, the
-  [knot editor](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md)
+  [knot editor](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md)
   script-block endgame over `evaluate_blocks`.
 - Rich-text CRDT for collaborative knot editing: Peritext is the reference.
 - Local embeddings for semantic neighbors: reachable via Burn-wgpu, though a whole
@@ -161,7 +161,7 @@ feature in itself:**
 
 ## Cross-references
 
-- [carve syntax harvest](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md#syntax-harvest-from-carve-extensions-over-djot):
+- [carve syntax harvest](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md#syntax-harvest-from-carve-extensions-over-djot):
   the grammar-level companion.
 - [graph signals layer plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md):
   edge config and lens, for live query regions.
@@ -178,5 +178,5 @@ feature in itself:**
   agentic scripting, for MCP and live blocks.
 - [local models harness brief](2026-06-24_local_models_harness_brief.md): local AI
   lane, for embeddings and agents.
-- [djot editor and knot nodes plan](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md):
+- [djot editor and knot nodes plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md):
   knot editor, for the `=query` block and live blocks.

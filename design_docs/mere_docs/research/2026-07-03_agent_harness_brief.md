@@ -18,7 +18,7 @@ the loop that puts a model behind the actions. This doc is that loop.
   the one action id-space (palette, omnibar, a11y, harness). The tool vocabulary.
 - [mcp_native_graph plan](../implementation_strategy/2026-06-26_mcp_native_graph_plan.md) — the
   external boundary, both directions. Expose rides the registry; consume is a tool ring here.
-- [knot plan, agent nodes](../implementation_strategy/2026-06-24_djot_editor_knot_nodes_plan.md) —
+- [knot plan, agent nodes](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md) —
   the durable home of a standing agent: a node whose body is its policy, whose edges are its
   materialized results.
 - [geist models brief](2026-05-10_geist_models_brief.md) — the model architecture (base + adapter
