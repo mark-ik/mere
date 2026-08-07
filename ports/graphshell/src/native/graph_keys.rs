@@ -78,7 +78,8 @@ impl GraphKeyGroup {
         root: &Path,
     ) -> Result<OpenedKeyGroup, GraphKeyError> {
         let storage = SealedRecordStorage::open_with_key(root, storage_key(identity, graph)?);
-        let record = PathBuf::from("graphshell/group-sessions").join(format!("{}.session", hex(&graph)));
+        let record =
+            PathBuf::from("graphshell/group-sessions").join(format!("{}.session", hex(&graph)));
         if let Some(bytes) = storage.load_record::<Vec<u8>>(&record)? {
             return Ok(OpenedKeyGroup {
                 group: Self {
@@ -121,9 +122,9 @@ impl GraphKeyGroup {
             return Ok(None);
         }
         let state = self.session.data_keyring_state()?;
-        Ok(Some(Arc::new(
-            DataKeyring::from_bytes(&state).map_err(|error| GraphKeyError::Session(error.to_string()))?,
-        )))
+        Ok(Some(Arc::new(DataKeyring::from_bytes(&state).map_err(
+            |error| GraphKeyError::Session(error.to_string()),
+        )?)))
     }
 
     /// Turn encryption on for this graph, with this device as first member.
@@ -236,11 +237,15 @@ fn dispatch_event(dispatch: &GroupSessionDispatch) -> Result<PersonalGraphEvent,
 }
 
 fn decode_dispatch(bytes: &[u8]) -> Result<GroupSessionDispatch, GraphKeyError> {
-    p2panda_core::cbor::decode_cbor(bytes).map_err(|error| GraphKeyError::Session(error.to_string()))
+    p2panda_core::cbor::decode_cbor(bytes)
+        .map_err(|error| GraphKeyError::Session(error.to_string()))
 }
 
 /// A key that protects session state on this disk and nowhere else.
-fn storage_key(identity: &dyn IdentityProvider, graph: [u8; 32]) -> Result<[u8; 32], GraphKeyError> {
+fn storage_key(
+    identity: &dyn IdentityProvider,
+    graph: [u8; 32],
+) -> Result<[u8; 32], GraphKeyError> {
     let mut salt = Vec::with_capacity(SESSION_IDENTITY_CONTEXT.len() + 32);
     salt.extend_from_slice(SESSION_IDENTITY_CONTEXT);
     salt.extend_from_slice(&graph);
