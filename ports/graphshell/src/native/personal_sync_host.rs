@@ -623,6 +623,26 @@ impl PersonalSyncHost {
         self.key_group.lock().await.is_keyed()
     }
 
+    /// Whether some device has already created this graph's key group.
+    ///
+    /// Read off the lane rather than from local state, because the question is
+    /// about the graph and not about this device. A device that can see a
+    /// group must wait to be added rather than starting a second one: two
+    /// groups on one graph cannot read each other, and nothing on the lane
+    /// would say which was meant.
+    pub async fn key_group_exists(&self) -> Result<bool, PersonalSyncHostError> {
+        let steps = {
+            let replica = self.replica.lock().await;
+            crate::personal_sync::key_agreement(&replica.sync_store(), self.graph).await?
+        };
+        Ok(steps.iter().any(|step| {
+            matches!(
+                step.step,
+                crate::personal_sync::KeyAgreementEvent::Dispatch(_)
+            )
+        }))
+    }
+
     /// Turn encryption on for this graph, with this device as first member.
     ///
     /// Explicit because it cannot be undone by another device: two devices
@@ -1336,6 +1356,66 @@ mod tests {
         assert!(
             arrived,
             "a sealed node crossed and was read on the other side"
+        );
+
+        owner.close().await.unwrap();
+        sibling.close().await.unwrap();
+    }
+
+    /// A device that can already see a key group must not start a second one.
+    /// Two groups on one graph cannot read each other, and nothing on the lane
+    /// would say which was meant.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_device_that_sees_a_key_group_does_not_start_another() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = [0xd1; 32];
+        let owner_identity = InMemoryProvider::from_seed([0xd2; 32]);
+        let sibling_identity = InMemoryProvider::from_seed([0xd3; 32]);
+        let roster = SyncRoster::new([
+            owner_identity.master_public_key().to_bytes(),
+            sibling_identity.master_public_key().to_bytes(),
+        ]);
+        let config = |name: &str| PersonalSyncHostConfig {
+            graph,
+            store_path: directory.path().join(format!("{name}.redb")),
+            roster: roster.clone(),
+            selection: SyncSelection::default(),
+            peer_tickets: Vec::new(),
+            peer_hints: Vec::new(),
+            paired_nodes: Vec::new(),
+            relay_urls: Vec::new(),
+        };
+
+        let owner = PersonalSyncHost::open(&owner_identity, config("owner"))
+            .await
+            .unwrap();
+        let mut sibling_config = config("sibling");
+        sibling_config.peer_tickets = vec![owner.ticket().await.unwrap()];
+        let sibling = PersonalSyncHost::open(&sibling_identity, sibling_config)
+            .await
+            .unwrap();
+        owner.pair_node(sibling.node_id()).await.unwrap();
+
+        assert!(!owner.key_group_exists().await.unwrap());
+        assert!(!sibling.key_group_exists().await.unwrap());
+
+        owner.enable_encryption().await.unwrap();
+        assert!(owner.key_group_exists().await.unwrap());
+
+        // Once the create has replicated, the sibling can see it and knows to
+        // wait rather than create.
+        let mut sees = false;
+        for _ in 0..60 {
+            sees = sibling.key_group_exists().await.unwrap();
+            if sees {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert!(sees, "the sibling can tell a group already exists");
+        assert!(
+            !sibling.is_keyed().await,
+            "seeing a group is not being in it: it still waits to be added"
         );
 
         owner.close().await.unwrap();

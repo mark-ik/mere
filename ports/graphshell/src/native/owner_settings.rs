@@ -119,6 +119,21 @@ pub struct SyncSettings {
     pub roster_roots: Vec<String>,
     pub paired_devices: Vec<PairedDevice>,
     pub lanes: LaneSettings,
+    /// Seal this graph's operations, so a device outside its key group cannot
+    /// read them even holding the bytes.
+    ///
+    /// **Turn this on for one device.** Settings are per device and are not
+    /// synced, so this is naturally where it lands. The device that turns it
+    /// on creates the key group and admits the others as their pre-keys
+    /// arrive; the others need nothing set. Two devices creating independently
+    /// would produce two groups on one graph, each unable to read the other,
+    /// so a device that can already see a group on the lane waits to be added
+    /// rather than starting a second one.
+    ///
+    /// Turning it off does not unseal anything. Operations already sealed stay
+    /// sealed, and this device keeps its key; it only stops sealing new ones.
+    #[serde(default)]
+    pub encrypted: bool,
     /// iroh relay urls to register.
     ///
     /// Empty means this device is LAN-only: p2panda registers no relay by

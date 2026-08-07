@@ -523,6 +523,31 @@ fn spawn_pairing_watch(
                 }
             }
 
+            // Turn encryption on if the owner asked and nobody has yet.
+            //
+            // Checked against the lane, not against this device: seeing a
+            // group means some device already created one, and starting a
+            // second would split the graph into two halves that cannot read
+            // each other. So this creates at most once per graph, and only
+            // from the device whose settings say so.
+            if sync.encrypted && !host.is_keyed().await {
+                match host.key_group_exists().await {
+                    Ok(false) => match host.enable_encryption().await {
+                        Ok(()) => tracing::info!("encryption is on for this graph"),
+                        Err(error) => tracing::warn!(
+                            %error,
+                            "could not turn encryption on; this graph stays readable to every                              admitted device"
+                        ),
+                    },
+                    // Somebody created it. This device waits to be added,
+                    // which is the ordinary path for every device but one.
+                    Ok(true) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "could not tell whether this graph has a key group")
+                    }
+                }
+            }
+
             // Key whatever has published since the last pass, and learn any
             // epoch this device has been given. Paired with the revocation
             // above deliberately: a host that keys devices automatically but
