@@ -2794,10 +2794,14 @@ Fallback.
             "an offline refresh must leave the restored document available"
         );
 
-        reopened.protocol_version = ProtocolVersion::V1_2;
         reopened.snapshot = None;
         reopened.resources.clear();
-        let request = reopened.describe().projections.remove(0).request;
+        // The version has to travel in the request, because that is where a
+        // real client puts it. `describe` advertises the endpoint's newest, and
+        // `snapshot` adopts whatever the request carries, so assigning the
+        // field alone is overwritten before the resource is ever built.
+        let mut request = reopened.describe().projections.remove(0).request;
+        request.version = ProtocolVersion::V1_2;
         let snapshot = reopened.snapshot(request).unwrap();
         let (_, editable, _) = editable_resource(&mut reopened, &snapshot, "field-note");
         let compatible = editable.derived.expect("1.2 still receives derived text");
@@ -2805,7 +2809,6 @@ Fallback.
             compatible.cache.is_none(),
             "1.2 resources must omit the 1.3 cache field"
         );
-        reopened.protocol_version = ProtocolVersion::V1;
         reopened.snapshot = None;
         reopened.resources.clear();
 
