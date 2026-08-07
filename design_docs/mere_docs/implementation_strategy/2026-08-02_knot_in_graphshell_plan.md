@@ -1,10 +1,17 @@
 # Knot in Graphshell Plan
 
 **Date:** 2026-08-02
-**Status:** scoped; **K1 decided 2026-08-02 in favour of Option A** (Mark).
-Shared documents are projected, personal documents replicate. T4's done
-condition is replaced accordingly, and the shared-Knot authority question it
-recorded is closed as dissolved rather than answered.
+**Status:** K0-K3 complete as of 2026-08-06. K1 chose Option A (Mark): shared
+documents are projected, personal documents replicate, and T4's done condition
+is replaced accordingly, closing the shared-Knot authority question as
+dissolved rather than answered. K2's three clauses are proven against the real
+resident host; K3 kept the spawn path deliberately.
+
+**Outstanding before this archives:** the two-machine receipt over real
+hardware. Everything above is proven against a paired in-process fixture, which
+exercises every layer but the physical one, and the reachability work the
+receipt depends on lives in its own plan. The Knot search section below is
+independent of K0-K3 and does not block archiving of the hosting work.
 **Related:** the
 [carrier seam plan](./2026-08-01_graphshell_carrier_seam_plan.md), which this
 converges with — see "Why these are one move".
@@ -309,10 +316,44 @@ what was missing was the ordinary case, since a product endpoint over durable
 source is generally both notifying and resumable.
 
 
-**K3. Retire the spawn path or keep it deliberately.** If the remote case has
-no live consumer, the stdio carrier and `bin/knot_endpoint.rs` are a
-deployment option rather than the default. Decide with evidence, not by
-attrition.
+**K3. ~~Retire the spawn path or keep it deliberately~~ DECIDED 2026-08-06:
+kept, deliberately, as a deployment option rather than the default.**
+
+The evidence the step asked for, now that hosting and the network carrier both
+exist:
+
+- **Hosting is already the default and spawning is already the exception.**
+  Turnstone hosts every Knot mode in-process, and `TURNSTONE_KNOT_ENDPOINT` is
+  an explicit opt-out for the case where the endpoint genuinely is a separate
+  program. Nothing has to change for that to be true; K0 made it so.
+- **Spawning is no longer how anything reaches elsewhere.** That was the stdio
+  carrier's accidental second job, and C3 took it back. A remote endpoint is
+  now reached by dialling it.
+- **It still has live consumers**, which is what distinguishes a decision from
+  attrition: `ports/knot/tests/revision_bell.rs` drives a real endpoint
+  process, and the G4 receipt harness in `ports/graphshell/src/sessions.rs`
+  mounts endpoint programs through `spawn_endpoint_session`.
+
+The reason to keep it is better than "it is still used", though, and worth
+stating because it is the thing that would be lost:
+
+**Stdio is the carrier that proves the protocol does not secretly depend on
+shared memory.** It is the only one with a real process boundary, so it is the
+only one that can catch a message type that stopped round-tripping, or an
+endpoint that quietly began relying on state its client happened to share.
+`graphshell-local` serializes deliberately for the same reason, but it
+serializes *by choice* and could be changed by accident; stdio cannot cheat,
+because there is a pipe in the way. Deleting it would leave that guarantee
+resting entirely on a decision someone could reverse without noticing.
+
+Second, it is the only deployment for an endpoint that *is* a separate program:
+one shipped by someone else, or one a host wants isolated in its own process
+rather than linked into itself. The participant gate's untrusted cases are the
+obvious future consumer, and the cost of keeping the option open is 684 stable,
+tested lines.
+
+So: not the default, not deprecated, and not on a path to deletion. A
+deployment option with two jobs it is uniquely good at.
 
 ## Knot search on the hybrid seam
 

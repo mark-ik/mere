@@ -3,7 +3,9 @@
 **Date:** 2026-08-01
 **Status:** complete. C0, C1, and C3 landed; C2 followed on C3's evidence and
 moved the session machinery to `graphshell-client` and the carrier body to a
-new `graphshell-network`. Ready to archive once K2 has consumed it.
+new `graphshell-network`. K2 consumed it on 2026-08-06, so this is ready to
+archive; C3's carrier error type gained the `Refused`/`Disconnected` split
+there, which is recorded in the Knot plan rather than restated here.
 **Depends on:** nothing. Every step below is independent of the authority
 decisions open under Turnstone's place port (the DCGKA carrier and the shared
 Knot space), which is the reason to do this now.
