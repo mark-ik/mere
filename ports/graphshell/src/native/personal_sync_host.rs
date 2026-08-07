@@ -711,6 +711,27 @@ impl PersonalSyncHost {
         Ok(())
     }
 
+    /// Drop the device that owns `root` from the key group, and turn the epoch.
+    ///
+    /// Takes a Personae root because that is what unpairing knows. The
+    /// recipient is resolved off the lane, so nothing has to persist the
+    /// mapping. A root that never joined resolves to nothing, which is the
+    /// ordinary case and reports `false` rather than failing.
+    pub async fn revoke_root_keys(&self, root: [u8; 32]) -> Result<bool, PersonalSyncHostError> {
+        if !self.is_keyed().await {
+            return Ok(false);
+        }
+        let steps = {
+            let replica = self.replica.lock().await;
+            crate::personal_sync::key_agreement(&replica.sync_store(), self.graph).await?
+        };
+        let Some(member) = crate::native::graph_keys::recipient_for_root(&steps, root) else {
+            return Ok(false);
+        };
+        self.revoke_device_keys(member).await?;
+        Ok(true)
+    }
+
     /// Put the current keyring where the replica and intake will find it.
     async fn refresh_keyring(&self) -> Result<(), PersonalSyncHostError> {
         let keyring = {

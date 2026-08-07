@@ -372,13 +372,43 @@ pub async fn start<P: IdentityProvider + ?Sized>(
 /// This reconciles in both directions deliberately. An unpair that only took
 /// effect on the next restart would leave a device the owner believes they
 /// removed still receiving the graph until they happened to reboot.
+/// Paired devices as node id to Personae root.
+///
+/// Both halves together because unpairing needs them together: the node id is
+/// what the overlay drops, and the root is what resolves the device's seat in
+/// the key group. A receive-only device has no root recorded and cannot join
+/// the key group, so `None` is a real answer rather than missing data.
+fn paired_nodes_with_roots(
+    sync: &owner_settings::SyncSettings,
+) -> Result<std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>>, OwnerSettingsError> {
+    let mut paired = std::collections::BTreeMap::new();
+    for device in &sync.paired_devices {
+        let node = owner_settings::parse_hex32(&device.node_id)?;
+        let root = match device.root.as_deref() {
+            Some(root) => Some(owner_settings::parse_hex32(root)?),
+            None => None,
+        };
+        paired.insert(node, root);
+    }
+    Ok(paired)
+}
+
 fn spawn_pairing_watch(
     host: Arc<PersonalSyncHost>,
     settings_file: PathBuf,
     already_applied: Vec<[u8; 32]>,
     local_root: [u8; 32],
 ) {
-    let mut applied: std::collections::HashSet<[u8; 32]> = already_applied.into_iter().collect();
+    // Node id to Personae root, not just node ids. Unpairing has to revoke the
+    // departed device's key, the key group knows devices by a recipient
+    // derived from their root, and the settings record is gone by the time the
+    // removal is noticed. Remembering the root here is what makes revocation
+    // possible at all; `None` is a receive-only device, which cannot join the
+    // key group and so has nothing to revoke.
+    let mut applied: std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>> = already_applied
+        .into_iter()
+        .map(|node| (node, None))
+        .collect();
     // Last reported reachability, so the log records transitions rather than
     // repeating the same line every poll.
     // (node, has an address, has a live path). Connectivity is in the compared
@@ -399,13 +429,14 @@ fn spawn_pairing_watch(
             // not the same as an empty roster; leave the live overlay alone
             // rather than tearing every device off it on a partial edit.
             let Some(sync) = reloaded.sync else { continue };
-            let desired: std::collections::HashSet<[u8; 32]> = match sync.paired_node_keys() {
-                Ok(nodes) => nodes.into_iter().collect(),
-                Err(error) => {
-                    tracing::warn!(%error, "owner settings hold an unusable node id");
-                    continue;
-                }
-            };
+            let desired: std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>> =
+                match paired_nodes_with_roots(&sync) {
+                    Ok(paired) => paired,
+                    Err(error) => {
+                        tracing::warn!(%error, "owner settings hold an unusable node id");
+                        continue;
+                    }
+                };
 
             // Authority moves with reachability. Tagging a peer onto the
             // overlay without admitting its root produces a device that
@@ -426,10 +457,15 @@ fn spawn_pairing_watch(
                 Err(error) => tracing::warn!(%error, "owner settings hold an unusable roster root"),
             }
 
-            for node in desired.difference(&applied).copied().collect::<Vec<_>>() {
+            let arrivals: Vec<([u8; 32], Option<[u8; 32]>)> = desired
+                .iter()
+                .filter(|(node, _)| !applied.contains_key(*node))
+                .map(|(node, root)| (*node, *root))
+                .collect();
+            for (node, root) in arrivals {
                 match host.pair_node(node).await {
                     Ok(()) => {
-                        applied.insert(node);
+                        applied.insert(node, root);
                         tracing::info!(
                             node = %owner_settings::hex32(&node),
                             "applied a newly paired device without a restart"
@@ -445,10 +481,33 @@ fn spawn_pairing_watch(
                 }
             }
 
-            for node in applied.difference(&desired).copied().collect::<Vec<_>>() {
+            let departures: Vec<([u8; 32], Option<[u8; 32]>)> = applied
+                .iter()
+                .filter(|(node, _)| !desired.contains_key(*node))
+                .map(|(node, root)| (*node, *root))
+                .collect();
+            for (node, root) in departures {
                 match host.unpair_node(node).await {
                     Ok(()) => {
                         applied.remove(&node);
+                        // Revoke before anything else can be written, so the
+                        // departed device does not read what comes next. It
+                        // keeps what it could already read; no scheme takes
+                        // that back.
+                        if let Some(root) = root {
+                            match host.revoke_root_keys(root).await {
+                                Ok(true) => tracing::info!(
+                                    node = %owner_settings::hex32(&node),
+                                    "revoked the unpaired device's key and turned the epoch"
+                                ),
+                                Ok(false) => {}
+                                Err(error) => tracing::warn!(
+                                    %error,
+                                    node = %owner_settings::hex32(&node),
+                                    "could not revoke the unpaired device's key; it can still                                      read what this graph writes next"
+                                ),
+                            }
+                        }
                         tracing::info!(
                             node = %owner_settings::hex32(&node),
                             "dropped an unpaired device without a restart"
@@ -462,6 +521,20 @@ fn spawn_pairing_watch(
                         "could not drop an unpaired device"
                     ),
                 }
+            }
+
+            // Key whatever has published since the last pass, and learn any
+            // epoch this device has been given. Paired with the revocation
+            // above deliberately: a host that keys devices automatically but
+            // waits for someone to revoke would widen the reader set on its
+            // own and narrow it only when asked.
+            //
+            // A no-op on a graph where encryption was never turned on, which
+            // is why it is unconditional rather than gated on a setting.
+            match host.key_paired_devices().await {
+                Ok(0) => {}
+                Ok(keyed) => tracing::info!(keyed, "keyed newly paired devices"),
+                Err(error) => tracing::warn!(%error, "could not key paired devices this pass"),
             }
 
             // Report connectedness, not just membership or a known address. A
