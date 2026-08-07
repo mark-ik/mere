@@ -20,8 +20,9 @@ use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext, MunimentStore,
-    OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget,
+    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext,
+    GroupPrekeyBundle, GroupSessionDispatch, MunimentStore, OperationPolicy, OperationProcessor,
+    PendingCausalOperation, ProcessError, Reject, StoreTarget,
     author_head, causal_projection, happens_before, observed_frontier, stable_writer_subject,
     validate_causal_metadata,
 };
@@ -138,6 +139,38 @@ pub enum PersonalGraphEvent {
     ObserveBlobAvailability {
         observation: BlobAvailabilityObservation,
     },
+    /// This device's group pre-key bundle, so a keyed member can add it.
+    ///
+    /// Public by construction: it is what another device needs in order to
+    /// key this one, and it authenticates back to a Personae root.
+    PublishPrekey {
+        /// `stickleback::GroupPrekeyBundle::to_bytes`.
+        bundle: Vec<u8>,
+    },
+    /// One membership or rotation step in the graph's key group.
+    ///
+    /// The broadcast control frame plus the per-recipient direct frames, which
+    /// the group scheme has already sealed to their recipients. Carrying them
+    /// in the clear here discloses nothing and is what lets a device that has
+    /// no key yet still receive one.
+    GroupDispatch {
+        /// `stickleback::GroupSessionDispatch::to_bytes`.
+        dispatch: Vec<u8>,
+    },
+}
+
+impl PersonalGraphEvent {
+    /// Whether this event carries key agreement rather than graph content.
+    ///
+    /// Key traffic must stay readable by a device that has no key, since
+    /// reading it is how that device gets one. Sealing it would be a lock
+    /// whose only key is inside the box.
+    pub fn is_key_agreement(&self) -> bool {
+        matches!(
+            self,
+            Self::PublishPrekey { .. } | Self::GroupDispatch { .. }
+        )
+    }
 }
 
 /// One immutable statement about which device currently holds addressed bytes.
@@ -315,6 +348,26 @@ pub struct WriterReceipt {
     pub stable_subject: [u8; 32],
 }
 
+/// One key-agreement step read off the lane, in causal order.
+///
+/// `author_root` is the stable writer subject the lane already authenticates,
+/// which is exactly what `GroupSession::process` requires. Carrying it here
+/// means the caller never has to re-derive who authored a control frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyAgreementStep {
+    pub operation: [u8; 32],
+    pub author_root: [u8; 32],
+    pub step: KeyAgreementEvent,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KeyAgreementEvent {
+    /// A device published a pre-key bundle so it can be added.
+    Prekey(Vec<u8>),
+    /// A membership or rotation step.
+    Dispatch(Vec<u8>),
+}
+
 /// Deterministic projection of one retained operation set.
 pub struct SyncProjection {
     pub graph: Graph,
@@ -323,6 +376,10 @@ pub struct SyncProjection {
     pub handler_preferences: BTreeMap<String, String>,
     pub blob_availability: Vec<BlobAvailabilityObservation>,
     pub available_blobs: BTreeMap<[u8; 32], BTreeSet<String>>,
+    /// Key-agreement steps in causal order, for a caller to hand to its group
+    /// session. Present whether or not this device can read the sealed
+    /// operations around them, since reading these is how it gets the key.
+    pub key_agreement: Vec<KeyAgreementStep>,
     pub pending: Vec<PendingCausalOperation>,
     pub conflicts: Vec<SyncConflict>,
     pub writers: Vec<WriterReceipt>,
@@ -416,6 +473,21 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
         for event in &record.events {
             validate_event(event)?;
         }
+        if let Err(reason) = one_kind_per_operation(&record.events) {
+            return Err(reason);
+        }
+        // Key agreement must be readable without a key, so it may not be
+        // sealed. Checked at intake rather than trusted, because a sealed
+        // dispatch would be undiagnosable from the outside: it would look
+        // exactly like an operation this device simply has no key for.
+        if operation.header.extensions.encryption != PersonalEncryption::Plaintext
+            && record.events.iter().any(PersonalGraphEvent::is_key_agreement)
+        {
+            return Err(Reject::new(
+                "sealed-key-agreement",
+                "key agreement must travel in the clear; sealing it would need the key it carries",
+            ));
+        }
         let subject = stable_subject(operation, &record)?;
         if !self.roster.admits(&subject) {
             return Err(Reject::new(
@@ -469,8 +541,38 @@ fn validate_event(event: &PersonalGraphEvent) -> Result<(), Reject> {
                 "blob availability observation must name its source device",
             ))
         }
+        // Decoding a bundle verifies its identity signature back to a Personae
+        // root, so a forged pre-key is refused at intake rather than at the
+        // moment somebody tries to key it.
+        PersonalGraphEvent::PublishPrekey { bundle } => GroupPrekeyBundle::from_bytes(bundle)
+            .map(|_| ())
+            .map_err(|error| Reject::new("invalid-group-prekey", error.to_string())),
+        PersonalGraphEvent::GroupDispatch { dispatch } => {
+            decode_cbor::<GroupSessionDispatch, _>(dispatch.as_slice())
+                .map(|_| ())
+                .map_err(|error| Reject::new("invalid-group-dispatch", error.to_string()))
+        }
         _ => Ok(()),
     }
+}
+
+/// Refuse an operation that mixes key agreement with graph content.
+///
+/// Not tidiness. Key agreement is authored in the clear, so a content event
+/// sharing the operation would be published in the clear with it. Separating
+/// them at the grammar means that cannot happen by accident.
+fn one_kind_per_operation(events: &[PersonalGraphEvent]) -> Result<(), Reject> {
+    let key = events
+        .iter()
+        .filter(|event| event.is_key_agreement())
+        .count();
+    if key == 0 || key == events.len() {
+        return Ok(());
+    }
+    Err(Reject::new(
+        "mixed-key-and-content-operation",
+        "an operation carries either key agreement or graph content, never both",
+    ))
 }
 
 fn validate_facet_name(facet: &str) -> Result<(), Reject> {
@@ -575,7 +677,11 @@ fn to_operation(
 ) -> Result<Operation<PersonalGraphExt>, PersonalGraphError> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
     let record_bytes = encode_cbor(record).expect("a personal graph record always CBOR-encodes");
-    let (body_bytes, encryption) = match keyring {
+    // Key agreement stays in the clear even here. A device with no key reads
+    // this operation to get one, so sealing it would be a lock whose only key
+    // is inside the box. Admission refuses a sealed one for the same reason.
+    let carries_keys = record.events.iter().any(PersonalGraphEvent::is_key_agreement);
+    let (body_bytes, encryption) = match keyring.filter(|_| !carries_keys) {
         Some(keyring) => {
             let envelope = keyring
                 .seal_random(&record_bytes)
@@ -869,6 +975,80 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
     }
 }
 
+/// Read the key agreement without holding a key.
+///
+/// The pass a device runs before it can read anything else: it has been
+/// paired, it has published a pre-key, and it needs the dispatch that keys it.
+/// Sealed operations are skipped rather than refused, because being unable to
+/// read them is the entire reason this runs.
+///
+/// Skipping is safe here and nowhere else. Key agreement is plaintext by
+/// construction and admission refuses a sealed one, so a sealed operation
+/// cannot be a step this pass needs.
+pub async fn key_agreement<B: Backend + Clone + Send + Sync + 'static>(
+    store: &MunimentStore<B, PersonalGraphExt>,
+    graph: [u8; 32],
+) -> Result<Vec<KeyAgreementStep>, PersonalGraphError> {
+    let by_author: BTreeMap<VerifyingKey, Vec<u64>> =
+        TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(graph)).await?;
+    let mut steps = Vec::new();
+    for (author, mut logs) in by_author {
+        logs.sort_unstable();
+        logs.dedup();
+        for log_id in logs {
+            let entries = LogStore::<
+                Operation<PersonalGraphExt>,
+                VerifyingKey,
+                u64,
+                u32,
+                Hash,
+            >::get_log_entries(store, &author, &log_id, None, None)
+            .await?
+            .unwrap_or_default();
+            for (operation, _) in entries {
+                if operation.header.extensions.encryption != PersonalEncryption::Plaintext {
+                    continue;
+                }
+                let Ok(record) = from_operation(&operation, None) else {
+                    continue;
+                };
+                let Ok(subject) = stable_subject(&operation, &record) else {
+                    continue;
+                };
+                for event in &record.events {
+                    let step = match event {
+                        PersonalGraphEvent::PublishPrekey { bundle } => {
+                            KeyAgreementEvent::Prekey(bundle.clone())
+                        }
+                        PersonalGraphEvent::GroupDispatch { dispatch } => {
+                            KeyAgreementEvent::Dispatch(dispatch.clone())
+                        }
+                        _ => continue,
+                    };
+                    steps.push((
+                        operation.header.seq_num,
+                        KeyAgreementStep {
+                            operation: *operation.hash.as_bytes(),
+                            author_root: subject,
+                            step,
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    // Causal order needs every operation, which this pass deliberately does not
+    // have. Sequence per author with the operation hash as a tiebreak is a
+    // deterministic order every device agrees on, which is what the group
+    // scheme needs; it orders its own steps internally.
+    steps.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| left.1.operation.cmp(&right.1.operation))
+    });
+    Ok(steps.into_iter().map(|(_, step)| step).collect())
+}
+
 pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, PersonalGraphExt>,
     graph_id: [u8; 32],
@@ -892,6 +1072,7 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     let mut handlers = BTreeMap::new();
     let mut blob_availability = BTreeMap::<Uuid, BlobAvailabilityObservation>::new();
     let mut writers = Vec::new();
+    let mut key_agreement = Vec::new();
 
     for &index in &causal.order {
         let stored = &records[index];
@@ -904,6 +1085,27 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
             stable_subject: subject,
         });
         for event in &stored.record.events {
+            // Never gated by selection. A device cannot opt out of the traffic
+            // that keys it and still expect to read the graph.
+            match event {
+                PersonalGraphEvent::PublishPrekey { bundle } => {
+                    key_agreement.push(KeyAgreementStep {
+                        operation: *stored.operation.hash.as_bytes(),
+                        author_root: subject,
+                        step: KeyAgreementEvent::Prekey(bundle.clone()),
+                    });
+                    continue;
+                }
+                PersonalGraphEvent::GroupDispatch { dispatch } => {
+                    key_agreement.push(KeyAgreementStep {
+                        operation: *stored.operation.hash.as_bytes(),
+                        author_root: subject,
+                        step: KeyAgreementEvent::Dispatch(dispatch.clone()),
+                    });
+                    continue;
+                }
+                _ => {}
+            }
             if selection.projects(event) {
                 apply_event(
                     &mut graph,
@@ -972,6 +1174,7 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
         handler_preferences: handlers,
         blob_availability,
         available_blobs,
+        key_agreement,
         pending: causal.pending,
         conflicts,
         writers,
@@ -1103,6 +1306,10 @@ fn apply_event(
                 .entry(observation.record_id)
                 .or_insert_with(|| observation.clone());
         }
+        // Key agreement is not graph content and folds into nothing. It is
+        // collected separately, because acting on it changes this device's
+        // keys rather than the graph everyone shares.
+        PersonalGraphEvent::PublishPrekey { .. } | PersonalGraphEvent::GroupDispatch { .. } => {}
     }
 }
 
@@ -1182,6 +1389,14 @@ fn event_target(event: &PersonalGraphEvent) -> String {
         PersonalGraphEvent::SetHandlerPreference { key, .. } => format!("handler/{key}"),
         PersonalGraphEvent::ObserveBlobAvailability { observation } => {
             format!("blob-availability/{}", observation.record_id)
+        }
+        // Concurrent key steps are not a conflict to report: the group scheme
+        // orders them itself, and two devices publishing at once is ordinary.
+        PersonalGraphEvent::PublishPrekey { bundle } => {
+            format!("group-prekey/{}", Hash::digest(bundle))
+        }
+        PersonalGraphEvent::GroupDispatch { dispatch } => {
+            format!("group-dispatch/{}", Hash::digest(dispatch))
         }
     }
 }
@@ -1910,5 +2125,104 @@ mod tests {
             matches!(read, Err(PersonalGraphWireError::Unsealable(_))),
             "expected an unsealable error, got {read:?}"
         );
+    }
+
+    /// The property the whole distribution design rests on: a device with no
+    /// key must still be able to read the traffic that keys it.
+    #[tokio::test]
+    async fn key_agreement_stays_readable_when_everything_else_is_sealed() {
+        let seed = [0x74; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let roster = SyncRoster::new([subject]);
+        let backend = MemoryBackend::new();
+        let mut replica =
+            PersonalGraphReplica::new(backend.clone(), GRAPH, seed, roster, selection());
+        replica.set_keyring(keyring());
+
+        // Content authored under a key, and a pre-key published beside it.
+        replica
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: A,
+                address: "https://sealed.test/".into(),
+                title: "Sealed".into(),
+            }])
+            .await
+            .unwrap();
+        let (_, bundle) = stickleback::GroupSession::new(
+            stickleback::GroupSessionId(GRAPH),
+            &personae::InMemoryProvider::from_seed([0x75; 32]),
+        )
+        .unwrap();
+        let published = replica
+            .author(vec![PersonalGraphEvent::PublishPrekey {
+                bundle: bundle.to_bytes().unwrap(),
+            }])
+            .await
+            .unwrap();
+
+        assert_eq!(
+            published.header.extensions.encryption,
+            PersonalEncryption::Plaintext,
+            "key agreement must not be sealed even by a device that holds a key"
+        );
+
+        // The reader a new device is: no key at all.
+        let steps = key_agreement(&replica.sync_store(), GRAPH).await.unwrap();
+        assert_eq!(steps.len(), 1, "the sealed content is skipped, the pre-key is not");
+        assert!(matches!(steps[0].step, KeyAgreementEvent::Prekey(_)));
+        assert_eq!(steps[0].author_root, subject, "the lane authenticates the author");
+    }
+
+    /// An operation may carry key agreement or graph content, never both.
+    /// Mixing would publish content in the clear alongside the key traffic.
+    #[tokio::test]
+    async fn an_operation_carrying_keys_may_not_also_carry_content() {
+        let seed = [0x76; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let mut replica = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            seed,
+            SyncRoster::new([subject]),
+            selection(),
+        );
+        let (_, bundle) = stickleback::GroupSession::new(
+            stickleback::GroupSessionId(GRAPH),
+            &personae::InMemoryProvider::from_seed([0x77; 32]),
+        )
+        .unwrap();
+        let mixed = replica
+            .author(vec![
+                PersonalGraphEvent::PublishPrekey {
+                    bundle: bundle.to_bytes().unwrap(),
+                },
+                PersonalGraphEvent::AddNode {
+                    id: A,
+                    address: "https://would-be-public.test/".into(),
+                    title: "Content beside a key".into(),
+                },
+            ])
+            .await;
+        assert!(mixed.is_err(), "mixing must be refused, not merely discouraged");
+    }
+
+    /// A forged pre-key is refused at intake, not when somebody tries to use it.
+    #[tokio::test]
+    async fn a_prekey_that_does_not_authenticate_is_refused() {
+        let seed = [0x78; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let mut replica = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            seed,
+            SyncRoster::new([subject]),
+            selection(),
+        );
+        let refused = replica
+            .author(vec![PersonalGraphEvent::PublishPrekey {
+                bundle: b"not a bundle".to_vec(),
+            }])
+            .await;
+        assert!(refused.is_err());
     }
 }

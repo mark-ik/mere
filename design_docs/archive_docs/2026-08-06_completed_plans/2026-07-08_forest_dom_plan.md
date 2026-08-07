@@ -5,7 +5,7 @@
 `layout_subtree`, cambium `push_forest_projection`, turnstone chrome as N window-root
 projections of one dom). F4 (multi-DPI) deferred. The body below is the pre-landing
 plan, kept for the design rationale.
-**Parent**: [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md)
+**Parent**: [one_state_n_windows_design](../../mere_docs/design/2026-07-05_one_state_n_windows_design.md)
 — this executes its **step 3**. Step 2 (the meerkat one-state migration) landed + is
 verified ([archived](../../archive_docs/2026-07-07_one_state_migration/)); its watch-items
 (§9 of the design doc) fold in here.
@@ -35,7 +35,7 @@ content tiles (the pelt/external-texture workbench tiles) already move by member
 reassignment, so a web tile keeps its live page and (with the scroll carry) its scroll
 position **today, without the forest dom**, while a new cross-tree key registry could carry
 *view-side* state for DOM-lane tiles but never their DOM node / scroll / layout. The middle
-path is detailed in [portable_tiles_plan](2026-07-08_portable_tiles_plan.md).
+path is detailed in [portable_tiles_plan](../../mere_docs/implementation_strategy/2026-07-08_portable_tiles_plan.md).
 
 The sharpened read: most of the *felt* tear-out payoff (a web tile keeping its live state) is
 reachable on N doms via the surface lane, so the forest dom earns its cost **specifically for
@@ -120,7 +120,7 @@ before committing.
   case wants it — do not gold-plate the per-window cascade before F3 banks the topology.
 - **Step 4 (portable tiles)** then becomes a same-document `move_before` for **DOM-lane** tiles
   and is finally reachable — now its own plan:
-  [portable_tiles_plan](2026-07-08_portable_tiles_plan.md) (which also carries the surface-lane
+  [portable_tiles_plan](../../mere_docs/implementation_strategy/2026-07-08_portable_tiles_plan.md) (which also carries the surface-lane
   P0 that needs no forest dom). **Done when** a torn-out DOM-lane tile keeps its DOM NodeId +
   scroll (`view.scroll[member]`, the one WindowView bit that must follow the move — rects
   self-heal per frame, textures are perf) across the window boundary, target apply scoped.

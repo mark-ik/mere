@@ -136,7 +136,7 @@ vault inside the app rather than merely a cheaper one.
   Knot remains a consumer through `knot-editor-host`.
 - ~~**The convergence decision has landed; Knot has not pulled it.**~~
   **Cleared 2026-07-27.** The
-  [commons convergence plan](2026-07-26_commons_multi_writer_convergence_plan.md)
+  [commons convergence plan](../../archive_docs/2026-08-06_completed_plans/2026-07-26_commons_multi_writer_convergence_plan.md)
   proves deterministic causal materialization over per-author logs. K5 now
   signs exact observed parents, restores author heads after Redb reopen, and
   returns documents, per-document conflicts, and pending-history diagnostics

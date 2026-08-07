@@ -183,7 +183,7 @@ between `shared` and `view`.
 3. **Forest dom.** One ScriptedDom, N window roots, per-window sessions rooted
    per window element, mutation routing by root containment. Done when two
    windows at different sizes and DPIs lay out and rasterize from one dom.
-   **Plan (2026-07-08): [forest_dom_plan](../implementation_strategy/2026-07-08_forest_dom_plan.md)**
+   **Plan (2026-07-08): [forest_dom_plan](../../archive_docs/2026-08-06_completed_plans/2026-07-08_forest_dom_plan.md)**
    (gate → F0 spike → F1 genet → F2 genet-layout → F3 meerkat → F4 multi-DPI).
 4. **Portable keyed adoption over moveBefore.** Engine slices first (the genet
    plan's S1/S2: the `Moved` mutation vocabulary, `move_before` semantics, the

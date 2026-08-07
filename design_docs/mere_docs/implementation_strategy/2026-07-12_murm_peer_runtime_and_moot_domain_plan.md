@@ -14,7 +14,7 @@ package spelling is retained below as part of this plan's evidence.
 governed-space domain over Murm's replication foundation, and remove p2panda
 session assembly from Turnstone. Preserve Mere as an offline-first graph library.
 **Supersedes**:
-[`2026-07-08_murm_moot_sibling_posture_plan.md`](2026-07-08_murm_moot_sibling_posture_plan.md).
+[`2026-07-08_murm_moot_sibling_posture_plan.md`](../../archive_docs/2026-08-06_superseded_plans/2026-07-08_murm_moot_sibling_posture_plan.md).
 That plan's completed consolidation and store work remain valid receipts. Its
 purity rule and host-composition target are retired.
 **Related**:

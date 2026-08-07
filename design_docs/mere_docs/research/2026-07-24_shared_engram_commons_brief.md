@@ -63,7 +63,7 @@ the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice.
 
 **Answered 2026-07-26/27** by the
-[commons multi-writer convergence plan](../implementation_strategy/2026-07-26_commons_multi_writer_convergence_plan.md).
+[commons multi-writer convergence plan](../../archive_docs/2026-08-06_completed_plans/2026-07-26_commons_multi_writer_convergence_plan.md).
 Checking the substrate first, as this section instructed, changed the answer:
 the replication layer already provides per-author order and a deterministic
 cross-author tiebreak, so convergence needed no CRDT or wall clock. It did

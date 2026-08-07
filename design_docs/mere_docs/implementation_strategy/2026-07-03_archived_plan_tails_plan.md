@@ -148,3 +148,12 @@ active tearout_gestures plan).
   missing is a reason. The plan's own rule was that a domain-neutral crate earns
   a sibling repo when someone outside this workspace depends on it, not when it
   merely could. Revisit when an external consumer appears, and not before.
+
+## From forest_dom (landed 2026-07-18, archived 2026-08-06)
+
+- **F4, per-window multi-DPI.** Per-window DPI, viewport, and cascade, deferred
+  on purpose rather than missed: the plan's own instruction was not to
+  gold-plate the per-window cascade before F3 had banked the topology, and F3
+  has. Revisit when a real multi-monitor case wants it, which is also the only
+  situation that can say whether the cascade needs to be per-window at all.
+

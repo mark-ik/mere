@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-08
 **Status**: Planning, downstream of the forest dom. Same-document cross-window moves are
-**blocked on step 3** ([forest_dom_plan](2026-07-08_forest_dom_plan.md)); this plan captures
+**blocked on step 3** ([forest_dom_plan](../../archive_docs/2026-08-06_completed_plans/2026-07-08_forest_dom_plan.md)); this plan captures
 the target + the open questions so the shape is settled before step 3 lands.
 **Parent**: [one_state_n_windows_design](../design/2026-07-05_one_state_n_windows_design.md)
 — **step 4** (§8), the mechanism in §5, the trichotomy in §6.
@@ -79,7 +79,7 @@ bookkeeping. Of it:
 ## The middle path (#1): portability without the forest dom
 
 Recorded because it is a real option and the gate on step 3 may keep the forest dom out for a
-while (see the [forest_dom_plan](2026-07-08_forest_dom_plan.md) gate, where this is the third
+while (see the [forest_dom_plan](../../archive_docs/2026-08-06_completed_plans/2026-07-08_forest_dom_plan.md) gate, where this is the third
 option between fresh-build and the full forest dom):
 
 - **Surface-lane tiles already have it** — member→window reassignment needs no forest dom, so a

@@ -2,12 +2,12 @@
 
 **Date:** 2026-07-26
 **Status:** implemented decision and executable receipt. Answers **Decision 1** of the
-[shared-engram commons brief](../research/2026-07-24_shared_engram_commons_brief.md),
+[shared-engram commons brief](../../mere_docs/research/2026-07-24_shared_engram_commons_brief.md),
 which asked for "a written merge rule under which two offline members editing
 the same container reconverge to one graph on sync, property-tested, before
 any chat implementation slice". Decision 2 is answered by the
-[follow-on plan](../../archive_docs/2026-08-06_completed_plans/2026-07-27_commons_authority_keys_consumers_plan.md) and
-[Commons profile](../design/2026-07-27_commons_profile_v1.md), rather than by
+[follow-on plan](2026-07-27_commons_authority_keys_consumers_plan.md) and
+[Commons profile](../../mere_docs/design/2026-07-27_commons_profile_v1.md), rather than by
 this convergence plan. The tracked `commons-spine` receipt was promoted to
 the workspace package at `crates/moot/commons` when Turnstone became its
 intended place consumer. `commons-spine` remains a technical profile, not a
@@ -100,7 +100,7 @@ writer observed. A deterministic topological fold preserves happens-before;
 a member who edits a value after seeing it can actually replace it, regardless
 of public-key rank. **And the granularity question is named rather than
 absorbed:** the
-[one-node facets ruling](../technical_architecture/2026-07-18_one_node_facets_layer_map.md)
+[one-node facets ruling](../../mere_docs/technical_architecture/2026-07-18_one_node_facets_layer_map.md)
 makes facets atomic, so the right long-run answer is that a facet write is
 its own edit and merges per facet. Until facet-grained edits exist, a
 concurrent edit to one node is whole-node LWW, and that limit belongs in the
@@ -263,7 +263,7 @@ Done-conditions, not dates.
     binds its signer, and typed Servitor authority reclassifies it as
     effective, pending, or revoked during materialization.
 - **M4. Write the limit down. DONE 2026-07-27**, in section 5 below. The
-  [Commons profile](../design/2026-07-27_commons_profile_v1.md) now carries
+  [Commons profile](../../mere_docs/design/2026-07-27_commons_profile_v1.md) now carries
   the user-visible merge, missing-history, limit, and durability contract.
   Section 5 remains the convergence decision's local rationale.
 

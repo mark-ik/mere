@@ -1,7 +1,7 @@
 # Murm/Moot Sibling Posture Plan
 
 **Status**: **Superseded 2026-07-12** by
-[`2026-07-12_murm_peer_runtime_and_moot_domain_plan.md`](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md).
+[`2026-07-12_murm_peer_runtime_and_moot_domain_plan.md`](../../mere_docs/implementation_strategy/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md).
 The completed R, N, and S receipts below remain historical implementation
 evidence. The sibling purity rule, the host as the sole composition point, and
 the target standalone package boundary are retired.
@@ -10,10 +10,10 @@ the target standalone package boundary are retired.
 **Related**:
 
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) (role spec; the charter this plan narrows and sharpens)
-- [`../research/2026-05-31_murm_p2p_landscape_brief.md`](../research/2026-05-31_murm_p2p_landscape_brief.md) (landscape; p2panda adopt call)
-- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](2026-07-06_comms_gating_and_key_addressing_plan.md) (comms G-phases; G1-G4 hold on the one-state migration)
+- [`../research/2026-05-31_murm_p2p_landscape_brief.md`](../../mere_docs/research/2026-05-31_murm_p2p_landscape_brief.md) (landscape; p2panda adopt call)
+- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](../../mere_docs/implementation_strategy/2026-07-06_comms_gating_and_key_addressing_plan.md) (comms G-phases; G1-G4 hold on the one-state migration)
 - `repos/muniment` (the Backend seam this plan's store substrate rides)
-- [`2026-07-08_generic_graph_substrate_plan.md`](2026-07-08_generic_graph_substrate_plan.md) (chartulary precedent: fresh core proven standalone, mere re-bases last)
+- [`2026-07-08_generic_graph_substrate_plan.md`](../../mere_docs/implementation_strategy/2026-07-08_generic_graph_substrate_plan.md) (chartulary precedent: fresh core proven standalone, mere re-bases last)
 
 ---
 
