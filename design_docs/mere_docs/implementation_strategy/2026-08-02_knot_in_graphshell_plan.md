@@ -254,9 +254,50 @@ one `ClientState` must mint per-session randomness or the second silently
 overwrites the first. The guarantee belongs to the client, and the doc comment
 should say so rather than claiming the responder provides it.
 
-Still open for K2: registering `KnotEndpoint` on the route, the visitor-side
-open path in Turnstone, the disconnected-visitor message the revised done
-condition names, and the two-machine receipt.
+**The mechanism is proven 2026-08-06.**
+`ports/knot/tests/place_projection.rs` runs the revised done condition's first
+two clauses with nothing stubbed: two peers with distinct subjects and distinct
+grants, admitted over a transport, each mounting a real `KnotEndpoint` over one
+holder's directory through the blocking network carrier and the ordinary
+`RetainedEndpointSession`. Ada saves; the holder writes the file; Bo, who asked
+for nothing, hears the bell, resumes, and reads Ada's text. The assertion that
+matters is the last one: the holder's own file on disk is what both were
+reading. Stable across repeated runs.
+
+**A collision worth deciding rather than working around.** `KnotEndpoint` is
+**not `Send`**, so it cannot be registered in `ResidentEndpointCatalog`, whose
+bounds require `Send` because the resident host spawns each session. The cause
+is exactly one field, confirmed against the compiler rather than guessed:
+`KnotEffectAuthority` holds `BlockEvaluators`, a `BTreeMap<String, Box<dyn
+BlockEvaluator>>`. Everything else in the endpoint, including the directory
+source and its watcher, is already `Send`.
+
+The trait lives in genet's inker and has exactly one implementor anywhere,
+mere's own `RhaiEvaluator`, which wraps a `rhai::Engine`. Rhai's engine is not
+`Send` without the crate's `sync` feature, so adding `Send` to the trait is not
+the free one-word change it first looks like.
+
+Three ways out, none of them obviously right, all of them Mark's call:
+
+- **Enable rhai's `sync` feature.** Makes everything `Send` and changes
+  nothing else structurally, at the cost of rhai switching its internals from
+  `Rc` to `Arc` throughout for a feature only the effects lane uses.
+- **Give a non-`Send` session its own thread.** The resident host stops
+  requiring `Send` and runs such sessions on a dedicated thread with a
+  current-thread runtime. Honest, and costs a thread per Knot visitor.
+- **Move the evaluators behind a channel.** The endpoint becomes `Send` and
+  the evaluator stays single-threaded on the far side of it. The nicest
+  long-term shape and the most work, and it touches the effects lane rather
+  than the projection one.
+
+Until it is decided, the proof above serves both sessions on one task with
+`join!`, which needs no `Send` at all. That is a real deployment shape, not
+only a test convenience, but it is not the resident host.
+
+Still open for K2: the catalog decision above, registering `KnotEndpoint` on
+the route once it is made, the visitor-side open path in Turnstone, the
+disconnected-visitor message the revised done condition's third clause names,
+and the two-machine receipt over real hardware rather than a paired fixture.
 
 **K3. Retire the spawn path or keep it deliberately.** If the remote case has
 no live consumer, the stdio carrier and `bin/knot_endpoint.rs` are a

@@ -117,10 +117,10 @@ impl KnotSyncHost {
             match transport.add_peer_ticket(hint).await {
                 Ok(peer) => {
                     tracing::debug!(peer = %crate::hex32(&peer.to_bytes()), "seeded a stored dial hint")
-                },
+                }
                 Err(error) => {
                     tracing::warn!(%error, "a stored dial hint was unusable; skipping it")
-                },
+                }
             }
         }
 
@@ -206,7 +206,7 @@ impl KnotSyncHost {
             Err(error) => {
                 tracing::warn!(%error, "could not read the peer directory");
                 return;
-            },
+            }
         };
 
         for writer in writers_to_refresh(&peers) {
@@ -216,7 +216,7 @@ impl KnotSyncHost {
                 Err(error) => {
                     tracing::warn!(%error, "could not read a peer's current address");
                     continue;
-                },
+                }
             };
             if sync.endpoint_for(&writer) == Some(ticket.as_str()) {
                 continue;
@@ -226,7 +226,7 @@ impl KnotSyncHost {
                 Err(error) => {
                     tracing::warn!(%error, "could not reload settings to refresh a hint");
                     continue;
-                },
+                }
             };
             let Some(live) = latest.sync.as_mut() else {
                 continue;
