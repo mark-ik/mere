@@ -219,6 +219,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        host.refresh_dial_hints(&sync, &settings_file).await;
     }
 }
 

@@ -221,6 +221,43 @@ a networking project.
 Done when two peers edit one document concurrently and the holder's projection
 is what both see.
 
+**The holder's serving half landed 2026-08-06.**
+`native::projection_host::ResidentProjectionHost` accepts over the transport
+and serves a catalog route, which is what `browser_host` already did for a
+browser and no one did for a network peer. Before this, the only accept loops
+in the tree were inside receipt binaries, exactly as the dial half was before
+C3.
+
+**Concurrency is the load-bearing part, not an optimisation.** A sequential
+accept loop can serve a place member but not two: the second visitor waits at
+the door until the first leaves, which is the one thing a shared document
+cannot do. Each admitted session is spawned, and the host returns to accepting
+immediately. Live sessions are counted so the policy's `max_sessions` is
+checked against something real, and a slot is released however a session ends.
+
+**Each session opens its own endpoint**, because the catalog is a factory
+rather than a registry of live objects. Two visitors to one Knot vault hold
+two `KnotEndpoint`s over the same files and converge through the holder's own
+truth. That is Option A working as designed rather than a limitation to route
+around.
+
+**A finding that cost a red test, and is worth keeping.** `projection_session`
+documents itself as making "two admissions never the same session", derived
+from the transcript-bound `session_id`. That is only true because the client
+mints a fresh nonce: `session_id` is `blake3(transcript)` and the nonce is in
+the transcript, and the responder does not check nonce freshness. Two sessions
+from one subject reusing a nonce receive the *same* projection session id.
+
+Not an authority hole, because the transcript binds the subject and a peer can
+only collide with itself. It does mean a client mounting two projections in
+one `ClientState` must mint per-session randomness or the second silently
+overwrites the first. The guarantee belongs to the client, and the doc comment
+should say so rather than claiming the responder provides it.
+
+Still open for K2: registering `KnotEndpoint` on the route, the visitor-side
+open path in Turnstone, the disconnected-visitor message the revised done
+condition names, and the two-machine receipt.
+
 **K3. Retire the spawn path or keep it deliberately.** If the remote case has
 no live consumer, the stdio carrier and `bin/knot_endpoint.rs` are a
 deployment option rather than the default. Decide with evidence, not by

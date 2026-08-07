@@ -1,31 +1,62 @@
-//! A Noise carrier: encrypted, mutually authenticated streams without TLS.
+//! Noise: an encrypted, mutually authenticated **session layer** that composes
+//! over any byte stream.
 //!
-//! ## Why this exists beside the others
+//! ## What this is, and what it is not
 //!
-//! The iroh lane gets its encryption from QUIC+TLS; the Reticulum lane gets it
-//! from Reticulum links. This lane gets it from the [Noise Protocol
-//! Framework](https://noiseprotocol.org/) over plain TCP, which is the option
-//! that needs no certificate machinery at all: the peer's key *is* its
-//! identity, which is the posture the rest of this workspace already reaches
-//! for and then approximates with self-signed certificates plus pinning.
+//! This is not a carrier competing with the iroh lane. iroh is the byte plane:
+//! it owns QUIC, NAT traversal, relays, and discovery, and nothing here moves
+//! bytes off it. What the [Noise Protocol Framework](https://noiseprotocol.org/)
+//! adds is a second, *application-layer* handshake that runs **inside** a
+//! stream the carrier already opened.
 //!
-//! The suite is [`NOISE_PARAMS`]: `Noise_XX_25519_ChaChaPoly_BLAKE2b`. `XX` is
-//! the mutual-unknown pattern -- neither side needs the other's key in
-//! advance, both transmit theirs encrypted during the handshake, and both end
-//! up holding the other's proven static key. That is trust-on-first-use as a
-//! protocol property rather than as a workaround.
+//! [`handshake`] is generic over `S: AsyncRead + AsyncWrite + Unpin`, which is
+//! the whole design. Hand it an iroh stream and you get Noise over iroh; hand
+//! it a TCP stream and you get the standalone case ([`NoiseListener`]); hand it
+//! a Reticulum link and you get Noise over the mesh. The layer never learns
+//! what is underneath it.
 //!
-//! ## Two things this lane defines, because Noise does not
+//! ## What composing it over iroh buys
 //!
-//! **Framing.** Noise messages are discrete and capped at 65535 bytes; TCP is
-//! a byte stream. The specification leaves the reconciliation to the
-//! application, so [`stream`] defines a 2-byte big-endian length prefix, the
-//! conventional choice. Ours to make: both ends are this code. It is not
-//! licence to guess another protocol's framing.
+//! **Zero trust through relays.** An iroh connection through a relay is
+//! encrypted to the relay's satisfaction of QUIC, but the plane it traverses is
+//! not ours. A Noise session inside it is opaque to everything between the two
+//! endpoints, including infrastructure we run.
+//!
+//! **Layered identity.** This is the part worth being precise about, because
+//! the two keys answer different questions:
+//!
+//! - The **carrier identity** (iroh's endpoint key, an Ed25519 public half)
+//!   answers *where do packets go*. It is routing and traversal machinery, it
+//!   is visible to relays, and it is long-lived because reachability depends on
+//!   its stability.
+//! - The **Noise identity** (whatever keypair is passed to [`handshake`])
+//!   answers *who is speaking*. It can be a persona, one agent acting for a
+//!   persona, or an identity that exists only for this session.
+//!
+//! Collapsing them is a choice, not a default: pass the same keypair and you
+//! get one identity in two places. Pass [`Ed25519Keypair::derive_child`] or
+//! [`Ed25519Keypair::generate`] and the peer learns who it is talking to
+//! without learning which node, at which address, it reached them on.
+//!
+//! ## Two things this layer defines, because Noise does not
+//!
+//! **Framing.** Noise messages are discrete and capped at 65535 bytes; a
+//! stream has no message boundaries. The specification leaves the
+//! reconciliation to the application, so [`stream`] defines a 2-byte big-endian
+//! length prefix, the conventional choice. Ours to make: both ends are this
+//! code. It is not licence to guess another protocol's framing.
 //!
 //! **Identity.** Noise proves an X25519 static key; Mere's [`PeerID`] is an
 //! Ed25519 key. So each side sends an identity proof as its first transport
 //! message, signing this session's handshake hash. See [`keys`].
+//!
+//! ## The suite
+//!
+//! [`NOISE_PARAMS`]: `Noise_XX_25519_ChaChaPoly_BLAKE2b`. `XX` is the
+//! mutual-unknown pattern: neither side needs the other's key in advance, both
+//! transmit theirs encrypted during the handshake, and both end up holding the
+//! other's proven static key. That is trust-on-first-use as a protocol
+//! property rather than as a workaround.
 //!
 //! ## On BLAKE2b, since our stack is BLAKE3
 //!
@@ -54,12 +85,12 @@ use tokio::sync::Mutex;
 
 use identity::Ed25519Keypair;
 
-use crate::{AcceptedSession, Alpn, IngressContext, PeerID, Transport, TransportError};
+use crate::{AcceptedSession, Alpn, IngressContext, PeerID, TransportError};
 
 pub use keys::ProofError;
 pub use stream::NoiseStream;
 
-/// The Noise suite this carrier speaks. Not negotiated: a peer built against a
+/// The Noise suite this layer speaks. Not negotiated: a peer built against a
 /// different suite cannot complete a handshake, by design.
 pub const NOISE_PARAMS: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2b";
 
@@ -67,51 +98,23 @@ fn backend(context: &str, error: impl std::fmt::Display) -> TransportError {
     TransportError::Backend(format!("noise: {context}: {error}"))
 }
 
-/// Open an outbound session: TCP connect, Noise `XX`, identity proof, ALPN.
+/// Run the Noise `XX` handshake over `inner`, then exchange identity proofs.
 ///
-/// The returned stream is encrypted and the returned `PeerID` is proven, not
+/// This is the composable core: `inner` is any byte stream, so the same call
+/// secures an iroh stream, a TCP socket, or a Reticulum link.
+///
+/// `identity` is the keypair this side proves to the peer, and it is
+/// deliberately a parameter rather than the carrier's key. Passing a distinct
+/// keypair -- [`Ed25519Keypair::derive_child`] for a durable application
+/// identity, [`Ed25519Keypair::generate`] for one that lives only as long as
+/// the session -- is what makes the identity a *layer* rather than a second
+/// copy of the carrier's. Passing the carrier's own keypair is legitimate and
+/// collapses the two.
+///
+/// The returned stream is encrypted and the returned [`PeerID`] is proven, not
 /// claimed.
-pub async fn connect_to(
-    master: &Ed25519Keypair,
-    addr: SocketAddr,
-    alpn: &Alpn,
-) -> Result<(NoiseStream<TcpStream>, PeerID), TransportError> {
-    let tcp = TcpStream::connect(addr)
-        .await
-        .map_err(|e| backend("tcp connect", e))?;
-    let (mut stream, peer) = handshake(master, tcp, true).await?;
-
-    // Noise has no ALPN concept, so the protocol name is a framed message
-    // inside the session. Sending it encrypted keeps which protocol is being
-    // spoken confidential, unlike TLS ALPN.
-    write_len_prefixed(&mut stream, alpn.as_bytes())
-        .await
-        .map_err(|e| backend("alpn write", e))?;
-
-    Ok((stream, peer))
-}
-
-/// Accept one inbound session, returning it with the ALPN the peer asked for.
-pub async fn accept_from(
-    master: &Ed25519Keypair,
-    listener: &TcpListener,
-) -> Result<(NoiseStream<TcpStream>, PeerID, Alpn), TransportError> {
-    let (tcp, _from) = listener
-        .accept()
-        .await
-        .map_err(|e| backend("tcp accept", e))?;
-    let (mut stream, peer) = handshake(master, tcp, false).await?;
-
-    let alpn = read_len_prefixed(&mut stream, 512)
-        .await
-        .map_err(|e| backend("alpn read", e))?;
-
-    Ok((stream, peer, Alpn::from_bytes(alpn)))
-}
-
-/// Run the Noise `XX` handshake, then exchange and verify identity proofs.
 pub async fn handshake<S>(
-    master: &Ed25519Keypair,
+    identity: &Ed25519Keypair,
     mut inner: S,
     initiator: bool,
 ) -> Result<(NoiseStream<S>, PeerID), TransportError>
@@ -119,7 +122,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let params = NOISE_PARAMS.parse().map_err(|e| backend("params", e))?;
-    let secret = keys::derive_static_secret(master);
+    let secret = keys::derive_static_secret(identity);
 
     let mut state = {
         let builder = Builder::new(params)
@@ -164,7 +167,7 @@ where
 
     // The proof rides the encrypted session, so an observer never learns which
     // identities are talking. The initiator writes first to avoid a deadlock.
-    let proof = keys::build_proof(master, &handshake_hash);
+    let proof = keys::build_proof(identity, &handshake_hash);
     if initiator {
         write_len_prefixed(&mut stream, &proof)
             .await
@@ -183,6 +186,70 @@ where
         .map_err(|e| backend("peer identity", e))?;
 
     Ok((stream, peer))
+}
+
+/// Secure a stream the carrier already opened, and announce a protocol.
+///
+/// The composition this module exists for: the carrier dialled and knows where
+/// the bytes go; this adds the second handshake inside. Over iroh that means
+/// the ALPN was already negotiated in QUIC's clear -- `alpn` here is a
+/// *second*, encrypted declaration, which is what lets the two layers disagree
+/// deliberately (one protocol visible to relays, another actually spoken).
+pub async fn secure_initiator<S>(
+    identity: &Ed25519Keypair,
+    inner: S,
+    alpn: &Alpn,
+) -> Result<(NoiseStream<S>, PeerID), TransportError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut stream, peer) = handshake(identity, inner, true).await?;
+    // Noise has no ALPN concept, so the protocol name is a framed message
+    // inside the session. Sending it encrypted keeps which protocol is being
+    // spoken confidential, unlike TLS ALPN.
+    write_len_prefixed(&mut stream, alpn.as_bytes())
+        .await
+        .map_err(|e| backend("alpn write", e))?;
+    Ok((stream, peer))
+}
+
+/// The responder half of [`secure_initiator`], returning the protocol asked for.
+pub async fn secure_responder<S>(
+    identity: &Ed25519Keypair,
+    inner: S,
+) -> Result<(NoiseStream<S>, PeerID, Alpn), TransportError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut stream, peer) = handshake(identity, inner, false).await?;
+    let alpn = read_len_prefixed(&mut stream, 512)
+        .await
+        .map_err(|e| backend("alpn read", e))?;
+    Ok((stream, peer, Alpn::from_bytes(alpn)))
+}
+
+/// Open a standalone Noise session over TCP: connect, handshake, announce.
+pub async fn connect_to(
+    identity: &Ed25519Keypair,
+    addr: SocketAddr,
+    alpn: &Alpn,
+) -> Result<(NoiseStream<TcpStream>, PeerID), TransportError> {
+    let tcp = TcpStream::connect(addr)
+        .await
+        .map_err(|e| backend("tcp connect", e))?;
+    secure_initiator(identity, tcp, alpn).await
+}
+
+/// Accept one standalone TCP session, returning the ALPN the peer asked for.
+pub async fn accept_from(
+    identity: &Ed25519Keypair,
+    listener: &TcpListener,
+) -> Result<(NoiseStream<TcpStream>, PeerID, Alpn), TransportError> {
+    let (tcp, _from) = listener
+        .accept()
+        .await
+        .map_err(|e| backend("tcp accept", e))?;
+    secure_responder(identity, tcp).await
 }
 
 /// Write a 2-byte-length-prefixed message *inside* the encrypted session.
@@ -219,44 +286,57 @@ where
     Ok(message)
 }
 
-/// A Noise carrier bound to a TCP listener.
-pub struct NoiseTransport {
-    master: Ed25519Keypair,
+/// A TCP listener that speaks Noise: the standalone deployment, for links with
+/// no carrier under them.
+///
+/// Deliberately **not** a [`Transport`](crate::Transport). A `Transport` dials
+/// by [`PeerID`] because it owns discovery, and this owns none: it dials by
+/// address, and an address has to come from somewhere else. Implementing the
+/// trait would have meant a `connect` that always fails, which is a tell that
+/// the trait is the wrong fit -- and it would have positioned Noise as a rival
+/// byte plane to iroh, which it is not. Over iroh, use [`secure_initiator`] /
+/// [`secure_responder`] on a stream the carrier opened.
+pub struct NoiseListener {
+    identity: Ed25519Keypair,
     listener: Arc<TcpListener>,
     local: PeerID,
     /// Sessions accepted while waiting for a different ALPN.
     parked: Mutex<Vec<(NoiseStream<TcpStream>, PeerID, Alpn)>>,
 }
 
-impl NoiseTransport {
-    /// Bind a Noise carrier on `addr`.
-    pub async fn bind(master: Ed25519Keypair, addr: SocketAddr) -> Result<Self, TransportError> {
+impl NoiseListener {
+    /// Bind a standalone Noise listener on `addr`, proving `identity`.
+    pub async fn bind(identity: Ed25519Keypair, addr: SocketAddr) -> Result<Self, TransportError> {
         let listener = TcpListener::bind(addr)
             .await
             .map_err(|e| backend("bind", e))?;
         Ok(Self {
-            local: PeerID::from_public_key(master.public_key()),
-            master,
+            local: PeerID::from_public_key(identity.public_key()),
+            identity,
             listener: Arc::new(listener),
             parked: Mutex::new(Vec::new()),
         })
     }
 
+    /// The identity this listener proves to peers.
+    pub fn local_peer_id(&self) -> PeerID {
+        self.local
+    }
+
     /// The address actually bound, which matters when binding port 0.
     pub fn local_addr(&self) -> Result<SocketAddr, TransportError> {
-        self.listener.local_addr().map_err(|e| backend("local addr", e))
+        self.listener
+            .local_addr()
+            .map_err(|e| backend("local addr", e))
     }
 
     /// Connect to a peer at a known address.
-    ///
-    /// Noise carries no discovery: an address has to come from somewhere else,
-    /// which is the same open question the Reticulum lane's addressing has.
     pub async fn connect_addr(
         &self,
         addr: SocketAddr,
         alpn: &Alpn,
     ) -> Result<(NoiseStream<TcpStream>, PeerID), TransportError> {
-        connect_to(&self.master, addr, alpn).await
+        connect_to(&self.identity, addr, alpn).await
     }
 
     /// Accept the next session for `alpn`, parking any other ALPN's session
@@ -264,59 +344,33 @@ impl NoiseTransport {
     pub async fn accept_alpn(
         &self,
         alpn: &Alpn,
-    ) -> Result<(NoiseStream<TcpStream>, PeerID), TransportError> {
-        {
+    ) -> Result<AcceptedSession<NoiseStream<TcpStream>>, TransportError> {
+        let already_parked = {
             let mut parked = self.parked.lock().await;
-            if let Some(index) = parked.iter().position(|(_, _, a)| a == alpn) {
-                let (stream, peer, _) = parked.remove(index);
-                return Ok((stream, peer));
-            }
-        }
-        loop {
-            let (stream, peer, got) = accept_from(&self.master, &self.listener).await?;
-            if &got == alpn {
-                return Ok((stream, peer));
-            }
-            self.parked.lock().await.push((stream, peer, got));
-        }
-    }
-}
+            parked
+                .iter()
+                .position(|(_, _, a)| a == alpn)
+                .map(|index| parked.remove(index))
+                .map(|(stream, peer, _)| (stream, peer))
+        };
 
-impl Transport for NoiseTransport {
-    type Stream = NoiseStream<TcpStream>;
+        let (stream, peer) = match already_parked {
+            Some(session) => session,
+            None => loop {
+                let (stream, peer, got) = accept_from(&self.identity, &self.listener).await?;
+                if &got == alpn {
+                    break (stream, peer);
+                }
+                self.parked.lock().await.push((stream, peer, got));
+            },
+        };
 
-    fn local_peer_id(&self) -> PeerID {
-        self.local
-    }
-
-    fn connect(
-        &self,
-        _peer: PeerID,
-        _alpn: Alpn,
-    ) -> impl Future<Output = Result<Self::Stream, TransportError>> + Send {
-        // Dialling by PeerID needs an address book this carrier does not have;
-        // `connect_addr` is the honest surface until one exists.
-        async move {
-            Err(TransportError::Backend(
-                "noise: this carrier dials by address; use connect_addr".into(),
-            ))
-        }
-    }
-
-    fn accept(
-        &self,
-        alpn: Alpn,
-    ) -> impl Future<Output = Result<AcceptedSession<Self::Stream>, TransportError>> + Send {
-        async move {
-            let (stream, peer) = self.accept_alpn(&alpn).await?;
-            // Proven by the identity proof, never taken from application
-            // bytes.
-            Ok(AcceptedSession::new(
-                stream,
-                alpn,
-                Some(peer),
-                IngressContext::noise(),
-            ))
-        }
+        Ok(AcceptedSession::new(
+            stream,
+            alpn.clone(),
+            // Proven by the identity proof, never taken from application bytes.
+            Some(peer),
+            IngressContext::noise(),
+        ))
     }
 }

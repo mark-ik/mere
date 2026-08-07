@@ -12,5 +12,6 @@ pub mod pairing;
 pub mod personae_host;
 #[cfg(feature = "personal-sync")]
 pub mod personal_sync_host;
+pub mod projection_host;
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod transfer_staging;

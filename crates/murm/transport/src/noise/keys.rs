@@ -44,14 +44,19 @@ const PROOF_PREFIX: &[u8] = b"mere-noise-identity-v1:";
 /// 64-byte signature.
 pub(super) const PROOF_LEN: usize = 32 + 64;
 
-/// Derive this node's Noise static secret from its Mere master keypair.
+/// Derive the Noise static secret from the Ed25519 identity being proven.
 ///
-/// Domain-separated through HKDF from the master seed, exactly as the
-/// Reticulum lane derives its X25519 half, so the two carriers cannot end up
-/// sharing key material by accident. Pure, so the same master seed always
-/// yields the same Noise static key across restarts.
-pub(super) fn derive_static_secret(master: &Ed25519Keypair) -> [u8; 32] {
-    let seed = master.to_seed();
+/// Domain-separated through HKDF from that keypair's seed, exactly as the
+/// Reticulum lane derives its X25519 half, so no two lanes can end up sharing
+/// key material by accident. Pure, so the same identity always yields the same
+/// Noise static key across restarts.
+///
+/// Note what this does *not* do: it derives from whatever identity the caller
+/// chose, not from a fixed master. Pass a child or ephemeral keypair and the
+/// static key is unlinkable to the carrier's, which is what the layered
+/// identity in the module docs rests on.
+pub(super) fn derive_static_secret(identity: &Ed25519Keypair) -> [u8; 32] {
+    let seed = identity.to_seed();
     let hk = Hkdf::<Sha256>::new(None, &seed);
     let mut secret = [0u8; 32];
     hk.expand(STATIC_HKDF_INFO, &mut secret)
@@ -67,11 +72,11 @@ fn proof_message(handshake_hash: &[u8]) -> Vec<u8> {
     message
 }
 
-/// Build the proof that `master` completed this session.
-pub(super) fn build_proof(master: &Ed25519Keypair, handshake_hash: &[u8]) -> Vec<u8> {
-    let signature = master.sign(&proof_message(handshake_hash));
+/// Build the proof that `identity` completed this session.
+pub(super) fn build_proof(identity: &Ed25519Keypair, handshake_hash: &[u8]) -> Vec<u8> {
+    let signature = identity.sign(&proof_message(handshake_hash));
     let mut payload = Vec::with_capacity(PROOF_LEN);
-    payload.extend_from_slice(&master.public_key().to_bytes());
+    payload.extend_from_slice(&identity.public_key().to_bytes());
     payload.extend_from_slice(&signature.to_bytes());
     payload
 }

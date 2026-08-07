@@ -1,4 +1,5 @@
-//! Receipts for the Noise carrier, over real sockets.
+//! Receipts for the Noise session layer: standalone over TCP, and composed
+//! over a live iroh stream.
 
 use std::net::SocketAddr;
 
@@ -8,7 +9,7 @@ use tokio::net::TcpListener;
 use identity::Ed25519Keypair;
 
 use super::*;
-use crate::{Alpn, Transport};
+use crate::{Alpn, P2pandaTransport, Transport, TransportKind};
 
 fn keypair(seed: u8) -> Ed25519Keypair {
     Ed25519Keypair::from_seed([seed; 32])
@@ -157,7 +158,9 @@ async fn tampered_ciphertext_is_refused_rather_than_delivered() {
                 }
             }
         };
-        tokio::join!(back, forth);
+        // Both halves end when the sockets close; a copy error here is the
+        // teardown, not a failure the test cares about.
+        let (_, ()) = tokio::join!(back, forth);
     });
 
     let server = tokio::spawn(async move {
@@ -175,7 +178,7 @@ async fn tampered_ciphertext_is_refused_rather_than_delivered() {
     let _ = stream.flush().await;
 
     match server.await.unwrap() {
-        Err(_) => {}
+        Err(_) => {},
         Ok(received) => assert_ne!(
             received, payload,
             "tampered ciphertext must never decrypt to the original plaintext"
@@ -184,11 +187,11 @@ async fn tampered_ciphertext_is_refused_rather_than_delivered() {
 }
 
 #[tokio::test]
-async fn a_transport_accepts_on_the_alpn_it_was_asked_for() {
+async fn a_listener_hands_out_the_alpn_it_was_asked_for() {
     let server_keys = keypair(9);
     let client_keys = keypair(10);
-    let transport = NoiseTransport::bind(server_keys, loopback()).await.unwrap();
-    let addr = transport.local_addr().unwrap();
+    let listener = NoiseListener::bind(server_keys, loopback()).await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let wanted = Alpn::new("mere/wanted/v1");
     let other = Alpn::new("mere/other/v1");
@@ -205,27 +208,120 @@ async fn a_transport_accepts_on_the_alpn_it_was_asked_for() {
         connect_to(&client_keys, addr, &wanted).await.map(|(s, _)| s)
     });
 
-    let accepted = transport.accept(Alpn::new("mere/wanted/v1")).await.unwrap();
+    let accepted = listener
+        .accept_alpn(&Alpn::new("mere/wanted/v1"))
+        .await
+        .unwrap();
     assert_eq!(accepted.protocol, Alpn::new("mere/wanted/v1"));
     assert_eq!(
         accepted.peer,
         Some(PeerID::from_public_key(keypair(10).public_key())),
         "the session handed back is the one on the wanted ALPN"
     );
+    assert_eq!(accepted.ingress.transport, TransportKind::Noise);
 
     let _ = dial_other.await.unwrap();
     let _ = dial_wanted.await.unwrap();
 }
 
-#[tokio::test]
-async fn dialling_by_peer_id_is_refused_honestly() {
-    let transport = NoiseTransport::bind(keypair(12), loopback()).await.unwrap();
-    let error = transport
-        .connect(PeerID::from_public_key(keypair(13).public_key()), Alpn::new("x"))
-        .await
-        .unwrap_err();
-    assert!(
-        format!("{error}").contains("connect_addr"),
-        "the refusal names the surface that works: {error}"
+/// The composition this module exists for, over a real iroh connection.
+///
+/// Two things have to hold at once, and they are the reason the layers are
+/// separate: iroh proves the *carrier* identity that routing depends on, and
+/// Noise proves an *application* identity that iroh never saw. A peer learns
+/// who is speaking without that being the same fact as which node it reached.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn noise_over_an_iroh_stream_layers_a_second_identity() {
+    let alpn = Alpn::new("mere/noise-over-iroh/v1");
+
+    // Carrier identities: what iroh routes to.
+    let (alice_carrier, bob_carrier) = (keypair(20), keypair(21));
+    let alice_carrier_id = PeerID::from_public_key(alice_carrier.public_key());
+    let bob_carrier_id = PeerID::from_public_key(bob_carrier.public_key());
+
+    // Application identities: who is actually speaking. Derived, so they are
+    // durable across sessions but unlinkable to the carrier key.
+    let alice_app = alice_carrier.derive_child(b"noise-test-app");
+    let bob_app = bob_carrier.derive_child(b"noise-test-app");
+    let alice_app_id = PeerID::from_public_key(alice_app.public_key());
+    let bob_app_id = PeerID::from_public_key(bob_app.public_key());
+
+    assert_ne!(
+        alice_app_id, alice_carrier_id,
+        "the premise: the application identity is a different key from the carrier's"
     );
+
+    let alice = P2pandaTransport::bind(&alice_carrier, vec![alpn.clone()])
+        .await
+        .expect("bind alice");
+    let bob = P2pandaTransport::bind(&bob_carrier, vec![alpn.clone()])
+        .await
+        .expect("bind bob");
+
+    alice
+        .add_peer(bob.endpoint_addr().await.unwrap())
+        .await
+        .expect("alice.add_peer");
+    bob.add_peer(alice.endpoint_addr().await.unwrap())
+        .await
+        .expect("bob.add_peer");
+
+    let alice_task = {
+        let alpn = alpn.clone();
+        tokio::spawn(async move {
+            // The carrier opens the stream; Noise runs *inside* it.
+            let carrier_stream = alice
+                .connect(bob_carrier_id, alpn.clone())
+                .await
+                .expect("iroh connect");
+            let (mut secured, peer) =
+                secure_initiator(&alice_app, carrier_stream, &alpn)
+                    .await
+                    .expect("noise handshake over iroh");
+
+            secured.write_all(b"inside two envelopes").await.unwrap();
+            secured.flush().await.unwrap();
+            let mut buf = [0u8; 32];
+            let n = secured.read(&mut buf).await.unwrap();
+            (peer, buf[..n].to_vec())
+        })
+    };
+
+    let accepted = bob.accept(alpn.clone()).await.expect("iroh accept");
+    // The carrier layer still reports the carrier identity, unchanged.
+    assert_eq!(
+        accepted.peer,
+        Some(alice_carrier_id),
+        "iroh proves the identity it routed to"
+    );
+    assert_eq!(accepted.ingress.transport, TransportKind::P2panda);
+
+    let (mut secured, noise_peer, inner_alpn) =
+        secure_responder(&bob_app, accepted.into_stream())
+            .await
+            .expect("noise handshake over iroh");
+
+    // And the session layer reports a different one, which is the point.
+    assert_eq!(
+        noise_peer, alice_app_id,
+        "Noise proves the application identity"
+    );
+    assert_ne!(
+        noise_peer, alice_carrier_id,
+        "which iroh never saw, and cannot be read off the carrier"
+    );
+    assert_eq!(inner_alpn, alpn);
+
+    let mut buf = vec![0u8; 20];
+    secured.read_exact(&mut buf).await.unwrap();
+    assert_eq!(&buf, b"inside two envelopes");
+    secured.write_all(b"and back out").await.unwrap();
+    secured.flush().await.unwrap();
+
+    let (alice_saw, reply) = alice_task.await.unwrap();
+    assert_eq!(
+        alice_saw, bob_app_id,
+        "the layering is symmetric: Alice sees Bob's application identity"
+    );
+    assert_eq!(reply, b"and back out");
 }

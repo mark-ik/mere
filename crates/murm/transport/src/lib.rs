@@ -44,12 +44,14 @@ mod alpn;
 pub mod blobs;
 mod error;
 pub mod memory;
+/// An encrypted session layer that composes *over* a carrier's stream, rather
+/// than being a carrier itself. See the module docs for the layering.
+#[cfg(feature = "noise")]
+pub mod noise;
 #[cfg(feature = "notochord")]
 pub mod notochord;
 pub mod p2panda_transport;
 mod peer_id;
-#[cfg(feature = "noise")]
-pub mod noise_transport;
 #[cfg(feature = "reticulum")]
 pub mod reticulum_transport;
 mod transport;

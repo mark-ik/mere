@@ -15,9 +15,11 @@ categories = ["network-programming"]
 # default; enable to build and test `ReticulumTransport`. Backed by `retinue`,
 # Mark's own RNS implementation; `hkdf`/`sha2` derive the retinue identity.
 reticulum = ["dep:retinue", "dep:hkdf", "dep:sha2"]
-# A Noise carrier over plain TCP: encrypted and mutually authenticated with no
-# certificate machinery. Off by default; it is an alternative to the iroh and
-# reticulum lanes, not a dependency of them.
+# A Noise session layer: a second, application-layer handshake that runs inside
+# a stream a carrier already opened. Off by default. It is not an alternative
+# to the iroh lane -- iroh stays the byte plane, and Noise composes over it for
+# end-to-end confidentiality through relays and for an identity distinct from
+# the carrier's. It also stands alone over TCP where there is no carrier.
 noise = ["dep:snow", "dep:hkdf", "dep:sha2"]
 # Conversion from this crate's acceptance record into the notochord
 # layer's carrier facts. The dependency runs in this direction on purpose:

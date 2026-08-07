@@ -43,8 +43,17 @@ use crate::admission::{CONNECT_ACTION, PROJECTION_SERVICE};
 /// The projection session id for an admitted principal.
 ///
 /// Derived from the transcript-bound `session_id` rather than chosen by the
-/// client, so two admissions are never the same session and a cached scene
-/// cannot be re-mounted under an authority that did not earn it.
+/// client, so a cached scene cannot be re-mounted under an authority that did
+/// not earn it.
+///
+/// Distinctness is the *client's* to maintain, and the responder does not
+/// enforce it. `session_id` is a digest of the transcript, the transcript
+/// carries the client's nonce, and nothing checks that a nonce is fresh. Two
+/// admissions of the same subject reusing one nonce therefore land on the same
+/// projection session. That is not an authority hole, because the transcript
+/// binds the subject and a peer can only collide with itself, but a client
+/// mounting two projections in one `ClientState` must mint per-session
+/// randomness or the second silently replaces the first.
 pub fn projection_session(principal: &AdmittedPrincipal) -> ProjectionSession {
     use base64::Engine;
     ProjectionSession(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(principal.session_id))

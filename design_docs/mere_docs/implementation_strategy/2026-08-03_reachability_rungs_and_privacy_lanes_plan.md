@@ -117,11 +117,32 @@ it, since an unpaired device's route is not ours to keep. `remember_endpoint`
 returns whether anything changed, so the caller only pays a settings write on
 change, matching R1's refresh discipline.
 
-Still open on this lane, and deliberately not done here: nothing yet *writes*
-the hint back. Graphshell refreshes from `remote_info` while a peer is
-connected; Knot's resident has no equivalent refresh loop, so hints currently
-arrive only if something else records them. That is the remaining half, and it
-is a resident-loop change rather than a schema one.
+**Knot's refresh loop closed the same day.** The schema half above could store
+a hint but nothing wrote one, so a Knot device could only ever use a route some
+other component had recorded. `KnotSyncHost` now exposes the same two
+primitives Graphshell's host does (`known_peers`, `peer_ticket`), and
+`refresh_dial_hints` runs on the resident's existing 5-second pairing poll
+rather than adding a second timer.
+
+It follows Graphshell's disciplines rather than reinventing them: connected
+peers only; a write only when the ticket actually differs (`peer_ticket` sorts
+addresses before serialising, so an unchanged address set is byte-identical);
+and a reload-modify-save through the atomic path, because `--pair-writer` is a
+second writer to the same file and can land between the loop's read and its
+write.
+
+Two notes on where the code sits. The loop was written in the binary first and
+moved into the library, because a `bin` target's contents are unreachable from
+tests; the policy is library code and only the argument parsing is not.
+And the `reachable` versus `connected` filter is its own function with its own
+test, since that is the distinction that cost the Graphshell lane hours: an
+address the endpoint holds for a peer it is *not* talking to may be exactly the
+stale route a working hint would replace, so writing it back trades good
+information for bad.
+
+Still open, unchanged by this: a genuinely remote receipt. The LAN's direct IPs
+are stable across restarts, so no receipt yet isolates whether the direct
+address or the relay component carried a dial.
 
 ## R2. Announce-carried dial hints (the sovereign discovery rung)
 
@@ -173,6 +194,45 @@ host an I2P participant, so transit policy, ports, and battery are owner
 decisions, not inherited defaults; parity with Java/C++ I2P is a program, not
 a milestone, and should live as its own checklist against the I2P proposal
 specs once the first consumer is live. Real traffic is the pressure vessel.
+
+**Noise (the in-stream plane, landed 2026-08-06).** The other two lanes hide
+*where* a connection goes. This one hides *who is speaking and what they say*
+from everything the connection passes through, including infrastructure we
+run, and it does so without leaving the byte plane.
+
+The framing this started with was wrong and is worth recording as wrong: the
+lane was built as `NoiseTransport`, a TCP carrier `impl Transport`, sitting
+*beside* iroh and retinue as a third way to move bytes. That contradicts this
+document's own plane split. Noise is not a transport; it is a handshake
+framework with no opinion about what carries it. It composes **over** iroh
+rather than competing with it.
+
+So the module is now `noise`, the `impl Transport` is gone, and the surface is
+`handshake` / `secure_initiator` / `secure_responder`, all generic over
+`AsyncRead + AsyncWrite + Unpin`. The TCP half survives as `NoiseListener`,
+explicitly the standalone deployment for links with no carrier under them, and
+deliberately not a `Transport`: a `Transport` dials by `PeerID` because it owns
+discovery, and this owns none. The old `impl` had a `connect` that always
+failed, which was the tell.
+
+What the composition buys, beyond confidentiality through relays:
+
+> **Layered identity.** iroh's endpoint key answers *where do packets go* — it
+> is routing machinery, visible to relays, and long-lived because
+> reachability depends on its stability. The Noise identity answers *who is
+> speaking*, and it is a parameter, not a derivation of the carrier's key.
+
+That distinction did not exist in the tree before this. Every lane bound with
+the persona master keypair, so there was one key doing both jobs. Passing
+`derive_child` or `generate` to the handshake now yields an identity a peer can
+verify without learning which node, at which address, it reached. The receipt
+is `noise_over_an_iroh_stream_layers_a_second_identity`, over a live iroh
+connection: the carrier reports the carrier identity, the session layer reports
+a different one, and both are proven rather than claimed.
+
+Not done, and not needed yet: Noise over iroh *datagrams* (the low-latency
+composition), and pre-shared-key or `Noise_KK`/`Noise_IK` patterns for
+capability-scoped sessions. `XX` is the right default while both ends are ours.
 
 **Arti (clearnet plane, later).** The Tor Project's own Rust rewrite:
 library-first, client and onion-service support solid, relay mode incomplete.
