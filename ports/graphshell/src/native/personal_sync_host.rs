@@ -10,15 +10,15 @@ use personae::IdentityProvider;
 use std::sync::Arc;
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
 
+use stickleback::DataKeyring;
 use tokio::sync::{Mutex, RwLock};
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::p2panda_transport::{KnownPeer, RelayUrl};
-use stickleback::DataKeyring;
 use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID, Transport, sync_overlay_topic};
 use uuid::Uuid;
 
 use crate::native::browser_host::now_ms;
-use crate::native::graph_keys::{GraphKeyGroup, GraphKeyError};
+use crate::native::graph_keys::{GraphKeyError, GraphKeyGroup};
 use crate::native::owner_settings::parse_hex32;
 use crate::transfer_offer::{TransferOfferV1, offers_in, transfer_offer_rule};
 
