@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
+    ResumableProjectionSource,
 };
 use graphshell_protocol::{
     CarrierNotice, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
@@ -198,6 +199,45 @@ impl ResidentEndpointCatalog {
         })
     }
 
+    /// Register an endpoint that supplies revision notices *and* answers
+    /// resume, which is what a product endpoint over durable source generally
+    /// is.
+    ///
+    /// Without this, such an endpoint has to enter through
+    /// [`Self::register_erased`] and restate the whole erased contract, or
+    /// lose resume silently: the typed wrappers answer resume with a refusal,
+    /// so a visitor recovering after a bell is told the endpoint cannot do the
+    /// thing it demonstrably can.
+    pub fn register_resumable_notifying<E, F>(
+        &mut self,
+        id: impl Into<String>,
+        label: impl Into<String>,
+        mut factory: F,
+    ) -> Result<(), ResidentEndpointCatalogError>
+    where
+        E: ProjectionCatalog
+            + ProjectionSource
+            + PresentationSource
+            + IntentSink
+            + ProjectionNoticeSource
+            + ResumableProjectionSource
+            + Send
+            + 'static,
+        <E as ProjectionSource>::Error: Display,
+        <E as PresentationSource>::Error: Display,
+        <E as IntentSink>::Error: Display,
+        <E as ProjectionNoticeSource>::Error: Display,
+        <E as ResumableProjectionSource>::Error: Display,
+        F: FnMut(&AdmittedEndpointContext) -> Result<E, String> + Send + 'static,
+    {
+        self.register_erased(id, label, move |context| {
+            let endpoint = factory(context)?;
+            Ok(Box::new(TypedResidentEndpoint::resumable_notifying(
+                endpoint,
+            )))
+        })
+    }
+
     /// Register an endpoint that supplies revision notices. It is otherwise
     /// the same composition contract as [`Self::register`].
     pub fn register_notifying<E, F>(
@@ -334,6 +374,14 @@ enum NoticeMode<E> {
 struct TypedResidentEndpoint<E> {
     endpoint: E,
     notices: NoticeMode<E>,
+    resume: ResumeMode<E>,
+}
+
+/// Whether this endpoint can recover a client that fell behind, or only
+/// re-send whole snapshots.
+enum ResumeMode<E> {
+    Unsupported,
+    Delegate(fn(&mut E, ResumeRequest) -> Result<ResumeReply, String>),
 }
 
 impl<E> TypedResidentEndpoint<E> {
@@ -341,8 +389,32 @@ impl<E> TypedResidentEndpoint<E> {
         Self {
             endpoint,
             notices: NoticeMode::Silent,
+            resume: ResumeMode::Unsupported,
         }
     }
+}
+
+impl<E> TypedResidentEndpoint<E>
+where
+    E: ProjectionNoticeSource + ResumableProjectionSource,
+    <E as ProjectionNoticeSource>::Error: Display,
+    <E as ResumableProjectionSource>::Error: Display,
+{
+    fn resumable_notifying(endpoint: E) -> Self {
+        Self {
+            endpoint,
+            notices: NoticeMode::Poll(poll_notice::<E>),
+            resume: ResumeMode::Delegate(resume_projection::<E>),
+        }
+    }
+}
+
+fn resume_projection<E>(endpoint: &mut E, request: ResumeRequest) -> Result<ResumeReply, String>
+where
+    E: ResumableProjectionSource,
+    <E as ResumableProjectionSource>::Error: Display,
+{
+    endpoint.resume(request).map_err(|error| error.to_string())
 }
 
 impl<E> TypedResidentEndpoint<E>
@@ -354,6 +426,7 @@ where
         Self {
             endpoint,
             notices: NoticeMode::Poll(poll_notice::<E>),
+            resume: ResumeMode::Unsupported,
         }
     }
 }
@@ -408,6 +481,15 @@ where
         match &self.notices {
             NoticeMode::Silent => Ok(None),
             NoticeMode::Poll(poll) => poll(&mut self.endpoint),
+        }
+    }
+
+    fn resume(&mut self, request: ResumeRequest) -> Result<ResumeReply, String> {
+        match &self.resume {
+            ResumeMode::Unsupported => {
+                Err("endpoint does not support projection resume".to_string())
+            }
+            ResumeMode::Delegate(resume) => resume(&mut self.endpoint, request),
         }
     }
 }

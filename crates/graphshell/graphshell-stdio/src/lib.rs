@@ -19,8 +19,8 @@ mod native {
         ProjectionSource, ResumableProjectionSource,
     };
     use graphshell_protocol::{
-        CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest, CarrierRequestBody,
-        CarrierResponse, CarrierResponseBody,
+        CarrierError, CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest,
+        CarrierRequestBody, CarrierResponse, CarrierResponseBody,
     };
 
     /// Serve discovery, snapshots, resources, and intents until the input
@@ -292,31 +292,41 @@ mod native {
             })
         }
 
-        pub fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
+        pub fn request(
+            &mut self,
+            body: CarrierRequestBody,
+        ) -> Result<CarrierResponseBody, CarrierError> {
             let id = self.next_id;
             self.next_id += 1;
             let request = CarrierRequest { id, body };
-            let input = self
-                .input
-                .as_mut()
-                .ok_or_else(|| "endpoint input is closed".to_string())?;
-            serde_json::to_writer(&mut *input, &request)
-                .map_err(|error| format!("could not encode carrier request: {error}"))?;
+            let input = self.input.as_mut().ok_or_else(|| {
+                CarrierError::Disconnected("endpoint input is closed".to_string())
+            })?;
+            serde_json::to_writer(&mut *input, &request).map_err(|error| {
+                CarrierError::Disconnected(format!("could not encode carrier request: {error}"))
+            })?;
             input
                 .write_all(b"\n")
                 .and_then(|()| input.flush())
-                .map_err(|error| format!("could not send carrier request: {error}"))?;
+                .map_err(|error| {
+                    CarrierError::Disconnected(format!("could not send carrier request: {error}"))
+                })?;
             loop {
                 match self.read_output()? {
                     CarrierOutput::Notice(notice) => self.notices.push_back(notice),
                     CarrierOutput::Response(response) => {
                         if response.id != id {
-                            return Err(format!(
+                            // The stream lost its place; asking again cannot
+                            // recover it.
+                            return Err(CarrierError::Disconnected(format!(
                                 "carrier response id {} did not match request {id}",
                                 response.id
-                            ));
+                            )));
                         }
-                        return response.body.map_err(|failure| failure.message);
+                        // The endpoint's own answer: the session is intact.
+                        return response
+                            .body
+                            .map_err(|failure| CarrierError::Refused(failure.message));
                     }
                 }
             }
@@ -328,28 +338,32 @@ mod native {
         }
 
         /// Wait for the endpoint's next revision bell.
-        pub fn wait_for_notice(&mut self) -> Result<CarrierNotice, String> {
+        pub fn wait_for_notice(&mut self) -> Result<CarrierNotice, CarrierError> {
             if let Some(notice) = self.take_notice() {
                 return Ok(notice);
             }
             match self.read_output()? {
                 CarrierOutput::Notice(notice) => Ok(notice),
-                CarrierOutput::Response(response) => Err(format!(
+                CarrierOutput::Response(response) => Err(CarrierError::Disconnected(format!(
                     "endpoint sent unexpected response {} while Graphshell waited for a notice",
                     response.id
-                )),
+                ))),
             }
         }
 
-        fn read_output(&mut self) -> Result<CarrierOutput, String> {
+        fn read_output(&mut self) -> Result<CarrierOutput, CarrierError> {
             let mut line = String::new();
-            self.output
-                .read_line(&mut line)
-                .map_err(|error| format!("could not read carrier output: {error}"))?;
+            self.output.read_line(&mut line).map_err(|error| {
+                CarrierError::Disconnected(format!("could not read carrier output: {error}"))
+            })?;
             if line.is_empty() {
-                return Err("endpoint closed without an output frame".into());
+                return Err(CarrierError::Disconnected(
+                    "endpoint closed without an output frame".into(),
+                ));
             }
-            serde_json::from_str(&line).map_err(|error| format!("invalid carrier output: {error}"))
+            serde_json::from_str(&line).map_err(|error| {
+                CarrierError::Disconnected(format!("invalid carrier output: {error}"))
+            })
         }
 
         pub fn shutdown(mut self) -> io::Result<()> {
@@ -366,7 +380,10 @@ mod native {
     }
 
     impl graphshell_protocol::Carrier for StdioCarrier {
-        fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
+        fn request(
+            &mut self,
+            body: CarrierRequestBody,
+        ) -> Result<CarrierResponseBody, CarrierError> {
             StdioCarrier::request(self, body)
         }
 
@@ -374,7 +391,7 @@ mod native {
             StdioCarrier::take_notice(self)
         }
 
-        fn wait_for_notice(&mut self) -> Result<CarrierNotice, String> {
+        fn wait_for_notice(&mut self) -> Result<CarrierNotice, CarrierError> {
             StdioCarrier::wait_for_notice(self)
         }
 
@@ -382,16 +399,17 @@ mod native {
         /// reference so a boxed carrier can be closed. Dropping the input
         /// twice is harmless; the second `wait` reports the already-reaped
         /// child, which a caller closing twice deserves to hear about.
-        fn shutdown(&mut self) -> Result<(), String> {
+        fn shutdown(&mut self) -> Result<(), CarrierError> {
             self.input.take();
-            let status = self
-                .child
-                .wait()
-                .map_err(|error| format!("endpoint did not stop cleanly: {error}"))?;
+            let status = self.child.wait().map_err(|error| {
+                CarrierError::Disconnected(format!("endpoint did not stop cleanly: {error}"))
+            })?;
             if status.success() {
                 Ok(())
             } else {
-                Err(format!("endpoint exited with status {status}"))
+                Err(CarrierError::Disconnected(format!(
+                    "endpoint exited with status {status}"
+                )))
             }
         }
     }

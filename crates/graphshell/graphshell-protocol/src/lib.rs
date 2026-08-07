@@ -1310,21 +1310,70 @@ pub enum CarrierOutput {
 /// guessed at now.
 pub trait Carrier {
     /// Send one request and wait for its response.
-    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String>;
+    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, CarrierError>;
 
     /// Take one already-received notice, if any is queued. Never blocks.
     fn take_notice(&mut self) -> Option<CarrierNotice>;
 
     /// Block until a notice arrives.
-    fn wait_for_notice(&mut self) -> Result<CarrierNotice, String>;
+    fn wait_for_notice(&mut self) -> Result<CarrierNotice, CarrierError>;
 
     /// Release whatever the carrier holds open.
     ///
     /// `&mut self` rather than `self` so this is callable on a boxed carrier,
     /// which is the whole point of the seam. Implementations should tolerate a
     /// second call rather than assuming exactly one.
-    fn shutdown(&mut self) -> Result<(), String>;
+    fn shutdown(&mut self) -> Result<(), CarrierError>;
 }
+
+/// Why a carrier did not return an answer.
+///
+/// The distinction is the whole reason this is not a `String`. A host holding
+/// a mounted scene has to act differently depending on which happened, and for
+/// a long time it could not tell: both arrived as an opaque message, so
+/// nothing could mark a session disconnected without also marking it
+/// disconnected every time an endpoint declined a request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CarrierError {
+    /// The endpoint answered, and its answer was a refusal.
+    ///
+    /// The session is intact. The peer is still there and still admitted; it
+    /// declined this request, and the next one may well succeed.
+    Refused(String),
+    /// The exchange could not complete.
+    ///
+    /// The session is gone. Nothing further will be answered on it, and a host
+    /// still presenting its scene as live is showing something it can no
+    /// longer save to.
+    Disconnected(String),
+}
+
+impl CarrierError {
+    /// Whether the session behind this error is finished.
+    pub fn is_disconnected(&self) -> bool {
+        matches!(self, CarrierError::Disconnected(_))
+    }
+
+    /// The human-readable half, without asking which kind it was.
+    pub fn message(&self) -> &str {
+        match self {
+            CarrierError::Refused(message) | CarrierError::Disconnected(message) => message,
+        }
+    }
+}
+
+impl core::fmt::Display for CarrierError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            CarrierError::Refused(message) => write!(f, "the endpoint refused: {message}"),
+            CarrierError::Disconnected(message) => {
+                write!(f, "the endpoint is no longer reachable: {message}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CarrierError {}
 
 #[cfg(test)]
 mod tests {

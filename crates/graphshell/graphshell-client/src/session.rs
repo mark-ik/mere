@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use graphshell_protocol::{
-    AdvertisedAction, CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody,
+    AdvertisedAction, CapabilityProfile, Carrier, CarrierError, CarrierNotice, CarrierRequestBody,
     CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
     ProjectionSession, ResumeRequest,
 };
@@ -51,7 +51,10 @@ impl RetainedEndpointSession {
     /// endpoint runs stops being a different code path and becomes a different
     /// argument.
     pub fn over(mut carrier: Box<dyn Carrier>, profile: CapabilityProfile) -> Result<Self, String> {
-        let descriptor = match carrier.request(CarrierRequestBody::Discover)? {
+        let descriptor = match carrier
+            .request(CarrierRequestBody::Discover)
+            .map_err(|error| error.to_string())?
+        {
             CarrierResponseBody::Descriptor(descriptor) => descriptor,
             other => return Err(unexpected("descriptor", &other)),
         };
@@ -96,10 +99,7 @@ impl RetainedEndpointSession {
             .get(offer_index)
             .map(|offer| offer.request.clone())
             .ok_or_else(|| format!("endpoint has no projection {offer_index}"))?;
-        let snapshot = match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Snapshot(request.clone()))?
-        {
+        let snapshot = match self.ask(CarrierRequestBody::Snapshot(request.clone()))? {
             CarrierResponseBody::Snapshot(snapshot) => *snapshot,
             other => return Err(unexpected("snapshot", &other)),
         };
@@ -115,10 +115,7 @@ impl RetainedEndpointSession {
             .get(session)
             .cloned()
             .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?;
-        let snapshot = match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Snapshot(request.clone()))?
-        {
+        let snapshot = match self.ask(CarrierRequestBody::Snapshot(request.clone()))? {
             CarrierResponseBody::Snapshot(snapshot) => *snapshot,
             other => return Err(unexpected("snapshot", &other)),
         };
@@ -191,10 +188,7 @@ impl RetainedEndpointSession {
         let invocation = draft
             .invocation(target)
             .map_err(|error| format!("could not compose advertised action: {error}"))?;
-        match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Intent(invocation))?
-        {
+        match self.ask(CarrierRequestBody::Intent(invocation))? {
             CarrierResponseBody::Intent(result) => Ok(result),
             other => Err(unexpected("intent result", &other)),
         }
@@ -229,10 +223,7 @@ impl RetainedEndpointSession {
             {
                 PresentationResolution::Ready(presentation) => return Ok(presentation),
                 PresentationResolution::NeedsResource(request) => {
-                    let response = match self
-                        .carrier_mut()?
-                        .request(CarrierRequestBody::Resource(request))?
-                    {
+                    let response = match self.ask(CarrierRequestBody::Resource(request))? {
                         CarrierResponseBody::Resource(response) => response,
                         other => return Err(unexpected("resource", &other)),
                     };
@@ -300,16 +291,14 @@ impl RetainedEndpointSession {
             .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
         let payload = serde_json::to_vec(payload)
             .map_err(|error| format!("could not encode intent payload: {error}"))?;
-        match self
-            .carrier_mut()?
-            .request(CarrierRequestBody::Intent(IntentInvocation {
-                session: session.clone(),
-                target,
-                observed_epoch: ack.epoch,
-                observed_revision: ack.revision,
-                intent: action.intent.0.clone(),
-                payload,
-            }))? {
+        match self.ask(CarrierRequestBody::Intent(IntentInvocation {
+            session: session.clone(),
+            target,
+            observed_epoch: ack.epoch,
+            observed_revision: ack.revision,
+            intent: action.intent.0.clone(),
+            payload,
+        }))? {
             CarrierResponseBody::Intent(result) => Ok(result),
             other => Err(unexpected("intent result", &other)),
         }
@@ -318,7 +307,11 @@ impl RetainedEndpointSession {
     /// Block for one revision bell and recover through the ordinary resume
     /// path. Source bytes never travel in the notice.
     pub fn wait_for_change(&mut self) -> Result<bool, String> {
-        let notice = self.carrier_mut()?.wait_for_notice()?;
+        let heard = match self.carrier.as_deref_mut() {
+            Some(carrier) => carrier.wait_for_notice(),
+            None => return Err("endpoint carrier is closed".to_string()),
+        };
+        let notice = self.observe(heard)?;
         let carrier = self
             .carrier
             .as_deref_mut()
@@ -333,7 +326,7 @@ impl RetainedEndpointSession {
     /// for a background owner that polls on a short cadence while its UI
     /// remains entirely local.
     pub fn poll_for_change(&mut self) -> Result<bool, String> {
-        match self.carrier_mut()?.request(CarrierRequestBody::Discover)? {
+        match self.ask(CarrierRequestBody::Discover)? {
             CarrierResponseBody::Descriptor(_) => {}
             other => return Err(unexpected("descriptor", &other)),
         }
@@ -361,7 +354,7 @@ impl RetainedEndpointSession {
             let close = match response {
                 Ok(CarrierResponseBody::Closed) => Ok(()),
                 Ok(other) => Err(unexpected("session close", &other)),
-                Err(error) => Err(error),
+                Err(error) => Err(error.to_string()),
             };
             let shutdown = carrier
                 .shutdown()
@@ -372,6 +365,46 @@ impl RetainedEndpointSession {
         };
         self.purge();
         carrier_result
+    }
+
+    /// Send one request, and notice when the answer means the session is gone.
+    ///
+    /// The single place disconnection is observed. A refusal leaves every
+    /// mounted scene exactly as it was, because the endpoint is still there and
+    /// merely said no; a disconnection marks them all, so a host stops
+    /// presenting a document it can no longer save to.
+    fn ask(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
+        let outcome = match self.carrier.as_deref_mut() {
+            Some(carrier) => carrier.request(body),
+            None => return Err("endpoint carrier is closed".to_string()),
+        };
+        self.observe(outcome)
+    }
+
+    /// Record what a carrier outcome means for the scenes this session holds.
+    fn observe<T>(&mut self, outcome: Result<T, CarrierError>) -> Result<T, String> {
+        match outcome {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                if error.is_disconnected() {
+                    self.disconnect();
+                }
+                Err(error.to_string())
+            }
+        }
+    }
+
+    /// Every mounted projection stops being live.
+    ///
+    /// The scene is kept rather than dropped: a host still wants to show what
+    /// was there, it just must not offer to save into it.
+    fn disconnect(&mut self) {
+        let Self {
+            mounted, client, ..
+        } = self;
+        for session in mounted.iter() {
+            client.mark_disconnected(session);
+        }
     }
 
     /// The carrier itself, for a host sending a verb this wrapper does not
@@ -413,7 +446,10 @@ pub fn resume_after_notice(
         return Ok(false);
     };
     for _ in 0..4 {
-        let reply = match carrier.request(CarrierRequestBody::Resume(request))? {
+        let reply = match carrier
+            .request(CarrierRequestBody::Resume(request))
+            .map_err(|error| error.to_string())?
+        {
             CarrierResponseBody::Resume(reply) => reply,
             other => return Err(unexpected("resume reply", &other)),
         };

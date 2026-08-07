@@ -18,4 +18,10 @@ inker = { workspace = true }
 # Rhai: pure Rust, embeddable, sandboxed by default (no file/network), with a
 # built-in operation budget (`set_max_operations`) so `eval_block`'s runaway
 # cap is first-class rather than hand-rolled.
-rhai = "1"
+# `sync` makes Engine Send + Sync (Rc becomes Arc, RefCell becomes RwLock
+# throughout rhai). Required because a KnotEndpoint holds its evaluators and a
+# resident host schedules endpoints across threads. We register no host
+# bindings and no custom types, so the feature costs us nothing at the API
+# boundary; it costs atomic refcounting inside script evaluation, which is an
+# on-demand fence with an operation budget rather than a hot path.
+rhai = { version = "1", features = ["sync"] }

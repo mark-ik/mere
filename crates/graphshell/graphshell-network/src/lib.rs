@@ -39,8 +39,8 @@
 use std::collections::VecDeque;
 
 use graphshell_protocol::{
-    Carrier, CarrierNotice, CarrierOutput, CarrierRequest, CarrierRequestBody, CarrierResponse,
-    CarrierResponseBody,
+    Carrier, CarrierError, CarrierNotice, CarrierOutput, CarrierRequest, CarrierRequestBody,
+    CarrierResponse, CarrierResponseBody,
 };
 use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, Lines,
@@ -106,47 +106,50 @@ impl<S: AsyncRead + AsyncWrite + Unpin> NetworkCarrier<S> {
     }
 }
 
-async fn write_request<W>(writer: &mut W, request: &CarrierRequest) -> Result<(), String>
+async fn write_request<W>(writer: &mut W, request: &CarrierRequest) -> Result<(), CarrierError>
 where
     W: AsyncWrite + Unpin,
 {
-    let mut line = serde_json::to_vec(request)
-        .map_err(|error| format!("could not encode carrier request: {error}"))?;
+    let mut line = serde_json::to_vec(request).map_err(|error| {
+        CarrierError::Disconnected(format!("could not encode carrier request: {error}"))
+    })?;
     line.push(b'\n');
-    writer
-        .write_all(&line)
-        .await
-        .map_err(|error| format!("could not send carrier request: {error}"))?;
-    writer
-        .flush()
-        .await
-        .map_err(|error| format!("could not flush carrier request: {error}"))
+    writer.write_all(&line).await.map_err(|error| {
+        CarrierError::Disconnected(format!("could not send carrier request: {error}"))
+    })?;
+    writer.flush().await.map_err(|error| {
+        CarrierError::Disconnected(format!("could not flush carrier request: {error}"))
+    })
 }
 
-async fn read_output<R>(lines: &mut Lines<R>) -> Result<CarrierOutput, String>
+async fn read_output<R>(lines: &mut Lines<R>) -> Result<CarrierOutput, CarrierError>
 where
     R: AsyncBufRead + Unpin,
 {
     loop {
-        let line = lines
-            .next_line()
-            .await
-            .map_err(|error| format!("could not read carrier output: {error}"))?;
+        let line = lines.next_line().await.map_err(|error| {
+            CarrierError::Disconnected(format!("could not read carrier output: {error}"))
+        })?;
         let Some(line) = line else {
-            return Err("endpoint closed without an output frame".into());
+            return Err(CarrierError::Disconnected(
+                "endpoint closed without an output frame".into(),
+            ));
         };
         if line.trim().is_empty() {
             continue;
         }
-        return serde_json::from_str(&line)
-            .map_err(|error| format!("invalid carrier output: {error}"));
+        return serde_json::from_str(&line).map_err(|error| {
+            CarrierError::Disconnected(format!("invalid carrier output: {error}"))
+        });
     }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> Carrier for NetworkCarrier<S> {
-    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
+    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, CarrierError> {
         if self.closed {
-            return Err("projection carrier is closed".into());
+            return Err(CarrierError::Disconnected(
+                "projection carrier is closed".into(),
+            ));
         }
         let id = self.next_id;
         self.next_id += 1;
@@ -183,21 +186,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Carrier for NetworkCarrier<S> {
     /// Unlike the in-process carrier, there is something real to wait for: a
     /// remote endpoint produces notices on its own schedule, and this is the
     /// call that lets a host wait on one rather than poll for it.
-    fn wait_for_notice(&mut self) -> Result<CarrierNotice, String> {
+    fn wait_for_notice(&mut self) -> Result<CarrierNotice, CarrierError> {
         if let Some(notice) = self.take_notice() {
             return Ok(notice);
         }
         if self.closed {
-            return Err("projection carrier is closed".into());
+            return Err(CarrierError::Disconnected(
+                "projection carrier is closed".into(),
+            ));
         }
         let Self { runtime, lines, .. } = self;
         runtime.block_on(async move {
             match read_output(lines).await? {
                 CarrierOutput::Notice(notice) => Ok(notice),
-                CarrierOutput::Response(response) => Err(format!(
+                CarrierOutput::Response(response) => Err(CarrierError::Disconnected(format!(
                     "endpoint sent unexpected response {} while Graphshell waited for a notice",
                     response.id
-                )),
+                ))),
             }
         })
     }
@@ -208,7 +213,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Carrier for NetworkCarrier<S> {
     /// `CarrierRequestBody::Close`, exactly as it is over stdio: a carrier
     /// that injected a verb of its own would answer for a client that may have
     /// already sent one. A second call is a no-op rather than an error.
-    fn shutdown(&mut self) -> Result<(), String> {
+    fn shutdown(&mut self) -> Result<(), CarrierError> {
         if self.closed {
             return Ok(());
         }
@@ -218,19 +223,27 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Carrier for NetworkCarrier<S> {
         } = self;
         runtime
             .block_on(async move { writer.shutdown().await })
-            .map_err(|error| format!("projection carrier did not close cleanly: {error}"))
+            .map_err(|error| {
+                CarrierError::Disconnected(format!(
+                    "projection carrier did not close cleanly: {error}"
+                ))
+            })
     }
 }
 
 /// A response is this request's answer only if it says so.
-fn match_response(response: CarrierResponse, id: u64) -> Result<CarrierResponseBody, String> {
+fn match_response(response: CarrierResponse, id: u64) -> Result<CarrierResponseBody, CarrierError> {
     if response.id != id {
-        return Err(format!(
+        // The stream has lost its place, which no further request can recover.
+        return Err(CarrierError::Disconnected(format!(
             "carrier response id {} did not match request {id}",
             response.id
-        ));
+        )));
     }
-    response.body.map_err(|failure| failure.message)
+    // The one place an endpoint's own answer arrives: the session is fine.
+    response
+        .body
+        .map_err(|failure| CarrierError::Refused(failure.message))
 }
 
 #[cfg(test)]
@@ -327,7 +340,14 @@ mod tests {
         let runtime = Runtime::new().unwrap();
         let mut carrier = scripted(&runtime, vec![response(99, CarrierResponseBody::Closed)]);
         let error = carrier.request(CarrierRequestBody::Close).unwrap_err();
-        assert!(error.contains("did not match request 1"), "{error}");
+        assert!(
+            error.message().contains("did not match request 1"),
+            "{error}"
+        );
+        assert!(
+            error.is_disconnected(),
+            "a stream that lost its place cannot be recovered by asking again"
+        );
     }
 
     #[test]
@@ -337,6 +357,7 @@ mod tests {
         carrier.shutdown().unwrap();
         carrier.shutdown().expect("a second shutdown is a no-op");
         let error = carrier.request(CarrierRequestBody::Close).unwrap_err();
-        assert!(error.contains("closed"), "{error}");
+        assert!(error.message().contains("closed"), "{error}");
+        assert!(error.is_disconnected());
     }
 }

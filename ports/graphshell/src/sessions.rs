@@ -131,7 +131,9 @@ pub fn wait_for_session_change(
     carrier: &mut StdioCarrier,
     client: &mut ClientState,
 ) -> Result<bool, String> {
-    let notice = carrier.wait_for_notice()?;
+    let notice = carrier
+        .wait_for_notice()
+        .map_err(|error| error.to_string())?;
     resume_after_notice(carrier, client, &notice)
 }
 
@@ -161,14 +163,17 @@ fn invoke_advertised_actions(
             if !seen.insert(action.intent.0.clone()) {
                 continue;
             }
-            let result = match carrier.request(CarrierRequestBody::Intent(IntentInvocation {
-                session: session.clone(),
-                target,
-                observed_epoch: ack.epoch,
-                observed_revision: ack.revision,
-                intent: action.intent.0.clone(),
-                payload: Vec::new(),
-            }))? {
+            let result = match carrier
+                .request(CarrierRequestBody::Intent(IntentInvocation {
+                    session: session.clone(),
+                    target,
+                    observed_epoch: ack.epoch,
+                    observed_revision: ack.revision,
+                    intent: action.intent.0.clone(),
+                    payload: Vec::new(),
+                }))
+                .map_err(|error| error.to_string())?
+            {
                 CarrierResponseBody::Intent(result) => result,
                 other => return Err(unexpected("intent result", &other)),
             };

@@ -254,83 +254,60 @@ one `ClientState` must mint per-session randomness or the second silently
 overwrites the first. The guarantee belongs to the client, and the doc comment
 should say so rather than claiming the responder provides it.
 
-**The mechanism is proven 2026-08-06.**
-`ports/knot/tests/place_projection.rs` runs the revised done condition's first
-two clauses with nothing stubbed: two peers with distinct subjects and distinct
-grants, admitted over a transport, each mounting a real `KnotEndpoint` over one
-holder's directory through the blocking network carrier and the ordinary
-`RetainedEndpointSession`. Ada saves; the holder writes the file; Bo, who asked
-for nothing, hears the bell, resumes, and reads Ada's text. The assertion that
-matters is the last one: the holder's own file on disk is what both were
-reading. Stable across repeated runs.
+**K2 IS DONE 2026-08-06.** All three clauses of the revised done condition
+are proven in `ports/knot/tests/place_projection.rs`, against the real
+`ResidentProjectionHost` and its catalog rather than a hand-rolled stand-in.
+Two peers with distinct subjects and distinct grants are admitted over a
+transport and each mounts a real `KnotEndpoint` over one holder's directory.
+Ada saves; the holder writes the file; Bo, who asked for nothing, hears the
+bell, resumes, and reads Ada's text; and the holder's own file on disk is what
+both were reading. A second test takes the holder away mid-session and finds
+the visitor told the document is unavailable, with the scene kept so a host can
+still show what was there and no longer offer a save that cannot land.
 
-**A collision worth deciding rather than working around.** `KnotEndpoint` is
-**not `Send`**, so it cannot be registered in `ResidentEndpointCatalog`, whose
-bounds require `Send` because the resident host spawns each session. The cause
-is exactly one field, confirmed against the compiler rather than guessed:
-`KnotEffectAuthority` holds `BlockEvaluators`, a `BTreeMap<String, Box<dyn
-BlockEvaluator>>`. Everything else in the endpoint, including the directory
-source and its watcher, is already `Send`.
+Three decisions were taken along the way, each forced by a compiler or a red
+test rather than chosen in the abstract.
 
-The trait lives in genet's inker and has exactly one implementor anywhere,
-mere's own `RhaiEvaluator`, which wraps a `rhai::Engine`. Rhai's engine is not
-`Send` without the crate's `sync` feature, so adding `Send` to the trait is not
-the free one-word change it first looks like.
+**`KnotEndpoint` is now `Send`, by enabling rhai's `sync` feature.** The
+catalog requires `Send` because the host spawns each session, and the endpoint
+was not, for exactly one reason: `KnotEffectAuthority` holds `BlockEvaluators`,
+a map of `Box<dyn BlockEvaluator>`. The trait is genet's and has exactly one
+implementor anywhere, mere's own `RhaiEvaluator` over a `rhai::Engine`.
 
-Three ways out, none of them obviously right, all of them Mark's call:
+The hidden cost turned out to be small and worth naming precisely. `sync`
+makes rhai's `Shared` an `Arc` instead of an `Rc` and its `Locked` an `RwLock`
+instead of a `RefCell`, so the cost is atomic refcounting inside script
+evaluation. It also requires every registered function and custom type to be
+`Send + Sync`, which costs us nothing: `base_engine` registers two non-capturing
+closures and no custom types at all. Evaluation is an on-demand knot fence
+under an operation budget, not a hot path. The other rhai consumer in the
+workspace, `quint`, has its dependency behind a `field-rhai` feature that
+nothing enables, so nothing else is dragged along today.
 
-- **Enable rhai's `sync` feature.** Makes everything `Send` and changes
-  nothing else structurally, at the cost of rhai switching its internals from
-  `Rc` to `Arc` throughout for a feature only the effects lane uses.
-- **Give a non-`Send` session its own thread.** The resident host stops
-  requiring `Send` and runs such sessions on a dedicated thread with a
-  current-thread runtime. Honest, and costs a thread per Knot visitor.
-- **Move the evaluators behind a channel.** The endpoint becomes `Send` and
-  the evaluator stays single-threaded on the far side of it. The nicest
-  long-term shape and the most work, and it touches the effects lane rather
-  than the projection one.
+`BlockEvaluator: Send` is now stated in genet, where the constraint belongs: a
+thread-hostile language runtime should say so by not implementing the trait,
+rather than leaving every endpoint above it unschedulable for reasons invisible
+from there. `ports/knot/tests/send_probe.rs` asserts the result, so breaking any
+link in that two-repo chain names the type that changed instead of surfacing as
+a confusing trait error at a registration in another crate.
 
-Until it is decided, the proof above serves both sessions on one task with
-`join!`, which needs no `Send` at all. That is a real deployment shape, not
-only a test convenience, but it is not the resident host.
+**The carrier now distinguishes a refusal from a disconnection.**
+`Carrier::request` returned `Result<_, String>`, and an endpoint that said no
+was indistinguishable from a link that died. `CarrierError::Refused` against
+`CarrierError::Disconnected` replaces it across the protocol crate and all
+three carriers. `RetainedEndpointSession` keeps its `Result<_, String>` public
+surface, so no consumer signature changed; internally it now observes every
+carrier outcome and marks its mounted scenes disconnected when the session is
+gone. The scene is kept rather than dropped, so a host can still show what was
+there while no longer offering a save that cannot land.
 
-**The third clause needs a seam change, and here is why nobody hit it before.**
-The done condition ends with *a disconnected visitor is told the document is
-unavailable rather than shown a stale copy it cannot save*.
-`ClientState::mark_disconnected` already exists and does exactly that. Nothing
-in the live path calls it: its only callers are a unit test and the resume
-fixture, so a visitor whose holder vanishes keeps a `Live` mounted scene, which
-is precisely the state the clause forbids.
+**The catalog gained `register_resumable_notifying`.** Its typed registrations
+answered resume with a refusal, so Knot, which is resumable, was told it could
+not do the thing it demonstrably can, and a visitor recovering after a bell
+failed. The escape hatch `register_erased` anticipated this in its doc comment;
+what was missing was the ordinary case, since a product endpoint over durable
+source is generally both notifying and resumable.
 
-The reason is in the seam. `Carrier::request` returns
-`Result<CarrierResponseBody, String>`, and two unrelated outcomes arrive as
-`Err(String)` through it:
-
-- the endpoint answered and its answer was a refusal, from
-  `response.body.map_err(|failure| failure.message)`;
-- the link died, from a failed write or an `endpoint closed without an output
-  frame`.
-
-Both stdio and the network carrier flatten them the same way, so a caller
-cannot mark a session disconnected without also marking it disconnected every
-time an endpoint says no. Wiring `mark_disconnected` against today's signature
-would be worse than leaving it unwired.
-
-`wait_for_notice` is the one unambiguous case, since a notice is never a
-refusal, so `wait_for_change` failing is a real disconnection signal and could
-be wired now. That closes the common case (a visitor sitting with a document
-open when the holder goes away) and leaves the general one open, which is a
-half-measure worth naming as such rather than shipping quietly.
-
-The fuller answer is a carrier error that distinguishes the two, something like
-`Refused(String)` against `Disconnected(String)`. It touches
-`graphshell-protocol`, all three carriers, and every caller, which is why it
-wants a decision rather than a drive-by.
-
-Still open for K2: the `Send` decision above, registering `KnotEndpoint` on the
-route once it is made, the carrier error decision just recorded, the
-visitor-side open path in Turnstone, and the two-machine receipt over real
-hardware rather than a paired fixture.
 
 **K3. Retire the spawn path or keep it deliberately.** If the remote case has
 no live consumer, the stdio carrier and `bin/knot_endpoint.rs` are a

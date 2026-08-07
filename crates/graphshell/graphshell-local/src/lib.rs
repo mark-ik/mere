@@ -22,8 +22,8 @@
 use std::fmt::Display;
 
 use graphshell_protocol::{
-    Carrier, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponseBody, ResumeReply,
-    ResumeRequest,
+    Carrier, CarrierError, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponseBody,
+    ResumeReply, ResumeRequest,
 };
 
 use graphshell_endpoint::{CompleteEndpoint, ProjectionNoticeSource, dispatch_common};
@@ -64,14 +64,19 @@ where
 
 /// Round-trip a value through the wire encoding. See the module note: this is
 /// the point, not an oversight.
-fn through_the_wire<T>(value: &T) -> Result<T, String>
+fn through_the_wire<T>(value: &T) -> Result<T, CarrierError>
 where
     T: serde::Serialize + serde::de::DeserializeOwned,
 {
-    let bytes = serde_json::to_vec(value)
-        .map_err(|error| format!("carrier could not encode a message: {error}"))?;
-    serde_json::from_slice(&bytes)
-        .map_err(|error| format!("carrier could not decode a message: {error}"))
+    // A message that will not round-trip is a defect in the message type, and
+    // no in-process session survives it, so it reports as disconnection rather
+    // than as something the endpoint decided.
+    let bytes = serde_json::to_vec(value).map_err(|error| {
+        CarrierError::Disconnected(format!("carrier could not encode a message: {error}"))
+    })?;
+    serde_json::from_slice(&bytes).map_err(|error| {
+        CarrierError::Disconnected(format!("carrier could not decode a message: {error}"))
+    })
 }
 
 impl<E, F> Carrier for LocalCarrier<E, F>
@@ -83,25 +88,24 @@ where
     <E as ProjectionNoticeSource>::Error: Display,
     F: FnMut(&mut E, ResumeRequest) -> Result<ResumeReply, String>,
 {
-    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
+    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, CarrierError> {
         let id = self.next_id;
         self.next_id += 1;
         let request = through_the_wire(&CarrierRequest { id, body })?;
-        let response = dispatch_common(&mut self.endpoint, request, &mut self.resume).map_err(
-            |plane| {
+        let response =
+            dispatch_common(&mut self.endpoint, request, &mut self.resume).map_err(|plane| {
                 // Session-plane verbs are the host's to answer, and an
                 // in-process host has no session plane to answer them with.
                 // Refusing names the verb rather than pretending it worked.
-                format!(
+                CarrierError::Refused(format!(
                     "in-process carrier does not serve the session plane (request {})",
                     plane.id
-                )
-            },
-        )?;
+                ))
+            })?;
         let response = through_the_wire(&response)?;
         match response.body {
             Ok(body) => Ok(body),
-            Err(failure) => Err(failure.message),
+            Err(failure) => Err(CarrierError::Refused(failure.message)),
         }
     }
 
@@ -113,13 +117,14 @@ where
     /// whatever it is going to produce by the time the host asks. A caller
     /// that wants to wait owns that loop, because only it knows what it is
     /// waiting for and how long is too long.
-    fn wait_for_notice(&mut self) -> Result<CarrierNotice, String> {
-        self.take_notice()
-            .ok_or_else(|| "in-process endpoint has no pending notice".to_string())
+    fn wait_for_notice(&mut self) -> Result<CarrierNotice, CarrierError> {
+        self.take_notice().ok_or_else(|| {
+            CarrierError::Refused("in-process endpoint has no pending notice".to_string())
+        })
     }
 
     /// Nothing is held open. Dropping the carrier drops the endpoint.
-    fn shutdown(&mut self) -> Result<(), String> {
+    fn shutdown(&mut self) -> Result<(), CarrierError> {
         Ok(())
     }
 }
@@ -185,9 +190,10 @@ mod tests {
         CountingEndpoint,
         impl FnMut(&mut CountingEndpoint, ResumeRequest) -> Result<ResumeReply, String>,
     > {
-        LocalCarrier::new(CountingEndpoint::default(), |_: &mut CountingEndpoint, _| {
-            Err("resume is the endpoint's to answer".to_string())
-        })
+        LocalCarrier::new(
+            CountingEndpoint::default(),
+            |_: &mut CountingEndpoint, _| Err("resume is the endpoint's to answer".to_string()),
+        )
     }
 
     #[test]
@@ -199,7 +205,11 @@ mod tests {
             }
             other => panic!("expected a descriptor, got {other:?}"),
         }
-        assert_eq!(carrier.endpoint().describes.get(), 1, "reached exactly once");
+        assert_eq!(
+            carrier.endpoint().describes.get(),
+            1,
+            "reached exactly once"
+        );
     }
 
     #[test]
@@ -211,7 +221,11 @@ mod tests {
                 resource: graphshell_protocol::ContentHash::of(b"absent"),
             }))
             .unwrap_err();
-        assert!(error.contains("no resources"), "{error}");
+        assert!(error.message().contains("no resources"), "{error}");
+        assert!(
+            !error.is_disconnected(),
+            "an endpoint saying no leaves the session intact"
+        );
     }
 
     #[test]
@@ -238,6 +252,6 @@ mod tests {
         // it had succeeded would be worse than refusing it.
         let mut carrier = carrier();
         let error = carrier.request(CarrierRequestBody::Close).unwrap_err();
-        assert!(error.contains("session plane"), "{error}");
+        assert!(error.message().contains("session plane"), "{error}");
     }
 }
