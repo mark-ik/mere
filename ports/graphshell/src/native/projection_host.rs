@@ -91,6 +91,29 @@ impl ServedProjection {
     }
 }
 
+/// One session's claim on the live count, released on drop.
+///
+/// A guard rather than a decrement at the end of the serving task, because
+/// that task runs product code: an endpoint or a resume closure that panics
+/// unwinds straight past a trailing statement, and tokio catches the panic at
+/// the join handle, so the host survives with the slot still counted. The
+/// policy's `max_sessions` is checked against this number, so a leak here is a
+/// host that quietly stops admitting anyone and reports nothing.
+struct LiveSession(Arc<AtomicU32>);
+
+impl LiveSession {
+    fn enter(live: Arc<AtomicU32>) -> Self {
+        live.fetch_add(1, Ordering::SeqCst);
+        Self(live)
+    }
+}
+
+impl Drop for LiveSession {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// A resident host serving one catalog route to admitted network peers.
 pub struct ResidentProjectionHost {
     policy: LocalNetworkPolicy,
@@ -172,13 +195,14 @@ impl ResidentProjectionHost {
 
         let interval = self.route.notice_poll_interval();
         let revocations = Arc::clone(&self.revocations);
-        let live = Arc::clone(&self.live);
-        live.fetch_add(1, Ordering::SeqCst);
+        let live = LiveSession::enter(Arc::clone(&self.live));
         let handle = tokio::spawn(async move {
+            // Held by the task, so the count falls however the task ends.
+            let _live = live;
             let mut resume = |endpoint: &mut ResidentEndpointSession, request: ResumeRequest| {
                 endpoint.resume(request)
             };
-            let summary = serve_admitted_session_notifying(
+            serve_admitted_session_notifying(
                 &mut admitted,
                 &authority,
                 &revocations,
@@ -187,11 +211,7 @@ impl ResidentProjectionHost {
                 now_ms,
                 interval,
             )
-            .await;
-            // Decremented however the session ended, including on error, so a
-            // failing peer cannot permanently consume a slot the policy counts.
-            live.fetch_sub(1, Ordering::SeqCst);
-            summary
+            .await
         });
 
         Ok(Ok(ServedProjection {
@@ -607,6 +627,27 @@ mod tests {
         visitor.await.unwrap();
         served.finished().await.expect("join").expect("served");
         assert_eq!(host.live_sessions(), 0, "the slot came back");
+    }
+
+    #[test]
+    fn a_panicking_session_gives_its_slot_back() {
+        // The leak the guard exists for. A serving task runs product code, and
+        // a panic there unwinds past any trailing decrement while tokio
+        // absorbs the panic at the join handle, so the host would survive with
+        // the slot counted forever and quietly stop admitting at max_sessions.
+        let live = Arc::new(AtomicU32::new(0));
+        let guard = LiveSession::enter(Arc::clone(&live));
+        assert_eq!(live.load(Ordering::SeqCst), 1);
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _held = guard;
+            panic!("the endpoint blew up mid-session");
+        }));
+        assert!(unwound.is_err(), "the panic really happened");
+        assert_eq!(
+            live.load(Ordering::SeqCst),
+            0,
+            "the slot came back on unwind, not just on a clean return"
+        );
     }
 
     #[test]

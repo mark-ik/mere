@@ -16,9 +16,7 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-use graphshell_client::{
-    ClientState, ResolvedPresentation, RetainedEndpointSession, resume_after_notice, unexpected,
-};
+use graphshell_client::{ClientState, ResolvedPresentation, RetainedEndpointSession, unexpected};
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use graphshell_protocol::{
     CapabilityProfile, Carrier, CarrierRequestBody, CarrierResponseBody, IntentInvocation,
@@ -122,19 +120,6 @@ fn mount_descriptor(
         });
     }
     Ok(views)
-}
-
-/// Block for one endpoint revision bell, mark the mounted scene stale, and
-/// recover through the ordinary revision-addressed resume path.
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-pub fn wait_for_session_change(
-    carrier: &mut StdioCarrier,
-    client: &mut ClientState,
-) -> Result<bool, String> {
-    let notice = carrier
-        .wait_for_notice()
-        .map_err(|error| error.to_string())?;
-    resume_after_notice(carrier, client, &notice)
 }
 
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
