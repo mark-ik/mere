@@ -161,9 +161,10 @@ active tearout_gestures plan).
 
 - **mooting adopting `eidetic-fjall`.** It already rides muniment, so this is a
   manifest change rather than a port. The plan's third done-condition also
-  named meerkat's suite as pending the genet ring-3 rename; that item is
-  **obsolete**, because meerkat was deleted rather than ported and lives only
-  in git history now. The fourth, a correction owed to the boundary-pass plan's
+  named meerkat's suite as pending the genet ring-3 rename. That suite has no
+  standing home to be pending *in*: meerkat was **decomposed**, not discarded,
+  so the check it described now belongs to whichever of mere's crates or
+  turnstone inherited the code it covered. The fourth, a correction owed to the boundary-pass plan's
   point 5, was already recorded there and needs nothing.
 
 ## From mere_turnstone_boundary_pass (landed 2026-07-09, archived 2026-08-06)
@@ -178,4 +179,14 @@ active tearout_gestures plan).
   the delta vocabulary can still change without forcing a durable-log
   migration, which is the reason it was safe to defer and the reason it stops
   being safe once a real log exists.
+
+## From host_wiring_grabbag (genet side complete 2026-06-12, archived 2026-08-06)
+
+- **Four genet seams with no caller yet: G1.1 `on_wheel`, G1.2 transform
+  hit-test, G1.3 pointer cancel, G2.3 keyboard escapes.** All eight seams
+  landed genet-side; four were runway whose done-condition was adoption by
+  meerkat. That condition did not evaporate when meerkat was decomposed, it
+  moved: the adopter is now whichever surface inherited those callers, which is
+  turnstone for the app-shell ones. Re-read against turnstone before assuming
+  any of the four is still unadopted.
 

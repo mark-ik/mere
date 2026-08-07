@@ -43,7 +43,7 @@ Cross-refs:
   — names the host **interact** stage; this plan inherits that ownership from
   window-composition.
 - [multi_graph_activation_plan](2026-06-09_multi_graph_activation_plan.md),
-  [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md) — consumers that
+  [host_wiring_grabbag_plan](../2026-08-06_completed_plans/2026-06-11_host_wiring_grabbag_plan.md) — consumers that
   rode "window-composition P2+"; now this.
 
 ---

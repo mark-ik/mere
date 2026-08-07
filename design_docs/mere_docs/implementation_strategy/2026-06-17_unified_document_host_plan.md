@@ -60,7 +60,7 @@ Sibling/converging docs:
 - [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery
   (authority) vs panes (views); this plan is the rendering-engine half of that
   same reshape (one document vs many).
-- [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md) — G1
+- [host_wiring_grabbag_plan](../../archive_docs/2026-08-06_completed_plans/2026-06-11_host_wiring_grabbag_plan.md) — G1
   composition-runway items (transform-aware hit-test, `on_wheel`, pointer
   cancellation) feed Phase 2 here.
 - [modular_integration_plan](2026-06-02_modular_integration_plan.md) — the

@@ -7,7 +7,7 @@
 
 **Date**: 2026-06-10
 **Status**: C0–C5 + C4c DONE (the perf chain). C6 spun out →
-[host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md). Ready to archive.
+[host_wiring_grabbag_plan](../2026-08-06_completed_plans/2026-06-11_host_wiring_grabbag_plan.md). Ready to archive.
 **Scope**: Move meerkat's DOM panes off the stateless per-frame pipeline and onto
 the incremental machinery that already exists on both sides of the seam
 (genet's `IncrementalLayout` + the always-recorded `DomMutation` stream), and
@@ -233,7 +233,7 @@ meerkat's render path.
 
 ### C6 — Host wiring parity (mere + genet; the audit's adjacent gaps)
 
-**SPUN OUT (2026-06-11) → [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md).**
+**SPUN OUT (2026-06-11) → [host_wiring_grabbag_plan](../2026-08-06_completed_plans/2026-06-11_host_wiring_grabbag_plan.md).**
 With C0–C5 + C4c done, C6 is all that remained here, so it grew into its own plan
 (eight items, two phases: G1 composition-runway, G2 host-completeness). The text
 below is the snapshot it was scoped from; the grab-bag plan is now the checklist
@@ -383,7 +383,7 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
 - **2026-06-11** — **C6 spun out; this plan is closed.** With the perf chain
   (C0–C5 + C4c) done, the only remaining work was the C6 host-wiring grab-bag, so
   it grew into its own plan:
-  [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md) (eight items,
+  [host_wiring_grabbag_plan](../2026-08-06_completed_plans/2026-06-11_host_wiring_grabbag_plan.md) (eight items,
   G1 composition-runway + G2 host-completeness). This plan is ready to move to
   `archive_docs/` — the cheap-path thesis (sessionize → halve the frame) is proven
   and shipped (chrome 4.3×, whole frame −40%).

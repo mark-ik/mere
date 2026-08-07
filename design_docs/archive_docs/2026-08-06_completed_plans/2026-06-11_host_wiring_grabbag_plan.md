@@ -8,21 +8,21 @@ Two have live meerkat callers (G2.1 IME, G2.4 chrome a11y actions); the other fo
 are runway with **no meerkat caller**, their own done-conditions (meerkat adoption)
 awaiting window-composition P2+. So this is 6-wired / 4-runway at the meerkat layer,
 not 8/0. Per-item statuses below. Spun out of the
-[host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md)'s C6 (which is now
+[host cheap-path plan](../2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md)'s C6 (which is now
 otherwise done: C0–C5 + C4c shipped). This was the checklist of record for the
 remaining host-wiring parity items; what is left is meerkat-side adoption of the
 genet-side runway (G1.1–G1.3, G2.3), which rides window-composition P2+.
 **Scope**: The grab-bag of genet / xilem-serval host capability that is wired
 and tested one layer down with zero or stub meerkat callers. Each item lands
 separately; this plan phases them by what unblocks what, not by date.
-**Related**: the [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) (the
+**Related**: the [host cheap-path plan](../2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) (the
 parent; C6 lived there until it grew); the
-[tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (its C-series
+[tearout_composability_plan](../2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md) (its C-series
 pane-heavy phases build directly on Phase G1 below — G1 is the runway).
 *Out of scope (tracked elsewhere):* scrying X2's leftover host wiring (omnibar
 `load_url`, back/forward + `can_go_*`, `poll_navigation_event`,
 `poll_cursor_shape`, Tab focus) — a different crate, tracked in the
-[scrying tile plan](2026-06-10_scrying_tile_plan.md), not here.
+[scrying tile plan](../../mere_docs/implementation_strategy/2026-06-10_scrying_tile_plan.md), not here.
 
 ---
 

@@ -254,7 +254,7 @@ correctly, with input routed to the right orrery per pane.
 ### P2 companion — the xilem-serval input spine (the proper-use target)
 
 Context (2026-06-12): the
-[host wiring grabbag plan](2026-06-11_host_wiring_grabbag_plan.md) completed
+[host wiring grabbag plan](../2026-08-06_completed_plans/2026-06-11_host_wiring_grabbag_plan.md) completed
 its genet-side seams (on_wheel, transform-aware hit-testing, pointer
 cancellation, keyboard escape hatches; 51/51 green) and correctly recorded
 G1.1–G1.3 + G2.3 as *runway* — their meerkat callers cannot exist yet,
