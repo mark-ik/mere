@@ -1869,10 +1869,64 @@ browser, two-device network, and real RF are different claims.
    tolerable for facets a device already syncs, and it is worth deciding
    deliberately before S3, because the blobs a manifest names carry file
    contents and any paired device can already fetch any advertised blob by
-   hash. Knot's `KnotSyncCipher` over a `DataKeyring` is the pattern to apply;
-   the cost is key distribution on pairing and re-encryption on roster change.
-   Do not let a projection filter stand in for this: filters decide what a
-   device shows, not what it can read.
+   hash. Do not let a projection filter stand in for this: filters decide what
+   a device shows, not what it can read.
+
+   **Ruled and under way 2026-08-06/07.** An earlier note here said to apply
+   Knot's `KnotSyncCipher`. That was wrong for Graphshell and is corrected:
+   Knot's `Personal` arm is one persona's vault key, while this graph admits a
+   **multi-root roster** (`PairedDevice.root` is per device, and
+   `receive_only_devices()` have none). One persona-derived key cannot serve
+   that. The fitting layer is stickleback's `DataKeyring` and `GroupSession`,
+   which the lane already depends on and which nothing consumed until now.
+
+   Three rulings with Mark:
+
+   - **Key traffic rides the personal lane**, as `PublishPrekey` and
+     `GroupDispatch` events that are plaintext by construction. DCGKA frames
+     are built for broadcast over an untrusted channel and must be readable
+     before a device holds a key. No new store, topic, or extension type.
+   - **Readers are a superset of writers, and any keyed member may add.**
+     Receive-only devices still get keyed, so read-without-write survives.
+     Losing one device never strands the group. The roster stays the write
+     boundary; the group becomes the read boundary.
+   - **Unpair rotates immediately**, in the same gesture as `remove`. The
+     departed device keeps what it could already read, because DCGKA cannot
+     un-know past epochs and pretending otherwise would be theater.
+
+   Landed so far (the seam, then the lane):
+
+   - `PersonalEncryption` in the signed header. Its `skip_serializing_if` is
+     load bearing: `Header::to_bytes` re-encodes extensions and both `hash()`
+     and signature verification digest that encoding, so a field present on
+     every operation would break every operation already signed and stored. A
+     test defines the extension as it was before the field existed and asserts
+     byte-identical CBOR.
+   - Reading takes both. Plaintext operations stay readable; sealing begins
+     with the next operation authored. Nothing is rewritten.
+   - **Sealing is still off.** With no keyring the replica writes plaintext
+     exactly as before, because a device that sealed while a sibling had no key
+     would replicate happily and the sibling would simply stop being able to
+     read. A device with no key refuses a sealed operation rather than storing
+     it unread; two devices silently holding different graphs is the failure
+     worth refusing.
+   - An operation carries key agreement **or** graph content, never both,
+     refused at admission. Not tidiness: key agreement is authored in the
+     clear, so content sharing the operation would be published in the clear
+     with it.
+   - Key agreement is never sealed even by a device that holds a key, and a
+     sealed one is refused, because it would be undiagnosable from outside
+     from an operation this device simply has no key for.
+   - `key_agreement()` reads the traffic without a key, skipping sealed
+     operations. Safe only here, and only because admission guarantees a sealed
+     operation is never a step this pass needs.
+   - A pre-key that does not authenticate back to a Personae root is refused at
+     intake rather than when somebody tries to use it.
+
+   Still to build: the `GroupSession` lifecycle in the resident host, its state
+   in Personae sealed storage (it holds long-term private keys), create/add on
+   pair, remove-and-rotate on unpair, and epoch retention so the keyring does
+   not grow without bound.
 
 None of these decisions changes the product boundary or requires a new
 repository.

@@ -472,9 +472,7 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
         for event in &record.events {
             validate_event(event)?;
         }
-        if let Err(reason) = one_kind_per_operation(&record.events) {
-            return Err(reason);
-        }
+        one_kind_per_operation(&record.events)?;
         // Key agreement must be readable without a key, so it may not be
         // sealed. Checked at intake rather than trusted, because a sealed
         // dispatch would be undiagnosable from the outside: it would look
