@@ -22,9 +22,8 @@ use serde_json::Value;
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext,
     GroupPrekeyBundle, GroupSessionDispatch, MunimentStore, OperationPolicy, OperationProcessor,
-    PendingCausalOperation, ProcessError, Reject, StoreTarget,
-    author_head, causal_projection, happens_before, observed_frontier, stable_writer_subject,
-    validate_causal_metadata,
+    PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head, causal_projection,
+    happens_before, observed_frontier, stable_writer_subject, validate_causal_metadata,
 };
 use uuid::Uuid;
 
@@ -481,7 +480,10 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
         // dispatch would be undiagnosable from the outside: it would look
         // exactly like an operation this device simply has no key for.
         if operation.header.extensions.encryption != PersonalEncryption::Plaintext
-            && record.events.iter().any(PersonalGraphEvent::is_key_agreement)
+            && record
+                .events
+                .iter()
+                .any(PersonalGraphEvent::is_key_agreement)
         {
             return Err(Reject::new(
                 "sealed-key-agreement",
@@ -680,7 +682,10 @@ fn to_operation(
     // Key agreement stays in the clear even here. A device with no key reads
     // this operation to get one, so sealing it would be a lock whose only key
     // is inside the box. Admission refuses a sealed one for the same reason.
-    let carries_keys = record.events.iter().any(PersonalGraphEvent::is_key_agreement);
+    let carries_keys = record
+        .events
+        .iter()
+        .any(PersonalGraphEvent::is_key_agreement);
     let (body_bytes, encryption) = match keyring.filter(|_| !carries_keys) {
         Some(keyring) => {
             let envelope = keyring
@@ -2168,9 +2173,16 @@ mod tests {
 
         // The reader a new device is: no key at all.
         let steps = key_agreement(&replica.sync_store(), GRAPH).await.unwrap();
-        assert_eq!(steps.len(), 1, "the sealed content is skipped, the pre-key is not");
+        assert_eq!(
+            steps.len(),
+            1,
+            "the sealed content is skipped, the pre-key is not"
+        );
         assert!(matches!(steps[0].step, KeyAgreementEvent::Prekey(_)));
-        assert_eq!(steps[0].author_root, subject, "the lane authenticates the author");
+        assert_eq!(
+            steps[0].author_root, subject,
+            "the lane authenticates the author"
+        );
     }
 
     /// An operation may carry key agreement or graph content, never both.
@@ -2203,7 +2215,10 @@ mod tests {
                 },
             ])
             .await;
-        assert!(mixed.is_err(), "mixing must be refused, not merely discouraged");
+        assert!(
+            mixed.is_err(),
+            "mixing must be refused, not merely discouraged"
+        );
     }
 
     /// A forged pre-key is refused at intake, not when somebody tries to use it.

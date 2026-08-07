@@ -13,14 +13,14 @@ boundary decisions this pass fixes, including the correction to the
 [turnstone founding](../../../../turnstone/design_docs/2026-07-08_turnstone_founding.md)
 target shape.
 **Relates to**: the turnstone founding doc (amended this session), the
-[generic graph substrate plan](../technical_architecture/2026-07-08_generic_graph_substrate_plan.md)
-and [G5 rebase progress](../technical_architecture/2026-07-08_g5_mere_rebase_progress.md)
+[generic graph substrate plan](../../mere_docs/technical_architecture/2026-07-08_generic_graph_substrate_plan.md)
+and [G5 rebase progress](../../mere_docs/technical_architecture/2026-07-08_g5_mere_rebase_progress.md)
 (the library seam this boundary rides), the
-[node image externalization plan](2026-07-06_node_image_externalization_plan.md)
+[node image externalization plan](../../mere_docs/implementation_strategy/2026-07-06_node_image_externalization_plan.md)
 (owns the favicon/thumbnail fields; deliberately NOT folded into slice C),
-the [meerkat promotion pass plan](2026-07-02_meerkat_promotion_pass_plan.md)
+the [meerkat promotion pass plan](../../mere_docs/implementation_strategy/2026-07-02_meerkat_promotion_pass_plan.md)
 (the module-promotion precedent and audit method), the
-[Murm peer-runtime and Moot domain plan](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
+[Murm peer-runtime and Moot domain plan](../../mere_docs/implementation_strategy/2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
 (current Murm/Moot authority; it supersedes the sibling posture cited when this
 pass landed), and vates's own
 `design_docs/2026-07-07_vates_founding_proposal.md`.
@@ -128,7 +128,7 @@ verified against the tree, not carried from docs.
      session-local `engine_pins` map, with the sidecar as the durable home
      the engine-picker X3 step wires up.
 7. **Images are NOT part of slice C.** The
-   [node image externalization plan](2026-07-06_node_image_externalization_plan.md)
+   [node image externalization plan](../../mere_docs/implementation_strategy/2026-07-06_node_image_externalization_plan.md)
    owns `thumbnail_png`/`favicon_rgba`: bytes go to the content-addressed
    blob store, and the small `ImageRef` map deliberately stays on `Node` so
    fork/sync/tear-out keep node visuals (content-addressed refs are

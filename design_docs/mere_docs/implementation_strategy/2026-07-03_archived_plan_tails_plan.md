@@ -157,3 +157,25 @@ active tearout_gestures plan).
   has. Revisit when a real multi-monitor case wants it, which is also the only
   situation that can say whether the cascade needs to be per-window at all.
 
+## From eidetic_on_muniment (landed 2026-07-12, archived 2026-08-06)
+
+- **mooting adopting `eidetic-fjall`.** It already rides muniment, so this is a
+  manifest change rather than a port. The plan's third done-condition also
+  named meerkat's suite as pending the genet ring-3 rename; that item is
+  **obsolete**, because meerkat was deleted rather than ported and lives only
+  in git history now. The fourth, a correction owed to the boundary-pass plan's
+  point 5, was already recorded there and needs nothing.
+
+## From mere_turnstone_boundary_pass (landed 2026-07-09, archived 2026-08-06)
+
+- **Splitting `session-runtime`'s mixed concerns.** The plan named the whole
+  list: graph engram and session stores, wallet and identity, frame layout and
+  tearout, browser content, engine profile and image stores, settings, and
+  scripts. Only the settings slice is tracked today, by the
+  [configuration ownership plan](./2026-08-06_configuration_ownership_settings_projection_plan.md);
+  the rest is unowned. Worth naming before the crate is treated as settled.
+- **Production journal persistence** (the G5 follow-on list). Until it lands,
+  the delta vocabulary can still change without forcing a durable-log
+  migration, which is the reason it was safe to defer and the reason it stops
+  being safe once a real log exists.
+
