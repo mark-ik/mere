@@ -130,8 +130,15 @@ pub struct SyncSettings {
     /// so a device that can already see a group on the lane waits to be added
     /// rather than starting a second one.
     ///
-    /// Turning it off does not unseal anything. Operations already sealed stay
-    /// sealed, and this device keeps its key; it only stops sealing new ones.
+    /// **What this actually controls is creating the group, not sealing.**
+    /// Once a graph has a key group and this device is in it, this device
+    /// seals what it writes whether or not this flag is set here, and that is
+    /// deliberate: a keyed device that kept writing in the clear would leave
+    /// the graph half sealed, which is the same as not sealed at all.
+    ///
+    /// So turning it off later stops nothing. It does not unseal what is
+    /// stored, does not surrender this device's key, and does not stop it
+    /// sealing. Removing a device from the group is what unpairing does.
     #[serde(default)]
     pub encrypted: bool,
     /// iroh relay urls to register.
