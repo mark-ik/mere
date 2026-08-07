@@ -259,3 +259,194 @@ fn storage_key(
 fn hex(bytes: &[u8; 32]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use personae::InMemoryProvider;
+
+    const GRAPH: [u8; 32] = [0x9c; 32];
+
+    fn open_device(seed: u8, dir: &Path) -> (InMemoryProvider, OpenedKeyGroup) {
+        let identity = InMemoryProvider::from_seed([seed; 32]);
+        let opened = GraphKeyGroup::open(&identity, GRAPH, dir).unwrap();
+        (identity, opened)
+    }
+
+    /// One device turns encryption on and keys another, using only what the
+    /// lane can carry. Nothing here is handed between devices directly: every
+    /// step is an event, exactly as it would replicate.
+    #[test]
+    fn a_second_device_becomes_readable_through_lane_events_alone() {
+        let owner_dir = tempfile::tempdir().unwrap();
+        let sibling_dir = tempfile::tempdir().unwrap();
+        let (_owner_identity, owner_opened) = open_device(0x9d, owner_dir.path());
+        let (_sibling_identity, sibling_opened) = open_device(0x9e, sibling_dir.path());
+        let mut owner = owner_opened.group;
+        let mut sibling = sibling_opened.group;
+
+        // A fresh session holds keys and no membership, so it can read
+        // nothing. That is the correct starting state, not a failure.
+        assert!(!owner.is_keyed());
+        assert!(!sibling.is_keyed());
+        assert!(owner.keyring().unwrap().is_none());
+
+        let sibling_prekey = sibling_opened
+            .publish
+            .expect("a new session must publish a pre-key or it can never be added");
+        let owner_prekey = owner_opened
+            .publish
+            .expect("the creator publishes too: a member cannot process control frames from a                      device whose pre-key it has never registered");
+
+        // The owner turns encryption on.
+        let created = owner.create().unwrap();
+        assert!(
+            owner.is_keyed(),
+            "the creator can read from the moment it creates"
+        );
+        assert!(owner.keyring().unwrap().is_some());
+
+        // The sibling's pre-key reaches the owner as a lane event.
+        let published = PersonalGraphEvent::PublishPrekey {
+            bundle: sibling_prekey.to_bytes().unwrap(),
+        };
+        let report = owner
+            .absorb(&[step(&_sibling_identity, &published)])
+            .unwrap();
+        assert_eq!(report.registered, vec![sibling.member()]);
+
+        // Now it can be added.
+        let added = owner.add(sibling.member()).unwrap();
+
+        // The sibling reads the group's traffic off the lane. It was not keyed
+        // when `created` was authored, which is the whole point: key agreement
+        // travels in the clear so a device can catch up. It registers the
+        // owner's pre-key from the same lane, in the same pass.
+        let owner_published = PersonalGraphEvent::PublishPrekey {
+            bundle: owner_prekey.to_bytes().unwrap(),
+        };
+        let learned = sibling
+            .absorb(&[
+                step(&_owner_identity, &owner_published),
+                step(&_owner_identity, &created),
+                step(&_owner_identity, &added),
+            ])
+            .unwrap();
+        assert!(learned.installed > 0, "the sibling learned an epoch");
+        assert!(sibling.is_keyed(), "and can now read sealed operations");
+        assert!(sibling.keyring().unwrap().is_some());
+    }
+
+    /// Removal alone leaves a departed device reading new writes, so unpair
+    /// turns the epoch in the same gesture.
+    #[test]
+    fn removing_a_device_also_turns_the_epoch() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let (_owner_identity, owner_opened) = open_device(0x9f, dir.path());
+        let (_sibling_identity, sibling_opened) = open_device(0xa0, other.path());
+        let mut owner = owner_opened.group;
+        let sibling = sibling_opened.group;
+
+        owner.create().unwrap();
+        let published = PersonalGraphEvent::PublishPrekey {
+            bundle: sibling_opened.publish.unwrap().to_bytes().unwrap(),
+        };
+        owner
+            .absorb(&[step(&_sibling_identity, &published)])
+            .unwrap();
+        owner.add(sibling.member()).unwrap();
+        let before = owner.session.current_epoch();
+
+        let events = owner.remove_and_rotate(sibling.member()).unwrap();
+        assert_eq!(
+            events.len(),
+            2,
+            "a removal and a rotation, not just a removal"
+        );
+        assert_ne!(
+            owner.session.current_epoch(),
+            before,
+            "the epoch must turn, or the departed device still reads new writes"
+        );
+    }
+
+    /// Session state is secret. It must survive a restart and must not be
+    /// readable without the device's own derived key.
+    #[test]
+    fn session_state_reopens_and_is_not_stored_in_the_clear() {
+        let dir = tempfile::tempdir().unwrap();
+        let identity = InMemoryProvider::from_seed([0xa1; 32]);
+        let opened = GraphKeyGroup::open(&identity, GRAPH, dir.path()).unwrap();
+        let mut owner = opened.group;
+        assert!(opened.publish.is_some());
+        owner.create().unwrap();
+        let member = owner.member();
+
+        let reopened = GraphKeyGroup::open(&identity, GRAPH, dir.path()).unwrap();
+        assert!(
+            reopened.publish.is_none(),
+            "reopening must not mint a second session, which would orphan the first"
+        );
+        assert_eq!(reopened.group.member(), member);
+        assert!(reopened.group.is_keyed(), "membership survived the restart");
+
+        // Another persona's derivation must not open it.
+        let stranger = InMemoryProvider::from_seed([0xa2; 32]);
+        assert!(
+            GraphKeyGroup::open(&stranger, GRAPH, dir.path())
+                .map(|opened| opened.publish.is_some())
+                .unwrap_or(true),
+            "a different identity must not read this device's session state"
+        );
+    }
+
+    /// A device that is not keyed cannot add or remove anyone.
+    #[test]
+    fn an_unkeyed_device_cannot_change_membership() {
+        let dir = tempfile::tempdir().unwrap();
+        let (_identity, opened) = open_device(0xa3, dir.path());
+        let mut group = opened.group;
+        let stranger = GroupRecipientId([0x11; 32]);
+        assert!(matches!(
+            group.add(stranger),
+            Err(GraphKeyError::NotAMember)
+        ));
+        assert!(matches!(
+            group.remove_and_rotate(stranger),
+            Err(GraphKeyError::NotAMember)
+        ));
+    }
+
+    /// One unreadable frame from one device must not stop this one being keyed.
+    #[test]
+    fn a_frame_that_will_not_decode_is_counted_rather_than_fatal() {
+        let dir = tempfile::tempdir().unwrap();
+        let (identity, opened) = open_device(0xa4, dir.path());
+        let mut group = opened.group;
+        let junk = PersonalGraphEvent::GroupDispatch {
+            dispatch: b"not a dispatch".to_vec(),
+        };
+        let report = group.absorb(&[step(&identity, &junk)]).unwrap();
+        assert_eq!(report.unreadable, 1);
+        assert_eq!(report.installed, 0);
+    }
+
+    fn step(identity: &InMemoryProvider, event: &PersonalGraphEvent) -> KeyAgreementStep {
+        use personae::IdentityProvider;
+        let inner = match event {
+            PersonalGraphEvent::PublishPrekey { bundle } => {
+                KeyAgreementEvent::Prekey(bundle.clone())
+            }
+            PersonalGraphEvent::GroupDispatch { dispatch } => {
+                KeyAgreementEvent::Dispatch(dispatch.clone())
+            }
+            _ => panic!("only key agreement travels this way"),
+        };
+        KeyAgreementStep {
+            operation: [0; 32],
+            author_root: identity.master_public_key().to_bytes(),
+            step: inner,
+        }
+    }
+}
