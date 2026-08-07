@@ -5,6 +5,7 @@
 //! and LogSync join/drain used by Commons and Knot.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use eidetic::PrivacyClass;
 use mere::kernel::geometry::PortablePoint;
@@ -19,9 +20,9 @@ use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalLimits, MunimentStore, OperationPolicy,
-    OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head,
-    causal_projection, happens_before, observed_frontier, stable_writer_subject,
+    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext, MunimentStore,
+    OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget,
+    author_head, causal_projection, happens_before, observed_frontier, stable_writer_subject,
     validate_causal_metadata,
 };
 use uuid::Uuid;
@@ -36,10 +37,45 @@ pub const PERSONAL_GRAPH_LIMITS: CausalLimits = CausalLimits {
 };
 pub const MAX_EVENTS_PER_OPERATION: usize = 256;
 
+/// How one operation's body is protected.
+///
+/// Carried in the signed header rather than guessed from the body, so a device
+/// knows what it is holding before it tries to read it. Knot's `KnotSyncExt`
+/// names its profile the same way and for the same reason.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PersonalEncryption {
+    /// The body is the CBOR record itself. Every operation written before
+    /// encryption existed.
+    #[default]
+    Plaintext,
+    /// The body is a `GroupCiphertext` sealed with this graph's data keyring.
+    GroupV1,
+}
+
+impl PersonalEncryption {
+    /// Whether this operation's body can be read without a key.
+    ///
+    /// Also the `skip_serializing_if` predicate below, which is load bearing:
+    /// see [`PersonalGraphExt::encryption`].
+    pub fn is_plaintext(&self) -> bool {
+        matches!(self, Self::Plaintext)
+    }
+}
+
 /// Signed addressing extension for one personal graph pool.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersonalGraphExt {
     pub graph: [u8; 32],
+    /// **`skip_serializing_if` is not cosmetic here.** `Header::to_bytes`
+    /// re-encodes the whole header, extensions included, and both `hash()` and
+    /// signature verification digest that encoding. A field that serialized on
+    /// every operation would change the bytes of headers already signed and
+    /// stored, so every existing operation would fail to verify. Omitting the
+    /// plaintext case keeps those headers byte-identical to what they already
+    /// are, which is what makes reading old operations possible at all.
+    #[serde(default, skip_serializing_if = "PersonalEncryption::is_plaintext")]
+    pub encryption: PersonalEncryption,
 }
 
 /// The bounded, secret-free events Graphshell can place on its generic lane.
@@ -298,6 +334,15 @@ pub enum PersonalGraphWireError {
     MissingBody,
     #[error("personal graph operation body is malformed")]
     Malformed,
+    /// The operation is sealed and this device holds no key for this graph.
+    ///
+    /// Loud rather than silent. A device that cannot read an operation must
+    /// not store it as though it had, because the graph would then differ
+    /// between devices with nothing saying why.
+    #[error("personal graph operation is sealed and this device has no key for the graph")]
+    NoKey,
+    #[error("personal graph operation could not be unsealed: {0}")]
+    Unsealable(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -318,6 +363,8 @@ pub enum PersonalGraphError {
     Excluded(String),
     #[error("writer is not in this personal graph roster")]
     WriterNotAdmitted,
+    #[error("personal graph operation could not be sealed: {0}")]
+    Seal(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -334,6 +381,10 @@ pub enum PersonalGraphIdentityError {
 struct PersonalGraphPolicy {
     graph: [u8; 32],
     roster: SyncRoster,
+    /// Admission reads the record to check its events, so a sealed operation
+    /// cannot be admitted without the key. Absent, a sealed operation is
+    /// refused with a reason rather than stored unvalidated.
+    keyring: Option<Arc<DataKeyring>>,
 }
 
 impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
@@ -349,7 +400,7 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
                 "operation addresses another personal graph",
             ));
         }
-        let record = from_operation(operation)
+        let record = from_operation(operation, self.keyring.as_deref())
             .map_err(|error| Reject::new("invalid-personal-graph-record", error.to_string()))?;
         validate_causal_metadata(operation, &record.parents, PERSONAL_GRAPH_LIMITS)
             .map_err(|error| Reject::new("invalid-personal-graph-causality", error.to_string()))?;
@@ -477,25 +528,64 @@ fn stable_subject(
     .map_err(|error| Reject::new(error.code(), error.to_string()))
 }
 
+/// Read one operation's record, unsealing it when the header says it is sealed.
+///
+/// The header names the protection, so this never guesses from the bytes. A
+/// device without the key gets [`PersonalGraphWireError::NoKey`] rather than a
+/// parse failure, because "I cannot read this" and "this is corrupt" call for
+/// different responses from whoever sees the error.
 pub fn from_operation(
     operation: &Operation<PersonalGraphExt>,
+    keyring: Option<&DataKeyring>,
 ) -> Result<PersonalGraphRecord, PersonalGraphWireError> {
     let body = operation
         .body
         .as_ref()
         .ok_or(PersonalGraphWireError::MissingBody)?;
-    decode_cbor(body.to_bytes().as_slice()).map_err(|_| PersonalGraphWireError::Malformed)
+    let bytes = body.to_bytes();
+    match operation.header.extensions.encryption {
+        PersonalEncryption::Plaintext => {
+            decode_cbor(bytes.as_slice()).map_err(|_| PersonalGraphWireError::Malformed)
+        }
+        PersonalEncryption::GroupV1 => {
+            let keyring = keyring.ok_or(PersonalGraphWireError::NoKey)?;
+            let envelope: GroupCiphertext =
+                decode_cbor(bytes.as_slice()).map_err(|_| PersonalGraphWireError::Malformed)?;
+            let plaintext = keyring
+                .open(&envelope)
+                .map_err(|error| PersonalGraphWireError::Unsealable(error.to_string()))?;
+            decode_cbor(plaintext.as_slice()).map_err(|_| PersonalGraphWireError::Malformed)
+        }
+    }
 }
 
+/// Write one operation, sealing it when a keyring is present.
+///
+/// Sealing is opt-in by the caller holding a key, not a default: a device that
+/// sealed while a sibling had no key would still replicate, and the sibling
+/// would simply stop being able to read the graph. Until keys are distributed,
+/// no keyring means no sealing means nothing breaks.
 fn to_operation(
     signing_seed: [u8; 32],
     graph: [u8; 32],
     record: &PersonalGraphRecord,
     seq_num: u32,
     backlink: Option<[u8; 32]>,
-) -> Operation<PersonalGraphExt> {
+    keyring: Option<&DataKeyring>,
+) -> Result<Operation<PersonalGraphExt>, PersonalGraphError> {
     let signing_key = SigningKey::from_bytes(&signing_seed);
-    let body_bytes = encode_cbor(record).expect("a personal graph record always CBOR-encodes");
+    let record_bytes = encode_cbor(record).expect("a personal graph record always CBOR-encodes");
+    let (body_bytes, encryption) = match keyring {
+        Some(keyring) => {
+            let envelope = keyring
+                .seal_random(&record_bytes)
+                .map_err(|error| PersonalGraphError::Seal(error.to_string()))?;
+            let sealed = encode_cbor(&envelope)
+                .map_err(|error| PersonalGraphError::Seal(error.to_string()))?;
+            (sealed, PersonalEncryption::GroupV1)
+        }
+        None => (record_bytes, PersonalEncryption::Plaintext),
+    };
     let body = Body::new(&body_bytes);
     let mut header = Header {
         version: 1,
@@ -505,15 +595,15 @@ fn to_operation(
         payload_hash: Some(body.hash()),
         seq_num,
         backlink: backlink.map(Hash::from),
-        extensions: PersonalGraphExt { graph },
+        extensions: PersonalGraphExt { graph, encryption },
     };
     header.sign(&signing_key);
     let hash = header.hash();
-    Operation {
+    Ok(Operation {
         hash,
         header,
         body: Some(body),
-    }
+    })
 }
 
 #[derive(Clone)]
@@ -526,6 +616,7 @@ struct StoredRecord {
 async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, PersonalGraphExt>,
     graph: [u8; 32],
+    keyring: Option<&Arc<DataKeyring>>,
 ) -> Result<Vec<StoredRecord>, PersonalGraphError> {
     let by_author: BTreeMap<VerifyingKey, Vec<u64>> =
         TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(graph)).await?;
@@ -544,7 +635,7 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
             .await?
             .unwrap_or_default();
             for (operation, _) in entries {
-                let record = from_operation(&operation)?;
+                let record = from_operation(&operation, keyring.map(Arc::as_ref))?;
                 records.push(StoredRecord {
                     operation,
                     record,
@@ -573,6 +664,7 @@ pub async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, PersonalGraphExt>,
     graph: [u8; 32],
     roster: &SyncRoster,
+    keyring: Option<&Arc<DataKeyring>>,
     operation: &Operation<PersonalGraphExt>,
 ) -> Result<bool, ProcessError> {
     let processor = OperationProcessor::new(
@@ -580,6 +672,7 @@ pub async fn accept_into<B: Backend + Clone + Send + Sync + 'static>(
         PersonalGraphPolicy {
             graph,
             roster: roster.clone(),
+            keyring: keyring.map(Arc::clone),
         },
     );
     Ok(processor.process(operation).await?.inserted())
@@ -593,6 +686,10 @@ pub struct PersonalGraphReplica<B: Backend + Clone + Send + Sync + 'static> {
     writer_attestation: Option<DerivedKeyAttestation>,
     roster: SyncRoster,
     selection: SyncSelection,
+    /// Present only once this device has been given the graph's key. Absent,
+    /// this replica writes plaintext exactly as before, which is what keeps a
+    /// sibling that has no key still able to read what this one writes.
+    keyring: Option<Arc<DataKeyring>>,
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
@@ -610,7 +707,22 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
             writer_attestation: None,
             roster,
             selection,
+            keyring: None,
         }
+    }
+
+    /// Hand this replica the graph's data keyring.
+    ///
+    /// Sealing starts from the next operation it authors. Reading is unrelated
+    /// to this call: an operation already stored plaintext stays readable, and
+    /// the header on each operation says which it is.
+    pub fn set_keyring(&mut self, keyring: Arc<DataKeyring>) {
+        self.keyring = Some(keyring);
+    }
+
+    /// Whether this replica seals what it writes.
+    pub fn seals(&self) -> bool {
+        self.keyring.is_some()
     }
 
     /// Replace the roster this replica projects through.
@@ -652,6 +764,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
             writer_attestation: Some(attestation),
             roster,
             selection,
+            keyring: None,
         })
     }
 
@@ -690,7 +803,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
             }
         }
 
-        let records = load_records(&self.store, self.graph).await?;
+        let records = load_records(&self.store, self.graph, self.keyring.as_ref()).await?;
         let entries = causal_entries(&records);
         let causal = causal_projection(&entries)?;
         if !causal.pending.is_empty() {
@@ -724,7 +837,8 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
             },
             seq_num,
             backlink,
-        );
+            self.keyring.as_deref(),
+        )?;
         self.accept(&operation).await?;
         Ok(operation)
     }
@@ -733,11 +847,25 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
         &self,
         operation: &Operation<PersonalGraphExt>,
     ) -> Result<bool, ProcessError> {
-        accept_into(&self.store, self.graph, &self.roster, operation).await
+        accept_into(
+            &self.store,
+            self.graph,
+            &self.roster,
+            self.keyring.as_ref(),
+            operation,
+        )
+        .await
     }
 
     pub async fn projection(&self) -> Result<SyncProjection, PersonalGraphError> {
-        materialize(&self.store, self.graph, &self.roster, &self.selection).await
+        materialize(
+            &self.store,
+            self.graph,
+            &self.roster,
+            self.keyring.as_ref(),
+            &self.selection,
+        )
+        .await
     }
 }
 
@@ -745,14 +873,16 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, PersonalGraphExt>,
     graph_id: [u8; 32],
     roster: &SyncRoster,
+    keyring: Option<&Arc<DataKeyring>>,
     selection: &SyncSelection,
 ) -> Result<SyncProjection, PersonalGraphError> {
-    let records = load_records(store, graph_id).await?;
+    let records = load_records(store, graph_id, keyring).await?;
     let entries = causal_entries(&records);
     let causal = causal_projection(&entries)?;
     let policy = PersonalGraphPolicy {
         graph: graph_id,
         roster: roster.clone(),
+        keyring: keyring.map(Arc::clone),
     };
     let processor = OperationProcessor::new(store.clone(), policy);
     let conflicts = collect_conflicts(&records, &entries, &causal.order, selection);
@@ -1287,7 +1417,7 @@ mod tests {
                 let store = alice_accept.clone();
                 let roster = alice_roster.clone();
                 async move {
-                    accept_into(&store, GRAPH, &roster, &operation)
+                    accept_into(&store, GRAPH, &roster, None, &operation)
                         .await
                         .unwrap_or(false)
                 }
@@ -1310,7 +1440,7 @@ mod tests {
                 let store = bob_accept.clone();
                 let roster = bob_roster.clone();
                 async move {
-                    accept_into(&store, GRAPH, &roster, &operation)
+                    accept_into(&store, GRAPH, &roster, None, &operation)
                         .await
                         .unwrap_or(false)
                 }
@@ -1608,5 +1738,177 @@ mod tests {
         assert!(node.tags.contains("before-restart"));
         assert!(node.tags.contains("after-restart"));
         assert!(final_projection.pending.is_empty());
+    }
+
+    fn keyring() -> Arc<DataKeyring> {
+        let mut keyring = DataKeyring::new();
+        keyring.rotate_random().expect("a fresh secret");
+        Arc::new(keyring)
+    }
+
+    /// The property the whole migration rests on.
+    ///
+    /// `Header::to_bytes` re-encodes extensions, and both `hash()` and
+    /// signature verification digest that encoding. If adding `encryption`
+    /// changed how a plaintext extension encodes, every operation already
+    /// signed and stored would stop verifying. `skip_serializing_if` is what
+    /// prevents that, and this is the assertion that keeps it.
+    #[test]
+    fn adding_the_encryption_field_did_not_change_a_plaintext_header() {
+        #[derive(Serialize)]
+        struct ExtensionAsItWasBeforeEncryption {
+            graph: [u8; 32],
+        }
+
+        let before = encode_cbor(&ExtensionAsItWasBeforeEncryption { graph: GRAPH }).unwrap();
+        let after = encode_cbor(&PersonalGraphExt {
+            graph: GRAPH,
+            encryption: PersonalEncryption::Plaintext,
+        })
+        .unwrap();
+        assert_eq!(
+            before, after,
+            "a plaintext extension must encode exactly as it did before the field existed"
+        );
+
+        // And the field is really carried when it is not plaintext, so the
+        // omission above is not simply the field never being written.
+        let sealed = encode_cbor(&PersonalGraphExt {
+            graph: GRAPH,
+            encryption: PersonalEncryption::GroupV1,
+        })
+        .unwrap();
+        assert_ne!(before, sealed);
+    }
+
+    #[tokio::test]
+    async fn a_sealed_graph_reads_back_and_still_reads_what_it_wrote_in_plaintext() {
+        let seed = [0x71; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let roster = SyncRoster::new([subject]);
+        let backend = MemoryBackend::new();
+        let mut replica =
+            PersonalGraphReplica::new(backend.clone(), GRAPH, seed, roster.clone(), selection());
+
+        // Written before this device had a key.
+        assert!(!replica.seals());
+        let plain = replica
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: A,
+                address: "https://plain.test/".into(),
+                title: "Written in the open".into(),
+            }])
+            .await
+            .unwrap();
+        assert_eq!(
+            plain.header.extensions.encryption,
+            PersonalEncryption::Plaintext
+        );
+
+        // The key arrives. Sealing starts from the next operation; nothing is
+        // rewritten, which is the whole point of reading both.
+        let keys = keyring();
+        replica.set_keyring(Arc::clone(&keys));
+        assert!(replica.seals());
+        let sealed = replica
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: B,
+                address: "https://sealed.test/".into(),
+                title: "Written under a key".into(),
+            }])
+            .await
+            .unwrap();
+        assert_eq!(
+            sealed.header.extensions.encryption,
+            PersonalEncryption::GroupV1
+        );
+
+        // The sealed body must not carry the plaintext it protects.
+        let body = sealed.body.as_ref().unwrap().to_bytes();
+        assert!(
+            !String::from_utf8_lossy(&body).contains("sealed.test"),
+            "a sealed operation must not leave its address in the body"
+        );
+
+        let projection = replica.projection().await.unwrap();
+        assert!(
+            projection.graph.get_node_by_id(A).is_some(),
+            "the plaintext operation is still readable"
+        );
+        assert!(
+            projection.graph.get_node_by_id(B).is_some(),
+            "the sealed one is readable with the key"
+        );
+        assert!(projection.pending.is_empty());
+    }
+
+    /// A device without the key must say so, not quietly diverge. Two devices
+    /// silently holding different graphs is the failure mode worth refusing.
+    #[tokio::test]
+    async fn a_sealed_operation_is_refused_by_a_device_with_no_key() {
+        let seed = [0x72; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let roster = SyncRoster::new([subject]);
+        let mut sealing = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            seed,
+            roster.clone(),
+            selection(),
+        );
+        sealing.set_keyring(keyring());
+        let sealed = sealing
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: A,
+                address: "https://sealed.test/".into(),
+                title: "Sealed".into(),
+            }])
+            .await
+            .unwrap();
+
+        let keyless =
+            PersonalGraphReplica::new(MemoryBackend::new(), GRAPH, seed, roster, selection());
+        let refused = keyless.accept(&sealed).await;
+        assert!(
+            refused.is_err() || !refused.unwrap(),
+            "a device with no key must not report having accepted a sealed operation"
+        );
+        assert!(
+            keyless
+                .projection()
+                .await
+                .unwrap()
+                .graph
+                .get_node_by_id(A)
+                .is_none(),
+            "and it must not have materialized anything from it"
+        );
+    }
+
+    /// A different keyring is not a wrong password prompt: it is an operation
+    /// this device cannot read, and it must be reported as such.
+    #[tokio::test]
+    async fn a_foreign_keyring_cannot_open_another_graphs_operations() {
+        let seed = [0x73; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let roster = SyncRoster::new([subject]);
+        let mut sealing =
+            PersonalGraphReplica::new(MemoryBackend::new(), GRAPH, seed, roster, selection());
+        sealing.set_keyring(keyring());
+        let sealed = sealing
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: A,
+                address: "https://sealed.test/".into(),
+                title: "Sealed".into(),
+            }])
+            .await
+            .unwrap();
+
+        let stranger = keyring();
+        let read = from_operation(&sealed, Some(stranger.as_ref()));
+        assert!(
+            matches!(read, Err(PersonalGraphWireError::Unsealable(_))),
+            "expected an unsealable error, got {read:?}"
+        );
     }
 }

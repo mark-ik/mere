@@ -152,7 +152,7 @@ async fn main() -> Result<(), String> {
             let store = accepted.clone();
             let roster = accepted_roster.clone();
             async move {
-                accept_into(&store, graph, &roster, &operation)
+                accept_into(&store, graph, &roster, None, &operation)
                     .await
                     .unwrap_or(false)
             }

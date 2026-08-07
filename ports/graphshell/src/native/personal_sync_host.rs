@@ -221,7 +221,11 @@ impl PersonalSyncHost {
                 let admitting = Arc::clone(&admitting);
                 async move {
                     let roster = admitting.read().await.clone();
-                    match accept_into(&store, graph, &roster, &operation).await {
+                    // No keyring here yet: this host writes and reads
+                    // plaintext until keys are distributed, and a sealed
+                    // operation from a sibling is refused loudly rather than
+                    // stored unread.
+                    match accept_into(&store, graph, &roster, None, &operation).await {
                         Ok(inserted) => inserted,
                         Err(error) => {
                             // A refused operation and a failed one both have to
