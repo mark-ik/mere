@@ -145,7 +145,7 @@ impl PersonalSyncHost {
         // hold sealed operations it has the key for and does not know it.
         let caught_up = crate::personal_sync::key_agreement(&replica.sync_store(), config.graph)
             .await
-            .map_err(|error| PersonalSyncHostError::Graph(error))?;
+            .map_err(PersonalSyncHostError::Graph)?;
         if !caught_up.is_empty() {
             match key_group.absorb(&caught_up) {
                 Ok(report) => tracing::info!(
@@ -618,6 +618,112 @@ impl PersonalSyncHost {
         self.replica.lock().await.serves_blob_availability()
     }
 
+    /// Whether this device can read sealed operations on this graph.
+    pub async fn is_keyed(&self) -> bool {
+        self.key_group.lock().await.is_keyed()
+    }
+
+    /// Turn encryption on for this graph, with this device as first member.
+    ///
+    /// Explicit because it cannot be undone by another device: two devices
+    /// creating independently would produce two groups on one graph, each
+    /// unable to read the other.
+    ///
+    /// Siblings do not become readable by this alone. Each is added once its
+    /// pre-key has reached this device, which [`key_paired_devices`] does.
+    ///
+    /// [`key_paired_devices`]: Self::key_paired_devices
+    pub async fn enable_encryption(&self) -> Result<(), PersonalSyncHostError> {
+        let event = {
+            let mut group = self.key_group.lock().await;
+            group.create().map_err(key_error)?
+        };
+        self.author(vec![event]).await?;
+        self.refresh_keyring().await?;
+        tracing::info!(graph = %hex(&self.graph), "encryption is on for this graph");
+        Ok(())
+    }
+
+    /// Read the lane's key agreement and act on it.
+    ///
+    /// Two things at once, because they are the same pass: learn epochs this
+    /// device has been given, and add any device whose pre-key has arrived and
+    /// which is not a member yet. Returns how many devices it added.
+    pub async fn key_paired_devices(&self) -> Result<usize, PersonalSyncHostError> {
+        let steps = {
+            let replica = self.replica.lock().await;
+            crate::personal_sync::key_agreement(&replica.sync_store(), self.graph).await?
+        };
+        let (report, keyed) = {
+            let mut group = self.key_group.lock().await;
+            let report = group.absorb(&steps).map_err(key_error)?;
+            (report, group.is_keyed())
+        };
+        self.refresh_keyring().await?;
+
+        // Only a keyed device may add, so an unkeyed one stops here rather
+        // than reporting a failure: waiting to be added is its ordinary state.
+        if !keyed {
+            return Ok(0);
+        }
+        let mut added = 0;
+        for member in report.registered {
+            let event = {
+                let mut group = self.key_group.lock().await;
+                match group.add(member) {
+                    Ok(event) => event,
+                    // Already a member is the common case on a second pass,
+                    // and is not worth failing the whole sweep over.
+                    Err(error) => {
+                        tracing::debug!(%error, "a paired device was not added on this pass");
+                        continue;
+                    }
+                }
+            };
+            self.author(vec![event]).await?;
+            added += 1;
+        }
+        if added > 0 {
+            self.refresh_keyring().await?;
+            tracing::info!(added, graph = %hex(&self.graph), "keyed paired devices");
+        }
+        Ok(added)
+    }
+
+    /// Drop a device from the key group and turn the epoch.
+    ///
+    /// Called by unpair, so the departed device reads nothing written after it
+    /// left. What it could already read stays readable to it; no scheme can
+    /// take that back.
+    pub async fn revoke_device_keys(
+        &self,
+        member: stickleback::GroupRecipientId,
+    ) -> Result<(), PersonalSyncHostError> {
+        let events = {
+            let mut group = self.key_group.lock().await;
+            group.remove_and_rotate(member).map_err(key_error)?
+        };
+        for event in events {
+            self.author(vec![event]).await?;
+        }
+        self.refresh_keyring().await?;
+        tracing::info!(graph = %hex(&self.graph), "removed a device and turned the epoch");
+        Ok(())
+    }
+
+    /// Put the current keyring where the replica and intake will find it.
+    async fn refresh_keyring(&self) -> Result<(), PersonalSyncHostError> {
+        let keyring = {
+            let group = self.key_group.lock().await;
+            group.keyring().map_err(key_error)?
+        };
+        if let Some(keyring) = keyring.clone() {
+            self.replica.lock().await.set_keyring(keyring);
+        }
+        *self.keys.write().await = keyring;
+        Ok(())
+    }
+
     /// Transfers waiting for this device, oldest first, plus the ones it sent.
     ///
     /// Reads the projection, so an offer addressed elsewhere is absent here
@@ -802,6 +908,10 @@ fn value(label: impl Into<String>, value: impl Into<String>) -> CardValueV1 {
         label: label.into(),
         value: value.into(),
     }
+}
+
+fn key_error(error: GraphKeyError) -> PersonalSyncHostError {
+    PersonalSyncHostError::Transport(error.to_string())
 }
 
 fn hex(bytes: &[u8; 32]) -> String {
@@ -1107,6 +1217,108 @@ mod tests {
             persona: "personae://persona/owner".to_string(),
             device: format!("personae://device/{}", hex(&host.node_id())),
         }
+    }
+
+    /// The whole item, on the product path: two resident hosts, one turns
+    /// encryption on, the other becomes able to read sealed operations without
+    /// anything being handed between them outside the lane.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_paired_device_is_keyed_over_live_sync_and_reads_what_was_sealed() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = [0xc1; 32];
+        let owner_identity = InMemoryProvider::from_seed([0xc2; 32]);
+        let sibling_identity = InMemoryProvider::from_seed([0xc3; 32]);
+        let roster = SyncRoster::new([
+            owner_identity.master_public_key().to_bytes(),
+            sibling_identity.master_public_key().to_bytes(),
+        ]);
+        let config = |name: &str| PersonalSyncHostConfig {
+            graph,
+            store_path: directory.path().join(format!("{name}.redb")),
+            roster: roster.clone(),
+            selection: SyncSelection::default(),
+            peer_tickets: Vec::new(),
+            peer_hints: Vec::new(),
+            paired_nodes: Vec::new(),
+            relay_urls: Vec::new(),
+        };
+
+        let owner = PersonalSyncHost::open(&owner_identity, config("owner"))
+            .await
+            .unwrap();
+        let mut sibling_config = config("sibling");
+        sibling_config.peer_tickets = vec![owner.ticket().await.unwrap()];
+        let sibling = PersonalSyncHost::open(&sibling_identity, sibling_config)
+            .await
+            .unwrap();
+        owner.pair_node(sibling.node_id()).await.unwrap();
+
+        // Neither can read anything yet, which is the correct starting state.
+        assert!(!owner.is_keyed().await);
+        assert!(!sibling.is_keyed().await);
+
+        owner.enable_encryption().await.unwrap();
+        assert!(
+            owner.is_keyed().await,
+            "the creator reads from the moment it creates"
+        );
+
+        // The sibling's pre-key has to replicate before the owner can add it,
+        // so this sweeps until the graph has carried it.
+        let mut added = 0;
+        for _ in 0..60 {
+            added = owner.key_paired_devices().await.unwrap();
+            if added > 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert_eq!(
+            added, 1,
+            "the owner keyed the paired device off the lane alone"
+        );
+
+        // And the sibling learns its epoch the same way, from the lane.
+        let mut keyed = false;
+        for _ in 0..60 {
+            sibling.key_paired_devices().await.unwrap();
+            keyed = sibling.is_keyed().await;
+            if keyed {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert!(keyed, "the sibling became able to read sealed operations");
+
+        // Now prove it means something: the owner seals a node, and the
+        // sibling reads it. A sibling that had not been keyed would refuse
+        // this operation rather than materialize it.
+        let node = Uuid::from_u128(0xc4);
+        owner
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: node,
+                address: "https://sealed-over-sync.test/".into(),
+                title: "Sealed and read".into(),
+            }])
+            .await
+            .unwrap();
+
+        let mut arrived = false;
+        for _ in 0..60 {
+            let cards = sibling.supplemental_cards().await.unwrap();
+            arrived = cards.iter().any(|card| card.source_id == node.to_string());
+            if arrived {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert!(
+            arrived,
+            "a sealed node crossed and was read on the other side"
+        );
+
+        owner.close().await.unwrap();
+        sibling.close().await.unwrap();
     }
 
     /// A rotted dial hint must cost the shortcut, never the host: the hint is
