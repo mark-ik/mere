@@ -72,8 +72,8 @@ impl GraphKeyGroup {
     /// Creating a *session* is not creating the *group*: a fresh session is a
     /// device holding its own keys and no membership. It can read nothing
     /// until somebody adds it, which is the correct starting state.
-    pub fn open(
-        identity: &dyn IdentityProvider,
+    pub fn open<P: IdentityProvider + ?Sized>(
+        identity: &P,
         graph: [u8; 32],
         root: &Path,
     ) -> Result<OpenedKeyGroup, GraphKeyError> {
@@ -90,7 +90,8 @@ impl GraphKeyGroup {
                 publish: None,
             });
         }
-        let (session, bundle) = GroupSession::new(GroupSessionId(graph), identity)?;
+        let (session, bundle) =
+            GroupSession::new(GroupSessionId(graph), &BorrowedProvider(identity))?;
         let group = Self {
             session,
             storage,
@@ -241,9 +242,36 @@ fn decode_dispatch(bytes: &[u8]) -> Result<GroupSessionDispatch, GraphKeyError> 
         .map_err(|error| GraphKeyError::Session(error.to_string()))
 }
 
+/// Lets a `&P` where `P` may be unsized reach an API that wants `&dyn`.
+///
+/// The resident host is generic over `?Sized` providers, and a `&P` cannot be
+/// coerced to a trait object without knowing `P: Sized`. Wrapping is cheaper
+/// than narrowing that bound across the host, which nothing else needs.
+struct BorrowedProvider<'a, P: ?Sized>(&'a P);
+
+impl<P: IdentityProvider + ?Sized> IdentityProvider for BorrowedProvider<'_, P> {
+    fn master_public_key(&self) -> personae::Ed25519PublicKey {
+        self.0.master_public_key()
+    }
+
+    fn derive_keypair(
+        &self,
+        salt: &[u8],
+    ) -> Result<personae::Ed25519Keypair, personae::IdentityError> {
+        self.0.derive_keypair(salt)
+    }
+
+    fn attest_derived_key(
+        &self,
+        salt: &[u8],
+    ) -> Result<personae::DerivedKeyAttestation, personae::IdentityError> {
+        self.0.attest_derived_key(salt)
+    }
+}
+
 /// A key that protects session state on this disk and nowhere else.
-fn storage_key(
-    identity: &dyn IdentityProvider,
+fn storage_key<P: IdentityProvider + ?Sized>(
+    identity: &P,
     graph: [u8; 32],
 ) -> Result<[u8; 32], GraphKeyError> {
     let mut salt = Vec::with_capacity(SESSION_IDENTITY_CONTEXT.len() + 32);
