@@ -81,6 +81,44 @@ pub trait Backend {
     async fn apply(&self, ops: &[WriteOp]) -> Result<(), StoreError>;
 }
 
+/// A boxed backend is a backend, so a host can **choose** one at runtime.
+///
+/// Which store a host uses is not always known when its types are named: a
+/// desktop app seals to the user's persona when the identity vault opens and
+/// writes plain files when it does not, and both are the same store to
+/// everything above. Without this, that choice has to be spelled as a
+/// hand-written enum per host, delegating all six methods.
+///
+/// `Sync` is required because the native bound makes the returned futures
+/// `Send`, which needs `&B` to cross threads. Every shipped backend is `Sync`.
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+impl<B: Backend + Sync + ?Sized> Backend for Box<B> {
+    async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, StoreError> {
+        (**self).get(key).await
+    }
+
+    async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StoreError> {
+        (**self).put(key, bytes).await
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), StoreError> {
+        (**self).delete(key).await
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<String>, StoreError> {
+        (**self).list(prefix).await
+    }
+
+    async fn scan(&self, start: &str, end: &str) -> Result<Vec<String>, StoreError> {
+        (**self).scan(start, end).await
+    }
+
+    async fn apply(&self, ops: &[WriteOp]) -> Result<(), StoreError> {
+        (**self).apply(ops).await
+    }
+}
+
 /// An in-memory [`Backend`], the deterministic test and development floor. Not
 /// durable: state lives only as long as the handle. Cheap to clone (a shared
 /// handle), so one instance can seed both a `SlotStore` and a `BlobStore`, the
@@ -274,6 +312,21 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(b.len(), 1);
+        });
+    }
+
+    #[test]
+    fn a_backend_chosen_at_runtime_is_still_a_backend() {
+        // What the boxed impl is for: the host decides which store it got, and
+        // everything above it stays generic over `B: Backend`.
+        pollster::block_on(async {
+            fn store<B: Backend>(backend: B) -> B {
+                backend
+            }
+            let chosen: Box<dyn Backend + Send + Sync> = Box::new(MemoryBackend::new());
+            let backend = store(chosen);
+            backend.put("k", b"v").await.unwrap();
+            assert_eq!(backend.get("k").await.unwrap(), Some(b"v".to_vec()));
         });
     }
 }

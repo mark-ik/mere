@@ -1,0 +1,23 @@
+[package]
+name = "mere-persona-picker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The persona picker: a Cambium view over a personae vault's roster. Every Merely application asks the same question — which persona am I? — so the list convention lives here rather than being re-drawn per app."
+keywords = ["persona", "identity", "picker", "cambium", "mere"]
+categories = ["gui", "authentication"]
+
+[lib]
+name = "persona_picker"
+path = "src/lib.rs"
+
+# A crate rather than a module in `personae` because the view needs Cambium,
+# and Cambium drags the whole Genet stack. `personae` is consumed by headless
+# bins, knot endpoints, and the retinue firmware side of the family; none of
+# them should build a view toolkit to derive a key. Splitting keeps the
+# identity crate lean and lets the four applications that DO have a GUI share
+# one picker.
+[dependencies]
+cambium.workspace = true
+identity.workspace = true

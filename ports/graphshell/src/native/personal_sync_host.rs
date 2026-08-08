@@ -1546,29 +1546,19 @@ mod tests {
         sibling.close().await.unwrap();
     }
 
-    /// **Known defect, recorded rather than deleted.** A device keyed after
-    /// sealed writes never receives them.
+    /// The order the happy-path receipt did not cover, and which it failed
+    /// when finally asked: sealing happens first, and a device is keyed
+    /// afterwards.
     ///
-    /// The order the happy-path receipt does not cover: sealing happens first
-    /// and a device is keyed afterwards. Intake refuses a sealed operation
-    /// while unkeyed and LogSync does not offer it again, so the device
-    /// carries a permanent hole in the graph.
+    /// It failed because admission read the writer attestation out of the
+    /// record, and the record is inside the sealed body, so an unkeyed device
+    /// could not tell an admitted writer from a stranger. It refused, and
+    /// LogSync does not offer twice, so the operation was gone for good.
     ///
-    /// The cause is not the refusal itself but what forces it. Admission
-    /// checks the roster through `stable_subject`, which reads the writer
-    /// attestation out of the record, and the record is inside the sealed
-    /// body. So an unkeyed device cannot tell whether the writer is admitted,
-    /// and storing an operation it cannot attribute would be worse than
-    /// refusing one it can re-request.
-    ///
-    /// The fix is to move the writer attestation into the signed header
-    /// extension, where it is checkable without the payload key. It is not
-    /// secret: it attests a public derived key. That is a wire change to a
-    /// signed structure and carries the same hazard as the encryption field
-    /// did, so it wants its own decision and its own `skip_serializing_if`.
-    ///
-    /// Ignored so the suite stays green while the defect stays visible.
-    #[ignore = "known defect: a device keyed after sealed writes never receives them"]
+    /// The attestation and the observed frontier now travel in the signed
+    /// header, where they are checkable without the payload key, so a sealed
+    /// operation is held rather than refused and becomes readable the moment
+    /// the key arrives, with nothing to re-fetch.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_device_keyed_after_sealed_writes_still_receives_them() {
         let directory = tempfile::tempdir().unwrap();

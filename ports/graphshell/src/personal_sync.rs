@@ -76,6 +76,26 @@ pub struct PersonalGraphExt {
     /// are, which is what makes reading old operations possible at all.
     #[serde(default, skip_serializing_if = "PersonalEncryption::is_plaintext")]
     pub encryption: PersonalEncryption,
+    /// The frontier this operation observed, repeated where a device without
+    /// the key can still read it.
+    ///
+    /// Knot carries its parents in the header for the same reason: causal
+    /// admission cannot depend on a body it may not be able to open. The
+    /// record keeps its own copy for operations written before this existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parents: Vec<[u8; 32]>,
+    /// Who wrote this, checkable without the payload key.
+    ///
+    /// This is what makes a sealed operation admissible at all. The roster
+    /// admits stable persona roots, and deriving one needs the attestation;
+    /// while it lived only in the sealed body, a device without the key could
+    /// not tell an admitted writer from a stranger, so it refused everything
+    /// sealed and never saw those operations again.
+    ///
+    /// Not a secret: it attests a public derived key, and the operation is
+    /// signed by that key in the clear regardless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writer_attestation: Option<DerivedKeyAttestation>,
 }
 
 /// The bounded, secret-free events Graphshell can place on its generic lane.
@@ -375,6 +395,13 @@ pub struct SyncProjection {
     pub handler_preferences: BTreeMap<String, String>,
     pub blob_availability: Vec<BlobAvailabilityObservation>,
     pub available_blobs: BTreeMap<[u8; 32], BTreeSet<String>>,
+    /// Operations this device holds and cannot read yet, because they are
+    /// sealed and it has no key.
+    ///
+    /// Reported rather than hidden: a graph that is quietly missing part of
+    /// itself looks identical to one that is complete, and the difference is
+    /// exactly what an owner needs to see while a device waits to be keyed.
+    pub unreadable: usize,
     /// Key-agreement steps in causal order, for a caller to hand to its group
     /// session. Present whether or not this device can read the sealed
     /// operations around them, since reading these is how it gets the key.
@@ -456,8 +483,51 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
                 "operation addresses another personal graph",
             ));
         }
-        let record = from_operation(operation, self.keyring.as_deref())
-            .map_err(|error| Reject::new("invalid-personal-graph-record", error.to_string()))?;
+        // Everything checkable without the body, first. A sealed operation
+        // this device cannot open is still attributable and still bounded,
+        // and refusing it would lose it: LogSync does not offer twice, so a
+        // device keyed later would carry a permanent hole.
+        let subject = header_subject(operation)?;
+        let record = match from_operation(operation, self.keyring.as_deref()) {
+            Ok(record) => record,
+            Err(PersonalGraphWireError::NoKey) => {
+                let Some(subject) = subject else {
+                    return Err(Reject::new(
+                        "unattributable-sealed-operation",
+                        "a sealed operation carries no writer attestation in its header, so this                          device cannot tell whether its writer is admitted",
+                    ));
+                };
+                if !self.roster.admits(&subject) {
+                    return Err(Reject::new(
+                        "personal-graph-writer-not-admitted",
+                        "stable writer subject is outside this graph roster",
+                    ));
+                }
+                validate_causal_metadata(
+                    operation,
+                    &operation.header.extensions.parents,
+                    PERSONAL_GRAPH_LIMITS,
+                )
+                .map_err(|error| {
+                    Reject::new("invalid-personal-graph-causality", error.to_string())
+                })?;
+                // Its events go unchecked, which is the price of holding it.
+                // They were authored by an admitted writer and the payload is
+                // size-bounded above; the alternative is losing the operation
+                // entirely. Projection re-admits it once the key arrives, so
+                // nothing unread is ever folded into the graph.
+                return Ok(Admission::keep(StoreTarget::new(
+                    Topic::from(self.graph),
+                    PERSONAL_GRAPH_LOG,
+                )));
+            }
+            Err(error) => {
+                return Err(Reject::new(
+                    "invalid-personal-graph-record",
+                    error.to_string(),
+                ));
+            }
+        };
         validate_causal_metadata(operation, &record.parents, PERSONAL_GRAPH_LIMITS)
             .map_err(|error| Reject::new("invalid-personal-graph-causality", error.to_string()))?;
         if record.events.is_empty() || record.events.len() > MAX_EVENTS_PER_OPERATION {
@@ -488,7 +558,10 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
                 "key agreement must travel in the clear; sealing it would need the key it carries",
             ));
         }
-        let subject = stable_subject(operation, &record)?;
+        let subject = match subject {
+            Some(subject) => subject,
+            None => stable_subject(operation, &record)?,
+        };
         if !self.roster.admits(&subject) {
             return Err(Reject::new(
                 "personal-graph-writer-not-admitted",
@@ -500,6 +573,23 @@ impl OperationPolicy<PersonalGraphExt> for PersonalGraphPolicy {
             PERSONAL_GRAPH_LOG,
         )))
     }
+}
+
+/// The stable writer subject, from the header alone.
+///
+/// `None` for operations written before the attestation moved into the header,
+/// which are readable anyway and fall back to the record.
+fn header_subject(operation: &Operation<PersonalGraphExt>) -> Result<Option<[u8; 32]>, Reject> {
+    let Some(attestation) = operation.header.extensions.writer_attestation.as_ref() else {
+        return Ok(None);
+    };
+    stable_writer_subject(
+        *operation.header.verifying_key.as_bytes(),
+        Some(attestation),
+        &personal_graph_identity_salt(operation.header.extensions.graph),
+    )
+    .map(Some)
+    .map_err(|error| Reject::new(error.code(), error.to_string()))
 }
 
 fn validate_event(event: &PersonalGraphEvent) -> Result<(), Reject> {
@@ -704,7 +794,12 @@ fn to_operation(
         payload_hash: Some(body.hash()),
         seq_num,
         backlink: backlink.map(Hash::from),
-        extensions: PersonalGraphExt { graph, encryption },
+        extensions: PersonalGraphExt {
+            graph,
+            encryption,
+            parents: record.parents.clone(),
+            writer_attestation: record.writer_attestation.clone(),
+        },
     };
     header.sign(&signing_key);
     let hash = header.hash();
@@ -726,10 +821,11 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
     store: &MunimentStore<B, PersonalGraphExt>,
     graph: [u8; 32],
     keyring: Option<&Arc<DataKeyring>>,
-) -> Result<Vec<StoredRecord>, PersonalGraphError> {
+) -> Result<(Vec<StoredRecord>, usize), PersonalGraphError> {
     let by_author: BTreeMap<VerifyingKey, Vec<u64>> =
         TopicStore::<Topic, VerifyingKey, u64>::resolve(store, &Topic::from(graph)).await?;
     let mut records = Vec::new();
+    let mut unreadable = 0usize;
     for (author, mut logs) in by_author {
         logs.sort_unstable();
         logs.dedup();
@@ -744,16 +840,23 @@ async fn load_records<B: Backend + Clone + Send + Sync + 'static>(
             .await?
             .unwrap_or_default();
             for (operation, _) in entries {
-                let record = from_operation(&operation, keyring.map(Arc::as_ref))?;
-                records.push(StoredRecord {
-                    operation,
-                    record,
-                    log_id,
-                });
+                match from_operation(&operation, keyring.map(Arc::as_ref)) {
+                    Ok(record) => records.push(StoredRecord {
+                        operation,
+                        record,
+                        log_id,
+                    }),
+                    // Held but not readable yet. Skipped rather than fatal:
+                    // one operation this device has no key for must not stop
+                    // it projecting the rest, and it becomes readable the
+                    // moment the key arrives, with nothing to re-fetch.
+                    Err(PersonalGraphWireError::NoKey) => unreadable += 1,
+                    Err(error) => return Err(error.into()),
+                }
             }
         }
     }
-    Ok(records)
+    Ok((records, unreadable))
 }
 
 fn causal_entries(records: &[StoredRecord]) -> Vec<CausalEntry<u64>> {
@@ -912,7 +1015,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> PersonalGraphReplica<B> {
             }
         }
 
-        let records = load_records(&self.store, self.graph, self.keyring.as_ref()).await?;
+        let (records, _) = load_records(&self.store, self.graph, self.keyring.as_ref()).await?;
         let entries = causal_entries(&records);
         let causal = causal_projection(&entries)?;
         if !causal.pending.is_empty() {
@@ -1059,7 +1162,7 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
     keyring: Option<&Arc<DataKeyring>>,
     selection: &SyncSelection,
 ) -> Result<SyncProjection, PersonalGraphError> {
-    let records = load_records(store, graph_id, keyring).await?;
+    let (records, unreadable) = load_records(store, graph_id, keyring).await?;
     let entries = causal_entries(&records);
     let causal = causal_projection(&entries)?;
     let policy = PersonalGraphPolicy {
@@ -1177,6 +1280,7 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
         handler_preferences: handlers,
         blob_availability,
         available_blobs,
+        unreadable,
         key_agreement,
         pending: causal.pending,
         conflicts,
@@ -1972,7 +2076,7 @@ mod tests {
     /// signed and stored would stop verifying. `skip_serializing_if` is what
     /// prevents that, and this is the assertion that keeps it.
     #[test]
-    fn adding_the_encryption_field_did_not_change_a_plaintext_header() {
+    fn the_header_fields_added_since_do_not_change_an_old_header() {
         #[derive(Serialize)]
         struct ExtensionAsItWasBeforeEncryption {
             graph: [u8; 32],
@@ -1982,6 +2086,8 @@ mod tests {
         let after = encode_cbor(&PersonalGraphExt {
             graph: GRAPH,
             encryption: PersonalEncryption::Plaintext,
+            parents: Vec::new(),
+            writer_attestation: None,
         })
         .unwrap();
         assert_eq!(
@@ -1994,9 +2100,24 @@ mod tests {
         let sealed = encode_cbor(&PersonalGraphExt {
             graph: GRAPH,
             encryption: PersonalEncryption::GroupV1,
+            parents: Vec::new(),
+            writer_attestation: None,
         })
         .unwrap();
         assert_ne!(before, sealed);
+
+        // Same for the two fields that moved out of the sealed body. Each is
+        // absent on an operation written before it existed, and each changes
+        // the bytes when present, so neither can quietly rewrite a signed
+        // header nor quietly fail to travel.
+        let with_parents = encode_cbor(&PersonalGraphExt {
+            graph: GRAPH,
+            encryption: PersonalEncryption::Plaintext,
+            parents: vec![[0x01; 32]],
+            writer_attestation: None,
+        })
+        .unwrap();
+        assert_ne!(before, with_parents);
     }
 
     #[tokio::test]

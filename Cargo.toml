@@ -51,6 +51,7 @@ members = [
     "crates/murm/murm",
     "crates/murm/transport",
     "crates/persona/gazetteer",
+    "crates/persona/persona-picker",
     "crates/moot/commons",
     "crates/moot/gemot",
     "crates/moot/moothold",
@@ -263,6 +264,9 @@ muniment = { version = "0.1.1", path = "crates/eidetic/muniment" }
 # 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer
 # yet, and its blocking reqwest needs an async port before one wires it.
 gazetteer = { package = "mere-gazetteer", path = "crates/persona/gazetteer" }
+# The shared "which persona am I?" list. A Cambium view over the personae
+# roster, so the four applications with a GUI draw one picker rather than four.
+persona-picker = { package = "mere-persona-picker", path = "crates/persona/persona-picker" }
 
 # Rhai backend for the knot block-evaluator lane (the thin BlockEvaluator
 # slice, distinct from genet's full ScriptEngine seam). Pure Rust, sandboxed.
