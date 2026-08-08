@@ -136,17 +136,46 @@ So Hocket needs the migration Strophe got — unseal under the old root, re-seal
 under the new — plus an answer for tokens already in the wild, which is a
 product decision, not a mechanical one. Left undone on purpose.
 
+## Where the picker gets drawn
+
+**Choosing is restart-shaped everywhere, not just in Woodshed.** Turnstone
+loads `RootIdentity` once at boot and every denizen grant descends from it;
+Knot opens `StartupUnlockedPersonalVault` when the endpoint opens; Woodshed
+derives its sealing key at `open_store()`. So the honest v1 in every
+application is the same: the choice is remembered and takes effect next launch.
+`genet_host_api::settings` already has the word for that,
+`SettingMutability::RestartRequired`, which makes Woodshed's settings row the
+*easy* case rather than the awkward one — a `SettingControl::Choice` over the
+roster whose `apply` calls `remember_profile`.
+
+**Graphshell is not just a consumer; it is a prior implementation.**
+`ports/graphshell/src/native/personae_host.rs::snapshot` already builds
+`ProfileView { selected, id, display_name, slot_count,
+master_public_fingerprint }` — the same list-and-mark-and-sort-by-id that
+`read_roster` does, projected over the protocol as a secret-free read model.
+The two should be reconciled rather than left to drift: `ProfileView` becomes
+the wire form of a `RosterEntry` plus the fingerprint.
+
+Graphshell also has **no switch intent** — `SSH_GENERATE`, `SSH_IMPORT_NATIVE`,
+`SSH_REMOVE`, `DEVICE_REVOKE`, three signing-approval intents, and nothing for
+the profile. It can show which persona you are on and cannot change it. That is
+precisely the gap the roster closes, which makes graphshell the first surface
+to draw rather than the last.
+
+Suggested order:
+
+1. **Graphshell** — reconcile `ProfileView` with `RosterEntry`, add the switch
+   intent over `remember_profile`. The read model is already there.
+2. **Turnstone** — `identity.rs` still hardcodes `ProfileId("default")`; it
+   moves to `roster::open_chosen`. This is the only remaining *production*
+   hardcode. (The `"default"` occurrences in `browser_host.rs` and `pairing.rs`
+   are test fixtures constructing a `Profile` directly, which is correct.)
+3. **Knot** — startup-bound the same way.
+4. **Woodshed** — the settings row above.
+5. **Hocket** — gated. Its picker *is* the rotation surface, so it cannot be
+   drawn before the migration is decided.
+
 ## Open
 
-- **Where the picker is shown.** The crate exists; no application draws it yet.
-  Woodshed's settings surface is the `genet_host_api::settings` provider
-  contract (specs and typed writes), not a Cambium view, so a persona row there
-  is a `SettingControl::Choice` over `roster_items`' data rather than the
-  picker itself — and applying it has to reopen the store under a new key,
-  which is restart-shaped and not a settings write. Turnstone and Knot draw
-  Cambium views directly and can take the picker as it stands.
 - **Creating a persona.** `PickerEvent::CreateRequested` reports the intent;
   naming it is the application's flow. No application has one.
-- **`personae::bootstrap`'s hardcoded `"default"`** still stands in
-  `ports/graphshell/src/native/browser_host.rs` (twice) and `pairing.rs`.
-  Those should move to `roster::open_chosen`.
