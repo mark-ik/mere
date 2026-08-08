@@ -1,0 +1,28 @@
+Also carries two changes unrelated to projection hosting, swept in by a
+whole-tree add while they were in flight:
+
+Noise moved from a carrier to a session layer. It had been NoiseTransport,
+an `impl Transport` over TCP sitting beside iroh as a third way to move
+bytes, which contradicts this tree's own plane split (iroh is the byte
+plane). Noise is a handshake framework with no opinion about what carries
+it, so it now composes over a stream the carrier already opened:
+`noise::handshake` / `secure_initiator` / `secure_responder`, generic over
+any AsyncRead + AsyncWrite. The TCP half survives as NoiseListener, the
+standalone case, deliberately not a Transport. The old `impl` had a
+`connect` that always failed, which was the tell.
+
+That also made the layered identity real. The Noise static had derived
+from the persona master, the same key every carrier binds with, so both
+traced to one root and nothing was layered. The identity is now a
+parameter of the handshake. Receipt:
+noise_over_an_iroh_stream_layers_a_second_identity, over a live iroh
+connection.
+
+Knot's dial-hint refresh loop, closing R1's remaining half. The schema
+could store a hint but nothing wrote one. KnotSyncHost gained known_peers
+and peer_ticket; refresh_dial_hints rides the existing 5-second pairing
+poll. Connected peers only, write only on change, reload-modify-save
+because --pair-writer is a second writer to the file.
+
+Both are described in
+design_docs/mere_docs/implementation_strategy/2026-08-03_reachability_rungs_and_privacy_lanes_plan.md
