@@ -1546,7 +1546,6 @@ mod tests {
         sibling.close().await.unwrap();
     }
 
-
     /// **Known defect, recorded rather than deleted.** A device keyed after
     /// sealed writes never receives them.
     ///
