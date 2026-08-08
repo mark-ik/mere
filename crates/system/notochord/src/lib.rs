@@ -23,6 +23,7 @@
 //! proof is worth, and [`ProofBinding`] is the intersection both peers can
 //! derive independently and therefore the only thing a signature can cover.
 
+mod authority;
 mod chain;
 mod facts;
 mod handshake;
@@ -32,6 +33,7 @@ mod owner;
 mod policy;
 mod types;
 
+pub use authority::{AuthorityLapse, RetainedAuthority};
 pub use chain::{RevocationLedger, TrustedRoot, validate_chain};
 pub use facts::{CarrierKind, IngressFacts, ProofBinding, SessionFacts};
 pub use handshake::{

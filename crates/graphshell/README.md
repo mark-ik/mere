@@ -1,16 +1,42 @@
 # Graphshell session stack
 
-These four crates are Mere's reusable remote-session machinery:
+Mere's reusable remote-session machinery: a versioned session protocol, the
+client state above it, the traits an authority implements, and one crate per
+carrier.
 
-- `graphshell-protocol`: versioned session messages over an unspecified carrier.
-- `graphshell-client`: endpoint-scoped snapshots, diffs, resume, and cache policy.
-- `graphshell-endpoint`: injected projection and intent traits for authorities.
-- `graphshell-stdio`: the first local newline-delimited JSON carrier.
+| Crate | Contents |
+|---|---|
+| `graphshell-protocol` | Session messages (score, scene, presentation, resource, resume, status, intent); the `Carrier` trait; `CarrierError` |
+| `graphshell-client` | `ClientState` (snapshots, diffs, resume, resource cache, cache policy), `RetainedEndpointSession`, `ActionDraft` |
+| `graphshell-endpoint` | `ProjectionCatalog`, `ProjectionSource`, `PresentationSource`, `IntentSink`, `ResumableProjectionSource`, `ProjectionNoticeSource`, `LiveViewReferenceGate`, `dispatch_common` |
+| `graphshell-stdio` | `StdioCarrier` plus `serve_basic`, `serve_resumable`, `serve_resumable_notifying`: NDJSON over a child process's standard streams |
+| `graphshell-local` | `LocalCarrier`: an endpoint hosted in this process, still round-tripping the wire encoding |
+| `graphshell-network` | `NetworkCarrier`, `CarrierRuntime`: NDJSON over any `AsyncRead + AsyncWrite` |
 
-They may depend on Scenograph contracts, serialization, and
-content-addressing primitives. They must not depend on the Mere kernel,
-products, renderers, GUI toolkits, or network runtimes.
+`Carrier::request` returns `Result<CarrierResponseBody, CarrierError>`.
+`CarrierError` is `Refused` (the session is intact) or `Disconnected` (the
+session is finished). `StdioCarrier`, `LocalCarrier`, and `NetworkCarrier` each
+implement `Carrier`.
 
-The reference application lives at [`ports/graphshell`](../../ports/graphshell).
-Dependency direction is one-way: the port composes these crates; these crates
-never depend on the port.
+## Dependencies
+
+| Crate | Depends on |
+|---|---|
+| `graphshell-protocol` | `sceno`, `scenotime`, `serde`, `serde_json`, `blake3`, `base64` |
+| `graphshell-client` | `graphshell-protocol`, `sceno`, `scenotime`, `serde`, `serde_json` |
+| `graphshell-endpoint` | `graphshell-protocol` |
+| `graphshell-stdio` | `graphshell-endpoint`, `graphshell-protocol`, `serde_json`, `std::process` |
+| `graphshell-local` | `graphshell-endpoint`, `graphshell-protocol`, `serde`, `serde_json` |
+| `graphshell-network` | `graphshell-protocol`, `serde_json`, Tokio (`io-util`, `rt`, `rt-multi-thread`) |
+
+`graphshell-protocol`, `-client`, and `-endpoint` build for
+`wasm32-unknown-unknown`. `NetworkCarrier`'s `Carrier` methods block, so they
+must run off a runtime worker thread.
+
+## Not in these crates
+
+Admission: which peers may open a session, under what grant, and over which
+ALPN. That lives in [`ports/graphshell`](../../ports/graphshell), along with the
+serve loops for admitted sessions, `ResidentEndpointCatalog`, and
+`ResidentProjectionHost`. That port is the reference application: it composes
+these crates, and they do not depend on it.

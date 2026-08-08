@@ -35,7 +35,9 @@ use graphshell_protocol::{
     CachePolicy, IntentInvocation, IntentResult, ProjectionSession, Revision, SceneEpoch,
     SessionStatus,
 };
-use notochord::{AdmittedPrincipal, AdmittedSession, RevocationLedger};
+use notochord::{
+    AdmittedPrincipal, AdmittedSession, AuthorityLapse, RetainedAuthority, RevocationLedger,
+};
 use personae::delegation::SignedDelegationCertificate;
 
 use crate::admission::{CONNECT_ACTION, PROJECTION_SERVICE};
@@ -69,23 +71,14 @@ pub fn score_path(score: &str) -> String {
     format!("{PROJECTION_SERVICE}/{score}")
 }
 
-/// Why a session's authority stopped holding.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Lapse {
-    /// The chain expired. Carries the deadline, not the observation time, so
-    /// a log says when authority ended rather than when someone noticed.
-    Expired { at_ms: u64 },
-    /// A certificate in the chain was revoked by its issuer.
-    Revoked,
-}
+/// Graphshell's name for Notochord's retained-authority lapse.
+pub type Lapse = AuthorityLapse;
 
-impl Lapse {
-    /// The status a client may render for this lapse.
-    pub fn status(self) -> SessionStatus {
-        match self {
-            Lapse::Expired { .. } => SessionStatus::Expired,
-            Lapse::Revoked => SessionStatus::Revoked,
-        }
+/// The status a client may render for a retained-authority lapse.
+fn lapse_status(lapse: Lapse) -> SessionStatus {
+    match lapse {
+        AuthorityLapse::Expired { .. } => SessionStatus::Expired,
+        AuthorityLapse::Revoked => SessionStatus::Revoked,
     }
 }
 
@@ -107,8 +100,7 @@ pub enum ScoreDenial {
 #[derive(Clone, Debug)]
 pub struct SessionAuthority {
     session: ProjectionSession,
-    principal: AdmittedPrincipal,
-    chain: Vec<SignedDelegationCertificate>,
+    retained: RetainedAuthority,
 }
 
 /// The narrow identity and projection-session handoff an admitted endpoint
@@ -160,10 +152,10 @@ impl SessionAuthority {
     /// claims retained by `notochord::admit_session`, so a long-lived
     /// session can notice a revocation after admission.
     pub fn retain_admitted<S>(session: &AdmittedSession<S>) -> Self {
-        Self::retain(
-            session.principal.clone(),
-            session.claims.delegations.clone(),
-        )
+        Self {
+            session: projection_session(&session.principal),
+            retained: RetainedAuthority::from_admitted(session),
+        }
     }
 
     /// Retain the authority a session was admitted on.
@@ -174,8 +166,7 @@ impl SessionAuthority {
     pub fn retain(principal: AdmittedPrincipal, chain: Vec<SignedDelegationCertificate>) -> Self {
         Self {
             session: projection_session(&principal),
-            principal,
-            chain,
+            retained: RetainedAuthority::new(principal, chain),
         }
     }
 
@@ -186,12 +177,12 @@ impl SessionAuthority {
 
     /// Who was admitted, and for what.
     pub fn principal(&self) -> &AdmittedPrincipal {
-        &self.principal
+        self.retained.principal()
     }
 
     /// Create the bounded product handoff for this already-admitted session.
     pub fn endpoint_context(&self) -> AdmittedEndpointContext {
-        AdmittedEndpointContext::new(self.session.clone(), self.principal.subject)
+        AdmittedEndpointContext::new(self.session.clone(), self.principal().subject)
     }
 
     /// When this session's authority runs out, if it does.
@@ -199,10 +190,7 @@ impl SessionAuthority {
     /// The earliest expiry in the chain: a session lives no longer than the
     /// shortest-lived link in the authority that opened it.
     pub fn deadline_ms(&self) -> Option<u64> {
-        self.chain
-            .iter()
-            .filter_map(|signed| signed.certificate.expires_at_ms)
-            .min()
+        self.retained.deadline_ms()
     }
 
     /// Whether the authority still holds, and if not, why.
@@ -210,23 +198,13 @@ impl SessionAuthority {
     /// Revocation is checked before expiry: both can be true at once, and
     /// "the owner withdrew this" is the more useful thing to report.
     pub fn lapse(&self, ledger: &RevocationLedger, now_ms: u64) -> Option<Lapse> {
-        if self
-            .chain
-            .iter()
-            .any(|signed| ledger.revokes(&signed.certificate))
-        {
-            return Some(Lapse::Revoked);
-        }
-        match self.deadline_ms() {
-            Some(deadline) if now_ms > deadline => Some(Lapse::Expired { at_ms: deadline }),
-            _ => None,
-        }
+        self.retained.lapse(ledger, now_ms)
     }
 
     /// The status a client may render without inferring authority itself.
     pub fn status(&self, ledger: &RevocationLedger, now_ms: u64) -> SessionStatus {
         self.lapse(ledger, now_ms)
-            .map_or(SessionStatus::Live, Lapse::status)
+            .map_or(SessionStatus::Live, lapse_status)
     }
 
     /// Whether this authority reaches one named score.
@@ -244,10 +222,7 @@ impl SessionAuthority {
             return Err(ScoreDenial::Lapsed(lapse));
         }
         let path = score_path(score);
-        let covered = self
-            .chain
-            .last()
-            .is_some_and(|leaf| leaf.certificate.covers(&path, CONNECT_ACTION, now_ms));
+        let covered = self.retained.covers(&path, CONNECT_ACTION, now_ms);
         if covered {
             Ok(())
         } else {
@@ -526,8 +501,9 @@ mod tests {
 
     #[test]
     fn a_revoked_grant_lapses_before_its_deadline_and_reports_revocation() {
-        let authority = authority();
-        let ledger = revoked_ledger(&authority.chain);
+        let chain = vec![grant(PROJECTION_SERVICE)];
+        let authority = SessionAuthority::retain(principal([21; 32]), chain.clone());
+        let ledger = revoked_ledger(&chain);
         assert_eq!(authority.lapse(&ledger, NOW_MS), Some(Lapse::Revoked));
         assert_eq!(authority.status(&ledger, NOW_MS), SessionStatus::Revoked);
     }
@@ -544,8 +520,9 @@ mod tests {
 
     #[test]
     fn revocation_outranks_expiry_when_both_are_true() {
-        let authority = authority();
-        let ledger = revoked_ledger(&authority.chain);
+        let chain = vec![grant(PROJECTION_SERVICE)];
+        let authority = SessionAuthority::retain(principal([21; 32]), chain.clone());
+        let ledger = revoked_ledger(&chain);
         assert_eq!(
             authority.lapse(&ledger, EXPIRY_MS + 1),
             Some(Lapse::Revoked),
@@ -616,8 +593,9 @@ mod tests {
 
     #[test]
     fn a_lapsed_session_discloses_no_score_at_all() {
-        let authority = authority();
-        let ledger = revoked_ledger(&authority.chain);
+        let chain = vec![grant(PROJECTION_SERVICE)];
+        let authority = SessionAuthority::retain(principal([21; 32]), chain.clone());
+        let ledger = revoked_ledger(&chain);
         assert_eq!(
             authority.authorize_score(&ledger, NOW_MS, "spiral"),
             Err(ScoreDenial::Lapsed(Lapse::Revoked))
@@ -679,8 +657,9 @@ mod tests {
     /// than told what the current revision is.
     #[test]
     fn a_lapsed_session_is_refused_without_being_told_the_current_revision() {
-        let authority = authority();
-        let ledger = revoked_ledger(&authority.chain);
+        let chain = vec![grant(PROJECTION_SERVICE)];
+        let authority = SessionAuthority::retain(principal([21; 32]), chain.clone());
+        let ledger = revoked_ledger(&chain);
         let result = adjudicate_intent(
             &authority,
             &ledger,

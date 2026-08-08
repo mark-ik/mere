@@ -96,6 +96,9 @@ pub struct PersonalSyncHost {
     /// reason the roster is: a device keyed while the host runs must start
     /// reading sealed operations without a restart.
     keys: Arc<RwLock<Option<Arc<DataKeyring>>>>,
+    /// Deterministic failure injection for key-transition rollback tests.
+    #[cfg(test)]
+    fail_next_key_author: std::sync::atomic::AtomicBool,
 }
 
 impl PersonalSyncHost {
@@ -147,10 +150,11 @@ impl PersonalSyncHost {
             .await
             .map_err(PersonalSyncHostError::Graph)?;
         if !caught_up.is_empty() {
-            match key_group.absorb(&caught_up) {
+            match key_group.absorb_admitted(&caught_up, &config.roster) {
                 Ok(report) => tracing::info!(
                     steps = caught_up.len(),
                     installed = report.installed,
+                    ineligible = report.ineligible,
                     unreadable = report.unreadable,
                     "read the graph's key agreement"
                 ),
@@ -300,6 +304,8 @@ impl PersonalSyncHost {
             blobs,
             key_group: Mutex::new(key_group),
             keys,
+            #[cfg(test)]
+            fail_next_key_author: std::sync::atomic::AtomicBool::new(false),
         };
         // Publish last, because it needs the joined lane. A device that never
         // publishes can never be added, so a failure here is reported rather
@@ -654,12 +660,8 @@ impl PersonalSyncHost {
     ///
     /// [`key_paired_devices`]: Self::key_paired_devices
     pub async fn enable_encryption(&self) -> Result<(), PersonalSyncHostError> {
-        let event = {
-            let mut group = self.key_group.lock().await;
-            group.create().map_err(key_error)?
-        };
-        self.author(vec![event]).await?;
-        self.refresh_keyring().await?;
+        self.author_key_change(|group| Ok((vec![group.create()?], ())))
+            .await?;
         tracing::info!(graph = %hex(&self.graph), "encryption is on for this graph");
         Ok(())
     }
@@ -670,13 +672,14 @@ impl PersonalSyncHost {
     /// device has been given, and add any device whose pre-key has arrived and
     /// which is not a member yet. Returns how many devices it added.
     pub async fn key_paired_devices(&self) -> Result<usize, PersonalSyncHostError> {
+        let roster = self.roster.read().await.clone();
         let steps = {
             let replica = self.replica.lock().await;
             crate::personal_sync::key_agreement(&replica.sync_store(), self.graph).await?
         };
         let (report, keyed) = {
             let mut group = self.key_group.lock().await;
-            let report = group.absorb(&steps).map_err(key_error)?;
+            let report = group.absorb_admitted(&steps, &roster).map_err(key_error)?;
             (report, group.is_keyed())
         };
         self.refresh_keyring().await?;
@@ -688,23 +691,17 @@ impl PersonalSyncHost {
         }
         let mut added = 0;
         for member in report.registered {
-            let event = {
-                let mut group = self.key_group.lock().await;
-                match group.add(member) {
-                    Ok(event) => event,
-                    // Already a member is the common case on a second pass,
-                    // and is not worth failing the whole sweep over.
-                    Err(error) => {
-                        tracing::debug!(%error, "a paired device was not added on this pass");
-                        continue;
+            let changed = self
+                .author_key_change(|group| {
+                    if group.has_member(member)? {
+                        return Ok((Vec::new(), false));
                     }
-                }
-            };
-            self.author(vec![event]).await?;
-            added += 1;
+                    Ok((vec![group.add(member)?], true))
+                })
+                .await?;
+            added += usize::from(changed);
         }
         if added > 0 {
-            self.refresh_keyring().await?;
             tracing::info!(added, graph = %hex(&self.graph), "keyed paired devices");
         }
         Ok(added)
@@ -719,16 +716,26 @@ impl PersonalSyncHost {
         &self,
         member: stickleback::GroupRecipientId,
     ) -> Result<(), PersonalSyncHostError> {
-        let events = {
-            let mut group = self.key_group.lock().await;
-            group.remove_and_rotate(member).map_err(key_error)?
-        };
-        for event in events {
-            self.author(vec![event]).await?;
-        }
-        self.refresh_keyring().await?;
-        tracing::info!(graph = %hex(&self.graph), "removed a device and turned the epoch");
+        self.revoke_device_keys_if_present(member).await?;
         Ok(())
+    }
+
+    async fn revoke_device_keys_if_present(
+        &self,
+        member: stickleback::GroupRecipientId,
+    ) -> Result<bool, PersonalSyncHostError> {
+        let removed = self
+            .author_key_change(|group| {
+                if !group.has_member(member)? {
+                    return Ok((Vec::new(), false));
+                }
+                Ok((group.remove_and_rotate(member)?, true))
+            })
+            .await?;
+        if removed {
+            tracing::info!(graph = %hex(&self.graph), "removed a device and turned the epoch");
+        }
+        Ok(removed)
     }
 
     /// Drop the device that owns `root` from the key group, and turn the epoch.
@@ -748,8 +755,63 @@ impl PersonalSyncHost {
         let Some(member) = crate::native::graph_keys::recipient_for_root(&steps, root) else {
             return Ok(false);
         };
-        self.revoke_device_keys(member).await?;
-        Ok(true)
+        self.revoke_device_keys_if_present(member).await
+    }
+
+    /// Apply one group mutation only if its corresponding lane events author.
+    ///
+    /// GroupSession persists eagerly so a crash cannot forget secret state.
+    /// That means a lane write failure must restore the previous sealed state;
+    /// otherwise the next poll sees an already-applied local transition and has
+    /// nothing it can publish to make the rest of the graph agree.
+    async fn author_key_change<T>(
+        &self,
+        change: impl FnOnce(&mut GraphKeyGroup) -> Result<(Vec<PersonalGraphEvent>, T), GraphKeyError>,
+    ) -> Result<T, PersonalSyncHostError> {
+        let mut group = self.key_group.lock().await;
+        let checkpoint = group.checkpoint().map_err(key_error)?;
+        let (events, value) = match change(&mut group) {
+            Ok(change) => change,
+            Err(error) => {
+                let original = error.to_string();
+                if let Err(rollback) = group.restore(&checkpoint) {
+                    return Err(PersonalSyncHostError::Transport(format!(
+                        "{original}; key-state rollback also failed: {rollback}"
+                    )));
+                }
+                return Err(key_error(error));
+            }
+        };
+        if events.is_empty() {
+            return Ok(value);
+        }
+
+        #[cfg(test)]
+        let authored = if self
+            .fail_next_key_author
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            Err(PersonalSyncHostError::Transport(
+                "injected key-event author failure".into(),
+            ))
+        } else {
+            self.author(events).await
+        };
+        #[cfg(not(test))]
+        let authored = self.author(events).await;
+
+        if let Err(error) = authored {
+            let original = error.to_string();
+            if let Err(rollback) = group.restore(&checkpoint) {
+                return Err(PersonalSyncHostError::Transport(format!(
+                    "{original}; key-state rollback also failed: {rollback}"
+                )));
+            }
+            return Err(error);
+        }
+        drop(group);
+        self.refresh_keyring().await?;
+        Ok(value)
     }
 
     /// Put the current keyring where the replica and intake will find it.
@@ -1358,8 +1420,70 @@ mod tests {
             "a sealed node crossed and was read on the other side"
         );
 
+        // A failed lane author must not strand the local session after it has
+        // already prepared and persisted a removal. The member remains, and
+        // the same revocation succeeds on the next attempt.
+        let sibling_member = sibling.key_group.lock().await.member();
+        owner
+            .fail_next_key_author
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        assert!(owner.revoke_device_keys(sibling_member).await.is_err());
+        assert!(
+            owner
+                .key_group
+                .lock()
+                .await
+                .has_member(sibling_member)
+                .unwrap(),
+            "failed lane authoring rolled the local removal back"
+        );
+        owner.revoke_device_keys(sibling_member).await.unwrap();
+        assert!(
+            !owner
+                .key_group
+                .lock()
+                .await
+                .has_member(sibling_member)
+                .unwrap(),
+            "the retry completed the same revocation"
+        );
+
         owner.close().await.unwrap();
         sibling.close().await.unwrap();
+    }
+
+    /// Creating the first epoch has the same failure boundary as add/remove:
+    /// local sealed state must roll back when the lane never receives it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn failed_group_creation_can_be_retried() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = InMemoryProvider::from_seed([0xc5; 32]);
+        let host = PersonalSyncHost::open(
+            &identity,
+            PersonalSyncHostConfig {
+                graph: [0xc6; 32],
+                store_path: directory.path().join("retry.redb"),
+                roster: SyncRoster::new([identity.master_public_key().to_bytes()]),
+                selection: SyncSelection::default(),
+                peer_tickets: Vec::new(),
+                peer_hints: Vec::new(),
+                paired_nodes: Vec::new(),
+                relay_urls: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+
+        host.fail_next_key_author
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        assert!(host.enable_encryption().await.is_err());
+        assert!(!host.is_keyed().await);
+        assert!(!host.key_group_exists().await.unwrap());
+
+        host.enable_encryption().await.unwrap();
+        assert!(host.is_keyed().await);
+        assert!(host.key_group_exists().await.unwrap());
+        host.close().await.unwrap();
     }
 
     /// A device that can already see a key group must not start a second one.

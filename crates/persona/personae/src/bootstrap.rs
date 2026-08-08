@@ -117,11 +117,7 @@ pub fn load_or_create_profile(
     {
         return Ok((storage.load_profile(id)?, false));
     }
-    let profile = Profile::new(
-        id.clone(),
-        id.0.clone(),
-        Ed25519Keypair::generate(),
-    );
+    let profile = Profile::new(id.clone(), id.0.clone(), Ed25519Keypair::generate());
     storage.save_profile(&profile)?;
     Ok((profile, true))
 }

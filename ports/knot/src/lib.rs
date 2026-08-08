@@ -9,6 +9,10 @@ mod content_classes;
 mod directory;
 mod editor;
 mod endpoint;
+mod publish;
+mod publish_carrier;
+mod publish_host;
+mod publish_wire;
 mod resident;
 mod search;
 mod settings;
@@ -26,6 +30,23 @@ pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::{
     KnotEffectAuthority, KnotEffectFetcher, KnotEffectMode, KnotEffectPolicy, KnotEndpoint,
     KnotWriteGrant,
+};
+pub use publish::{
+    KNOT_PUBLISH_ALPN, KNOT_PUBLISH_DOMAIN, KNOT_PUBLISH_READ_ACTION, KNOT_PUBLISH_SERVICE,
+    KNOT_SHARE_TICKET_VERSION, KnotPublication, KnotPublishCatalog, KnotPublishError,
+    KnotPublishRead, KnotPublishedDocument, KnotShareTicket, PublicationId, publication_path,
+};
+pub use publish_carrier::{
+    PublishCarrierError, PublishRefusal, accept_publish_session, publish_alpn, publish_policy,
+};
+pub use publish_host::{
+    KnotPublishHost, KnotPublishHostError, KnotPublishHostLimits, KnotPublishServeOutcome,
+};
+pub use publish_wire::{
+    CandidateFixture, CandidateFixtureOutcome, HARD_MAX_CATALOG_ENTRIES, HARD_MAX_DOCUMENT_BYTES,
+    HARD_MAX_REQUEST_BYTES, HARD_MAX_RESPONSE_BYTES, PublishRequest, PublishResponse,
+    PublishWireError, PublishWireLimits, candidate_fixture_corpus, decode_request, decode_response,
+    encode_request, encode_response,
 };
 pub use resident::{KnotSyncHost, KnotSyncHostConfig, KnotSyncHostError};
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};

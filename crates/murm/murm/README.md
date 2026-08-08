@@ -1,120 +1,106 @@
 # murm
 
-`murm` is the bilateral peer-to-peer comms supercrate for the
-[mere](https://crates.io/crates/mere) browser. One-to-one (and small-group)
-signed conversations between known peers: a *murmur* between them.
+Direct peer-to-peer conversation for the [mere](https://crates.io/crates/mere)
+browser. A *cabal* is an invitation-scoped conversation between known peers,
+addressed by a 32-byte shared secret. Murm owns the post grammar, the signed
+per-author log, admission of received operations, per-cabal storage, and the
+sync lanes.
 
-`murm` composes identity from
-[`identity`](https://crates.io/crates/identity), transport from
-[`transport`](https://crates.io/crates/transport), its signed operation
-grammar, and the shared replication store behind one high-level conversation
-runtime.
+Product surfaces call a conversation a *murmur*; `Cabal` is the protocol and
+code noun. `mere/cable/v1` names the inherited cabal/channel/post grammar and
+the ALPN it claims. It does not assert wire compatibility with cabal-club
+Cable. Many-to-many federation lives in `gemot`, not here.
 
-## What's in the crate
+## Public surface
 
-- **`Murm<T: Transport>`** — the orchestrator, generic over the transport.
-  - `Murm::new(identity, transport)` — construct with an in-memory store.
-  - `Murm::with_storage(identity, transport, ConversationStorage::redb(path))`
-    — construct with durable per-cabal stores.
-  - `local_peer_id()` — the peer identity derived from the master pubkey.
-  - `open_cabal(&CabalKey) -> Future<CabalHandle>` — open or rejoin a cabal by
-    its 32-byte secret key. A durable open rebuilds history and the local author
-    head before returning. The `CabalHandle` sends text, queries `history`, and
-    `subscribe`s to posts.
-  - `derive_cabal_keypair(&CabalKey)` — the per-cabal Ed25519 keypair
-    derivation.
-  - `subscribe_cabal(&CabalKey) -> SyncedCabal` (on `Murm<P2pandaTransport>`) —
-    join a cabal's sync overlays. Authoring through the returned `SyncedCabal`
-    broadcasts each post live over gossip; peers that were offline catch up
-    via LogSync (RBSR) over the shared muniment store. Both lanes ingest idempotently,
-    so history converges across online members and catches up peers that
-    were away.
-- **`CabalHandle` / `CabalId` / `CabalKey`** — cabal addressing.
-  - `CabalKey` is the 32-byte secret shared between members; `CabalId` is
-    the public BLAKE3 derivation; `CabalHandle` is what callers send /
-    query through.
-  - `import_plain_drop` and `import_protected_drop` admit native drops through
-    the shared processor, refresh materialized history, and publish newly
-    visible posts once.
-  - `CabalKeyring` protects native drops with epoch keys. Installing a new key
-    preserves the stable `CabalId`; callers may retain or forget older epochs
-    according to their recovery policy.
-- **`SyncedCabal`** — a `CabalHandle` plus the two live sync lanes (gossip +
-  LogSync) over a `P2pandaTransport`.
-- **`MurmError`** — unified error type.
-- **`ConversationDropSelector`** — settings-driven catch-up, archive, and
-  radio selection for the shared native-drop exporter. Per-author frontiers,
-  signed-header privacy, body privacy, and post-kind priority remain
-  conversation policy.
-- **`ConversationStore`** — the muniment-backed replacement substrate with
-  shared structural checks, conversation admission, continuity, LogSync store
-  traits, and native-drop export. The live `ConversationEngine` now uses it.
-- **Re-exports for ergonomic use**:
-  - `Ed25519PublicKey`, `IdentityProvider` from identity.
-  - `Alpn`, `PeerID`, `Transport` from transport.
-  - `ChannelName`, `InfoEntry`, `Post`, `PostId`, and `PostKind`.
-  - Post primitives: `encode_post`, `decode_post`, `hash_post`, `sign_post`,
-    `verify_post`.
+Every module is private; `src/lib.rs` re-exports the whole surface, so a caller
+writes `murm::CabalHandle`. The `Source` column names the source file.
 
-## Vocabulary
+| Source | Contents |
+| --- | --- |
+| `cabal` | `CabalKey`, `CabalId`, `CabalHandle`, `CabalMembership` |
+| `conversation_engine` | `ConversationEngine`, `ConversationRefresh`; the runtime behind every handle |
+| `conversation_store` | `ConversationStore<B>`, `ConversationStoreError`; the per-cabal store over stickleback |
+| `conversation_backend` | `ConversationStorage`, `ConversationBackend` (memory or redb) |
+| `drop_export` | `ConversationDropSelector`, `ConversationDropProfile`, `ConversationDropPrivacy`, `ConversationDropPriorities`, `ConversationFrontier` |
+| `key_epoch` | `CabalKeyring`, `CabalKeyEpoch`, `CabalKeyringError`, `CABAL_DROP_SUITE` |
+| `post` | `Post`, `PostId`, `PostKind`, `ChannelName`, `InfoEntry` |
+| `post_sign` | `sign_post`, `verify_post` |
+| `post_hash` | `hash_cabal_id` (`cabal_id = BLAKE3-256(cabal_key)`) |
+| `post_wire` | `CabalExt`, `encode_post`, `decode_post`, `operation_id`, `post_to_operation`, `operation_to_post` |
+| `gossip_sync` | `SyncedCabal`, and `subscribe_cabal` on `Murm<P2pandaTransport>` |
+| `session_lane` (feature) | `serve_session`, `serve_accepted_session`, `push_posts`, `lane_binding`, `Admission`, `SessionOutcome`, `MAX_POST_FRAME` |
+| `error` | `MurmError` |
 
-Product surfaces call the conversation a **murmur**. **Cabal** remains the
-protocol and code noun for the invitation-scoped shared conversation. **Cable**
-names the inherited cabal/channel/post grammar and Mere's namespaced
-`mere/cable/v1` dialect; it does not assert wire compatibility with cabal-club
-Cable. Runtime and storage mechanics use plain `Conversation*` names.
+`lib.rs` itself defines `Murm<T>`, `hash_post`, and the `VERSION` / `STAGE`
+consts, and re-exports `Ed25519PublicKey` and `IdentityProvider` from identity
+and `Alpn`, `PeerID`, `Transport` from transport.
 
-## How it relates to other workspace crates
+## Key entry points
 
-murm sits above the identity / transport / wire-protocol layers and below
-the user-facing Comms UI.
+| Item | Signature / role |
+| --- | --- |
+| `Murm::new(Arc<dyn IdentityProvider>, T)` | In-memory storage. |
+| `Murm::with_storage(identity, transport, ConversationStorage)` | `ConversationStorage::Memory` or `ConversationStorage::redb(dir)`, one redb file per cabal. |
+| `Murm::open_cabal(&CabalKey) -> Result<CabalHandle, MurmError>` | Opens or rejoins. A durable open rebuilds history and the local author head before returning. Idempotent per key. |
+| `Murm::derive_cabal_keypair(&CabalKey) -> Result<identity::Ed25519Keypair, MurmError>` | `child = BLAKE3(master_seed \|\| cabal_key)`; the master secret stays in the identity provider. |
+| `Murm::local_peer_id() -> PeerID` | Derived from the identity provider's master public key. |
+| `Murm::conversation_engine() -> &Arc<ConversationEngine>` | The runtime, for operations `CabalHandle` does not expose. |
+| `Murm::<P2pandaTransport>::subscribe_cabal(&CabalKey) -> Result<SyncedCabal, MurmError>` | Joins the cabal's gossip topic and its LogSync overlay topic. |
 
-```text
-              Comms pane (UI; reads / writes via murm)
-                          │
-                          ▼
-                        murm
-              cabal lifecycle, live + catch-up sync,
-              per-cabal keypair derivation, ALPN claim
-                          │
-   ┌──────────────────────┴──────────────────────┐
-   ▼                                             ▼
-identity                                      transport
-(derive_keypair)                 (P2pandaTransport + gossip)
-```
+`CabalHandle` authoring: `send_text`, `send_topic`, `send_join`, `send_leave`,
+`send_info`, `send_delete`, each with an `_at` variant taking an explicit
+timestamp. Reads: `id`, `author_public_key`, `get_post`, `history(channel)`,
+`membership(channel) -> CabalMembership`, `subscribe() ->
+broadcast::Receiver<Post>`. Ingress: `ingest_post`, `import_plain_drop`,
+`import_protected_drop`, `refresh`. Keys: `keyring`, `install_key_epoch`.
 
-- [`identity`](https://crates.io/crates/identity) —
-  `derive_keypair(cabal_key)` produces the per-cabal Ed25519 keypair. The
-  master secret never leaves the identity provider; murm only sees the
-  derived keypair.
-- [`transport`](https://crates.io/crates/transport) — murm is
-  `Murm<T: Transport>`; the same code runs against `MemoryTransport` in
-  tests and `P2pandaTransport` in production. Cabal traffic claims its own
-  ALPN.
-- [`gemot`](https://crates.io/crates/gemot) — many-to-many federation
-  lives there, not here. murm strictly handles bilateral / small-group
-  flows.
-- [`mere`](https://crates.io/crates/mere) — composes murm into the product.
+`SyncedCabal` wraps a `CabalHandle` plus the two lanes over a
+`P2pandaTransport`. Authored posts broadcast on gossip; peers that were offline
+catch up over LogSync (RBSR) against the same muniment store. Both lanes ingest
+idempotently, so a post arriving on both lands once. It exposes `send_text`,
+`history`, `subscribe`, `handle`, `sync_status`, and `resync`.
+
+`CabalKeyring` protects native drops with epoch keys under `CABAL_DROP_SUITE`
+(XChaCha20). `install` adds an epoch and keeps the `CabalId` stable;
+`forget_before` drops older epochs.
+
+## Features
+
+| Feature | Effect |
+| --- | --- |
+| `session-lane` (off) | Enables `session_lane`: an owner-gated point-to-point lane carrying posts over a stream a carrier already opened. Pulls in `notochord` and `transport/notochord`. |
+
+## Dependencies
+
+| Crate | Why |
+| --- | --- |
+| `identity` (`personae`) | `IdentityProvider::derive_keypair` for the per-cabal keypair; `Ed25519PublicKey`. |
+| `transport` (`mere-transport`) | The `Transport` trait `Murm<T>` is generic over; `P2pandaTransport` and `GossipHandle` for the sync lanes. |
+| `stickleback` | `MunimentStore`, `OperationProcessor`, `JoinedSpace`, and the native-drop codec and export/import path. |
+| `muniment` (`redb`) | `MemoryBackend` / `RedbBackend` under `ConversationStore`. |
+| `p2panda-core` | `Operation`, `Topic`, header hashing; the stored form of a post. |
+| `p2panda-encryption` | XChaCha20 AEAD behind `CabalKeyring`. |
+| `notochord` (optional) | Session admission for `session-lane`. |
+| `blake3` | `hash_cabal_id`. |
+| `tokio`, `tokio-stream` | Sync tasks, the `subscribe` broadcast channel, gossip streams. |
+
+LogSync assembly is not done here; `stickleback::JoinedSpace` owns that
+ceremony, so `p2panda-net` and `p2panda-sync` are not direct dependencies.
 
 ## Status
 
-Pre-1.0. The `Murm` orchestrator, cabal lifecycle, per-cabal keypair
-derivation, and the `CabalHandle` send / history / subscribe surface are in
-place. Over a `P2pandaTransport`, `subscribe_cabal` returns a `SyncedCabal`
-that runs both live gossip and LogSync catch-up; two peers on the same cabal
-key converge over the wire (tested). The host wires a networked cabal into
-mere's Comms pane end to end (join ticket, connect-by-ticket, live post
-drain) and selects redb storage under its per-user comms directory.
+Pre-1.0 (`STAGE = "pre-alpha"`). Cabal lifecycle, keypair derivation, the
+`CabalHandle` send / history / subscribe surface, durable redb storage with
+reopen reconstruction, and native drop import with materialization refresh are
+in place. Two peers on the same cabal key converge over a `P2pandaTransport`
+(tested). The host wires a networked cabal into mere's Comms pane end to end
+(join ticket, connect-by-ticket, live post drain).
 
-Ahead:
-
-- **Host-led co-op sessions** (`host_coop` / `join_coop`) — ephemeral,
-  host-admitted sessions over the bilateral transport.
-- **Cross-author causal links** and **retention-aware pruning** — domain work
-  over the shared store.
-- **Group key distribution** — native drops have real epoch-aware XChaCha20
-  protection and old-epoch recovery. Personae or a p2panda group-state adapter
-  still owns authorization, epoch distribution, and persisted key history.
+Ahead: host-led co-op sessions (`host_coop` / `join_coop`), cross-author causal
+links, retention-aware pruning, and group key distribution. Native drops have
+epoch-aware protection today; authorization, epoch distribution, and persisted
+key history still belong to personae or a p2panda group-state adapter.
 
 ## License
 

@@ -1,125 +1,123 @@
-# transport
+# mere-transport
 
-`transport` is the peer transport layer for the
-[mere](https://crates.io/crates/mere) browser. It wraps
-[iroh](https://www.iroh.computer) for authenticated, encrypted QUIC streams
-between known peers, exposes content-addressed blob storage (BLAKE3 via
-`iroh-blobs`), and presents a `Transport` trait the rest of the workspace
-consumes generically.
+The peer transport layer for the [mere](https://crates.io/crates/mere) browser.
+Package name is `mere-transport`; the lib is `transport`, so consumers write
+`use transport::...`.
 
-## Design
+It wraps [iroh](https://www.iroh.computer) for authenticated, encrypted QUIC
+streams between known peers, exposes content-addressed blob storage (BLAKE3 via
+`iroh-blobs`), and presents a `Transport` trait the rest of the workspace takes
+as a generic parameter rather than a `Box<dyn Transport>`.
 
-- **Identity is provider-neutral at the boundary.** Existing Mere consumers can
-  pass an `identity::Ed25519Keypair`; sibling applications can pass the raw
-  32-byte Ed25519 signing seed from Personae or another provider. In both cases
-  the peer ID is derived from the corresponding public key.
-- **Streams are byte-oriented.** `Transport::Stream: AsyncRead + AsyncWrite`.
-  Higher protocols layer their own framing on top. `murm` carries
-  signed p2panda-core Operations; co-op sessions carry their own format.
-- **ALPNs are explicit.** Each protocol registers its own ALPN string
-  (`mere/cable/v1`, `mere/coop/v1`, …) so multiple protocols share one peer
-  connection without ambiguity. ALPNs are versioned and tracked in the
-  workspace's protocol architecture plan.
-- **Generic over implementation.** Consumers take `T: Transport` rather than
-  `Box<dyn Transport>`, so the same code runs against real iroh in production
-  and against an in-memory transport in tests.
+Consumers layer their own framing on the byte stream. Each protocol registers
+its own ALPN string (`mere/cable/v1`, `mere/coop/v1`, and so on) so several
+protocols share one peer connection.
 
-## What's in the crate
+## Public surface
 
-- **`transport`** — the public contract.
-  - `Transport` trait — `connect(PeerID, Alpn) -> Stream`,
-    `accept(Alpn) -> Stream`, `local_peer_id()`. Generic associated type for
-    the stream.
-- **`p2panda_transport`** — the production implementation.
-  - `P2pandaTransport` — backed by `p2panda-net`'s `Endpoint` (the endpoint
-    authority). Real QUIC, with p2panda-net discovery, relay/hole-punching,
-    and actor supervision. Replaced a hand-rolled iroh `Router`.
-  - `P2pandaStream` — the QUIC stream type implementing `AsyncRead + AsyncWrite`.
-  - **Gossip + LogSync** — `builder().gossip()` enables a gossip overlay;
-    `subscribe(topic) -> GossipHandle` joins a space topic to broadcast /
-    receive operations (live convergence for online peers); `set_topics(peer,
-    …)` bootstraps the overlay (discovery does this in production). RBSR
-    offline catch-up over `p2panda-net`'s `LogSync` is wired: a consumer's
-    `p2panda-store` `LogStore` / `TopicStore` reconciles the log with peers
-    (murm's cabal store is the first consumer).
-- **`memory`** — the in-memory test fixture.
-  - `MemoryTransport` — paired channels, no network. Used for unit tests of
-    higher-level protocols without booting iroh.
-- **`peer_id`** — `PeerID` derived from `Ed25519PublicKey`. Named `PeerID` rather than `NodeId` to disambiguate from `kernel`'s graph-node identity (graph-object identity and peer identity are distinct concepts that previously shared the name).
-- **`alpn`** — `Alpn` newtype with hash-friendly equality, for the ALPN
-  registry pattern.
-- **`blobs`** — content-addressed blob storage.
-  - `BlobStore`, `BlobHash` (32-byte BLAKE3), `BlobError`. Backed by
-    `iroh-blobs::store::mem::MemStore` today; persistent backends land
-    behind the same trait.
-- **`error`** — `TransportError` (unified error type).
-- **Re-exports**: `Ed25519PublicKey`, `IdentityProvider` from `identity`
-  so consumers don't need a direct identity dep for basic flows.
+`blobs`, `memory`, `p2panda_transport`, and the three feature modules are
+public. `transport`, `accepted`, `peer_id`, `alpn`, and `error` are private and
+their contents are re-exported at the crate root, so a caller writes
+`transport::PeerID`.
 
-## How it relates to other workspace crates
+| Source | Contents |
+| --- | --- |
+| `transport` | The `Transport` trait |
+| `accepted` | `AcceptedSession<S>`, `IngressContext`, `IngressInterfaceId`, `TransportKind` |
+| `p2panda_transport` | `P2pandaTransport`, `P2pandaTransportBuilder`, `P2pandaStream`, `KnownPeer`, `sync_overlay_topic`, re-exports `MdnsDiscoveryMode` and `RelayUrl` |
+| `memory` | `MemoryTransport::pair(a, b)`, the in-process test fixture |
+| `peer_id` | `PeerID` (newtype over `Ed25519PublicKey`; `from_public_key`, `public_key`, `to_bytes`, `from_bytes`) |
+| `alpn` | `Alpn`, a hash-friendly protocol-name newtype |
+| `blobs` | `BlobStore`, `BlobHash`, `BlobError` |
+| `error` | `TransportError` |
+| `noise` (feature) | `NoiseStream`, `NoiseListener`, `handshake`, `secure_initiator`, `secure_responder`, `connect_to`, `accept_from`, `ProofError`, `NOISE_PARAMS` |
+| `notochord` (feature) | `AcceptedSession::session_facts` / `into_session`, `initiator_binding`, `initiator_link_binding` |
+| `reticulum_transport` (feature) | `ReticulumTransport`, `ReticulumTransportBuilder`, `ReticulumInterface`, `ReticulumStream` |
 
-transport sits between [`identity`](https://crates.io/crates/identity)
-(for addressing) and the higher-level protocols above; iroh sits below as
-the substrate.
+Root also re-exports `p2panda_net::gossip::GossipHandle`, plus
+`Ed25519PublicKey` and `IdentityProvider` from identity, and the `VERSION` /
+`STAGE` consts.
 
-```text
-                murm     moothold (planned)    eidetic-sync (planned)
-                  ▲              ▲                       ▲
-                  │              │                       │
-                  └──────────────┼───────────────────────┘
-                                 │ Transport::dial / accept,
-                                 │ ALPN-multiplexed streams,
-                                 │ BlobStore for content addressing
-                                 ▼
-                          transport
-                  ┌─────────────────┴──────────────────┐
-                  │                                    │
-                  ▼                                    ▼
-            identity                       iroh + iroh-blobs
-            (PeerID from                        (QUIC, content addressing,
-             master pubkey)                      gossip topics)
+## The `Transport` trait
+
+```rust,ignore
+pub trait Transport: Send + Sync {
+    type Stream: AsyncRead + AsyncWrite + Send + Unpin + 'static;
+    fn local_peer_id(&self) -> PeerID;
+    fn connect(&self, peer: PeerID, alpn: Alpn)
+        -> impl Future<Output = Result<Self::Stream, TransportError>> + Send;
+    fn accept(&self, alpn: Alpn)
+        -> impl Future<Output = Result<AcceptedSession<Self::Stream>, TransportError>> + Send;
+}
 ```
 
-- [`identity`](https://crates.io/crates/identity) — `PeerID::from_public_key(master_pubkey)`
-  derives the transport's peer identity from the identity trust root. External
-  providers use `P2pandaTransport::builder_from_seed` or `bind_seed`; no
-  separate transport key is generated.
-- [`murm`](https://crates.io/crates/murm) — opens a stream per cabal
-  conversation, carrying signed p2panda-core Operations over the byte
-  stream, and reconciles the cabal log over gossip + LogSync. Each cabal
-  claims an ALPN.
-- [`gemot`](https://crates.io/crates/gemot) (planned) — uses transport
-  streams + iroh-gossip topics for moot-scoped event sync.
-- [`eidetic`](https://crates.io/crates/eidetic) — large local-memory
-  artifacts (engram payloads, graph snapshots) are stored as content-addressed
-  blobs through `BlobStore`; consumed via `iroh-blobs` for cross-device sync
-  in multi-device deployments.
-- **Bridges** (`mere-bridge-matrix`, `mere-bridge-nostr`, …, planned) — sit
-  above transport when their foreign protocol can ride iroh; otherwise
-  they bring their own transport.
+`accept` returns an `AcceptedSession`, not a bare stream: the stream plus the
+protocol, the ingress context, and `peer: Option<PeerID>`. `peer` is `Some`
+only where the carrier itself authenticated it (p2panda, and `MemoryTransport`
+by construction); Reticulum reports `None`. A subject named by application
+bytes is never placed there. `is_transport_authenticated()` reads that
+distinction; `into_stream()` discards the context.
 
-## Off-grid transport (feature-gated)
+## Key entry points
 
-A `reticulum` feature (default-off) adds a
-[Reticulum](https://reticulum.network/) backend for the bilateral stream
-lane, so a murmur can ride LoRa / packet-radio / serial links where there is
-no IP network. It is the bilateral stream lane only: sync (gossip / LogSync)
-and blob transfer stay iroh-only, since Reticulum's small MTU cannot carry
-them. The feature contributes zero compile surface to the default build; the
-durable Reticulum implementation is tracked in the external `retinue` repo.
+| Item | Role |
+| --- | --- |
+| `P2pandaTransport::builder(&Ed25519Keypair)` | Builder over an identity keypair. `builder_from_seed([u8; 32])` takes a raw signing seed from an external provider. |
+| `P2pandaTransportBuilder` | `alpns`, `blobs`, `relay_url`, `mdns`, `discovery`, `discovery_config`, `gossip`, then `bind()`. |
+| `P2pandaTransport::bind` / `bind_seed` / `bind_with_blobs` | Shorthands for the common builds. `bind_with_blobs` makes the router serve iroh-blobs. |
+| `endpoint_addr`, `ticket`, `add_peer`, `add_peer_ticket`, `peer_ticket` | Explicit bootstrap: serialize this node's `EndpointAddr` to a pasteable ticket and dial back from one. |
+| `subscribe(topic: [u8; 32]) -> GossipHandle` | Joins a gossip topic; `publish(bytes)` broadcasts, `subscribe()` yields received bytes. |
+| `set_topics`, `remove_topic`, `peers_for_topic` | Topic bookkeeping for peers reached without discovery. |
+| `sync_parts() -> Option<(Endpoint, Gossip)>` | The parts a LogSync session is built from above this crate. |
+| `sync_overlay_topic(sync_topic) -> [u8; 32]` | Derives the overlay topic LogSync joins gossip on. Explicit bootstrap must tag peers with it. |
+| `BlobStore::new()` / `BlobStore::open(root)` | In-memory (`iroh_blobs` `MemStore`) or on-disk (`FsStore`) behind the same API; `is_persistent()` reports which. |
+| `put_bytes`, `get_bytes`, `read_range`, `has`, `flush`, `shutdown` | Local blob operations. `fetch_from` downloads a blob from a peer over a `P2pandaTransport`. |
+
+`PeerID` is named for peer identity to keep it distinct from `kernel`'s graph
+`NodeId`.
+
+## Features
+
+| Feature | Effect |
+| --- | --- |
+| `reticulum` (off) | Builds `ReticulumTransport` over `retinue`, Mark's Rust Reticulum stack, for the bilateral stream lane on LoRa / packet-radio / serial links. Sync and blob transfer stay iroh-only. Adds `retinue`, `hkdf`, `sha2`. |
+| `noise` (off) | An application-layer Noise_XX handshake that composes inside a stream a carrier already opened, and stands alone over TCP where there is no carrier. Adds `snow`, `hkdf`, `sha2`. |
+| `notochord` (off) | Converts an `AcceptedSession` into `notochord::SessionFacts`, plus the initiator-side proof bindings. |
+
+The `notochord` integration test declares `required-features = ["notochord"]`,
+so a bare `cargo test -p mere-transport` skips it.
+
+## Dependencies
+
+| Crate | Why |
+| --- | --- |
+| `identity` (`personae`) | `Ed25519Keypair` / `Ed25519PublicKey` behind `PeerID`. External providers can pass a raw 32-byte seed instead. |
+| `iroh` 1.0.3 (floor) | QUIC. 1.0.2 exact-pinned a dalek prerelease; 1.0.3 relaxed it to a range. |
+| `iroh-blobs`, `iroh-tickets` | Content-addressed storage; pasteable `EndpointAddr` tickets. |
+| `p2panda-net` | The endpoint authority behind `P2pandaTransport`: discovery, relay and hole-punching, gossip, LogSync. Pins iroh 1.0. |
+| `p2panda-core` | Operation types on the sync path. |
+| `tokio` | Stream I/O, the accept plumbing, `endpoint_addr`'s discovery wait. |
+| `retinue`, `snow`, `hkdf`, `sha2`, `notochord` | Optional, per the features above. |
+
+## Consumers
+
+- `murm` opens a stream per cabal, carries signed p2panda-core operations over
+  it, and reconciles the log over gossip plus LogSync.
+- `gemot` uses transport streams and gossip topics for moot-scoped event sync.
+- `mesh` rides `P2pandaTransport` and `sync_overlay_topic` for its sync lane.
+- `commons-spine` depends on it with `reticulum` enabled.
+- `eidetic-iroh-fetcher` fetches artifacts through `BlobStore` / `BlobHash`
+  over a `P2pandaTransport`.
 
 ## Status
 
-Pre-1.0. The `Transport` trait, `MemoryTransport` (in-memory test fixture),
-and `P2pandaTransport` (production, `p2panda-net`'s `Endpoint` as the
-endpoint authority, with gossip + LogSync served off the same endpoint) are
-in place. The `reticulum` off-grid backend is present behind its feature,
-default-off. Production discovery wiring and a persistent `BlobStore` backend
-continue to land.
+Pre-1.0 (`STAGE = "pre-alpha"`). The `Transport` trait, `MemoryTransport`,
+`P2pandaTransport` (with gossip and LogSync served off the same endpoint), and
+both memory- and disk-backed `BlobStore` are in place. The `reticulum`,
+`noise`, and `notochord` lanes are present behind their features, default-off.
+Production discovery wiring continues to land.
 
-transport stays the pipe: authenticated QUIC streams, ALPN multiplexing,
-content-addressed blobs, and the p2panda-net endpoint the sync lanes ride.
-Protocol semantics (the cabal log, folds, tiers) live above it, never here.
+Protocol semantics (the cabal log, folds, tiers) live above this crate.
 
 ## License
 

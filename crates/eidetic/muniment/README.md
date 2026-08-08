@@ -21,10 +21,36 @@ assert_eq!(blobs.get(&hash).await?.unwrap(), b"media bytes");
 # Ok::<_, muniment::StoreError>(()) }).unwrap();
 ```
 
+## Modules
+
+| Module | Contents |
+|---|---|
+| `backend` | `Backend` (`get`, `put`, `delete`, `list`, `scan`, `apply`), `WriteOp`, `MemoryBackend` |
+| `slot` | `SlotStore<B, C>`: `save`, `load`, `delete`, `keys` |
+| `blob` | `BlobStore<B>`: `put`, `get`, `has`; `Hash` (blake3, `of` / `as_bytes` / `to_hex` / `from_hex`) |
+| `codec` | `Codec`, `JsonCodec`, `PostcardCodec` |
+| `error` | `StoreError` |
+| `redb_backend` | `RedbBackend` (feature `redb`) |
+| `zip_backend` | `ZipBackend` (feature `zip`) |
+| `indexeddb_backend` | `IndexedDbBackend` (feature `indexeddb`, wasm32 only) |
+
+Type aliases `JsonSlots<B>` and `PostcardSlots<B>` pair `SlotStore` with the
+matching codec.
+
+## Features
+
+| Feature | Default | Effect |
+|---|---|---|
+| `json` | yes | `JsonCodec` and `JsonSlots` via `serde_json` |
+| `postcard` | no | `PostcardCodec` and `PostcardSlots` |
+| `redb` | no | `RedbBackend`, the durable desktop store |
+| `zip` | no | `ZipBackend`, a zip archive whose entries are the store's keys |
+| `indexeddb` | no | `IndexedDbBackend`. Its `js-sys` / `wasm-bindgen` / `web-sys` / `futures-channel` deps are declared for wasm32 only, so enabling it in a shared feature set is a no-op on desktop |
+
 The `Backend` is `async` and `?Send` so a browser main thread can await OPFS
-promises, while desktop backends return ready futures and pay nothing. muniment
-defines the seam and ships only an in-memory backend; the host supplies the real
-one. It moves bytes and does not model what they mean.
+promises, while desktop backends return ready futures. `scan` is an ordered
+half-open range read; `apply` commits a batch of `WriteOp`s, atomically where the
+backend has transactions. muniment moves bytes and does not model what they mean.
 
 Built from a survey of four consumers (woodshed, hocket, isometry, mere), each
 of which was hand-rolling this seam. Sibling to

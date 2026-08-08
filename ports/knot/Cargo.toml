@@ -29,11 +29,13 @@ knot-editor-host.workspace = true
 muniment = { workspace = true, features = ["redb"] }
 nematic.workspace = true
 notify = "8"
+notochord = { workspace = true, features = ["tokio"] }
 personae.workspace = true
 p2panda-core = "0.7.0"
 p2panda-net = "0.7.0"
 p2panda-store = { version = "0.7.0", default-features = false }
 pollster = "0.4"
+postcard = { version = "1", features = ["alloc"] }
 proofs.workspace = true
 sceno.workspace = true
 scenotime.workspace = true
@@ -46,8 +48,8 @@ session-runtime.workspace = true
 sibylla.workspace = true
 stickleback.workspace = true
 thiserror = "1"
-transport.workspace = true
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+transport = { workspace = true, features = ["noise", "notochord"] }
+tokio = { version = "1", features = ["io-util", "macros", "rt-multi-thread", "sync", "time"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 url = "2"
@@ -55,8 +57,8 @@ uuid.workspace = true
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+base64.workspace = true
 graphshell = { path = "../graphshell" }
-notochord.workspace = true
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 transport.workspace = true

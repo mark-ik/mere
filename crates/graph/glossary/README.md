@@ -1,34 +1,54 @@
 # glossary
 
-Graph digest module for the [mere](https://crates.io/crates/mere) browser.
+Graph digest projections for [mere](https://crates.io/crates/mere): pure
+`&Graph -> human-facing view`. Turns `kernel::graph::Graph` into a textual
+outline and summary metrics. The textual / statistical sibling of `cartography`
+(spatial projection) and `linked-data` (RDF / JSON-LD interchange).
 
-Pure `Graph -> human-facing view`: turns [`kernel::graph::Graph`] (the user's
-graph of nodes + edges) into consumer-facing **digests** — a textual outline and
-summary metrics — that the gloss Navigator, apparatus, and export surfaces render.
-The textual / statistical sibling of `cartography` (spatial projection) and
-`linked-data` (RDF / JSON-LD interchange). Host-free, DOM-free, `&Graph`-immutable.
+Package `mere-glossary`, lib name `glossary`.
 
-## Planned surface
+## Public surface
 
-See the [gloss-outline-lens plan](../../../design_docs/mere_docs/implementation_strategy/2026-06-23_gloss_outline_lens_plan.md).
+| Item | What it is |
+| --- | --- |
+| `outline_rows(&Graph) -> Vec<OutlineRow>` | The URL-structure outline as a flat, depth-tagged row list. |
+| `outline_djot(&Graph) -> String` | The same outline formatted as nested [djot](https://djot.net) bullets, a node as `[label](url)`. |
+| `OutlineRow` | `depth: usize`, `label: String`, `url: Option<String>`. `url` is `Some` for a graph node, `None` for a structural path segment. |
+| `graph_metrics(&Graph) -> GraphMetrics` | Summary statistics read off the kernel's own queries. |
+| `GraphMetrics` | `node_count`, `edge_count`, `relation_count`, `relations_by_family: BTreeMap<EdgeFamily, usize>`, `orphan_count`, `component_count`, `largest_component`. |
+| `VERSION` / `STAGE` | Crate version string, lifecycle marker (`"pre-alpha"`). |
 
-- `outline_djot(&Graph) -> String` — a hierarchical [djot](https://djot.net) outline
-  of the graph, nested by **parsed URL structure** (host -> path from each node's
-  address; explicit containment overlaid where present), each node a `[title](url)`
-  entry. The outline doubles as an editable knot (the first notetaking feature).
-- `graph_metrics(&Graph) -> GraphMetrics` — counts (node / edge / relation-family),
-  degree, components, traversal aggregates. Cheap kernel-sourced stats; the expensive
-  signals (centrality / community) are consumed from `intel/signals`, not reproduced.
+## Outline shape
 
-## History
+Nesting comes from parsed URL structure rather than containment edges: the host
+is depth 0, each path segment adds a level, and a node lands at its full-path
+leaf. A segment with no node at it emits a structural row (`url: None`).
+Addresses without `scheme://host` are listed flat at the end. A node's label is
+its title, or the last path segment when the title is empty or still seeded to
+the URL. Output is deterministic: children are `BTreeMap`-ordered and the loose
+list is sorted.
 
-Renamed from `mere-orrery` on 2026-06-23 and relocated from `crates/orrery/` to
-`crates/graph/` (beside `linked-data`). Its prior role — the a11y `project_graph`
-projection of the graph into an AccessKit / `uxtree` subtree — moved host-side into
-meerkat's `orrery_a11y_tree` (unified-document-host slice 4, which sources the orrery
-a11y from the laid-out DOM cards) and was retired here.
+`graph_metrics` reads `node_count` / `edge_count` / `relations` /
+`orphan_node_keys` / `weakly_connected_components` off the kernel. Centrality
+and community signals come from `intel/signals`.
 
-## Status
+## Dependencies
 
-Pre-1.0. Scaffolded for the digest surface above; functions land in the gloss-outline
-plan's P0.
+- `kernel` (`mere-kernel`), the only runtime dependency: `Graph`, `EdgeFamily`.
+- dev: `kernel` with the `fixtures` feature, `euclid`.
+
+Host-free and DOM-free. Takes `&Graph` and never mutates it.
+
+## Consumers
+
+- `crates/domain/gloss`: `build_outline_snapshot` wraps `outline_rows` with
+  per-node state/selection and carries `GraphMetrics` in its snapshot.
+- `crates/mere`: re-exports `glossary` under the `graph` feature.
+
+## Related
+
+- [gloss outline lens plan](../../../design_docs/mere_docs/implementation_strategy/2026-06-23_gloss_outline_lens_plan.md)
+
+Renamed from `mere-orrery` on 2026-06-23 and moved from `crates/orrery/` to
+`crates/graph/`. Its prior a11y `project_graph` projection moved host-side and
+was retired here.

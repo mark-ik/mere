@@ -1,17 +1,39 @@
-# eidetic-iroh-fetcher
+# mere-eidetic-iroh-fetcher
 
-Iroh [`BlobFetcher`] companion crate for [`eidetic`].
+Package `mere-eidetic-iroh-fetcher`; the library is `eidetic_iroh_fetcher`.
 
-Implements `eidetic::BlobFetcher::fetch` for `BlobSource::Iroh { ticket }` by parsing the ticket as `"<node-id-hex>/<blob-hash-hex>"`, fetching the blob from the named peer through [`transport`]'s iroh-blobs integration, and returning the bytes.
+`IrohFetcher` is an `eidetic::BlobFetcher` that resolves
+`BlobSource::Iroh { ticket }` by parsing the ticket, pulling the blob from the
+named peer through `mere-transport`'s `BlobStore` / `P2pandaTransport`, and
+returning the bytes. Every other source kind returns `Ok(None)` so
+`eidetic::manifest::resolve_blob` falls through.
 
-The fetcher does **not** verify the response hash itself — `iroh-blobs` already does BLAKE3 verification natively as part of its transfer protocol, and `eidetic::resolve_blob` BLAKE3-checks again against the manifest's `content_hash` for defense-in-depth.
+| Item | Signature |
+|---|---|
+| `IrohFetcher::new` | `(blobs: Arc<BlobStore>, transport: Arc<P2pandaTransport>) -> Self` |
+| `BlobFetcher::fetch` | `(&mut self, source: &BlobSource) -> Result<Option<Vec<u8>>>` |
+| `build_ticket` | `(peer_id: PeerID, blob_hash: BlobHash) -> String` |
 
-Returns `Ok(None)` for any other source kind so [`eidetic::resolve_blob`] can fall through to the next fetcher / source.
+Construction takes references to an already-running iroh stack; it does not
+start a node.
 
-## Native-only
+## Ticket format
 
-Pulls in iroh + iroh-blobs transitively. Native-only; browser-side iroh transfer would require an alternate transport layer.
+`"<node-id-hex>/<blob-hash-hex>"`: 64 hex chars, a slash, 64 hex chars, 129
+total. Same `(PeerID, BlobHash)` pair that iroh-blobs' base32 `BlobTicket`
+encodes, in a form that reads plainly in a manifest.
 
-[`BlobFetcher`]: https://docs.rs/eidetic/0.0.1/eidetic/manifest/trait.BlobFetcher.html
-[`eidetic`]: https://crates.io/crates/eidetic
-[`transport`]: https://crates.io/crates/transport
+## Hash verification
+
+Two independent BLAKE3 checks happen on every successful fetch: iroh-blobs
+verifies as part of its transfer protocol, and
+`eidetic::manifest::resolve_blob` re-verifies against the manifest's
+`content_hash`.
+
+Native-only; pulls in iroh and iroh-blobs transitively.
+
+Dependencies: `mere-eidetic`, `mere-transport` (as `transport`), `async-trait`.
+
+## License
+
+MIT OR Apache-2.0.

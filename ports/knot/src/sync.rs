@@ -659,6 +659,57 @@ where
         })
     }
 
+    /// Materialize one exact retained document-producing operation.
+    ///
+    /// The operation must be in the causally closed projection and must name
+    /// `document_id` itself. Deletes, resolutions to no document, operations
+    /// for another document, and pending history all return `None`; callers do
+    /// not need to infer history from a current endpoint projection.
+    pub async fn document_version(
+        &self,
+        vault: &KnotVault,
+        document_id: &str,
+        operation_id: [u8; 32],
+    ) -> Result<Option<VaultDocument>, KnotSyncError> {
+        self.document_version_with_cipher(
+            KnotSyncCipher::Personal(vault),
+            document_id,
+            operation_id,
+        )
+        .await
+    }
+
+    /// Cipher-generic form of [`Self::document_version`].
+    pub async fn document_version_with_cipher(
+        &self,
+        cipher: KnotSyncCipher<'_>,
+        document_id: &str,
+        operation_id: [u8; 32],
+    ) -> Result<Option<VaultDocument>, KnotSyncError> {
+        self.require_cipher(cipher)?;
+        let records = self.load_operations().await?;
+        let entries = causal_entries(&records);
+        let projection = causal_projection(&entries)?;
+
+        for index in projection.order {
+            let operation = &records[index].operation;
+            if *operation.hash.as_bytes() != operation_id {
+                continue;
+            }
+            let event = decode_event(cipher, operation)?;
+            return Ok(match event {
+                KnotSyncEvent::Put(document) if document.id == document_id => Some(document),
+                KnotSyncEvent::Resolve {
+                    id,
+                    document: Some(document),
+                    ..
+                } if id == document_id && document.id == id => Some(document),
+                _ => None,
+            });
+        }
+        Ok(None)
+    }
+
     /// Compatibility view for existing callers. New consumers should use
     /// [`Self::projection`] so unrelated documents remain available beside an
     /// explicit conflict.

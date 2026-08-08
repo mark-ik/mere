@@ -1,82 +1,62 @@
 # luggage
 
-Self-update for packaged apps: signed release manifests over pluggable feeds.
-The runtime half of the family's update pipeline; packing uses upstream's
-[`cargo-packager`](https://github.com/crabnebula-dev/cargo-packager) CLI
-unchanged, so the whole pipeline is Rust with no .NET anywhere.
+Self-update for apps packaged by
+[`cargo-packager`](https://docs.rs/cargo-packager): check a feed for a signed
+release manifest, download and verify it, install per platform. Packing itself
+still uses upstream's `cargo-packager` CLI unchanged.
 
 Forked 2026-07-24 from
 [`cargo-packager-updater` 0.2.3](https://crates.io/crates/cargo-packager-updater)
 (Tauri Programme within The Commons Conservancy / CrabNebula Ltd,
-MIT OR Apache-2.0). Upstream copyright headers are preserved on derived
-files. Named and homed per Mark's ruling: **luggage**, in the mere repo.
+MIT OR Apache-2.0). Upstream copyright headers are preserved on derived files.
 
-## Divergences from upstream
+```rust
+use luggage::{check_update, Config, Feed};
 
-- **Feeds, not just endpoints.** [`Feed`] is HTTP(S) (upstream semantics,
-  `{{target}}`/`{{arch}}`/`{{current_version}}` templating intact), a local
-  **directory** holding `luggage.json` (LAN shares, mounted drives,
-  acceptance tests — no server), or a **GitHub repo** (`github:owner/repo`,
-  resolving to the latest release's `luggage.json` asset).
-- **BLAKE3 in the manifest.** Each platform entry may carry a `blake3` hex
-  digest of its artifact, verified before the minisign signature. This is
-  the content-addressing seam for the planned P2P distribution lane
-  (iroh-blobs chunk dedup as implicit delta), carried from day one so
-  manifests never need a format break.
-- **rustls** instead of system TLS.
-- Split into modules per mere's file-size policy.
-
-Everything else — the manifest JSON shape, minisign verification, the
-per-platform install mechanics (NSIS/MSI, `.app.tar.gz`, AppImage) — is
-upstream's, deliberately. Planned divergences (staged-swap apply mechanics,
-the P2P lane) are tracked in
-[hocket's auto-update plan](https://github.com/merely-made/hocket/blob/main/design_docs/2026-07-24_auto-update_plan.md)
-and mere's auto-update brief.
-
-## Security: two signatures, and why both
-
-Every release carries two minisign signatures, and luggage checks both:
-
-1. **The artifact signature** (in the manifest, per platform) proves the
-   downloaded bytes are ours. A BLAKE3 digest is checked first when present,
-   so a corrupt download fails with a clearer error than a crypto failure.
-2. **The manifest signature** (`luggage.json.sig`, detached) proves the
-   *version and URL announced around* those bytes are ours.
-
-The second exists because the first cannot cover it. Demonstrated
-2026-07-24 before it was fixed: a manifest claiming version 0.3.0 while
-pointing at a genuinely-signed 0.2.0 artifact was accepted, since digest and
-signature both checked out against the bytes actually served. Whoever
-controls the feed could therefore never ship arbitrary code, but *could*
-advertise an old signed build as new and roll a client **backwards** onto a
-release with a known flaw.
-
-[`Config::require_signed_manifest`] defaults to `true`, so an unsigned feed
-is refused with a message naming the fix. Opting out is possible and has to
-be written down in the caller's code, which is the point.
-
-Sign the manifest **last**, after every host has added its platform entry —
-any later edit invalidates it:
-
-```sh
-cargo packager signer sign <feed>/luggage.json
+let config = Config {
+    feeds: vec![Feed::parse("github:merely-made/hocket").unwrap()],
+    pubkey: "<minisign public key>".into(),
+    ..Default::default()
+};
+if let Some(update) = check_update("0.1.0".parse().unwrap(), config)? {
+    update.download_and_install()?;
+}
 ```
 
-Both `.sig` conventions are accepted: the raw minisign text block that
-`minisign -S` writes, and the base64-wrapped form `cargo packager signer
-sign` writes.
+## Public API
 
-## Staging
+Every module is private; the whole surface is re-exported at the crate root, so
+a caller writes `luggage::Config`. The `Source` column names the source file.
 
-`Update::stage` writes a verified artifact into an app-owned directory, so
-"downloaded, ready to restart" survives the app closing rather than being a
-claim about bytes held in memory. `StagedUpdate::take_verified` re-hashes
-the file at apply time, closing the gap between staging and applying;
-staging requires a manifest digest for exactly that reason.
+| Item | Source | What it is |
+| --- | --- | --- |
+| `check_update(Version, Config)` | `lib.rs` | One call: build an `Updater`, check the feeds, return `Option<Update>` |
+| `Config` | `config` | `feeds`, `pubkey`, `windows`, `require_signed_manifest` (defaults to `true`) |
+| `Feed` | `config` | `Http(Url)`, `Directory(PathBuf)`, `GitHub { owner, repo }`; built by `Feed::parse` |
+| `WindowsConfig`, `WindowsUpdateInstallMode` | `config` | Extra installer args; `BasicUi` / `Quiet` / `Passive` (default), with `msiexec_args` and `nsis_args` |
+| `UpdaterBuilder`, `Updater`, `target()` | `updater` | Builder form: `version_comparator`, `pub_key`, `target`, `feeds`, `executable_path`, `header`, `timeout`, `installer_args`; `Updater::check` |
+| `Update` | `install` | `download`, `download_extended`, `install`, `download_and_install`, `download_and_install_extended`, plus `stage` and `install_staged` |
+| `StagedUpdate` | `staging` | `load`, `take_verified`, `version`, `format`, `extract_path`, `discard` |
+| `RemoteRelease`, `RemoteReleaseData`, `ReleaseManifestPlatform`, `UpdateFormat`, `MANIFEST_NAME` | `release` | Manifest types. `UpdateFormat` is `Nsis` / `Wix` / `AppImage` / `App`; `MANIFEST_NAME` is `"luggage.json"` |
+| `Error`, `Result` | `error` | `thiserror` enum and the crate alias |
+
+`http`, `reqwest`, `semver` and `url` are re-exported too, so a caller can name
+a `Url` or a `Version` without adding those crates.
+
+## Feeds
+
+| Form | Parsed as | Behaviour |
+| --- | --- | --- |
+| `https://host/path` | `Feed::Http` | Upstream semantics: `{{target}}`, `{{arch}}`, `{{current_version}}` templating; 204 means no update, 200 carries the release JSON |
+| `/srv/updates`, `C:/feed`, `file://...` | `Feed::Directory` | A local path holding `luggage.json`. Artifact URLs are absolute `file://` URLs |
+| `github:owner/repo` | `Feed::GitHub` | Resolves to `https://github.com/owner/repo/releases/latest/download/luggage.json` |
+
+Feeds are checked in order; the first that yields a release wins.
 
 ## Manifest
 
-`luggage.json`, same shape upstream documents, plus the optional `blake3`:
+`luggage.json`, the shape upstream documents plus the optional per-platform
+`blake3` digest, verified before the minisign signature.
 
 ```json
 {
@@ -93,5 +73,48 @@ staging requires a manifest digest for exactly that reason.
 }
 ```
 
-In a directory feed, artifact `url`s are absolute `file://` URLs (the pack
-script generates them on-host); relative names are a noted follow-on.
+## Signatures
+
+Two minisign signatures are checked per release: the per-platform `signature`
+over the artifact bytes, and a detached `luggage.json.sig` over the manifest.
+`Config::require_signed_manifest` defaults to `true`, so a feed serving no
+`luggage.json.sig` is refused. Sign the manifest after every host has added its
+platform entry; any later edit invalidates it.
+
+```sh
+cargo packager signer sign <feed>/luggage.json
+```
+
+Both `.sig` conventions are accepted: the raw minisign text block `minisign -S`
+writes, and the base64-wrapped form `cargo packager signer sign` writes.
+
+## Staging
+
+`Update::stage(dir, bytes)` writes a verified artifact plus a `staged.json`
+record into `dir`, so a pending update survives the app closing.
+`StagedUpdate::load(dir)` picks it up on the next launch and
+`StagedUpdate::take_verified` re-hashes the file before it is applied. Staging
+requires the manifest to have carried a `blake3` digest and errors otherwise.
+
+## luggage-manifest
+
+A binary that turns a `cargo packager` artifact plus its `.sig` into a manifest
+entry, computing the BLAKE3 digest and merging into an existing `luggage.json`
+so a multi-platform release is assembled one host at a time.
+
+```text
+luggage-manifest --artifact <path> --version <semver> --format nsis \
+    [--target <os-arch>] [--signature <path>] [--url <url>] \
+    [--out <luggage.json>] [--notes <text>]
+```
+
+Defaults: `--target` is the host triple, `--signature` is `<artifact>.sig`,
+`--url` is a `file://` URL to the artifact, `--out` is `luggage.json` beside it.
+
+## Dependencies
+
+`reqwest` with `rustls-tls` and no default features, `minisign-verify`,
+`blake3`, `semver`, `serde` / `serde_json`, `url`, `http`, `time`, `dirs`,
+`tempfile`, `percent-encoding`, `base64`, `log`, `thiserror`, and upstream's
+`cargo-packager-utils` for `current_exe` resolution. macOS additionally pulls
+`flate2` and `tar` for `.app.tar.gz`. Tests use `minisign` to sign in-process.

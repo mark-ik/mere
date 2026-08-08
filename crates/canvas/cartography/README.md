@@ -1,118 +1,93 @@
 # cartography
 
-`cartography` is the **non-destructive projection layer** for the
-[mere](https://crates.io/crates/mere) browser. It sits between graph
-truth + intelligence signals on the input side, and canvas swatches on
-the output side, and owns the *contracts* — the strategy trait, the
-projection / overlay / minimap vocabulary, and the narrow
-`IntelligenceSignals` shape that firewalls cartography from
-`embed`' internals.
+The projection layer for [mere](https://crates.io/crates/mere). It owns the
+contracts between graph truth plus intelligence signals on the input side and
+canvas swatches on the output side: the `LayoutStrategy` trait, the
+`Projection` / `Overlay` / `MinimapDescriptor` vocabulary, and the
+`IntelligenceSignals` shape strategies read instead of depending on `embed`.
+It reads `&Graph` and never mutates it.
 
-The graph stays canonical. Cartography is *representation*, not
-truth — it never mutates the graph; it produces alternative views of
-the same territory at the user's current scale and intent.
+Package `mere-cartography`, lib name `cartography`. Most contract types derive
+`serde::Serialize` / `Deserialize`.
 
-## The framing
+## Modules
 
-Inputs:
+| Module | Public items |
+| --- | --- |
+| `strategy` | `LayoutStrategy`, with `projection_id() -> &'static str` and `project(&ProjectionRequest<'_>) -> Projection`. |
+| `request` | `ProjectionRequest<'a>` (borrowed graph + signals, owned intent), `ViewIntent`, `FormFactor`, `ProjectionDimension`, `NodeFilter`, `TargetSize`, `AxisValue`. |
+| `projection` | `Projection`, `PositionedNode`, `PositionedEdge`, `ProjectionMetadata`. |
+| `overlay` | `Overlay`, whose variants are `ClusterHalo`, `ActivityHeat`, `BridgeEmphasis`, `ImportanceScale`, `EdgeWeight`. |
+| `signals` | `IntelligenceSignals`, `ClusterSet`, `Cluster`, `AffinityScores`, `BridgeNodes`, `ImportanceWeights`, `NodeEmbeddings`. |
+| `minimap` | `MinimapDescriptor`, `MinimapOverlayKind`. |
+| `scene_out` | `scene_from_projection`, `MERE_GRAPH_ADAPTER`, `HEAT_CHANNEL`, `BRIDGE_CHANNEL`. |
+| `spiral_score` | `project_spiral_score`, `MereSpiralProjection`. |
+| `adapters` | Doc-only stub. The `graph_canvas` adapter family moved to `arrangements` on 2026-05-18. |
 
-- **Graph truth** — `kernel::graph::Graph` (immutable reference).
-- **Intelligence signals** — clusters, affinity, hot regions, bridge
-  nodes, importance hints. Consumed through `IntelligenceSignals`, not
-  a direct dependency on the producer crate.
-- **View intent** — what the user is trying to see right now: scale,
-  dimension, focus, filter, **form factor** (orrery root, workbench
-  swatch, volvelle radial, astroid hub-collapse, minimap thumbnail).
+`VERSION` and `STAGE` (`"pre-alpha"`) are crate-root constants.
 
-Outputs:
+## Request vocabulary
 
-- **`Projection`** — positioned nodes + edges + overlays, ready for a
-  canvas swatch to render.
-- **`Overlay` variants** — semantic emphases (`ClusterHalo`,
-  `ActivityHeat`, `BridgeEmphasis`, `ImportanceScale`, `EdgeWeight`)
-  the canvas applies on top of geometry.
-- **`MinimapDescriptor`** — thumbnail-scale projection metadata for
-  any swatch.
+- `FormFactor`: `Canvas` (default), `Orrery`, `Volvelle`, `Astroid`, `Minimap`.
+- `ProjectionDimension`: `TwoD` (default), `TwoPointFive`, `Isometric`, `ThreeD`.
+  `(x, y)` is identical across variants; `z` is metadata-driven.
+- `NodeFilter`: `Neighborhood { center, hops }`, `Tagged(Vec<String>)`,
+  `Explicit(Vec<NodeKey>)`.
+- `TargetSize`: `Default` (480x360 logical), `Pixels { width, height }`,
+  `Logical { width, height }`. `TargetSize::logical_size()` normalizes to a
+  `PortableSize`.
+- `ViewIntent` also carries `focus`, `axis_values` (per-node `AxisValue` for
+  Timeline / Kanban) and `extents` (per-node measured `(w, h)`). Builders:
+  `ViewIntent::canvas_pixels`, `ViewIntent::minimap`, `with_focus`,
+  `with_filter`, `with_axis_values`.
 
-## What's in the crate (v0)
+## Scene output
 
-Contracts only:
+`scene_from_projection(&Projection, id_of, extent_of) -> sceno::Scene` lowers a
+projection into the portable scenograph contract. Nodes become
+`sceno::ProjectedItem`s (measured extent becomes `Footprint::Rect`, otherwise
+the projection radius becomes `Footprint::Circle`, otherwise `Footprint::Point`),
+edges become `RoutedRelation`s carrying `weight`, and `Overlay::ClusterHalo`
+becomes a `sceno::Region`. `ImportanceScale` folds into the instance transform;
+`ActivityHeat` and `BridgeEmphasis` ride the item channel map as `"heat"` and
+`"bridge"`. `id_of` supplies the stable node Uuid string, not the session-local
+`NodeKey`.
 
-- **`LayoutStrategy`** trait — `projection_id()` + `project(&request)
-  -> Projection`. Implementations live in sibling crates
-  (`graph-layout`, future `document-layout`).
-- **`ProjectionRequest<'a>`** — borrow-lifetimed input bundle (graph,
-  signals, intent).
-- **`ViewIntent`** + **`FormFactor`** + **`ProjectionDimension`** +
-  **`NodeFilter`** + **`TargetSize`** — the declarative shape of a
-  "render this view" request.
-- **`IntelligenceSignals`** + `ClusterSet` / `AffinityScores` /
-  `BridgeNodes` / `ImportanceWeights` — additive sparse signal types.
-- **`Projection`** + `PositionedNode` / `PositionedEdge` /
-  `ProjectionMetadata` — output bundle.
-- **`Overlay`** variants — additive overlay vocabulary; canvases that
-  don't recognize a variant ignore it.
-- **`MinimapDescriptor`** + `MinimapOverlayKind` — minimap
-  descriptors for the same-strategy-at-different-form-factor pattern.
+`project_spiral_score(&Graph, extents, focus, recent_first)` is mere's graph
+adapter to the spiral arrangement: it builds a `sceno::Score`, solves it with
+`scenomise::solve`, and returns both the score and the `Projection` it realizes
+as `MereSpiralProjection`. Recency ordering and the LOD rung choice
+(`Glyph` / `Snapshot` / `Card` / `LivePane`) are mere-local policy.
 
-## What's NOT in the crate
+## Dependencies
 
-- **No strategy implementations** — force-directed, radial,
-  cluster-collapsed, phyllotaxis, etc. live in `graph-layout`.
-- **No embed dependency** — `IntelligenceSignals` is
-  a narrow contract type. Producers fill in fields they have; cartography
-  consumers read what's there.
-- **No rendering** — `graph-canvas` (and the future `document-canvas`
-  minimap consumer) renders `Projection`s.
-- **No host-platform coupling** — `wasm32-unknown-unknown` clean.
-  Geometry types come from `kernel` (which uses `euclid`).
+- `kernel` (`mere-kernel`): `Graph`, `NodeKey`, `EdgeKey`, and the geometry
+  types (`PortablePoint`, `PortableRect`, `PortableSize`).
+- `sceno`, `scenomise`: the scenograph scene and score contracts and the
+  arrangement solver.
+- `serde`.
+- dev: `uuid`.
 
-## Position parity contract
+No cargo features; `default = []`.
 
-`(x, y)` is identical across all `ProjectionDimension` variants. The
-`z` axis (when applicable) is metadata-driven via the
-[graph-canvas field algebra plan](https://github.com/merely-made/mere/blob/main/design_docs/graphshell_docs/implementation_strategy/2026-05-07_graph_canvas_field_algebra_plan.md)'s
-`FieldProjection` / `ZSource` — not strategy-driven. Switching
-dimensions never invalidates a strategy's output.
+## Where the pieces live
 
-## How it relates to other workspace crates
+- Strategy implementations: `crates/canvas/arrangements` (penrose, l-system,
+  phyllotaxis, grid, radial, axial kanban/timeline, semantic embedding), with
+  `LayoutStrategy` adapters in `arrangements::adapters`. Live force physics is
+  `seiche`.
+- Renderer: `crates/canvas/canvas` (`mere-canvas`) consumes `Projection`.
+- Signal producers: `crates/intel/signals` and `crates/intel/embed` fill
+  `IntelligenceSignals`.
 
-```text
-                  kernel::graph::Graph
-                            │ &Graph
-                            │
-embed ────►│ IntelligenceSignals
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │ cartography  │  ◄────── ViewIntent
-                     │  (contracts) │           from host / platen
-                     └──────┬───────┘
-                            │
-                  picks strategy
-                            │
-                            ▼
-                     ┌──────────────┐
-                     │ graph-layout │  (sibling — owns the strategies)
-                     │  (strategies)│
-                     └──────┬───────┘
-                            │ Projection
-                            ▼
-                     ┌──────────────┐
-                     │ graph-canvas │  ◄── renderer; consumes Projection
-                     │  (renderer)  │       and draws it
-                     └──────────────┘
-```
+## Related
 
-See [`design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md`](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
-for the full design + strategy catalogue + scoping decisions.
+- [cartography layer brief](../../../design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
+- [cartography / aether layout seam](../../../design_docs/mere_docs/technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
 
 ## Status
 
-Pre-1.0. v0 ships contract types only. Strategy implementations land
-in `graph-layout` (sibling crate, follows). Wiring through `platen`
-and the host's surface-placement plan lands as their consumers
-materialize.
+Pre-1.0.
 
 ## License
 

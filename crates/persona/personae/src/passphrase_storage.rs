@@ -40,7 +40,7 @@ use std::sync::{Arc, Mutex};
 use argon2::Argon2;
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
- 
+
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 

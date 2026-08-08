@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use personae::delegation::path_covers;
 use serde::{Deserialize, Serialize};
 
 use crate::chain::{RevocationLedger, TrustedRoot, validate_chain};
@@ -145,6 +146,19 @@ impl LocalNetworkPolicy {
             .any(|accepted| accepted.id == profile.id && profile.revision >= accepted.revision)
     }
 
+    /// Find the most-specific service rule that structurally owns `path`.
+    ///
+    /// A base service may admit a capability for one owned child resource,
+    /// such as `/services/knot-publish/{publication}`. Exact rules still win
+    /// over their parents, and a shared string prefix is never enough.
+    fn service_rule(&self, path: &str) -> Option<&ServiceRule> {
+        self.services
+            .iter()
+            .filter(|(service_path, _)| path_covers(service_path, path))
+            .max_by_key(|(service_path, _)| service_path.len())
+            .map(|(_, rule)| rule)
+    }
+
     /// Decide one incoming session.
     ///
     /// Takes the carrier's observations and the initiator's claims as separate
@@ -182,7 +196,7 @@ impl LocalNetworkPolicy {
             return deny(DenyReason::TransitNotASession);
         }
 
-        let Some(rule) = self.services.get(&claims.action.path) else {
+        let Some(rule) = self.service_rule(&claims.action.path) else {
             return deny(DenyReason::ServiceNotOffered);
         };
         if rule.access == ServiceAccess::Disabled {
@@ -258,6 +272,39 @@ mod tests {
         assert!(!policy.permits_transit());
         assert!(!policy.permits_discovery());
         assert!(policy.services.is_empty());
+    }
+
+    #[test]
+    fn a_service_rule_owns_slash_bounded_children_but_not_a_neighbour() {
+        let mut policy = LocalNetworkPolicy::closed(NetworkId([1; 32]));
+        policy.services.insert(
+            "/services/knot-publish".into(),
+            ServiceRule::new(ServiceAccess::MemberOnly, "mere.knot", ["read"], true, None),
+        );
+        policy.services.insert(
+            "/services/knot-publish/special".into(),
+            ServiceRule::new(
+                ServiceAccess::MemberOnly,
+                "mere.knot",
+                ["read"],
+                true,
+                Some(7),
+            ),
+        );
+
+        let parent = policy
+            .service_rule("/services/knot-publish/a")
+            .expect("the base service owns a publication child");
+        let special = policy
+            .service_rule("/services/knot-publish/special/history")
+            .expect("the narrow service rule wins");
+        assert_eq!(parent.max_sessions, None);
+        assert_eq!(special.max_sessions, Some(7));
+        assert!(
+            policy
+                .service_rule("/services/knot-publish-private/a")
+                .is_none()
+        );
     }
 
     #[test]

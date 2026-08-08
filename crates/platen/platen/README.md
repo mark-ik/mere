@@ -1,57 +1,69 @@
 # platen
 
-`platen` is the workbench composition surface for the
-[mere](https://crates.io/crates/mere) browser: it compiles a forme
-arrangement into a presentation plan and renders graph projections into
-paint. In the printing-press metaphor the platen is the press; the host
-prints what it presses.
+The pane composition home for the [mere](https://crates.io/crates/mere)
+browser. Platen compiles a `forme::Arrangement` into the presentation plans a
+host renders panes from: the workbench split tree, its tree projection, the
+projection-geometry sidecar, and the document-canvas scene input for a pane
+holding a document tile.
 
-## What's in the crate
+Platen is geometry-free. Concrete rectangles come from the host's genet layout;
+platen emits structure and ratios.
 
-- **`tree_projection`** — platen's core role under the composition spine:
-  compile a forme `Arrangement` into a `WorkbenchPlan` (splits of
-  tab-stacks: `PlanSlot`, `TilePlan`, `project_tree`).
-- **`workbench`** — the tiled-workbench model (`Workbench`, `SlotView`):
-  slots of tab-stacks, active tab per stack, projection mode. Geometry-free;
-  concrete rects come from `platen-view`'s flex DOM laid out by genet.
-- **`cartography_scene`** — cartography projection-request derivation and
-  layout-strategy dispatch (the `arrangements` catalog seam).
-- **`scene_paint`** / **`orrery`** — render a cartography `Projection` /
-  the session graph into a host-agnostic `paint_list_api` paint list (the
-  orrery's scene underlay, consumed by netrender on any host).
-- **`coupling_paint`** — visual couplings as paint overlays (the
-  aether→platen seam).
-- **`document_scene`** — wraps `document-canvas` so a pane holding a
-  document tile (a nematic engine's output) gets a render packet with the
-  same shape as a graph swatch.
+## Modules
 
-## How it relates to other workspace crates
+| Module | Contents |
+| --- | --- |
+| `tree_projection` | `ProjectionKind`, `TilePlan`, `PlanSlot`, `WorkbenchPlan`, `project_tree`, `tile_tree_from_plan` |
+| `workbench` | `Workbench`, `SlotView`; the live split tree, plus the forme bridge |
+| `projection_geometry` | `Axis`, `TreeGeometry`, `TreeBranch` |
+| `document_scene` | `build_document_scene` |
 
-```text
- forme::Arrangement ──► platen (tree_projection / workbench)
-                          │ WorkbenchPlan / Workbench
-                          ▼
-                     platen-view ──► genet flex DOM ──► netrender
- kernel::Graph ──► platen (orrery / scene_paint)
-                          │ paint list (underlay)
-                          ▼
-                     netrender Scene
-```
+Root re-exports: `build_document_scene`, `Axis`, `TreeBranch`, `TreeGeometry`,
+`PlanSlot`, `ProjectionKind`, `TilePlan`, `WorkbenchPlan`, `project_tree`,
+`SlotView`, `Workbench`, plus the `VERSION` and `STAGE` consts.
 
-- **`forme`** — owns the arrangement platen projects; platen never mutates it.
-- **`platen-view`** (`crates/platen/view`) — the genet-coupled view layer;
-  platen-core stays engine-free.
-- **`paint_list_api`** — the engine-neutral paint vocabulary platen emits.
-- **`document-canvas`** / **`cartography`** / **`arrangements`** — the
-  swatch and projection engines platen dispatches into.
-- *Verso* is not a layer below platen: it names the engine-flip /
-  compatibility-view seam (see `design_docs/verso_docs/`).
+## Key entry points
+
+| Item | Signature / role |
+| --- | --- |
+| `project_tree(&Arrangement) -> WorkbenchPlan` | Root-level tile-bearing members into ordered slots; `StackedWith` members collapse into a tab-stack. |
+| `tile_tree_from_plan(&WorkbenchPlan, impl FnMut(&TilePlan) -> Tile) -> Option<TileTree>` | Projects a plan onto `genet_host_api::tile::TileTree`. One slot maps to a bare stack; several map to an even `Row` split. |
+| `Workbench::to_tile_tree(impl FnMut(GraphMemberId) -> Tile) -> Option<TileTree>` | Same seam from the live split tree, preserving nesting and fractions. |
+| `Workbench::slot_views() -> impl Iterator<Item = SlotView<'_>>` | Flattened leaf stacks (members, active index, parent fraction) for the a11y / automation projection. |
+| `Workbench::to_arrangement() -> (Arrangement, Option<TreeGeometry>)` | Derives the canonical persisted pair; `from_arrangement` rebuilds the tree from it. |
+| `Workbench::to_persisted_json` / `from_persisted_json` | JSON form of that pair, written beside the session graph. |
+| `build_document_scene(&EngineDocument, Viewport, &DocumentStyleSheet) -> LaidOutDocument` | Wraps `document_canvas::layout_document` for a pane holding a document tile. |
+
+`Workbench` mutation API covers `open_tile`, `open_split`, `open_stack`,
+`open_in_slot_of`, `close_tile`, `activate`, `move_to_slot_of`, `split_beside`,
+`split_beside_axis`, `split_out`, `stack_all`, `split_all`, `clear_tiles`, and
+the divider reads/writes `weights` / `set_weights` / `split_fractions` /
+`set_split_fractions`. Mode state is `mode`, `set_mode`, `toggle_mode`,
+`is_tiled`, `ensure_tiled`; a new workbench starts in
+`ProjectionKind::Cartography`.
+
+## Dependencies
+
+| Crate | Why |
+| --- | --- |
+| `forme` | Owns the `Arrangement` platen projects. Platen never mutates it. |
+| `genet-host-api` (git, genet `main`) | `tile::{Tile, TileTree, TileBranch, SplitAxis, TileId, ContentSource}`, the host tile-surface contract platen projects onto. |
+| `document-canvas` (git, genet `main`) | Document layout behind `build_document_scene`. |
+| `inker` (git, genet `main`) | `EngineDocument`, the document scene input. |
+| `serde` / `serde_json` | Plans and persisted `(Arrangement, TreeGeometry)` pairs. |
+| `uuid` | `GraphMemberId`. |
+
+## Decomposition, 2026-07-09
+
+The graph-scene paint lane left platen for the `canvas` crate: `scene_paint`,
+`cartography_scene`, `coupling_paint`, the underlay, and cartography geometry
+now live in `crates/canvas/canvas`. Platen keeps the pane lane.
 
 ## Status
 
-Pre-1.0. Tree projection, the workbench model, and the orrery paint
-underlay are live in the meerkat host; sibling projections (lattice,
-corridor) are added when a surface needs one.
+Pre-1.0 (`STAGE = "pre-alpha"`). `project_tree` surfaces root-level members
+only; tiles nested inside an arrangement `Group` are not yet projected. Sibling
+projections (lattice, corridor) are added when a surface needs one.
 
 ## License
 

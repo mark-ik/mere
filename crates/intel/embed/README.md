@@ -1,55 +1,58 @@
-# embed
+# mere-embed
 
-Embedding-provider trait, deterministic test provider, and pure-Rust flat
-vector index for Mere's statistical-intelligence tier. Target topology:
-`crates/intel/embed/`.
+Mere's glue over the `sibylla` retrieval crate: eidetic persistence for vector
+indexes, and the quint field-algebra bridge that renders query similarity on the
+graph canvas. Package `mere-embed`, library name `embed`.
 
-This crate provides:
+The portable core (`EmbeddingProvider`, `SimilarityMetric`, `VectorIndex`,
+`SemanticSearch`, `LexicalEmbeddingProvider`, `StubEmbeddingProvider`,
+`affinity_pairs`, and the Burn-backed BERT provider behind `bert`) lives in
+`sibylla` and is re-exported here at the same paths, so `embed::VectorIndex` and
+`sibylla::VectorIndex` are the same type.
 
-- `EmbeddingProvider` — the trait every embedding source implements (text → fixed-dimension vector).
-- `LexicalEmbeddingProvider` — pure-Rust, burn-free feature-hashing (the "hashing trick"). Texts that share vocabulary get correlated vectors, so it is a real (if shallow) lexical similarity signal with no model. The right default when you want clustering/recall without loading weights.
-- `StubEmbeddingProvider` — a deterministic **test double** (formerly `HashedEmbeddingProvider`, now a deprecated alias). Same input → same vector, but different inputs → *uncorrelated* vectors, so cosine over it is meaningless except for exact-string matches. For exercising the pipeline in tests/demos only, never for real clustering or recall — reach for `LexicalEmbeddingProvider` (lexical) or the BERT provider (semantic) instead.
-- `VectorIndex<K>` — a flat (dense) cosine/euclidean/dot-product index keyed by node identifiers. `O(N)` per query — fine for graphs up to ~10k nodes; the burn-batched-cosine and HNSW lifts are scoped in `design_docs/.../2026-07-06_intel_vector_index_burn_lift_plan.md`.
-- `SimilarityMetric` enum.
+## Modules
 
-Pure Rust, no GPU required. Compiles to `wasm32-unknown-unknown` for browser/PWA delivery.
+| Module | Contents |
+| --- | --- |
+| `persistence` | `save_to_eidetic`, `load_from_eidetic`, `list_from_eidetic`, `vector_index_schema_ref`, `VECTOR_INDEX_SCHEMA_REF`. Async, over eidetic's typed-payload API (`save_typed` / `load_typed` / `list_typed`); JSON via serde, keyed by the returned `ManifestId`. |
+| `field_bridge` | `build_query_similarity_field`, `register_query_similarity_field`. Renders per-node query similarity as a sum of weighted gaussians into a `quint::ast::ScalarField`, placed from a caller-supplied `HashMap<K, (f32, f32)>` of canvas positions. |
+| `canvas_search` | `CanvasSearchSurface<K, P>`: a `SemanticSearch` plus node positions and an optional focus query. `ingest`, `forget`, `move_node`, `set_focus_query`, `clear_focus`, `search`, `search_focus`, `register_focus_field`, `set_sigma`. |
 
-## Status
+Re-exported from sibylla: the `affinity`, `index`, `lexical`, `provider`,
+`search`, `stub` modules, and `bert` under the `bert` feature.
+`HashedEmbeddingProvider` is a deprecated alias for `StubEmbeddingProvider`.
 
-The Burn-backed BERT provider is wired end-to-end (`features = ["bert"]`):
+## Features
 
-- `BertEmbeddingProvider::<B>::load(model_dir, device)` — single-call constructor that reads `config.json` + `tokenizer.json` + `model.safetensors` (HF layout) and returns a working provider.
-- All BERT layers (`BertEmbeddings`, `BertSelfAttention`, `BertSelfOutput`, `BertAttention`, `BertIntermediate`, `BertOutput`, `BertLayer`, `BertEncoder`, `BertModel`) implemented in Burn 0.21 with `from_loaded` constructors that bypass random init.
-- PyTorch `[out, in]` → Burn `[in, out]` Linear-weight transpose handled at the safetensors-extraction boundary.
-- HF `LayerNorm.weight/bias` → Burn `gamma/beta` mapped at the construct boundary.
+| Feature | Effect |
+| --- | --- |
+| default | The three glue modules plus the sibylla re-exports. |
+| `bert` | Enables `sibylla/bert` and pulls `burn` (ndarray) for the backend type the integration test names. |
+| `bert-wgpu` | `bert` plus `sibylla/bert-wgpu`, for `BertEmbeddingProvider<Wgpu>`. |
 
-Outstanding empirical work (see `bert/validation.rs`):
+## Dependencies
 
-1. Capture reference fixtures from any source (script provided: `scripts/capture_minilm_fixtures.py`).
-2. Run the tier-1 fixture test against real weights → first run reveals whether numerical adjustments are needed (Linear transpose direction, GELU variant, attention scale factor — all small adjustments at known sites).
-3. Tier-2 continuous validation (gated on `bert-validation` feature) wires a reference engine for drift detection.
+`sibylla` (path, `crates/intel/sibylla`), `eidetic`, `quint`, `async-trait`,
+`serde`, `serde_json`. `burn` is optional, behind `bert`. Dev-dependencies:
+`muniment` (its `MemoryBackend` is the test store), `pollster`.
 
-End-to-end integration test in `tests/bert_full_pipeline.rs` runs against `MERE_MINILM_DIR`:
+## Tests
+
+`tests/semantic_search.rs` runs on the default build.
+`tests/bert_full_pipeline.rs` covers loading a real model through eidetic and is
+`#[ignore]`d; it needs `MERE_MINILM_DIR` pointing at an `all-MiniLM-L6-v2`
+directory in HuggingFace layout:
 
 ```bash
 export MERE_MINILM_DIR=/path/to/all-MiniLM-L6-v2
-cargo test -p embed --features bert --test bert_full_pipeline -- --ignored
+cargo test -p mere-embed --features bert --test bert_full_pipeline -- --ignored
 ```
 
-## Field-algebra integration
+`scripts/capture_minilm_fixtures.py` captures reference vectors for sibylla's
+`bert::validation::FIXTURES`.
 
-This crate currently includes the Bridge-A graph-canvas integration:
-`field_bridge` renders query similarity as a 2D scalar field, and
-`canvas_search` packages semantic search + node positions + field
-registration into a host-agnostic surface. Because of that transitional
-bridge, the crate depends on `graph-canvas` today.
+## Next
 
-The long-term split is sharper:
-
-- `intel/embed` owns providers, vector indexes, semantic search, and typed
-  intelligence-signal production.
-- `eidetic` stores model artifacts and persisted vector indexes; it does not
-  own embedding/model logic.
-- Graph-canvas-specific field adapters live beside
-  `graphshell/graph/graph-canvas` or in an explicit adapter crate once the
-  topology pass separates the graph bridge from the embedding core.
+- Providers, index, search, BERT, and the burn cosine kernel: `crates/intel/sibylla`.
+- `design_docs/mere_docs/research/2026-05-08_local_intelligence_integration_research.md`
+- `design_docs/mere_docs/implementation_strategy/2026-07-06_intel_vector_index_burn_lift_plan.md`

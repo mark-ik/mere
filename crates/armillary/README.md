@@ -1,27 +1,9 @@
 # armillary
 
-A host-neutral actor-kernel runtime. A single-threaded *host kernel* owns all
-canonical state (the document model, the GPU device, the window); a constellation
-of *actors* runs off-thread and talks to it only by message. The name is the
-instrument: an armillary sphere is a frame of rings around a central point, the
-kernel at the center and the actor rings around it.
-
-The runtime spine, and nothing host-specific:
-
-- **A typed boundary** (`KernelThread`) that is `!Send` by construction, so the
-  compiler refuses to move kernel authority onto an actor thread. Boundary drift
-  is a compile error, not a code-review catch. GPUI's discipline made structural.
-- **An actor harness** (`spawn` / `spawn_on`) that runs a subsystem on its own
-  thread (or a pooled worker), driven by `Send` commands and drained of `Send`
-  updates. The actor's internals may be `!Send` (a JS engine, a DOM, a layout
-  engine) because they are built *on* the actor thread, never moved across.
-- **A growable, reusing worker pool** so long-lived actors bound the OS-thread
-  count (and any leaked per-thread state) to peak concurrency, not total spawns.
-- **Generation counters** for backpressure, so a result from a superseded state
-  is dropped rather than applied.
-- **Request correlation** (`RequestId`, `RequestIds`, `Correlated<T>`) so a host
-  can pair actor progress or completion updates with the command that caused
-  them without Armillary defining the app's outcome vocabulary.
+A host-neutral actor-kernel runtime. A single-threaded host kernel owns the
+canonical state (the document model, the GPU device, the window); actors run
+off-thread and talk to it only by `Send` message. The crate is the runtime spine
+and carries nothing host-specific; its only dependency is `tracing`.
 
 ```rust
 use std::sync::Arc;
@@ -41,9 +23,28 @@ handle.join();
 assert_eq!(updates.iter().collect::<Vec<_>>(), vec![2, 5]);
 ```
 
-Promoted from mere's `crates/armillary`, host-neutral from the start (its only
-dependency is `tracing`). The concrete `Command` / `Update` taxonomy and the
-kernel inbox belong to the host; this crate is generic over them. See
-[`design_docs/`](design_docs/) for the founding proposal.
+## Modules
+
+| Module | Contents |
+| --- | --- |
+| `boundary` | `KernelThread`, a zero-size `!Send` + `!Sync` marker (`PhantomData<Rc<()>>`). Embed it in the host's kernel context and moving that context to another thread becomes a compile error. |
+| `actor` | `spawn`, `spawn_named`, `spawn_on`, `spawn_named_on`; `ActorHandle<C>` (`command`, `join`), `Emitter<U>` (`emit`, `Clone` without requiring `U: Clone`), `Wake = Arc<dyn Fn() + Send + Sync>`. The `run` closure executes on the actor thread, so `!Send` internals are constructed there and never move across. Each run loop is wrapped in a `tracing` span on target `armillary` with `actor started` / `actor finished` (`lifetime_ms`) events. |
+| `pool` | `Pool` (`new`, `submit`, `workers`), a growable worker pool built on `Mutex` + `Condvar`. A worker runs one job for that job's whole lifetime, then waits for the next instead of exiting, so the OS-thread count tracks peak concurrent actors rather than total spawns. |
+| `message` | `Generations` (`nav`, `viewport`, `accepts`), `NavGeneration` and `ViewportGeneration` (`bump`), `RequestId`, `RequestIds::issue`, `Correlated<T>` (`new`, `map`). Stamp outgoing work, drop returning work whose stamp no longer matches. |
+
+`spawn` returns an `ActorHandle<C>` plus a `Receiver<U>` the kernel drains.
+Dropping the handle closes the command channel, which is how the actor loop ends.
+`spawn_on` is the same shape on a pooled worker, and its handle carries no
+`JoinHandle`.
+
+The concrete `Command` / `Update` taxonomy and the kernel inbox belong to the
+host; this crate is generic over them. `Correlated<T>` pairs updates with the
+command that caused them without defining the outcome vocabulary.
+
+## Next
+
+- `design_docs/2026-07-07_armillary_founding_proposal.md`
+- Consumers in this workspace: `crates/system/fetch`, `crates/crawl`,
+  `crates/canvas/canvas`, and `crates/intel/vates` under its `actor` feature.
 
 License: dual MIT OR Apache-2.0, at your option.

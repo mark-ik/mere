@@ -62,7 +62,8 @@ impl SessionEnd {
         match self {
             SessionEnd::Closed | SessionEnd::Suspended => SessionStatus::Stale,
             SessionEnd::Disconnected => SessionStatus::Disconnected,
-            SessionEnd::Lapsed(lapse) => lapse.status(),
+            SessionEnd::Lapsed(Lapse::Expired { .. }) => SessionStatus::Expired,
+            SessionEnd::Lapsed(Lapse::Revoked) => SessionStatus::Revoked,
         }
     }
 }

@@ -1,170 +1,115 @@
-# Graphshell
+# graphshell (port)
 
-Graphshell is Mere's local-first reference host and projection portal.
-Applications retain authority over mounted domains; Graphshell also grows its
-own local Mere graph through the reference-host plan.
+The reference application over [`crates/graphshell`](../../crates/graphshell).
+The stack crates carry sessions; this port decides who gets one, runs the serve
+loops, hosts resident endpoints, and renders projections.
 
-## Current boundary
+Package name `graphshell`. It re-exports the stack as `graphshell::protocol`,
+`graphshell::client`, and `graphshell::endpoint`.
 
-The reusable session stack lives in [`crates/graphshell`](../../crates/graphshell):
+## Modules
 
-- `graphshell-protocol` carries versioned score, epoch-preserving scene,
-  presentation, resume, status, and intent messages over an unspecified
-  carrier.
-- `graphshell-client` keeps endpoint-scoped snapshots, applies transactional
-  diffs and resume replies, and persists only when session policy permits it.
-- `graphshell-endpoint` defines injected projection and intent traits for
-  applications to implement beside their own truth.
-- `graphshell-stdio` provides the first local carrier: a newline-delimited JSON
-  process boundary for discovery, snapshots, resources, resume, and intents.
-This port is the `graphshell` presentation host. Its native receipt view can
-place resolved presentations at disclosed Scenograph origins, draw disclosed
-relations, and collapse to a semantic card stack on narrow screens.
+Always compiled:
 
-## Build profiles
+| Module | Contents |
+|---|---|
+| `view` | `ProjectionReceiptView`, `ProjectionLayoutView`, `ScenePlacementView`, `SceneRelationView`, `IntentReceiptView`, `render_projection_receipt`, `render_g1_receipt`, `render_canary_html` |
+| `canary` | `FixtureEndpoint`, `CanaryRun`, `CanaryError`, `run_loopback_canary` |
+| `resume` | `ResumeFixtureEndpoint`, `run_resume_canary` |
+| `sessions` | `SessionProjectionView`, `render_session_switch_receipt`; under `native`, `spawn_endpoint_session` and `mount_endpoint_processes` |
 
-The package has two explicit capability profiles:
+Under `native` (non-wasm):
 
-- `native` is the default. It contains the existing admitted sessions,
-  Personae composition, native transports, stdio carrier, and receipt binaries.
-- `web` selects Mere's portable graph + canvas facade and leaves native
-  admission, transport, Tokio, Personae vault, and receipt binaries outside the
-  WASM dependency cone.
+| Module | Contents |
+|---|---|
+| `admission` | `GRAPHSHELL_DOMAIN`, `PROJECTION_SERVICE`, `CONNECT_ACTION`, `PROJECTION_PROTOCOL`, `open_session`, `admit_session`, `serves_action` |
+| `carrier` | `projection_alpn`, `projection_policy`, `accept_projection_session`, `ProjectionRefusal`, `ProjectionAcceptError` |
+| `network_carrier` | `projection_binding`, `dial_projection_session`, `DialError`; re-exports `NetworkCarrier` and `CarrierRuntime` |
+| `session_loop` | `serve_admitted_session`, `SessionEnd`, `SessionSummary`, `SessionLoopError` |
+| `session_notices` | `serve_admitted_session_notifying` |
+| `lifecycle` | `SessionAuthority`, `AdmittedEndpointContext`, `BindAdmittedSession`, `Lapse`, `ScoreDenial`, `adjudicate_intent`, `apply_lapse` |
+| `browser_carrier` | WebExtensions native messaging: `NATIVE_HOST_NAME`, `CHROMIUM_EXTENSION_ID`, `FIREFOX_EXTENSION_ID`, `AllowedExtensions`, `BrowserLauncher`, `BrowserChallenge` |
+| `identity` | Secret-free read model: `VaultView`, `ProfileView`, `SshKeyView`, `DeviceView`, `DeviceGrantView` |
+| `identity_endpoint` | `SupplementalCard`, `TransferAcceptIntentV1`, `TransferDecision`, `IdentityEndpointError` |
+| `identity_projection` | Identity cards plus the signing, SSH generate, and SSH import intents |
+| `policy_projection` | `PolicySettingsView`, `run_n4_policy_scenario`, `render_n4_policy_receipt` |
+| `profile` | `PROFILE_ENV` (`GRAPHSHELL_PROFILE`), `selected_profile`, `default_vault_dir`, `GraphshellIdentity` |
+| `native::endpoint_catalog` | `ResidentEndpointCatalog`, `ResidentEndpoint`, `ResidentEndpointRoute`, `ResidentEndpointSession` |
+| `native::projection_host` | `ResidentProjectionHost`, `ServedProjection` |
+| `native::personae_host` | Resident Personae authority; SSH key mutation receipts |
+| `native::browser_host` | `serve_identity_native_messages`, `serve_catalog_native_messages` |
+| `native::device_broker` | `DeviceSurface`, `DEVICE_ENDPOINT_ENV` (`GRAPHSHELL_DEVICE_ENDPOINT`), `configured_device_endpoint` |
+| `native::identity_ui` | `NativeIdentityUi`, `SystemNativeIdentityUi`, `apply_native_identity_action` |
+| `native::owner_settings` | App directory, data root, per-profile settings file |
 
-H0 proves the web cone. H1 adds the local graph-host adapter inside that cone:
+Under `web` (portable, builds for `wasm32-unknown-unknown`):
 
-```powershell
-$env:CARGO_TARGET_DIR = 'target-plan-graphshell'
-cargo check -p graphshell-protocol -p graphshell-client --target wasm32-unknown-unknown
-cargo check -p mere-canvas --target wasm32-unknown-unknown
-cargo check -p graphshell --target wasm32-unknown-unknown --no-default-features --features web
-python scripts/check_port_boundaries.py
-```
+| Module | Contents |
+|---|---|
+| `app` | `GraphshellApp`, `AppError`: local and remote projections through one `ClientState` |
+| `mere_host` | `MereHost`, `SelectedPersonaRef`: Mere graph truth as a Graphshell endpoint |
+| `product` | Graph-product operations and facets: `TransferScope`, `RelationFamilyFilter`, `EditableRelation` |
+| `handlers` | `HandlerRegistry`, `HandlerOffer`, `OpenAddressV1` |
+| `access` | `AccessRecord`, `AccessObservation`, `AccessTransition`, `save_access_record` |
+| `capture` | `HistoryCapturePolicy`, `BrowserVisit`, `NormalizedVisit`, `CaptureBackend` |
+| `browser_storage` | `StoragePersistence`, `decide`, `status_line` |
+| `transfer` | `TransferRequest`, `TransferRouteV1`, `TransferAuthorization`, manifest and content facets |
+| `transfer_endpoint` | `TransferSourceEndpoint`, `TransferBeginV1` |
 
-The `web` profile now exposes:
+Under `personal-sync`:
 
-- a local Mere graph plus its unknown-forward facet store;
-- Muniment persistence through an injected backend;
-- an in-process Graphshell endpoint with portable cards and typed open intents;
-- user-configurable handler offers;
-- local and remote projections mounted through one `ClientState`;
-- public Personae references while vault authority remains native.
+| Module | Contents |
+|---|---|
+| `personal_sync` | `PersonalGraphEvent`, `PersonalGraphRecord`, `PersonalGraphExt`, `PersonalEncryption` |
+| `transfer_offer` | `TransferOfferV1`, `transfer_offer_rule`, `offer_address` |
+| `native::personal_sync_host` | `PersonalSyncHost`, `PersonalSyncHostConfig` |
+| `native::device_sync` | `personal_graph_id`, `SeedNote`, `BlobAction`, `resolve_data_root` |
+| `native::pairing` | `pair_device`, `unpair_device`, `PairingFacts` |
+| `native::graph_keys` | `GraphKeyGroup`, `OpenedKeyGroup`, `AbsorbReport` |
+| `native::transfer_staging` | `offer_transfer`, `receive_transfer`, `released_blobs_for` |
 
-The H1 fixture exercises web, custom-protocol, and file addresses; saved scene
-and remote-mount facets; several relation families; two-device access history;
-synthetic public identity projections; and a foreign facet namespace. Its open
-intent mutates access history, persists, reopens, and re-saves the unchanged
-graph/facet boundary byte-equivalently:
+## Features
 
-```powershell
-$env:CARGO_TARGET_DIR = 'target-plan-graphshell'
-cargo test -p graphshell --no-default-features --features web
-```
+| Feature | Scope | Key dependencies |
+|---|---|---|
+| `native` (default) | Admitted sessions, native transports, Personae composition, the binaries | `graphshell-network`, `graphshell-stdio`, `notochord`, `transport`, `personae`, `session-runtime`, `ssh-agent-lib`, `ssh-key`, `light-file-dialog`, Tokio |
+| `web` | The portable graph and canvas cone | `mere` (`graph`, `canvas`), `chartulary`, `eidetic`, `muniment`, `url`, `sha2` |
+| `personal-sync` | `native` + `web` + device synchronization | `muniment/redb`, `p2panda-core`, `p2panda-store`, `stickleback` |
 
-H2 adds the real browser presenter as a separate `graphshell-web` workspace
-package. It composes the H1 host with Mere Canvas, Cambium over Genet's neutral
-DOM/layout seam, and NetRender over an asynchronous WebGPU canvas. The painted
-chrome is a Cambium view; its separate semantic browser controls remain
-hand-wired. The browser-only stack does not enter the portable `graphshell`
-crate.
+Crates under `crates/` may not depend on this package.
+`scripts/check_port_boundaries.py` enforces that, checks that `graphshell` has
+exactly one manifest, and checks that the `web` cone's dependency tree excludes
+Turnstone, Genet host packages, and Servo runtime packages.
 
-```powershell
-$env:CARGO_TARGET_DIR = 'target-plan-graphshell-web'
-cargo build -p graphshell-web --offline --target wasm32-unknown-unknown
-wasm-bindgen --target web --out-dir ports/graphshell/web/pkg `
-  target-plan-graphshell-web/wasm32-unknown-unknown/debug/graphshell_web.wasm
-python -m http.server 8765 --bind 127.0.0.1 --directory ports/graphshell/web
-```
+## Binaries
 
-Headed Chromium and Firefox receipts cover pan, zoom, selection, persistent
-node drag, detail, local/remote session switching, and advertised action
-invocation at wide and narrow sizes. See the
-[H2 receipt](docs/2026-07-27_h2_browser_presenter_receipt.md) and its
-[screenshots plus semantic tree](docs/receipts/h2_browser_receipts.json).
-Canvas2D was not needed.
+| Binary | Required features |
+|---|---|
+| `g1_receipt` | `native` |
+| `g4_sessions` | `native` |
+| `g5_peer` | `native` |
+| `n4_policy_receipt` | `native` |
+| `h4_identity_receipt` | `native` |
+| `h4d_browser_receipt_host` | `native` |
+| `h4e_browser_import_receipt_host` | `native` |
+| `h4f_agent_probe` | `native` |
+| `graphshell_native_host` | `native` |
+| `h6_transfer_peer` | `native`, `web` |
+| `h7_sync_peer` | `personal-sync` |
+| `graphshell_device_host` | `personal-sync` |
 
-H3 turns that presenter into the first standalone graph product cut. The
-browser can create addressed and content-addressed file objects, edit graph
-metadata and relations, filter and arrange the graph, save and reopen scenes,
-choose representations and open handlers, and round-trip an explicitly scoped
-graph engram. Device-local file metadata stays out of transfer unless the user
-opts in. See the
-[H3 local graph product receipt](docs/2026-07-28_h3_local_graph_product_receipt.md)
-and its [headed browser record](docs/receipts/h3_browser_receipts.json).
+## Browser surfaces
 
-The standalone native canvas presenter is similarly explicit:
+`web/Cargo.toml` is a separate package, `graphshell-web`, whose `[lib] path` is
+`../src/web.rs`. It is a `cdylib` composing this port's `web` cone with Mere
+Canvas, Cambium over Genet's DOM and layout seam, and NetRender over a WebGPU
+canvas. Its browser dependencies stay out of the `graphshell` package.
 
-```powershell
-cargo run -p mere-canvas --features native-present --bin canvas
-```
+[`web/extension`](web/extension) holds the Chromium and Firefox extension and
+the `org.mere.graphshell` native-messaging registration.
 
-The portable crates may depend on Scenograph contracts, serialization, and
-content-addressing primitives. They must not depend on Mere, Turnstone, Isometry,
-Genet, Cambium, NetRender, a network runtime, or an application model. Product
-adapters depend on `graphshell-endpoint` in the other direction.
+## Where to look next
 
-## G1, G2, and the first product endpoint
-
-G1 keeps presentation outside `sceno::Scene`. A snapshot carries a Graphshell
-sidecar manifest that binds scene instances to ordered, versioned resource
-offers. Resource bytes are fetched separately, verified by content hash, and
-cached within the disclosing session.
-
-The deterministic fixture proves two capability profiles over one scene:
-
-- rich: portable card plus content-addressed image;
-- compact: native glyph plus a labeled image placeholder;
-- both: the same advertised actions in the accessibility projection.
-
-Run the proof wall:
-
-```powershell
-$env:CARGO_TARGET_DIR = 'target-proof'
-cargo test --workspace
-cargo check --workspace --target wasm32-unknown-unknown
-cargo run -p graphshell --bin g1_receipt -- ports/graphshell/docs/receipts/g1_loopback.html
-```
-
-The committed [G1 receipt](docs/receipts/g1_loopback.html) is compared
-byte-for-byte with fresh output by the test suite.
-
-G2 adds stable scene epochs and revisions through Scenotime. The client applies
-scene, presentation-resource, and status changes together; retains stale or
-disconnected scenes; acknowledges revisions; and resumes from replay or a full
-epoch-preserving snapshot. Persisted caches use an injected store and require
-the protection promised by the session's cache policy.
-
-The deterministic resume fixture disconnects after revision 2, replays
-revision 3, and reaches the same scene as the endpoint's complete snapshot.
-Its removed item remains a tombstone at slot 0 while later items stay at slots
-1 and 2. See the [G2 receipt note](docs/2026-07-22_g2_diff_resume_receipt.md).
-
-G3 lives in Turnstone, in the required dependency direction. Its endpoint reads
-live Mere graph truth through Mere cartography, returns the resulting score,
-scene, routed relations, and content-addressed card offers, and maps advertised
-intents back through Turnstone's Servitor gate. Graphshell gains only the generic
-spatial receipt view. The portable Graphshell crates still have no Mere or
-Turnstone dependency; this application port selects Mere explicitly in its
-`web` profile.
-
-The portable stack was published on 2026-07-22 as the active Graphshell tree.
-It joined Mere on 2026-07-23, and the reference application moved under
-`ports/` on 2026-07-24. The retired browser donor remains intact in Mere's Git
-history rather than appearing as current source or documentation.
-
-## G4 local sessions
-
-Graphshell can now discover and mount projections from arbitrary local endpoint
-processes. The `g4_sessions` host has no product dependency: it asks each
-endpoint for its catalog, mounts every advertised projection through the same
-client state machine, resolves resources, invokes advertised actions, and puts
-the resulting sessions behind keyboard-reachable tabs.
-
-The committed [G4 receipt](docs/receipts/g4_session_switch.html) was generated
-from the Turnstone browsing endpoint and Isometry's player-overmap and tile-board
-endpoints. It proves three independently owned projections through one
-Graphshell binary. The [receipt note](docs/2026-07-22_g4_cross_product_receipt.md)
-records the commands and acceptance boundary.
-
-This carrier is deliberately local and unauthenticated. Identity, negotiated
-grants, revocation, reconnect, and cross-device transport belong to G5.
+[`docs/`](docs) holds the dated receipt notes for each landed slice.
+[`docs/receipts`](docs/receipts) holds the committed receipt artifacts and the
+commands that regenerate them.

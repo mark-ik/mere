@@ -1,23 +1,40 @@
 # eidetic
 
-The durable-memory family. Eidetic memory holds what passed through it,
-exactly; these four crates are that faculty for graph apps, from raw bytes up
-to semantic projection:
+The durable-memory family: nine crates covering raw bytes, the append-only log,
+the container graph, semantic projection, the typed memory lane, and its
+backends.
 
-| Crate | Role |
-|---|---|
-| [`muniment`](crates/muniment) | The persistence floor: a host-supplied byte-backend seam (filesystem, OPFS, redb, fjall), typed mutable slots over a pluggable codec, content-addressed immutable blobs. |
-| [`codicil`](crates/codicil) | The append-only, replayable log: immutable ordered entries appended and replayed to rebuild state, persisted through muniment. |
-| [`chartulary`](crates/chartulary) | The content-addressed container graph: `Graph<N, E>` with capability traits, binding muniment's blobs and codicil's log into an app-agnostic substrate. Carries the lineage layer (`chartulary::stemma`). |
-| [`scholia`](crates/scholia) | The RDF projection over a chartulary graph's semantic ring: addressed, labeled nodes become RDF subjects. |
+## The substrate crates
 
-Floor, log, graph, projection. Each crate publishes individually under its
-own name; this workspace is their shared home. Per-crate design docs live
-beside each crate (for example `crates/muniment/design_docs/`).
+Published under their own names. Formerly four sibling repos, merged into one
+2026-07-21 and absorbed into this workspace 2026-07-23, histories preserved.
 
-Formerly four sibling repos (muniment, codicil, chartulary, scholia), merged
-2026-07-21 with histories preserved. Mere's private local-memory lane carried
-the eidetic name first and continues as `mere-eidetic`.
+| Directory | Package | Contents |
+|---|---|---|
+| [`muniment`](muniment) | `muniment` | The persistence floor. `Backend` (host-supplied byte seam), `SlotStore` (typed mutable slots over a `Codec`), `BlobStore` (content-addressed blake3 blobs). Ships `MemoryBackend`, plus `RedbBackend`, `ZipBackend`, and `IndexedDbBackend` behind features. |
+| [`codicil`](codicil) | `codicil` | The append-only log. `Codicil<T>` of immutable entries addressed by `Seq`, replayed to rebuild state, persisted through a muniment slot. Carries causal parent links and `fork`/`Provenance`. |
+| [`chartulary`](chartulary) | `chartulary` | The content-addressed container graph. `Graph<N, E>` on petgraph with capability traits, default `Container`/`Relation` payloads, the `GraphLog` edit spine, runtime `facet` metadata, `content_class`, and the `stemma` lineage layer. |
+| [`scholia`](scholia) | `scholia` | The RDF projection over a chartulary graph's semantic ring. `to_quads`, `to_jsonld`, `to_nquads`. |
+
+## The eidetic lane
+
+Mere's owner-scoped local memory, which carried the eidetic name first. Packages
+are named `mere-*`; each sets a `[lib] name` so consumers still write
+`use eidetic::…`.
+
+| Directory | Package | Lib name | Contents |
+|---|---|---|---|
+| [`eidetic-core`](eidetic-core) | `mere-eidetic` | `eidetic` | Manifests, typed payloads, schemas, engrams, bundles, packs, sealing, browsing traces, model artifacts. `Store` is an alias for `muniment::Backend`. |
+| [`eidetic-fjall`](eidetic-fjall) | `mere-eidetic-fjall` | `eidetic_fjall` | `FjallStore`, the production-default native backend. |
+| [`eidetic-https-fetcher`](eidetic-https-fetcher) | `mere-eidetic-https-fetcher` | `eidetic_https_fetcher` | `HttpsFetcher`, a `BlobFetcher` for `BlobSource::Https`. |
+| [`eidetic-iroh-fetcher`](eidetic-iroh-fetcher) | `mere-eidetic-iroh-fetcher` | `eidetic_iroh_fetcher` | `IrohFetcher`, a `BlobFetcher` for `BlobSource::Iroh`. |
+| [`eidetic-search`](eidetic-search) | `mere-eidetic-search` | `eidetic_search` | `TrailIndex`, a tantivy index minted from `BrowsingTrace` engrams, plus the `fuse` hybrid-ranking seam. |
+
+## Design docs
+
+Per-crate design docs live beside `muniment`, `codicil`, `chartulary`, and
+`scholia` (for example [`muniment/design_docs/`](muniment/design_docs)). The
+eidetic lane's plans live in the repo-level `design_docs/mere_docs/`.
 
 ## License
 

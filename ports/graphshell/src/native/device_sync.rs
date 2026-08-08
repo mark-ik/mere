@@ -141,7 +141,8 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     roots.push(identity.master_public_key().to_bytes());
     roots.sort_unstable();
     roots.dedup();
-    let paired_nodes = sync.paired_node_keys()?;
+    let paired_devices = paired_nodes_with_roots(&sync)?;
+    let paired_nodes = paired_devices.keys().copied().collect::<Vec<_>>();
     // A malformed relay url is refused rather than dropped: silently starting
     // LAN-only when the owner asked for a relay would look like the relay was
     // configured and simply not helping.
@@ -352,7 +353,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     spawn_pairing_watch(
         Arc::clone(&host),
         settings_file,
-        paired_nodes,
+        paired_devices,
         identity.master_public_key().to_bytes(),
     );
     let surface: DeviceSurfaceHandle = Arc::new(tokio::sync::RwLock::new(DeviceSurface {
@@ -396,7 +397,7 @@ fn paired_nodes_with_roots(
 fn spawn_pairing_watch(
     host: Arc<PersonalSyncHost>,
     settings_file: PathBuf,
-    already_applied: Vec<[u8; 32]>,
+    already_applied: std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>>,
     local_root: [u8; 32],
 ) {
     // Node id to Personae root, not just node ids. Unpairing has to revoke the
@@ -405,10 +406,7 @@ fn spawn_pairing_watch(
     // removal is noticed. Remembering the root here is what makes revocation
     // possible at all; `None` is a receive-only device, which cannot join the
     // key group and so has nothing to revoke.
-    let mut applied: std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>> = already_applied
-        .into_iter()
-        .map(|node| (node, None))
-        .collect();
+    let mut applied = already_applied;
     // Last reported reachability, so the log records transitions rather than
     // repeating the same line every poll.
     // (node, has an address, has a live path). Connectivity is in the compared
@@ -457,6 +455,39 @@ fn spawn_pairing_watch(
                 Err(error) => tracing::warn!(%error, "owner settings hold an unusable roster root"),
             }
 
+            // A node can stay paired while its Personae authority changes,
+            // especially when a receive-only pairing is promoted. Reconcile
+            // that value as well as map membership. When a root is removed or
+            // replaced, finish its key revocation before forgetting it so a
+            // transient lane-write failure remains retryable on the next pass.
+            let authority_changes: Vec<([u8; 32], Option<[u8; 32]>, Option<[u8; 32]>)> = desired
+                .iter()
+                .filter_map(|(node, next)| {
+                    let previous = applied.get(node)?;
+                    (previous != next).then_some((*node, *previous, *next))
+                })
+                .collect();
+            for (node, previous, next) in authority_changes {
+                if let Some(root) = previous {
+                    match host.revoke_root_keys(root).await {
+                        Ok(true) => tracing::info!(
+                            node = %owner_settings::hex32(&node),
+                            "revoked the device's previous key authority"
+                        ),
+                        Ok(false) => {}
+                        Err(error) => {
+                            tracing::warn!(
+                                %error,
+                                node = %owner_settings::hex32(&node),
+                                "could not revoke changed key authority; will retry"
+                            );
+                            continue;
+                        }
+                    }
+                }
+                applied.insert(node, next);
+            }
+
             let arrivals: Vec<([u8; 32], Option<[u8; 32]>)> = desired
                 .iter()
                 .filter(|(node, _)| !applied.contains_key(*node))
@@ -487,27 +518,29 @@ fn spawn_pairing_watch(
                 .map(|(node, root)| (*node, *root))
                 .collect();
             for (node, root) in departures {
+                // Revoke while the departure remains in `applied`. A failed
+                // lane write then retries next pass instead of leaving a local
+                // epoch turn that the rest of the graph never received.
+                if let Some(root) = root {
+                    match host.revoke_root_keys(root).await {
+                        Ok(true) => tracing::info!(
+                            node = %owner_settings::hex32(&node),
+                            "revoked the unpaired device's key and turned the epoch"
+                        ),
+                        Ok(false) => {}
+                        Err(error) => {
+                            tracing::warn!(
+                                %error,
+                                node = %owner_settings::hex32(&node),
+                                "could not revoke the unpaired device's key; will retry"
+                            );
+                            continue;
+                        }
+                    }
+                }
                 match host.unpair_node(node).await {
                     Ok(()) => {
                         applied.remove(&node);
-                        // Revoke before anything else can be written, so the
-                        // departed device does not read what comes next. It
-                        // keeps what it could already read; no scheme takes
-                        // that back.
-                        if let Some(root) = root {
-                            match host.revoke_root_keys(root).await {
-                                Ok(true) => tracing::info!(
-                                    node = %owner_settings::hex32(&node),
-                                    "revoked the unpaired device's key and turned the epoch"
-                                ),
-                                Ok(false) => {}
-                                Err(error) => tracing::warn!(
-                                    %error,
-                                    node = %owner_settings::hex32(&node),
-                                    "could not revoke the unpaired device's key; it can still                                      read what this graph writes next"
-                                ),
-                            }
-                        }
                         tracing::info!(
                             node = %owner_settings::hex32(&node),
                             "dropped an unpaired device without a restart"
@@ -795,5 +828,19 @@ mod tests {
     fn a_graph_name_maps_to_one_id_and_different_names_do_not_collide() {
         assert_eq!(personal_graph_id("personal"), personal_graph_id("personal"));
         assert_ne!(personal_graph_id("personal"), personal_graph_id("scratch"));
+    }
+
+    /// The pairing watcher starts from this value. Losing the root here means
+    /// an ordinary restart followed by unpair can drop reachability while
+    /// silently leaving the departed device in the graph's key group.
+    #[test]
+    fn initial_pairing_watch_state_retains_each_device_root() {
+        let node = [0xd4; 32];
+        let root = [0xd5; 32];
+        let mut sync = owner_settings::SyncSettings::default();
+        assert!(sync.pair(node, Some(root), "sibling", 1));
+
+        let applied = paired_nodes_with_roots(&sync).unwrap();
+        assert_eq!(applied.get(&node), Some(&Some(root)));
     }
 }

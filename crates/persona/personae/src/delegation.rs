@@ -400,7 +400,12 @@ pub fn delegation_signing_salt(scope: &CapabilityScope) -> Vec<u8> {
     bytes
 }
 
-fn path_covers(prefix: &str, path: &str) -> bool {
+/// Whether `prefix` selects `path` at a structural slash boundary.
+///
+/// A scope for `/publications/a` reaches `/publications/a/version`, but not
+/// `/publications/a-private`. Application service routing uses the same rule
+/// when a base service owns resource-specific children.
+pub fn path_covers(prefix: &str, path: &str) -> bool {
     path == prefix
         || path
             .strip_prefix(prefix)

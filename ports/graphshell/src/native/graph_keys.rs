@@ -21,7 +21,7 @@ use stickleback::{
     GroupSessionId,
 };
 
-use crate::personal_sync::{KeyAgreementEvent, KeyAgreementStep, PersonalGraphEvent};
+use crate::personal_sync::{KeyAgreementEvent, KeyAgreementStep, PersonalGraphEvent, SyncRoster};
 
 /// Domain for the key that protects session state at rest.
 ///
@@ -109,6 +109,26 @@ impl GraphKeyGroup {
         self.session.member()
     }
 
+    /// Whether `member` currently holds a seat in this device's group view.
+    pub(crate) fn has_member(&self, member: GroupRecipientId) -> Result<bool, GraphKeyError> {
+        Ok(self.session.members()?.contains(&member))
+    }
+
+    /// Capture the durable session before preparing a lane-visible change.
+    ///
+    /// The host restores this checkpoint when authoring the corresponding lane
+    /// event fails. Otherwise a locally persisted add, remove, or epoch turn
+    /// could become impossible to retry because the lane never learned it.
+    pub(crate) fn checkpoint(&self) -> Result<Vec<u8>, GraphKeyError> {
+        Ok(self.session.to_bytes()?)
+    }
+
+    /// Restore a failed lane-visible change in memory and sealed storage.
+    pub(crate) fn restore(&mut self, checkpoint: &[u8]) -> Result<(), GraphKeyError> {
+        self.session = GroupSession::from_bytes(checkpoint)?;
+        self.persist()
+    }
+
     /// Whether this device can read sealed operations yet.
     pub fn is_keyed(&self) -> bool {
         self.session.current_epoch().is_some()
@@ -174,6 +194,29 @@ impl GraphKeyGroup {
     /// same step again is ordinary, and a step addressed elsewhere is most of
     /// the traffic.
     pub fn absorb(&mut self, steps: &[KeyAgreementStep]) -> Result<AbsorbReport, GraphKeyError> {
+        self.absorb_where(steps, |_| true)
+    }
+
+    /// Absorb key traffic while registering only roots the live roster admits.
+    ///
+    /// Dispatches remain readable regardless of current roster membership:
+    /// they were accepted into the retained lane under the authority in force
+    /// at the time. Pre-keys are different. Registering one is preparation for
+    /// a future add, so a historical device removed before encryption was
+    /// enabled must not regain a seat merely because its old pre-key remains.
+    pub fn absorb_admitted(
+        &mut self,
+        steps: &[KeyAgreementStep],
+        roster: &SyncRoster,
+    ) -> Result<AbsorbReport, GraphKeyError> {
+        self.absorb_where(steps, |root| roster.admits(root))
+    }
+
+    fn absorb_where(
+        &mut self,
+        steps: &[KeyAgreementStep],
+        admits: impl Fn(&[u8; 32]) -> bool,
+    ) -> Result<AbsorbReport, GraphKeyError> {
         let mut report = AbsorbReport::default();
         for step in steps {
             match &step.step {
@@ -182,6 +225,14 @@ impl GraphKeyGroup {
                         report.unreadable += 1;
                         continue;
                     };
+                    let Ok(root) = bundle.personae_root() else {
+                        report.unreadable += 1;
+                        continue;
+                    };
+                    if !admits(&root) {
+                        report.ineligible += 1;
+                        continue;
+                    }
                     if bundle.recipient == self.session.member() {
                         continue;
                     }
@@ -249,6 +300,8 @@ pub struct AbsorbReport {
     /// Steps that would not decode. Counted rather than fatal, so one bad
     /// frame from one device cannot stop this one being keyed.
     pub unreadable: usize,
+    /// Valid pre-keys whose Personae roots are outside the live roster.
+    pub ineligible: usize,
 }
 
 fn dispatch_event(dispatch: &GroupSessionDispatch) -> Result<PersonalGraphEvent, GraphKeyError> {
@@ -311,7 +364,7 @@ fn hex(bytes: &[u8; 32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use personae::InMemoryProvider;
+    use personae::{IdentityProvider, InMemoryProvider};
 
     const GRAPH: [u8; 32] = [0x9c; 32];
 
@@ -480,6 +533,63 @@ mod tests {
         assert_eq!(report.installed, 0);
     }
 
+    /// A retained pre-key is history, not current admission. Removing a root
+    /// before encryption starts must keep that old device out of the group.
+    #[test]
+    fn only_live_roster_roots_are_registered_for_a_future_add() {
+        let owner_dir = tempfile::tempdir().unwrap();
+        let current_dir = tempfile::tempdir().unwrap();
+        let departed_dir = tempfile::tempdir().unwrap();
+        let (owner_identity, owner_opened) = open_device(0xb1, owner_dir.path());
+        let (current_identity, current_opened) = open_device(0xb2, current_dir.path());
+        let (departed_identity, departed_opened) = open_device(0xb3, departed_dir.path());
+        let current_member = current_opened.group.member();
+        let mut owner = owner_opened.group;
+        let roster = SyncRoster::new([
+            owner_identity.master_public_key().to_bytes(),
+            current_identity.master_public_key().to_bytes(),
+        ]);
+        let steps = [
+            (&current_identity, current_opened.publish.unwrap()),
+            (&departed_identity, departed_opened.publish.unwrap()),
+        ]
+        .into_iter()
+        .map(|(identity, bundle)| {
+            step(
+                identity,
+                &PersonalGraphEvent::PublishPrekey {
+                    bundle: bundle.to_bytes().unwrap(),
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+
+        let report = owner.absorb_admitted(&steps, &roster).unwrap();
+        assert_eq!(report.registered, vec![current_member]);
+        assert_eq!(report.ineligible, 1);
+    }
+
+    /// A lane write failure restores both memory and sealed storage so the
+    /// exact group transition can be attempted again.
+    #[test]
+    fn a_failed_lane_change_can_restore_its_durable_checkpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let (identity, opened) = open_device(0xb4, dir.path());
+        let mut group = opened.group;
+        let checkpoint = group.checkpoint().unwrap();
+
+        group.create().unwrap();
+        assert!(group.is_keyed());
+        group.restore(&checkpoint).unwrap();
+        assert!(!group.is_keyed());
+
+        let reopened = GraphKeyGroup::open(&identity, GRAPH, dir.path()).unwrap();
+        assert!(
+            !reopened.group.is_keyed(),
+            "rollback must reach sealed storage, not only the live value"
+        );
+    }
+
     fn step(identity: &InMemoryProvider, event: &PersonalGraphEvent) -> KeyAgreementStep {
         use personae::IdentityProvider;
         let inner = match event {
@@ -522,7 +632,6 @@ mod tests {
         })
         .collect();
 
-        use personae::IdentityProvider;
         assert_eq!(
             recipient_for_root(&published, sibling_identity.master_public_key().to_bytes()),
             Some(sibling.group.member())

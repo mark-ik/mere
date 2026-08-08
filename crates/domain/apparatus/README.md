@@ -1,40 +1,36 @@
 # apparatus
 
-Apparatus domain module for the [mere](https://crates.io/crates/mere)
-browser — the peripheral system-inspector strip.
+Apparatus domain layer for the [mere](https://crates.io/crates/mere) browser:
+the peripheral system-inspector strip. Package `mere-apparatus`, library
+`apparatus`.
 
-In scholarly use, an *apparatus* (apparatus criticus) is the textual /
-critical machinery alongside a primary text: variants, footnotes,
-source citations. mere's apparatus panel is the same shape applied to
-the system itself — diagnostics, register-diagnostics channel taps, the
-live uxtree dump, accesskit inspector, performance metrics, profiler
-traces. Distinct from `system` (which *changes* the machine);
-apparatus *examines* it.
+## API
 
-## What it produces (v0)
+| Item | Role |
+| --- | --- |
+| `project_skeleton() -> uxtree::UxTree` | Emits the v0 skeleton subtree. Takes no input. |
+| `VERSION`, `STAGE` | Crate version string and lifecycle marker (`"pre-alpha"`). |
 
-A placeholder [`project_skeleton`] that emits a stub apparatus subtree
-with sections for the inspector lanes that will eventually populate it:
+## Node shape
 
 ```text
-apparatus (Group "Apparatus")
-  ├─ tracing events (Group, empty)
-  ├─ register-diagnostics channels (Group, empty)
-  ├─ uxtree (Group, empty)
-  └─ accesskit (Group, empty)
+apparatus (Role::Group, label "Apparatus")
+  ├─ tracing events               (Role::Group, empty)
+  ├─ register-diagnostics channels (Role::Group, empty)
+  ├─ uxtree                       (Role::Group, empty)
+  └─ accesskit                    (Role::Group, empty)
 ```
 
-Real content lands as each lane is wired:
+Node ids come from `uxtree::node_id_for_path`: `apparatus` for the root,
+`apparatus/section/{label}` for each section. Ids are stable across runs.
 
-- **tracing events** — pulled from a tracing-subscriber bridge
-  installed at host startup
-- **register-diagnostics channels** — bridged in via
-  `register_diagnostics::install_global_sender`
-- **uxtree** — a snapshot of the running application uxtree
-  (the inspector overlay you already have in `host`)
-- **accesskit** — node walk of the current accesskit tree
+## Dependencies
+
+`accesskit`, `uxtree`, `tracing`.
 
 ## Status
 
-Pre-1.0. Skeleton with placeholder section nodes. Each section grows
-real content as the corresponding host bridge lands.
+Pre-1.0. Sections are empty placeholders. Each fills in as its host bridge
+lands: a tracing-subscriber bridge for events, `register_diagnostics`
+channel taps, a snapshot of the running uxtree, and a walk of the current
+accesskit tree.

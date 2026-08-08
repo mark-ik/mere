@@ -3,8 +3,9 @@
 # imports over genet's live ScriptedDom, drives per-turn handle-event, and
 # enforces epoch / StoreLimits quotas.
 #
-# A member of the mere workspace (folded in at P2.5). The workspace pins rustc 1.93
-# (mere/rust-toolchain.toml) because wasmtime 45 requires it.
+# A member of the mere workspace (folded in at P2.5). wasmtime 45 sets this crate's
+# rustc floor at 1.93; the workspace channel is in mere/rust-toolchain.toml and sits
+# above it.
 [package]
 name = "document-host"
 version = "0.0.1"

@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
- 
+
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 

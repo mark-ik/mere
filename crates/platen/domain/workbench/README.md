@@ -1,42 +1,52 @@
 # workbench
 
-Workbench domain module for the [mere](https://crates.io/crates/mere) browser.
+Workbench domain layer for the [mere](https://crates.io/crates/mere) browser.
+Projects `platen::Workbench` (the tiling split tree) into a subtree of
+[AccessKit](https://accesskit.dev) nodes for `uxtree`.
 
-Projects [`platen::WorkbenchProjection`] (the user's active frame, root
-view, and pane bindings) into a subtree of
-[AccessKit](https://accesskit.dev) nodes for consumption by `uxtree`.
-This is the layer where mere's *user-facing* concept of a workbench gets
-its accessibility / automation identity — distinct from platen, which
-owns the data shape, and verso-core, which owns the surface lifecycle.
+## API
 
-## What it produces
+| Item | Role |
+| --- | --- |
+| `project_workbench(&platen::Workbench) -> uxtree::UxTree` | Builds the subtree. The host stitches `tree.root` under its application or window root. |
+| `VERSION`, `STAGE` | Crate version string and lifecycle marker (`"pre-alpha"`). |
 
-- **Workbench root** (`Role::Group`, label = active frame label or
-  `"Workbench"`)
-  - **Frame** (`Role::Group`, label = frame label) — present when
-    `WorkbenchProjection.active_frame` is set
-    - **Pane** (`Role::Group`, label = `"Pane <pane_id>"`) — one per
-      `ProjectedPane`. The primary pane carries `description = "primary"`.
+## Node shape
 
-Each node gets a deterministic `accesskit::NodeId` from its domain path:
+Built from `Workbench::slot_views()`, so the tree is flattened to leaf stacks in
+order.
 
-- Workbench root → `workbench`
-- Frame → `workbench/frame/{frame_id}`
-- Pane → `workbench/frame/{frame_id}/pane/{pane_id}`
+```text
+workbench (Role::Group, label "Workbench")
+  └─ slot (Role::Group, label "Slot {index}")       one per leaf stack
+       └─ tab (Role::Tab, label "Tile {member}")    one per member in the stack
+```
 
-## Sibling modules
+The active tab of each slot carries `description = "active"`.
 
-`mere-domain/workbench` is the first of several mere-domain modules:
+Node ids come from `uxtree::node_id_for_path` over these domain paths:
 
-- `workbench` (this crate) — tiles + frames
-- `orrery` (planned) — graph node / edge / canvas
-- `gloss` (planned) — peripheral context strip
-- system, murm, moot, etc. — as their UX surfaces land
+| Node | Path |
+| --- | --- |
+| Root | `workbench` |
+| Slot | `workbench/slot/{slot_index}` |
+| Tab | `workbench/slot/{slot_index}/tab/{member}` |
 
-Each module owns its UX concept's role mapping + uxtree projection.
+The same workbench always produces the same ids.
+
+## Dependencies
+
+`accesskit`, `platen`, `uxtree`, `tracing`. Dev-dependencies: `kernel`, `uuid`.
+
+## Sibling domain crates
+
+`mere-apparatus` (inspector strip), `mere-gloss` (peripheral outline and
+minimap), `mere-roster`, `mere-trail`. Each owns one UX concept's role mapping
+and uxtree projection; the host merges them with `uxtree::stitch`. Graph-canvas
+a11y is host-side.
 
 ## Status
 
-Pre-1.0. Initial projection covers `WorkbenchProjection` blocks. Surface-
-host references are exposed as a node `value`; the host fills in
-bounds after layout.
+Pre-1.0. Structure only: slots, tabs, and the active marker. Resolved titles and
+URLs from the graph are not projected yet, and bounds are filled in by the host
+after layout.

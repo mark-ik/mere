@@ -12,15 +12,27 @@ The projection is driven by chartulary's capability traits:
 - a `Predicated` edge (one carrying a predicate IRI) becomes a triple; an
   app-private relation is **not** projected.
 
-Only the shared semantic ring reaches RDF. An app's private relation families stay
-private, by construction.
+Only the shared semantic ring reaches RDF; an app's private relation families stay
+private.
 
-```rust
-use scholia::{to_jsonld, to_nquads};
+```rust,ignore
+use scholia::{to_jsonld, to_nquads, to_quads};
 
-let json = to_jsonld(graph);   // expanded JSON-LD
-let doc = to_nquads(graph);    // N-Quads
+let quads = to_quads(&graph);   // Vec<Quad>
+let json = to_jsonld(&graph);   // expanded JSON-LD, a serde_json::Value
+let doc = to_nquads(&graph);    // N-Quads, a String
 ```
+
+All three take `&Graph<N, E>` where `N: Identified + Addressed + Labeled` (with
+`N::Id: Display`) and `E: Predicated`.
+
+## Public surface
+
+`to_quads`, `to_jsonld`, `to_nquads`, `Quad`, `Term`, and the predicate constants
+`SCHEMA_NAME` (`https://schema.org/name`) and `SCHEMA_KEYWORDS`
+(`https://schema.org/keywords`), all in `scholia::project`.
+
+Dependencies: `chartulary`, `serde`, `serde_json`.
 
 This is the export half, harvested from mere's `linked-data` and re-seamed onto the
 traits. Compact JSON-LD with `@context`, ingest and round-trip, named-graph scopes,

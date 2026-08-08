@@ -29,9 +29,26 @@ history.save(&slots, "history").await?;
 let restored: Codicil<i64> = Codicil::load(&slots, "history").await?;
 ```
 
-Transport-neutral (it produces a replayable sequence; shipping it to peers is the
-consumer's job) and linear (a branching edit-tree is a later shape), by design.
-The name: a codicil is an amendment appended to a document, never a rewrite of it.
+## Modules
+
+| Module | Contents |
+|---|---|
+| `log` | `Codicil<T>`: `new`, `with_id`, `append`, `get`, `entries`, `from`, `len`, `is_empty`, `next_seq`, `replay`, `replay_from`, `fork`, `id`, `provenance` |
+| `seq` | `Seq(u64)` with `index` and `next` |
+| `causal` | `append_caused_by`, `parents`, `roots`, `causes`, `effects`, `concurrent`, `CausalError` |
+| `fork` | `LogId`, `Provenance` |
+| `persist` | `Codicil::save` / `Codicil::load` against a muniment `SlotStore` |
+
+Storage is a flat monotonic sequence; causality rides beside it as parent links.
+`append` claims no causes and stays linear; `append_caused_by` records them, after
+which `causes`, `effects`, and `concurrent` answer over the resulting DAG.
+`Codicil::fork` mints a new `LogId` carrying `Provenance` back to the parent log.
+
+Transport-neutral: it produces a replayable sequence, and shipping it to peers is
+the consumer's job. The name: a codicil is an amendment appended to a document,
+never a rewrite of it.
+
+Dependencies: `muniment` (path), `serde`.
 
 Built alongside muniment from a survey of four consumers (woodshed, hocket,
 isometry, mere). See [`design_docs/`](design_docs/).

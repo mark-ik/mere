@@ -29,13 +29,39 @@ predicate IRIs) that projects to RDF, and **app-private** families that do not.
 The provided `Container` and `Relation` payloads implement every capability trait;
 an app that needs more implements the traits on its own types.
 
+## Modules
+
+| Module | Contents |
+|---|---|
+| `caps` | `Identified`, `Addressed`, `ContentBearing`, `GraphBearing`, `Labeled`, `Classified`, `Predicated`, `Address` |
+| `graph` | `Graph<N, E>`, `NodeKey`, `EdgeKey` |
+| `container` | `Container`, `ContainerAddress`, `Relation` |
+| `taxonomy` | `RelationClass`, `Recognized`, `Semantic`, `REL_NS` |
+| `edit` | `GraphEdit`, `EdgeId`, `WriterId`, `DerivationKind`, `DerivationRecord` |
+| `spine` | `GraphLog`: graph edits as a codicil log, with muniment snapshots for checkpoint-plus-tail loading |
+| `commit` | `Batch`, `BatchId`, `Author`, `EditSpec`, `Committed`, `CommitError` |
+| `facet` | `NodeFacets`, `FacetStore`, `FacetId`, `FacetValidator`, `AcceptAll`, `FacetError`. Runtime typed node metadata, validated through an injected seam |
+| `content_class` | `ContentClass`, `ClassId`, `ClassRegistry`, `ClassMembership`, `CLASS_FACET`, `ClassError` |
+| `stemma` | `Stemma`, `StemmaSnapshot`, `EntryRecord`, `VisitRecord`, `OwnerRecord`, `TransitionKind`, `EntryPrivacy`, `OwnerBranchProjection`, `GcReport`. Owner-scoped descent of content through branching visits |
+| `nested` | Slot-name helpers: `log_slot`, `snap_slot`, `archived_log_slot`, `archived_snap_slot` |
+
+`codicil::LogId` and `codicil::Provenance` are re-exported so a consumer can fork
+a log and inspect provenance without depending on codicil directly.
+
+Dependencies: `petgraph` (with `serde-1`), `muniment` (default features off, for
+the blake3 `Hash`), `codicil`, `rkyv` and `slotmap` (the stemma snapshot and visit
+arena), `serde`, `serde_json`.
+
 The name: a chartulary is the register a house kept its charters and muniments in.
 `chart = { package = "chartulary" }` in a consumer workspace for the short name.
 
-This is the **G0** cut (the generic core, capability traits, default payloads,
-two-ring taxonomy). The edit spine, lineage (stemma), and RDF projection (scholia)
-are later phases. Canonical plan: mere's
-`design_docs/mere_docs/technical_architecture/2026-07-08_generic_graph_substrate_plan.md`.
+The standalone `stemma` crate was folded in as `chartulary::stemma` on
+2026-07-12. The RDF projection is the sibling `scholia` crate.
+
+Build phases and their done conditions live in the canonical plan, mere's
+`design_docs/mere_docs/technical_architecture/2026-07-08_generic_graph_substrate_plan.md`,
+and are not restated here: the module table above is what the crate actually
+ships, and a phase ladder copied into a README drifts from it.
 See [`design_docs/`](design_docs/).
 
 License: dual MIT OR Apache-2.0, at your option.
