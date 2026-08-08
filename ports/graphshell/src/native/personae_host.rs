@@ -13,7 +13,7 @@ use personae::signing::{ApprovalBroker, DecisionError, RememberApproval, Signing
 use personae::ssh_slot;
 use personae::{
     CredentialLineage, DerivedKeyAttestation, Ed25519Keypair, Ed25519PublicKey, IdentityError,
-    IdentityProvider, IdentityStorage, IdentityVault, ProtocolKey, UnlockTier,
+    IdentityProvider, IdentityStorage, IdentityVault, ProfileId, ProtocolKey, UnlockTier, roster,
 };
 use serde::{Deserialize, Serialize};
 use session_runtime::{DeviceId, revoke_remote_auth_device};
@@ -25,10 +25,11 @@ use crate::identity::{
     VaultProtectionView, VaultView, load_carry_view,
 };
 use crate::identity_projection::{
-    DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1, RemoveSshKeyIntentV1,
-    RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT, SIGNING_APPROVE_ONCE_INTENT,
-    SIGNING_DENY_INTENT, SSH_GENERATE_INTENT, SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT,
-    SigningDecisionIntentV1, SshUnlockPolicyIntentV1,
+    DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1, PROFILE_SWITCH_INTENT,
+    RemoveSshKeyIntentV1, RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT,
+    SIGNING_APPROVE_ONCE_INTENT, SIGNING_DENY_INTENT, SSH_GENERATE_INTENT,
+    SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT, SigningDecisionIntentV1, SshUnlockPolicyIntentV1,
+    SwitchProfileIntentV1,
 };
 
 const MAX_SHORT_TTL_SECONDS: u32 = 24 * 60 * 60;
@@ -94,6 +95,19 @@ pub enum IdentityIntentOutcome {
     SigningDecision,
     SshKeyMutation(SshKeyMutationReceipt),
     DeviceRevocation(DeviceRevocationReceipt),
+    ProfileSwitch(ProfileSwitchReceipt),
+}
+
+/// Public facts produced by a live profile switch.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileSwitchReceipt {
+    /// The persona the host now speaks as.
+    pub profile: String,
+    /// Whether the choice was written beside the vault for the rest of the
+    /// family, or only applied to this host (an ephemeral vault has no
+    /// beside). Shown, not guessed: "everyone follows" and "just here" are
+    /// different promises.
+    pub remembered: bool,
 }
 
 /// Public facts produced by a carry-authority revocation.
@@ -111,6 +125,11 @@ pub struct PersonaeHost<S: IdentityStorage> {
     agent: VaultAgent<S>,
     approval: ApprovalBroker,
     data_root: Option<PathBuf>,
+    /// Where the vault lives on disk, when it lives anywhere. A profile
+    /// switch writes the family's remembered choice beside it
+    /// ([`personae::roster::remember_profile`]); an ephemeral host has no
+    /// beside, so `None` switches without remembering.
+    vault_dir: Option<PathBuf>,
     protection: VaultProtectionView,
     lock: VaultLockView,
     listener: Arc<Mutex<AgentListenerView>>,
@@ -145,7 +164,15 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
             protection,
             lock: VaultLockView::Unlocked,
             listener: Arc::new(Mutex::new(AgentListenerView::StandaloneRetained)),
+            vault_dir: None,
         }
+    }
+
+    /// Name where the vault lives, so a profile switch also remembers the
+    /// choice for the rest of the family.
+    pub fn with_vault_dir(mut self, dir: PathBuf) -> Self {
+        self.vault_dir = Some(dir);
+        self
     }
 
     /// A fresh per-connection SSH agent session over the resident vault.
@@ -454,6 +481,38 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         self.approval.decide(request_id, SigningDecision::Deny)
     }
 
+    /// Switch the resident vault to another persona, live.
+    ///
+    /// Everything sharing the vault follows from its next operation — the SSH
+    /// agent holds the same `Arc<Mutex<IdentityVault>>`, so the next signing
+    /// request is served from the new persona's slots with no restart
+    /// anywhere. The choice is then remembered beside the vault so the rest
+    /// of the family opens on it too; a host with no on-disk vault switches
+    /// without remembering, and the receipt says which happened.
+    pub fn switch_profile(
+        &self,
+        payload: SwitchProfileIntentV1,
+    ) -> Result<ProfileSwitchReceipt, IdentityIntentError> {
+        let id = ProfileId(payload.profile);
+        self.vault.lock().unwrap().switch_profile(&id)?;
+        let remembered = match &self.vault_dir {
+            Some(dir) => match roster::remember_profile(dir, &id) {
+                Ok(()) => true,
+                // The switch itself succeeded; a choice that could not be
+                // written is worth saying, not worth unwinding.
+                Err(error) => {
+                    tracing::warn!(%error, profile = %id.0, "switched without remembering");
+                    false
+                }
+            },
+            None => false,
+        };
+        Ok(ProfileSwitchReceipt {
+            profile: id.0,
+            remembered,
+        })
+    }
+
     /// Apply one typed action emitted by [`crate::identity_projection`].
     pub fn apply_intent(
         &self,
@@ -494,6 +553,11 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
                 let payload: RevokeDeviceIntentV1 = serde_json::from_slice(payload)?;
                 self.revoke_device(payload)
                     .map(IdentityIntentOutcome::DeviceRevocation)
+            }
+            PROFILE_SWITCH_INTENT => {
+                let payload: SwitchProfileIntentV1 = serde_json::from_slice(payload)?;
+                self.switch_profile(payload)
+                    .map(IdentityIntentOutcome::ProfileSwitch)
             }
             _ => Err(IdentityIntentError::UnknownIntent),
         }
@@ -602,6 +666,86 @@ mod tests {
         assert!(!json.contains("BEGIN OPENSSH PRIVATE KEY"));
         assert!(!json.contains("5a5a5a5a5a5a5a5a"));
         assert_eq!(snapshot.vault.agent, AgentListenerView::StandaloneRetained);
+    }
+
+    #[test]
+    fn a_projected_switch_is_live_and_remembered_for_the_family() {
+        // The gap this closes: the projection could show which persona the
+        // host speaks as, and nothing could change it.
+        let storage = InMemoryStorage::new();
+        let work = Profile::new(
+            ProfileId("work".into()),
+            "Work",
+            Ed25519Keypair::from_seed([0x11; 32]),
+        );
+        let personal = Profile::new(
+            ProfileId("personal".into()),
+            "Personal",
+            Ed25519Keypair::from_seed([0x12; 32]),
+        );
+        storage.save_profile(&work).unwrap();
+        storage.save_profile(&personal).unwrap();
+        let vault_dir = std::env::temp_dir().join(format!(
+            "graphshell-switch-receipt-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&vault_dir);
+        let host = PersonaeHost::new(
+            IdentityVault::with_profile(storage, work),
+            None,
+            VaultProtectionView::Ephemeral,
+        )
+        .with_vault_dir(vault_dir.clone());
+
+        let before = IdentityProvider::master_public_key(&host).to_bytes();
+        let outcome = host
+            .apply_intent(
+                PROFILE_SWITCH_INTENT,
+                &serde_json::to_vec(&SwitchProfileIntentV1 {
+                    profile: "personal".into(),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+
+        // Live: the host's own identity — the one the shared SSH agent
+        // serves — is the new persona, and the snapshot marks it selected.
+        assert_ne!(IdentityProvider::master_public_key(&host).to_bytes(), before);
+        let snapshot = host.snapshot().unwrap();
+        let selected: Vec<&str> = snapshot
+            .profiles
+            .iter()
+            .filter(|profile| profile.selected)
+            .map(|profile| profile.id.as_str())
+            .collect();
+        assert_eq!(selected, ["personal"]);
+
+        // Remembered: the family's choice file now names the new persona.
+        match outcome {
+            IdentityIntentOutcome::ProfileSwitch(receipt) => {
+                assert_eq!(receipt.profile, "personal");
+                assert!(receipt.remembered);
+            }
+            other => panic!("expected a profile switch receipt, got {other:?}"),
+        }
+        assert_eq!(
+            roster::chosen_profile(&vault_dir),
+            Some(ProfileId("personal".into()))
+        );
+
+        // A persona that does not exist is an error, and the host still
+        // speaks as the one it had.
+        assert!(
+            host.switch_profile(SwitchProfileIntentV1 {
+                profile: "absent".into(),
+            })
+            .is_err()
+        );
+        assert_eq!(
+            host.snapshot().unwrap().profiles.iter().find(|p| p.selected).unwrap().id,
+            "personal"
+        );
+        let _ = std::fs::remove_dir_all(&vault_dir);
     }
 
     #[tokio::test]

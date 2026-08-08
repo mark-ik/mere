@@ -27,6 +27,8 @@ pub const SSH_REMOVE_INTENT: &str = "graphshell.identity.ssh.remove";
 pub const SSH_REMOVE_SCHEMA: &str = "graphshell.identity.ssh.remove/v1";
 pub const DEVICE_REVOKE_INTENT: &str = "graphshell.identity.device.revoke";
 pub const DEVICE_REVOKE_SCHEMA: &str = "graphshell.identity.device.revoke/v1";
+pub const PROFILE_SWITCH_INTENT: &str = "graphshell.identity.profile.switch";
+pub const PROFILE_SWITCH_SCHEMA: &str = "graphshell.identity.profile.switch/v1";
 
 /// Typed, secret-free signing decision payload.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,6 +78,20 @@ pub struct RemoveSshKeyIntentV1 {
 pub struct RevokeDeviceIntentV1 {
     pub device_id: Uuid,
     pub confirmed: bool,
+}
+
+/// Switch the resident host to another persona, live.
+///
+/// The one identity mutation that was missing: the projection could show which
+/// persona the host speaks as and could not change it. No confirmation field —
+/// switching is not destructive (the previous persona keeps everything and is
+/// one switch away), and a wrong guess corrects itself the same way it was
+/// made.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SwitchProfileIntentV1 {
+    /// The profile id, as carried by the profile card this action rides on.
+    pub profile: String,
 }
 
 /// One visible local-authority action attached to a portable card.
@@ -186,7 +202,25 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                     },
                     media: Vec::new(),
                 },
-                actions: Vec::new(),
+                // The selected persona gets no action: the only mutation a
+                // profile card offers is becoming the selected one.
+                actions: if profile.selected {
+                    Vec::new()
+                } else {
+                    vec![IdentityProjectionAction {
+                        intent: PROFILE_SWITCH_INTENT,
+                        schema: PROFILE_SWITCH_SCHEMA,
+                        label: "Speak as this persona",
+                        payload: Some(
+                            serde_json::to_value(SwitchProfileIntentV1 {
+                                profile: profile.id.clone(),
+                            })
+                            .expect("profile switch payload is always serializable"),
+                        ),
+                        native_only: true,
+                        input_form: None,
+                    }]
+                },
             }),
     );
 
@@ -683,6 +717,48 @@ mod tests {
             !serde_json::to_string(remove.payload.as_ref().unwrap())
                 .unwrap()
                 .contains("private")
+        );
+    }
+
+    #[test]
+    fn every_persona_but_the_selected_one_offers_the_switch() {
+        use crate::identity::ProfileView;
+        let mut snapshot = snapshot(SigningPolicy::PerUse);
+        for (id, selected) in [("work", true), ("personal", false)] {
+            snapshot.profiles.push(ProfileView {
+                id: id.to_string(),
+                display_name: id.to_string(),
+                selected,
+                slot_count: 0,
+                master_public_fingerprint: "blake3:test".to_string(),
+            });
+        }
+        let cards = project_identity(&snapshot);
+
+        let selected = cards
+            .iter()
+            .find(|card| card.key == "identity:profile:work")
+            .unwrap();
+        assert!(
+            selected.actions.is_empty(),
+            "the persona in use has nothing to become"
+        );
+
+        let other = cards
+            .iter()
+            .find(|card| card.key == "identity:profile:personal")
+            .unwrap();
+        let switch = other
+            .actions
+            .iter()
+            .find(|action| action.intent == PROFILE_SWITCH_INTENT)
+            .unwrap();
+        assert!(switch.native_only, "switching mutates the resident vault");
+        let payload: SwitchProfileIntentV1 =
+            serde_json::from_value(switch.payload.clone().unwrap()).unwrap();
+        assert_eq!(
+            payload.profile, "personal",
+            "activation resolves by identity, not by row position"
         );
     }
 

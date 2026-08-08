@@ -163,6 +163,31 @@ fn list_profiles_summarizes_each() {
 }
 
 #[test]
+fn switching_profiles_is_live_and_a_failed_switch_changes_nothing() {
+    let storage = InMemoryStorage::new();
+    let work = make_profile(1, "work");
+    let personal = make_profile(2, "personal");
+    storage.save_profile(&work).unwrap();
+    storage.save_profile(&personal).unwrap();
+
+    let mut vault = IdentityVault::open(&storage, &work.id).unwrap();
+    let before = vault.master_public_key().to_bytes();
+
+    vault.switch_profile(&personal.id).unwrap();
+    assert_eq!(vault.current_profile().id, personal.id);
+    assert_ne!(
+        vault.master_public_key().to_bytes(),
+        before,
+        "everything reading this vault now speaks as the new persona"
+    );
+
+    // A profile that will not load leaves the current one untouched rather
+    // than half-switched.
+    assert!(vault.switch_profile(&ProfileId("absent".into())).is_err());
+    assert_eq!(vault.current_profile().id, personal.id);
+}
+
+#[test]
 fn missing_profile_returns_backend_error() {
     // Profile doesn't impl Debug (master keypair is secret material),
     // so we match on the Result rather than expect_err().

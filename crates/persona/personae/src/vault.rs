@@ -416,6 +416,22 @@ impl<S: IdentityStorage> IdentityVault<S> {
     pub fn storage(&self) -> &S {
         &self.storage
     }
+
+    /// Switch to another profile, live.
+    ///
+    /// This is the vault-level switching the [`ProfileId`] docs promise. It is
+    /// deliberately **not** a restart: everything reading this vault — every
+    /// consumer of a shared `Arc<Mutex<IdentityVault>>`, including a
+    /// [`crate::agent::VaultAgent`] serving SSH keys — speaks as the new
+    /// persona from its next operation, with no process anywhere told to die.
+    ///
+    /// Loads before replacing, so a profile that will not load leaves the
+    /// current one untouched rather than half-switched.
+    #[tracing::instrument(level = "debug", skip(self), fields(?id))]
+    pub fn switch_profile(&mut self, id: &ProfileId) -> Result<(), IdentityError> {
+        self.current = self.storage.load_profile(id)?;
+        Ok(())
+    }
 }
 
 impl<S: IdentityStorage> IdentityProvider for IdentityVault<S> {

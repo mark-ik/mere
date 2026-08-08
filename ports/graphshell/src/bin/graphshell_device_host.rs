@@ -22,7 +22,7 @@ use graphshell::native::pairing;
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
-use graphshell::profile::{default_vault_dir, selected_profile};
+use graphshell::profile::{default_vault_dir, resolve_selected_profile};
 use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
 use personae::{IdentityVault, ProfileId};
 use ssh_agent_lib::agent::listen;
@@ -38,7 +38,10 @@ enum AgentEndpoint {
 
 struct Args {
     vault_dir: PathBuf,
-    profile: ProfileId,
+    /// `--profile`, when given. `None` means the family choice decides, once
+    /// the vault is open ([`resolve_selected_profile`] needs the storage for
+    /// the sole-persona rung), so each flow resolves after its own open.
+    profile: Option<ProfileId>,
     agent: AgentEndpoint,
     browser_endpoint: String,
     data_root: Option<PathBuf>,
@@ -128,7 +131,7 @@ async fn main() {
 
 fn parse_args() -> Result<Args, String> {
     let mut vault_dir = default_vault_dir();
-    let mut profile = selected_profile();
+    let mut profile = None;
     let mut agent_endpoint = None;
     let mut receipt_agent_endpoint = None;
     let mut browser_endpoint = configured_device_endpoint();
@@ -178,7 +181,7 @@ fn parse_args() -> Result<Args, String> {
                 vault_dir = PathBuf::from(argv.next().ok_or("--dir needs a value")?);
             }
             "--profile" => {
-                profile = ProfileId(argv.next().ok_or("--profile needs a value")?);
+                profile = Some(ProfileId(argv.next().ok_or("--profile needs a value")?));
             }
             "--agent-endpoint" => {
                 agent_endpoint = Some(argv.next().ok_or("--agent-endpoint needs a value")?);
@@ -357,15 +360,18 @@ fn parse_args() -> Result<Args, String> {
 fn report_pairing_facts(args: &Args) -> Result<String, String> {
     let opened = bootstrap::open_storage(&args.vault_dir, Unlock::from_env())
         .map_err(|error| error.to_string())?;
-    let (profile, _created) = bootstrap::load_or_create_profile(&*opened.storage, &args.profile)
+    let profile_id =
+        resolve_selected_profile(&*opened.storage, &args.vault_dir, args.profile.as_ref())
+            .map_err(|error| error.to_string())?;
+    let (profile, _created) = bootstrap::load_or_create_profile(&*opened.storage, &profile_id)
         .map_err(|error| error.to_string())?;
     let vault = IdentityVault::with_profile(opened.storage, profile);
-    let facts = pairing::pairing_facts(&vault, &owner_settings::default_app_dir(), &args.profile)
+    let facts = pairing::pairing_facts(&vault, &owner_settings::default_app_dir(), &profile_id)
         .map_err(|error| error.to_string())?;
     let Some(facts) = facts else {
         return Err(format!(
             "personal sync is not configured for profile {:?}",
-            args.profile.0
+            profile_id.0
         ));
     };
     Ok(format!(
@@ -382,7 +388,11 @@ fn report_pairing_facts(args: &Args) -> Result<String, String> {
 #[cfg(feature = "personal-sync")]
 fn unpair_device(args: &Args, node_id: &str) -> Result<String, String> {
     let node = owner_settings::parse_hex32(node_id).map_err(|error| error.to_string())?;
-    let outcome = pairing::unpair_device(&owner_settings::default_app_dir(), &args.profile, node)
+    // Pairing settings are per-profile, so unpairing the wrong profile's
+    // settings would silently unpair nothing. Resolving costs one vault open;
+    // this is a one-shot command that exits.
+    let profile_id = resolve_cli_profile(args)?;
+    let outcome = pairing::unpair_device(&owner_settings::default_app_dir(), &profile_id, node)
         .map_err(|error| error.to_string())?;
     Ok(match outcome {
         pairing::UnpairOutcome::Removed { path } => {
@@ -394,6 +404,16 @@ fn unpair_device(args: &Args, node_id: &str) -> Result<String, String> {
     })
 }
 
+/// Resolve the profile for a one-shot CLI flow that does not otherwise open
+/// the vault. The open exists only for the family ladder's sole-persona rung.
+#[cfg(feature = "personal-sync")]
+fn resolve_cli_profile(args: &Args) -> Result<ProfileId, String> {
+    let opened = bootstrap::open_storage(&args.vault_dir, Unlock::from_env())
+        .map_err(|error| error.to_string())?;
+    resolve_selected_profile(&*opened.storage, &args.vault_dir, args.profile.as_ref())
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(feature = "personal-sync")]
 fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
     let node = owner_settings::parse_hex32(&request.node_id).map_err(|error| error.to_string())?;
@@ -401,9 +421,10 @@ fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
         Some(value) => Some(owner_settings::parse_hex32(value).map_err(|error| error.to_string())?),
         None => None,
     };
+    let profile_id = resolve_cli_profile(args)?;
     let outcome = pairing::pair_device(
         &owner_settings::default_app_dir(),
-        &args.profile,
+        &profile_id,
         node,
         root,
         &request.label,
@@ -511,20 +532,27 @@ fn init_logging(path: Option<&Path>) -> Result<(), std::io::Error> {
 async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let opened = bootstrap::open_storage(&args.vault_dir, Unlock::from_env())?;
     tracing::info!(storage = %opened.description, "Personae storage open");
-    let (profile, created) = bootstrap::load_or_create_profile(&*opened.storage, &args.profile)?;
+    let profile_id =
+        resolve_selected_profile(&*opened.storage, &args.vault_dir, args.profile.as_ref())?;
+    let (profile, created) = bootstrap::load_or_create_profile(&*opened.storage, &profile_id)?;
     if created {
-        tracing::warn!(profile = %args.profile.0, "selected profile was created");
+        tracing::warn!(profile = %profile_id.0, "selected profile was created");
     }
     let protection = if std::env::var_os(PASSPHRASE_ENV).is_some() {
         VaultProtectionView::Passphrase
     } else {
         VaultProtectionView::OsProtected
     };
-    let personae = Arc::new(PersonaeHost::new(
-        IdentityVault::with_profile(opened.storage, profile),
-        args.data_root.clone(),
-        protection,
-    ));
+    let personae = Arc::new(
+        PersonaeHost::new(
+            IdentityVault::with_profile(opened.storage, profile),
+            args.data_root.clone(),
+            protection,
+        )
+        // So a profile switch is remembered for the whole family, not just
+        // applied to this resident.
+        .with_vault_dir(args.vault_dir.clone()),
+    );
 
     #[cfg(not(windows))]
     prepare_unix_agent_endpoint(match &args.agent {
@@ -554,7 +582,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         personae.as_ref(),
         &owner_settings::default_app_dir(),
         &args.vault_dir,
-        &args.profile,
+        &profile_id,
         args.data_root.clone(),
         args.sync_overrides,
         args.sync_peer_tickets,

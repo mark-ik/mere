@@ -19,33 +19,59 @@
 //!
 //! ## Selection
 //!
-//! The profile is configurable and defaults to `default` — the same profile
-//! the Personae SSH agent serves, so Graphshell speaks as the user rather than
-//! as a second identity the user did not know they had.
+//! The profile is the **family choice** ([`personae::roster`]): picked once,
+//! beside the shared vault, honoured by every Merely application — so
+//! Graphshell speaks as whoever the user is everywhere else, rather than as a
+//! second identity they did not know they had. `GRAPHSHELL_PROFILE` sits above
+//! the family ladder as this application's own override, for a host that
+//! genuinely should speak as someone else (a receipt run, a second resident on
+//! one machine).
 
 use std::path::{Path, PathBuf};
 
 use personae::bootstrap::{self, Unlock};
+use personae::roster;
 use personae::vault::{IdentityStorage, IdentityVault, ProfileId};
 use personae::{
     DerivedKeyAttestation, Ed25519Keypair, Ed25519PublicKey, IdentityError, IdentityProvider,
 };
 
-/// Environment override for the profile Graphshell speaks as.
+/// Environment override for the profile Graphshell speaks as, above the
+/// family-wide [`personae::roster::PROFILE_ENV`].
 pub const PROFILE_ENV: &str = "GRAPHSHELL_PROFILE";
 
-/// The default profile: the one the Personae bins and SSH agent use.
-pub const DEFAULT_PROFILE: &str = "default";
+/// This application's own override: `GRAPHSHELL_PROFILE`, or nothing.
+///
+/// `None` means Graphshell has no opinion of its own and the family choice
+/// decides — which is the ordinary case.
+pub fn env_profile() -> Option<ProfileId> {
+    std::env::var(PROFILE_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(ProfileId)
+}
 
-/// The profile this process should load — `GRAPHSHELL_PROFILE`, else
-/// [`DEFAULT_PROFILE`].
-pub fn selected_profile() -> ProfileId {
-    ProfileId(
-        std::env::var(PROFILE_ENV)
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| DEFAULT_PROFILE.to_string()),
-    )
+/// Which profile this process speaks as.
+///
+/// The ladder: an explicit choice from the caller (a `--profile` flag), then
+/// [`env_profile`], then the family ladder ([`personae::roster::resolve_profile`]:
+/// `PERSONAE_PROFILE`, the choice remembered beside the vault, the vault's
+/// sole persona, `default`). Needs the opened storage for the sole-persona
+/// rung, which every caller already has — resolution without looking at the
+/// vault is how five hardcoded `"default"`s happened.
+pub fn resolve_selected_profile(
+    storage: &dyn IdentityStorage,
+    vault_dir: &Path,
+    explicit: Option<&ProfileId>,
+) -> Result<ProfileId, IdentityError> {
+    if let Some(profile) = explicit {
+        return Ok(profile.clone());
+    }
+    if let Some(profile) = env_profile() {
+        return Ok(profile);
+    }
+    roster::resolve_profile(storage, vault_dir)
 }
 
 /// The shared Personae vault directory.
@@ -100,9 +126,25 @@ impl GraphshellIdentity {
         })
     }
 
-    /// Load [`selected_profile`] from the shared vault.
+    /// Load whichever profile [`resolve_selected_profile`] picks from the
+    /// shared vault: the one call an application makes to speak as the user.
     pub fn load_selected() -> Result<Self, IdentityError> {
-        Self::load(&default_vault_dir(), &selected_profile())
+        let vault_dir = default_vault_dir();
+        let opened = bootstrap::open_storage(&vault_dir, Unlock::from_env())?;
+        let profile = resolve_selected_profile(&*opened.storage, &vault_dir, None)?;
+        let (loaded, created) = bootstrap::load_or_create_profile(&*opened.storage, &profile)?;
+        if created {
+            eprintln!(
+                "graphshell: minted a new Personae profile `{}` in {}",
+                profile.0,
+                vault_dir.display()
+            );
+        }
+        Ok(Self {
+            vault: IdentityVault::with_profile(opened.storage, loaded),
+            profile,
+            description: opened.description,
+        })
     }
 
     /// The profile this identity speaks as.
@@ -198,10 +240,36 @@ mod tests {
     }
 
     #[test]
-    fn the_selected_profile_defaults_to_the_shared_one() {
-        // Graphshell speaks as the user's own profile — the one the SSH agent
-        // serves — not as a second identity minted behind their back.
-        assert_eq!(selected_profile().0, DEFAULT_PROFILE);
+    fn the_selected_profile_is_the_family_choice() {
+        // Graphshell speaks as whoever the user is everywhere else. The rungs
+        // that matter here: an explicit flag beats everything, and with no
+        // opinion of its own Graphshell takes the family ladder — including
+        // the sole-persona rung, so a vault holding one persona under another
+        // name does not gain a second identity minted behind the user's back.
+        use personae::vault::InMemoryStorage;
+        let dir = scratch("family-choice");
+        std::fs::create_dir_all(&dir).unwrap();
+        let storage = InMemoryStorage::new();
+
+        let explicit = ProfileId("receipt".into());
+        assert_eq!(
+            resolve_selected_profile(&storage, &dir, Some(&explicit)).unwrap(),
+            explicit
+        );
+
+        storage
+            .save_profile(&personae::vault::Profile::new(
+                ProfileId("stage-name".into()),
+                "Stage Name",
+                Ed25519Keypair::generate(),
+            ))
+            .unwrap();
+        assert_eq!(
+            resolve_selected_profile(&storage, &dir, None).unwrap().0,
+            "stage-name",
+            "the vault's sole persona wins over minting a default beside it"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

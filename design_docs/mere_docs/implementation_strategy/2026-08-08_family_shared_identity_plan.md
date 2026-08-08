@@ -138,42 +138,74 @@ product decision, not a mechanical one. Left undone on purpose.
 
 ## Where the picker gets drawn
 
-**Choosing is restart-shaped everywhere, not just in Woodshed.** Turnstone
-loads `RootIdentity` once at boot and every denizen grant descends from it;
-Knot opens `StartupUnlockedPersonalVault` when the endpoint opens; Woodshed
-derives its sealing key at `open_store()`. So the honest v1 in every
-application is the same: the choice is remembered and takes effect next launch.
-`genet_host_api::settings` already has the word for that,
-`SettingMutability::RestartRequired`, which makes Woodshed's settings row the
-*easy* case rather than the awkward one — a `SettingControl::Choice` over the
-roster whose `apply` calls `remember_profile`.
+**Ruled 2026-08-08 (Mark): switching is live. A forced restart is the
+exception, reserved for necessities, never the design.** An earlier draft of
+this section called restart-shaped switching "the honest v1"; it is retracted.
+What live means per application:
+
+- **Graphshell** — free. The resident host holds `Arc<Mutex<IdentityVault>>`
+  and the SSH agent shares the same handle, so `IdentityVault::switch_profile`
+  (added for this) takes effect on the next operation of everything reading
+  the vault. Nothing anywhere is told to die.
+- **Woodshed** — reopen the store and reload: save the old persona's session
+  sealed under its key, `open_store()` again (it reads the new choice), load
+  whatever the new persona had. "Switching personas switches practice
+  sessions" is the tested property; live switch is just doing it without the
+  relaunch in the middle.
+- **Turnstone** — the heavy one, and the machinery exists: `denizen::rebuild`'s
+  re-root heal already handles "the root changed" by re-issuing grants from
+  the reviewed projections. A live switch is an invocation of the heal, not
+  new infrastructure.
+- **Knot** — close the endpoint, open the new persona's. K2 built exactly the
+  contract this needs: sessions on a vanished endpoint are told
+  (`Disconnected`), never shown a stale copy.
+
+`SettingMutability::Live` is the marker for Woodshed's settings row, with the
+row's `apply` doing the actual swap, not just remembering it.
 
 **Graphshell is not just a consumer; it is a prior implementation.**
 `ports/graphshell/src/native/personae_host.rs::snapshot` already builds
 `ProfileView { selected, id, display_name, slot_count,
 master_public_fingerprint }` — the same list-and-mark-and-sort-by-id that
 `read_roster` does, projected over the protocol as a secret-free read model.
-The two should be reconciled rather than left to drift: `ProfileView` becomes
-the wire form of a `RosterEntry` plus the fingerprint.
+One caution from reconciling them: their `selected` fields answer different
+questions. `read_roster`'s chosen is the *resolved choice* (env, remembered
+file, sole persona); `snapshot`'s selected is the *loaded current profile*.
+After a switch they coincide, but under a `GRAPHSHELL_PROFILE` override they
+must not — the UI shows what is, not what would be resolved. So the two stay
+separate constructions, on purpose.
 
-Graphshell also has **no switch intent** — `SSH_GENERATE`, `SSH_IMPORT_NATIVE`,
+Graphshell also had **no switch intent** — `SSH_GENERATE`, `SSH_IMPORT_NATIVE`,
 `SSH_REMOVE`, `DEVICE_REVOKE`, three signing-approval intents, and nothing for
-the profile. It can show which persona you are on and cannot change it. That is
-precisely the gap the roster closes, which makes graphshell the first surface
-to draw rather than the last.
+the profile. It could show which persona you are on and could not change it.
 
-Suggested order:
+### Landed 2026-08-08 (graphshell)
 
-1. **Graphshell** — reconcile `ProfileView` with `RosterEntry`, add the switch
-   intent over `remember_profile`. The read model is already there.
-2. **Turnstone** — `identity.rs` still hardcodes `ProfileId("default")`; it
-   moves to `roster::open_chosen`. This is the only remaining *production*
-   hardcode. (The `"default"` occurrences in `browser_host.rs` and `pairing.rs`
-   are test fixtures constructing a `Profile` directly, which is correct.)
-3. **Knot** — startup-bound the same way.
-4. **Woodshed** — the settings row above.
-5. **Hocket** — gated. Its picker *is* the rotation surface, so it cannot be
-   drawn before the migration is decided.
+- `IdentityVault::switch_profile` (personae) — the vault-level switching the
+  `ProfileId` docs had promised. Loads before replacing, so a failed switch
+  changes nothing.
+- `graphshell::profile` joins the family ladder: explicit `--profile`, then
+  `GRAPHSHELL_PROFILE` (the application's own override, above the family one),
+  then `roster::resolve_profile`. The device host resolves after opening
+  storage — resolution without looking at the vault is how five hardcoded
+  `"default"`s happened. Pair/unpair subcommands now resolve too, which fixes
+  a real bug: they operated on `default`'s pairing settings regardless of the
+  family choice.
+- `PROFILE_SWITCH_INTENT` + `SwitchProfileIntentV1`: every non-selected
+  profile card carries "Speak as this persona", payload bound to the profile
+  id off the drawn card (identity, not row position). The host applies it
+  live and then remembers the choice beside the vault for the rest of the
+  family; the receipt says whether remembering happened, because "everyone
+  follows" and "just here" are different promises.
+
+Remaining order: **Turnstone** (`identity.rs` still hardcodes
+`ProfileId("default")` — the only remaining production hardcode; the
+`"default"`s in `browser_host.rs` and `pairing.rs` are test fixtures and
+correct), then **Knot**, then **Woodshed** (the settings row), then **Hocket**
+— gated: its picker *is* the rotation surface, so it cannot be drawn before
+the contact-token migration is decided. Its persona-faceted timeline concept
+is sketched in
+[hocket's design docs](../../../../hocket/design_docs/2026-08-08_persona_timeline_design.md).
 
 ## Open
 
