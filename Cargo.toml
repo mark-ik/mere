@@ -1,0 +1,17 @@
+[package]
+name = "gaz"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Name reservation. Gaz is the contact layer of the mere stack: persona-scoped, key-rooted contact records (your petname for them, their stable keys, attested handles, endpoints each carrying its own trust state), plus kith/kin tiers and recency. Muniment-backed storage; records keyed against personae. A resolver finds the wide world; gaz keeps who you actually know."
+repository = "https://github.com/merely-made/gaz"
+readme = "README.md"
+keywords = ["contacts", "petname", "identity", "persona", "kith"]
+categories = ["data-structures"]
+exclude = ["design_docs/"]
+
+# Own workspace root. Members arrive if the organ splits; until then the
+# reservation package is the only member.
+[workspace]
+
+[dependencies]
