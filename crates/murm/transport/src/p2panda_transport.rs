@@ -547,6 +547,21 @@ impl P2pandaTransport {
         Ok(addr)
     }
 
+    /// Gracefully stop the underlying iroh endpoint.
+    ///
+    /// Call this when a bounded transport owner is finished. Dropping an open
+    /// iroh endpoint aborts its remaining connections and makes the remote end
+    /// report a lost connection even after all application data was delivered.
+    pub async fn close(&self) -> Result<(), TransportError> {
+        let endpoint = self
+            .endpoint
+            .endpoint()
+            .await
+            .map_err(|e| TransportError::Backend(format!("endpoint(): {e}")))?;
+        endpoint.close().await;
+        Ok(())
+    }
+
     /// Register a peer's [`EndpointAddr`] so connect-by-PeerID resolves without
     /// discovery (DNS / mDNS / random-walk).
     pub async fn add_peer(&self, addr: EndpointAddr) -> Result<(), TransportError> {

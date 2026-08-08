@@ -1,19 +1,29 @@
 # Knot in Graphshell Plan
 
 **Date:** 2026-08-02
-**Status:** K0-K3 complete as of 2026-08-06. K1 chose Option A (Mark): shared
-documents are projected, personal documents replicate, and T4's done condition
-is replaced accordingly, closing the shared-Knot authority question as
-dissolved rather than answered. K2's three clauses are proven against the real
-resident host; K3 kept the spawn path deliberately.
+**Status:** K0-K3 complete. K1 chose Option A (Mark): shared documents are
+projected, personal documents replicate, and T4's done condition is replaced
+accordingly, closing the shared-Knot authority question as dissolved rather
+than answered. K2's three clauses are proven against the real resident host,
+and its physical two-machine receipt passed on 2026-08-08. K3 kept the spawn
+path deliberately.
 
-**Outstanding before this archives:** running the two-machine receipt. The
-rehearsal itself is built: `ports/knot/examples/k2_peer.rs`, modelled on
-graphshell's `g5_peer`, holds a real vault on one device and visits it from
-another, saving through the projection and waiting for the holder's bell. It is
-an example rather than a bin because Knot depends on graphshell only as a
-dev-dependency, and examples get dev-dependencies where bins do not, so the
-rehearsal costs the crate graph nothing.
+**Physical receipt (2026-08-08):** `ports/knot/examples/k2_peer.rs` held a real
+vault on Q-PC and visited it from Windows over an explicit endpoint ticket.
+The visitor was admitted, mounted `Knot`, saved, heard the unseen revision,
+remained live, read back exactly what it wrote from Q-PC's file, closed, and
+exited zero. Both native runners used the same source snapshot and lockfile.
+See the
+[K2 physical two-machine receipt](../../../ports/knot/docs/2026-08-08_k2_physical_two_machine_receipt.md).
+
+The reverse Windows-holder to Q-PC-visitor direction timed out before
+admission and left the file unchanged. That direction remains a reachability
+defect, but K2's physical two-machine condition is met by the passing direction.
+The route was ticketed; direct-versus-relay selection was not instrumented.
+
+The rehearsal remains an example rather than a bin because Knot depends on
+graphshell only as a dev-dependency, and examples get dev-dependencies where
+bins do not, so the rehearsal costs the crate graph nothing.
 
 ```
 cargo run -p knot --example k2_peer -- hold  --root <vault-dir>
@@ -21,11 +31,8 @@ cargo run -p knot --example k2_peer -- visit --peer <ticket>
 ```
 
 Both devices set `K2_OWNER` and `K2_NETWORK` to the same value and `K2_SEED` to
-different ones. What it cannot do from here is run: that needs the two
-machines, so the receipt is Mark's to take. Everything above is proven against a paired in-process fixture, which
-exercises every layer but the physical one, and the reachability work the
-receipt depends on lives in its own plan. The Knot search section below is
-independent of K0-K3 and does not block archiving of the hosting work.
+different ones. The Knot search section below is independent of K0-K3 and does
+not block archiving of the hosting work.
 **Related:** the
 [carrier seam plan](../../archive_docs/2026-08-06_completed_plans/2026-08-01_graphshell_carrier_seam_plan.md), which this
 converges with — see "Why these are one move".
@@ -285,6 +292,12 @@ bell, resumes, and reads Ada's text; and the holder's own file on disk is what
 both were reading. A second test takes the holder away mid-session and finds
 the visitor told the document is unavailable, with the scene kept so a host can
 still show what was there and no longer offer a save that cannot land.
+
+**K2 PHYSICAL RECEIPT PASSED 2026-08-08.** Q-PC held the real vault and a
+Windows visitor completed admission, mount, save, revision bell, live readback,
+and close over the ticketed p2panda carrier. The holder's file hash matched the
+captured Windows copy. See the
+[physical receipt](../../../ports/knot/docs/2026-08-08_k2_physical_two_machine_receipt.md).
 
 Three decisions were taken along the way, each forced by a compiler or a red
 test rather than chosen in the abstract.
