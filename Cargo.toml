@@ -3,7 +3,7 @@ name = "gaz"
 version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "Name reservation. Gaz is the contact layer of the mere stack: persona-scoped, key-rooted contact records (your petname for them, their stable keys, attested handles, endpoints each carrying its own trust state), plus kith/kin tiers and recency. Muniment-backed storage; records keyed against personae. A resolver finds the wide world; gaz keeps who you actually know."
+description = "The contact layer: persona-scoped, key-rooted contact records. Your petname for them, rooted on stable keys, with handles and endpoints each carrying their own trust state, plus kith/kin tiers and recency. A resolver finds the wide world; gaz keeps who you actually know."
 repository = "https://github.com/merely-made/gaz"
 readme = "README.md"
 keywords = ["contacts", "petname", "identity", "persona", "kith"]
@@ -15,3 +15,7 @@ exclude = ["design_docs/"]
 [workspace]
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
