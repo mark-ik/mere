@@ -7,8 +7,22 @@ is replaced accordingly, closing the shared-Knot authority question as
 dissolved rather than answered. K2's three clauses are proven against the real
 resident host; K3 kept the spawn path deliberately.
 
-**Outstanding before this archives:** the two-machine receipt over real
-hardware. Everything above is proven against a paired in-process fixture, which
+**Outstanding before this archives:** running the two-machine receipt. The
+rehearsal itself is built: `ports/knot/examples/k2_peer.rs`, modelled on
+graphshell's `g5_peer`, holds a real vault on one device and visits it from
+another, saving through the projection and waiting for the holder's bell. It is
+an example rather than a bin because Knot depends on graphshell only as a
+dev-dependency, and examples get dev-dependencies where bins do not, so the
+rehearsal costs the crate graph nothing.
+
+```
+cargo run -p knot --example k2_peer -- hold  --root <vault-dir>
+cargo run -p knot --example k2_peer -- visit --peer <ticket>
+```
+
+Both devices set `K2_OWNER` and `K2_NETWORK` to the same value and `K2_SEED` to
+different ones. What it cannot do from here is run: that needs the two
+machines, so the receipt is Mark's to take. Everything above is proven against a paired in-process fixture, which
 exercises every layer but the physical one, and the reachability work the
 receipt depends on lives in its own plan. The Knot search section below is
 independent of K0-K3 and does not block archiving of the hosting work.

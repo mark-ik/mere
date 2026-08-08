@@ -1,7 +1,8 @@
 # Knot Publishing Protocol Plan
 
 **Date**: 2026-08-07
-**Status**: Scoped, not started. Awaiting a decision on §4.
+**Status**: Scoped, not started. Direction settled 2026-08-07: **A then B**
+(§4). Nothing is implemented; this is the plan, not a queue item in progress.
 
 **Scope**: Give knot documents a documented way to be fetched by *someone who
 is not you*. Everything knot does today is intra-persona.
@@ -73,12 +74,17 @@ Likewise settled and not to be re-litigated:
 - **The document format is djot.** §10.5 of the polyglot knot design finished
   on 2026-05-31; `text/x-knot` routes to `nematic.knot-djot` by default.
 
-## 4. The decision this plan is waiting on
+## 4. The direction: A, then B
 
-**How much of a protocol does this want to be?** Three honest options, and they
-differ in kind, not degree.
+**How much of a protocol does this want to be?** Both, in that order. A is not
+a trial of whether B is worth doing — B is where this is going. A is how B gets
+written from something that has carried traffic rather than from a guess.
 
-### (a) A knot ALPN on the existing projection seam
+Stating that plainly matters for a reason this workspace has been bitten by
+before: a phase recorded as "an option we might take" reads, months later, as a
+thing that was considered and dropped. This is a sequence.
+
+### Phase A — a knot ALPN on the existing projection seam
 
 Knot's resident accepts on its own ALPN, admits through
 `accept_projection_session`, and answers a small request vocabulary: fetch a
@@ -86,44 +92,58 @@ document by id, list what is published, fetch a version. No new scheme, no new
 crate. `knot://vault/{id}` gains a remote resolution through an existing
 carrier.
 
-Smallest, reuses everything, and is the only option that needs no new
-specification. It is also *not interoperable with anything* — it is a private
-protocol between Mere instances.
+Smallest, reuses everything, and needs no specification written in advance. It
+is deliberately *not interoperable with anything yet* — a private protocol
+between Mere instances, which is exactly the right shape for something whose
+wire grammar is still learning what it needs to carry.
 
-### (b) (a), plus a published specification and a `knot-protocol` crate
+Useful on its own terms, not merely as groundwork: it closes the publishing gap
+for the users who exist today, which is Mere instances talking to each other.
 
-The same wire behaviour, but written down to the standard the smolweb crates
-hold, published, and implementable by someone else. This is what would make it
-"Demarkus but ours" rather than "an internal RPC".
+**Done when:** two personas on two machines, not paired to each other, and one
+fetches a djot note the other published — with the refusal path exercised too,
+because an admission seam that has never refused anything has not been tested.
 
-The cost is real and should not be understated: a published protocol is a
-compatibility promise, and this workspace's own rule is that a crate ships only
-where a specification exists to be faithful to. Here *we* would be the ones
-writing that specification, which is a different and larger undertaking than
-implementing someone else's.
+### Phase B — write the specification, publish `knot-protocol`
 
-### (c) Implement Demarkus's Mark Protocol for interoperability
+The same wire behaviour, written down to the standard the smolweb crates hold,
+published, and implementable by someone who is not us. This is what makes it a
+protocol rather than an internal RPC, and it is the destination.
 
-Currently **blocked**: demarkus.io publishes a feature list and a GitHub link,
-not a wire specification. Reading their repository to establish whether a real
-spec exists is a prerequisite, and until one does, this falls under the same
-rule that ruled out Mercury — no guessing a wire format.
+The cost is real and should not be understated. A published protocol is a
+compatibility promise, and this workspace's rule has been that a crate ships
+only where a specification exists to be faithful to. Here **we are the ones
+writing that specification**, which is a different and larger undertaking than
+implementing someone else's — every ambiguity we leave is one an implementer
+has to guess at, and this session has spent a good deal of effort refusing to
+guess at other people's.
 
-### Recommendation
+What Phase A must hand over for Phase B to be writable: the request grammar as
+it actually settled, the refusal vocabulary as it actually got used, and the
+versioning semantics as codicil actually exposed them. A specification written
+before those are known describes something nobody wanted.
 
-**(a) now, (b) as a deliberate later decision, (c) only after reading their
-repo.**
+**Enter Phase B when:** Phase A's grammar has stopped changing under real use,
+and there is a second party who wants to implement it. The second condition is
+not decoration — a specification with no prospective implementer is
+documentation wearing a costume.
 
-(a) is genuinely useful on its own — it closes the publishing gap for real
-users, who are Mere instances talking to each other — and it is the honest
-prerequisite for (b) regardless. Writing a specification for a protocol that
-has never carried traffic is how specifications end up describing something
-nobody wanted. Run (a), let it carry real notes between real people, and then
-decide whether what it learned is worth publishing.
+### Not a phase: Demarkus's Mark Protocol (interoperability)
 
-## 5. Sketch of (a), for costing only
+Kept here so it is not re-researched from scratch. Implementing the Mark
+Protocol for interop with Demarkus is **blocked, and separate from A and B**:
+demarkus.io publishes a feature list and a GitHub link, not a wire
+specification. Reading their repository to establish whether a real spec exists
+is the prerequisite; until one does, this falls under the rule that ruled out
+Mercury — no guessing a wire format.
 
-Not a design; a size estimate.
+Note the relationship, which is not competition: if their spec turns out to be
+real and good, Phase B could adopt it instead of authoring one. That would be a
+better outcome, not a worse one. It just cannot be decided from a landing page.
+
+## 5. Sketch of Phase A, for costing only
+
+Not a design; a size estimate. The design is written when the work starts.
 
 - A knot ALPN constant, beside the projection one.
 - A request grammar. Small: `GET <document-id>`, `LIST`, `GET <id>@<version>`.
@@ -139,9 +159,7 @@ Not a design; a size estimate.
 - Serving reuses `KnotEndpoint`'s existing projection, so a remote reader gets
   exactly what a local one does.
 
-**Done when:** two personas on two machines, not paired to each other, and one
-fetches a djot note the other published — with the refusal path exercised too,
-because an admission seam that has never refused anything has not been tested.
+The done-condition is stated with Phase A in §4.
 
 ## 6. Deliberately out of scope
 
