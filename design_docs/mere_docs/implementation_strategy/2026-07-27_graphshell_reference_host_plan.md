@@ -1975,10 +1975,46 @@ browser, two-device network, and real RF are different claims.
    publish a pre-key. That is a gap against the readers-superset ruling, named
    in the host's warning rather than left silent.
 
-   Still to build: the receive-only path, which wants the pre-key carried with
-   `PairingFacts` out of band as `node_id` and `root` already are; and epoch
-   retention (`forget_authorized`), which matters more now that unpair rotates
-   automatically and every rotation adds an epoch.
+   **A defect the receipt was shaped to miss, found and fixed 2026-08-07** (in
+   commit `8fcbed5a`, whose message is about personas: shared working tree
+   again). The end-to-end receipt keyed the sibling *before* sealing anything,
+   so it proved the order that works and never asked the other. Written the
+   other way round, it failed: a device keyed after sealed writes never
+   received them.
+
+   The cause was not the refusal but what forced it. Admission checks the
+   roster through `stable_subject`, which read the writer attestation out of
+   the record, and the record is inside the sealed body. An unkeyed device
+   could not tell an admitted writer from a stranger, so it refused, and
+   LogSync does not offer twice.
+
+   The attestation and the observed frontier now travel in the signed header,
+   checkable without the payload key. Knot carries its parents there for the
+   same reason. Admission can attribute and bound a sealed operation, so it
+   holds it rather than refusing it, and a device keyed later reads what it
+   already has with nothing to re-fetch. Both fields are `skip_serializing_if`
+   and the byte-identity test covers all four header fields.
+
+   Its events go unchecked while sealed. That is the price: they were authored
+   by an admitted writer and the payload is size-bounded by the header, and the
+   alternative was losing the operation outright. Projection re-admits with the
+   key in hand, so nothing unread is folded into the graph. Projection also
+   skips what it cannot read instead of failing wholesale, and reports the
+   count, because a graph quietly missing part of itself looks identical to a
+   complete one.
+
+   Still to build, and two more found by reviewing:
+
+   - The receive-only path, which wants the pre-key carried with
+     `PairingFacts` out of band as `node_id` and `root` already are.
+   - Epoch retention (`forget_authorized`), which matters more now that unpair
+     rotates automatically and every rotation adds an epoch.
+   - **Revocation depends on which device the unpair happens on.** Settings are
+     per device and unsynced, so unpairing on device A never reaches device B's
+     watch, and if A is not itself keyed nothing revokes at all.
+   - **`key_agreement()` orders by `(seq_num, hash)` across authors**, which is
+     not causal order, since `seq_num` is per author. Two devices work; three
+     with interleaved sequences is unproven.
 
 None of these decisions changes the product boundary or requires a new
 repository.
