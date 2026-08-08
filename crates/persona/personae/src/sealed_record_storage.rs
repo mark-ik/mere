@@ -35,6 +35,7 @@ struct SealedRecordEnvelope {
 /// Each relative record path maps to one sealed JSON envelope on disk. The
 /// record path itself is bound into AEAD associated data so ciphertext cannot be
 /// transparently copied to a different logical record id.
+#[derive(Clone)]
 pub struct SealedRecordStorage {
     root: PathBuf,
     key: Zeroizing<[u8; 32]>,

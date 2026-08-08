@@ -56,6 +56,14 @@ impl DocumentFormat {
         self.parse(address, source.as_bytes()).map(|_| ())
     }
 
+    /// Convert a Knot or Djot source into the CommonMark projection served by
+    /// the bounded Mark read adapter. This is deliberately a conversion, never
+    /// a relabeling of the authored source bytes.
+    pub(crate) fn to_commonmark(self, address: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
+        self.parse(address, bytes)
+            .map(|document| document.to_markdown().into_bytes())
+    }
+
     fn parse(self, address: &str, bytes: &[u8]) -> Result<EngineDocument, String> {
         if self == Self::Json {
             return serde_json::from_slice(bytes)

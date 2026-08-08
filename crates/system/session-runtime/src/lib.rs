@@ -65,6 +65,7 @@ pub mod denizen_facets;
 // Device-local policy, including startup unlock behavior, lives beside the
 // install-local data root and never travels with a session.
 pub mod device_settings_store;
+pub mod shared_root;
 // Per-node facet-store sidecar (facets.json): the runtime tier of the one-node
 // facet system — typed per-node metadata keyed by node UUID, persisted beside
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/

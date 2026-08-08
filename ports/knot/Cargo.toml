@@ -37,10 +37,13 @@ p2panda-store = { version = "0.7.0", default-features = false }
 pollster = "0.4"
 postcard = { version = "1", features = ["alloc"] }
 proofs.workspace = true
+quinn = "0.11"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 sceno.workspace = true
 scenotime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 similar = "2.7"
 script-rhai.workspace = true
 servitor.workspace = true
@@ -59,6 +62,7 @@ zeroize = { version = "1", features = ["derive"] }
 [dev-dependencies]
 base64.workspace = true
 graphshell = { path = "../graphshell" }
+rcgen = "0.14"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 transport.workspace = true

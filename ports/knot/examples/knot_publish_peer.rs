@@ -30,17 +30,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use base64::Engine;
 use knot::{
     KNOT_PUBLISH_DOMAIN, KNOT_PUBLISH_READ_ACTION, KNOT_PUBLISH_SERVICE, KnotPublishCatalog,
-    KnotPublishHost, KnotPublishHostLimits, KnotPublishRead, KnotShareTicket, KnotSyncEvent,
-    KnotSyncStore, KnotVault, PublicationId, PublishRequest, decode_response, encode_request,
-    publication_path, publish_alpn, publish_policy,
+    KnotPublishHost, KnotPublishHostLimits, KnotPublishRead, KnotShareRecipient, KnotShareTicket,
+    KnotSyncEvent, KnotSyncStore, KnotVault, PublishRequest, decode_response, encode_request,
+    publication_path, publish_alpn, publish_policy, revoke_share,
 };
 use notochord::{
     NetworkId, ProfileRef, RequestedAction, SessionHello, TrafficClass, TrustedRoot,
     initiate_session, read_frame, write_frame,
-};
-use personae::delegation::{
-    CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
-    SignedDelegationCertificate, SignedDelegationRevocation,
 };
 use personae::{IdentityProvider, InMemoryProvider};
 use transport::p2panda_transport::{MdnsDiscoveryMode, P2pandaTransport};
@@ -135,17 +131,26 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
         .map_err(|error| format!("author source: {error}"))?;
     let mut catalog = KnotPublishCatalog::default();
     let publication = catalog.publish("receipt-source");
-    let ticket = KnotShareTicket::new(
-        carrier.local_peer_id().to_bytes(),
-        carrier
-            .ticket()
-            .await
-            .map_err(|error| format!("holder ticket: {error}"))?,
-        network,
-        publication,
-        vec![grant(&holder, reader, network, publication)],
-        None,
-    );
+    let issued_at = now_ms().saturating_sub(60_000);
+    let ticket = catalog
+        .issue_share(
+            &holder,
+            KnotShareRecipient {
+                publication,
+                publisher: holder.master_public_key().to_bytes(),
+                reader,
+                network,
+                endpoint_ticket: carrier
+                    .ticket()
+                    .await
+                    .map_err(|error| format!("holder ticket: {error}"))?,
+                root_authority: ROOT_AUTHORITY,
+                issued_at_ms: issued_at,
+                expires_at_ms: Some(issued_at.saturating_add(3_600_000)),
+                pinned_head: None,
+            },
+        )
+        .map_err(|error| format!("issue reader share: {error}"))?;
     let encoded_ticket = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&ticket).map_err(|error| format!("encode share ticket: {error}"))?,
     );
@@ -174,7 +179,10 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
     println!("  publication: {}", publication.as_uuid());
     println!("  ticket: {encoded_ticket}");
     println!(
-        "  paste on the reader: cargo run -p knot --example knot_publish_peer -- visit <ticket>"
+        "  same LAN (preferred): cargo run -p knot --example knot_publish_peer -- visit-mdns <ticket>"
+    );
+    println!(
+        "  ticket endpoint fallback: cargo run -p knot --example knot_publish_peer -- visit <ticket>"
     );
     println!("  waiting for one distinct reader identity...");
     let outcome = host
@@ -183,21 +191,8 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
         .map_err(|error| format!("serve: {error}"))?;
     println!("  holder outcome: {outcome:?}");
     if revoke_after_first_fetch {
-        let certificate = ticket
-            .delegations
-            .first()
-            .ok_or_else(|| "fixture ticket lost its delegation".to_string())?;
-        let revocation = SignedDelegationRevocation::issue(
-            &holder,
-            DelegationRevocation::new(
-                certificate.certificate.id(),
-                holder.master_public_key().to_bytes(),
-                certificate.certificate.scope.clone(),
-                now_ms(),
-                [0x56; 32],
-            ),
-        )
-        .map_err(|error| format!("issue revocation: {error}"))?;
+        let revocation = revoke_share(&holder, &ticket, now_ms())
+            .map_err(|error| format!("issue revocation: {error}"))?;
         if !host.revocations().write().await.fold(&revocation) {
             return Err("holder could not fold its own signed revocation".into());
         }
@@ -341,35 +336,6 @@ async fn visit(encoded_ticket: &str, route: PeerRoute) -> Result<(), String> {
     println!("  media type:  {}", document.media_type);
     println!("  bytes:       {}", document.body.len());
     Ok(())
-}
-
-fn grant(
-    holder: &InMemoryProvider,
-    reader: [u8; 32],
-    network: NetworkId,
-    publication: PublicationId,
-) -> SignedDelegationCertificate {
-    let issued_at = now_ms().saturating_sub(60_000);
-    SignedDelegationCertificate::issue(
-        holder,
-        DelegationCertificate::new(
-            DelegationParent::Root(ROOT_AUTHORITY),
-            holder.master_public_key().to_bytes(),
-            reader,
-            CapabilityScope {
-                domain: KNOT_PUBLISH_DOMAIN.into(),
-                resource: network.0.to_vec(),
-                path_prefix: publication_path(publication),
-                actions: [KNOT_PUBLISH_READ_ACTION.into()].into_iter().collect(),
-            },
-            issued_at,
-            issued_at,
-            Some(now_ms().saturating_add(3_600_000)),
-            1,
-            [0x55; 32],
-        ),
-    )
-    .expect("holder issues its own receipt grant")
 }
 
 fn reader_identity() -> Result<InMemoryProvider, String> {

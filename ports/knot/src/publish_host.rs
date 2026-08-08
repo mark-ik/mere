@@ -19,7 +19,8 @@ use tokio::sync::RwLock;
 use transport::Transport;
 
 use crate::{
-    KnotPublishCatalog, KnotPublishError, KnotSyncStore, KnotVault, PublicationId,
+    KnotPublishCandidate, KnotPublishCatalog, KnotPublishError, KnotShareControlError,
+    KnotShareRecipient, KnotShareTicket, KnotSyncStore, KnotVault, PublicationId,
     PublishCarrierError, PublishRefusal, PublishRequest, PublishResponse, PublishWireError,
     PublishWireLimits, accept_publish_session, decode_request, encode_response,
 };
@@ -79,6 +80,58 @@ pub struct KnotPublishHost<B> {
     now_ms: Arc<dyn Fn() -> u64 + Send + Sync>,
 }
 
+/// The independently retained read material a startup-unlocked Knot vault
+/// hands to the publishing service. It keeps the carrier identity equal to the
+/// signed writer/device identity while leaving the editor's mutable vault
+/// handle with the authoring endpoint.
+pub struct KnotPublishSource {
+    identity: Ed25519Keypair,
+    store: KnotSyncStore<muniment::RedbBackend>,
+    vault: Arc<KnotVault>,
+}
+
+impl KnotPublishSource {
+    pub(crate) fn from_unlocked(
+        identity: Ed25519Keypair,
+        store: KnotSyncStore<muniment::RedbBackend>,
+        vault: Arc<KnotVault>,
+    ) -> Self {
+        Self {
+            identity,
+            store,
+            vault,
+        }
+    }
+
+    /// The device key that must own both the outer carrier and inner Noise
+    /// identity for this host.
+    pub fn transport_seed(&self) -> [u8; 32] {
+        self.identity.to_seed()
+    }
+
+    /// The stable public carrier identity advertised in a share ticket.
+    pub fn publisher(&self) -> [u8; 32] {
+        self.identity.public_key().to_bytes()
+    }
+
+    /// Move the retained source material into one live publishing host.
+    pub fn into_host(
+        self,
+        policy: LocalNetworkPolicy,
+        catalog: KnotPublishCatalog,
+        limits: KnotPublishHostLimits,
+    ) -> KnotPublishHost<muniment::RedbBackend> {
+        KnotPublishHost::new(
+            self.identity,
+            policy,
+            self.store,
+            self.vault,
+            catalog,
+            limits,
+        )
+    }
+}
+
 impl<B> KnotPublishHost<B>
 where
     B: Backend + Clone,
@@ -121,6 +174,24 @@ where
     /// writing makes this linearize before or after a bounded response.
     pub async fn unpublish(&self, id: PublicationId) -> bool {
         self.catalog.write().await.unpublish(id).is_some()
+    }
+
+    /// Inspect owner-visible retained sources before selecting one.
+    pub async fn candidates(&self) -> Result<Vec<KnotPublishCandidate>, KnotPublishError> {
+        let catalog = self.catalog.read().await.clone();
+        catalog.candidates(&self.store, &self.vault).await
+    }
+
+    /// Issue one reader-bound share through this host's current catalog.
+    /// The host, not a product pane, supplies the transport identity encoded in
+    /// the ticket so the reader cannot be directed to a different carrier.
+    pub async fn issue_share<P: personae::IdentityProvider>(
+        &self,
+        issuer: &P,
+        mut request: KnotShareRecipient,
+    ) -> Result<KnotShareTicket, KnotShareControlError> {
+        request.publisher = self.identity.public_key().to_bytes();
+        self.catalog.read().await.issue_share(issuer, request)
     }
 
     /// The owner-maintained revocation ledger. Admission snapshots it; a

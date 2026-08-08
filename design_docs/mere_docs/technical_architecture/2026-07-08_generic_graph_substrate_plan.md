@@ -159,6 +159,64 @@ Done-conditions, not durations.
 
 G5 is the long tail and deliberately last; G0 through G4 never block on it.
 
+## Where the rungs actually stand (checked against code 2026-08-08)
+
+The ladder above went stale in both directions: work landed without being
+credited, and two done conditions can no longer be met as written.
+
+**G0, G1, G2: landed.** `chartulary` ships `caps`, `graph`, `container`,
+`taxonomy`, `edit`, `spine` (`GraphLog` over codicil with muniment snapshots),
+`commit`, `facet`, `content_class`, `nested`, and `stemma`, the last folded in
+from the standalone crate on 2026-07-12.
+
+**G3: three consumers exist outside mere, and none of them meets the written
+done condition.** The rung reads "user-authored content lives in a substrate
+graph through muniment". What is actually true:
+
+- **woodshed** exercises both halves of the substrate in the running app.
+  `woodshed-graph` (1112 lines, 14 tests) builds the theory catalog as a
+  container graph, and `relation_index` feeds `related_neighbors`, which
+  `woodshed-core` calls to drive what the user sees. `PracticeHistory` in
+  `woodshed-core::history` is `Stemma<String, (), String, Engagement>`, adopted
+  2026-07-26: every practice engagement the user records is a dated stemma
+  visit. That is user-authored content in a substrate graph, and it survives
+  restarts.
+- **turnstone** uses `chartulary::FacetId` and `AcceptAll` on nodes it already
+  owns, including mere's provenance facets. Facets on a host graph, not a
+  substrate graph of its own content.
+- **cleromancy** uses `GraphLog`, `Container`, `Relation`, and `EditSpec` in
+  its servitor lane, plus facets in host and sync.
+
+**So G3 is met in substance, and its last clause should be restated rather than
+chased.** "Through muniment" names a mechanism where the rung meant a property.
+Woodshed persists through its own `Storage` seam: one serde form moved by a
+host realization, filesystem on desktop and OPFS in the browser, sealed with
+`personae::seal_bytes`. That is the same seam muniment provides, already built,
+already sealed, already working on both targets. Satisfying the clause
+literally means either replacing that with an equivalent abstraction and
+redoing the sealing, or splitting one practice session across two persistence
+paths. Both make woodshed worse to make a sentence true.
+
+The property the rung wanted, real user data living in a substrate graph
+durably, holds. Recommend crediting G3 and rewording the clause to name
+durability rather than the crate that provides it.
+
+**G4: the export half exists, the gate does not.** `scholia` ships `to_jsonld`,
+`to_nquads`, and `to_quads`, projecting only the shared semantic ring so an
+app's private relation families stay private, with five tests. Its own module
+docs name the remainder as roadmap and say linked-data's losslessness gate has
+**not** been re-passed. The cross-app triple the rung names, a woodshed note
+citing a mere document, has nothing blocking it now that woodshed is on the
+substrate.
+
+**G5's done condition is unmeetable as written.** It reads "Done when meerkat
+runs on the substrate graph with no behavior change." Meerkat was decomposed
+into mere's crates and then turnstone, so nothing can satisfy that sentence.
+Note also that mere's own adoption, which is what G5 describes, has already
+begun: `graph-kernel`, `session-runtime`, `graphshell`, `commons`, `gemot`,
+`servitor`, `signals`, `seiche`, and `eidetic-core` all depend on chartulary.
+The ladder is being climbed from the top as well as the bottom.
+
 ## 8. The name: chartulary, "chart" for short
 
 **Decided 2026-07-08: chartulary.** The attested variant spelling of cartulary

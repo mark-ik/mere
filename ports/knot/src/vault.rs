@@ -82,6 +82,29 @@ impl KnotVault {
         &self.root
     }
 
+    /// Create another in-process read handle over the same unlocked vault.
+    ///
+    /// A retained publishing host only needs the sealed sync key to materialize
+    /// signed source events. It must not take the authoring endpoint's mutable
+    /// vault handle, but it does need an independently zeroized copy of the
+    /// already-unlocked record-storage handle for the duration of the host.
+    pub(crate) fn fork_read_handle(&self) -> Result<Self, String> {
+        let store = self
+            .store
+            .as_ref()
+            .ok_or_else(|| "cannot fork a locked Knot vault".to_string())?;
+        let sync_key = self
+            .sync_key
+            .as_ref()
+            .ok_or_else(|| "cannot fork a locked Knot vault".to_string())?;
+        Ok(Self {
+            root: self.root.clone(),
+            store: Some(store.clone()),
+            sync_key: Some(sync_key.clone()),
+            index: self.index.clone(),
+        })
+    }
+
     /// Whether document plaintext and the root key have been dropped.
     pub fn is_locked(&self) -> bool {
         self.store.is_none()

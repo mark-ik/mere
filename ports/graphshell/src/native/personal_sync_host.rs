@@ -1546,6 +1546,112 @@ mod tests {
         sibling.close().await.unwrap();
     }
 
+
+    /// **Known defect, recorded rather than deleted.** A device keyed after
+    /// sealed writes never receives them.
+    ///
+    /// The order the happy-path receipt does not cover: sealing happens first
+    /// and a device is keyed afterwards. Intake refuses a sealed operation
+    /// while unkeyed and LogSync does not offer it again, so the device
+    /// carries a permanent hole in the graph.
+    ///
+    /// The cause is not the refusal itself but what forces it. Admission
+    /// checks the roster through `stable_subject`, which reads the writer
+    /// attestation out of the record, and the record is inside the sealed
+    /// body. So an unkeyed device cannot tell whether the writer is admitted,
+    /// and storing an operation it cannot attribute would be worse than
+    /// refusing one it can re-request.
+    ///
+    /// The fix is to move the writer attestation into the signed header
+    /// extension, where it is checkable without the payload key. It is not
+    /// secret: it attests a public derived key. That is a wire change to a
+    /// signed structure and carries the same hazard as the encryption field
+    /// did, so it wants its own decision and its own `skip_serializing_if`.
+    ///
+    /// Ignored so the suite stays green while the defect stays visible.
+    #[ignore = "known defect: a device keyed after sealed writes never receives them"]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_device_keyed_after_sealed_writes_still_receives_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = [0xe1; 32];
+        let owner_identity = InMemoryProvider::from_seed([0xe2; 32]);
+        let sibling_identity = InMemoryProvider::from_seed([0xe3; 32]);
+        let roster = SyncRoster::new([
+            owner_identity.master_public_key().to_bytes(),
+            sibling_identity.master_public_key().to_bytes(),
+        ]);
+        let config = |name: &str| PersonalSyncHostConfig {
+            graph,
+            store_path: directory.path().join(format!("{name}.redb")),
+            roster: roster.clone(),
+            selection: SyncSelection::default(),
+            peer_tickets: Vec::new(),
+            peer_hints: Vec::new(),
+            paired_nodes: Vec::new(),
+            relay_urls: Vec::new(),
+        };
+
+        let owner = PersonalSyncHost::open(&owner_identity, config("owner"))
+            .await
+            .unwrap();
+        let mut sibling_config = config("sibling");
+        sibling_config.peer_tickets = vec![owner.ticket().await.unwrap()];
+        let sibling = PersonalSyncHost::open(&sibling_identity, sibling_config)
+            .await
+            .unwrap();
+        owner.pair_node(sibling.node_id()).await.unwrap();
+
+        owner.enable_encryption().await.unwrap();
+
+        // Sealed while the sibling is definitely not a member.
+        let node = Uuid::from_u128(0xe4);
+        owner
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: node,
+                address: "https://sealed-before-keying.test/".into(),
+                title: "Sealed before the sibling could read".into(),
+            }])
+            .await
+            .unwrap();
+        assert!(!sibling.is_keyed().await);
+
+        // Now key it, the ordinary way.
+        for _ in 0..80 {
+            if owner.key_paired_devices().await.unwrap() > 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        let mut keyed = false;
+        for _ in 0..80 {
+            sibling.key_paired_devices().await.unwrap();
+            keyed = sibling.is_keyed().await;
+            if keyed {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert!(keyed, "the sibling was keyed");
+
+        // The question: does the operation it once refused ever arrive?
+        let mut arrived = false;
+        for _ in 0..80 {
+            let cards = sibling.supplemental_cards().await.unwrap();
+            arrived = cards.iter().any(|card| card.source_id == node.to_string());
+            if arrived {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert!(
+            arrived,
+            "a device keyed after sealed writes must still receive them, or it              carries a permanent hole in the graph"
+        );
+
+        owner.close().await.unwrap();
+        sibling.close().await.unwrap();
+    }
+
     /// A rotted dial hint must cost the shortcut, never the host: the hint is
     /// what a previous run believed, and this run has no way to check it other
     /// than by trying.

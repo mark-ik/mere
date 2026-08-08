@@ -5,11 +5,15 @@
 //! a document, and it must turn every unavailable source state into the same
 //! wire result.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use muniment::Backend;
 use notochord::{NetworkId, RetainedAuthority, RevocationLedger};
-use personae::delegation::SignedDelegationCertificate;
+use personae::IdentityProvider;
+use personae::delegation::{
+    CapabilityScope, DelegationCertificate, DelegationError, DelegationParent,
+    DelegationRevocation, SignedDelegationCertificate, SignedDelegationRevocation,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -68,6 +72,31 @@ pub struct KnotPublication {
     pub source_document: String,
 }
 
+/// Owner-visible eligibility for one retained source document.
+///
+/// This is local control-plane information. A reader always receives the
+/// single non-disclosing [`KnotPublishRead::NotAvailable`] outcome instead.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KnotPublishEligibility {
+    Eligible,
+    PendingHistory,
+    Conflicted,
+    AutomaticMerge,
+    NoCurrentHead,
+    UnsupportedMediaType,
+}
+
+/// A current source document the owner may inspect before explicitly selecting
+/// it for publication.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnotPublishCandidate {
+    pub source_document: String,
+    pub title: String,
+    pub media_type: String,
+    pub head: Option<[u8; 32]>,
+    pub eligibility: KnotPublishEligibility,
+}
+
 /// Owner-controlled, explicit publication selection.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KnotPublishCatalog {
@@ -104,6 +133,59 @@ impl KnotPublishCatalog {
     /// Whether this catalog contains an explicit selection for `id`.
     pub fn contains(&self, id: PublicationId) -> bool {
         self.publications.contains_key(&id)
+    }
+
+    /// Inspect the holder's retained sources before adding one explicitly to
+    /// the catalog. This intentionally belongs to the owner control plane,
+    /// never the reader protocol.
+    pub async fn candidates<B>(
+        &self,
+        store: &KnotSyncStore<B>,
+        vault: &KnotVault,
+    ) -> Result<Vec<KnotPublishCandidate>, KnotPublishError>
+    where
+        B: Backend + Clone,
+    {
+        let projection = store.projection(vault).await?;
+        let has_pending = !projection.pending.is_empty();
+        let conflicts = projection
+            .conflicts
+            .iter()
+            .map(|conflict| conflict.id.clone())
+            .collect::<BTreeSet<_>>();
+        let automatic_merges = projection
+            .automatic_merges
+            .iter()
+            .map(|merge| merge.id.clone())
+            .collect::<BTreeSet<_>>();
+        let heads = projection.document_heads;
+        Ok(projection
+            .documents
+            .into_iter()
+            .map(|document| {
+                let head = heads.get(&document.id).copied();
+                let eligibility = if has_pending {
+                    KnotPublishEligibility::PendingHistory
+                } else if conflicts.contains(&document.id) {
+                    KnotPublishEligibility::Conflicted
+                } else if automatic_merges.contains(&document.id) {
+                    KnotPublishEligibility::AutomaticMerge
+                } else if head.is_none() {
+                    KnotPublishEligibility::NoCurrentHead
+                } else if !is_publishable_media_type(&document.media_type) {
+                    KnotPublishEligibility::UnsupportedMediaType
+                } else {
+                    KnotPublishEligibility::Eligible
+                };
+                KnotPublishCandidate {
+                    source_document: document.id,
+                    title: document.title,
+                    media_type: document.media_type,
+                    head,
+                    eligibility,
+                }
+            })
+            .collect())
     }
 
     /// The holder-local selection for a publication, for the host's final
@@ -192,6 +274,70 @@ impl KnotPublishCatalog {
         Ok(KnotPublishRead::Document(KnotPublishedDocument::new(
             id, document, operation,
         )))
+    }
+
+    /// Owner-side materialization for the separately configured Mark adapter.
+    ///
+    /// This intentionally has no reader authority parameter: the adapter has
+    /// its own explicit export selection and Mark access policy. It does retain
+    /// every source-eligibility rule from the native lane, so an unresolved
+    /// causal state cannot become a false numeric Mark history.
+    pub(crate) async fn current_for_mark_export<B>(
+        &self,
+        store: &KnotSyncStore<B>,
+        vault: &KnotVault,
+        id: PublicationId,
+    ) -> Result<Option<KnotPublishedDocument>, KnotPublishError>
+    where
+        B: Backend + Clone,
+    {
+        let Some(publication) = self.publications.get(&id) else {
+            return Ok(None);
+        };
+        let Some((document, head)) = self.current_eligible(store, vault, publication).await? else {
+            return Ok(None);
+        };
+        Ok(Some(KnotPublishedDocument::new(id, document, head)))
+    }
+
+    /// Issue a recipient-bound, single-publication read ticket. Publication is
+    /// never inferred from an open document: it must already be selected by
+    /// this catalog. The ticket is secret material when its grant is secret.
+    pub fn issue_share<P: IdentityProvider>(
+        &self,
+        issuer: &P,
+        request: KnotShareRecipient,
+    ) -> Result<KnotShareTicket, KnotShareControlError> {
+        if !self.contains(request.publication) {
+            return Err(KnotShareControlError::UnknownPublication);
+        }
+        let certificate = SignedDelegationCertificate::issue(
+            issuer,
+            DelegationCertificate::new(
+                DelegationParent::Root(request.root_authority),
+                issuer.master_public_key().to_bytes(),
+                request.reader,
+                CapabilityScope {
+                    domain: KNOT_PUBLISH_DOMAIN.into(),
+                    resource: request.network.0.to_vec(),
+                    path_prefix: publication_path(request.publication),
+                    actions: [KNOT_PUBLISH_READ_ACTION.into()].into_iter().collect(),
+                },
+                request.issued_at_ms,
+                request.issued_at_ms,
+                request.expires_at_ms,
+                0,
+                share_nonce(),
+            ),
+        )?;
+        Ok(KnotShareTicket::new(
+            request.publisher,
+            request.endpoint_ticket,
+            request.network,
+            request.publication,
+            vec![certificate],
+            request.pinned_head,
+        ))
     }
 
     fn authorized_publication<'a>(
@@ -307,6 +453,48 @@ pub struct KnotShareTicket {
     pub pinned_head: Option<[u8; 32]>,
 }
 
+/// The owner-visible facts required to share one selected publication with one
+/// recipient. This has no vault key, writer key, or source pathname.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnotShareRecipient {
+    pub publication: PublicationId,
+    /// The stable transport identity serving this publication. It is allowed
+    /// to differ from the Personae root that signs the reader delegation: a
+    /// product root can authorize one device's retained publishing host
+    /// without turning that device key into the authority root.
+    pub publisher: [u8; 32],
+    pub reader: [u8; 32],
+    pub network: NetworkId,
+    pub endpoint_ticket: String,
+    pub root_authority: [u8; 32],
+    pub issued_at_ms: u64,
+    pub expires_at_ms: Option<u64>,
+    pub pinned_head: Option<[u8; 32]>,
+}
+
+/// Revoke a share ticket's final certificate. The caller folds the returned
+/// signed statement into the live [`RevocationLedger`] held by its host.
+pub fn revoke_share<P: IdentityProvider>(
+    issuer: &P,
+    ticket: &KnotShareTicket,
+    at_ms: u64,
+) -> Result<SignedDelegationRevocation, KnotShareControlError> {
+    let certificate = ticket
+        .delegations
+        .last()
+        .ok_or(KnotShareControlError::MissingDelegation)?;
+    Ok(SignedDelegationRevocation::issue(
+        issuer,
+        DelegationRevocation::new(
+            certificate.certificate.id(),
+            issuer.master_public_key().to_bytes(),
+            certificate.certificate.scope.clone(),
+            at_ms,
+            share_nonce(),
+        ),
+    )?)
+}
+
 impl KnotShareTicket {
     /// Construct a ticket the recipient may carry out of band.
     #[allow(clippy::too_many_arguments)]
@@ -349,8 +537,29 @@ pub enum KnotPublishError {
     Sync(#[from] KnotSyncError),
 }
 
+/// Explicit owner-control failure. These are local UI/API results, never a
+/// response to a reader that could use them to enumerate a catalog.
+#[derive(Debug, thiserror::Error)]
+pub enum KnotShareControlError {
+    #[error("the document is not selected for publication")]
+    UnknownPublication,
+    #[error("the share ticket has no delegation to revoke")]
+    MissingDelegation,
+    #[error(transparent)]
+    Delegation(#[from] DelegationError),
+}
+
 fn is_publishable_media_type(media_type: &str) -> bool {
     matches!(media_type, "text/vnd.knot" | "text/djot")
+}
+
+fn share_nonce() -> [u8; 32] {
+    let left = Uuid::new_v4();
+    let right = Uuid::new_v4();
+    let mut nonce = [0u8; 32];
+    nonce[..16].copy_from_slice(left.as_bytes());
+    nonce[16..].copy_from_slice(right.as_bytes());
+    nonce
 }
 
 #[cfg(test)]
@@ -420,6 +629,72 @@ mod tests {
             },
             vec![certificate],
         )
+    }
+
+    #[test]
+    fn owner_controls_issue_and_revoke_one_recipient_share() {
+        let mut catalog = KnotPublishCatalog::default();
+        let selected = catalog.publish("field-notes");
+        let ticket = catalog
+            .issue_share(
+                &owner(),
+                KnotShareRecipient {
+                    publication: selected,
+                    publisher: [0x77; 32],
+                    reader: reader().master_public_key().to_bytes(),
+                    network: NETWORK,
+                    endpoint_ticket: "endpoint-ticket".into(),
+                    root_authority: ROOT,
+                    issued_at_ms: NOW_MS,
+                    expires_at_ms: Some(EXPIRY_MS),
+                    pinned_head: Some([0x9a; 32]),
+                },
+            )
+            .unwrap();
+        assert_eq!(ticket.publisher, [0x77; 32]);
+        assert_eq!(
+            ticket.delegations.last().unwrap().certificate.issuer,
+            owner().master_public_key().to_bytes(),
+            "the Personae issuer and carrier publisher may be different keys"
+        );
+        assert_eq!(ticket.publication, selected);
+        assert_eq!(ticket.pinned_head, Some([0x9a; 32]));
+        let certificate = ticket.delegations.last().unwrap();
+        assert!(certificate.verify());
+        assert_eq!(
+            certificate.certificate.scope.path_prefix,
+            publication_path(selected)
+        );
+        assert_eq!(
+            certificate.certificate.scope.actions,
+            [KNOT_PUBLISH_READ_ACTION.to_string()].into_iter().collect()
+        );
+
+        let revocation = revoke_share(&owner(), &ticket, NOW_MS + 1).unwrap();
+        assert!(revocation.verify());
+        assert_eq!(
+            revocation.revocation.certificate,
+            certificate.certificate.id()
+        );
+
+        let unselected = PublicationId::from_uuid(Uuid::from_u128(99));
+        assert!(matches!(
+            catalog.issue_share(
+                &owner(),
+                KnotShareRecipient {
+                    publication: unselected,
+                    publisher: owner().master_public_key().to_bytes(),
+                    reader: reader().master_public_key().to_bytes(),
+                    network: NETWORK,
+                    endpoint_ticket: "unreachable".into(),
+                    root_authority: ROOT,
+                    issued_at_ms: NOW_MS,
+                    expires_at_ms: Some(EXPIRY_MS),
+                    pinned_head: None,
+                },
+            ),
+            Err(KnotShareControlError::UnknownPublication)
+        ));
     }
 
     #[tokio::test]

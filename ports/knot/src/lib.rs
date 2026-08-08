@@ -9,6 +9,7 @@ mod content_classes;
 mod directory;
 mod editor;
 mod endpoint;
+mod mark;
 mod publish;
 mod publish_carrier;
 mod publish_host;
@@ -31,16 +32,29 @@ pub use endpoint::{
     KnotEffectAuthority, KnotEffectFetcher, KnotEffectMode, KnotEffectPolicy, KnotEndpoint,
     KnotWriteGrant,
 };
+pub use mark::{
+    MARK_ALPN, MARK_DEFAULT_PORT, MARK_MAX_DOCUMENT_BYTES, MARK_MAX_METADATA_BYTES,
+    MARK_MAX_REQUEST_BYTES, MarkAdapterError, MarkQuicHost, MarkReadAccess, MarkReadAdapter,
+    MarkReadAdapterLimits, MarkRequest, MarkResponse, MarkServerError, MarkSnapshotOutcome,
+    MarkTimestamp, MarkVersion, MarkVersionId, decode_mark_request, mark_server_config,
+};
 pub use publish::{
     KNOT_PUBLISH_ALPN, KNOT_PUBLISH_DOMAIN, KNOT_PUBLISH_READ_ACTION, KNOT_PUBLISH_SERVICE,
-    KNOT_SHARE_TICKET_VERSION, KnotPublication, KnotPublishCatalog, KnotPublishError,
-    KnotPublishRead, KnotPublishedDocument, KnotShareTicket, PublicationId, publication_path,
+    KNOT_SHARE_TICKET_VERSION, KnotPublication, KnotPublishCandidate, KnotPublishCatalog,
+    KnotPublishEligibility, KnotPublishError, KnotPublishRead, KnotPublishedDocument,
+    KnotShareControlError, KnotShareRecipient, KnotShareTicket, PublicationId, publication_path,
+    revoke_share,
 };
+/// Admission-policy vocabulary belongs to the same Notochord instance as
+/// Knot's publishing carrier. Product hosts should take these through Knot,
+/// not add a second direct Notochord dependency.
+pub use notochord::{NetworkId, ProfileRef, TrustedRoot};
 pub use publish_carrier::{
     PublishCarrierError, PublishRefusal, accept_publish_session, publish_alpn, publish_policy,
 };
 pub use publish_host::{
     KnotPublishHost, KnotPublishHostError, KnotPublishHostLimits, KnotPublishServeOutcome,
+    KnotPublishSource,
 };
 pub use publish_wire::{
     CandidateFixture, CandidateFixtureOutcome, HARD_MAX_CATALOG_ENTRIES, HARD_MAX_DOCUMENT_BYTES,
