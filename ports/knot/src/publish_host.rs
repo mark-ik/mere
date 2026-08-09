@@ -625,12 +625,8 @@ mod tests {
 
         let server_future = fixture.host.accept_and_serve(&server);
         let reader = reader();
-        let client_future = crate::fetch_published_document(
-            &client,
-            reader.master_keypair(),
-            profile(),
-            &ticket,
-        );
+        let client_future =
+            crate::fetch_published_document(&client, reader.master_keypair(), profile(), &ticket);
         let (served, read) = tokio::join!(server_future, client_future);
         assert_eq!(served.unwrap(), KnotPublishServeOutcome::Responded);
         let KnotPublishRead::Document(document) = read.unwrap() else {
