@@ -649,6 +649,13 @@ impl PersonalSyncHost {
         }))
     }
 
+    /// Who this device believes is currently in the graph's key group.
+    pub async fn key_group_members(
+        &self,
+    ) -> Result<Vec<stickleback::GroupRecipientId>, PersonalSyncHostError> {
+        self.key_group.lock().await.members().map_err(key_error)
+    }
+
     /// Turn encryption on for this graph, with this device as first member.
     ///
     /// Explicit because it cannot be undone by another device: two devices
@@ -1639,6 +1646,131 @@ mod tests {
 
         owner.close().await.unwrap();
         sibling.close().await.unwrap();
+    }
+
+    /// **Known defect, recorded rather than deleted.** A revocation performed
+    /// on one device is undone by the next sweep on another.
+    ///
+    /// Three devices, the first count that exercises what two cannot. The
+    /// removal replicates and the other device processes it; membership then
+    /// goes straight back to three.
+    ///
+    /// The cause is that membership is applied as commands while the condition
+    /// behind it is per device. The roster lives in each device's own settings
+    /// file and is not synced, so unpairing on A leaves B's roster still
+    /// admitting the departed device. `absorb_admitted` correctly refuses to
+    /// register a pre-key the roster does not admit, and `has_member`
+    /// correctly skips a device already seated, but neither can help here: B's
+    /// roster does admit it, and after the removal it is not seated, so B adds
+    /// it back. A and B then disagree forever, each doing exactly what it was
+    /// told.
+    ///
+    /// No amount of care in the add path fixes this, because the two devices
+    /// hold different conditions. It resolves when membership becomes a
+    /// function of one shared condition rather than a sequence of commands:
+    /// with a roster every device converges on, a revocation is simply the
+    /// roster no longer admitting a root, and any keyed device restores that
+    /// state without being told.
+    ///
+    /// Ignored so the suite stays green while the defect stays visible.
+    #[ignore = "known defect: a revoked device is re-added by another device's sweep"]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_revocation_on_one_device_reaches_the_others() {
+        let directory = tempfile::tempdir().unwrap();
+        let graph = [0xf1; 32];
+        let identities: Vec<InMemoryProvider> = (0xf2u8..0xf5)
+            .map(|seed| InMemoryProvider::from_seed([seed; 32]))
+            .collect();
+        let roster = SyncRoster::new(
+            identities
+                .iter()
+                .map(|identity| identity.master_public_key().to_bytes()),
+        );
+
+        let mut hosts: Vec<PersonalSyncHost> = Vec::new();
+        for (index, identity) in identities.iter().enumerate() {
+            let peer_tickets = match hosts.first() {
+                Some(first) => vec![first.ticket().await.unwrap()],
+                None => Vec::new(),
+            };
+            hosts.push(
+                PersonalSyncHost::open(
+                    identity,
+                    PersonalSyncHostConfig {
+                        graph,
+                        store_path: directory.path().join(format!("device-{index}.redb")),
+                        roster: roster.clone(),
+                        selection: SyncSelection::default(),
+                        peer_tickets,
+                        peer_hints: Vec::new(),
+                        paired_nodes: Vec::new(),
+                        relay_urls: Vec::new(),
+                    },
+                )
+                .await
+                .unwrap(),
+            );
+        }
+        for index in 1..hosts.len() {
+            let node = hosts[index].node_id();
+            hosts[0].pair_node(node).await.unwrap();
+        }
+
+        hosts[0].enable_encryption().await.unwrap();
+
+        // Key both siblings. Their pre-keys arrive from two authors, so this
+        // is where interleaved per-author sequences would show if they broke
+        // anything.
+        let mut keyed_by_owner = 0;
+        for _ in 0..120 {
+            keyed_by_owner += hosts[0].key_paired_devices().await.unwrap();
+            if keyed_by_owner >= 2 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert_eq!(keyed_by_owner, 2, "both siblings were keyed off the lane");
+
+        for index in 1..hosts.len() {
+            let mut keyed = false;
+            for _ in 0..120 {
+                hosts[index].key_paired_devices().await.unwrap();
+                keyed = hosts[index].is_keyed().await;
+                if keyed {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+            assert!(
+                keyed,
+                "device {index} learned its epoch with three authors on the lane"
+            );
+        }
+
+        // The owner revokes the third device. The claim under test is that the
+        // second device learns of it from the lane, without the unpair ever
+        // being typed on the second device.
+        let departing = identities[2].master_public_key().to_bytes();
+        assert!(hosts[0].revoke_root_keys(departing).await.unwrap());
+
+        let mut witness = None;
+        for _ in 0..120 {
+            hosts[1].key_paired_devices().await.unwrap();
+            let members = hosts[1].key_group_members().await.unwrap();
+            if members.len() == 2 {
+                witness = Some(members);
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+        assert!(
+            witness.is_some(),
+            "a revocation performed on one device must reach the others through              the lane, or every device has to be told separately"
+        );
+
+        for host in hosts {
+            host.close().await.unwrap();
+        }
     }
 
     /// A rotted dial hint must cost the shortcut, never the host: the hint is

@@ -129,6 +129,11 @@ impl GraphKeyGroup {
         self.persist()
     }
 
+    /// Who this device believes is in the group.
+    pub fn members(&self) -> Result<Vec<GroupRecipientId>, GraphKeyError> {
+        Ok(self.session.members()?.into_iter().collect())
+    }
+
     /// Whether this device can read sealed operations yet.
     pub fn is_keyed(&self) -> bool {
         self.session.current_epoch().is_some()
