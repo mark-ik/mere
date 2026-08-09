@@ -1,129 +1,217 @@
 # Personal Mesh Substrate M2 Plan
 
-**Date**: 2026-06-30  
-**Status**: Active next slice.  
+**Date**: 2026-06-30
+
+**Status**: Active next slice; re-scoped 2026-08-09 after ESP consolidation.
+
 **Related**:
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md),
 [`../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md`](../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md),
-[`2026-06-03_actor_constellation_plan.md`](2026-06-03_actor_constellation_plan.md),
-[`../research/2026-06-24_local_models_harness_brief.md`](../research/2026-06-24_local_models_harness_brief.md)
+[`2026-06-30_mesh_lease_scheduler_plan.md`](2026-06-30_mesh_lease_scheduler_plan.md),
+[`2026-08-08_esp_consolidation_plan.md`](2026-08-08_esp_consolidation_plan.md)
 
-M2 turns the M1 proof into a real substrate. The goal is not a market, not kith
-sharing, and not sharded models. The goal is a job namespace and one useful
-resource adapter.
-
----
-
-## Current State
-
-`crates/mesh` has the M1 core:
-
-- signed `MeshEvent` operations over LogSync
-- deterministic `JobBoard` fold
-- `JobPosted`, `JobClaimed`, `JobDone`
-- `Echo` and `Blake3` job kinds
-- a `mesh-peer` two-machine rehearsal path
-
-That proves transport and convergence. It does not prove the product contract.
-M1 jobs still carry inline payloads and ambient assumptions.
+M2 turns the M1 convergence proof into a bounded execution substrate. Its whole
+claim is one versioned job namespace, one resource registry, and one useful
+resource running through both. Leases, GPU scheduling, kith grants, and markets
+remain later layers.
 
 ---
 
-## M2 Contract
+## 1. Current state
 
-Add a namespace-shaped job spec before adding more work kinds.
+`crates/mesh/mesh` currently has:
+
+- signed `MeshEvent` operations over LogSync;
+- a deterministic `JobBoard` fold;
+- inline-payload `JobPosted`, `JobClaimed`, and `JobDone` events;
+- pure `Echo` and `Blake3` executors;
+- retention checkpoints and history pruning; and
+- a two-peer rehearsal path.
+
+The checkout has no `JobSpec`, `JobNamespace`, `MeshResource`, or resource
+registry. M1 proves transport, storage, and convergence. It does not yet prove
+that a worker sees only the inputs and outputs granted to one job.
+
+---
+
+## 2. Ownership boundary
+
+- **Mesh wire and board** own signed job facts and deterministic projection.
+- **The host** resolves authorization, constructs the restricted namespace,
+  advertises local capabilities, selects work, and supplies cancellation.
+- **A resource adapter** prepares and executes only through that namespace. It
+  does not read the mesh store, inspect the OS, choose a device, or mutate the
+  board.
+- **ESP** owns embedding behavior. The mesh adapter calls `esp::embed`; it does
+  not reproduce a provider.
+
+A `BlobRef` is an address and integrity commitment, not an authorization token.
+The signed spec can name a blob, but only the local host can grant a resource a
+reader for it. This is the difference between a namespace-shaped manifest and
+an enforced namespace.
+
+---
+
+## 3. M2a: versioned job wire
+
+Do not change the fields of the existing signed CBOR variants. Stored M1
+operations must remain decodable and replayable. Add new variants, provisionally
+named `JobPostedV2` and `JobDoneV2`; after the cutover, new writes use V2 while
+the fold accepts both generations.
+
+The first wire shape is deliberately smaller than the 2026-06-30 sketch:
 
 ```rust
 pub struct JobSpec {
-    pub kind: MeshJobKind,
-    pub namespace: JobNamespace,
-    pub requirements: DeviceRequirements,
+    pub resource: ResourceId,
+    pub inputs: Vec<JobInput>,
+    pub output: OutputGrant,
+    pub requirements: ResourceRequirements,
     pub determinism: DeterminismClass,
     pub checkpoint: CheckpointClass,
-    pub verification: VerificationHint,
 }
 
-pub struct JobNamespace {
-    pub inputs: Vec<BlobRef>,
-    pub weights: Vec<BlobRef>,
-    pub scratch: ScratchGrant,
-    pub output: OutputSink,
-    pub metrics: Option<MetricsSink>,
-    pub host_calls: Vec<HostCallGrant>,
-    pub privacy: PrivacyClass,
+pub struct JobInput {
+    pub name: String,
+    pub blob: BlobRef,
 }
-```
 
-These names are design placeholders. The important part is the boundary: a job
-names only what its namespace grants. The sandbox contains code; the namespace
-limits what code can reach.
-
----
-
-## MeshResource Seam
-
-The adapter seam should sit above wire/store/sync and below the host actor.
-
-```rust
-pub trait MeshResource {
-    fn kind(&self) -> MeshJobKind;
-    fn can_run(&self, device: &DeviceCaps, spec: &JobSpec) -> bool;
-    fn prepare(&self, spec: &JobSpec) -> Result<PreparedJob, MeshResourceError>;
-    fn run(&self, job: PreparedJob) -> Result<JobOutput, MeshResourceError>;
+pub struct OutputGrant {
+    pub name: String,
+    pub max_bytes: u64,
 }
 ```
 
-Rules:
+`ResourceId` is an extensible, validated identifier such as
+`esp.embed.lexical/v1`, not a closed enum. Registering a new resource must not
+require a wire or board edit. Weights are named inputs when a resource needs
+them. Scratch, metrics, arbitrary host calls, and cross-ring privacy grants wait
+for a consumer rather than becoming speculative M2 vocabulary.
 
-- Adding a new resource must not change LogSync or board convergence.
-- The board folds claims and results; adapters execute only after the host has
-  selected a valid action.
-- Blob-backed inputs arrive here, not as a special case in `wire.rs`.
-- Device capabilities are facts the host advertises, not claims the asker trusts
-  blindly.
+`JobDoneV2` records a content-addressed output plus the resource id and
+implementation identity needed to verify it. Result bytes do not return inline.
 
----
+Done for M2a:
 
-## First Adapter
-
-Prefer an embeddings batch with the deterministic `hashed` provider before a
-GPU/Burn adapter. It is product-useful, already near the `intel/embed` seam, and
-can be tested without device-specific GPU behavior.
-
-Candidate done-condition:
-
-1. Laptop posts an embedding batch over blob-backed inputs.
-2. Workstation claims it because it advertises the adapter.
-3. Result lands as a content-addressed output.
-4. A deterministic local rerun verifies the result.
-5. Adding the adapter does not touch `JobBoard::fold`.
-
-Burn-wgpu should wait until device policy and owner reclaim exist. Otherwise the
-first real adapter will smuggle scheduler policy into the resource layer.
+- legacy events still decode and reproduce the same board;
+- V2 specs and results survive CBOR and signed-operation round trips;
+- malformed or duplicate input names, invalid resource ids, and oversized
+  grants are rejected before mutation; and
+- mixed M1/V2 replicas converge in a property or permutation test.
 
 ---
 
-## Non-Goals
+## 4. M2b: restricted namespace and execution control
 
-- Kith grants
-- Bounty escrow
-- Public verification markets
-- Wasmtime arbitrary compute
-- Petals-style model hosting
-- Training
+The host constructs a `JobNamespaceView` only after checking the job and local
+authority. It exposes named reads and the granted output writer. It does not
+expose a raw `muniment::Backend`, filesystem handle, network client, or ambient
+blob resolver.
 
-Those lanes depend on this contract; they do not belong inside it.
+Required negative receipts:
 
-## Done Conditions
+- reading a blob not named by the job fails;
+- writing another output name fails;
+- exceeding `max_bytes` fails without committing a partial output; and
+- a digest mismatch fails before the adapter receives bytes.
 
-- `JobSpec` and `JobNamespace` are serializable, signed through the existing mesh
-  operation path, and covered by round-trip tests.
-- `MeshResource` exists as an adapter seam with one real adapter.
-- M1 `Echo` / `Blake3` still run through a compatibility path or minimal adapter.
-- The two-peer sync test covers a nontrivial namespace-backed job.
-- The code has one place where resource kinds are registered.
+Execution receives a host-owned control handle with cooperative cancellation.
+The first adapter may finish too quickly to exercise preemption, but the seam
+must not require a breaking rewrite when M3 owner reclaim arrives. Blob access
+is asynchronous; the object-safe resource interface must therefore admit
+asynchronous preparation/execution rather than hiding `block_on` inside an
+adapter.
 
-## Progress
+---
 
-- **2026-06-30** - Split out of the merged resource-coordination brief. Scope
-  narrowed to the substrate slice: namespace manifest plus first adapter.
+## 5. M2c: one registry, including M1
+
+The registry maps `ResourceId` to an adapter descriptor and executor. It lives
+above wire/store/sync and below the host actor.
+
+Conceptually, each resource supplies:
+
+- stable resource and implementation identities;
+- capability matching against host-advertised facts;
+- preparation through the restricted namespace;
+- execution under the control handle; and
+- a declared verification class.
+
+Move `Echo` and `Blake3` behind minimal adapters before adding ESP. The old M1
+wire compatibility path may translate its inline payload into an ephemeral
+one-input namespace, but the executors themselves should have one route. The
+board remains ignorant of adapter types.
+
+---
+
+## 6. M2d: lexical embedding resource
+
+The first useful resource is `esp.embed.lexical/v1`, backed by
+`esp::embed::LexicalEmbeddingProvider`:
+
+- input: a canonical batch of UTF-8 texts plus configurable dimensions;
+- output: vectors in input order, their dimensions and cosine metric, encoded
+  canonically;
+- dependencies: ESP without Burn, a GPU, model weights, or tokenizer assets;
+  and
+- product value: a cheap shared-vocabulary signal suitable for clustering and
+  recall rehearsals.
+
+`StubEmbeddingProvider` remains a test double. It hashes whole strings and does
+not produce useful similarity; the earlier plan's claim that the hashed
+provider was product-useful was wrong.
+
+The verification class must be earned. Run the canonical output on native and
+wasm. If the `f32` normalization is bit-identical, record the vectors as an
+exact deterministic receipt. If it is not, use an explicit tolerance or add a
+canonical integer/quantized result. A content hash proves which bytes were
+stored; it does not by itself prove that every device should have produced the
+same bytes.
+
+Two-peer receipt:
+
+1. One peer stores and posts a blob-backed text batch.
+2. A second peer advertises and claims `esp.embed.lexical/v1`.
+3. The host constructs a restricted namespace and the adapter executes.
+4. The output is committed by `BlobRef` and `JobDoneV2` converges to both peers.
+5. A local rerun verifies it under the declared verification class.
+6. A deliberately ungranted blob remains unreadable.
+
+---
+
+## 7. Non-goals and stop rule
+
+M2 does not implement:
+
+- lease expiry, heartbeat, owner reclaim, or reputation;
+- OS device discovery or foreground policy;
+- Burn, WGPU, remote tensor execution, or training;
+- kith grants, bounty escrow, or public verification markets;
+- arbitrary Wasm execution; or
+- generalized scratch, metrics, or host-call mounts.
+
+Stop after the lexical two-peer receipt and compatibility coverage. The next
+serial slice is the revised mesh lease scheduler plan. A long-running, GPU, or
+remote resource may not land before that plan proves cancellation and owner
+reclaim.
+
+## 8. Done conditions
+
+- V2 jobs are signed, versioned, content-addressed, and backward-readable with
+  M1 history.
+- Namespace enforcement has positive and negative access tests.
+- One registry owns M1 compatibility adapters and the lexical ESP adapter.
+- Adding a test resource changes neither `wire.rs` nor `JobBoard::fold`.
+- The two-peer namespace-backed job and verification receipt pass.
+- Native and wasm lexical result behavior is classified honestly.
+
+## 9. Progress
+
+- **2026-06-30**: split out of the merged resource-coordination brief as the
+  namespace manifest plus first-adapter slice.
+- **2026-08-09**: re-scoped against the live M1 wire and newly consolidated
+  ESP. Preserved signed-wire compatibility with V2 events; replaced the closed
+  job-kind direction with an extensible resource id; separated blob addressing
+  from host-enforced namespace access; added async/cancellation requirements;
+  corrected the first useful adapter from the whole-string stub to the lexical
+  provider; and made exact-versus-tolerance verification an explicit receipt.

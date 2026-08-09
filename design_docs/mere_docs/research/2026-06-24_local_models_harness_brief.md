@@ -1,7 +1,9 @@
 # Local models and the inference/training harness
 
 **Date**: 2026-06-24
-**Status**: Design brief (the runtime + harness layer). No code proposed. Picks up the piece the
+**Status**: Direction brief. The inference seam, decoder, Eidetic loading, cancellation, and native
+actor/host receipt now live in `esp::infer`; the headed-browser D2 probe and a real adapter/session
+remain open. Picks up the piece the
 [geist models brief](2026-05-10_geist_models_brief.md) and the
 [local-intelligence research](2026-05-08_local_intelligence_integration_research.md) both defer:
 not the geist *architecture* (that brief owns it) nor the compute *marketplace* (the communal-compute
@@ -22,6 +24,10 @@ Mere, across the wasm and native targets.
 - eidetic [`models`](../../../crates/eidetic/eidetic-core/src/models/) (`ModelManifest` /
   `ModelComponents` / `ModelLibrary`) — content-addressed model + adapter storage. The harness loads
   from here.
+- [browser model ceiling probe](../implementation_strategy/2026-08-09_browser_model_ceiling_probe_plan.md)
+  — the headed-browser storage, worker, execution, and measurement half of this brief's wasm claim.
+- [ESP consolidation plan](../implementation_strategy/2026-08-08_esp_consolidation_plan.md) — the
+  settled seam home: `esp::infer` and `esp::embed` in one published crate.
 
 ---
 
@@ -128,6 +134,11 @@ Net-new here: the `InferenceProvider` / `AdapterLoader` traits, the inference ac
 manifest binding. Reused: `EmbeddingProvider`, the vector index, eidetic `ModelManifest` storage, the
 armillary actor framework, the eidetic typed-payload layer.
 
+**Current disposition (2026-08-09):** `InferenceProvider`, its deterministic stub, the Burn decoder,
+Eidetic model loading, streaming actor, cancellation, and a headed native host are landed in
+`esp::infer`. `AdapterLoader` and its manifest/session binding remain gated on one real adapter; the
+browser execution claim moved to the dedicated D2 probe.
+
 ---
 
 ## 6. Owned elsewhere (not re-solved here)
@@ -143,9 +154,8 @@ armillary actor framework, the eidetic typed-payload layer.
 
 ## 7. Open questions specific to the harness
 
-- **Where the seam crate lives.** A new `intel/llm` beside `intel/embed`, or fold inference into a
-  broadened `intel` provider crate. Lean: a sibling `intel/llm` so the embedding and inference seams
-  stay independently testable.
+- **Where the seam crate lives (answered).** `esp` is published from Mere with independent
+  `esp::infer` and `esp::embed` namespaces and feature gates.
 - **Streaming shape across the actor boundary.** Token-by-token messages vs chunked; backpressure when
   the UI is slow. Mirror the fetch actor's delivery model.
 - **Adapter format canon.** PEFT/safetensors as the training artifact, runtime-specific converted
@@ -166,3 +176,7 @@ armillary actor framework, the eidetic typed-payload layer.
   (§11/§14) and the tier-1 research both defer; does not re-derive architecture, marketplace, or
   governance (cross-referenced in §1/§6). Corrected a homonym during scoping: `offgrid_lora_transports`
   is LoRa *radio*, not LoRA adapters, so it is not part of this lane.
+- 2026-08-09: Refreshed after ESP E0-E4. Marked the implemented inference/actor/Eidetic/native-host
+  slice as landed, recorded ESP as the seam home, linked the D2 headed-browser plan, and kept
+  `AdapterLoader` gated on a real immutable model-session implementation rather than an abstract
+  manifest-only trait.

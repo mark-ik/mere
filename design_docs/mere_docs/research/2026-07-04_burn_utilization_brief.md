@@ -71,8 +71,10 @@ seam. Lease semantics (owner-reclaim, heartbeat) stay ours. Their wasm-client
 remote-compute example is the shape of the no-JIT browser inference lane,
 with the caveat that browser-side transport is websocket for now.
 
-Gated on the post-0.21 release (PR #5111 is on main, unreleased; expect API
-churn). **Done when** a second machine executes tensor ops for the first over
+**Gate refreshed 2026-08-09**: Burn and Burn Remote exist only as
+`0.22.0-pre.1`; the stable 0.22 migration has its own
+[plan](../implementation_strategy/2026-08-09_burn_0_22_migration_plan.md).
+**Done when** a second machine executes tensor ops for the first over
 murm's endpoint under a lease, authorized by a tessera/kith credential.
 
 ## Lane 3: inference, burn-first
@@ -224,10 +226,15 @@ at a measured node count.
     a separate device at the one place tensors meet pixels (the Lane 5 cond-1
     `<orrery>` element, if it lands). Until then no lane hard-codes either; the
     coalesce holds the UI usable on the shared device.
-- **D2 wasm model-size ceiling**: inherited from the harness brief; empirical;
-  sets the in-browser inference tier.
-- **D3 burn-remote release timing**: Lane 2 waits on the post-0.21 release;
-  re-check the API against the plan's seam notes when it ships.
+- **D2 wasm model-size ceiling**: the
+  [headed-browser probe](../implementation_strategy/2026-08-09_browser_model_ceiling_probe_plan.md)
+  owns artifact/storage copies, worker execution, cancellation, UI impact, and
+  the configured size sweep. It proceeds independently of Lane 2.
+- **D3 burn-remote release timing**: the
+  [Burn 0.22 migration plan](../implementation_strategy/2026-08-09_burn_0_22_migration_plan.md)
+  waits for stable 0.22 and keeps remote execution outside the dependency
+  migration. A disposable prerelease compatibility probe is allowed after the
+  M2/M3 resource and reclaim seams exist.
 - **D4 position readback shape for Lane 5**: batch readback per tick until
   cond-1; revisit if the `<orrery>` element lands.
 
@@ -247,3 +254,6 @@ at a measured node count.
   (embed/eidetic-search/aether/gyre) plus the prior burn threads
   (harness brief, mesh prior art, geist, communal compute). Mark endorsed all
   five lanes and the shape-the-app-around-it framing.
+- **2026-08-09**: refreshed D2 and D3 after ESP consolidation. D2 is now an
+  independent headed-browser evidence plan. Stable Burn 0.22 remains gated;
+  migration and Burn Remote execution are separate plans/slices.

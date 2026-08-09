@@ -1,183 +1,222 @@
 # Mesh Lease Scheduler Plan
 
-**Date**: 2026-06-30  
-**Status**: Planned after M2 substrate.  
+**Date**: 2026-06-30
+
+**Status**: Planned immediately after the M2 namespace/resource receipt;
+re-scoped 2026-08-09 into replicated lease facts and host enforcement.
+
 **Related**:
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md),
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](2026-06-30_personal_mesh_substrate_m2_plan.md),
+[`2026-08-09_burn_0_22_migration_plan.md`](2026-08-09_burn_0_22_migration_plan.md),
 [`../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md`](../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md)
 
-The scheduler is the owner-priority layer. It decides when this device may offer
-work, when a lease is still alive, and how a job recovers when a worker drops or
-the owner takes the machine back.
+M3 makes lending an owned device socially safe. It records lease lifecycle as
+replicated facts, but each device enforces its owner's settings locally. Owner
+reclaim is a clean handoff, never worker dishonesty.
 
 ---
 
-## Core Rule
+## 1. Core rule and ownership
 
-Owned hardware keeps foreground priority. A local owner reclaim is a clean
-handoff event. It must not look like worker dishonesty or a reputation lapse.
-
-This rule is load-bearing because it is what makes lending personal machines
-socially safe. If the user cannot take their GPU back instantly, the mesh becomes
+Owned hardware keeps absolute foreground priority. If the user cannot take a
+GPU, CPU, storage budget, or network budget back, the personal mesh has become
 a cluster scheduler wearing local-first clothes.
 
+- **Mesh wire** records lease, heartbeat, release, revoke, and completion
+  facts.
+- **The deterministic fold** retains those facts without consulting a wall
+  clock or the OS.
+- **A time-indexed projection** answers whether a lease is live at an explicit
+  observation time.
+- **The host scheduler** reads local settings and activity, chooses whether to
+  offer resources, supplies execution control, and authors reclaim.
+- **Resource adapters** cooperate with cancellation and checkpoints. They do
+  not decide foreground policy or classify their own reliability.
+
+Replicated grant state plus local enforcement is the invariant. M3 does not
+introduce an online central broker.
+
 ---
 
-## Events
+## 2. M3a: settle lease authority and time
 
-M1 has `JobPosted`, `JobClaimed`, and `JobDone`. M3 adds lease semantics:
+The earlier plan said a missed heartbeat could simply become `LeaseLapsed` in
+the fold. That is incomplete: a pure fold has no current time, and authored
+timestamps alone cannot silently become trustworthy clocks.
+
+Before adding events, settle and test these rules:
+
+1. Who may issue a lease and extend it?
+2. Which signed fact establishes its duration or expiry?
+3. What bounded clock skew is accepted?
+4. Who may author reassignment after expiry?
+5. Which evidence distinguishes an expired lease from a temporarily unseen
+   heartbeat?
+
+The initial personal-mesh recommendation is job-author lease authority: claims
+are proposals; the job author grants a lease to the deterministic winning
+claim, including holder, duration/expiry, heartbeat interval, checkpoint class,
+and a unique lease id. The author need not remain online while the lease runs,
+but reassignment waits for an authorized expiry/revoke projection rather than
+trusting a worker's self-declared clock.
+
+If implementation finds that this makes disconnected progress unusable, stop
+and record a different authority rule. Do not bury a distributed-clock choice
+inside `JobBoard::fold`.
+
+---
+
+## 3. M3b: versioned lease facts and projection
+
+Add lease-era variants without changing the serialized M1/M2 variants:
 
 ```rust
-pub enum MeshEvent {
-    JobPosted { spec: JobSpec, nonce: u64, at_ms: u64 },
-    LeaseClaimed { job: JobId, lease: LeaseSpec, at_ms: u64 },
-    LeaseHeartbeat { job: JobId, lease: LeaseId, at_ms: u64 },
-    LeaseReleased { job: JobId, lease: LeaseId, at_ms: u64 },
-    LeaseRevokedByOwner { job: JobId, lease: LeaseId, reason: ReclaimReason, at_ms: u64 },
-    JobDone { job: JobId, lease: LeaseId, output: JobOutput, at_ms: u64 },
-}
+LeaseGranted { job, lease, holder, expires_at_ms, heartbeat_ms, checkpoint, at_ms }
+LeaseHeartbeat { job, lease, progress, checkpoint, at_ms }
+LeaseReleased { job, lease, reason, at_ms }
+LeaseRevokedByOwner { job, lease, reason, at_ms }
+JobCompletedUnderLease { job, lease, output, at_ms }
 ```
 
-`LeaseLapsed` can be derived by the fold from missed heartbeats, or authored by a
-coordinator projection. The board should not need an online broker to notice a
-dead lease.
+Names remain provisional; the facts do not. A lease id binds every heartbeat,
+checkpoint, revoke, and output to one grant. A completion from the wrong holder,
+an expired/revoked lease, or a prior lease is rejected before mutation.
+
+The fold stores the latest admissible facts. A projection such as
+`board.at(observed_at_ms)` classifies:
+
+- `Posted`: no granted lease;
+- `Leased`: grant exists and is live at the supplied time;
+- `Revoked`: the owner explicitly reclaimed it;
+- `Released`: the holder returned it cleanly;
+- `Lapsed`: the projection time is beyond the authorized heartbeat/expiry
+  window; and
+- `Done`: an admissible leased completion exists.
+
+Calling the fold twice over the same facts must return the same retained state.
+Changing only the explicit observation time may change the live projection.
+Tests must cover boundary times and clock-skew policy.
+
+Reliability distinguishes causes:
+
+- owner revoke and policy shutdown carry no worker penalty;
+- clean release carries no penalty;
+- lapse may become reliability evidence later; and
+- invalid completion is an admission failure, not a completed job.
 
 ---
 
-## Fold Semantics
+## 4. M3c: host policy and execution control
 
-The board should distinguish:
+Device policy is configurable host state:
 
-- `Posted`: no valid lease
-- `Leased`: a valid lease exists and heartbeats are current
-- `Done`: the lease holder returned an accepted result
-- `Revoked`: the owner cleanly reclaimed the resource
-- `Lapsed`: the worker missed the heartbeat window
+- idle and foreground-activity thresholds;
+- battery and thermal floors/ceilings;
+- network class and bandwidth cap;
+- quiet hours;
+- maximum concurrent jobs;
+- allowed resource ids;
+- checkpoint classes this device will accept; and
+- later, per-ring limits.
 
-Reassign is allowed after `Revoked` or `Lapsed`, but policy differs:
+The host observes the OS and produces a policy snapshot/capability
+advertisement. `mere-mesh` must not query the OS. ESP must not choose rendering
+versus compute priority. The scheduler supplies M2's execution-control handle
+and may request cancel, yield, or checkpoint.
 
-- `Revoked` carries no penalty.
-- `Lapsed` may feed reliability standing later.
-- `Done` closes the job unless the verification layer rejects it.
+Policy changes affect new offers immediately. Active work follows its declared
+checkpoint class:
 
----
+- `Interruptible`: cancel and re-dispatch from the start;
+- `Checkpointable`: request a checkpoint, then cancel and re-dispatch from that
+  boundary; and
+- `NonInterruptible`: finish or fail within a user-configurable maximum grace
+  window.
 
-## Device Policy
-
-Device policy must be settings, not hardcoded defaults:
-
-- idle threshold
-- foreground activity detector
-- battery floor
-- thermal ceiling
-- network class and bandwidth cap
-- quiet hours
-- maximum concurrent jobs
-- allowed resource kinds
-- per-ring limits once kith sharing exists
-- checkpoint class allowed on this device
-
-The host owns these settings. The mesh crate should receive a policy snapshot or
-capability advertisement, not query the OS directly.
+Owner reclaim is allowed regardless of class. A grace window changes how the
+handoff occurs, not who has authority.
 
 ---
 
-## Checkpoint Classes
+## 5. M3d: executable reclaim receipt
 
-Every job declares one:
+Use a deterministic delayed test resource before a GPU resource. It must expose
+multiple cooperative cancellation points and an optional checkpoint boundary.
 
-- `Interruptible`: kill and re-dispatch from the start.
-- `Checkpointable`: resume from a saved boundary.
-- `NonInterruptible`: finish or fail; owner reclaim may defer until the policy's
-  maximum grace window.
+The receipt runs two workers:
 
-M2 can record the class. M3 makes it operational.
+1. Both race to claim a job; one receives the lease.
+2. The winner heartbeats and makes observable progress.
+3. Its owner reclaims the device through the host policy path.
+4. Execution stops, a clean owner-revoke fact is authored, and reliability is
+   unchanged.
+5. The other worker receives a new lease and completes.
+6. A separate run drops heartbeats without owner revoke and projects `Lapsed`.
+7. The board and receipt distinguish those two histories.
 
----
-
-## Storage And Uptime Classes
-
-Storage sharing should reuse the same lease vocabulary, but it has a different
-done-condition from compute. Compute asks whether a result was produced. Storage
-asks whether encrypted content stayed retrievable across checkpoints.
-
-Uptime is therefore a service class, not a universal mesh rule:
-
-- `BestEffort`: peer stores while online; no standing loss for absence.
-- `Checkpointed`: peer answers periodic possession/retrieval checks.
-- `UptimeWindow`: peer commits to policy windows such as nights, weekends, or
-  "while plugged in".
-- `Replicated`: repair starts when available copies drop below policy.
-
-The storage layer should emit checkpoint facts that the board can fold:
-
-```rust
-pub enum StorageCheckpoint {
-    Stored { blob: BlobRef, lease: LeaseId, at_ms: u64 },
-    ChallengeIssued { blob: BlobRef, nonce: Vec<u8>, at_ms: u64 },
-    ChallengeAnswered { blob: BlobRef, proof: Hash, at_ms: u64 },
-    RepairRequested { blob: BlobRef, reason: RepairReason, at_ms: u64 },
-}
-```
-
-The same owner-priority rule still applies. If a laptop reclaims its disk or
-goes offline outside its promised class, that is not worker dishonesty. If it
-misses a promised checkpoint, that becomes reliability evidence for the storage
-lane.
+Only after this receipt may a long-running Burn/WGPU or Burn Remote resource
+join the registry.
 
 ---
 
-## Prior art: burn-remote over iroh (noted 2026-07-03)
+## 6. Storage and uptime are a follow-on
 
-Burn's `burn-remote` gained iroh as its **primary transport** (tracel-ai/burn
-PR #5111, on main 2026-07; unreleased — burn 0.21 is what mere pins in
-`intel/embed` / `eidetic-search` / `aether`). Before any bespoke compute-worker
-protocol is written for this mesh, evaluate it: the shape matches this plan
-family point-for-point.
+Storage can reuse lease ids, owner reclaim, and policy snapshots, but its proof
+is continued encrypted retrievability rather than compute completion. The
+earlier `BestEffort`, `Checkpointed`, `UptimeWindow`, and `Replicated` service
+classes remain valid research vocabulary. They are not implemented in M3.
 
-- **The compute half of the mesh, ready-made**: a peer advertises devices; a
-  client holds `Device::remote_iroh(&node, peer, idx)` and tensor ops execute
-  remotely. Their `p2p-remote-training` example is the personal-fleet picture.
-- **Authorization is the tessera/kith seam**: `RemoteTicket` carries an
-  `EndpointAddr` plus *opaque credential bytes*; the compute peer's
-  `PeerAuthorizer` callback verifies them — signature format, expiry, and fleet
-  membership are explicitly application concerns. A tessera receipt or kith
-  capability grant plugs in without burn knowing either exists.
-- **Composes onto murm's endpoint**: burn registers as an ALPN on an
-  application-owned `iroh::protocol::Router` (`accept(BURN_REMOTE_ALPN, ..)`),
-  so it mounts on the same endpoint/identity/relay policy Mere already runs —
-  no second identity, no second connection pool. "Applications own the endpoint
-  configuration" is their stated design.
-- **Peer-to-peer tensor movement uses short-lived capabilities**: transfers go
-  source-peer → destination-peer directly (not via the client), gated by a
-  random short-lived capability bound to the destination's authenticated
-  endpoint identity, download-count-limited.
-- **Also reopens the deferred geist/serving lane**: their `remote-inference-web`
-  example (wasm client, remote compute peer) is the right shape for the no-JIT
-  browser lane — though browser-side transport is websocket, not iroh, so the
-  web story is transport-asymmetric for now.
+Spin storage service classes into their own plan when a real replicated-blob
+consumer is selected. That plan owns possession challenges, repair, replica
+counts, and reliability effects.
 
-Caveats: freshly landed (expect API churn before it stabilizes in a release);
-burn is a heavy tree to widen beyond the current ndarray-only embed pin; and
-lease semantics (this plan's core) stay ours — burn gives execution + authz
-hooks, not owner-reclaim or heartbeat policy.
+---
 
-## Done Conditions
+## 7. Burn Remote prior art and gate
 
-- A worker that stops heartbeating is reassigned.
-- A worker whose owner reclaims resources is cleanly canceled and reassigned.
-- The board exposes the difference between owner revoke and worker lapse.
-- Lease/heartbeat defaults are configurable.
-- A test covers two workers racing, one winning, then lapsing, then the other
-  completing the job.
+As of 2026-08-09, `burn-remote` is published only as `0.22.0-pre.1`. Its iroh
+transport, client/server split, `RemoteTicket`, and authorization callback still
+fit the intended compute adapter. It can mount on an application-owned iroh
+Router, while Mere retains job authorization, lease lifecycle, and owner
+reclaim.
 
-## Progress
+The installed Rust 1.97.1 exceeds Burn 0.22's Rust 1.95 requirement. Release
+stability and API migration, rather than the toolchain, remain the gate. The
+separate Burn 0.22 plan owns that migration. A prerelease probe may inspect the
+Router and authorization seams after M2/M3, but it does not widen production
+dependencies or publish a public remote feature.
 
-- **2026-06-30** - Split out of the merged resource-coordination brief. Scope
-  narrowed to lease lifecycle, owner reclaim, and device policy.
-- **2026-06-30** - Added storage checkpoint and optional uptime classes so
-  storage reliability does not leak into the default compute lease rule.
-- **2026-07-03** - Added the burn-remote-over-iroh prior-art section (Mark
-  flagged tracel-ai/burn PR #5111): the compute-worker protocol + authz seam
-  this mesh would otherwise hand-roll. Watch for the post-0.21 burn release.
+---
+
+## 8. Non-goals and stop rule
+
+M3 does not implement kith authorization, economic standing, public resource
+banking, storage repair, Burn migration, remote tensor transport, or training.
+
+Stop after the delayed-resource owner-reclaim and lapse receipts. The next
+serial gate is the stable Burn migration; Burn Remote follows it as another
+resource adapter rather than another scheduler.
+
+## 9. Done conditions
+
+- Lease authority, expiry, skew, and reassignment rules are explicit and
+  executable.
+- Folded facts are deterministic; time-dependent state requires an explicit
+  observation time.
+- Wrong-holder, stale-lease, revoked-lease, and late outputs are rejected.
+- Host settings are configurable and OS-free below the host boundary.
+- Cooperative cancellation and checkpoint control reach a real resource.
+- Owner revoke and heartbeat lapse produce distinct convergent receipts.
+- A second worker completes after reclaim or lapse.
+
+## 10. Progress
+
+- **2026-06-30**: split out of the resource-coordination brief around lease
+  lifecycle, owner reclaim, device policy, and storage service classes.
+- **2026-07-03**: recorded Burn Remote over iroh as compute prior art.
+- **2026-08-09**: split replicated lease facts from host enforcement; exposed
+  the pure-fold/current-time contradiction; added an explicit lease-authority
+  decision gate, versioned events, time-indexed projection, cooperative
+  cancellation, and a real owner-reclaim receipt; deferred storage classes;
+  refreshed Burn Remote to the current `0.22.0-pre.1` gate.

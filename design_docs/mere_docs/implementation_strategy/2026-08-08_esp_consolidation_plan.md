@@ -31,8 +31,13 @@ holds the ledger, it does not absorb the lanes.
   commons is a profile over the substrate; multi-writer convergence answered.
 - [mesh_lease_scheduler_plan](2026-06-30_mesh_lease_scheduler_plan.md) — Lane 2
   prior art: burn-remote as an ALPN on murm's iroh Router, leases ours.
+- [personal_mesh_substrate_m2_plan](2026-06-30_personal_mesh_substrate_m2_plan.md)
+  — the versioned namespace/resource receipt that precedes leases.
 - [inference_provider_plan](2026-07-05_inference_provider_plan.md) (Lane 3),
   [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (Lane 1),
+  [browser_model_ceiling_probe_plan](2026-08-09_browser_model_ceiling_probe_plan.md)
+  (D2), [burn_0_22_migration_plan](2026-08-09_burn_0_22_migration_plan.md)
+  (D3),
   [orrery_graph_intelligence_plan](2026-07-06_orrery_graph_intelligence_plan.md)
   (Lane 5) — the landed lanes esp inherits.
 - [participant_gate_packs_plan](2026-07-17_participant_gate_packs_plan.md) —
@@ -147,14 +152,16 @@ up, per the burn brief's own rule.
   (9.95 tok/s wgpu vs 0.09 CPU), eidetic `ManifestId` loading.
 - Lane 5: the burn-free solver and affinity seams into gyre, blended affinity,
   lexical embedding, all with the honest in-context numbers.
-- The vector-index burn lift (in sibylla, exact, measured crossover).
+- The vector-index Burn lift (now in `esp::embed`, exact, measured crossover).
 
 **Unfinished, with esp as the seam home:**
 
 - **Lane 3's tail**: the `endpoint` backend (external OpenAI-compatible
   endpoints; named in vates's manifest as roadmap), the wasm half of the
   done-condition, and D2 (the empirical wasm model-size ceiling, which sets
-  the in-browser tier). D2 is a measurement list, not one number, per the
+  the in-browser tier). D2 now has its own
+  [headed-browser probe plan](2026-08-09_browser_model_ceiling_probe_plan.md).
+  It is a measurement list, not one number, per the
   WebLLM lesson: cold download, warm reopen, artifact integrity,
   persistent-storage status, first-token latency, steady throughput, GPU
   memory, cancellation, UI frame impact, worker restart. Model artifacts ride
@@ -175,9 +182,10 @@ up, per the burn brief's own rule.
   concurrent residents.
 - **Lane 2, the personal mesh**: the split honors the standing
   resource-coordination boundaries rather than reinventing them.
-  `crates/mesh` already owns the signed job grammar, `JobSpec`,
-  `JobNamespace`, and the `MeshResource` adapter seam (M1 done: Echo/Blake3
-  jobs over LogSync); the lease/scheduler plan owns owner priority, revocable
+  `crates/mesh/mesh` already owns the signed M1 job grammar and Echo/Blake3
+  jobs over LogSync; `JobSpec`, enforced `JobNamespace`, and the
+  `MeshResource` registry are the active M2 slice. The lease/scheduler plan
+  owns owner priority, revocable
   leases, heartbeats, checkpoint classes, device policy, and owner reclaim.
   So: **esp** = model loading, tensor ops, the local/remote compute adapter,
   cooperative cancellation points; **mesh** = job grammar, namespace, resource
@@ -187,12 +195,12 @@ up, per the burn brief's own rule.
   an admitted denizen may petition the graph at all. Burn's `PeerAuthorizer`
   is session admission, not job authorization; the opaque `RemoteTicket` may
   carry a mesh lease reference, but mesh enforces scope, expiry, and reclaim
-  locally. **The first step needs no burn at all**: the M2 plan already names
-  a deterministic hashed embedding batch as the first real `MeshResource`,
-  and `esp::embed`'s stub provider is exactly that adapter. Burn-remote
-  mounting on the Router stays gated on a stable release (D3; it exists today
-  only as 0.22.0-pre.1, and 0.21 → 0.22 is a breaking backend/device
-  migration that gets its own plan).
+  locally. **The first step needs no burn at all**: the revised M2 plan uses
+  `esp::embed::LexicalEmbeddingProvider` for a useful deterministic batch;
+  `StubEmbeddingProvider` remains a test double with meaningless similarity.
+  Burn-remote mounting on the Router stays gated on a stable release (D3; it
+  exists today only as 0.22.0-pre.1). The 0.21 → 0.22 backend/device migration
+  has its own [release-gated plan](2026-08-09_burn_0_22_migration_plan.md).
 - **Lane 4, training**: Distillery-as-trainer as a native-only armillary job
   over the scoped corpus, emitting the geist §6 engram triple
   (`ModelAdapterManifest` + `TrainingCorpus` + `EvalReport`); the bunsen
@@ -206,10 +214,10 @@ up, per the burn brief's own rule.
   policy shared by rendering, inference, embedding, and later training: esp
   accepts a host-selected device and exposes cancellation/yield hooks; the
   host scheduler owns foreground priority and the render-vs-compute budget.
-  The M2 plan states the rule exactly: land device policy and owner reclaim
-  first, "otherwise the first real adapter will smuggle scheduler policy into
-  the resource layer." The decision itself stays open until the resident-data
-  consumer forces it.
+  M2 supplies a host-owned cancellation handle and stops after a fast lexical
+  resource. M3 proves device policy and owner reclaim before any long-running,
+  GPU, or remote resource. The broader render-versus-compute decision stays
+  open until the resident-data consumer forces it.
 - **Scope guard**: esp is the inference and embedding seam home, not a
   taxonomy of every intelligent operation. Woodshed's structured audio
   analysis is a third, provenance-bearing provider seam that stays
@@ -249,14 +257,13 @@ completes into: not a chat box, a bounded resident with a scoped faculty. The
 thoughtform words (servitor, tulpa, egregore) stay product language, not a
 runtime type hierarchy.
 
-**Sequence (adopted from the 2026-08-08 review):** 1. consolidate and stop at
-E4. 2. Land the deterministic embedding `MeshResource` and namespace receipt.
-3. Burn 0.21 → 0.22 migration as its own plan (it carries burn-remote; new
-runtime `Device` selects local or remote behind one model implementation; its
-iroh 1.0 aligns with murm's 1.0.3). 4. Device policy and owner reclaim.
-5. Mount burn-remote as another compute adapter. 6. wasm model
-loading/storage receipts (D2's list). 7. Model sessions and adapter loading.
-8. Only then training and communal compute.
+**Sequence after E4:** the serial mesh track is 1. M2 versioned namespace,
+registry, and lexical-resource receipt. 2. M3 lease projection, host policy,
+and owner reclaim. 3. Stable Burn 0.22 migration. 4. Burn Remote as another
+resource adapter on murm's Router. 5. Immutable model sessions plus one real
+adapter. 6. Local training, then communal compute. The D2 headed-browser model
+probe is an independent evidence track and may proceed alongside M2; it has no
+dependency on mesh or Burn Remote.
 
 ## 5. Posture (does this necessitate going beyond mere?)
 
@@ -320,3 +327,12 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   resolved ESP from the registry, packaged, verified, and published; Sibylla
   0.1.2 followed with the same registry-backed verification. E0-E4 are
   complete.
+- **2026-08-09, ledger spin-out**: kept this consolidation plan closed and
+  moved its ready work into authorities of their own. M2 now owns versioned
+  job wire, a host-enforced namespace, one resource registry, and a lexical
+  ESP receipt. M3 separates deterministic lease facts from time-indexed
+  projection and host reclaim. D2 has a headed-browser artifact/worker/ceiling
+  probe. Burn 0.22 has a stable-release-gated migration matrix plus an optional
+  disposable prerelease probe. Endpoint, model-session/adapter, training, and
+  communal lanes remain entrance-gated rather than being smuggled into those
+  scopes.

@@ -1,8 +1,8 @@
 # Inference Provider Plan (burn brief, Lane 3)
 
 **Date**: 2026-07-05
-**Status**: P0 (seam + stub), P1 (own decoder body incl. seeded temperature/top-p sampling; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), P2 (eidetic loading; corridor proven transparent), P3 (actor with cancellation), and the meerkat host wiring (`>ask` omnibar verb) all landed. Remaining: P4's wasm half (gated on the embed-wasm dependency slice).
-**Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 3), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (§2 defines this seam; §3 the actor harness; §4 the wasm/native split), [geist_models_brief](../research/2026-05-10_geist_models_brief.md) (adapter envelope, deferred to Lane 4), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (the GPU receipts motivating burn-first).
+**Status**: P0 (seam + stub), P1 (own decoder body incl. seeded temperature/top-p sampling; validated on the real TinyLlama checkpoint, 9.95 tok/s on wgpu vs 0.09 on ndarray), P2 (eidetic loading; corridor proven transparent), P3 (actor with cancellation), and the meerkat host wiring (`>ask` omnibar verb) all landed. P4's native measurement is landed; its headed-browser half is scoped in the D2 browser model ceiling probe.
+**Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 3), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (§2 defines this seam; §3 the actor harness; §4 the wasm/native split), [geist_models_brief](../research/2026-05-10_geist_models_brief.md) (adapter envelope, deferred to Lane 4), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (the GPU receipts motivating burn-first), [browser_model_ceiling_probe_plan](2026-08-09_browser_model_ceiling_probe_plan.md) (the remaining P4/D2 headed proof).
 
 ## Scope
 
@@ -91,10 +91,11 @@ test harness) shows streamed tokens from the actor.
 
 ### P4 — Measurements that gate the defaults
 
-The harness brief's two open questions, answerable once P1 exists: the wasm
-model-size ceiling (D2) and whether burn-wgpu inference is competitive
-enough to be the default native path. Recorded numbers, then the default
-gets bound.
+The native path is measured, including real-model throughput and in-process
+render contention. The wasm model-size ceiling remains empirical and is now
+owned by the [D2 headed-browser plan](2026-08-09_browser_model_ceiling_probe_plan.md),
+which separates storage/copy pressure, worker execution, UI impact, and model
+size rather than binding one unqualified number.
 
 ## Findings
 
@@ -350,3 +351,8 @@ gets bound.
   already proven byte-faithful by the fixed round-trip test), P4
   (measurements). The host wiring (meerkat kernel inbox + omnibar consumer)
   rides P1/P2, since a canned-echo omnibar serves no one.
+- 2026-08-09 — P4's remaining browser half moved into the dedicated D2 plan.
+  ESP's wasm feature matrix is a compile receipt; the new plan requires a real
+  artifact through IndexedDB/Eidetic, a Web Worker lifecycle, cancellation,
+  frame-impact measurement, and a configurable size sweep before declaring an
+  in-browser tier.
