@@ -15,6 +15,7 @@ name = "knot_sync_host"
 path = "src/bin/knot_sync_host.rs"
 
 [dependencies]
+base64.workspace = true
 blake3.workspace = true
 cambium.workspace = true
 chartulary.workspace = true
@@ -60,7 +61,6 @@ uuid.workspace = true
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
-base64.workspace = true
 graphshell = { path = "../graphshell" }
 rcgen = "0.14"
 tempfile = "3"

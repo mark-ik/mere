@@ -607,6 +607,34 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn ticket_client_reads_only_its_named_publication() {
+        let fixture = host_and_publication().await;
+        let certificate = grant(fixture.publication);
+        let holder_peer = PeerID::from_bytes(&holder().master_public_key().to_bytes()).unwrap();
+        let reader_peer = PeerID::from_bytes(&reader().master_public_key().to_bytes()).unwrap();
+        let (server, client) = MemoryTransport::pair(holder_peer, reader_peer);
+        let ticket = crate::KnotShareTicket::new(
+            holder_peer.to_bytes(),
+            "memory-carrier",
+            NETWORK,
+            fixture.publication,
+            vec![certificate],
+            None,
+        );
+
+        let server_future = fixture.host.accept_and_serve(&server);
+        let client_future =
+            crate::fetch_published_document(&client, reader().master_keypair(), profile(), &ticket);
+        let (served, read) = tokio::join!(server_future, client_future);
+        assert_eq!(served.unwrap(), KnotPublishServeOutcome::Responded);
+        let KnotPublishRead::Document(document) = read.unwrap() else {
+            panic!("a granted, selected publication must disclose its current source")
+        };
+        assert_eq!(document.publication, ticket.publication);
+        assert_eq!(document.body, b"private source");
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn p2panda_loopback_uses_the_real_noise_and_notochord_path() {
         let fixture = host_and_publication().await;

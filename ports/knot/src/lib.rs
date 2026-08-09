@@ -12,6 +12,7 @@ mod endpoint;
 mod mark;
 mod publish;
 mod publish_carrier;
+mod publish_client;
 mod publish_host;
 mod publish_wire;
 mod resident;
@@ -38,6 +39,10 @@ pub use mark::{
     MarkReadAdapterLimits, MarkRequest, MarkResponse, MarkServerError, MarkSnapshotOutcome,
     MarkTimestamp, MarkVersion, MarkVersionId, decode_mark_request, mark_server_config,
 };
+/// Admission-policy vocabulary belongs to the same Notochord instance as
+/// Knot's publishing carrier. Product hosts should take these through Knot,
+/// not add a second direct Notochord dependency.
+pub use notochord::{NetworkId, ProfileRef, TrustedRoot};
 pub use publish::{
     KNOT_PUBLISH_ALPN, KNOT_PUBLISH_DOMAIN, KNOT_PUBLISH_READ_ACTION, KNOT_PUBLISH_SERVICE,
     KNOT_SHARE_TICKET_VERSION, KnotPublication, KnotPublishCandidate, KnotPublishCatalog,
@@ -45,12 +50,12 @@ pub use publish::{
     KnotShareControlError, KnotShareRecipient, KnotShareTicket, PublicationId, publication_path,
     revoke_share,
 };
-/// Admission-policy vocabulary belongs to the same Notochord instance as
-/// Knot's publishing carrier. Product hosts should take these through Knot,
-/// not add a second direct Notochord dependency.
-pub use notochord::{NetworkId, ProfileRef, TrustedRoot};
 pub use publish_carrier::{
     PublishCarrierError, PublishRefusal, accept_publish_session, publish_alpn, publish_policy,
+};
+pub use publish_client::{
+    KNOT_PUBLISH_READER_KEY_CONTEXT, KnotPublishClientError, decode_share_ticket,
+    encode_share_ticket, fetch_published_document,
 };
 pub use publish_host::{
     KnotPublishHost, KnotPublishHostError, KnotPublishHostLimits, KnotPublishServeOutcome,
