@@ -166,6 +166,30 @@ pub enum PersonalGraphEvent {
         /// `stickleback::GroupPrekeyBundle::to_bytes`.
         bundle: Vec<u8>,
     },
+    /// Name a persona root that should be able to read this graph.
+    ///
+    /// Intent, not the key itself. The key group reconciles toward this, which
+    /// is what lets a revocation stand: every device folds the same set from
+    /// the same operations, so none of them re-seats a device another one
+    /// retired.
+    ///
+    /// Authority is checked when this is folded rather than when it is
+    /// admitted. Only a device already in the reader set may name another, and
+    /// the first is named by whoever creates the group. Checking it at
+    /// admission would be circular, since the set being decided is the one the
+    /// check would need.
+    AdmitReader {
+        root: [u8; 32],
+        /// What a person calls this device. Never load bearing.
+        label: String,
+    },
+    /// Withdraw a persona root's ability to read this graph.
+    ///
+    /// The departed device keeps what it could already read; no scheme takes
+    /// that back. What this ends is everything written afterwards.
+    RetireReader {
+        root: [u8; 32],
+    },
     /// One membership or rotation step in the graph's key group.
     ///
     /// The broadcast control frame plus the per-recipient direct frames, which
@@ -187,7 +211,10 @@ impl PersonalGraphEvent {
     pub fn is_key_agreement(&self) -> bool {
         matches!(
             self,
-            Self::PublishPrekey { .. } | Self::GroupDispatch { .. }
+            Self::PublishPrekey { .. }
+                | Self::GroupDispatch { .. }
+                | Self::AdmitReader { .. }
+                | Self::RetireReader { .. }
         )
     }
 }
@@ -395,6 +422,12 @@ pub struct SyncProjection {
     pub handler_preferences: BTreeMap<String, String>,
     pub blob_availability: Vec<BlobAvailabilityObservation>,
     pub available_blobs: BTreeMap<[u8; 32], BTreeSet<String>>,
+    /// Persona roots the graph says may read it, with their labels.
+    ///
+    /// The condition the key group reconciles toward. Every device folds this
+    /// identically from the same operations, so a device retired on one is
+    /// retired everywhere without anyone being told twice.
+    pub readers: BTreeMap<[u8; 32], String>,
     /// Operations this device holds and cannot read yet, because they are
     /// sealed and it has no key.
     ///
@@ -1280,6 +1313,7 @@ pub async fn materialize<B: Backend + Clone + Send + Sync + 'static>(
         handler_preferences: handlers,
         blob_availability,
         available_blobs,
+        readers: fold_readers(&records, &causal.order),
         unreadable,
         key_agreement,
         pending: causal.pending,
@@ -1416,8 +1450,55 @@ fn apply_event(
         // Key agreement is not graph content and folds into nothing. It is
         // collected separately, because acting on it changes this device's
         // keys rather than the graph everyone shares.
-        PersonalGraphEvent::PublishPrekey { .. } | PersonalGraphEvent::GroupDispatch { .. } => {}
+        PersonalGraphEvent::PublishPrekey { .. }
+        | PersonalGraphEvent::GroupDispatch { .. }
+        | PersonalGraphEvent::AdmitReader { .. }
+        | PersonalGraphEvent::RetireReader { .. } => {}
     }
+}
+
+/// Fold the reader set from the operations that named it.
+///
+/// Deterministic and total: every device that holds the same operations
+/// computes the same set, which is the whole point. A revocation is not an
+/// action one device performs on another; it is a fact all of them read.
+///
+/// The first admit bootstraps. Before anyone is a reader there is nobody who
+/// could authorize one, so the earliest admit in causal order stands on its
+/// author's own authority and seats that author too. After that, only a
+/// current reader may admit or retire, and an event from anyone else is
+/// ignored rather than refused: it was validly authored on the lane and is
+/// simply not authoritative about this.
+fn fold_readers(records: &[StoredRecord], order: &[usize]) -> BTreeMap<[u8; 32], String> {
+    let mut readers: BTreeMap<[u8; 32], String> = BTreeMap::new();
+    for &index in order {
+        let stored = &records[index];
+        let Ok(author) = stable_subject(&stored.operation, &stored.record) else {
+            continue;
+        };
+        for event in &stored.record.events {
+            match event {
+                PersonalGraphEvent::AdmitReader { root, label } => {
+                    if readers.is_empty() {
+                        readers.insert(author, String::new());
+                    }
+                    if readers.contains_key(&author) {
+                        readers.insert(*root, label.clone());
+                    }
+                }
+                PersonalGraphEvent::RetireReader { root } => {
+                    // A reader may retire itself; that is leaving, not a
+                    // coup. What it may not do is retire the set out of
+                    // existence, because nobody could then admit anyone.
+                    if readers.contains_key(&author) && readers.len() > 1 {
+                        readers.remove(root);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    readers
 }
 
 fn collect_conflicts(
@@ -1505,7 +1586,18 @@ fn event_target(event: &PersonalGraphEvent) -> String {
         PersonalGraphEvent::GroupDispatch { dispatch } => {
             format!("group-dispatch/{}", Hash::digest(dispatch))
         }
+        // Concurrent edits to one root's readership are a genuine conflict
+        // worth surfacing: two devices disagreeing about who may read is not
+        // something to resolve quietly.
+        PersonalGraphEvent::AdmitReader { root, .. }
+        | PersonalGraphEvent::RetireReader { root } => {
+            format!("reader/{}", hex32(root))
+        }
     }
+}
+
+fn hex32(bytes: &[u8; 32]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn relation_key(assertion: &EdgeAssertion) -> String {
@@ -2358,5 +2450,169 @@ mod tests {
             }])
             .await;
         assert!(refused.is_err());
+    }
+
+    /// The property that makes revocation fall out rather than be performed:
+    /// every device folds the same set, so none of them re-seats what another
+    /// retired.
+    #[tokio::test]
+    async fn the_reader_set_is_a_fold_every_device_computes_the_same_way() {
+        let owner_seed = [0x81; 32];
+        let sibling_seed = [0x82; 32];
+        let owner_subject = *SigningKey::from_bytes(&owner_seed)
+            .verifying_key()
+            .as_bytes();
+        let sibling_subject = *SigningKey::from_bytes(&sibling_seed)
+            .verifying_key()
+            .as_bytes();
+        let roster = SyncRoster::new([owner_subject, sibling_subject]);
+        let mut owner = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            owner_seed,
+            roster.clone(),
+            selection(),
+        );
+        let mut sibling = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            sibling_seed,
+            roster,
+            selection(),
+        );
+
+        // The first admit bootstraps: nobody could authorize it, so it stands
+        // on its author's own authority and seats the author too.
+        let opened = owner
+            .author(vec![PersonalGraphEvent::AdmitReader {
+                root: sibling_subject,
+                label: "sibling".into(),
+            }])
+            .await
+            .unwrap();
+        sibling.accept(&opened).await.unwrap();
+
+        let both = owner.projection().await.unwrap().readers;
+        assert_eq!(
+            both.len(),
+            2,
+            "the author seats itself alongside the one it named"
+        );
+        assert!(both.contains_key(&owner_subject));
+        assert!(both.contains_key(&sibling_subject));
+        assert_eq!(
+            sibling.projection().await.unwrap().readers,
+            both,
+            "both devices fold the same set from the same operations"
+        );
+
+        // Retiring on ONE device is enough, because the other reads the same
+        // fact rather than being told. This is the case the command-shaped
+        // version could not do.
+        let retired = sibling
+            .author(vec![PersonalGraphEvent::RetireReader {
+                root: owner_subject,
+            }])
+            .await
+            .unwrap();
+        owner.accept(&retired).await.unwrap();
+
+        let after = sibling.projection().await.unwrap().readers;
+        assert_eq!(
+            after.keys().copied().collect::<Vec<_>>(),
+            vec![sibling_subject]
+        );
+        assert_eq!(
+            owner.projection().await.unwrap().readers,
+            after,
+            "the device that was retired agrees it was retired"
+        );
+    }
+
+    /// Authority is checked in the fold. An admit from a device that is not a
+    /// reader is ignored rather than refused: it was validly authored and is
+    /// simply not authoritative about who reads.
+    #[tokio::test]
+    async fn only_a_reader_can_name_another() {
+        let owner_seed = [0x83; 32];
+        let stranger_seed = [0x84; 32];
+        let owner_subject = *SigningKey::from_bytes(&owner_seed)
+            .verifying_key()
+            .as_bytes();
+        let stranger_subject = *SigningKey::from_bytes(&stranger_seed)
+            .verifying_key()
+            .as_bytes();
+        let roster = SyncRoster::new([owner_subject, stranger_subject]);
+        let mut owner = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            owner_seed,
+            roster.clone(),
+            selection(),
+        );
+        let mut stranger = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            stranger_seed,
+            roster,
+            selection(),
+        );
+
+        let opened = owner
+            .author(vec![PersonalGraphEvent::AdmitReader {
+                root: owner_subject,
+                label: "owner".into(),
+            }])
+            .await
+            .unwrap();
+        stranger.accept(&opened).await.unwrap();
+
+        // On the roster, so this operation is admitted and stored. Not a
+        // reader, so it does not get to decide who reads.
+        let overreach = stranger
+            .author(vec![PersonalGraphEvent::AdmitReader {
+                root: stranger_subject,
+                label: "helping myself".into(),
+            }])
+            .await
+            .unwrap();
+        owner.accept(&overreach).await.unwrap();
+
+        let readers = owner.projection().await.unwrap().readers;
+        assert_eq!(
+            readers.keys().copied().collect::<Vec<_>>(),
+            vec![owner_subject],
+            "a writer that is not a reader cannot admit itself"
+        );
+    }
+
+    /// The set must never empty out, or nobody could ever admit anyone again.
+    #[tokio::test]
+    async fn the_last_reader_cannot_retire_itself() {
+        let seed = [0x85; 32];
+        let subject = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let mut replica = PersonalGraphReplica::new(
+            MemoryBackend::new(),
+            GRAPH,
+            seed,
+            SyncRoster::new([subject]),
+            selection(),
+        );
+        replica
+            .author(vec![PersonalGraphEvent::AdmitReader {
+                root: subject,
+                label: "only".into(),
+            }])
+            .await
+            .unwrap();
+        replica
+            .author(vec![PersonalGraphEvent::RetireReader { root: subject }])
+            .await
+            .unwrap();
+        assert_eq!(
+            replica.projection().await.unwrap().readers.len(),
+            1,
+            "retiring the last reader would strand the graph with no one able to admit"
+        );
     }
 }
