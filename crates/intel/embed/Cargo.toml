@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Mere's statistical-intelligence glue over the standalone sibylla retrieval crate: eidetic persistence and the quint field-algebra / canvas-search bridge, re-exporting sibylla's embedding + retrieval core (incl. the Burn-backed BERT provider behind features)."
+description = "Mere's statistical-intelligence glue over esp::embed: eidetic persistence and the quint field-algebra / canvas-search bridge."
 readme = "README.md"
 keywords = ["embeddings", "vector-search", "intelligence", "mere"]
 categories = ["data-structures"]
@@ -14,14 +14,9 @@ name = "embed"
 path = "src/lib.rs"
 
 [dependencies]
-# The promoted embedding + retrieval core (provider / stub / index / search /
-# lexical / affinity, and the bert provider behind features), owned by the
-# standalone sibylla crate. embed re-exports it and keeps only the mere glue
-# (persistence / field_bridge / canvas_search). Git sibling consumed one-way; a
-# local checkout is picked up via the gitignored `.cargo/config.toml` patch
-# (mirrors netfetcher / errand).
-sibylla = { path = "../sibylla" }
-async-trait = "0.1"
+# The portable embedding and retrieval core. This crate keeps only Mere's
+# persistence, field, and canvas glue.
+esp.workspace = true
 eidetic.workspace = true
 # The field algebra (FieldProjection / FieldId / eval) the embedding→field
 # bridge builds onto — extracted from graph-canvas into its own crate.
@@ -39,9 +34,9 @@ default = []
 # The Burn-backed BERT embedding provider, re-exported from sibylla — which now
 # owns the burn / tokenizers / safetensors tree (BERT moved there at sibylla's
 # founding P2). `dep:burn` is for the mere-side integration test's backend type.
-bert = ["sibylla/bert", "dep:burn"]
+bert = ["esp/bert", "dep:burn"]
 # GPU execution for the BERT provider (`BertEmbeddingProvider<Wgpu>`).
-bert-wgpu = ["bert", "sibylla/bert-wgpu"]
+bert-wgpu = ["bert", "esp/bert-wgpu"]
 
 [dev-dependencies]
 # Test stores are muniment backends now (2026-07-12).

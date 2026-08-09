@@ -48,7 +48,7 @@ similar = "2.7"
 script-rhai.workspace = true
 servitor.workspace = true
 session-runtime.workspace = true
-sibylla.workspace = true
+esp.workspace = true
 stickleback.workspace = true
 thiserror = "1"
 transport = { workspace = true, features = ["noise", "notochord"] }

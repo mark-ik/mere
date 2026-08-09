@@ -1,12 +1,14 @@
 # Esp Consolidation Plan
 
 **Date**: 2026-08-08
-**Status**: Decisions registered (Mark, 2026-08-08); consolidation phases planned,
-nothing executed. Amended same day after an adversarial review: consumer graph
-corrected (knot), mesh/scheduler boundaries restored, device policy moved
-host-side, servitor language narrowed, portability separated from repository
-promotion. Supersedes the first draft written in `repos/esp/design_docs/`;
-that file is now a pointer here.
+**Status**: E0-E3 implemented 2026-08-09. E4 is locally prepared: ESP 0.1.0
+packages and verifies; the Vates and Sibylla compatibility shims compile, but
+Cargo cannot package them until ESP exists in the registry. The irreversible
+publish sequence remains unexecuted. The 2026-08-08 adversarial amendments
+remain authoritative: corrected knot consumer graph, restored mesh/scheduler
+boundaries, host-side device policy, narrowed servitor language, and separate
+portability and repository-promotion gates. Supersedes the first draft written
+in `repos/esp/design_docs/`; that file is now a pointer here.
 **Scope**: fold `vates` and `sibylla` into one crate named `esp` inside mere,
 retire the two names, and connect the crate to the intention corpus it serves.
 The lanes themselves keep their own plans; this doc consolidates the code and
@@ -109,12 +111,13 @@ Two side-findings the consolidation collects:
   first. One naming fix while everything is in motion: vates's `canned` and
   sibylla's `stub` are the same idea; `stub` wins (sibylla already renamed away
   from `hashed` once for honesty; keep that direction).
-- **E3 — workspace and doc sweep.** Drop the `vates` / `sibylla` / `infer`
-  workspace keys, add `esp`; the intel cluster keeps its directory name. Sweep
-  the record in the same pass: mere's root README, DOC_README (including the
-  stale "scoped, not started" line on the index burn lift, §2), supersession
-  banners on the two founding proposals, package metadata, and the
-  `repos/esp` pointer.
+- **E3 — workspace and doc sweep.** Remove `infer`, add `esp`, and remove all
+  active consumers of `vates` and `sibylla`; their workspace keys remain only
+  to build the E4 compatibility shims. The intel cluster keeps its directory
+  name. Sweep the record in the same pass: mere's root README, DOC_README
+  (including the stale "scoped, not started" line on the index burn lift, §2),
+  supersession banners on the two founding proposals, package metadata, and
+  the `repos/esp` pointer.
 - **E4 — publish esp, then compatibility shims.** Order matters because
   published versions are permanent: `esp` 0.1.0 first, then final `vates` and
   `sibylla` releases that depend on esp and re-export their old APIs with
@@ -296,3 +299,20 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   and the E4 esp-first publish order with compatibility shims. The review's
   burn 0.22.0-pre.1 status and prior-art lessons (WebLLM, mistral.rs,
   woodshed's scope guard) are folded into the ledger.
+- **2026-08-09, E0-E3 implementation**: created `crates/intel/esp` with
+  `esp::infer` and `esp::embed`; moved both implementation and test suites;
+  renamed `CannedProvider` to `StubInferenceProvider` with a deprecated shim
+  alias; removed `mere-infer`; repointed `mere-embed` and knot; retained
+  Vates/Sibylla as deprecated compatibility crates; and swept the authority
+  docs plus the standalone pointer repository. The recorded target matrix is
+  `crates/intel/esp/design_docs/2026-08-09_feature_target_matrix.md`. Empty,
+  every individual feature, combined CPU features, and combined browser-WGPU
+  features compile on their claimed targets; the merged CPU suite passed 171
+  tests with one ignored, the Eidetic corridor passed, and three real-device
+  WGPU parity tests passed. ESP packages and verifies as 0.1.0. The shims pass
+  all-feature workspace checks and package-file enumeration, then stop at the
+  intended registry gate because ESP 0.1.0 has not been published. Knot's
+  consumer compiled before concurrent publication-client work introduced an
+  unrelated temporary-borrow error in its test module; that work was preserved
+  untouched. E4 therefore waits only on explicit authorization for the
+  irreversible crates.io sequence.

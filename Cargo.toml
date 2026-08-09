@@ -45,7 +45,7 @@ members = [
     "crates/import",
     "crates/crawl",
     "crates/intel/embed",
-    "crates/intel/infer",
+    "crates/intel/esp",
     "crates/intel/signals",
     "crates/stickleback",
     "crates/murm/murm",
@@ -155,6 +155,7 @@ scholia = { path = "crates/eidetic/scholia" }
 numen = { path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
+esp = { path = "crates/intel/esp" }
 graphshell-protocol = { path = "crates/graphshell/graphshell-protocol" }
 graphshell-client = { path = "crates/graphshell/graphshell-client" }
 graphshell-local = { path = "crates/graphshell/graphshell-local" }
@@ -224,7 +225,6 @@ import = { path = "crates/import" }
 crawl = { package = "mere-crawl", path = "crates/crawl" }
 
 embed = { package = "mere-embed", path = "crates/intel/embed" }
-infer = { package = "mere-infer", path = "crates/intel/infer" }
 signals = { package = "mere-signals", path = "crates/intel/signals" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace

@@ -1,45 +1,19 @@
 [package]
 name = "vates"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "A local-model inference seam: the InferenceProvider trait, capability descriptors, and a deterministic canned provider. Model-backed backends (burn-wgpu, external llama.cpp/Ollama endpoints, mistral.rs) land behind features, selected by capability, never bound as universal."
+description = "Deprecated compatibility shim for esp::infer; new code should depend on esp."
 repository = "https://github.com/merely-made/mere"
-keywords = ["inference", "llm", "local", "seam", "streaming"]
+readme = "README.md"
+keywords = ["inference", "llm", "deprecated"]
 categories = ["science", "api-bindings"]
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-# The decoder's sampling-seed debug event; only the decoder emits today.
-tracing = { version = "0.1", optional = true }
-# The streaming actor (`actor`) rides armillary's thread-actor harness
-# (the promoted sibling; founding proposal §5 resolved as promote-and-depend).
-# Optional so the seam's core stays thread-free and wasm-clean.
-armillary = { path = "../../armillary", version = "0.1.0", optional = true }
-# The own llama-family decoder body (`decoder`) — burn-nn primitives (RmsNorm,
-# RotaryEncoding, SwiGlu, autoregressive cache), ndarray baseline, wgpu via
-# `decoder-wgpu`.
-burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
-serde_json = { version = "1.0", optional = true }
-safetensors = { version = "0.4", optional = true }
-# BF16/F16 -> f32 decode at the safetensors boundary (TinyLlama and most
-# HF llama-family checkpoints ship bfloat16).
-half = { version = "2", optional = true }
-# HF tokenizer.json — the one tokenizer stack (no tiktoken/sentencepiece duality).
-tokenizers = { version = "0.20", default-features = false, features = ["onig"], optional = true }
+esp = { path = "../esp", version = "0.1.0", default-features = false }
 
-[dev-dependencies]
-serde_json = "1"
-
-# Model-backed backends behind features (ported from mere's intel/infer, see
-# design_docs/2026-07-07_vates_founding_proposal.md):
-#   decoder       — the own burn llama-family decoder (ndarray baseline)
-#   decoder-wgpu  — the same decoder on burn's wgpu backend
-#   endpoint      — an external OpenAI-compatible endpoint (Ollama, llama.cpp); roadmap
-#   actor         — a threaded streaming actor over any provider (armillary)
-# The default build is the seam plus the canned stub: no GPU, no model, wasm-clean.
 [features]
 default = []
-actor = ["dep:armillary"]
-decoder = ["dep:burn", "dep:serde_json", "dep:safetensors", "dep:half", "dep:tokenizers", "dep:tracing"]
-decoder-wgpu = ["decoder", "burn/wgpu"]
+actor = ["esp/actor"]
+decoder = ["esp/decoder"]
+decoder-wgpu = ["decoder", "esp/decoder-wgpu"]

@@ -25,10 +25,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use eidetic::{
     ModelLibrary, ModerationState, NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
-    Store, Timestamp, TrustEnvelope, TrustLevel,
+    Timestamp, TrustEnvelope, TrustLevel,
 };
 use embed::bert::BertEmbeddingProvider;
 use embed::{EmbeddingProvider, SemanticSearch, VectorIndex, register_query_similarity_field};

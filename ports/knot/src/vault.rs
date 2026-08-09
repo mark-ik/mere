@@ -2,10 +2,10 @@
 
 use std::path::{Path, PathBuf};
 
+use esp::embed::VectorIndex;
 use personae::{SealedRecordStorage, seal_bytes, unseal_bytes};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sibylla::VectorIndex;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const INDEX_PATH: &str = "knot/documents.json";

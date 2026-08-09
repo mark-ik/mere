@@ -2,9 +2,9 @@
 
 use std::fs;
 
+use esp::embed::{LexicalEmbeddingProvider, SemanticSearch};
 use serde::{Deserialize, Serialize};
 use servitor::{AuthorityProvider, Cap, Mode, Subject};
-use sibylla::{LexicalEmbeddingProvider, SemanticSearch};
 
 use crate::{DirectorySource, KnotVault};
 

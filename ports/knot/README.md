@@ -47,7 +47,7 @@ Integration tests: `tests/place_projection.rs`, `tests/revision_bell.rs`,
 - Storage and identity: `muniment` (`redb`), `personae`, `zeroize`.
 - Sync: `stickleback`, `transport`, `p2panda-core`, `p2panda-net`,
   `p2panda-store` (all 0.7).
-- Search: `sibylla`.
+- Search: `esp::embed`.
 - Effects: `fetch`, `script-rhai`, `url`.
 - Filesystem and platform: `notify` 8, and `windows-sys` on Windows for file
   identity.

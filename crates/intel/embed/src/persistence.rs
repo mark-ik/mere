@@ -138,9 +138,7 @@ where
 mod tests {
     use super::*;
     use crate::SimilarityMetric;
-    use async_trait::async_trait;
     use eidetic::{ModerationState, ProvenanceOrigin, TrustLevel};
-    use std::collections::HashMap;
 
     // The in-memory store is muniment's (2026-07-12): the hand-rolled
     // one was the same map behind the same seam.

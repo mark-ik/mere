@@ -45,6 +45,6 @@ command that caused them without defining the outcome vocabulary.
 
 - `design_docs/2026-07-07_armillary_founding_proposal.md`
 - Consumers in this workspace: `crates/system/fetch`, `crates/crawl`,
-  `crates/canvas/canvas`, and `crates/intel/vates` under its `actor` feature.
+  `crates/canvas/canvas`, and `crates/intel/esp` under its `actor` feature.
 
 License: dual MIT OR Apache-2.0, at your option.

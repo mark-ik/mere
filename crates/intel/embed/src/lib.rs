@@ -1,13 +1,12 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Mere's statistical-intelligence glue over the standalone `sibylla` retrieval
-//! crate.
+//! Mere's statistical-intelligence glue over [`esp::embed`].
 //!
 //! The portable retrieval core — the [`EmbeddingProvider`] trait, [`VectorIndex`],
 //! [`SemanticSearch`], the [`LexicalEmbeddingProvider`] + [`StubEmbeddingProvider`]
 //! embedders, [`affinity_pairs`], and (behind the `bert` feature) the Burn-backed
-//! BERT provider — lives in `sibylla` and is re-exported here at the same paths.
+//! BERT provider — lives in `esp::embed` and is re-exported here at the same paths.
 //! This crate keeps only the pieces coupled to mere's own subsystems:
 //!
 //! - `persistence` — save/load a `VectorIndex` through eidetic's typed-payload API.
@@ -15,7 +14,7 @@
 //!   field algebra over the graph canvas.
 //!
 //! See `repos/mere/design_docs/mere_docs/research/2026-05-08_local_intelligence_integration_research.md`
-//! for the architectural anchor, and sibylla's founding proposal for the split.
+//! for the architectural anchor and ESP's consolidation plan for the split.
 //!
 //! ## Quick start (with the `bert` feature)
 //!
@@ -48,13 +47,13 @@
 //! # fn main() {}
 //! ```
 
-// The portable retrieval core is owned by sibylla; re-export its modules at the
+// The portable retrieval core is owned by ESP; re-export its modules at the
 // same paths so the mere glue below (`use crate::index::…`, `crate::provider::…`,
-// `crate::search::…`) and the `bert` provider bind to sibylla's types with no churn.
-pub use sibylla::{affinity, index, lexical, provider, search, stub};
+// `crate::search::…`) and the `bert` provider bind to ESP's types with no churn.
+pub use esp::embed::{affinity, index, lexical, provider, search, stub};
 
 #[cfg(feature = "bert")]
-pub use sibylla::bert;
+pub use esp::embed::bert;
 pub mod canvas_search;
 pub mod field_bridge;
 pub mod persistence;

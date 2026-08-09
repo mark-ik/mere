@@ -85,7 +85,7 @@ declared.
 | `crates/eidetic` | `mere-eidetic`, `mere-eidetic-fjall`, `mere-eidetic-https-fetcher`, `mere-eidetic-iroh-fetcher`, `mere-eidetic-search`, `muniment`, `codicil`, `chartulary`, `scholia` | Durable private local memory: the typed blob request/response vocabulary and store trait, the fjall backend, HTTPS and iroh fetchers, the tantivy/BM25 lexical index, the portable byte-backend seam, the append-only log, the content-addressed container graph, and its RDF projection |
 | `crates/import` | `import` | Bookmark, history, and session models plus Chrome-JSON and Netscape-HTML parsers, producing portable page seeds |
 | `crates/crawl` | `mere-crawl` | Host-neutral crawl frontier and bounded crawl runtime |
-| `crates/intel` | `mere-embed`, `mere-infer`, `mere-signals`, `vates`, `sibylla` | Local intelligence: the `InferenceProvider` and `EmbeddingProvider` seams with their burn-backed and deterministic providers, a pure-Rust vector index, Mere's eidetic and quint glue over both, and graph-structural signal extraction |
+| `crates/intel` | `esp`, `mere-embed`, `mere-signals`, `vates`/`sibylla` compatibility shims | Portable generation and embedding seams under `esp::infer` and `esp::embed`, their feature-gated Burn backends, exact vector retrieval, Mere's eidetic/quint glue, and graph-structural signal extraction |
 | `crates/conatus` | `numen`, `quint`, `seiche` | The portable physics stack: field definitions as data, evaluation, integration |
 | `crates/scenograph` | `sceno`, `scenomise`, `scenotime`, `scenograph` | The projection engine: scene and score contracts, choreography, the incremental runtime, and a re-export facade |
 | `crates/graphshell` | `graphshell-protocol`, `-client`, `-endpoint`, `-stdio`, `-local`, `-network` | The reusable remote-session stack: versioned carrier-neutral messages and the `Carrier` trait, the client state machine, injected projection/intent traits for applications, and three carriers (child-process stdio, in-process, byte stream) |
@@ -101,10 +101,10 @@ declared.
 
 Nine component families were separate sibling repositories until the 2026-07-23
 consolidation: `personae`, `armillary`, the eidetic memory primitives
-(`muniment`, `codicil`, `chartulary`, `scholia`), `servitor`, `vates` and
-`sibylla`, the conatus physics stack, the scenograph family, the graphshell
-session crates, and the Graphshell port. Their crate names, versions, and
-licenses are unchanged; only the repository home moved.
+(`muniment`, `codicil`, `chartulary`, `scholia`), `servitor`, Vates and Sibylla,
+the conatus physics stack, the scenograph family, the graphshell session crates,
+and the Graphshell port. Vates and Sibylla were subsequently consolidated as
+`esp::infer` and `esp::embed`; their old packages remain compatibility shims.
 
 ## Ports
 
