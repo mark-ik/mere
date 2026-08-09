@@ -2,8 +2,11 @@
 
 **Date**: 2026-08-08
 **Status**: Decisions registered (Mark, 2026-08-08); consolidation phases planned,
-nothing executed. Supersedes the first draft written in `repos/esp/design_docs/`
-the same day; that file is now a pointer here.
+nothing executed. Amended same day after an adversarial review: consumer graph
+corrected (knot), mesh/scheduler boundaries restored, device policy moved
+host-side, servitor language narrowed, portability separated from repository
+promotion. Supersedes the first draft written in `repos/esp/design_docs/`;
+that file is now a pointer here.
 **Scope**: fold `vates` and `sibylla` into one crate named `esp` inside mere,
 retire the two names, and connect the crate to the intention corpus it serves.
 The lanes themselves keep their own plans; this doc consolidates the code and
@@ -57,11 +60,19 @@ holds the ledger, it does not absorb the lanes.
 
 ## 2. The consumer graph (verified, and why this is small)
 
-`vates` ← `mere-infer` only. `sibylla` ← `mere-embed` only. `mere-embed` ←
-`eidetic-search` only. **`mere-infer` ← nobody**: it exists to re-export vates
-under `infer::` paths, nothing imports it, and its only original content is one
-integration test. Nothing outside mere consumes any of them; isometry, the
-named flagship in both founding proposals, never wired either.
+`vates` ← `mere-infer` only. `sibylla` ← `mere-embed` **and `ports/knot`**
+(`sibylla.workspace = true`, knot:51). `mere-embed` ← `eidetic-search` only.
+**`mere-infer` ← nobody**: it exists to re-export vates under `infer::` paths,
+nothing imports it, and its only original content is one integration test.
+Nothing outside the mere repository consumes any of them; isometry, the named
+flagship in both founding proposals, never wired either.
+
+Method note, learned the hard way: the first draft said "sibylla ← mere-embed
+only" because its dependency grep matched `name = {...}` but not the dotted
+`name.workspace = true` form knot uses. Consumer graphs get verified with
+`cargo metadata` (or a grep matching both forms), never a single-form grep.
+The same bug undercounted servitor's consumers (six, not four: commons-spine,
+document-host, gemot, knot, turnstone, cleromancy).
 
 Two side-findings the consolidation collects:
 
@@ -77,22 +88,41 @@ Two side-findings the consolidation collects:
 
 ## 3. Consolidation phases
 
-- **E0 — skeleton.** `crates/intel/esp` with the two namespaces, the merged
-  dependency block, the union of the feature sets. Compiles empty.
+- **E0 — skeleton plus the feature/target matrix.** `crates/intel/esp` with
+  the two namespaces, the merged dependency block, the union of the feature
+  sets. An empty compile proves too little; E0's done-condition is a recorded
+  matrix: empty/default on native and wasm; every feature individually;
+  infer × embed combinations; the tokenizer question decided (both halves pin
+  `onig`, native Oniguruma, so the wasm story needs tokenizers' wasm-compatible
+  regex path or an honest wasm exclusion per feature); `decoder-wgpu` made to
+  activate the wasm `getrandom` override it currently misses in the merged
+  manifest; CPU-vs-real-wgpu parity smoke; and confirmation the default tree
+  pulls neither burn nor tokenizers. Prior wasm receipts are treated as
+  historical until re-run here.
 - **E1 — move sibylla in.** `mere-embed` drops its path dep and rides
   `esp::embed`, keeping its genuine glue (persistence, quint field bridge,
-  canvas search) mere-side per sibylla's founding split. Verify with
-  `eidetic-search` under `bert` + `bert-wgpu`.
+  canvas search) mere-side per sibylla's founding split. **Repoint knot too**
+  (its direct `sibylla` dep). Verify with `eidetic-search` under `bert` +
+  `bert-wgpu`, and knot's own tests.
 - **E2 — move vates in; delete `mere-infer`.** Not repointed, removed. Its
   `eidetic_corridor` test moves beside the other mere-side corridor tests
   first. One naming fix while everything is in motion: vates's `canned` and
   sibylla's `stub` are the same idea; `stub` wins (sibylla already renamed away
   from `hashed` once for honesty; keep that direction).
-- **E3 — workspace sweep.** Drop the `vates` / `sibylla` / `infer` workspace
-  keys, add `esp`. The intel cluster keeps its directory name.
-- **E4 — publish and tombstone.** `esp` 0.1.0 from mere. Final `vates` and
-  `sibylla` publishes carry a deprecation notice naming esp; notice-only is
-  enough (downloads are double-digit, no external consumers).
+- **E3 — workspace and doc sweep.** Drop the `vates` / `sibylla` / `infer`
+  workspace keys, add `esp`; the intel cluster keeps its directory name. Sweep
+  the record in the same pass: mere's root README, DOC_README (including the
+  stale "scoped, not started" line on the index burn lift, §2), supersession
+  banners on the two founding proposals, package metadata, and the
+  `repos/esp` pointer.
+- **E4 — publish esp, then compatibility shims.** Order matters because
+  published versions are permanent: `esp` 0.1.0 first, then final `vates` and
+  `sibylla` releases that depend on esp and re-export their old APIs with
+  `#[deprecated]` markers (`CannedProvider` kept as a deprecated alias of the
+  renamed stub). A notice-only tombstone is easy to miss and crates.io shows
+  no maintenance badge; the shim keeps any stray consumer compiling and
+  pointing at the door. Cost accepted: the shims pin an esp version and ride
+  along on future bumps.
 
 Risks carry from the draft: mere's workspace manifest is the likeliest
 concurrent-work conflict, so E1 and E2 land as separate commits with targeted
@@ -121,18 +151,46 @@ up, per the burn brief's own rule.
 
 - **Lane 3's tail**: the `endpoint` backend (external OpenAI-compatible
   endpoints; named in vates's manifest as roadmap), the wasm half of the
-  done-condition, and D2 (the empirical wasm model-size ceiling, which sets the
-  in-browser tier).
+  done-condition, and D2 (the empirical wasm model-size ceiling, which sets
+  the in-browser tier). D2 is a measurement list, not one number, per the
+  WebLLM lesson: cold download, warm reopen, artifact integrity,
+  persistent-storage status, first-token latency, steady throughput, GPU
+  memory, cancellation, UI frame impact, worker restart. Model artifacts ride
+  the existing muniment IndexedDB store and its headed-proven persistence
+  status UX (graphshell's 2026-08-06 browser-storage receipt); esp does not
+  grow its own cache.
 - **The harness's missing trait**: `AdapterLoader` was specified in the harness
   brief §2 and never built. Load/stack LoRA-adapter engrams against a base,
   honouring the geist compatibility envelope; a mismatch is a rejection, never
-  a guess. This lands in `esp::infer` beside the provider.
-- **Lane 2, the personal mesh**: burn-remote mounted as an ALPN on murm's
-  existing iroh Router, `RemoteTicket`/`PeerAuthorizer` as the tessera/kith
-  authorization seam, lease semantics ours. Done when a second machine executes
-  tensor ops for the first under a lease. Still gated on the post-0.21
-  burn-remote release (D3); the split when it lands: esp owns the compute
-  worker/client seam, murm owns transport, the lease scheduler stays mere.
+  a guess. One tension to resolve on the way in: `GenerationRequest` says chat
+  templating happens above the seam (provider.rs:52), while the envelope makes
+  the template an adapter-compatibility fact. Resolve with a **`ModelSession`**
+  (prepared-request) seam binding base, tokenizer, prompt template,
+  quantization, and the *ordered* adapter set; the provider stays the streaming
+  execution contract. Per the mistral.rs lesson, adapter selection is
+  per-request against an immutable loaded base with the adapter-set identity
+  recorded; provider-global mutable adapter state is a bug waiting for
+  concurrent residents.
+- **Lane 2, the personal mesh**: the split honors the standing
+  resource-coordination boundaries rather than reinventing them.
+  `crates/mesh` already owns the signed job grammar, `JobSpec`,
+  `JobNamespace`, and the `MeshResource` adapter seam (M1 done: Echo/Blake3
+  jobs over LogSync); the lease/scheduler plan owns owner priority, revocable
+  leases, heartbeats, checkpoint classes, device policy, and owner reclaim.
+  So: **esp** = model loading, tensor ops, the local/remote compute adapter,
+  cooperative cancellation points; **mesh** = job grammar, namespace, resource
+  registry, lease lifecycle, checkpoint/result facts; **host scheduler** =
+  foreground priority, device selection, render-vs-compute budget, reclaim;
+  **murm** = the shared iroh endpoint and Router; **servitor::Gate** = whether
+  an admitted denizen may petition the graph at all. Burn's `PeerAuthorizer`
+  is session admission, not job authorization; the opaque `RemoteTicket` may
+  carry a mesh lease reference, but mesh enforces scope, expiry, and reclaim
+  locally. **The first step needs no burn at all**: the M2 plan already names
+  a deterministic hashed embedding batch as the first real `MeshResource`,
+  and `esp::embed`'s stub provider is exactly that adapter. Burn-remote
+  mounting on the Router stays gated on a stable release (D3; it exists today
+  only as 0.22.0-pre.1, and 0.21 → 0.22 is a breaking backend/device
+  migration that gets its own plan).
 - **Lane 4, training**: Distillery-as-trainer as a native-only armillary job
   over the scoped corpus, emitting the geist §6 engram triple
   (`ModelAdapterManifest` + `TrainingCorpus` + `EvalReport`); the bunsen
@@ -142,9 +200,18 @@ up, per the burn brief's own rule.
 - **D1, the device policy**: now a three-consumer decision (netrender render,
   infer generation, embed affinity) with measured contention on the shared
   queue (a 200-token answer at >40s, coalesce to ~18s, well under the 9.95
-  tok/s standalone). esp inherits the burn boundary, so the compute-device
-  handle and any yield/priority seam live in esp; the decision itself stays
-  open until the resident-data consumer forces it.
+  tok/s standalone). **esp does not own this.** One consumer must not own
+  policy shared by rendering, inference, embedding, and later training: esp
+  accepts a host-selected device and exposes cancellation/yield hooks; the
+  host scheduler owns foreground priority and the render-vs-compute budget.
+  The M2 plan states the rule exactly: land device policy and owner reclaim
+  first, "otherwise the first real adapter will smuggle scheduler policy into
+  the resource layer." The decision itself stays open until the resident-data
+  consumer forces it.
+- **Scope guard**: esp is the inference and embedding seam home, not a
+  taxonomy of every intelligent operation. Woodshed's structured audio
+  analysis is a third, provenance-bearing provider seam that stays
+  woodshed-side until a second consumer proves it, per its own plan.
 
 **The communal horizon (moots get the capability):**
 
@@ -169,15 +236,25 @@ up, per the burn brief's own rule.
   (tessera-shaped credit, T0-T3 verification) that the resource-coordination
   briefs own.
 
-**The consumer shape: servitor.** The created-and-bounded resident of the
-thoughtform triad (servitor → tulpa → egregore), live at `crates/servitor` with
-four consumers (commons, document-host, turnstone, cleromancy). A servitor
-perceives through esp's seams, remembers through eidetic, runs on armillary,
-and acts only under participant-gate grants; the commons profile already routes
-its capability checks. This is what "harnessing models" completes into: not a
-chat box, a bounded resident with a scoped faculty. The moot-scale end of the
-same triad is the moot's geist wearing the egregore vocabulary, which the stack
-already holds.
+**The consumer shape.** The servitor crate is a headless identity, capability,
+and petition gate (six consumers: commons-spine, document-host, gemot, knot,
+turnstone, cleromancy); it is not an inference runtime, and this plan gives it
+no new role. The composition is the point: an admitted denizen may be hosted
+by armillary, use an esp model session, retain artifacts through eidetic, and
+petition through `servitor::Gate`. The application host composes those organs;
+none of them owns the resident. That composition is what "harnessing models"
+completes into: not a chat box, a bounded resident with a scoped faculty. The
+thoughtform words (servitor, tulpa, egregore) stay product language, not a
+runtime type hierarchy.
+
+**Sequence (adopted from the 2026-08-08 review):** 1. consolidate and stop at
+E4. 2. Land the deterministic embedding `MeshResource` and namespace receipt.
+3. Burn 0.21 → 0.22 migration as its own plan (it carries burn-remote; new
+runtime `Device` selects local or remote behind one model implementation; its
+iroh 1.0 aligns with murm's 1.0.3). 4. Device policy and owner reclaim.
+5. Mount burn-remote as another compute adapter. 6. wasm model
+loading/storage receipts (D2's list). 7. Model sessions and adapter loading.
+8. Only then training and communal compute.
 
 ## 5. Posture (does this necessitate going beyond mere?)
 
@@ -188,11 +265,16 @@ ride gemot, personae, and the commons profile; the actors are armillary; the
 resident is servitor. esp stays the portable burn boundary inside that weave,
 publishing from mere.
 
-The promote-as-necessary triggers, named so the valve is real: isometry finally
-wiring the NPC lane (the flagship consumer both founding proposals promised),
-the graphshell remote lens needing client-side inference, or any non-mere host
-adopting the seams. Until one exists, promotion would be a wall with nothing
-behind it.
+Two valves, kept distinct because the consolidation ruling keeps them
+distinct: portable crates may live in the platform repository and be consumed
+from it, and the bar for a separate repository is coherent utility and
+identity apart from mere and its products. So a **second consumer** (isometry
+finally wiring the NPC lane, the graphshell remote lens needing client-side
+inference) triggers *portability discipline*: portability tests, a documented
+API and target support, semantic-version care. **Repository promotion**
+requires independent ownership or release cadence, which no named consumer
+implies. If the halves ever diverge, the intermediate is `esp-infer` +
+`esp-embed` packages behind an `esp` facade, still inside mere.
 
 ## 6. Progress
 
@@ -203,3 +285,14 @@ behind it.
   verified against manifests; corpus read (burn brief, harness brief, geist,
   communal compute, engram commons, commons profile). Nothing executed; E0 is
   the next act.
+- **2026-08-08, review pass**: an adversarial review by a second agent landed
+  seven corrections, all verified against the tree before adoption: knot's
+  direct sibylla dep (the draft's grep missed dotted `workspace = true` deps;
+  method note in §2), servitor at six consumers, the mesh/scheduler ownership
+  boundaries restored to Lane 2 (with the M2 deterministic-embedding first
+  step, which un-blocks Lane 2 from the burn release gate), device policy
+  moved to the host scheduler, the servitor paragraph narrowed to composition
+  language, portability separated from repository promotion, the E0 matrix,
+  and the E4 esp-first publish order with compatibility shims. The review's
+  burn 0.22.0-pre.1 status and prior-art lessons (WebLLM, mistral.rs,
+  woodshed's scope guard) are folded into the ledger.
