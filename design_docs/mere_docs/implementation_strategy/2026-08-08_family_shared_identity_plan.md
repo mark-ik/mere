@@ -198,13 +198,40 @@ the profile. It could show which persona you are on and could not change it.
   family; the receipt says whether remembering happened, because "everyone
   follows" and "just here" are different promises.
 
-Remaining order: **Turnstone** (`identity.rs` still hardcodes
-`ProfileId("default")` — the only remaining production hardcode; the
-`"default"`s in `browser_host.rs` and `pairing.rs` are test fixtures and
-correct), then **Knot**, then **Woodshed** (the settings row), then **Hocket**
-— gated: its picker *is* the rotation surface, so it cannot be drawn before
-the contact-token migration is decided. Its persona-faceted timeline concept
-is sketched in
+### Landed 2026-08-09 (turnstone, knot)
+
+**Turnstone** — `identity.rs::open_vault` was the last production
+`ProfileId("default")`; it is now a thin wrapper over `roster::open_chosen`,
+which is exactly the shape it had hand-rolled. (The `"default"`s in
+`browser_host.rs` and `pairing.rs` are test fixtures constructing a `Profile`
+directly, and stay.)
+
+**The wallet lane got its own sole-persona rung.** Knot's persona is a
+`PersonaId` (UUID) in the session-runtime wallet lane — a different namespace
+from the vault's `ProfileId`, so the roster's remembered choice does not
+apply to it. What does apply is the same resolution idea:
+`wallet_store::list_personas(root)` (wallet-file membership, deliberately —
+`personas/<uuid>/` also hosts engine profiles, so a bare directory is not a
+persona), and callers resolve zero/one/many. One resolves silently; zero and
+several are told plainly with what exists, because guessing among real
+cryptographic identities is how a document gets sealed to somebody else. The
+lane's fuller ladder (a remembered choice) grows when something exists to
+write it.
+
+- Turnstone's `TURNSTONE_KNOT_PERSONA` is now the override, not a
+  requirement: unset, both the hosted and spawned Knot paths resolve the sole
+  wallet under the shared root.
+- `knot_sync_host`'s two positionals are now optional: bare invocation is the
+  ordinary machine (shared root, sole persona); one positional is read as
+  whichever it parses as (a UUID cannot be mistaken for a path); explicit
+  args remain for tests and receipts. `knot_endpoint` keeps explicit args
+  only — it is spawned by hosts that already resolved.
+
+Remaining: **Woodshed** (the settings row: `SettingControl::Choice` over the
+roster, `SettingMutability::Live`, apply = remember + reopen the store), then
+**Hocket** — gated: its picker *is* the rotation surface, so it cannot be
+drawn before the contact-token migration is decided. Its persona-faceted
+timeline concept is sketched in
 [hocket's design docs](../../../../hocket/design_docs/2026-08-08_persona_timeline_design.md).
 
 ## Open

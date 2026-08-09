@@ -11,7 +11,7 @@ use proofs::{BlobRef, Commitment, CommitmentDomain, Digest};
 use serde::{Deserialize, Serialize};
 use stickleback::CheckpointAuthority;
 
-use crate::board::{JobBoard, JobState};
+use crate::board::JobBoard;
 use crate::wire::MeshLogId;
 
 /// A configured duration or logical retention boundary.
@@ -72,11 +72,12 @@ impl JobBoardSnapshot {
         encode_cbor(self).expect("a JobBoardSnapshot always CBOR-encodes")
     }
 
-    /// Remove terminal inputs while retaining job identity and compact result.
+    /// Remove terminal M1 inputs while retaining job identity and compact
+    /// result. A V2 job holds no inline input, so it is untouched here.
     pub fn erase_terminal_payloads(&mut self) -> u64 {
         let mut erased = 0;
         for job in &mut self.jobs {
-            if matches!(job.state, JobState::Done { .. }) && job.payload.take().is_some() {
+            if job.state.is_terminal() && job.payload.take().is_some() {
                 erased += 1;
             }
         }
@@ -344,8 +345,9 @@ mod tests {
         let mut snapshot = JobBoardSnapshot {
             jobs: vec![Job {
                 id: JobId([1; 32]),
-                kind: JobKind::Echo,
+                kind: Some(JobKind::Echo),
                 payload: Some(b"private input".to_vec()),
+                spec: None,
                 posted_by: [2; 32],
                 state: JobState::Done {
                     winner: [3; 32],

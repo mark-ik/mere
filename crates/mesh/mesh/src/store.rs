@@ -99,10 +99,12 @@ impl OperationPolicy<MeshExt> for MeshPolicy<'_> {
                         &checkpoint,
                     )
                     .map_err(checkpoint_reject)?;
+                // Only M1's inline inputs live in an operation body, so only
+                // they are erasable this way. A V2 input is a blob; collecting
+                // it is a blob-retention job, not a body erasure.
                 let erased = checkpoint.snapshot.jobs.iter().filter_map(|job| {
-                    (matches!(job.state, crate::board::JobState::Done { .. })
-                        && job.payload.is_none())
-                    .then_some(Hash::from(job.id.0))
+                    (job.spec.is_none() && job.state.is_terminal() && job.payload.is_none())
+                        .then_some(Hash::from(job.id.0))
                 });
                 Ok(Admission::keep(target).erasing_payloads(erased))
             }
@@ -133,6 +135,21 @@ impl OperationPolicy<MeshExt> for MeshPolicy<'_> {
                         "unexpected-prune-flag",
                         "only a history-pruned event may carry the prune flag",
                     ));
+                }
+                // V2 bodies carry attacker-supplied structure, so their bounds
+                // are re-established here — before the operation is stored, not
+                // when the board later folds it.
+                match &event {
+                    MeshEvent::JobPostedV2 { spec, .. } => {
+                        spec.validate()
+                            .map_err(|err| Reject::new("invalid-job-spec", err.to_string()))?;
+                    }
+                    MeshEvent::JobDoneV2 { output, .. } => {
+                        output
+                            .validate_self()
+                            .map_err(|err| Reject::new("invalid-job-result", err.to_string()))?;
+                    }
+                    _ => {}
                 }
                 Ok(Admission::keep(target))
             }

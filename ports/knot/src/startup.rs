@@ -14,8 +14,8 @@ use session_runtime::wallet_store;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
-    KnotEndpoint, KnotPublishSource, KnotSyncEvent, KnotSyncFileStore, KnotVault,
-    KnotWriteGrant, VaultDocument,
+    KnotEndpoint, KnotPublishSource, KnotSyncEvent, KnotSyncFileStore, KnotVault, KnotWriteGrant,
+    VaultDocument,
 };
 
 const VAULT_KEY_CONTEXT: &str = "mere.knot.persona-vault.root.v1";
@@ -143,12 +143,8 @@ impl StartupUnlockedPersonalVault {
         let publish_vault = Arc::new(self.vault.fork_read_handle()?);
         let publish_store = self.store.clone();
         let publish_identity = Ed25519Keypair::from_seed(*self.signing_seed);
-        let endpoint = KnotEndpoint::from_synced_vault(
-            self.vault,
-            self.store,
-            *self.signing_seed,
-            grant,
-        )?;
+        let endpoint =
+            KnotEndpoint::from_synced_vault(self.vault, self.store, *self.signing_seed, grant)?;
         Ok((
             endpoint,
             KnotPublishSource::from_unlocked(publish_identity, publish_store, publish_vault),

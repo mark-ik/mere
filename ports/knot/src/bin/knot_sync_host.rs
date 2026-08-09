@@ -10,11 +10,17 @@
 //! both from one process would tie the lane's uptime to a viewer's.
 //!
 //! ```text
-//! knot_sync_host <data-root> <persona-uuid> [--label <name>] [--log-file <path>]
+//! knot_sync_host [<data-root>] [<persona-uuid>] [--label <name>] [--log-file <path>]
 //! pair and exit:   --pair-writer <64-hex>
 //! unpair and exit: --unpair-writer <64-hex>
 //! what the others need: --pairing-facts
 //! ```
+//!
+//! Both positionals are optional. Omitted, the family answers: the shared
+//! root ([`session_runtime::shared_root`]), and the sole persona wallet under
+//! it — the ordinary machine runs `knot_sync_host` bare. Zero or several
+//! personas are told plainly rather than guessed among, and a scratch root or
+//! explicit persona still overrides, which is what the tests and receipts use.
 
 use std::path::{Path, PathBuf};
 
@@ -25,6 +31,7 @@ use knot::{
 
 const PAIRING_POLL: std::time::Duration = std::time::Duration::from_secs(5);
 
+#[cfg_attr(test, derive(Debug))]
 struct Args {
     data_root: PathBuf,
     persona: personae::PersonaId,
@@ -224,14 +231,72 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut argv = std::env::args().skip(1);
-    let data_root = PathBuf::from(argv.next().ok_or_else(usage)?);
-    let persona = argv
-        .next()
-        .ok_or_else(usage)?
-        .parse::<uuid::Uuid>()
-        .map(personae::PersonaId::from_uuid)
-        .map_err(|error| format!("persona must be a UUID: {error}"))?;
+    parse_from(std::env::args().skip(1).collect())
+}
+
+fn parse_from(args: Vec<String>) -> Result<Args, String> {
+    // Up to two leading positionals: a data root, a persona UUID, or both in
+    // that order. A UUID cannot be mistaken for a path in practice, so one
+    // positional is read as whichever it parses as. Omitted, the family
+    // answers: the shared root, and the sole persona wallet under it.
+    let positional: Vec<&String> = args
+        .iter()
+        .take_while(|arg| !arg.starts_with("--"))
+        .collect();
+    let parse_persona = |value: &str| {
+        value
+            .parse::<uuid::Uuid>()
+            .map(personae::PersonaId::from_uuid)
+            .map_err(|error| format!("persona must be a UUID: {error}"))
+    };
+    let (data_root, persona) = match positional.as_slice() {
+        [] => (None, None),
+        [one] => match one.parse::<uuid::Uuid>() {
+            Ok(uuid) => (None, Some(personae::PersonaId::from_uuid(uuid))),
+            Err(_) => (Some(PathBuf::from(one.as_str())), None),
+        },
+        [root, persona] => (
+            Some(PathBuf::from(root.as_str())),
+            Some(parse_persona(persona)?),
+        ),
+        _ => return Err(usage()),
+    };
+    let data_root = data_root.unwrap_or_else(session_runtime::shared_root::shared_root);
+    let persona = match persona {
+        Some(persona) => persona,
+        // Resolving rather than guessing: personas are real cryptographic
+        // identities, and syncing the wrong one is not a recoverable oops.
+        None => {
+            let personas = session_runtime::wallet_store::list_personas(&data_root)
+                .map_err(|error| {
+                    format!("could not list personas under {}: {error}", data_root.display())
+                })?;
+            match personas.as_slice() {
+                [only] => *only,
+                [] => {
+                    return Err(format!(
+                        "no persona wallet exists under {} yet; pair this device first, or \
+                         name a persona explicitly\n{}",
+                        data_root.display(),
+                        usage()
+                    ));
+                }
+                several => {
+                    return Err(format!(
+                        "several personas live under {}; name one of: {}\n{}",
+                        data_root.display(),
+                        several
+                            .iter()
+                            .map(|persona| persona.as_uuid().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        usage()
+                    ));
+                }
+            }
+        }
+    };
+    let mut argv = args.iter().skip(positional.len()).cloned();
     let mut label = "knot".to_string();
     let mut log_file = None;
     let mut pair = None;
@@ -263,8 +328,10 @@ fn parse_args() -> Result<Args, String> {
 }
 
 fn usage() -> String {
-    "usage: knot_sync_host <data-root> <persona-uuid> [--label <name>] \
+    "usage: knot_sync_host [<data-root>] [<persona-uuid>] [--label <name>] \
      [--log-file <path>]\n\
+     omitted, the family answers: the shared root (MERE_ROOT or the platform \
+     data dir), and the sole persona wallet under it\n\
      pair and exit: --pair-writer <64-hex> | --unpair-writer <64-hex>\n\
      what the others need: --pairing-facts"
         .to_string()
@@ -291,4 +358,97 @@ fn init_logging(path: Option<&Path>) -> Result<(), std::io::Error> {
             .init(),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use session_runtime::wallet_store::{
+        KeyEpochId, PersonaChainRoot, PersonaWalletManifest, save_persona_wallet,
+    };
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "knot-sync-host-args-{tag}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn seed_wallet(root: &std::path::Path, uuid: u128) -> personae::PersonaId {
+        let persona = personae::PersonaId::from_uuid(uuid::Uuid::from_u128(uuid));
+        save_persona_wallet(
+            root,
+            &PersonaWalletManifest::new(
+                persona,
+                PersonaChainRoot([7u8; 32]),
+                KeyEpochId(uuid::Uuid::from_u128(0x9999)),
+            ),
+        )
+        .unwrap();
+        persona
+    }
+
+    fn args(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|part| part.to_string()).collect()
+    }
+
+    #[test]
+    fn a_root_alone_resolves_its_sole_persona() {
+        // The ordinary machine: nobody should have to hand-copy a UUID to
+        // sync the only persona they have.
+        let root = scratch("sole");
+        let persona = seed_wallet(&root, 0x42);
+        let parsed = parse_from(args(&[root.to_str().unwrap(), "--label", "study"])).unwrap();
+        assert_eq!(parsed.persona, persona);
+        assert_eq!(parsed.data_root, root);
+        assert_eq!(parsed.label, "study", "flags still parse after resolution");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_lone_uuid_reads_as_a_persona_not_a_path() {
+        let parsed = parse_from(args(&["00000000-0000-0000-0000-000000000042"])).unwrap();
+        assert_eq!(
+            parsed.persona,
+            personae::PersonaId::from_uuid(uuid::Uuid::from_u128(0x42))
+        );
+    }
+
+    #[test]
+    fn both_positionals_still_work_exactly_as_before() {
+        let root = scratch("explicit");
+        let parsed = parse_from(args(&[
+            root.to_str().unwrap(),
+            "00000000-0000-0000-0000-000000000011",
+        ]))
+        .unwrap();
+        assert_eq!(parsed.data_root, root);
+        assert_eq!(
+            parsed.persona,
+            personae::PersonaId::from_uuid(uuid::Uuid::from_u128(0x11))
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn zero_and_several_personas_are_told_not_guessed() {
+        let empty = scratch("zero");
+        let error = parse_from(args(&[empty.to_str().unwrap()])).unwrap_err();
+        assert!(error.contains("no persona wallet exists"), "{error}");
+
+        let crowded = scratch("several");
+        let a = seed_wallet(&crowded, 0x21);
+        let b = seed_wallet(&crowded, 0x22);
+        let error = parse_from(args(&[crowded.to_str().unwrap()])).unwrap_err();
+        assert!(error.contains(&a.as_uuid().to_string()), "{error}");
+        assert!(
+            error.contains(&b.as_uuid().to_string()),
+            "names what exists so the fix is a copy, not a hunt: {error}"
+        );
+        let _ = std::fs::remove_dir_all(&empty);
+        let _ = std::fs::remove_dir_all(&crowded);
+    }
 }

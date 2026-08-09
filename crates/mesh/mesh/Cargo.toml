@@ -38,6 +38,10 @@ muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 # session, `time` bounds the manual `resync`.
 p2panda-net = "0.7.0"
 tokio = { version = "1", features = ["rt", "time"] }
+# The embedding behaviour behind `esp.embed.lexical/v1`. Default features: the
+# lexical provider is pure Rust, so the mesh pulls in no Burn, GPU, weights, or
+# tokenizer assets to ship its first useful resource.
+esp = { workspace = true }
 
 [dev-dependencies]
 # `transport` builds the real p2panda-net peers for

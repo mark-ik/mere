@@ -23,6 +23,13 @@ impl Hash {
         Self(*blake3::hash(bytes).as_bytes())
     }
 
+    /// Adopt 32 bytes that are already a blake3 hash — a content address that
+    /// arrived from elsewhere (a signed manifest, a peer's index) rather than
+    /// from hashing local bytes.
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     /// The 32 raw hash bytes.
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0

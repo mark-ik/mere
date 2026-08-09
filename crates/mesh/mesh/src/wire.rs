@@ -19,6 +19,7 @@ use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
 use crate::retention::RetentionCheckpoint;
+use crate::spec::{JobOutput, JobSpec};
 
 /// Separate per-author logs keep checkpoint authority available while event
 /// prefixes are pruned.
@@ -44,9 +45,10 @@ pub struct MeshExt {
     pub prune_flag: PruneFlag,
 }
 
-/// What a job asks for. M1 ships the two pure, deterministic kinds that prove
-/// transport + protocol + convergence; real kinds (an embeddings batch, a Burn
-/// job) arrive with M2's `MeshResource` adapter seam.
+/// The M1 job kinds: two pure, deterministic asks that proved transport +
+/// protocol + convergence. Closed by construction, which is exactly why V2
+/// replaced it with an extensible [`ResourceId`](crate::ident::ResourceId).
+/// Retained so stored M1 operations still decode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobKind {
     /// Return the payload unchanged (the round-trip proof).
@@ -57,11 +59,16 @@ pub enum JobKind {
 
 /// A mesh event: the logical job-board record a peer authors. The board folds
 /// these (by their operation hashes) into job state.
+///
+/// Two generations coexist. `JobPosted`/`JobDone` are the M1 inline-payload
+/// pair, frozen field-for-field so stored operations stay decodable and
+/// replayable; `JobPostedV2`/`JobDoneV2` are what new writes use. Adding
+/// variants (rather than editing the old ones) is what keeps a mixed replica
+/// set converging.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MeshEvent {
-    /// Ask the mesh to run a job. The job's identity is this operation's hash.
-    /// `payload` is inline-small in M1 (content-addressed blobs are M2);
-    /// `nonce` distinguishes otherwise-identical asks.
+    /// M1: ask the mesh to run a job, inputs inline. The job's identity is this
+    /// operation's hash; `nonce` distinguishes otherwise-identical asks.
     JobPosted {
         kind: JobKind,
         payload: Vec<u8>,
@@ -69,12 +76,27 @@ pub enum MeshEvent {
         at_ms: u64,
     },
     /// Claim a posted job (by the posting operation's hash). Competing claims
-    /// are resolved deterministically by the board, not by ordering.
+    /// are resolved deterministically by the board, not by ordering. Shared by
+    /// both generations.
     JobClaimed { job: [u8; 32], at_ms: u64 },
-    /// The claimed job's result, from the claim winner.
+    /// M1: the claimed job's result, inline, from the claim winner.
     JobDone {
         job: [u8; 32],
         result: Vec<u8>,
+        at_ms: u64,
+    },
+    /// V2: ask for a named resource over a content-addressed namespace. The
+    /// spec is a manifest — it names blobs, it does not grant access to them.
+    JobPostedV2 {
+        spec: Box<JobSpec>,
+        nonce: u64,
+        at_ms: u64,
+    },
+    /// V2: the claimed job's committed output — an address plus the identities
+    /// a verifier needs. Result bytes do not return inline.
+    JobDoneV2 {
+        job: [u8; 32],
+        output: Box<JobOutput>,
         at_ms: u64,
     },
     /// Owner-authorized current state and retained per-log frontier.
@@ -280,6 +302,72 @@ mod tests {
         assert_eq!(legacy.to_bytes(), current.header.to_bytes());
         assert_eq!(legacy.hash(), current.header.hash());
         assert_eq!(legacy.signature, current.header.signature);
+    }
+
+    #[test]
+    fn v2_events_survive_cbor_and_signed_operation_round_trips() {
+        use crate::ident::{ImplementationId, ResourceId};
+        use crate::spec::{DeterminismClass, JobOutput, VerificationClass};
+        use proofs::BlobRef;
+
+        let kp = keypair(7);
+        let spec = JobSpec::simple(
+            ResourceId::parse("esp.embed.lexical/v1").unwrap(),
+            "texts",
+            BlobRef::blake3(b"a batch"),
+            "vectors",
+            4096,
+            DeterminismClass::Exact,
+        );
+        let post = MeshEvent::JobPostedV2 {
+            spec: Box::new(spec.clone()),
+            nonce: 3,
+            at_ms: 11,
+        };
+        let post_op = to_operation(&kp, MESH, &post, 0, None);
+        assert_eq!(from_operation(&post_op).unwrap().1, post);
+        assert!(verify(&post_op));
+
+        let done = MeshEvent::JobDoneV2 {
+            job: *post_op.hash.as_bytes(),
+            output: Box::new(JobOutput {
+                name: "vectors".to_string(),
+                blob: BlobRef::blake3(b"the vectors"),
+                resource: spec.resource.clone(),
+                implementation: ImplementationId::parse("mesh.lexical.fnv1a/v1").unwrap(),
+                verification: VerificationClass::ExactBytes,
+            }),
+            at_ms: 12,
+        };
+        let done_op = to_operation(&kp, MESH, &done, 1, Some(*post_op.hash.as_bytes()));
+        assert_eq!(from_operation(&done_op).unwrap().1, done);
+        assert!(verify(&done_op));
+    }
+
+    #[test]
+    fn adding_v2_variants_left_legacy_bytes_untouched() {
+        // The generation guarantee: an M1 body encoded before V2 existed still
+        // decodes, and re-encoding the same event reproduces those exact bytes.
+        #[derive(Serialize)]
+        enum LegacyMeshEvent {
+            JobPosted {
+                kind: JobKind,
+                payload: Vec<u8>,
+                nonce: u64,
+                at_ms: u64,
+            },
+        }
+
+        let legacy_bytes = encode_cbor(&LegacyMeshEvent::JobPosted {
+            kind: JobKind::Blake3,
+            payload: b"hello mesh".to_vec(),
+            nonce: 1,
+            at_ms: 42,
+        })
+        .unwrap();
+        assert_eq!(legacy_bytes, encode_cbor(&posted()).unwrap());
+        let decoded: MeshEvent = decode_cbor(legacy_bytes.as_slice()).unwrap();
+        assert_eq!(decoded, posted());
     }
 
     #[test]

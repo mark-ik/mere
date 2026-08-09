@@ -23,39 +23,120 @@ use p2panda_core::Operation;
 use serde::{Deserialize, Serialize};
 
 use crate::retention::JobBoardSnapshot;
+use crate::spec::{JobOutput, JobSpec};
 use crate::wire::{JobKind, MeshEvent, MeshExt, from_operation, verify};
 
-/// A job's identity: the hash of its `JobPosted` operation.
+/// A job's identity: the hash of its posting operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct JobId(pub [u8; 32]);
 
-/// Where a job is in its M1 lifecycle.
+/// Where a job is in its lifecycle. The two terminal states are the two wire
+/// generations: `Done` carries M1's inline bytes, `Committed` carries V2's
+/// content-addressed output record.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobState {
     /// Posted, no claims yet.
     Posted,
     /// Claimed; `winner` is the deterministic claim-race winner's author key.
     Claimed { winner: [u8; 32] },
-    /// The winner returned a result.
+    /// The winner returned an inline result (M1).
     Done { winner: [u8; 32], result: Vec<u8> },
+    /// The winner committed an output blob honouring the signed grant (V2).
+    Committed {
+        winner: [u8; 32],
+        output: Box<JobOutput>,
+    },
+}
+
+impl JobState {
+    /// The claim-race winner, once one exists.
+    pub fn winner(&self) -> Option<[u8; 32]> {
+        match self {
+            Self::Posted => None,
+            Self::Claimed { winner }
+            | Self::Done { winner, .. }
+            | Self::Committed { winner, .. } => Some(*winner),
+        }
+    }
+
+    /// Whether the job has a result, in either generation.
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Done { .. } | Self::Committed { .. })
+    }
 }
 
 /// One job on the board.
+///
+/// The generation fields are mutually exclusive: an M1 job carries `kind` +
+/// `payload`, a V2 job carries `spec`. `spec` is skipped when absent and `kind`
+/// encodes identically to the pre-V2 field, so a snapshot of M1 jobs still
+/// hashes to the bytes its checkpoint committed to.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Job {
     pub id: JobId,
-    pub kind: JobKind,
-    /// `None` after an accepted checkpoint erases a terminal job's input.
+    /// The M1 kind; `None` for a V2 job.
+    pub kind: Option<JobKind>,
+    /// The M1 inline input. `None` for a V2 job, and `None` after an accepted
+    /// checkpoint erases a terminal M1 job's input.
     pub payload: Option<Vec<u8>>,
+    /// The V2 manifest; `None` for an M1 job.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<Box<JobSpec>>,
     /// The poster's author (verifying) key bytes.
     pub posted_by: [u8; 32],
     pub state: JobState,
+}
+
+impl Job {
+    /// Whether this device could still run the job: its input is retained (M1)
+    /// or its manifest is present (V2).
+    pub fn is_runnable(&self) -> bool {
+        self.spec.is_some() || self.payload.is_some()
+    }
 }
 
 /// The folded board: every known job, keyed (and so ordered) by id.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct JobBoard {
     jobs: BTreeMap<JobId, Job>,
+}
+
+/// A gathered posting, before claims and results are resolved against it.
+struct Posted {
+    kind: Option<JobKind>,
+    payload: Option<Vec<u8>>,
+    spec: Option<Box<JobSpec>>,
+    by: [u8; 32],
+}
+
+/// A gathered result, in whichever generation its author wrote.
+enum ResultRecord {
+    Inline(Vec<u8>),
+    Committed(Box<JobOutput>),
+}
+
+impl Posted {
+    /// Resolve one job's terminal state. A result only counts when it answers
+    /// the generation the job was posted in, and a V2 result must additionally
+    /// honour the signed grant — so a winner cannot rename the output slot,
+    /// overflow its ceiling, or substitute another resource.
+    fn resolve(&self, winner: [u8; 32], record: Option<&ResultRecord>) -> JobState {
+        match (record, &self.spec) {
+            (Some(ResultRecord::Inline(result)), None) => JobState::Done {
+                winner,
+                result: result.clone(),
+            },
+            (Some(ResultRecord::Committed(output)), Some(spec))
+                if output.validate_against(spec).is_ok() =>
+            {
+                JobState::Committed {
+                    winner,
+                    output: output.clone(),
+                }
+            }
+            _ => JobState::Claimed { winner },
+        }
+    }
 }
 
 impl JobBoard {
@@ -76,17 +157,12 @@ impl JobBoard {
         I: IntoIterator<Item = &'a Operation<MeshExt>>,
     {
         // Gather phase.
-        struct Posted {
-            kind: JobKind,
-            payload: Option<Vec<u8>>,
-            by: [u8; 32],
-        }
         let mut posted: BTreeMap<JobId, Posted> = BTreeMap::new();
         // job → claim-op-hash → claimant author. BTreeMap keys give the
         // deterministic winner (lowest claim-op hash) for free.
         let mut claims: BTreeMap<JobId, BTreeMap<[u8; 32], [u8; 32]>> = BTreeMap::new();
-        // job → author → result.
-        let mut results: BTreeMap<JobId, BTreeMap<[u8; 32], Vec<u8>>> = BTreeMap::new();
+        // job → author → result, in whichever generation the author wrote.
+        let mut results: BTreeMap<JobId, BTreeMap<[u8; 32], ResultRecord>> = BTreeMap::new();
 
         // Seed the gather maps from the accepted checkpoint. The all-zero
         // synthetic claim key sorts before any real operation hash, preserving
@@ -97,21 +173,27 @@ impl JobBoard {
                 Posted {
                     kind: job.kind,
                     payload: job.payload.clone(),
+                    spec: job.spec.clone(),
                     by: job.posted_by,
                 },
             );
+            if let Some(winner) = job.state.winner() {
+                claims.entry(job.id).or_default().insert([0; 32], winner);
+            }
             match &job.state {
-                JobState::Posted => {}
-                JobState::Claimed { winner } => {
-                    claims.entry(job.id).or_default().insert([0; 32], *winner);
-                }
                 JobState::Done { winner, result } => {
-                    claims.entry(job.id).or_default().insert([0; 32], *winner);
                     results
                         .entry(job.id)
                         .or_default()
-                        .insert(*winner, result.clone());
+                        .insert(*winner, ResultRecord::Inline(result.clone()));
                 }
+                JobState::Committed { winner, output } => {
+                    results
+                        .entry(job.id)
+                        .or_default()
+                        .insert(*winner, ResultRecord::Committed(output.clone()));
+                }
+                JobState::Posted | JobState::Claimed { .. } => {}
             }
         }
 
@@ -131,8 +213,26 @@ impl JobBoard {
                     posted.insert(
                         JobId(*op.hash.as_bytes()),
                         Posted {
-                            kind,
+                            kind: Some(kind),
                             payload: Some(payload),
+                            spec: None,
+                            by: author,
+                        },
+                    );
+                }
+                MeshEvent::JobPostedV2 { spec, .. } => {
+                    // Defence in depth: the store refuses a malformed spec
+                    // before it is ever persisted, so this only fires for a
+                    // direct caller folding unvetted operations.
+                    if spec.validate().is_err() {
+                        continue;
+                    }
+                    posted.insert(
+                        JobId(*op.hash.as_bytes()),
+                        Posted {
+                            kind: None,
+                            payload: None,
+                            spec: Some(spec),
                             by: author,
                         },
                     );
@@ -147,7 +247,13 @@ impl JobBoard {
                     results
                         .entry(JobId(job))
                         .or_default()
-                        .insert(author, result);
+                        .insert(author, ResultRecord::Inline(result));
+                }
+                MeshEvent::JobDoneV2 { job, output, .. } => {
+                    results
+                        .entry(JobId(job))
+                        .or_default()
+                        .insert(author, ResultRecord::Committed(output));
                 }
                 MeshEvent::RetentionCheckpoint { .. } | MeshEvent::HistoryPruned { .. } => {}
             }
@@ -162,13 +268,7 @@ impl JobBoard {
                 .map(|(_, claimant)| *claimant);
             let state = match winner {
                 None => JobState::Posted,
-                Some(winner) => match results.get(&id).and_then(|r| r.get(&winner)) {
-                    Some(result) => JobState::Done {
-                        winner,
-                        result: result.clone(),
-                    },
-                    None => JobState::Claimed { winner },
-                },
+                Some(winner) => post.resolve(winner, results.get(&id).and_then(|r| r.get(&winner))),
             };
             jobs.insert(
                 id,
@@ -176,6 +276,7 @@ impl JobBoard {
                     id,
                     kind: post.kind,
                     payload: post.payload,
+                    spec: post.spec,
                     posted_by: post.by,
                     state,
                 },

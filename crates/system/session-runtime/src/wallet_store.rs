@@ -560,6 +560,41 @@ pub fn persona_wallet_path(data_root: &Path, persona: PersonaId) -> PathBuf {
         .join(PERSONA_WALLET_FILENAME)
 }
 
+/// The personas that actually exist under `data_root`: directories named by a
+/// persona UUID that hold a wallet manifest.
+///
+/// The wallet file is the membership test, deliberately. `personas/<uuid>/`
+/// also hosts engine profiles ([`crate::engine_profile_store`]), so a bare
+/// directory does not mean a persona lives there — and a caller resolving
+/// "which persona am I?" against directories alone would happily pick an
+/// engine-profile shell with no keys in it.
+///
+/// Sorted by UUID so the answer is stable across runs. This is the wallet
+/// lane's half of the family "which persona?" question — the vault lane's is
+/// `personae::roster` — and the resolution ladder for this lane grows here
+/// when something exists to write a remembered choice.
+pub fn list_personas(data_root: &Path) -> io::Result<Vec<PersonaId>> {
+    let dir = data_root.join(PERSONAS_DIR);
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    let mut personas = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        let Ok(uuid) = entry.file_name().to_string_lossy().parse::<Uuid>() else {
+            continue;
+        };
+        let persona = PersonaId::from_uuid(uuid);
+        if persona_wallet_path(data_root, persona).is_file() {
+            personas.push(persona);
+        }
+    }
+    personas.sort_by_key(|persona| *persona.as_uuid());
+    Ok(personas)
+}
+
 /// `<data_root>/personas/<persona_id>/private-epoch-bridge.json`
 pub fn persona_epoch_bridge_path(data_root: &Path, persona: PersonaId) -> PathBuf {
     data_root
@@ -1129,6 +1164,41 @@ mod tests {
 
     fn fixture_chain_root() -> PersonaChainRoot {
         PersonaChainRoot([7u8; 32])
+    }
+
+    #[test]
+    fn listing_personas_counts_wallets_not_directories() {
+        let root = temp_data_root("list-personas");
+        assert_eq!(list_personas(&root).unwrap(), Vec::new(), "no dir yet");
+
+        // An engine-profile shell: a persona-shaped directory with no wallet.
+        // This is the case the wallet-file membership test exists for.
+        let shell = PersonaId::from_uuid(Uuid::from_u128(0xEE));
+        fs::create_dir_all(
+            root.join(PERSONAS_DIR)
+                .join(shell.as_uuid().to_string())
+                .join("engine-profiles"),
+        )
+        .unwrap();
+        // Something that is not a persona at all.
+        fs::create_dir_all(root.join(PERSONAS_DIR).join("not-a-uuid")).unwrap();
+
+        let real = PersonaId::from_uuid(Uuid::from_u128(0x22));
+        let later = PersonaId::from_uuid(Uuid::from_u128(0x11));
+        for persona in [real, later] {
+            save_persona_wallet(
+                &root,
+                &PersonaWalletManifest::new(persona, fixture_chain_root(), fixture_epoch()),
+            )
+            .unwrap();
+        }
+
+        assert_eq!(
+            list_personas(&root).unwrap(),
+            vec![later, real],
+            "wallets only, sorted by UUID so the answer is stable"
+        );
+        let _ = fs::remove_dir_all(&root);
     }
 
     fn fixture_epoch() -> KeyEpochId {

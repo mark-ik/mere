@@ -3,24 +3,42 @@
 
 //! # mesh
 //!
-//! The personal-space compute mesh — resource-coordination **milestone 1**:
+//! The personal-space compute mesh — resource-coordination **milestone 2**:
 //! one owned device posts a job into the shared space, another claims it and
-//! returns the result, replicated over the same signed-operation event-DAG
+//! runs it against a *restricted namespace*, returning a content-addressed
+//! output; all of it replicated over the same signed-operation event-DAG
 //! tessera and murm ride (LogSync underneath). **No economy**: every peer
 //! holding the mesh id is trusted (the own-devices ring, where sharing is
-//! scheduling and permissions, never verification markets).
+//! scheduling and permissions, never verification markets). Trusted still does
+//! not mean unbounded — a worker sees only the inputs and output slot one job
+//! granted it.
 //!
-//! Five layers, innermost first:
+//! Layers, innermost first:
 //!
+//! - [`ident`] / [`spec`] — the V2 job vocabulary: extensible [`ResourceId`]s
+//!   and the [`JobSpec`] manifest (named blob inputs, one granted output).
 //! - [`wire`] — job events as signed `Operation<MeshExt>`s (the mesh id is the
 //!   signed addressing extension, so an op cannot replay into another mesh).
+//!   Two generations coexist: M1's inline pair and V2's spec/output pair.
 //! - [`board`] — the [`JobBoard`]: a **deterministic, order-independent fold**
-//!   of the op log into job state (`posted → claimed → done`). Claim races
-//!   resolve identically on every peer (lowest claim-op hash wins), and only
-//!   the winner's result is accepted.
-//! - [`worker`] — the pure decision function ([`next_action`]) + the M1 job
-//!   executors ([`execute`]: `Echo`, `Blake3`). The *host* drives the loop
-//!   (the `mesh-peer` bin now; meerkat's P6 compute actor later).
+//!   of the op log into job state (`posted → claimed → done | committed`).
+//!   Claim races resolve identically on every peer (lowest claim-op hash
+//!   wins), only the winner's result is accepted, and a V2 result is accepted
+//!   only when it honours the signed grant.
+//! - [`namespace`] — the [`JobNamespaceView`]: the *only* door a resource has
+//!   to data. Named reads, one granted writer, no ambient resolver. The host
+//!   builds it; a `BlobRef` in a signed spec never authorizes anything by
+//!   itself.
+//! - [`resource`] / [`registry`] — the [`MeshResource`] adapter seam (async
+//!   prepare + execute under a host-owned [`JobControl`]) and the one
+//!   [`ResourceRegistry`] that maps a [`ResourceId`] to it. Adding a resource
+//!   touches neither `wire.rs` nor `JobBoard::fold`.
+//! - [`resources`] — the shipped adapters: `mesh.echo/v1`, `mesh.blake3/v1`
+//!   (the M1 kinds, now behind one execution route) and
+//!   `esp.embed.lexical/v1`.
+//! - [`worker`] — the pure decision function ([`next_action`]), which selects
+//!   only work this host advertises capability for. The *host* drives the loop
+//!   (the `mesh-peer` bin now; turnstone's compute actor later).
 //! - [`store`] — the [`MeshStore`]: the shared muniment operation store behind
 //!   one policy-before-insert path that validates, admits, and indexes each op
 //!   atomically. Retention checkpoints live in a separate author log from job
@@ -35,11 +53,17 @@
 //!   path ([`SyncedMesh::author`]) and a real, non-placebo [`SyncStatus`].
 //!
 //! See the
-//! [mesh M1 plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-12_mesh_m1_plan.md).
+//! [mesh M2 plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-30_personal_mesh_substrate_m2_plan.md).
 
 pub mod board;
 pub mod drop_export;
+pub mod ident;
+pub mod namespace;
+pub mod registry;
+pub mod resource;
+pub mod resources;
 pub mod retention;
+pub mod spec;
 pub mod store;
 pub mod sync;
 pub mod wire;
@@ -47,10 +71,23 @@ pub mod worker;
 
 pub use board::{Job, JobBoard, JobId, JobState};
 pub use drop_export::{MeshDropPriorities, MeshDropPrivacy, MeshDropProfile, MeshDropSelector};
+pub use ident::{IdentError, ImplementationId, ResourceId};
+pub use namespace::{
+    BlobSink, BlobSource, JobNamespaceView, MemoryBlobSpace, NamespaceError, OutputCommit,
+};
 pub use proofs::{BlobRef, Commitment, CommitmentDomain, CommitmentScheme, Digest, DigestAlg};
+pub use registry::{RegistryError, ResourceRegistry, RunError, Verdict, run_job, verify_output};
+pub use resource::{
+    Cancelled, JobControl, JobControlHandle, MeshResource, Prepared, ResourceDescriptor,
+    ResourceError,
+};
 pub use retention::{
     AvailabilityPolicy, CheckpointError, ErasurePolicy, JobBoardSnapshot, KeepBound, LogFrontier,
     MeshRetentionPolicy, PayloadRule, PolicyRevision, RetentionCheckpoint, RetentionEffect,
+};
+pub use spec::{
+    CheckpointClass, ComputeClass, DeterminismClass, HostFacts, JobInput, JobOutput, JobSpec,
+    OutputError, OutputGrant, ResourceRequirements, SpecError, VerificationClass,
 };
 pub use store::{MeshStore, MeshStoreError, StoredCheckpoint};
 pub use sync::{MeshSyncError, SyncRound, SyncStatus, SyncedMesh};
@@ -58,7 +95,7 @@ pub use wire::{
     JobKind, MeshEvent, MeshExt, MeshLogId, WireError, from_operation, to_operation,
     to_prune_operation, verify,
 };
-pub use worker::{WorkerAction, execute, next_action};
+pub use worker::{HostOffer, WorkerAction, next_action};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

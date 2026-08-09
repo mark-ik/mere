@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use p2panda_core::Operation;
 use stickleback::{DropExportDecision, DropExportSelector};
 
-use crate::board::JobState;
 use crate::store::StoredCheckpoint;
 use crate::wire::{MeshEvent, MeshExt, MeshLogId, from_operation};
 
@@ -107,19 +106,25 @@ impl MeshDropSelector {
 
     fn privacy_permits(&self, event: &MeshEvent) -> bool {
         match event {
-            MeshEvent::JobPosted { .. } => self.privacy.include_job_inputs,
-            MeshEvent::JobDone { .. } => self.privacy.include_job_results,
+            // A V2 spec carries addresses rather than bytes, but naming a blob
+            // is enough to fetch it. It counts as an input for privacy.
+            MeshEvent::JobPosted { .. } | MeshEvent::JobPostedV2 { .. } => {
+                self.privacy.include_job_inputs
+            }
+            MeshEvent::JobDone { .. } | MeshEvent::JobDoneV2 { .. } => {
+                self.privacy.include_job_results
+            }
             MeshEvent::RetentionCheckpoint { checkpoint } => {
                 let contains_inputs = checkpoint
                     .snapshot
                     .jobs
                     .iter()
-                    .any(|job| job.payload.is_some());
+                    .any(|job| job.payload.is_some() || job.spec.is_some());
                 let contains_results = checkpoint
                     .snapshot
                     .jobs
                     .iter()
-                    .any(|job| matches!(job.state, JobState::Done { .. }));
+                    .any(|job| job.state.is_terminal());
                 (self.privacy.include_job_inputs || !contains_inputs)
                     && (self.privacy.include_job_results || !contains_results)
             }
@@ -131,9 +136,11 @@ impl MeshDropSelector {
         match event {
             MeshEvent::RetentionCheckpoint { .. } => self.priorities.retention_checkpoint,
             MeshEvent::HistoryPruned { .. } => self.priorities.history_pruned,
-            MeshEvent::JobDone { .. } => self.priorities.job_done,
+            MeshEvent::JobDone { .. } | MeshEvent::JobDoneV2 { .. } => self.priorities.job_done,
             MeshEvent::JobClaimed { .. } => self.priorities.job_claimed,
-            MeshEvent::JobPosted { .. } => self.priorities.job_posted,
+            MeshEvent::JobPosted { .. } | MeshEvent::JobPostedV2 { .. } => {
+                self.priorities.job_posted
+            }
         }
     }
 
