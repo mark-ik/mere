@@ -90,6 +90,9 @@ pub struct PersonalSyncHost {
     /// must not send the bytes back over the wire. It is also why a device can
     /// still answer for a blob after the session that received it ended.
     blobs: BlobStore,
+    /// This device's Personae root, which is how the graph names it as a
+    /// reader. Distinct from the per-graph node id, which names reachability.
+    own_root: [u8; 32],
     /// This device's seat in the graph's key group.
     key_group: Mutex<GraphKeyGroup>,
     /// The keyring intake reads. Shared rather than captured, for the same
@@ -302,6 +305,7 @@ impl PersonalSyncHost {
             joined,
             transport,
             blobs,
+            own_root: identity.master_public_key().to_bytes(),
             key_group: Mutex::new(key_group),
             keys,
             #[cfg(test)]
@@ -667,8 +671,24 @@ impl PersonalSyncHost {
     ///
     /// [`key_paired_devices`]: Self::key_paired_devices
     pub async fn enable_encryption(&self) -> Result<(), PersonalSyncHostError> {
-        self.author_key_change(|group| Ok((vec![group.create()?], ())))
-            .await?;
+        // Two facts, not one. The dispatch is the crypto; the admit is the
+        // intent every device folds. Naming itself here is what makes the
+        // creator a reader by record rather than by accident of being the
+        // first to say anything, so reconciliation has a reason to keep it
+        // seated and later readers have someone whose authority they inherit.
+        self.author_key_change(|group| {
+            Ok((
+                vec![
+                    group.create()?,
+                    PersonalGraphEvent::AdmitReader {
+                        root: self.own_root,
+                        label: "this device".to_string(),
+                    },
+                ],
+                (),
+            ))
+        })
+        .await?;
         tracing::info!(graph = %hex(&self.graph), "encryption is on for this graph");
         Ok(())
     }
@@ -689,16 +709,58 @@ impl PersonalSyncHost {
             let report = group.absorb_admitted(&steps, &roster).map_err(key_error)?;
             (report, group.is_keyed())
         };
+        let _ = report;
         self.refresh_keyring().await?;
 
-        // Only a keyed device may add, so an unkeyed one stops here rather
-        // than reporting a failure: waiting to be added is its ordinary state.
+        // Only a seated device can change seats, so an unkeyed one stops here
+        // rather than reporting a failure: waiting is its ordinary state.
         if !keyed {
             return Ok(0);
         }
-        let mut added = 0;
-        for member in report.registered {
-            let changed = self
+
+        // Reconcile toward the reader set rather than replay commands. The
+        // set is folded from the lane, so every device works from the same
+        // one; that is what stops two devices undoing each other, one seating
+        // a device the other just retired, each doing as it was told.
+        //
+        // Idempotent by construction. Running it twice changes nothing, and
+        // running it in a different order reaches the same place, so no device
+        // has to see the lane's events in any particular sequence.
+        let readers = {
+            let replica = self.replica.lock().await;
+            replica.projection().await?.readers
+        };
+        let seated = self.key_group_members().await?;
+        let mine = self.key_group.lock().await.member();
+
+        let mut changes = 0;
+        for member in seated {
+            if member == mine {
+                continue;
+            }
+            // A seat whose root the graph no longer admits, or which no
+            // pre-key on the lane accounts for, is a seat nothing justifies.
+            let justified = crate::native::graph_keys::root_for_recipient(&steps, member)
+                .is_some_and(|root| readers.contains_key(&root));
+            if justified {
+                continue;
+            }
+            let turned = self
+                .author_key_change(|group| Ok((group.remove_and_rotate(member)?, true)))
+                .await?;
+            changes += usize::from(turned);
+        }
+
+        for root in readers.keys() {
+            let Some(member) = crate::native::graph_keys::recipient_for_root(&steps, *root) else {
+                // Admitted but has not published yet. Ordinary for a device
+                // paired a moment ago; it seats itself on a later pass.
+                continue;
+            };
+            if member == mine {
+                continue;
+            }
+            let seated = self
                 .author_key_change(|group| {
                     if group.has_member(member)? {
                         return Ok((Vec::new(), false));
@@ -706,12 +768,17 @@ impl PersonalSyncHost {
                     Ok((vec![group.add(member)?], true))
                 })
                 .await?;
-            added += usize::from(changed);
+            changes += usize::from(seated);
         }
-        if added > 0 {
-            tracing::info!(added, graph = %hex(&self.graph), "keyed paired devices");
+        if changes > 0 {
+            tracing::info!(
+                changes,
+                readers = readers.len(),
+                graph = %hex(&self.graph),
+                "brought the key group in line with the graph's reader set"
+            );
         }
-        Ok(added)
+        Ok(changes)
     }
 
     /// Drop a device from the key group and turn the epoch.
@@ -745,24 +812,31 @@ impl PersonalSyncHost {
         Ok(removed)
     }
 
-    /// Drop the device that owns `root` from the key group, and turn the epoch.
+    /// Name a persona root as a reader of this graph.
     ///
-    /// Takes a Personae root because that is what unpairing knows. The
-    /// recipient is resolved off the lane, so nothing has to persist the
-    /// mapping. A root that never joined resolves to nothing, which is the
-    /// ordinary case and reports `false` rather than failing.
-    pub async fn revoke_root_keys(&self, root: [u8; 32]) -> Result<bool, PersonalSyncHostError> {
-        if !self.is_keyed().await {
-            return Ok(false);
-        }
-        let steps = {
-            let replica = self.replica.lock().await;
-            crate::personal_sync::key_agreement(&replica.sync_store(), self.graph).await?
-        };
-        let Some(member) = crate::native::graph_keys::recipient_for_root(&steps, root) else {
-            return Ok(false);
-        };
-        self.revoke_device_keys_if_present(member).await
+    /// Intent only. The seat follows on the next reconciliation, here and on
+    /// every other device, because they all fold the same set.
+    pub async fn admit_reader(
+        &self,
+        root: [u8; 32],
+        label: impl Into<String>,
+    ) -> Result<(), PersonalSyncHostError> {
+        self.author(vec![PersonalGraphEvent::AdmitReader {
+            root,
+            label: label.into(),
+        }])
+        .await
+    }
+
+    /// Withdraw a persona root's readership.
+    ///
+    /// This is the whole of revocation now. It removes no seat and turns no
+    /// epoch; it states that the root is no longer a reader, and every keyed
+    /// device reconciles to that on its own. Which device the unpair was typed
+    /// on stops mattering, and so does whether that device holds a key.
+    pub async fn retire_reader(&self, root: [u8; 32]) -> Result<(), PersonalSyncHostError> {
+        self.author(vec![PersonalGraphEvent::RetireReader { root }])
+            .await
     }
 
     /// Apply one group mutation only if its corresponding lane events author.
@@ -1368,6 +1442,12 @@ mod tests {
         assert!(!sibling.is_keyed().await);
 
         owner.enable_encryption().await.unwrap();
+        // Pairing is reachability; readership is named. The watch couples them
+        // on the product path, and a test driving hosts directly says both.
+        owner
+            .admit_reader(sibling_identity.master_public_key().to_bytes(), "sibling")
+            .await
+            .unwrap();
         assert!(
             owner.is_keyed().await,
             "the creator reads from the moment it creates"
@@ -1598,6 +1678,10 @@ mod tests {
         owner.pair_node(sibling.node_id()).await.unwrap();
 
         owner.enable_encryption().await.unwrap();
+        owner
+            .admit_reader(sibling_identity.master_public_key().to_bytes(), "sibling")
+            .await
+            .unwrap();
 
         // Sealed while the sibling is definitely not a member.
         let node = Uuid::from_u128(0xe4);
@@ -1648,32 +1732,16 @@ mod tests {
         sibling.close().await.unwrap();
     }
 
-    /// **Known defect, recorded rather than deleted.** A revocation performed
-    /// on one device is undone by the next sweep on another.
+    /// Three devices, the first count that exercises what two cannot:
+    /// cross-author ordering of key steps, and whether a revocation performed
+    /// on one device holds on the others.
     ///
-    /// Three devices, the first count that exercises what two cannot. The
-    /// removal replicates and the other device processes it; membership then
-    /// goes straight back to three.
-    ///
-    /// The cause is that membership is applied as commands while the condition
-    /// behind it is per device. The roster lives in each device's own settings
-    /// file and is not synced, so unpairing on A leaves B's roster still
-    /// admitting the departed device. `absorb_admitted` correctly refuses to
-    /// register a pre-key the roster does not admit, and `has_member`
-    /// correctly skips a device already seated, but neither can help here: B's
-    /// roster does admit it, and after the removal it is not seated, so B adds
-    /// it back. A and B then disagree forever, each doing exactly what it was
-    /// told.
-    ///
-    /// No amount of care in the add path fixes this, because the two devices
-    /// hold different conditions. It resolves when membership becomes a
-    /// function of one shared condition rather than a sequence of commands:
-    /// with a roster every device converges on, a revocation is simply the
-    /// roster no longer admitting a root, and any keyed device restores that
-    /// state without being told.
-    ///
-    /// Ignored so the suite stays green while the defect stays visible.
-    #[ignore = "known defect: a revoked device is re-added by another device's sweep"]
+    /// It used to fail. Membership was applied as commands while the condition
+    /// behind it lived in each device's own settings, so the device that had
+    /// not been told simply seated the departed device again. Now every device
+    /// folds the same reader set off the lane and reconciles toward it, so the
+    /// retirement is a fact all of them read rather than an instruction one of
+    /// them was given.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn a_revocation_on_one_device_reaches_the_others() {
         let directory = tempfile::tempdir().unwrap();
@@ -1711,12 +1779,22 @@ mod tests {
                 .unwrap(),
             );
         }
-        for index in 1..hosts.len() {
-            let node = hosts[index].node_id();
+        let siblings: Vec<[u8; 32]> = hosts.iter().skip(1).map(|host| host.node_id()).collect();
+        for node in siblings {
             hosts[0].pair_node(node).await.unwrap();
         }
 
         hosts[0].enable_encryption().await.unwrap();
+
+        // Readership is named, not inferred from having published a pre-key.
+        // The pairing watch does this on pair; the test does it directly
+        // because it drives the hosts rather than the watch.
+        for identity in identities.iter().skip(1) {
+            hosts[0]
+                .admit_reader(identity.master_public_key().to_bytes(), "sibling")
+                .await
+                .unwrap();
+        }
 
         // Key both siblings. Their pre-keys arrive from two authors, so this
         // is where interleaved per-author sequences would show if they broke
@@ -1731,11 +1809,11 @@ mod tests {
         }
         assert_eq!(keyed_by_owner, 2, "both siblings were keyed off the lane");
 
-        for index in 1..hosts.len() {
+        for (index, host) in hosts.iter().enumerate().skip(1) {
             let mut keyed = false;
             for _ in 0..120 {
-                hosts[index].key_paired_devices().await.unwrap();
-                keyed = hosts[index].is_keyed().await;
+                host.key_paired_devices().await.unwrap();
+                keyed = host.is_keyed().await;
                 if keyed {
                     break;
                 }
@@ -1751,7 +1829,7 @@ mod tests {
         // second device learns of it from the lane, without the unpair ever
         // being typed on the second device.
         let departing = identities[2].master_public_key().to_bytes();
-        assert!(hosts[0].revoke_root_keys(departing).await.unwrap());
+        hosts[0].retire_reader(departing).await.unwrap();
 
         let mut witness = None;
         for _ in 0..120 {

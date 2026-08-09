@@ -293,6 +293,24 @@ pub fn recipient_for_root(steps: &[KeyAgreementStep], root: [u8; 32]) -> Option<
     })
 }
 
+/// Which Personae root a seated member belongs to, read off the lane.
+///
+/// The inverse of [`recipient_for_root`], and needed for the same reason: the
+/// key group knows seats, the graph knows roots, and reconciling one against
+/// the other means being able to cross between them in both directions.
+pub fn root_for_recipient(
+    steps: &[KeyAgreementStep],
+    recipient: GroupRecipientId,
+) -> Option<[u8; 32]> {
+    steps.iter().rev().find_map(|step| {
+        let KeyAgreementEvent::Prekey(bundle) = &step.step else {
+            return None;
+        };
+        let bundle = GroupPrekeyBundle::from_bytes(bundle).ok()?;
+        (bundle.recipient == recipient).then(|| bundle.personae_root().ok())?
+    })
+}
+
 /// What one pass over the lane's key traffic changed.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AbsorbReport {

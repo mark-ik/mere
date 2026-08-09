@@ -1,0 +1,23 @@
+# The M2d cross-target determinism receipt: compile the *same*
+# `lexical_codec.rs` source the mesh's `esp.embed.lexical/v1` adapter uses to
+# wasm32-unknown-unknown, run it under Node's WebAssembly engine, and print the
+# blake3 digest of its canonical output. Matching the native digest is what
+# earns `VerificationClass::ExactBytes`; a mismatch means the class must drop to
+# an explicit tolerance.
+#
+# Standalone (crates/probes is excluded from the mere workspace) and carries its
+# own Cargo.lock. Run with `run.ps1`.
+[package]
+name = "mesh-lexical-wasm"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+esp = { path = "../../intel/esp" }
+blake3 = "1.5"
+thiserror = "1"

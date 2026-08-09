@@ -469,12 +469,11 @@ fn spawn_pairing_watch(
                 .collect();
             for (node, previous, next) in authority_changes {
                 if let Some(root) = previous {
-                    match host.revoke_root_keys(root).await {
-                        Ok(true) => tracing::info!(
+                    match host.retire_reader(root).await {
+                        Ok(()) => tracing::info!(
                             node = %owner_settings::hex32(&node),
-                            "revoked the device's previous key authority"
+                            "retired the device's previous readership"
                         ),
-                        Ok(false) => {}
                         Err(error) => {
                             tracing::warn!(
                                 %error,
@@ -497,6 +496,19 @@ fn spawn_pairing_watch(
                 match host.pair_node(node).await {
                     Ok(()) => {
                         applied.insert(node, root);
+                        // Reachability and readership are separate grants and
+                        // stay separate: pairing says where a device is, this
+                        // says it may read. A receive-only device has no root
+                        // and gets neither, which is what receive-only means.
+                        if let Some(root) = root {
+                            if let Err(error) = host.admit_reader(root, "paired device").await {
+                                tracing::warn!(
+                                    %error,
+                                    node = %owner_settings::hex32(&node),
+                                    "could not admit the paired device as a reader"
+                                );
+                            }
+                        }
                         tracing::info!(
                             node = %owner_settings::hex32(&node),
                             "applied a newly paired device without a restart"
@@ -522,17 +534,16 @@ fn spawn_pairing_watch(
                 // lane write then retries next pass instead of leaving a local
                 // epoch turn that the rest of the graph never received.
                 if let Some(root) = root {
-                    match host.revoke_root_keys(root).await {
-                        Ok(true) => tracing::info!(
+                    match host.retire_reader(root).await {
+                        Ok(()) => tracing::info!(
                             node = %owner_settings::hex32(&node),
-                            "revoked the unpaired device's key and turned the epoch"
+                            "retired the unpaired device's readership"
                         ),
-                        Ok(false) => {}
                         Err(error) => {
                             tracing::warn!(
                                 %error,
                                 node = %owner_settings::hex32(&node),
-                                "could not revoke the unpaired device's key; will retry"
+                                "could not retire the unpaired device's readership; will retry"
                             );
                             continue;
                         }
