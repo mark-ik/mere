@@ -1,14 +1,13 @@
 # Esp Consolidation Plan
 
 **Date**: 2026-08-08
-**Status**: E0-E3 implemented 2026-08-09. E4 is locally prepared: ESP 0.1.0
-packages and verifies; the Vates and Sibylla compatibility shims compile, but
-Cargo cannot package them until ESP exists in the registry. The irreversible
-publish sequence remains unexecuted. The 2026-08-08 adversarial amendments
-remain authoritative: corrected knot consumer graph, restored mesh/scheduler
-boundaries, host-side device policy, narrowed servitor language, and separate
-portability and repository-promotion gates. Supersedes the first draft written
-in `repos/esp/design_docs/`; that file is now a pointer here.
+**Status**: E0-E4 complete 2026-08-09. ESP 0.1.0, Vates 0.1.2, and Sibylla
+0.1.2 are published on crates.io in that order. The 2026-08-08 adversarial
+amendments remain authoritative: corrected knot consumer graph, restored
+mesh/scheduler boundaries, host-side device policy, narrowed servitor
+language, and separate portability and repository-promotion gates. Supersedes
+the first draft written in `repos/esp/design_docs/`; that file is now a pointer
+here.
 **Scope**: fold `vates` and `sibylla` into one crate named `esp` inside mere,
 retire the two names, and connect the crate to the intention corpus it serves.
 The lanes themselves keep their own plans; this doc consolidates the code and
@@ -314,5 +313,10 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   intended registry gate because ESP 0.1.0 has not been published. Knot's
   consumer compiled before concurrent publication-client work introduced an
   unrelated temporary-borrow error in its test module; that work was preserved
-  untouched. E4 therefore waits only on explicit authorization for the
-  irreversible crates.io sequence.
+  untouched. That was the final local boundary before publication.
+- **2026-08-09, E4 publication**: committed the consolidation as `1283b4a8`
+  and published from a clean detached worktree at that commit. ESP 0.1.0
+  packaged, verified, uploaded, and became available first. Vates 0.1.2 then
+  resolved ESP from the registry, packaged, verified, and published; Sibylla
+  0.1.2 followed with the same registry-backed verification. E0-E4 are
+  complete.
