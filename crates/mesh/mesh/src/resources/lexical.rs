@@ -17,7 +17,17 @@ use crate::ident::{ImplementationId, ResourceId};
 use crate::namespace::{BoxFuture, JobNamespaceView};
 use crate::resource::{JobControl, MeshResource, Prepared, ResourceDescriptor, ResourceError};
 use crate::resources::lexical_codec::{LexicalBatch, embed_batch};
-use crate::spec::{ResourceRequirements, VerificationClass};
+use crate::spec::{ComputeClass, ResourceRequirements, VerificationClass};
+
+/// Working-memory floor this adapter advertises, in MiB.
+///
+/// A full batch at the codec's ceilings is roughly 80 MiB live — up to 64 MiB
+/// of decoded input text plus a 16 MiB vector block, before `Vec<Vec<f32>>`
+/// overhead. 128 MiB is the conservative round number over that. It is a
+/// *constant* because [`ResourceRequirements`] is per-adapter, not per-job;
+/// when requirements become input-derived this becomes a function of the
+/// batch's declared dimensions and text count.
+pub const MEMORY_FLOOR_MIB: u32 = 128;
 
 /// The granted input slot: a canonical [`LexicalBatch`].
 pub const TEXTS: &str = "texts";
@@ -36,7 +46,10 @@ impl LexicalEmbedResource {
                 resource: ResourceId::parse("esp.embed.lexical/v1").expect("well-formed id"),
                 implementation: ImplementationId::parse("mesh.lexical.fnv1a/v1")
                     .expect("well-formed id"),
-                requires: ResourceRequirements::cpu(),
+                requires: ResourceRequirements {
+                    memory_mib: MEMORY_FLOOR_MIB,
+                    compute: ComputeClass::Cpu,
+                },
                 verification: VerificationClass::ExactBytes,
             },
         }
@@ -151,7 +164,9 @@ mod tests {
             verify_output(&registry(), &spec, &output, &space, &space, &control)
                 .await
                 .unwrap(),
-            Verdict::Reproduced
+            Verdict::Reproduced {
+                by: ImplementationId::parse("mesh.lexical.fnv1a/v1").unwrap()
+            }
         );
     }
 

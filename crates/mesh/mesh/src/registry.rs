@@ -17,7 +17,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::ident::ResourceId;
+use crate::ident::{ImplementationId, ResourceId};
 use crate::namespace::{BlobSink, BlobSource, JobNamespaceView, MemoryBlobSpace, NamespaceError};
 use crate::resource::{JobControl, MeshResource, ResourceError};
 use crate::resources::{legacy_resource_id, register_builtin};
@@ -159,20 +159,37 @@ pub async fn run_job(
 }
 
 /// What a local re-run says about a committed output.
+///
+/// Both byte outcomes name the implementation that did the re-running, because
+/// a `ResourceId` is an interoperable algorithm (see [`crate::ident`]): the
+/// interesting fact is not *that* bytes matched but *which two builds* agreed
+/// or disagreed.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Verdict {
-    /// The re-run reproduced the committed bytes exactly.
-    Reproduced,
-    /// The re-run produced different bytes under an exact claim.
-    Diverged { rerun: proofs::BlobRef },
+    /// This device reproduced the committed bytes exactly.
+    Reproduced { by: ImplementationId },
+    /// This device produced different bytes under an exact claim. Under the
+    /// resource-id contract that is a conformance failure in one of the two
+    /// implementations, not a tolerable difference — hence both are named.
+    Diverged {
+        rerun: proofs::BlobRef,
+        by: ImplementationId,
+    },
     /// The declared class makes no byte-level claim. A tolerant comparison
     /// needs a resource-supplied decoder; the first resource that cannot claim
     /// [`VerificationClass::ExactBytes`] brings one.
     NotCheckable { class: DeterminismClass },
+    /// This device has no adapter for the resource, so it cannot judge the
+    /// result at all. Not a divergence: nothing was compared.
+    Unavailable { resource: ResourceId },
 }
 
 /// Re-run a job locally and judge its committed output under the class the
 /// producing resource declared.
+///
+/// A device without the resource returns [`Verdict::Unavailable`] rather than
+/// an error: "I cannot check this here" is a verdict, and conflating it with a
+/// failed check is how a verifier starts lying.
 pub async fn verify_output(
     registry: &ResourceRegistry,
     spec: &JobSpec,
@@ -182,6 +199,12 @@ pub async fn verify_output(
     control: &JobControl,
 ) -> Result<Verdict, RunError> {
     output.validate_against(spec)?;
+    let Some(adapter) = registry.get(&spec.resource) else {
+        return Ok(Verdict::Unavailable {
+            resource: spec.resource.clone(),
+        });
+    };
+    let by = adapter.descriptor().implementation.clone();
     if output.verification != VerificationClass::ExactBytes {
         return Ok(Verdict::NotCheckable {
             class: output.verification.class(),
@@ -189,9 +212,12 @@ pub async fn verify_output(
     }
     let rerun = run_job(registry, spec, source, sink, control).await?;
     if rerun.blob == output.blob {
-        Ok(Verdict::Reproduced)
+        Ok(Verdict::Reproduced { by })
     } else {
-        Ok(Verdict::Diverged { rerun: rerun.blob })
+        Ok(Verdict::Diverged {
+            rerun: rerun.blob,
+            by,
+        })
     }
 }
 
@@ -348,7 +374,12 @@ mod tests {
         let verdict = verify_output(&registry, &spec, &output, &space, &space, &control)
             .await
             .unwrap();
-        assert_eq!(verdict, Verdict::Reproduced);
+        assert_eq!(
+            verdict,
+            Verdict::Reproduced {
+                by: ImplementationId::parse("test.reverse.std/v1").unwrap()
+            }
+        );
     }
 
     #[tokio::test]
@@ -371,6 +402,88 @@ mod tests {
             run_job(&registry, &spec, &space, &space, &control).await,
             Err(RunError::UnknownResource(_))
         ));
+
+        // Verification, though, is not an error: a device that cannot run the
+        // resource has nothing to say about the result, and saying so is not
+        // the same as saying the result is wrong.
+        let output = JobOutput {
+            name: "result".to_string(),
+            blob: BlobRef::blake3(b"whatever"),
+            resource: spec.resource.clone(),
+            implementation: ImplementationId::parse("someone.else/v1").unwrap(),
+            verification: VerificationClass::ExactBytes,
+        };
+        assert_eq!(
+            verify_output(&registry, &spec, &output, &space, &space, &control)
+                .await
+                .unwrap(),
+            Verdict::Unavailable {
+                resource: ResourceId::parse("test.absent/v1").unwrap()
+            }
+        );
+    }
+
+    /// The resource-id contract: a second implementation of the same exact
+    /// resource must agree byte for byte, and a disagreement is attributable.
+    #[tokio::test]
+    async fn a_second_implementation_of_an_exact_resource_must_agree() {
+        struct WrongReverse(ResourceDescriptor);
+
+        impl MeshResource for WrongReverse {
+            fn descriptor(&self) -> &ResourceDescriptor {
+                &self.0
+            }
+
+            fn prepare<'a>(
+                &'a self,
+                namespace: &'a JobNamespaceView<'a>,
+            ) -> BoxFuture<'a, Result<Prepared, ResourceError>> {
+                Box::pin(async move { Ok(Prepared::new(namespace.read("payload").await?)) })
+            }
+
+            fn execute<'a>(
+                &'a self,
+                prepared: Prepared,
+                _control: &'a JobControl,
+            ) -> BoxFuture<'a, Result<Vec<u8>, ResourceError>> {
+                // Same resource id, same exact claim — different bytes (it
+                // forgets to reverse). Under the contract this build is wrong.
+                Box::pin(async move { prepared.take::<Vec<u8>>() })
+            }
+        }
+
+        let space = MemoryBlobSpace::in_memory();
+        let blob = space.put(b"abcdef").await.unwrap();
+        let spec = reverse_spec(blob);
+        let (_handle, control) = JobControl::new();
+
+        let mut honest = ResourceRegistry::new();
+        honest.register(Arc::new(ReverseResource::new())).unwrap();
+        let output = run_job(&honest, &spec, &space, &space, &control)
+            .await
+            .unwrap();
+
+        let mut broken = ResourceRegistry::new();
+        broken
+            .register(Arc::new(WrongReverse(ResourceDescriptor {
+                resource: ResourceId::parse("test.reverse/v1").unwrap(),
+                implementation: ImplementationId::parse("test.reverse.broken/v1").unwrap(),
+                requires: ResourceRequirements::cpu(),
+                verification: VerificationClass::ExactBytes,
+            })))
+            .unwrap();
+
+        let verdict = verify_output(&broken, &spec, &output, &space, &space, &control)
+            .await
+            .unwrap();
+        assert_eq!(
+            verdict,
+            Verdict::Diverged {
+                rerun: BlobRef::blake3(b"abcdef"),
+                by: ImplementationId::parse("test.reverse.broken/v1").unwrap()
+            },
+            "divergence names the build that disagreed, so it is attributable"
+        );
     }
 
     #[tokio::test]

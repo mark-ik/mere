@@ -8,6 +8,35 @@
 //! answered it. Both are extensible strings, not closed enums: registering a
 //! resource must not require a wire or board edit.
 //!
+//! # The contract between them
+//!
+//! **A [`ResourceId`] is an interoperable algorithm; an [`ImplementationId`] is
+//! provenance.** The consequence is load-bearing:
+//!
+//! - Two adapters registered under the same `ResourceId` and declaring
+//!   [`VerificationClass::ExactBytes`](crate::spec::VerificationClass) **must**
+//!   produce byte-identical canonical output for the same inputs. The resource
+//!   id *is* that promise. A different `ImplementationId` records who ran it,
+//!   never a licence to answer differently.
+//! - So a byte divergence between two exact implementations of one resource is
+//!   a **conformance failure in one of them**, not a mismatch to be tolerated.
+//!   [`Verdict::Diverged`](crate::registry::Verdict) therefore names the
+//!   implementation that re-ran, so the failure is attributable.
+//! - Changing an algorithm means a new `ResourceId` (`/v2`, or a new path), not
+//!   a new implementation of the old one.
+//!
+//! The alternative — implementation-scoped results, where verification demands
+//! the *matching* build and reports "implementation unavailable" rather than
+//! divergence — was considered and rejected: it makes every exact result
+//! checkable on exactly one build, which is not verification. The one honest
+//! use of "unavailable" survives as
+//! [`Verdict::Unavailable`](crate::registry::Verdict), for a device that has no
+//! adapter for the resource at all.
+//!
+//! Weaker classes carry no cross-implementation promise, which is exactly why
+//! a re-run under them returns
+//! [`Verdict::NotCheckable`](crate::registry::Verdict).
+//!
 //! The grammar is `path '/' 'v' digits`, where `path` is dot-separated segments
 //! of lowercase alphanumerics, `-`, and `_`. Validation happens before any
 //! store mutation, so an unparseable id never reaches the board.
