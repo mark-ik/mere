@@ -1,0 +1,30 @@
+[package]
+name = "mere-mesh-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The mesh host supervisor: runs claimed jobs off the decision loop, heartbeats their real progress, stops them when the device's owner takes it back, and authors the completion the wire expects. Host lanes plan, gate H0."
+
+[lib]
+name = "mesh_host"
+path = "src/lib.rs"
+
+[dependencies]
+# The protocol floor this supervises. `mere-mesh` stays OS-free and clock-free;
+# every reading of a clock or a battery enters here, behind a trait.
+mesh = { workspace = true }
+identity = { workspace = true }
+muniment = { path = "../../eidetic/muniment" }
+p2panda-core = "0.7.0"
+thiserror = "1"
+# `rt` spawns the run tasks off the decision loop — the whole point of the
+# supervisor; `time` bounds the reclaim grace window.
+tokio = { version = "1", features = ["rt", "time"] }
+
+[dev-dependencies]
+# The two-host receipt runs over real p2panda-net peers, like the mesh's own.
+transport = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+proofs.workspace = true

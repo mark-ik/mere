@@ -57,6 +57,7 @@ members = [
     "crates/moot/moothold",
     "crates/moot/mooting",
     "crates/mesh/mesh",
+    "crates/mesh/host",
     "crates/script/rhai",
     "crates/script/document-host",
     "crates/script/app-host",
@@ -251,6 +252,10 @@ mooting = { version = "0.1.0", path = "crates/moot/mooting" }
 # The personal-space compute mesh (resource-coordination M1): signed job ops
 # over the tessera-proven LogSync lane + the deterministic job board.
 mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
+# The host supervisor above the mesh (host lanes plan, gate H0): owns in-flight
+# jobs, their control handles, and the OS-facing condition/clock seams that
+# `mere-mesh` deliberately refuses to have.
+mesh-host = { package = "mere-mesh-host", path = "crates/mesh/host" }
 
 identity = { package = "personae", version = "0.1.0", path = "crates/persona/personae" }
 # The denizen authority gate (participant gate B1/B3): document-host derives

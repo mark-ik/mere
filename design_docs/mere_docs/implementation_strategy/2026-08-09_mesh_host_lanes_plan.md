@@ -3,7 +3,7 @@
 **Date**: 2026-08-09
 
 **Status**: Open. Re-cut 2026-08-09 after review, around a supervisor gate the
-first draft was missing entirely.
+first draft was missing entirely. **H0 landed the same day**; H1 is next.
 
 **Related**:
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md),
@@ -32,7 +32,7 @@ supervises running work.
 
 | Gate | Required result |
 |---|---|
-| **H0: Host supervisor** | Non-blocking in-flight jobs, real heartbeat state, cancellation/reclaim, correct leased completion |
+| ~~**H0: Host supervisor**~~ | **Done 2026-08-09** — `mere-mesh-host`. Non-blocking in-flight jobs, real heartbeat state, cancellation before revoke, correct leased completion |
 | **H1: Blob location and delivery** | Mesh author mapped to transport endpoint; existing iroh-blobs path used; disjoint-store two-host receipt |
 | **H2: Retention safety** | Refuse checkpoint/prune when an observed live lease depends on the prefix; retain inputs and outputs through completion/convergence |
 | **Burn migration** | Stable 0.22 dependency migration and existing backend baselines |
@@ -63,23 +63,51 @@ would then have to reach into an app. It owns:
 - the shared `P2pandaTransport`; and
 - the authoring loop, so `next_action` runs on a tick that never blocks.
 
-**What it must get right**, each of which is a live bug in the current example:
+**What it had to get right**, each of which was a live bug in the example:
 
 1. Execution runs off the decision loop, so a tick can heartbeat, reclaim, or
    claim while a job is running.
 2. `LeaseProgress` comes from the running job's control handle, not a constant.
-3. Owner reclaim cancels the run *and then* authors `LeaseRevokedByOwner` —
-   in that order, and the receipt should assert the order.
+3. Owner reclaim cancels the run *and then* authors `LeaseRevokedByOwner`.
 4. A leased job completes with `JobCompletedUnderLease` naming its lease.
    `JobDoneV2` on a leased job is refused by the fold, so getting this wrong is
    silent no-progress rather than corruption — which is worse to debug.
 5. `CheckpointClass::NonInterruptible` honours `reclaim_grace_ms` before a hard
    cancel.
 
-**Receipt.** Two supervised hosts over real transport: one takes a lease and
-starts a long job, its owner reclaims mid-run, the run actually stops, and the
-other host finishes under a new epoch. That is the M3 receipt again, but driven
-by the supervisor rather than by a test authoring events by hand.
+### Landed 2026-08-09 — `crates/mesh/host` (`mere-mesh-host`)
+
+`MeshHost::tick` reaps finished runs, abandons any lease it no longer holds,
+escalates an overdue reclaim, then takes at most one new action. It never
+awaits execution. The OS enters through exactly two seams, `Clock` and
+`ConditionSource`, so a receipt can drive it with a clock it controls.
+
+Every tick returns the [`Step`]s it took, rather than logging them, so a caller
+can see what the supervisor actually did instead of inferring it. `AwaitingStop`
+and `Reclaimed { stopped_at }` are separate steps precisely because the ordering
+in (3) is the property worth proving: no revoke exists on the wire while the run
+is still stopping, and the revoke that follows reports how far the work had got
+when it let go.
+
+**A sixth requirement, found while building it.** A device can grant itself a
+lease on a board that has not caught up, win *locally*, and start work — then
+lose to a peer's earlier grant when the facts arrive. The protocol handles that
+correctly (the fold picks one winner), but the loser must notice: a completion
+under a lease that did not survive is dropped by every peer, so the run is
+wasted and reporting it would be a lie. `still_held` is the check, run every
+tick against every in-flight lease; a lost lease cancels its run and authors
+nothing, because a lease this device does not hold is not its to release. The
+same check covers expiry and a revoke authored elsewhere.
+
+**Receipts.** `tests/supervised_reclaim.rs` runs two supervised hosts over real
+p2panda-net: one claims, grants itself a lease, runs, heartbeats real progress,
+has its device reclaimed mid-run, stops, and the other finishes under epoch 1 —
+with nobody authoring a lease event by hand. `still_held` is unit-tested
+directly against a folded board where two grants race.
+
+**Not done here.** Blob delivery (H1): a worker still needs the inputs in its
+own space, and the supervisor reports a miss as
+`ReleaseReason::InputUnavailable` rather than as an unreliable worker.
 
 ---
 
@@ -249,3 +277,10 @@ classes, and remote tensor transport beyond the adapter gate above.
   cannot currently express, made live-lease retention refusal fail-closed, and
   moved tolerant comparators, portable checkpoints, and reliability accounting
   behind their first real consumers.
+- **2026-08-09 (H0)**: `mere-mesh-host` landed. The gate's five requirements
+  were all met, and building it surfaced a sixth that no amount of planning had
+  turned up: a supervisor must keep checking that it *still holds* the lease its
+  run is bound to, because a grant made on a stale board can win locally and
+  lose globally. That check (`still_held`) is now the first thing every tick
+  does after reaping. Two-host receipt over real transport; 7 tests green;
+  clippy clean; largest file 531 lines.
