@@ -1,0 +1,21 @@
+[package]
+name = "gaz"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "The contact layer: persona-scoped, key-rooted contact records. Your petname for them, rooted on stable keys, with handles and endpoints each carrying their own trust state, plus kith/kin tiers and recency. A resolver finds the wide world; gaz keeps who you actually know."
+repository = "https://github.com/merely-made/gaz"
+readme = "README.md"
+keywords = ["contacts", "petname", "identity", "persona", "kith"]
+categories = ["data-structures"]
+exclude = ["design_docs/"]
+
+# Own workspace root. Members arrive if the organ splits; until then the
+# reservation package is the only member.
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
