@@ -73,6 +73,7 @@ members = [
     "crates/eidetic/codicil",
     "crates/eidetic/chartulary",
     "crates/eidetic/scholia",
+    "crates/eidetic/tulpa",
     "crates/servitor",
     "crates/intel/vates",
     "crates/intel/sibylla",
@@ -155,6 +156,8 @@ notochord = { path = "crates/system/notochord" }
 codicil = { path = "crates/eidetic/codicil" }
 chartulary = { path = "crates/eidetic/chartulary" }
 scholia = { path = "crates/eidetic/scholia" }
+# The legend/memorial view over a codicil log; reservation, no implementation.
+tulpa = { version = "0.0.2", path = "crates/eidetic/tulpa" }
 numen = { path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
