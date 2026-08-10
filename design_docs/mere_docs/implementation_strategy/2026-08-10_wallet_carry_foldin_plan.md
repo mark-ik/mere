@@ -1,7 +1,7 @@
 # Wallet Carry Fold-In Plan
 
 **Date:** 2026-08-10
-**Status:** W0 + W1 + W2 done, W3 RULED 2026-08-10; W3's split and W4 remain
+**Status:** COMPLETE 2026-08-10 (W0-W4). One question spun out; see W3.
 **Anchors:** [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md),
 the 2026-07-08 personae founding ruling ("the carry layer folds into the same
@@ -132,15 +132,32 @@ verbatim move wrong:
       design question, not a mechanical move. It needs its own brief before
       anything relocates. Castellan reaches grant verification through that
       reconciliation, not through a copy.
-- [ ] `wallet_grant.rs` (2764 lines) splits under the ceiling in place
+- [x] `wallet_grant.rs` (2803 lines) split in place into fourteen modules,
+      largest 432: `errors` + `types` (pure shapes), `envelope` (the CBOR grant
+      and its on-disk read/write), `pairing`, `epochs`, `records`, `wrapping`,
+      `validate` (one concern each), and `issue` / `enroll` / `revoke` /
+      `refresh` (the four flows that write wallet state).
 
 ### W4: consumers re-base + closure
 
-- [ ] knot imports `identity::carry` names directly; re-export facade shrinks
-- [ ] The wallet fold-in line in the personae founding doc + trust-plane
-      memory updated
-- [ ] personae version bump + publish only when a consumer outside mere
-      wants carry (republish timing rule)
+- [x] **knot re-base: ruled unnecessary, facade stays.** knot turned out to
+      consume the *adapter*, not the model: `list_personas`,
+      `load_current_private_epoch`, `ensure_local_device_identity`, and
+      `ensure_wallet_state`, plus three carry types in one test module. Pointing
+      those three at `identity::carry` would split one import into two and add a
+      personae dependency to knot for nothing. The facade is doing exactly its
+      job, which is letting a store consumer not care where the model lives.
+- [x] The personae founding doc's roadmap item 1 now records what actually
+      moved and what deliberately did not; trust-plane memory updated.
+- [x] personae publish deferred per the republish-timing rule: no consumer
+      outside mere wants carry yet. Castellan will be the first, and its own
+      plan carries the bump.
+
+## Noted in passing, not fixed
+
+`session-runtime` has three other files over the 600-line ceiling that have
+nothing to do with the wallet: `athanor.rs` (840), `graph_engram.rs` (817),
+`manifest_store.rs` (655). Left alone deliberately; they are their own task.
 
 ## Progress
 

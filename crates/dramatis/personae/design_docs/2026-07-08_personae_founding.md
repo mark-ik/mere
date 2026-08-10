@@ -37,10 +37,26 @@ and the `StartupUnlockMode` OS-store unlock (Windows DPAPI today); the reusable
 
 ## Roadmap
 
-1. **Carry layer.** Lift mere's `session-runtime::wallet_store` +
-   `wallet_grant` (identity/persona wallet manifests, device roster, capability
-   grants, private-epoch history, the `WalletEpochSealer`) into personae. This
-   is the piece that makes a persona portable across devices.
+1. **Carry layer.** ~~Lift mere's `session-runtime::wallet_store` +
+   `wallet_grant` ... into personae.~~ **Done 2026-08-10, and narrower than
+   this line promised** (mere's `2026-08-10_wallet_carry_foldin_plan.md`).
+   `personae::carry` took the *model*: the identity and persona wallet
+   manifests, the device roster, private-epoch records, and derivation. Three
+   pieces deliberately stayed in mere, each for a reason found by doing it:
+
+   - **The store adapter.** Path layout, device-settings policy, sealed-record
+     wiring, and bootstrap are sequenced filesystem effects, not portable model.
+   - **The `WalletEpochSealer`.** It implements eidetic's `PayloadSealer`, so it
+     *is* the seal seam of roadmap item 2; personae owns the epoch key, not the
+     joint.
+   - **The capability grants.** personae already has `delegation` (certificates,
+     scopes, attenuation, revocation). Device grants are the same concept
+     serialized a second way, so moving them in would install two delegation
+     models side by side. Reconciling them is its own design question.
+
+   Content refs crossed the boundary as `carry::CarryRef`, byte-identical to the
+   `eidetic::Hash` string form the manifests already stored, so no disk format
+   changed and personae stays free of an eidetic dependency.
 2. **The two seams** (from the trust-plane plan): the seal seam over
    [muniment](https://github.com/mark-ik/muniment) (personae owns the epoch key
    the sealer uses) and the sync gate over codicil (moot/tessera/kith admission).
