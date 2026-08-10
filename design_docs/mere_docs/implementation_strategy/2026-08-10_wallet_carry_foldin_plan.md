@@ -1,7 +1,7 @@
 # Wallet Carry Fold-In Plan
 
 **Date:** 2026-08-10
-**Status:** W0 + W1 done 2026-08-10; W2 next
+**Status:** W0 + W1 + W2 done 2026-08-10; W3 next
 **Anchors:** [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md),
 the 2026-07-08 personae founding ruling ("the carry layer folds into the same
@@ -86,11 +86,17 @@ verbatim move wrong:
 
 ### W2: the store splits under the ceiling
 
-- [ ] `wallet_store.rs` splits: paths/policy/IO adapter vs re-export facade;
-      every resulting file under 600 lines
-- [ ] Model-shaped store logic (`ensure_wallet_state` invariants, epoch
-      staging rules) moves into carry as pure functions over injected
-      state where it cleanly can
+- [x] `wallet_store.rs` (1544) splits into a module tree, largest file 322:
+      `paths` (composition + the persona membership test), `secrets` (the
+      unlock ladder, sealed-record stores, identity seed), `manifests` (the
+      three plain-JSON manifests), `devices` (grants, local delegated
+      identity, wrapping keys), `epochs` (the private-epoch bridge),
+      `bootstrap` (the first-launch ladder), `io` (atomic writes),
+      `test_support` (shared fixtures). Tests moved with their subject.
+- [x] Model-shaped logic reviewed and deliberately NOT moved: `ensure_wallet_state`
+      and the epoch rules are *sequenced filesystem effects*, not pure functions
+      over injected state. Faking a filesystem to relocate them would buy
+      nothing the carry model wants. The seam stayed where W0 drew it.
 
 ### W3: the grant envelope ruling
 
@@ -110,6 +116,12 @@ verbatim move wrong:
 
 ## Progress
 
+- 2026-08-10 (W2): the split landed with all 245 session-runtime tests green
+  and zero warnings; knot still compiles untouched. Two mechanical lessons:
+  PowerShell `.Replace()` with LF-joined literals silently no-ops against
+  CRLF files (use the Edit tool for multi-line patches), and giving each test
+  module `use super::super::*;` resolves the re-export surface in one line
+  instead of hand-threading dozens of imports.
 - 2026-08-10: W0 map verified against code (couplings, consumers, sizes,
   Hash repr). W1 executed and green the same session. Two surprises, both
   benign: `RecoveryPolicy` was missed from the first re-export list (caught by
