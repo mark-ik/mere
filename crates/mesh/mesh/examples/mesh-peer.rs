@@ -9,11 +9,19 @@
 //! laptop's ticket into the workstation's stdin if the one-way bootstrap
 //! doesn't connect (both directions tagged is the proven test shape).
 //!
+//! **Scope: transport rehearsal, not a host.** This bin runs one job at a time,
+//! inline on its own decision loop. It cannot heartbeat while working and
+//! cannot stop a run on demand, so it declares itself
+//! [`DevicePolicy::unsupervised`] and the worker will not hand it leased work.
+//! Supervising in-flight jobs — the non-blocking run map, live progress,
+//! cancellation on owner reclaim, and leased completion — is gate H0 of the
+//! mesh host lanes plan, and belongs in a reusable host service above
+//! `mere-mesh`, not in an example.
+//!
 //! `post` writes an M1 inline-payload job, because operations replicate here
 //! and blobs do not: a V2 spec names bytes the other device would have to
-//! already hold. The worker loop runs *both* generations through the M2
-//! resource registry, so a V2 job posted by a host that does move blobs is
-//! executed against a restricted namespace without changing this bin.
+//! already hold. The worker loop runs both unleased generations through the M2
+//! resource registry.
 //!
 //! ```text
 //! mesh-peer work [--peer <ticket>]
@@ -289,14 +297,16 @@ async fn run<B: Backend + Clone + Send + Sync + 'static>(
             // job whose input this machine does not hold simply fails to run,
             // because a signed spec names bytes, it does not deliver them.
             let registry = ResourceRegistry::builtin();
-            // The rehearsal bin lends unconditionally and reads no OS state, so
-            // its conditions are a constant. A real host swaps in the owner's
-            // configured policy and a fresh `DeviceConditions` each tick, and
-            // the loop below is unchanged.
-            let policy = DevicePolicy::permissive();
+            // This bin runs one job at a time, inline, on its decision loop. It
+            // therefore declares itself unsupervised, and `next_action` will not
+            // hand it leased work: taking a lease means promising to heartbeat
+            // and to stop on demand, and a loop that blocks on execution can do
+            // neither. Leased jobs are the host supervisor's business (mesh host
+            // lanes plan, gate H0); this bin stays the transport rehearsal.
+            let policy = DevicePolicy::unsupervised();
             let blobs = MemoryBlobSpace::in_memory();
             println!(
-                "working — watching the board for jobs (offering {})…",
+                "working — watching the board for unleased jobs (offering {})…",
                 registry
                     .resources()
                     .map(|id| id.to_string())
@@ -309,54 +319,16 @@ async fn run<B: Backend + Clone + Send + Sync + 'static>(
                 let board = synced.board().await.map_err(|e| format!("board: {e}"))?;
                 let offer = HostOffer::new(&registry, HostFacts::cpu(1024), &policy).at(now_ms());
                 match next_action(&board, &me, &offer) {
-                    WorkerAction::Grant {
-                        job,
-                        epoch,
-                        granted_at_ms,
-                        expires_at_ms,
-                    } => {
-                        println!("taking a lease on job {} (epoch {epoch})", hex8(&job.0));
-                        synced
-                            .author(
-                                &author,
-                                &MeshEvent::LeaseGranted {
-                                    job: job.0,
-                                    epoch,
-                                    granted_at_ms,
-                                    expires_at_ms,
-                                },
-                            )
-                            .await
-                            .map_err(|e| format!("grant: {e}"))?;
-                    }
-                    WorkerAction::Heartbeat { job, lease } => {
-                        synced
-                            .author(
-                                &author,
-                                &MeshEvent::LeaseHeartbeat {
-                                    job: job.0,
-                                    lease: lease.0,
-                                    progress: Default::default(),
-                                    at_ms: now_ms(),
-                                },
-                            )
-                            .await
-                            .map_err(|e| format!("heartbeat: {e}"))?;
-                    }
-                    WorkerAction::Reclaim { job, lease, reason } => {
-                        println!("owner reclaim on job {} ({reason:?})", hex8(&job.0));
-                        synced
-                            .author(
-                                &author,
-                                &MeshEvent::LeaseRevokedByOwner {
-                                    job: job.0,
-                                    lease: lease.0,
-                                    reason,
-                                    at_ms: now_ms(),
-                                },
-                            )
-                            .await
-                            .map_err(|e| format!("reclaim: {e}"))?;
+                    // Unreachable while `supervises_leases` is false, and left
+                    // as a hard failure rather than a silent skip so that
+                    // flipping the flag without building a supervisor is loud.
+                    action @ (WorkerAction::Grant { .. }
+                    | WorkerAction::Heartbeat { .. }
+                    | WorkerAction::Reclaim { .. }) => {
+                        return Err(format!(
+                            "mesh-peer does not supervise leases; {action:?} needs a host \
+                             supervisor (mesh host lanes plan, gate H0)"
+                        ));
                     }
                     WorkerAction::Claim(id) => {
                         println!("claiming job {}", hex8(&id.0));
@@ -373,10 +345,16 @@ async fn run<B: Backend + Clone + Send + Sync + 'static>(
                     }
                     WorkerAction::Execute(id) => {
                         let job = board.job(id).expect("execute targets a known job");
-                        // Cancellation is host-owned. This bin never cancels;
-                        // the handle exists so the seam is the real one.
+                        // Blocking, single-job, uncancellable — which is exactly
+                        // why this bin refuses leases. The control handle is
+                        // constructed so the seam is the real one, and dropped
+                        // unused because nothing here can act on it.
                         let (_cancel, control) = JobControl::new();
                         let event = match &job.spec {
+                            // Unleased by construction (see the policy above), so
+                            // the plain V2 completion is the correct one. A leased
+                            // job would need `JobCompletedUnderLease` naming its
+                            // lease, which is the supervisor's job to author.
                             Some(spec) => {
                                 let output = run_job(&registry, spec, &blobs, &blobs, &control)
                                     .await

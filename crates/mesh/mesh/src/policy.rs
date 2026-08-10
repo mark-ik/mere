@@ -75,6 +75,16 @@ pub struct DevicePolicy {
     /// after the owner has asked for the device back. The owner still wins; this
     /// only says how abrupt the handoff is.
     pub reclaim_grace_ms: u64,
+    /// Whether this host actually supervises running work: keeps in-flight jobs
+    /// off the decision loop, heartbeats live progress, and can stop a run when
+    /// the owner reclaims the device.
+    ///
+    /// A host that cannot do those things **must not take leased work**. A lease
+    /// is a promise to stay in contact and to let go on request; a host that
+    /// blocks on execution can keep neither, and the ring would read its silence
+    /// as a lapse while it was busy succeeding. Set `false` until a supervisor
+    /// exists (see the mesh host lanes plan, gate H0).
+    pub supervises_leases: bool,
 }
 
 impl DevicePolicy {
@@ -92,6 +102,16 @@ impl DevicePolicy {
             allowed_resources: BTreeSet::new(),
             accepted_checkpoints: BTreeSet::new(),
             reclaim_grace_ms: 0,
+            supervises_leases: true,
+        }
+    }
+
+    /// A host that has no supervisor yet: it will run unleased work and refuse
+    /// every leased job, rather than take on a promise it cannot keep.
+    pub fn unsupervised() -> Self {
+        Self {
+            supervises_leases: false,
+            ..Self::permissive()
         }
     }
 
@@ -114,6 +134,7 @@ impl DevicePolicy {
                 CheckpointClass::Resumable,
             ]),
             reclaim_grace_ms: 5_000,
+            supervises_leases: true,
         }
     }
 
@@ -162,10 +183,12 @@ impl DevicePolicy {
     }
 
     /// Whether this device will take on `spec` at all, independent of current
-    /// conditions: the resource is allowed and the interruption promise is one
-    /// the owner accepted.
+    /// conditions: it can supervise the job's contract, the resource is allowed,
+    /// and the interruption promise is one the owner accepted.
     pub fn accepts(&self, spec: &JobSpec) -> bool {
-        (self.allowed_resources.is_empty() || self.allowed_resources.contains(&spec.resource))
+        (self.supervises_leases || spec.lease.is_none())
+            && (self.allowed_resources.is_empty()
+                || self.allowed_resources.contains(&spec.resource))
             && (self.accepted_checkpoints.is_empty()
                 || self.accepted_checkpoints.contains(&spec.checkpoint))
     }
@@ -225,6 +248,26 @@ mod tests {
         );
         spec.checkpoint = checkpoint;
         spec
+    }
+
+    #[test]
+    fn a_host_without_a_supervisor_refuses_leased_work_only() {
+        use crate::lease::LeaseTerms;
+
+        let unsupervised = DevicePolicy::unsupervised();
+        let unleased = spec("mesh.echo/v1", CheckpointClass::Restart);
+        assert!(
+            unsupervised.accepts(&unleased),
+            "unleased work needs no supervisor"
+        );
+
+        let leased = unleased.clone().leased(LeaseTerms::new(60_000, 10_000));
+        assert!(
+            !unsupervised.accepts(&leased),
+            "a lease is a promise to stay in contact and to let go; \
+             a host that cannot do either must not take one"
+        );
+        assert!(DevicePolicy::permissive().accepts(&leased));
     }
 
     #[test]

@@ -2,9 +2,21 @@
 
 **Date**: 2026-06-30
 
-**Status**: **Complete 2026-08-09.** Re-scoped and then executed the same day,
-directly after M2. All seven done conditions carry a receipt. The lanes M2 and
-M3 both named but deliberately did not build are carried into the
+**Status**: **Complete 2026-08-09 as the lease protocol floor.** Re-scoped and
+then executed the same day, directly after M2. All seven done conditions carry
+a receipt.
+
+Read "complete" narrowly. What landed is the *protocol*: the lease algebra
+(envelope, epochs, claim eligibility, clock-free fold, time-indexed
+projection), the policy vocabulary, and the control seam — all of it library,
+all of it tested. What did **not** land is a host that uses it. No shipped
+binary supervises in-flight work: `mesh-peer` blocks on execution, so it
+declares `DevicePolicy::unsupervised` and the worker refuses to hand it leased
+jobs at all. A device that cannot heartbeat while working and cannot stop on
+demand must not take a lease, and M3 enforces that rather than pretending
+otherwise.
+
+The supervisor, and the lanes M2 and M3 both leaned on, are gates H0-H2 of the
 [mesh host lanes plan](../../mere_docs/implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
 
 **Related**:

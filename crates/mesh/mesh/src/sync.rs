@@ -19,11 +19,11 @@
 //! module keeps only the mesh-specific parts: the domain admission policy and
 //! addressed-mesh guard, the authoring path, and the [`JobBoard`] fold.
 //!
-//! It is **endpoint-decoupled**: `join` takes the raw p2panda-net [`Endpoint`]
-//! + [`Gossip`] (the host pulls them from its `P2pandaTransport` via
-//! `sync_parts`), so the lib never builds a transport. The mesh id is the
-//! LogSync topic (and the operation's signed addressing extension), so a
-//! session syncs exactly that mesh's log.
+//! It is **endpoint-decoupled**: `join` takes the raw p2panda-net
+//! [`Endpoint`] and [`Gossip`] (the host pulls them from its
+//! `P2pandaTransport` via `sync_parts`), so the lib never builds a transport.
+//! The mesh id is the LogSync topic (and the operation's signed addressing
+//! extension), so a session syncs exactly that mesh's log.
 
 use identity::Ed25519Keypair;
 use muniment::Backend;
@@ -52,7 +52,7 @@ pub enum MeshSyncError {
 /// A device joined to a mesh's LogSync session.
 ///
 /// Holds the store, the live publish lane, the session (kept alive), and the
-/// shared [`SyncedSpace`] draining reconciled operations into the store.
+/// shared [`JoinedSpace`] draining reconciled operations into the store.
 /// Dropping it stops the drain and ends the session.
 pub struct SyncedMesh<B: Backend + Clone + Send + 'static> {
     store: MeshStore<B>,
@@ -622,7 +622,9 @@ mod tests {
             )
             .await
             .unwrap(),
-            Verdict::Reproduced
+            Verdict::Reproduced {
+                by: crate::ident::ImplementationId::parse("mesh.lexical.fnv1a/v1").unwrap()
+            }
         );
     }
 
