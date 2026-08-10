@@ -292,7 +292,9 @@ impl LeaseRecord {
         }
     }
 
-    pub(crate) fn push(&mut self, epoch: LeaseEpoch) {
+    /// Append an already-validated epoch. `pub` so a test can build a record
+    /// the fold would have produced.
+    pub fn push_epoch(&mut self, epoch: LeaseEpoch) {
         self.epochs.push(epoch);
     }
 
@@ -377,7 +379,7 @@ impl GatheredLeases {
             if winner_for(boundary, grant.granted_at_ms) != Some(grant.author) {
                 continue;
             }
-            record.push(LeaseEpoch {
+            record.push_epoch(LeaseEpoch {
                 epoch: grant.epoch,
                 lease: LeaseId(grant.operation),
                 holder: grant.author,

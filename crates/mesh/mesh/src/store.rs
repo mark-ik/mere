@@ -201,6 +201,7 @@ fn checkpoint_reject(error: CheckpointError) -> Reject {
         CheckpointError::FalseSnapshotCommitment => "checkpoint-false-commitment",
         CheckpointError::DuplicateFrontier => "checkpoint-duplicate-frontier",
         CheckpointError::FrontierRewind => "checkpoint-frontier-rewind",
+        CheckpointError::LiveLease(_) => "checkpoint-live-lease",
     };
     Reject::new(code, error.to_string())
 }
@@ -370,6 +371,21 @@ impl<B: Backend + Clone> MeshStore<B> {
         ))
     }
 
+    /// Blobs this device may stop holding — jobs the mesh has agreed are
+    /// finished, by way of an accepted checkpoint.
+    ///
+    /// Empty until a checkpoint exists. A device that has never agreed anything
+    /// with its ring keeps everything, which is the fail-closed answer.
+    pub async fn collectable_blobs(
+        &self,
+        mesh_id: [u8; 32],
+    ) -> Result<Vec<proofs::BlobRef>, MeshStoreError> {
+        let current = self.latest_checkpoint(mesh_id).await?;
+        Ok(crate::retention::collectable_blobs(
+            current.as_ref().map(|stored| &stored.checkpoint),
+        ))
+    }
+
     pub async fn latest_checkpoint(
         &self,
         mesh_id: [u8; 32],
@@ -426,6 +442,13 @@ impl<B: Backend + Clone> MeshStore<B> {
         let mut snapshot = JobBoardSnapshot::from_board(&board);
         if policy.erasure.terminal_job_payload == PayloadRule::EraseTerminalAtCheckpoint {
             snapshot.erase_terminal_payloads();
+        }
+        // Refuse here as well as on the accept path, so a host does not author
+        // a checkpoint every one of its peers is going to reject.
+        if let Some(job) = snapshot.live_leases(at_ms, &policy.lease).first() {
+            return Err(MeshStoreError::Retention(
+                CheckpointError::LiveLease(*job).to_string(),
+            ));
         }
         let mut frontier: BTreeMap<_, _> = current
             .iter()
@@ -490,6 +513,7 @@ mod tests {
                 privacy_ceiling: KeepBound::UntilCheckpoint,
                 terminal_job_payload: PayloadRule::EraseTerminalAtCheckpoint,
             },
+            lease: crate::projection::LeasePolicy { max_skew_ms: 0 },
         }
     }
 
@@ -693,6 +717,242 @@ mod tests {
         );
         assert!(store.accept(MESH, &accepted).await.unwrap());
         assert_eq!(store.board(MESH).await.unwrap().len(), 1);
+    }
+
+    /// H2's fail-closed rule. A checkpoint prunes the operations beneath its
+    /// frontier — including the *claims* a later lease epoch needs to prove its
+    /// grant came from the deterministic winner. Prune those and the lease chain
+    /// can never advance again, so the checkpoint is refused while a lease is
+    /// live rather than repaired afterwards.
+    #[tokio::test]
+    async fn a_live_lease_blocks_a_checkpoint_until_it_ends() {
+        use crate::ident::ResourceId;
+        use crate::lease::LeaseTerms;
+        use crate::spec::{DeterminismClass, JobSpec};
+        use proofs::BlobRef;
+
+        let authority = keypair(1);
+        let store = MeshStore::in_memory_with_retention(retention(&authority));
+        let spec = JobSpec::simple(
+            ResourceId::parse("mesh.delayed/v1").unwrap(),
+            "payload",
+            BlobRef::blake3(b"seed"),
+            "result",
+            64,
+            DeterminismClass::Exact,
+        )
+        .leased(LeaseTerms::new(60_000, 10_000));
+
+        let post = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::JobPostedV2 {
+                spec: Box::new(spec),
+                nonce: 0,
+                at_ms: 0,
+            },
+            0,
+            None,
+        );
+        store.insert(&post).await.unwrap();
+        let job = *post.hash.as_bytes();
+        let claim = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::JobClaimed { job, at_ms: 1_000 },
+            1,
+            Some(job),
+        );
+        store.insert(&claim).await.unwrap();
+        let grant = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::LeaseGranted {
+                job,
+                epoch: 0,
+                granted_at_ms: 2_000,
+                expires_at_ms: 62_000,
+            },
+            2,
+            Some(*claim.hash.as_bytes()),
+        );
+        store.insert(&grant).await.unwrap();
+
+        let refused = store.build_checkpoint(MESH, 3_000).await;
+        assert!(
+            refused
+                .as_ref()
+                .err()
+                .is_some_and(|err| err.to_string().contains("live lease")),
+            "a checkpoint while the lease runs is refused: {refused:?}"
+        );
+
+        // The same facts, observed after the signed window closes: nothing is
+        // live, nothing would be stranded, and the checkpoint is allowed.
+        assert!(
+            store.build_checkpoint(MESH, 62_000).await.is_ok(),
+            "an expired lease strands nothing"
+        );
+    }
+
+    /// The same rule on the accept path, so one device cannot checkpoint a
+    /// stranding frontier onto everybody else.
+    #[tokio::test]
+    async fn a_peers_checkpoint_that_would_strand_a_lease_is_refused() {
+        use crate::board::{Claimant, Job, JobId};
+        use crate::ident::ResourceId;
+        use crate::lease::{LeaseEpoch, LeaseId, LeaseProgress, LeaseRecord, LeaseTerms};
+        use crate::spec::{DeterminismClass, JobSpec};
+        use proofs::BlobRef;
+
+        let authority = keypair(1);
+        let policy = retention(&authority);
+        let spec = JobSpec::simple(
+            ResourceId::parse("mesh.delayed/v1").unwrap(),
+            "payload",
+            BlobRef::blake3(b"seed"),
+            "result",
+            64,
+            DeterminismClass::Exact,
+        )
+        .leased(LeaseTerms::new(60_000, 10_000));
+
+        let mut lease = LeaseRecord::default();
+        lease.push_epoch(LeaseEpoch {
+            epoch: 0,
+            lease: LeaseId([5; 32]),
+            holder: [6; 32],
+            granted_at_ms: 2_000,
+            expires_at_ms: 62_000,
+            last_seen_ms: 2_000,
+            progress: LeaseProgress::default(),
+            end: None,
+        });
+        let snapshot = JobBoardSnapshot {
+            jobs: vec![Job {
+                id: JobId([1; 32]),
+                kind: None,
+                payload: None,
+                spec: Some(Box::new(spec)),
+                posted_by: [2; 32],
+                state: JobState::Claimed { winner: [6; 32] },
+                lease,
+                next_claimants: vec![Claimant {
+                    author: [6; 32],
+                    at_ms: 1_000,
+                }],
+            }],
+        };
+        let candidate = RetentionCheckpoint::new(
+            MESH,
+            policy.revision,
+            policy.authority_revision(),
+            vec![],
+            snapshot,
+            3_000,
+        );
+        assert!(matches!(
+            policy.validate_checkpoint(MESH, authority.public_key().to_bytes(), None, &candidate),
+            Err(CheckpointError::LiveLease(_))
+        ));
+    }
+
+    /// Blobs stay until the *mesh* has agreed the job is finished, not merely
+    /// until this device thinks so.
+    #[tokio::test]
+    async fn blobs_are_kept_until_an_accepted_checkpoint_says_the_job_is_done() {
+        use crate::ident::{ImplementationId, ResourceId};
+        use crate::spec::{DeterminismClass, JobOutput, JobSpec, VerificationClass};
+        use proofs::BlobRef;
+
+        let authority = keypair(1);
+        let store = MeshStore::in_memory_with_retention(retention(&authority));
+        let input = BlobRef::blake3(b"the input");
+        let output_blob = BlobRef::blake3(b"the output");
+        let resource = ResourceId::parse("mesh.echo/v1").unwrap();
+        let spec = JobSpec::simple(
+            resource.clone(),
+            "payload",
+            input.clone(),
+            "result",
+            64,
+            DeterminismClass::Exact,
+        );
+
+        let post = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::JobPostedV2 {
+                spec: Box::new(spec),
+                nonce: 0,
+                at_ms: 0,
+            },
+            0,
+            None,
+        );
+        store.insert(&post).await.unwrap();
+        let job = *post.hash.as_bytes();
+        let claim = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::JobClaimed { job, at_ms: 1_000 },
+            1,
+            Some(job),
+        );
+        store.insert(&claim).await.unwrap();
+        let done = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::JobDoneV2 {
+                job,
+                output: Box::new(JobOutput {
+                    name: "result".to_string(),
+                    blob: output_blob.clone(),
+                    resource,
+                    implementation: ImplementationId::parse("mesh.echo.identity/v1").unwrap(),
+                    verification: VerificationClass::ExactBytes,
+                }),
+                at_ms: 2_000,
+            },
+            2,
+            Some(*claim.hash.as_bytes()),
+        );
+        store.insert(&done).await.unwrap();
+
+        // The local board already says Committed. That is this device's own
+        // opinion, and it is not enough to start dropping bytes.
+        assert!(
+            store
+                .board(MESH)
+                .await
+                .unwrap()
+                .jobs()
+                .all(|job| job.state.is_terminal()),
+            "the job is finished locally"
+        );
+        assert!(
+            store.collectable_blobs(MESH).await.unwrap().is_empty(),
+            "nothing is collectable before the mesh has agreed anything"
+        );
+
+        let checkpoint = store.build_checkpoint(MESH, 3_000).await.unwrap();
+        let checkpoint_op = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::RetentionCheckpoint {
+                checkpoint: Box::new(checkpoint),
+            },
+            0,
+            None,
+        );
+        assert!(store.accept(MESH, &checkpoint_op).await.unwrap());
+
+        let collectable = store.collectable_blobs(MESH).await.unwrap();
+        assert!(
+            collectable.contains(&input) && collectable.contains(&output_blob),
+            "both the granted input and the committed output are now droppable: \
+             {collectable:?}"
+        );
     }
 
     #[tokio::test]

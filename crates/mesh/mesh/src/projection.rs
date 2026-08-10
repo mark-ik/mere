@@ -228,7 +228,7 @@ mod tests {
 
     fn granted(end: Option<LeaseEnd>, last_seen_ms: u64) -> LeaseRecord {
         let mut record = LeaseRecord::default();
-        record.push(LeaseEpoch {
+        record.push_epoch(LeaseEpoch {
             epoch: 0,
             lease: LEASE,
             holder: HOLDER,

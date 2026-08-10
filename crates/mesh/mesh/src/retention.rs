@@ -11,7 +11,8 @@ use proofs::{BlobRef, Commitment, CommitmentDomain, Digest};
 use serde::{Deserialize, Serialize};
 use stickleback::CheckpointAuthority;
 
-use crate::board::JobBoard;
+use crate::board::{JobBoard, JobId, JobState};
+use crate::projection::{LeasePhase, LeasePolicy};
 use crate::wire::MeshLogId;
 
 /// A configured duration or logical retention boundary.
@@ -70,6 +71,25 @@ impl JobBoardSnapshot {
 
     pub fn canonical_bytes(&self) -> Vec<u8> {
         encode_cbor(self).expect("a JobBoardSnapshot always CBOR-encodes")
+    }
+
+    /// Jobs whose lease is live at `at_ms`.
+    ///
+    /// A checkpoint prunes the operations beneath its frontier, and a later
+    /// lease epoch has to prove its grant came from the deterministic claim
+    /// winner — which needs the *claim* operations. Prune them and the chain
+    /// stalls: no grant can ever validate again. Checkpointing over a live
+    /// lease is therefore refused, not repaired.
+    ///
+    /// Self-contained on purpose: a peer validating somebody else's checkpoint
+    /// has the snapshot and the checkpoint's own `at_ms`, and needs no board of
+    /// its own to see the problem.
+    pub fn live_leases(&self, at_ms: u64, policy: &LeasePolicy) -> Vec<JobId> {
+        self.jobs
+            .iter()
+            .filter(|job| matches!(job.lease_at(at_ms, policy), LeasePhase::Held { .. }))
+            .map(|job| job.id)
+            .collect()
     }
 
     /// Remove terminal M1 inputs while retaining job identity and compact
@@ -133,6 +153,10 @@ pub struct MeshRetentionPolicy {
     pub checkpoint_authority: [u8; 32],
     pub availability: AvailabilityPolicy,
     pub erasure: ErasurePolicy,
+    /// How this mesh reads lease time when deciding whether a checkpoint would
+    /// strand one. Retention governance, because it decides how long a lease's
+    /// claim history has to be kept.
+    pub lease: LeasePolicy,
 }
 
 impl MeshRetentionPolicy {
@@ -154,6 +178,18 @@ impl MeshRetentionPolicy {
         }
         if candidate.policy_revision != self.revision {
             return Err(CheckpointError::StalePolicy);
+        }
+        // Fail closed: a checkpoint that would strand a live lease's claim
+        // history is refused outright. A busy mesh waits for the lease to end
+        // (they are bounded by their own signed window) rather than pruning
+        // around it. Advancing the frontier selectively is an optimisation for
+        // later, and only with a receipt.
+        if let Some(job) = candidate
+            .snapshot
+            .live_leases(candidate.at_ms, &self.lease)
+            .first()
+        {
+            return Err(CheckpointError::LiveLease(*job));
         }
         let snapshot_bytes = candidate.snapshot.canonical_bytes();
         if !candidate.snapshot_ref.verifies(&snapshot_bytes) {
@@ -227,6 +263,43 @@ pub enum CheckpointError {
     DuplicateFrontier,
     #[error("checkpoint frontier would rewind accepted history")]
     FrontierRewind,
+    #[error("checkpoint would strand a live lease's claim history")]
+    LiveLease(JobId),
+}
+
+/// Every blob a job is holding on this device: its named inputs, and its
+/// committed output.
+pub fn job_blobs(job: &crate::board::Job) -> Vec<BlobRef> {
+    let inputs = job
+        .spec
+        .iter()
+        .flat_map(|spec| spec.inputs.iter().map(|input| input.blob.clone()));
+    let output = match &job.state {
+        JobState::Committed { output, .. } => Some(output.blob.clone()),
+        _ => None,
+    };
+    inputs.chain(output).collect()
+}
+
+/// Blobs this device may stop holding, given the mesh's accepted checkpoint.
+///
+/// The rule is retention **through completion and convergence**, and the second
+/// half is the load-bearing one. A local board saying `Committed` is this
+/// device's own opinion, formed the moment it folded its own result; an
+/// accepted checkpoint is the mesh's, authored by the checkpoint authority over
+/// a frontier every peer replays from. Dropping bytes on the strength of the
+/// first would let a device throw away a job's inputs before the poster had
+/// ever seen the answer.
+///
+/// Returns nothing at all until a checkpoint exists — there is no such thing as
+/// "converged" on a mesh that has never agreed anything.
+pub fn collectable_blobs(checkpoint: Option<&RetentionCheckpoint>) -> Vec<BlobRef> {
+    checkpoint
+        .into_iter()
+        .flat_map(|checkpoint| checkpoint.snapshot.jobs.iter())
+        .filter(|job| job.state.is_terminal())
+        .flat_map(job_blobs)
+        .collect()
 }
 
 /// User-facing retention effect categories.
@@ -258,6 +331,7 @@ mod tests {
                 privacy_ceiling: KeepBound::UntilCheckpoint,
                 terminal_job_payload: PayloadRule::EraseTerminalAtCheckpoint,
             },
+            lease: LeasePolicy { max_skew_ms: 0 },
         }
     }
 

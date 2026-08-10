@@ -3,7 +3,8 @@
 **Date**: 2026-08-09
 
 **Status**: Open. Re-cut 2026-08-09 after review, around a supervisor gate the
-first draft was missing entirely. **H0 and H1 have landed**; H2 is next.
+first draft was missing entirely. **H0, H1 and H2 have landed**; the Burn
+migration is the next gate and is release-gated upstream.
 
 **Related**:
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md),
@@ -34,7 +35,7 @@ supervises running work.
 |---|---|
 | ~~**H0: Host supervisor**~~ | **Done 2026-08-09** — `mere-mesh-host`. Non-blocking in-flight jobs, real heartbeat state, cancellation before revoke, correct leased completion |
 | ~~**H1: Blob location and delivery**~~ | **Done 2026-08-10** — `DeviceAttested` + `TransportCourier`. Mesh author resolves to a transport endpoint through an existing master-signed attestation; disjoint-store two-host receipt passes |
-| **H2: Retention safety** | Refuse checkpoint/prune when an observed live lease depends on the prefix; retain inputs and outputs through completion/convergence |
+| ~~**H2: Retention safety**~~ | **Done 2026-08-10** — fail-closed on both the build and accept paths; blobs kept until an accepted checkpoint agrees the job is finished |
 | **Burn migration** | Stable 0.22 dependency migration and existing backend baselines |
 | **Remote adapter** | Lease-bound authorization plus targeted session revocation |
 
@@ -211,21 +212,41 @@ Two distinct holes, one fail-closed rule to start.
 **Live leases versus prefix pruning.** A retention checkpoint that prunes the
 claim operations a later lease epoch depends on stops that epoch validating:
 the fold can no longer prove the grant's author was the eligible winner.
-Recorded in `fold.rs`.
-
-**Initial rule: refuse, fail closed.** `build_checkpoint` refuses to advance
-past a job whose lease is live at the supplied observation time. Checkpointing
-already takes an `at_ms`, so this needs no new clock — only the projection the
-board already exposes. Optimising the frontier so a busy mesh can still prune
-comes later, and only with a receipt.
 
 **Blob lifetime.** Checkpoint erasure removes M1's *inline* inputs from
 operation bodies. A V2 input or output is a blob with its own lifetime, and
-`RetentionEffect::BlobCollected` sits in the vocabulary with nothing behind it.
-The rule to start from is retention *through* completion and convergence: a
-device may drop a job's inputs once the result has committed and converged, and
-not before. The same settings that say what a device will lend should say what
-it will keep.
+`RetentionEffect::BlobCollected` sat in the vocabulary with nothing behind it.
+
+### Landed 2026-08-10
+
+**Refuse, on both paths.** `JobBoardSnapshot::live_leases(at_ms, policy)` names
+the jobs whose lease is live, and a checkpoint carrying any of them is refused
+with `CheckpointError::LiveLease`. The check runs in `build_checkpoint`, so a
+host does not author something its peers will reject, *and* in
+`validate_checkpoint`, so one device cannot push a stranding frontier onto
+everybody else.
+
+It needed no new clock and no board: a checkpoint already carries its own
+`at_ms` and its own snapshot, so a peer validating somebody else's checkpoint
+can see the problem with nothing but the thing in front of it. The observation
+policy lives on `MeshRetentionPolicy` as `lease`, because "how long must a
+lease's claim history be kept" is a retention question.
+
+A mesh with a live lease therefore cannot checkpoint until it ends. That is
+bounded — leases expire by their own signed window, at most 24h — and it is the
+deliberately unclever answer. Advancing the frontier selectively around a live
+lease is still the optimisation, still deferred, still wants its own receipt.
+
+**Blobs are kept through convergence, not merely completion.**
+`collectable_blobs` returns a job's inputs and committed output only once the
+job is terminal *in an accepted checkpoint*. The distinction is the whole point:
+a local board saying `Committed` is this device's own opinion, formed the moment
+it folded its own result, and dropping bytes on that basis would let a worker
+throw away a job's inputs before the poster had ever seen the answer. A
+checkpoint is the mesh's opinion. A device with no checkpoint collects nothing.
+
+`MeshStore::collectable_blobs` is the query; wiring an actual sweep (and
+emitting `RetentionEffect::BlobCollected`) is the host's, and is not done.
 
 ---
 
@@ -330,3 +351,11 @@ classes, and remote tensor transport beyond the adapter gate above.
   publishing. The genuinely new decision was collapsing the two blob stores
   into one, which the plan had not noticed was a choice at all. Disjoint-store
   two-host receipt over real transport; 124 tests green across both crates.
+- **2026-08-10 (H2)**: retention safety landed, unusually close to as planned —
+  the fail-closed instinct paid off twice. Putting the refusal on the *accept*
+  path as well as the build path came free, because a checkpoint already carries
+  everything needed to judge it (its own `at_ms` and snapshot), which meant no
+  new clock and no board lookup. The one judgement call was defining
+  "converged" as "terminal in an accepted checkpoint" rather than "terminal on
+  my board": the second would let a worker drop a job's inputs before the poster
+  had seen the answer. 117 mesh tests green.
