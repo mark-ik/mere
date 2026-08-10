@@ -51,7 +51,7 @@ members = [
     "crates/murm/murm",
     "crates/murm/transport",
     "crates/dramatis/gaz",
-    "crates/dramatis/gazetteer",
+    "crates/dramatis/gazette",
     "crates/dramatis/persona-picker",
     "crates/moot/commons",
     "crates/moot/gemot",

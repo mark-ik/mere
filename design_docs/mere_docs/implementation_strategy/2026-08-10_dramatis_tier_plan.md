@@ -22,7 +22,7 @@ Considered and declined: gaz as the umbrella over the tier. gaz was defined
 |---|---|---|
 | `crates/dramatis/personae` | `personae` | identity + carry spine (me) |
 | `crates/dramatis/persona-picker` | `mere-persona-picker` | Cambium view over the roster |
-| `crates/dramatis/gazetteer` | `mere-gazetteer` | handle resolution (finding them) |
+| `crates/dramatis/gazette` | `gazette` | handle resolution (finding them) |
 | `crates/dramatis/gaz` | `gaz` | stored contacts (keeping them) |
 
 Package names and lib names are untouched; only the tier directory and the
@@ -97,3 +97,10 @@ where actors don costumes) but the name needs its own challenge round.
   `crates/persona`. gaz: 41 tests + doctest green from the workspace. dramatis
   0.0.1 published; merely-made/dramatis created. D4 remains deferred. Open with
   Mark: repos/gaz + merely-made/gaz disposition.
+- 2026-08-10, follow-up: Mark noticed bare `gazetteer` is taken on crates.io
+  while `gazette` is free, and ruled: take gazette. The crate renamed back to
+  its pre-2026-07-08 name (`mere-gazetteer` -> `gazette`, dir + package + lib;
+  zero consumers made it free), and `gazette` 0.0.1 published from mere. The
+  2026-07-08 "an index, not a broadcast" rationale is superseded; the recovered
+  sense is the official gazette, where appointments are *gazetted*: officially
+  announced and thereby resolvable, which is what a resolver does.

@@ -1,11 +1,15 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Gazetteer: Mere's handle-resolution index (incubating; WebFinger only today).
+//! Gazette: Mere's handle-resolution index (incubating; WebFinger only today).
 //!
-//! A gazetteer is an index / directory, not a broadcast *gazette*: it lives on
-//! the persona / identity tier (beside `identity`), not under the bilateral
-//! `murm` supercrate where it used to sit.
+//! Named for the official gazette, the publication where appointments are
+//! *gazetted*: officially announced and thereby resolvable. The crate began as
+//! `gazette`, spent a year as `gazetteer` (an index, not a broadcast), and
+//! returned to the original when the bare `gazetteer` crates.io name turned
+//! out to be taken and `gazette` free (2026-08-10). It lives on the dramatis
+//! tier (beside `personae` and `gaz`), not under the bilateral `murm`
+//! supercrate where it used to sit.
 //!
 //! Turns a name, handle, or key into the set of reachable, trust-stated
 //! endpoints Mere can navigate to or message. **Today** it implements
