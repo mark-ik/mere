@@ -16,7 +16,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
-use eidetic::Hash;
 use identity::{
     Ed25519Keypair, Ed25519PublicKey, Ed25519Signature, IdentityProvider, InMemoryProvider,
 };
@@ -27,7 +26,7 @@ use uuid::Uuid;
 
 use crate::manifest::PersonaId;
 use crate::wallet_store::{
-    CapabilitySlotRef, DeviceExposure, DeviceGrantRef, DeviceId, DeviceMode, DevicePublicKey,
+    CapabilitySlotRef, CarryRef, DeviceExposure, DeviceGrantRef, DeviceId, DeviceMode, DevicePublicKey,
     DeviceRecord, DeviceRoster, IdentityWalletManifest, KeyEpochId, LocalDeviceIdentity,
     PersonaWalletManifest, PersonaWalletRef, RemoteAuthWrappingKeyBridge,
     RemoteAuthWrappingKeyRecord, device_grant_path, device_roster_ref, ensure_persona_epoch_bridge,
@@ -680,10 +679,10 @@ pub fn verify_device_grant(grant: &SignedDeviceGrant) -> Result<bool, DeviceGran
     Ok(delegator.verify(&payload, &signature))
 }
 
-/// Stable content hash of the signed grant envelope bytes.
-pub fn device_grant_ref(grant: &SignedDeviceGrant) -> Result<Hash, DeviceGrantError> {
+/// Stable content ref of the signed grant envelope bytes.
+pub fn device_grant_ref(grant: &SignedDeviceGrant) -> Result<CarryRef, DeviceGrantError> {
     let bytes = encode_signed_device_grant(grant)?;
-    Ok(Hash::of(bytes.as_slice()))
+    Ok(CarryRef::of(bytes.as_slice()))
 }
 
 /// Load one signed device grant from `identity/grants/<device_id>.cbor`.
@@ -701,7 +700,7 @@ pub fn load_signed_device_grant(
 
 /// Save one signed device grant to `identity/grants/<device_id>.cbor`, returning
 /// the stable content hash callers can store in `grant_ref`.
-pub fn save_signed_device_grant(data_root: &Path, grant: &SignedDeviceGrant) -> io::Result<Hash> {
+pub fn save_signed_device_grant(data_root: &Path, grant: &SignedDeviceGrant) -> io::Result<CarryRef> {
     let bytes = encode_signed_device_grant(grant)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     save_device_grant(data_root, grant.payload.device_id, &bytes)?;
@@ -1279,7 +1278,7 @@ fn upsert_persona_capability_slots(
     data_root: &Path,
     personas: &[PersonaId],
     device_id: DeviceId,
-    grant_ref: Hash,
+    grant_ref: CarryRef,
 ) -> io::Result<()> {
     let slot_id = remote_auth_capability_slot_id(device_id);
     for &persona in personas {
@@ -1441,7 +1440,7 @@ fn validate_remote_auth_enrollment_bundle(
 fn upsert_remote_auth_device_record(
     roster: &mut DeviceRoster,
     spec: &RemoteAuthGrantSpec,
-    grant_ref: Hash,
+    grant_ref: CarryRef,
 ) {
     if let Some(existing) = roster
         .devices
@@ -1465,7 +1464,7 @@ fn upsert_remote_auth_device_record(
     });
 }
 
-fn upsert_grant_index(wallet: &mut IdentityWalletManifest, device_id: DeviceId, grant_ref: Hash) {
+fn upsert_grant_index(wallet: &mut IdentityWalletManifest, device_id: DeviceId, grant_ref: CarryRef) {
     if let Some(existing) = wallet
         .grant_index
         .iter_mut()
@@ -1483,7 +1482,7 @@ fn upsert_grant_index(wallet: &mut IdentityWalletManifest, device_id: DeviceId, 
 fn upsert_local_remote_auth_record(
     roster: &mut DeviceRoster,
     local: &LocalDeviceIdentity,
-    grant_ref: Hash,
+    grant_ref: CarryRef,
 ) {
     if let Some(existing) = roster
         .devices

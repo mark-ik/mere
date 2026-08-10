@@ -29,16 +29,14 @@
 //! This module owns the file layout and typed serde shapes. Pairing, wrapped-key
 //! semantics, and transport resolution layer on top.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::{fs, io};
 
-use blake3::Hasher;
-use eidetic::Hash;
 use identity::{
-    Ed25519Keypair, Ed25519PublicKey, IdentityError, IdentityProvider, InMemoryProvider, PersonaId,
-    SealedRecordStorage, StartupUnlockMode, load_or_create_auto_unlock_root,
+    IdentityError, IdentityProvider, InMemoryProvider, PersonaId, SealedRecordStorage,
+    StartupUnlockMode, load_or_create_auto_unlock_root,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -86,319 +84,23 @@ pub const REMOTE_AUTH_WRAPPING_KEYS_FILENAME: &str = "remote-auth-wrapping-keys.
 /// still the typed host seam, but the secret bytes now migrate behind the
 /// sealed-record backend while epoch-history storage remains in transition.
 pub const PERSONA_EPOCH_BRIDGE_FILENAME: &str = "private-epoch-bridge.json";
-/// Current schema version for wallet and roster files.
-pub const WALLET_SCHEMA_VERSION: u32 = 1;
-
-/// Stable device id within the identity-level roster.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct DeviceId(pub Uuid);
-
-impl DeviceId {
-    /// Mint a fresh device id.
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-
-    /// Wrap an existing uuid.
-    pub fn from_uuid(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-
-    /// Borrow the underlying uuid.
-    pub fn as_uuid(&self) -> &Uuid {
-        &self.0
-    }
-}
-
-/// Opaque key-epoch id for persona-private material.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct KeyEpochId(pub Uuid);
-
-impl KeyEpochId {
-    /// Mint a fresh epoch id.
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-}
-
-/// Stored public key bytes for a device.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct DevicePublicKey(pub [u8; 32]);
-
-impl DevicePublicKey {
-    /// Convert to the runtime identity type.
-    pub fn to_public_key(self) -> Result<Ed25519PublicKey, IdentityError> {
-        Ed25519PublicKey::from_bytes(&self.0)
-    }
-}
-
-impl From<Ed25519PublicKey> for DevicePublicKey {
-    fn from(value: Ed25519PublicKey) -> Self {
-        Self(value.to_bytes())
-    }
-}
-
-/// Stored chain-root bytes for a persona's standing lineage.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct PersonaChainRoot(pub [u8; 32]);
-
-/// How a device was enrolled.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DeviceMode {
-    /// Full seed copy. Revocation means master rotation.
-    Copy,
-    /// Delegated device with wrapped private-lane epoch material.
-    #[default]
-    RemoteAuth,
-}
-
-/// Whether a device is hidden behind another egress or intentionally exposed.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum DeviceExposure {
-    /// No public listener; dials outward only.
-    #[default]
-    HiddenClient,
-    /// Reachable and allowed to serve as egress/availability anchor.
-    ExposedEgress,
-}
-
-/// How identity recovery is expected to work for this wallet root.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RecoveryPolicy {
-    /// Seed recovery plus device handover are both valid v1 flows.
-    #[default]
-    SeedAndDeviceHandover,
-    /// Seed phrase only; device handover disabled.
-    SeedPhraseOnly,
-}
-
-/// One persona known to the identity-level wallet root.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PersonaWalletRef {
-    pub persona_id: PersonaId,
-}
-
-/// One device grant tracked from the identity-level wallet root.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceGrantRef {
-    pub device_id: DeviceId,
-    #[serde(default)]
-    pub grant_ref: Option<Hash>,
-}
-
-/// Identity-level wallet manifest: device fabric, recovery posture, and the known personas.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct IdentityWalletManifest {
-    pub schema_version: u32,
-    #[serde(default)]
-    pub device_roster_ref: Option<Hash>,
-    #[serde(default)]
-    pub recovery_policy: RecoveryPolicy,
-    #[serde(default)]
-    pub personas: Vec<PersonaWalletRef>,
-    #[serde(default)]
-    pub grant_index: Vec<DeviceGrantRef>,
-}
-
-impl Default for IdentityWalletManifest {
-    fn default() -> Self {
-        Self {
-            schema_version: WALLET_SCHEMA_VERSION,
-            device_roster_ref: None,
-            recovery_policy: RecoveryPolicy::default(),
-            personas: Vec::new(),
-            grant_index: Vec::new(),
-        }
-    }
-}
-
-/// References into the encrypted lane for one persona.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrivateRoots {
-    /// The primary private eidetic root, when one exists.
-    #[serde(default)]
-    pub primary_root: Option<Hash>,
-    /// Additional typed roots keyed by their logical role.
-    #[serde(default)]
-    pub typed_roots: BTreeMap<String, Hash>,
-    /// Optional restore cursor / checkpoint for faster restore.
-    #[serde(default)]
-    pub restore_cursor: Option<Hash>,
-}
-
-/// References into the cleartext / public lane for one persona.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PublicRoots {
-    /// The primary public eidetic root, when one exists.
-    #[serde(default)]
-    pub primary_root: Option<Hash>,
-    /// Additional typed roots keyed by their logical role.
-    #[serde(default)]
-    pub typed_roots: BTreeMap<String, Hash>,
-}
-
-/// One persona-scoped capability slot.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CapabilitySlotRef {
-    pub slot_id: String,
-    #[serde(default)]
-    pub grant_ref: Option<Hash>,
-}
-
-/// Persona-level wallet manifest: refs and epoch history for one persona.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PersonaWalletManifest {
-    pub schema_version: u32,
-    pub persona_id: PersonaId,
-    pub chain_root: PersonaChainRoot,
-    pub private_epoch_head: KeyEpochId,
-    #[serde(default)]
-    pub epoch_history_ref: Option<Hash>,
-    #[serde(default)]
-    pub private_roots: PrivateRoots,
-    #[serde(default)]
-    pub public_roots: PublicRoots,
-    #[serde(default)]
-    pub capability_slots: Vec<CapabilitySlotRef>,
-}
-
-impl PersonaWalletManifest {
-    /// Build a new persona wallet manifest with empty refs and slots.
-    pub fn new(
-        persona_id: PersonaId,
-        chain_root: PersonaChainRoot,
-        private_epoch_head: KeyEpochId,
-    ) -> Self {
-        Self {
-            schema_version: WALLET_SCHEMA_VERSION,
-            persona_id,
-            chain_root,
-            private_epoch_head,
-            epoch_history_ref: None,
-            private_roots: PrivateRoots::default(),
-            public_roots: PublicRoots::default(),
-            capability_slots: Vec::new(),
-        }
-    }
-}
-
-/// One plaintext private epoch currently staged in the temporary host bridge.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrivateEpochRecord {
-    pub epoch_id: KeyEpochId,
-    pub epoch_secret: Vec<u8>,
-}
-
-/// Transitional per-persona plaintext epoch bridge for pairing-time wrapping.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PersonaEpochBridge {
-    pub schema_version: u32,
-    pub persona_id: PersonaId,
-    #[serde(default)]
-    pub epochs: Vec<PrivateEpochRecord>,
-}
-
-impl PersonaEpochBridge {
-    pub fn new(persona_id: PersonaId) -> Self {
-        Self {
-            schema_version: WALLET_SCHEMA_VERSION,
-            persona_id,
-            epochs: Vec::new(),
-        }
-    }
-}
-
-/// Identity-wide device roster.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceRoster {
-    pub schema_version: u32,
-    #[serde(default)]
-    pub devices: Vec<DeviceRecord>,
-    #[serde(default)]
-    pub revoked: Vec<DeviceId>,
-}
-
-impl DeviceRoster {
-    /// Build an empty roster under the current schema.
-    pub fn new() -> Self {
-        Self {
-            schema_version: WALLET_SCHEMA_VERSION,
-            devices: Vec::new(),
-            revoked: Vec::new(),
-        }
-    }
-}
-
-/// One enrolled device.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceRecord {
-    pub device_id: DeviceId,
-    pub device_pubkey: DevicePublicKey,
-    pub label: String,
-    pub mode: DeviceMode,
-    pub exposure: DeviceExposure,
-    #[serde(default)]
-    pub grant_ref: Option<Hash>,
-}
-
-/// The local host's delegated-device identity bridge.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LocalDeviceIdentity {
-    pub schema_version: u32,
-    pub device_id: DeviceId,
-    pub device_seed: [u8; 32],
-    pub label: String,
-}
-
-impl LocalDeviceIdentity {
-    /// Build a new local delegated-device identity from a fresh device id and seed.
-    pub fn new(device_id: DeviceId, device_seed: [u8; 32], label: String) -> Self {
-        Self {
-            schema_version: WALLET_SCHEMA_VERSION,
-            device_id,
-            device_seed,
-            label,
-        }
-    }
-
-    /// Reconstruct the delegated device's keypair from the stored seed.
-    pub fn keypair(&self) -> Ed25519Keypair {
-        Ed25519Keypair::from_seed(self.device_seed)
-    }
-
-    /// The delegated device's public key.
-    pub fn public_key(&self) -> DevicePublicKey {
-        DevicePublicKey::from(self.keypair().public_key())
-    }
-}
-
-/// One retained remote-auth wrapping key keyed by delegated device id.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RemoteAuthWrappingKeyRecord {
-    pub device_id: DeviceId,
-    #[serde(default)]
-    pub ticket_id: Option<Uuid>,
-    pub wrapping_key: [u8; 32],
-}
-
-/// Transitional identity-level bridge of remote-auth wrapping keys.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RemoteAuthWrappingKeyBridge {
-    pub schema_version: u32,
-    #[serde(default)]
-    pub keys: Vec<RemoteAuthWrappingKeyRecord>,
-}
-
-impl RemoteAuthWrappingKeyBridge {
-    pub fn new() -> Self {
-        Self {
-            schema_version: WALLET_SCHEMA_VERSION,
-            keys: Vec::new(),
-        }
-    }
-}
+// ── Carry model (moved to personae 2026-08-10) ───────────────────────────────
+//
+// The wallet record types, content refs, and derivation live in
+// `identity::carry` (the fold-in the 2026-07-08 personae founding promised;
+// see design_docs/mere_docs/implementation_strategy/
+// 2026-08-10_wallet_carry_foldin_plan.md). This module keeps the store
+// adapter: path layout, device-settings policy, sealed-record wiring, and
+// bootstrap. The re-exports keep every existing consumer path
+// (`session_runtime::wallet_store::*`) compiling unchanged.
+pub use identity::carry::{
+    CapabilitySlotRef, CarryHashFn, CarryRef, CarryRefParseError, DeviceExposure, DeviceGrantRef,
+    DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, IdentityWalletManifest,
+    KeyEpochId, LocalDeviceIdentity, PersonaChainRoot, PersonaEpochBridge, PersonaWalletManifest,
+    PersonaWalletRef, PrivateEpochRecord, PrivateRoots, PublicRoots, RecoveryPolicy,
+    RemoteAuthWrappingKeyBridge, RemoteAuthWrappingKeyRecord, WALLET_SCHEMA_VERSION,
+    derive_persona_chain_root, persona_wallet_salt,
+};
 
 /// Which wallet bootstrap posture the current data root resolved to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -623,10 +325,10 @@ pub fn save_device_roster(data_root: &Path, roster: &DeviceRoster) -> io::Result
     save_json_atomic(&device_roster_path(data_root), roster)
 }
 
-/// Stable content hash of a device roster's on-disk JSON bytes.
-pub fn device_roster_ref(roster: &DeviceRoster) -> io::Result<Hash> {
+/// Stable content ref of a device roster's on-disk JSON bytes.
+pub fn device_roster_ref(roster: &DeviceRoster) -> io::Result<CarryRef> {
     let bytes = json_pretty_bytes(roster)?;
-    Ok(Hash::of(bytes.as_slice()))
+    Ok(CarryRef::of(bytes.as_slice()))
 }
 
 /// Load one persona wallet manifest, or `None` when absent.
@@ -1010,24 +712,6 @@ pub fn bootstrap_wallet_state(
     Ok(WalletBootstrapMode::CopySeeded)
 }
 
-/// The canonical persona derivation salt: `BLAKE3("persona" || persona_id)`.
-pub fn persona_wallet_salt(persona: PersonaId) -> [u8; 32] {
-    let mut hasher = Hasher::new();
-    hasher.update(b"persona");
-    hasher.update(persona.as_uuid().as_bytes());
-    *hasher.finalize().as_bytes()
-}
-
-/// Derive the current persona chain root from the shared master seed.
-pub fn derive_persona_chain_root(
-    master_seed: [u8; 32],
-    persona: PersonaId,
-) -> Result<PersonaChainRoot, IdentityError> {
-    let provider = InMemoryProvider::from_seed(master_seed);
-    let keypair = provider.derive_keypair(&persona_wallet_salt(persona))?;
-    Ok(PersonaChainRoot(keypair.public_key().to_bytes()))
-}
-
 /// Ensure the shared identity root and one persona wallet exist, seeding the
 /// minimal carry-layer files on first launch.
 ///
@@ -1166,6 +850,27 @@ mod tests {
         PersonaChainRoot([7u8; 32])
     }
 
+    /// The fold-in's disk-format invariant: `CarryRef` must serialize exactly
+    /// as `eidetic::Hash` always did, digest and framing both, or every
+    /// stored manifest ref on every machine silently stops resolving.
+    #[test]
+    fn carry_ref_repr_matches_eidetic_hash_repr() {
+        for input in [b"".as_slice(), b"roster bytes", b"grant envelope"] {
+            let hash = eidetic::Hash::of(input);
+            let carry = CarryRef::of(input);
+            assert_eq!(carry.to_string(), hash.to_string());
+            assert_eq!(
+                serde_json::to_string(&carry).unwrap(),
+                serde_json::to_string(&hash).unwrap()
+            );
+            let reparsed: CarryRef = serde_json::from_str(
+                &serde_json::to_string(&hash).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(reparsed, carry);
+        }
+    }
+
     #[test]
     fn listing_personas_counts_wallets_not_directories() {
         let root = temp_data_root("list-personas");
@@ -1278,13 +983,13 @@ mod tests {
     fn identity_wallet_round_trips() {
         let root = temp_data_root("identity");
         let wallet = IdentityWalletManifest {
-            device_roster_ref: Some(Hash::of(b"roster")),
+            device_roster_ref: Some(CarryRef::of(b"roster")),
             personas: vec![PersonaWalletRef {
                 persona_id: fixture_persona(),
             }],
             grant_index: vec![DeviceGrantRef {
                 device_id: fixture_device(),
-                grant_ref: Some(Hash::of(b"grant")),
+                grant_ref: Some(CarryRef::of(b"grant")),
             }],
             ..IdentityWalletManifest::default()
         };
@@ -1305,7 +1010,7 @@ mod tests {
                 label: "home-server".to_string(),
                 mode: DeviceMode::RemoteAuth,
                 exposure: DeviceExposure::ExposedEgress,
-                grant_ref: Some(Hash::of(b"grant")),
+                grant_ref: Some(CarryRef::of(b"grant")),
             }],
             revoked: vec![DeviceId::from_uuid(Uuid::from_u128(0x4444))],
             ..DeviceRoster::new()
@@ -1321,16 +1026,16 @@ mod tests {
         let root = temp_data_root("persona");
         let mut wallet =
             PersonaWalletManifest::new(fixture_persona(), fixture_chain_root(), fixture_epoch());
-        wallet.epoch_history_ref = Some(Hash::of(b"epochs"));
-        wallet.private_roots.primary_root = Some(Hash::of(b"private-root"));
+        wallet.epoch_history_ref = Some(CarryRef::of(b"epochs"));
+        wallet.private_roots.primary_root = Some(CarryRef::of(b"private-root"));
         wallet
             .private_roots
             .typed_roots
-            .insert("eidetic".to_string(), Hash::of(b"typed-private"));
-        wallet.public_roots.primary_root = Some(Hash::of(b"public-root"));
+            .insert("eidetic".to_string(), CarryRef::of(b"typed-private"));
+        wallet.public_roots.primary_root = Some(CarryRef::of(b"public-root"));
         wallet.capability_slots.push(CapabilitySlotRef {
             slot_id: "cluster-read".to_string(),
-            grant_ref: Some(Hash::of(b"cap")),
+            grant_ref: Some(CarryRef::of(b"cap")),
         });
         save_persona_wallet(&root, &wallet).unwrap();
         let restored = load_persona_wallet(&root, fixture_persona())

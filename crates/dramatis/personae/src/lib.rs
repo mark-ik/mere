@@ -52,6 +52,7 @@
 #[cfg(feature = "agent")]
 pub mod agent;
 pub mod bootstrap;
+pub mod carry;
 pub mod delegation;
 mod error;
 mod keypair;
