@@ -17,4 +17,4 @@ chartulary = { path = "../eidetic/chartulary" }
 # not reimplement any of that; it contributes the TYPED capability view (`Cap`)
 # over the same certificates, so the denizen tier and the moot tier share one
 # delegation system rather than two.
-identity = { package = "personae", path = "../persona/personae" }
+identity = { package = "personae", path = "../dramatis/personae" }
