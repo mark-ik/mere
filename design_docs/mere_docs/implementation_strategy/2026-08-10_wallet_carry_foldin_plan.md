@@ -1,7 +1,7 @@
 # Wallet Carry Fold-In Plan
 
 **Date:** 2026-08-10
-**Status:** W0 + W1 + W2 done 2026-08-10; W3 next
+**Status:** W0 + W1 + W2 done, W3 RULED 2026-08-10; W3's split and W4 remain
 **Anchors:** [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md),
 the 2026-07-08 personae founding ruling ("the carry layer folds into the same
@@ -100,11 +100,39 @@ verbatim move wrong:
 
 ### W3: the grant envelope ruling
 
-- [ ] Verify what `p2panda_core::cbor::{encode,decode}_cbor` wrap; test
-      byte-compat of a direct cbor dep against a staged grant fixture
-- [ ] Rule: envelope codec in personae::carry (if byte-compat holds with a
-      non-p2panda dep) or in the adapter (if not)
-- [ ] `wallet_grant.rs` splits under the ceiling either way
+- [x] Verified: `p2panda_core::cbor` is a thin wrapper over `ciborium`
+      (`encode_cbor` is `ciborium::ser::into_writer` into a `Vec`, `decode_cbor`
+      is `ciborium::from_reader`) with no framing of its own. Byte-compat with a
+      direct ciborium dependency therefore holds by construction.
+- [x] Fixture pinned: `signed_device_grant_wire_format_is_pinned` encodes a
+      fully deterministic signed grant and asserts its 612 bytes exactly, so any
+      future codec swap has to come argue for itself. (Observation recorded, not
+      acted on: `[u8; 32]` keys serialize as CBOR arrays of integers rather than
+      byte strings, which costs about 2x on every key. That is the format in the
+      wild; changing it is a migration, not a cleanup.)
+- [x] **RULED: the envelope codec STAYS in the adapter** — and the reason is not
+      byte-compat, which holds. It is that `personae::delegation` already exists
+      and is the same concept: an issuer delegating a scoped, time-bounded
+      capability to a subject, with attenuation and revocation. The two models
+      disagree on everything underneath:
+
+      | | `DelegationCertificate` (personae) | `DeviceGrantPayload` (here) |
+      |---|---|---|
+      | signing | hand-rolled domain-separated bytes | canonical CBOR envelope |
+      | scope | typed `CapabilityScope` with `attenuates()` | `Vec<String>` atoms |
+      | attenuation | `remaining_delegation_depth: u16` | `Vec<String>` atoms |
+      | carriage | none | wrapped private-epoch material |
+
+      Moving the envelope in as-is would install a second delegation model beside
+      the first, inside the one crate that owns delegation. That is the
+      duplication the generalize-don't-duplicate rule exists to stop.
+- [ ] **Spun out**: whether a device grant should BECOME a
+      `SignedDelegationCertificate` (device-scoped `CapabilityScope`, depth
+      instead of `no-subdelegation`, wrapped epochs as a side-carriage) is a
+      design question, not a mechanical move. It needs its own brief before
+      anything relocates. Castellan reaches grant verification through that
+      reconciliation, not through a copy.
+- [ ] `wallet_grant.rs` (2764 lines) splits under the ceiling in place
 
 ### W4: consumers re-base + closure
 

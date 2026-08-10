@@ -1796,6 +1796,45 @@ mod tests {
         assert!(verify_device_grant(&restored).unwrap());
     }
 
+    /// The wire format of a signed grant, pinned byte for byte.
+    ///
+    /// Grants are handed between machines and stored on disk, so the encoding
+    /// is a compatibility surface, not an implementation detail. This fixture
+    /// is fully deterministic (fixed seeds, uuids, and timestamps; Ed25519
+    /// signing is deterministic per RFC 8032), so any change to the codec has
+    /// to come here and argue for itself.
+    ///
+    /// Recorded 2026-08-10 while ruling the fold-in plan's W3 question. The
+    /// current encoder is `p2panda_core::cbor`, which is a thin wrapper over
+    /// `ciborium::ser::into_writer` with no framing of its own, so swapping to
+    /// a direct ciborium dependency would keep these exact bytes.
+    #[test]
+    fn signed_device_grant_wire_format_is_pinned() {
+        let grant = issue_device_grant(&delegator(), sample_payload()).unwrap();
+        let bytes = encode_signed_device_grant(&grant).unwrap();
+        assert_eq!(hex::encode(&bytes), PINNED_SIGNED_GRANT_HEX);
+    }
+
+    const PINNED_SIGNED_GRANT_HEX: &str = concat!(
+        "a2677061796c6f6164aa6e736368656d615f76657273696f6e01696465766963655f69645000",
+        "00000000000000000000000000aaa17064656c656761746f725f7075626b65799820183a1878",
+        "18ac18c1000e18a8182b18f118a518a5081874186718b112188e18341824187418b6183218a8",
+        "18d418b7181f18c7184d1845186a183a18657064656c6567617465655f7075626b6579982018",
+        "f21828186618f71873185718e5185a1890186218fe18711846188b18e0188c18e3184c18c318",
+        "f3189a184618d418a018fd183818731832187f18c6188c184b6c6973737565645f61745f6d73",
+        "1a6553f1016d657870697265735f61745f6d731a6b49d20168706572736f6e61738150000000",
+        "0000000000000000000000aaa26673636f706573826c6964656e746974792e6163746c707269",
+        "766174652e726561646c617474656e756174696f6e7381706e6f2d73756264656c6567617469",
+        "6f6e76777261707065645f707269766174655f65706f63687381a46a706572736f6e615f6964",
+        "500000000000000000000000000000aaa26865706f63685f6964500000000000000000000000",
+        "000000aaa36b777261705f666f726d617474786368616368613230706f6c79313330352d7631",
+        "6b777261707065645f6b65798418de18ad18be18ef697369676e6174757265984018e118a318",
+        "d018180618b218b718e318b218d9121618be18e1182918bf1851185e187d1865188718711863",
+        "181818691857182518c1187e186518411830184d18d418f5186918ce18b818e418c31837184e",
+        "18cc18ae18f3181f183418b7188418e40d1824184c189d1835188e1897188118b8183c18ef18",
+        "3f186705",
+    );
+
     #[test]
     fn save_and_load_signed_device_grant_round_trip() {
         let root = temp_data_root("round-trip");
