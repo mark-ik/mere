@@ -284,8 +284,14 @@ before this work, verified by stashing.
 commit; verified 2026-07-25 against the registry — the published sceno has no
 `measure.rs` and the published scenotime carries `pick.rs`, so the artifacts
 are this cut. A second publish attempt on 2026-07-25 correctly errored
-"already exists"; nothing was missing). Still remaining: re-resolve isometry
-and turnstone against 0.0.3, and tell woodshed the contract is frozen.
+"already exists"; nothing was missing). ~~Still remaining: re-resolve isometry
+and turnstone against 0.0.3, and tell woodshed the contract is frozen.~~
+**Closed 2026-08-10**: both locks verified at 0.0.3 for sceno, scenomise,
+and scenotime (each tracks `merely-made/mere` main and had re-resolved along
+the way), and the freeze notification is delivered as a banner on woodshed's
+stage-set plan plus the
+[scenograph expansion brief](../research/2026-08-10_scenograph_expansion_brief.md),
+whose L1 lane owns woodshed adoption.
 
 **History note.** A concurrent session's `git add -A` swept most of S1-S3
 into two unrelated commits, `4b8d875f` ("document-host: derive the wasm
