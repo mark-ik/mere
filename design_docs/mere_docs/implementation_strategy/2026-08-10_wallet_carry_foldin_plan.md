@@ -1,7 +1,7 @@
 # Wallet Carry Fold-In Plan
 
 **Date:** 2026-08-10
-**Status:** W0 (this map) done; W1 executing
+**Status:** W0 + W1 done 2026-08-10; W2 next
 **Anchors:** [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md),
 the 2026-07-08 personae founding ruling ("the carry layer folds into the same
@@ -69,18 +69,20 @@ verbatim move wrong:
 
 ### W1: the model moves (this session)
 
-- [ ] `personae::carry` module: all wallet record types (wallet_store L90-417),
-      `WALLET_SCHEMA_VERSION`, `CarryRef` with the pinned repr, plus
-      `persona_wallet_salt` + `derive_persona_chain_root`
-- [ ] Repr test: `CarryRef` round-trips the exact JSON eidetic::Hash produces
-- [ ] session-runtime re-exports the moved types from `wallet_store`;
+- [x] `personae::carry` module (split as `carry/mod.rs` + `carry/refs.rs`,
+      both under the ceiling): all wallet record types, `WALLET_SCHEMA_VERSION`,
+      `CarryRef`, `persona_wallet_salt` + `derive_persona_chain_root`
+- [x] Repr test: `carry_ref_repr_matches_eidetic_hash_repr` in wallet_store
+      compares string and JSON forms across three inputs
+- [x] session-runtime re-exports the moved types from `wallet_store`;
       `wallet_grant`/`engram_seal`/`shared_root`/knot compile unchanged
-- [ ] Hash<->CarryRef seam helpers in session-runtime where wallet_grant
-      computes content refs
-- [ ] Targeted green: `cargo test -p personae -p session-runtime`,
-      `cargo check -p knot`
-- [ ] Disk-format invariant: zero serialized-byte changes (repr test + the
-      existing round-trip tests are the witness)
+- [x] No seam helpers needed at all: both ref producers were plain BLAKE3
+      over canonical bytes, so they now call `CarryRef::of` directly and
+      eidetic::Hash simply left the wallet
+- [x] Targeted green: personae 74, session-runtime 245 (including all wallet
+      round-trips and grant flows), knot check
+- [x] Disk-format invariant held by the repr test + the untouched round-trip
+      suite
 
 ### W2: the store splits under the ceiling
 
@@ -109,4 +111,9 @@ verbatim move wrong:
 ## Progress
 
 - 2026-08-10: W0 map verified against code (couplings, consumers, sizes,
-  Hash repr). W1 begun.
+  Hash repr). W1 executed and green the same session. Two surprises, both
+  benign: `RecoveryPolicy` was missed from the first re-export list (caught by
+  the compiler), and the wallet tests construct refs directly so they needed
+  the same `CarryRef::of` spelling (digests unchanged). wallet_grant's whole
+  diff was 9 insertions / 10 deletions, which is the payoff of converting at
+  the producers instead of the touchpoints.

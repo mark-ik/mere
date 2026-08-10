@@ -22,11 +22,9 @@
 //! honest.
 
 use std::collections::BTreeMap;
-use std::fmt;
-use std::str::FromStr;
 
 use blake3::Hasher;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
@@ -36,119 +34,9 @@ use crate::{
 /// Wallet schema version stamped into every carry record.
 pub const WALLET_SCHEMA_VERSION: u32 = 1;
 
-// ── Content refs ─────────────────────────────────────────────────────────────
+mod refs;
 
-/// The hash function behind a [`CarryRef`]. BLAKE3-256 today.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum CarryHashFn {
-    /// BLAKE3-256, 32-byte digest.
-    Blake3,
-}
-
-impl CarryHashFn {
-    fn label(self) -> &'static str {
-        match self {
-            CarryHashFn::Blake3 => "blake3",
-        }
-    }
-}
-
-/// A content ref in a carry record: a digest tagged with the function that
-/// produced it, serialized as the display string `<fn>:<hex>`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CarryRef {
-    func: CarryHashFn,
-    digest: [u8; 32],
-}
-
-impl CarryRef {
-    /// Compute the BLAKE3-256 ref of a byte slice.
-    pub fn of(bytes: &[u8]) -> Self {
-        Self {
-            func: CarryHashFn::Blake3,
-            digest: *blake3::hash(bytes).as_bytes(),
-        }
-    }
-
-    /// The raw digest bytes.
-    pub fn digest(&self) -> &[u8; 32] {
-        &self.digest
-    }
-
-    /// The hash function tag.
-    pub fn func(&self) -> CarryHashFn {
-        self.func
-    }
-}
-
-impl fmt::Display for CarryRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:", self.func.label())?;
-        for byte in self.digest {
-            write!(f, "{byte:02x}")?;
-        }
-        Ok(())
-    }
-}
-
-impl fmt::Debug for CarryRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CarryRef({self})")
-    }
-}
-
-/// Error parsing a [`CarryRef`] display string.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CarryRefParseError(String);
-
-impl fmt::Display for CarryRefParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid carry ref: {}", self.0)
-    }
-}
-
-impl std::error::Error for CarryRefParseError {}
-
-impl FromStr for CarryRef {
-    type Err = CarryRefParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (func, hex) = s
-            .split_once(':')
-            .ok_or_else(|| CarryRefParseError(format!("missing ':' in {s:?}")))?;
-        let func = match func {
-            "blake3" => CarryHashFn::Blake3,
-            other => return Err(CarryRefParseError(format!("unknown hash fn {other:?}"))),
-        };
-        if hex.len() != 64 {
-            return Err(CarryRefParseError(format!(
-                "expected 64 hex chars, got {}",
-                hex.len()
-            )));
-        }
-        let mut digest = [0u8; 32];
-        for (i, chunk) in hex.as_bytes().chunks(2).enumerate() {
-            let pair = std::str::from_utf8(chunk)
-                .map_err(|_| CarryRefParseError(format!("non-utf8 hex in {s:?}")))?;
-            digest[i] = u8::from_str_radix(pair, 16)
-                .map_err(|_| CarryRefParseError(format!("non-hex byte {pair:?}")))?;
-        }
-        Ok(Self { func, digest })
-    }
-}
-
-impl Serialize for CarryRef {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for CarryRef {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(serde::de::Error::custom)
-    }
-}
+pub use refs::{CarryHashFn, CarryRef, CarryRefParseError};
 
 // ── Identity-level records ───────────────────────────────────────────────────
 
@@ -401,6 +289,7 @@ pub struct PersonaEpochBridge {
 }
 
 impl PersonaEpochBridge {
+    /// Build an empty bridge for one persona under the current schema.
     pub fn new(persona_id: PersonaId) -> Self {
         Self {
             schema_version: WALLET_SCHEMA_VERSION,
@@ -512,6 +401,7 @@ pub struct RemoteAuthWrappingKeyBridge {
 }
 
 impl RemoteAuthWrappingKeyBridge {
+    /// Build an empty bridge under the current schema.
     pub fn new() -> Self {
         Self {
             schema_version: WALLET_SCHEMA_VERSION,
