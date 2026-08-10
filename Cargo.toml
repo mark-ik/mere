@@ -96,6 +96,7 @@ members = [
     "ports/graphshell/web",
     "ports/knot",
     "ports/castellan",
+    "ports/distillery",
 ]
 exclude = [
     "crates/probes",
@@ -174,6 +175,8 @@ graphshell-network = { path = "crates/graphshell/graphshell-network" }
 knot = { path = "ports/knot" }
 # The credential-keeper port; reservation, no implementation (dramatis plan D4).
 castellan = { version = "0.0.1", path = "ports/castellan" }
+# The model-works port; reservation, no implementation (esp plan §4's consumer shape).
+distillery = { version = "0.0.1", path = "ports/distillery" }
 # Shared pins the graphshell crates inherit.
 base64 = "0.22"
 blake3 = "1"
