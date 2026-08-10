@@ -1,0 +1,12 @@
+[package]
+name = "castellan"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Name reservation. Castellan is the credential-keeper port of the Mere platform: the officer of the gate who holds your chatelaine (secrets: passwords, 2FA seeds, tokens) and presents your emblems (graded proofs of identity), in trust for your personae. Hosts embed views; only the castellan touches secrets, and every release is a gate petition."
+readme = "README.md"
+keywords = ["credentials", "identity", "vault", "agent", "persona"]
+categories = ["authentication"]
+
+[dependencies]
