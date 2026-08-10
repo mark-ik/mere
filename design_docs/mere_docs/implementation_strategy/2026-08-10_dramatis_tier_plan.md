@@ -45,9 +45,12 @@ on package name and are unaffected.
 - [x] Workspace member + `gaz = { path = ... }` dependency entry added
 - [x] gaz `Cargo.toml` repository field points at merely-made/mere; its bare
       `[workspace]` stub table removed so it joins mere's workspace
-- [ ] Open with Mark: disposition of the emptied `repos/gaz` checkout and the
-      merely-made/gaz GitHub repo (pointer README vs archive vs delete).
-      Next gaz publish (0.1.0 per its founding plan) happens from mere.
+- [x] Disposition ruled by Mark 2026-08-10: DELETE. repos/gaz +
+      merely-made/gaz and repos/dramatis + merely-made/dramatis all removed
+      (gaz history lives in mere via the subtree merge; the dramatis stub
+      moved to crates/dramatis/dramatis and 0.0.2 published so the registry
+      points at mere). Next gaz publish (0.1.0 per its founding plan) happens
+      from mere; its 0.0.1 registry page carries a dead repo link until then.
 
 ### D3: the claim
 
