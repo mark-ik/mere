@@ -70,8 +70,8 @@ use eidetic::{
 };
 use eidetic_fjall::FjallStore;
 use eidetic_search::{SearchError, TrailIndex, bootstrap_search_schema, fuse};
-use embed::provider::EmbeddingProvider;
 use embed::VectorIndex;
+use embed::provider::EmbeddingProvider;
 use import::{
     HistoryTransitionKind, ImportedBookmarkItem, ImportedHistoryVisitItem, ImportedPageSeed,
     parse_bookmark_items,
@@ -79,10 +79,8 @@ use import::{
 
 /// The CPU backend the rehearsal bin embeds on by default.
 
-
 /// The GPU backend behind `--backend wgpu` (burn brief Lane 1's first
 /// consumer wiring; ~38x on batch embedding at MiniLM dims).
-
 
 /// Texts per embedding batch (CPU-friendly).
 const EMBED_BATCH: usize = 16;

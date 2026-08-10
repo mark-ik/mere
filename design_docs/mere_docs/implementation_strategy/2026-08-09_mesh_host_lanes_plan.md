@@ -267,6 +267,12 @@ widen production dependencies.
 
 The last gate, and the one with a real upstream question in it.
 
+> **Named in error.** Earlier drafts of this section called the credential a
+> `RemoteTicket`. No such type exists in `burn-remote 0.22.0-pre.1`; the real
+> surface is `PeerAuthorizer` + an opaque `Vec<u8>` credential. The design is
+> [lease-bound remote sessions](../technical_architecture/2026-08-10_lease_bound_remote_sessions.md),
+> written against the source on 2026-08-10.
+
 **Burn Remote authorizes a session at admission.** M3 owner reclaim requires
 terminating a session that was *already* authorized — the whole point of reclaim
 is that permission granted a minute ago stops applying the moment the human

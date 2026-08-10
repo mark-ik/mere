@@ -193,9 +193,10 @@ up, per the burn brief's own rule.
   foreground priority, device selection, render-vs-compute budget, reclaim;
   **murm** = the shared iroh endpoint and Router; **servitor::Gate** = whether
   an admitted denizen may petition the graph at all. Burn's `PeerAuthorizer`
-  is session admission, not job authorization; the opaque `RemoteTicket` may
-  carry a mesh lease reference, but mesh enforces scope, expiry, and reclaim
-  locally. **The first step needs no burn at all**: the revised M2 plan uses
+  is session admission, not job authorization; the opaque credential it checks
+  may carry a mesh lease reference, but mesh enforces scope, expiry, and
+  reclaim locally. (This said `RemoteTicket` until 2026-08-10; no such type
+  exists in `burn-remote 0.22.0-pre.1`.) **The first step needs no burn at all**: the revised M2 plan uses
   `esp::embed::LexicalEmbeddingProvider` for a useful deterministic batch;
   `StubEmbeddingProvider` remains a test double with meaningless similarity.
   Burn-remote mounting on the Router stays gated on a stable release (D3; it
