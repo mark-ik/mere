@@ -23,18 +23,14 @@ eidetic.workspace = true
 quint.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# Test-support only: the `bert_full_pipeline` integration test (the mere-side
-# eidetic↔BERT loading check) names `burn::backend::NdArray` for the provider's
-# backend. The BERT model tree itself lives in sibylla; this is just the backend
-# type the test instantiates. Pulled only by the `bert` feature.
-burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
 
 [features]
 default = []
-# The Burn-backed BERT embedding provider, re-exported from sibylla — which now
-# owns the burn / tokenizers / safetensors tree (BERT moved there at sibylla's
-# founding P2). `dep:burn` is for the mere-side integration test's backend type.
-bert = ["esp/bert", "dep:burn"]
+# The Burn-backed BERT embedding provider, re-exported from ESP, which owns the
+# burn / tokenizers / safetensors tree. No `dep:burn` here: the test and the
+# doctest construct through `esp::embed::bert::load_cpu`, so nothing on this
+# side ever names a Burn type (Burn 0.22 plan, B1).
+bert = ["esp/bert"]
 # GPU execution for the BERT provider (`BertEmbeddingProvider<Wgpu>`).
 bert-wgpu = ["bert", "esp/bert-wgpu"]
 

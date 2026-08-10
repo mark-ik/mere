@@ -20,7 +20,7 @@ identity.workspace = true
 notochord.workspace = true
 blake3 = "1.5"
 p2panda-core = "0.7.0"
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 rand_core = { version = "0.6", features = ["getrandom"] }
 # The blob Store trait the content cache persists through (wasm-clean; the host
 # supplies the concrete fjall / OPFS backend).

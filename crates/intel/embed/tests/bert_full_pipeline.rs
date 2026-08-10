@@ -29,13 +29,11 @@ use eidetic::{
     ModelLibrary, ModerationState, NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
     Timestamp, TrustEnvelope, TrustLevel,
 };
-use embed::bert::BertEmbeddingProvider;
+use embed::bert::{from_bytes_cpu, load_cpu};
 use embed::{EmbeddingProvider, SemanticSearch, VectorIndex, register_query_similarity_field};
 use quint::eval::eval_scalar;
 use quint::projection::FieldProjection;
 use quint::registry::FieldRegistry;
-
-type B = burn::backend::NdArray<f32>;
 
 /// Minimal in-memory store used by the eidetic round-trip test below.
 /// Mirrors the shape of `eidetic::ModelLibrary` tests' helper without
@@ -71,10 +69,11 @@ fn minilm_dir() -> Option<PathBuf> {
 #[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]
 fn loads_real_minilm_and_embeds_a_sentence() {
     let dir = minilm_dir().expect("MERE_MINILM_DIR must be set");
-    let provider: BertEmbeddingProvider<B> =
-        BertEmbeddingProvider::load(&dir, Default::default()).expect("load");
+    let provider = load_cpu(&dir).expect("load");
 
-    assert!(provider.is_loaded());
+    // `load_cpu` only ever returns a loaded provider, so the old
+    // `is_loaded()` assertion was tautological through this seam; the
+    // dimension check is what actually proves the config was read.
     assert_eq!(provider.dimensions(), 384);
 
     let v = provider
@@ -97,8 +96,7 @@ fn loads_real_minilm_and_embeds_a_sentence() {
 #[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]
 fn semantic_search_with_real_minilm_finds_self_match() {
     let dir = minilm_dir().expect("MERE_MINILM_DIR must be set");
-    let provider: BertEmbeddingProvider<B> =
-        BertEmbeddingProvider::load(&dir, Default::default()).expect("load");
+    let provider = load_cpu(&dir).expect("load");
 
     let mut search = SemanticSearch::<u32, _>::new(provider);
     search.ingest(1, "This is a sample sentence.").unwrap();
@@ -121,8 +119,7 @@ fn semantic_search_with_real_minilm_finds_self_match() {
 #[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]
 fn semantic_search_with_real_minilm_clusters_similar_topics() {
     let dir = minilm_dir().expect("MERE_MINILM_DIR must be set");
-    let provider: BertEmbeddingProvider<B> =
-        BertEmbeddingProvider::load(&dir, Default::default()).expect("load");
+    let provider = load_cpu(&dir).expect("load");
 
     let mut search = SemanticSearch::<u32, _>::new(provider);
     // Three rust topics (1, 2, 3) interleaved with three cooking topics (4, 5, 6).
@@ -166,8 +163,7 @@ fn semantic_search_with_real_minilm_clusters_similar_topics() {
 #[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]
 fn field_bridge_with_real_bert_separates_similar_from_dissimilar() {
     let dir = minilm_dir().expect("MERE_MINILM_DIR must be set");
-    let provider: BertEmbeddingProvider<B> =
-        BertEmbeddingProvider::load(&dir, Default::default()).expect("load");
+    let provider = load_cpu(&dir).expect("load");
 
     // Lay out 6 nodes on a canvas: rust topics on the left (x < 0),
     // cooking topics on the right (x > 0). The y-axis is irrelevant
@@ -265,8 +261,7 @@ fn minilm_round_trips_through_eidetic_and_inference_matches_direct_load() {
 
     // Reference: build a provider directly from the model dir, embed a
     // sentence. The eidetic-resolved provider must reproduce this output.
-    let direct: BertEmbeddingProvider<B> =
-        BertEmbeddingProvider::load(&dir, Default::default()).expect("direct load");
+    let direct = load_cpu(&dir).expect("direct load");
     let reference = direct
         .embed_one("This is a sample sentence.")
         .expect("reference embedding");
@@ -328,11 +323,10 @@ fn minilm_round_trips_through_eidetic_and_inference_matches_direct_load() {
     );
 
     // Build a provider from the eidetic-resolved bytes.
-    let resolved: BertEmbeddingProvider<B> = BertEmbeddingProvider::from_bytes(
+    let resolved = from_bytes_cpu(
         &resolved_model.components.config_bytes,
         &resolved_model.components.tokenizer_bytes,
         &resolved_model.components.weight_bytes,
-        Default::default(),
     )
     .expect("from_bytes via eidetic-resolved bytes");
     assert_eq!(resolved.dimensions(), 384);

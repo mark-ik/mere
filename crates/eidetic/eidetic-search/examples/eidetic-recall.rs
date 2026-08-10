@@ -71,18 +71,18 @@ use eidetic::{
 use eidetic_fjall::FjallStore;
 use eidetic_search::{SearchError, TrailIndex, bootstrap_search_schema, fuse};
 use embed::provider::EmbeddingProvider;
-use embed::{BertEmbeddingProvider, VectorIndex};
+use embed::VectorIndex;
 use import::{
     HistoryTransitionKind, ImportedBookmarkItem, ImportedHistoryVisitItem, ImportedPageSeed,
     parse_bookmark_items,
 };
 
 /// The CPU backend the rehearsal bin embeds on by default.
-type CpuBackend = burn::backend::NdArray<f32>;
+
 
 /// The GPU backend behind `--backend wgpu` (burn brief Lane 1's first
 /// consumer wiring; ~38x on batch embedding at MiniLM dims).
-type GpuBackend = burn::backend::Wgpu<f32, i32>;
+
 
 /// Texts per embedding batch (CPU-friendly).
 const EMBED_BATCH: usize = 16;
@@ -215,16 +215,11 @@ fn url_ranking(hits: &[eidetic_search::Hit]) -> Vec<String> {
 fn load_provider(model_dir: &str, backend: &str) -> Result<Box<dyn EmbeddingProvider>, String> {
     let t = std::time::Instant::now();
     let provider: Box<dyn EmbeddingProvider> = match backend {
-        "cpu" => Box::new(
-            BertEmbeddingProvider::<CpuBackend>::load(model_dir, Default::default())
-                .map_err(|e| format!("load embedding model from {model_dir}: {e}"))?,
-        ),
-        "wgpu" => Box::new(
-            BertEmbeddingProvider::<GpuBackend>::load(model_dir, Default::default())
-                .map_err(|e| format!("load embedding model from {model_dir}: {e}"))?,
-        ),
+        "cpu" => embed::bert::load_cpu(model_dir),
+        "wgpu" => embed::bert::load_wgpu(model_dir),
         other => return Err(format!("--backend must be cpu or wgpu, got {other:?}")),
-    };
+    }
+    .map_err(|e| format!("load embedding model from {model_dir}: {e}"))?;
     println!(
         "embedding backend: {backend} (model loaded in {} ms)",
         t.elapsed().as_millis()

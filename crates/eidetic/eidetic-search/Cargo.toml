@@ -31,12 +31,14 @@ tempfile = "3"
 # here so one bin carries ingest → index → recall → report): import supplies
 # the bookmark parser + history interchange types; fjall the on-disk store;
 # embed (BERT over burn, `--backend cpu|wgpu` at runtime) the vector half of
-# fused recall — burn is here only to name the backend types, pinned as embed
-# pins it.
+# fused recall. No direct burn dependency: the example constructs through
+# `embed::bert::load_cpu` / `load_wgpu`, which return the provider seam (Burn
+# 0.22 plan, B1). It used to name `burn::backend::Wgpu` while depending on burn
+# with only the ndarray feature — compiling solely because `embed/bert-wgpu`
+# unified `burn/wgpu` in. That is exactly the accidental fan-out this removes.
 import = { workspace = true }
 eidetic-fjall = { workspace = true }
 embed = { workspace = true, features = ["bert", "bert-wgpu"] }
-burn = { version = "0.21", default-features = false, features = ["ndarray", "std"] }
 
 # `test = true` runs the example's embedded mapper tests under `cargo test`.
 [[example]]

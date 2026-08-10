@@ -99,6 +99,63 @@ mod tests {
         assert!(unseal_bytes(&key, b"ctx", &sealed).is_err());
     }
 
+    /// The sealed-record format, pinned byte for byte.
+    ///
+    /// This guards real data. Vaults, wallets, and woodshed sessions on disk
+    /// right now were sealed by this function, so the day its output changes
+    /// is the day they stop opening. A crypto-crate version bump is exactly
+    /// how that would happen quietly, which is why the assertion is on bytes
+    /// rather than on a round trip: a round trip passes happily while writing
+    /// and reading a *new* format.
+    ///
+    /// Recorded 2026-08-10 during the digest 0.10 to 0.11 unification, and
+    /// confirmed identical under both generations. XChaCha20-Poly1305 is
+    /// standardized, so this is the algorithm speaking, not the crate.
+    ///
+    /// The nonce is supplied rather than generated, since `seal_bytes` draws a
+    /// fresh random one and its output is deliberately not reproducible.
+    #[test]
+    fn the_sealed_format_is_pinned_across_crate_generations() {
+        use chacha20poly1305::aead::{Aead, KeyInit, Payload};
+        use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
+
+        let key = [7u8; 32];
+        let nonce = [9u8; 24];
+        let aad = b"ctx";
+        let plaintext = b"a private payload";
+
+        let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
+        let ciphertext = cipher
+            .encrypt(
+                XNonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext,
+                    aad,
+                },
+            )
+            .unwrap();
+
+        let mut sealed = Vec::new();
+        sealed.extend_from_slice(&nonce);
+        sealed.extend_from_slice(&ciphertext);
+
+        assert_eq!(
+            hex::encode(&sealed),
+            concat!(
+                // the 24-byte nonce, prepended verbatim
+                "090909090909090909090909090909090909090909090909",
+                // XChaCha20-Poly1305 ciphertext plus its 16-byte tag
+                "df5292f815dc18169132785d111f688a4e",
+                "78010cef9d49354ca255964add266317",
+            ),
+            "the sealed byte format changed"
+        );
+
+        // And the public path still opens it, so the pin is on the real format
+        // rather than on a construction that only resembles it.
+        assert_eq!(unseal_bytes(&key, aad, &sealed).unwrap(), plaintext);
+    }
+
     #[test]
     fn a_fresh_nonce_each_time_so_ciphertexts_differ() {
         let key = [5u8; 32];

@@ -21,14 +21,11 @@
 //! ```no_run
 //! # #[cfg(feature = "bert")]
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use embed::bert::BertEmbeddingProvider;
 //! use embed::SemanticSearch;
 //!
-//! type B = burn::backend::NdArray<f32>;
-//!
-//! // One-shot load: config.json + tokenizer.json + model.safetensors.
-//! let provider: BertEmbeddingProvider<B> =
-//!     BertEmbeddingProvider::load("/path/to/all-MiniLM-L6-v2", Default::default())?;
+//! // One-shot load: config.json + tokenizer.json + model.safetensors, on the
+//! // portable CPU backend. No Burn type is named, so no Burn dependency.
+//! let provider = embed::bert::load_cpu("/path/to/all-MiniLM-L6-v2")?;
 //!
 //! // Wrap in the search facade.
 //! let mut search = SemanticSearch::<u32, _>::new(provider);

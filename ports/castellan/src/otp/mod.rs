@@ -32,7 +32,11 @@ mod uri;
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hmac::{Hmac, Mac};
+// `new_from_slice` lives on `KeyInit` rather than `Mac` since the digest 0.11
+// generation. `HmacCore` overrides it, so a key of any length is still
+// accepted, which is what OTP secrets need: they are 20, 32, or 64 bytes, not
+// the hash's block size.
+use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
@@ -294,7 +298,7 @@ impl Otp {
         // three lines of expansion.
         macro_rules! mac_with {
             ($hash:ty) => {{
-                let mut mac = <Hmac<$hash> as Mac>::new_from_slice(&self.secret)
+                let mut mac = <Hmac<$hash> as KeyInit>::new_from_slice(&self.secret)
                     .expect("HMAC accepts a key of any length");
                 mac.update(message);
                 mac.finalize().into_bytes().to_vec()

@@ -339,8 +339,8 @@ retinue = { git = "https://github.com/merely-made/retinue.git", branch = "main" 
 # Reticulum identity derivation: HKDF-SHA256 stretches Mere's 32-byte master seed
 # into retinue's 64-byte dual-key private identity. retinue owns the X25519/RNG
 # work, so the probe no longer needs x25519-dalek or a separate rand source.
-hkdf = "0.12"
-sha2 = "0.10"
+hkdf = "0.13"
+sha2 = "0.11"
 
 [workspace.lints.rust]
 unsafe_code = "warn"
