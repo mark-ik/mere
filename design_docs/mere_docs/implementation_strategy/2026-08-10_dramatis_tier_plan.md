@@ -33,17 +33,17 @@ on package name and are unaffected.
 
 ### D1: tier rename
 
-- [ ] `crates/persona/` renamed `crates/dramatis/`
-- [ ] Root `Cargo.toml`: 3 member paths + 4 workspace.dependencies paths updated
-- [ ] README.md tier table row updated
-- [ ] Dated plan docs deliberately NOT swept (receipts, per DOC_POLICY)
+- [x] `crates/persona/` renamed `crates/dramatis/`
+- [x] Root `Cargo.toml`: 3 member paths + 4 workspace.dependencies paths updated
+- [x] README.md tier table row updated
+- [x] Dated plan docs deliberately NOT swept (receipts, per DOC_POLICY)
 
 ### D2: gaz relocation
 
-- [ ] `repos/gaz` subtree-merged at `crates/dramatis/gaz` (history preserved,
+- [x] `repos/gaz` subtree-merged at `crates/dramatis/gaz` (history preserved,
       personae-consolidation precedent)
-- [ ] Workspace member + `gaz = { path = ... }` dependency entry added
-- [ ] gaz `Cargo.toml` repository field points at merely-made/mere; its bare
+- [x] Workspace member + `gaz = { path = ... }` dependency entry added
+- [x] gaz `Cargo.toml` repository field points at merely-made/mere; its bare
       `[workspace]` stub table removed so it joins mere's workspace
 - [ ] Open with Mark: disposition of the emptied `repos/gaz` checkout and the
       merely-made/gaz GitHub repo (pointer README vs archive vs delete).
@@ -51,7 +51,7 @@ on package name and are unaffected.
 
 ### D3: the claim
 
-- [ ] `dramatis` 0.0.1 reservation published (seven-file stub anatomy per the
+- [x] `dramatis` 0.0.1 reservation published (seven-file stub anatomy per the
       tulpa pattern, MIT/Apache, ed2024), local repo `repos/dramatis`,
       GitHub merely-made/dramatis
 
@@ -90,5 +90,10 @@ where actors don costumes) but the name needs its own challenge round.
 
 ## Progress
 
-- 2026-08-10: plan written; D1-D3 executed this session (see Progress updates
-  below); D4 deferred.
+- 2026-08-10: plan written; D1-D3 executed and verified same session. Two
+  relative personae paths (servitor, commons-spine) escaped the workspace-table
+  sweep and were fixed in a follow-up commit; the lesson is that consumers path
+  tier crates relatively, so a tier rename greps for `persona/`, not just
+  `crates/persona`. gaz: 41 tests + doctest green from the workspace. dramatis
+  0.0.1 published; merely-made/dramatis created. D4 remains deferred. Open with
+  Mark: repos/gaz + merely-made/gaz disposition.
