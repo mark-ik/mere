@@ -92,6 +92,42 @@ separation, serverless carry, agent-first architecture, and
 library-substrate packaging. That combination, not any single feature, is the
 product claim.
 
+### The name and the vocabulary (ratified 2026-08-10, same day)
+
+The port is **castellan** (claimed, 0.0.1 from `ports/castellan`): the keeper
+who holds a keep in trust for its lord, custody without ownership, the office
+of the gate. Tiring-house is retired (its meaning, where the costume is
+donned, was always personae's). Two register siblings were promoted from
+bench to vocabulary by Mark in the same round:
+
+- **chatelaine**: the secrets. Passwords, 2FA seeds, tokens, foreign key
+  material. Historically the waist-worn chain holding the household's keys.
+  Chatelaine items are *exercised*, never shown: showing a password burns it,
+  showing a TOTP seed clones it.
+- **emblem**: the proofs. Graded presentations of identity a persona hands
+  out. Emblems are *made to be shown* and survive showing: a signature
+  reveals no key. An emblem needn't be the most stringent proof available;
+  the grade is chosen per audience.
+
+The boundary between the two nouns is cryptographic, not just filing:
+chatelaine holds bearer/symmetric material (damaged by disclosure), emblem
+holds public-key artifacts (designed for disclosure). Castellan's two halves
+map onto them: the authority half exercises chatelaine and signs emblem
+presentations; the embeddable half browses both and contains neither.
+
+**The emblem/gaz relation (Mark's framing):** your emblem is what someone
+else's gaz keeps. The emblem is the interchange artifact between one person's
+dramatis and another's; the gaz record is the ledger of emblems received,
+with verification state and petname/tier annotations. The receipt already
+ships: hocket's contact token (the full master pubkey pasted between
+musicians) is a v0 emblem, load-bearing in the wild. Emblem grades map onto
+existing machinery: bare key (continuity), signed claims binding handles and
+endpoints to a persona key (cross-attestation), personae's delegation
+certificates, up to chain-root linkage, which is where tessera already
+accrues. A published emblem is what gazette resolves (a WebFinger JRD is
+exactly one); a handed emblem travels bilaterally (paste, QR, misfin). Same
+artifact, two carriages.
+
 ### Open questions for the port's own plan
 
 1. **Derived vs stored.** SSH keys re-derive from the seed; TOTP secrets and
@@ -102,8 +138,11 @@ product claim.
    browse half shows origin-match warnings is a product decision.
 3. Rate/abuse posture on the authority half: per-persona release policies,
    "ask every time" vs session grants (wallet_grant already models this).
-4. The name. Tiring-house is floated (where actors don their costumes);
-   needs a challenge round.
+4. Where emblem and chatelaine live as code: chatelaine is plausibly the
+   vault's stored-item taxonomy (personae substrate, castellan surface);
+   emblem's spine is personae's delegation module. Names verified free
+   2026-08-10; whether either becomes a crate follows the
+   module/crate/publish three-decisions rule.
 
 ---
 
