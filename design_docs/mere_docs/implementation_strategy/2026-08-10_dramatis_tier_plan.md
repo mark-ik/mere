@@ -91,6 +91,11 @@ to read for technique, not adopt wholesale: IOTA Stronghold, keyring-rs.
 The port is unnamed. The theatrical register has candidates (a tiring-house is
 where actors don costumes) but the name needs its own challenge round.
 
+Both this direction and the gazette's feed direction are fleshed out in the
+[credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md),
+which owns the standards inventory and the open questions until dated plans
+supersede it.
+
 ## Progress
 
 - 2026-08-10: plan written; D1-D3 executed and verified same session. Two
