@@ -50,6 +50,7 @@ members = [
     "crates/stickleback",
     "crates/murm/murm",
     "crates/murm/transport",
+    "crates/dramatis/gaz",
     "crates/dramatis/gazetteer",
     "crates/dramatis/persona-picker",
     "crates/moot/commons",
@@ -269,6 +270,9 @@ muniment = { version = "0.1.1", path = "crates/eidetic/muniment" }
 # 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer
 # yet, and its blocking reqwest needs an async port before one wires it.
 gazetteer = { package = "mere-gazetteer", path = "crates/dramatis/gazetteer" }
+# Stored key-rooted contacts (the "them" side personae keeps): petnames, handles,
+# per-endpoint trust, kith/kin tiers, recency. Relocated from repos/gaz 2026-08-10.
+gaz = { version = "0.0.1", path = "crates/dramatis/gaz" }
 # The shared "which persona am I?" list. A Cambium view over the personae
 # roster, so the four applications with a GUI draw one picker rather than four.
 persona-picker = { package = "mere-persona-picker", path = "crates/dramatis/persona-picker" }
