@@ -93,7 +93,7 @@ declared.
 | `crates/murm` | `murm`, `mere-transport` | Direct peer conversation, over iroh QUIC. A `reticulum` feature adds a `retinue` radio backend |
 | `crates/moot` | `commons-spine`, `gemot`, `moothold`, `mooting` | Governed community spaces: the chartulary-graph-as-replicated-domain profile, the Moot lifecycle and governance layer with Tessera, tier-3 federation, and the social-primitives protocol core |
 | `crates/mesh` | `mere-mesh` | The personal-space compute mesh: signed job operations over LogSync, a deterministic job board, and the worker loop |
-| `crates/persona` | `personae`, `mere-gazetteer` | The trust-plane spine (master Ed25519 keypair, BLAKE3 per-protocol derivation, OS-store-unlocked vault, sealed records) and the handle-resolution index (WebFinger today) |
+| `crates/dramatis` | `personae`, `mere-persona-picker`, `mere-gazetteer`, `gaz` | The cast list (dramatis personae): the trust-plane spine (master Ed25519 keypair, BLAKE3 per-protocol derivation, OS-store-unlocked vault, sealed records), the persona picker view, the handle-resolution index (WebFinger today), and stored key-rooted contacts |
 | `crates/servitor` | `servitor` | The resident-helper unit: a denizen holds a scoped structural capability and proposes changes through a validating, revision-checked gate |
 | `crates/armillary` | `armillary` | The host-neutral actor-kernel runtime: the `!Send` host-kernel boundary, the `Send` actor harness, generation counters, and a reusing worker pool |
 | `crates/script` | `script-rhai`, `document-host`, `app-host` | Scripting hosts: the Rhai `BlockEvaluator` backend, the Wasmtime `document-core` host over genet's live `ScriptedDom`, and the Wasmtime `app-core` envelope host over a host-supplied `ActionSink` |

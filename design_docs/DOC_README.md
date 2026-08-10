@@ -40,6 +40,7 @@ Root-level briefs that span multiple area-docs (not required reading).
 > The older detailed index entry below describes the deleted Meerkat
 > implementation and is not the current queue.
 
+- [dramatis_tier_plan](mere_docs/implementation_strategy/2026-08-10_dramatis_tier_plan.md) — **ratified + D1-D3 executed 2026-08-10**: `crates/persona/` renamed `crates/dramatis/` (dramatis personae; dodges the in-product term *persona*); gaz subtree-merged in from its standalone repo as the tier's stored-contact crate; bare `dramatis` claimed on crates.io as a facade reservation. Deferred with anchors: the wallet fold-in from session-runtime, and the credential-manager **port** (embeddable browse half, resident-only authority half through the participant gate; standards runway TOTP/HOTP → CXF → OS credential surfaces → WebAuthn provider).
 - [knot_authoring_consumer_plan](mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md) — **complete locally 2026-07-27 for Knot-owned work**: Graphshell editable text and typed Save; retained Turnstone Cambium authoring; file, personal-vault, and Commons writes; stale refusal and revision refresh; typed Inspector clipping; consented Resolve/Run with rooted file, anonymous HTTP(S), read-only smolweb, sanitized HTML, and sealed attributable resolve caching. Faithful selected-range clipping is explicitly gated on Genet retaining selection and producing a stable DOM-range selector; Knot already records one when supplied.
 
 Several older plans here carry a 2026-06-09 rename-key banner: their bodies use
