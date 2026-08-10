@@ -22,9 +22,10 @@ thiserror = "1"
 # `rt` spawns the run tasks off the decision loop — the whole point of the
 # supervisor; `time` bounds the reclaim grace window.
 tokio = { version = "1", features = ["rt", "time"] }
+# H1's blob lane. The host owns the shared transport, so this is where the
+# iroh-blobs store and `fetch_from` belong — `mere-mesh` stays transport-free.
+transport = { workspace = true }
 
 [dev-dependencies]
-# The two-host receipt runs over real p2panda-net peers, like the mesh's own.
-transport = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
 proofs.workspace = true

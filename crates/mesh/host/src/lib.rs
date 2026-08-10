@@ -43,10 +43,14 @@
 //! See the
 //! [mesh host lanes plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
 
+pub mod courier;
 pub mod host;
 pub mod inflight;
 pub mod sense;
 
+pub use courier::{
+    BlobCourier, CourierError, NoCourier, TransportBlobSpace, TransportCourier, deliver_inputs,
+};
 pub use host::{BlobSpace, HostConfig, HostError, MeshHost, Step};
 pub use inflight::{RunOutcome, still_held};
 pub use sense::{Clock, ConditionSource, ManualClock, ObservedConditions, SystemClock};

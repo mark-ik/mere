@@ -134,12 +134,19 @@ impl MeshDropSelector {
                 (self.privacy.include_job_inputs || !contains_inputs)
                     && (self.privacy.include_job_results || !contains_results)
             }
-            MeshEvent::JobClaimed { .. } | MeshEvent::HistoryPruned { .. } => true,
+            // A device saying which master key it answers to carries no job
+            // content at all — and a catch-up without it cannot resolve who to
+            // fetch blobs from, so it always travels.
+            MeshEvent::DeviceAttested { .. }
+            | MeshEvent::JobClaimed { .. }
+            | MeshEvent::HistoryPruned { .. } => true,
         }
     }
 
     fn priority(&self, event: &MeshEvent) -> u32 {
         match event {
+            // Nothing else can be acted on without knowing who the authors are.
+            MeshEvent::DeviceAttested { .. } => self.priorities.retention_checkpoint,
             MeshEvent::RetentionCheckpoint { .. } => self.priorities.retention_checkpoint,
             MeshEvent::HistoryPruned { .. } => self.priorities.history_pruned,
             MeshEvent::JobDone { .. }

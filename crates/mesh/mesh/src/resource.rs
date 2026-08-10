@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use crate::ident::{ImplementationId, ResourceId};
-use crate::lease::LeaseProgress;
+use crate::lease::{LeaseActivity, LeaseProgress};
 use crate::namespace::{BoxFuture, JobNamespaceView, NamespaceError};
 use crate::spec::{ResourceRequirements, VerificationClass};
 
@@ -84,6 +84,7 @@ struct ControlState {
     done: AtomicU64,
     total: AtomicU64,
     checkpoint_held: AtomicBool,
+    activity: AtomicU8,
 }
 
 impl ControlState {
@@ -104,6 +105,12 @@ impl ControlState {
             done: self.done.load(Ordering::SeqCst),
             total: self.total.load(Ordering::SeqCst),
             checkpoint_held: self.checkpoint_held.load(Ordering::SeqCst),
+            activity: match self.activity.load(Ordering::SeqCst) {
+                0 => LeaseActivity::Fetching,
+                1 => LeaseActivity::Preparing,
+                3 => LeaseActivity::Checkpointing,
+                _ => LeaseActivity::Running,
+            },
         }
     }
 }
@@ -153,6 +160,7 @@ impl JobControl {
             done: AtomicU64::new(0),
             total: AtomicU64::new(0),
             checkpoint_held: AtomicBool::new(false),
+            activity: AtomicU8::new(2),
         });
         (
             JobControlHandle {
@@ -184,6 +192,18 @@ impl JobControl {
     pub fn report(&self, done: u64, total: u64) {
         self.state.done.store(done, Ordering::SeqCst);
         self.state.total.store(total, Ordering::SeqCst);
+    }
+
+    /// Say which phase this run is in. A device fetching a job's inputs is not
+    /// a device that has stalled, and only the run knows the difference.
+    pub fn set_activity(&self, activity: LeaseActivity) {
+        let code = match activity {
+            LeaseActivity::Fetching => 0,
+            LeaseActivity::Preparing => 1,
+            LeaseActivity::Running => 2,
+            LeaseActivity::Checkpointing => 3,
+        };
+        self.state.activity.store(code, Ordering::SeqCst);
     }
 
     /// Declare whether a resumable checkpoint now exists **on this device**.
@@ -316,7 +336,8 @@ mod tests {
             LeaseProgress {
                 done: 3,
                 total: 10,
-                checkpoint_held: true
+                checkpoint_held: true,
+                activity: LeaseActivity::Running,
             }
         );
     }

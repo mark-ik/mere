@@ -3,7 +3,7 @@
 **Date**: 2026-08-09
 
 **Status**: Open. Re-cut 2026-08-09 after review, around a supervisor gate the
-first draft was missing entirely. **H0 landed the same day**; H1 is next.
+first draft was missing entirely. **H0 and H1 have landed**; H2 is next.
 
 **Related**:
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md),
@@ -33,7 +33,7 @@ supervises running work.
 | Gate | Required result |
 |---|---|
 | ~~**H0: Host supervisor**~~ | **Done 2026-08-09** — `mere-mesh-host`. Non-blocking in-flight jobs, real heartbeat state, cancellation before revoke, correct leased completion |
-| **H1: Blob location and delivery** | Mesh author mapped to transport endpoint; existing iroh-blobs path used; disjoint-store two-host receipt |
+| ~~**H1: Blob location and delivery**~~ | **Done 2026-08-10** — `DeviceAttested` + `TransportCourier`. Mesh author resolves to a transport endpoint through an existing master-signed attestation; disjoint-store two-host receipt passes |
 | **H2: Retention safety** | Refuse checkpoint/prune when an observed live lease depends on the prefix; retain inputs and outputs through completion/convergence |
 | **Burn migration** | Stable 0.22 dependency migration and existing backend baselines |
 | **Remote adapter** | Lease-bound authorization plus targeted session revocation |
@@ -163,6 +163,45 @@ Whatever the lane does, that distinction must survive it.
 **Receipt.** Two hosts with **disjoint** blob stores: the poster holds the
 input, the worker does not, and the job completes anyway.
 
+### Landed 2026-08-10
+
+**The binding already existed.** Neither proposal above was needed as new
+machinery. `personae` already mints a `DerivedKeyAttestation`: a statement,
+signed *by the master*, that a given derived key belongs to it. What was
+missing was only publication. `MeshEvent::DeviceAttested` carries one on the
+mesh, and the board folds a `DeviceDirectory` out of them — self-authenticating,
+no new record format, nothing to get wrong.
+
+Two rules make it safe, checked at the store before mutation and again in the
+fold: the master signature must verify over `MESH_AUTHOR_SALT`, and **the
+attested key must be the operation's own author**. Without the second rule
+anyone could publish a perfectly valid attestation *about somebody else* and
+aim the ring's blob fetches at a device of their choosing.
+
+**One store, not two.** A host's blob space is `mere-transport`'s `BlobStore`
+directly (`TransportBlobSpace` implements the mesh's `BlobSource`/`BlobSink`
+over it). The first sketch had a muniment space beside the iroh-blobs one, which
+would have meant copying every blob twice and deciding forever which copy was
+real. Because it is the store the router already serves, staging a blob makes it
+fetchable, the namespace reads out of it, and pulling one in is `fetch_from`
+against the same store. A unit test pins the thing this rests on: iroh-blobs and
+`BlobRef` agree on what a blob is called.
+
+**Who to ask.** The poster first — it named the bytes, so it had them — then
+every other attested device, because a peer that already fetched it is just as
+good a source. Never this device.
+
+`LeaseActivity { Fetching, Preparing, Running, Checkpointing }` landed on
+`LeaseProgress` with `#[serde(default)]` and skip-when-`Running`, so a snapshot
+written before H1 still hashes to its committed bytes.
+
+**Not done here.** A courier failure is deliberately not fatal: the run proceeds
+and fails on the missing input, which is reported as
+`ReleaseReason::InputUnavailable`. Retry policy, parallel fetch, and partial
+transfer resume are not implemented — the lane works, it is not yet tuned.
+
+---
+
 ---
 
 ## 4. H2: retention safety
@@ -284,3 +323,10 @@ classes, and remote tensor transport beyond the adapter gate above.
   lose globally. That check (`still_held`) is now the first thing every tick
   does after reaping. Two-host receipt over real transport; 7 tests green;
   clippy clean; largest file 531 lines.
+- **2026-08-10 (H1)**: blob delivery landed, and the plan's framing was half
+  wrong in a useful way. Discovery *was* the hard part, as recorded — but the
+  fix needed no new record: personae's `DerivedKeyAttestation` was already
+  exactly the authenticated author-to-master binding, and only wanted
+  publishing. The genuinely new decision was collapsing the two blob stores
+  into one, which the plan had not noticed was a choice at all. Disjoint-store
+  two-host receipt over real transport; 124 tests green across both crates.

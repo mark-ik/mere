@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use identity::Ed25519Keypair;
+use identity::{DerivedKeyAttestation, Ed25519Keypair};
 use mesh::{
     BlobSink, BlobSource, DevicePolicy, HostFacts, HostOffer, JobControl, JobId, LeaseId,
     LeasePolicy, LeaseProgress, MeshEvent, MeshStoreError, MeshSyncError, ReclaimReason,
@@ -16,6 +16,7 @@ use mesh::{
 };
 use muniment::Backend;
 
+use crate::courier::{BlobCourier, NoCourier, deliver_inputs};
 use crate::inflight::{InFlight, Reclaiming, RunOutcome, release_reason, still_held};
 use crate::sense::{Clock, ConditionSource};
 
@@ -41,6 +42,8 @@ impl<T: BlobSource + BlobSink + Send + Sync> BlobSpace for T {
 pub struct HostConfig {
     pub registry: ResourceRegistry,
     pub blobs: Arc<dyn BlobSpace>,
+    /// How this device gets a job's inputs when it does not already hold them.
+    pub courier: Arc<dyn BlobCourier>,
     pub clock: Arc<dyn Clock>,
     pub conditions: Arc<dyn ConditionSource>,
     pub facts: HostFacts,
@@ -56,6 +59,9 @@ impl HostConfig {
         Self {
             registry: ResourceRegistry::builtin(),
             blobs,
+            // No delivery lane by default: a host wires `TransportCourier` when
+            // it has a transport to pull over.
+            courier: Arc::new(NoCourier),
             clock: Arc::new(crate::sense::SystemClock),
             conditions: Arc::new(crate::sense::ObservedConditions::spare()),
             facts: HostFacts::cpu(4096),
@@ -183,6 +189,21 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
     /// already in flight.
     pub fn set_policy(&mut self, policy: DevicePolicy) {
         self.config.policy = policy;
+    }
+
+    /// Tell the ring which persona master key authorized this device's mesh
+    /// authoring key, so peers can turn its jobs into a transport address.
+    ///
+    /// The attestation must be minted by the identity provider that owns the
+    /// master — the supervisor holds only the derived key, and deliberately
+    /// cannot forge one. Mint it with
+    /// `provider.attest_derived_key(mesh::MESH_AUTHOR_SALT)`.
+    pub async fn announce(&self, attestation: DerivedKeyAttestation) -> Result<(), HostError> {
+        self.author(&MeshEvent::DeviceAttested {
+            attestation: Box::new(attestation),
+        })
+        .await?;
+        Ok(())
     }
 
     /// One pass: reap finished runs, escalate any overdue reclaim, then take at
@@ -315,6 +336,28 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
             .collect()
     }
 
+    /// Who to ask for a job's inputs, best first.
+    ///
+    /// The poster is the obvious holder — it named the bytes, so it had them.
+    /// Every other attested device follows, because a peer that already fetched
+    /// the blob is just as good a source and the directory knows who they are.
+    /// This device is never in the list: it has already looked locally.
+    fn blob_sources(&self, board: &mesh::JobBoard, posted_by: [u8; 32]) -> Vec<[u8; 32]> {
+        let directory = board.devices();
+        let mut sources: Vec<[u8; 32]> = directory
+            .master_of(&posted_by)
+            .filter(|_| posted_by != self.me)
+            .into_iter()
+            .collect();
+        sources.extend(
+            directory
+                .entries()
+                .filter(|(author, _)| **author != posted_by && **author != self.me)
+                .map(|(_, master)| *master),
+        );
+        sources
+    }
+
     /// Spawn a run off the decision loop.
     fn start(&mut self, board: &mesh::JobBoard, job: JobId, now_ms: u64) -> Option<Step> {
         let record = board.job(job)?;
@@ -329,12 +372,17 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
         };
         let registry = self.config.registry.clone();
         let blobs = self.config.blobs.clone();
+        let courier = self.config.courier.clone();
         let (handle, control) = JobControl::new();
 
         let task = match (&record.spec, record.kind) {
             (Some(spec), _) => {
                 let spec = spec.as_ref().clone();
+                let from = self.blob_sources(board, record.posted_by);
                 tokio::spawn(async move {
+                    // Grant first, then fetch under the lease: pulling before
+                    // the grant spends bandwidth on races this device may lose.
+                    deliver_inputs(&spec, &*blobs, &*courier, &from, &control).await;
                     run_job(
                         &registry,
                         &spec,

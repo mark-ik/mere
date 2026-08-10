@@ -172,6 +172,17 @@ impl OperationPolicy<MeshExt> for MeshPolicy<'_> {
                             ));
                         }
                     }
+                    MeshEvent::DeviceAttested { attestation }
+                        if !crate::directory::attests(
+                            *operation.header.verifying_key.as_bytes(),
+                            attestation,
+                        ) =>
+                    {
+                        return Err(Reject::new(
+                            "invalid-device-attestation",
+                            "an attestation must be signed by the author's own master key",
+                        ));
+                    }
                     _ => {}
                 }
                 Ok(Admission::keep(target))

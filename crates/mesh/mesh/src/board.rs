@@ -22,6 +22,7 @@ use std::collections::BTreeMap;
 use p2panda_core::Operation;
 use serde::{Deserialize, Serialize};
 
+use crate::directory::DeviceDirectory;
 use crate::fold::{ClaimFact, CompletionFact, GatheredJobLeases, Posted, ResultRecord};
 use crate::lease::{GrantFact, LeaseEnd, LeaseFact, LeaseFactBody, LeaseId, LeaseRecord};
 use crate::projection::{LeasePhase, LeasePolicy, phase_at};
@@ -139,6 +140,7 @@ impl Job {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct JobBoard {
     jobs: BTreeMap<JobId, Job>,
+    devices: DeviceDirectory,
 }
 
 /// A device eligible for the next lease epoch, with the instant it proposed
@@ -180,6 +182,8 @@ impl JobBoard {
         let mut leases: BTreeMap<JobId, GatheredJobLeases> = BTreeMap::new();
         // Lease records carried in from a checkpoint, topped up by the tail.
         let mut retained: BTreeMap<JobId, LeaseRecord> = BTreeMap::new();
+        // Which device is behind each author key.
+        let mut devices = DeviceDirectory::default();
 
         // Seed the gather maps from the accepted checkpoint. The all-zero
         // synthetic claim key sorts before any real operation hash, preserving
@@ -369,6 +373,10 @@ impl JobBoard {
                         },
                     );
                 }
+                MeshEvent::DeviceAttested { attestation } => {
+                    // Defence in depth behind the store's admission check.
+                    devices.admit(author, &attestation);
+                }
                 MeshEvent::RetentionCheckpoint { .. } | MeshEvent::HistoryPruned { .. } => {}
             }
         }
@@ -435,7 +443,7 @@ impl JobBoard {
                 },
             );
         }
-        Self { jobs }
+        Self { jobs, devices }
     }
 
     /// Every job's lease phase at one observation time — the `board.at(t)` the
@@ -464,6 +472,12 @@ impl JobBoard {
     /// One job by id.
     pub fn job(&self, id: JobId) -> Option<&Job> {
         self.jobs.get(&id)
+    }
+
+    /// Which devices have said who they are. A host turns a master key into a
+    /// transport address; the mesh stops at the key so it stays transport-free.
+    pub fn devices(&self) -> &DeviceDirectory {
+        &self.devices
     }
 
     /// How many jobs the board knows.

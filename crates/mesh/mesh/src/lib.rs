@@ -71,6 +71,7 @@
 //! [mesh host lanes plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
 
 pub mod board;
+pub mod directory;
 pub mod drop_export;
 mod fold;
 pub mod ident;
@@ -89,11 +90,12 @@ pub mod wire;
 pub mod worker;
 
 pub use board::{Job, JobBoard, JobId, JobState};
+pub use directory::{DeviceDirectory, MESH_AUTHOR_SALT, attests};
 pub use drop_export::{MeshDropPriorities, MeshDropPrivacy, MeshDropProfile, MeshDropSelector};
 pub use ident::{IdentError, ImplementationId, ResourceId};
 pub use lease::{
-    LeaseEnd, LeaseEpoch, LeaseId, LeaseProgress, LeaseRecord, LeaseTerms, LeaseTermsError,
-    ReclaimReason, ReleaseReason,
+    LeaseActivity, LeaseEnd, LeaseEpoch, LeaseId, LeaseProgress, LeaseRecord, LeaseTerms,
+    LeaseTermsError, ReclaimReason, ReleaseReason,
 };
 pub use namespace::{
     BlobSink, BlobSource, JobNamespaceView, MemoryBlobSpace, NamespaceError, OutputCommit,

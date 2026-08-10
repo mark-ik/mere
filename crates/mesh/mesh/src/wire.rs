@@ -18,6 +18,8 @@ use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
+use identity::DerivedKeyAttestation;
+
 use crate::lease::{LeaseProgress, ReclaimReason, ReleaseReason};
 use crate::retention::RetentionCheckpoint;
 use crate::spec::{JobOutput, JobSpec};
@@ -140,6 +142,13 @@ pub enum MeshEvent {
         lease: [u8; 32],
         output: Box<JobOutput>,
         at_ms: u64,
+    },
+    /// H1: this device says which persona master key authorized its mesh
+    /// authoring key, so peers can turn a job's author into a transport
+    /// address. Self-attesting only: the attested key must be this operation's
+    /// own author.
+    DeviceAttested {
+        attestation: Box<DerivedKeyAttestation>,
     },
     /// Owner-authorized current state and retained per-log frontier.
     RetentionCheckpoint {

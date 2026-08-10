@@ -92,6 +92,34 @@ pub enum LeaseTermsError {
     MissAllowance(u32),
 }
 
+/// What a holder is doing under its lease, as distinct from how far it has got.
+///
+/// A device that is fetching a job's inputs looks exactly like a device that
+/// has stalled if all it can report is a counter — and transfer time is lease
+/// time. This is the difference between "slow" and "stuck".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LeaseActivity {
+    /// Pulling granted inputs this device did not already hold.
+    Fetching,
+    /// Decoding and validating them.
+    Preparing,
+    /// Doing the work. The default, because a pre-H1 heartbeat carried no
+    /// activity and every one of them was a run.
+    #[default]
+    Running,
+    /// Reaching a checkpoint boundary before stopping.
+    Checkpointing,
+}
+
+impl LeaseActivity {
+    /// Whether this is the encoding-invisible default. A [`LeaseProgress`] can
+    /// ride inside a retention snapshot, which is re-encoded and hashed, so the
+    /// field has to disappear when it says nothing new.
+    pub fn is_running(&self) -> bool {
+        matches!(self, Self::Running)
+    }
+}
+
 /// What a holder reports about how far it has got. Resource-defined units; the
 /// mesh only carries them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,6 +130,10 @@ pub struct LeaseProgress {
     /// Whether a resumable checkpoint exists on the holder's device. It is
     /// **local**: no other device can start from it until a blob lane exists.
     pub checkpoint_held: bool,
+    /// Which phase the run is in. Skipped when `Running` so a snapshot written
+    /// before H1 still hashes to the bytes its checkpoint committed to.
+    #[serde(default, skip_serializing_if = "LeaseActivity::is_running")]
+    pub activity: LeaseActivity,
 }
 
 /// Why a holder gave the lease back. About the *work*.
@@ -539,6 +571,7 @@ mod tests {
             done: 3,
             total: 10,
             checkpoint_held: true,
+            activity: LeaseActivity::Running,
         };
         let record = gathered(
             vec![grant(1, 9, 0, 100, 1_000)],
@@ -574,6 +607,7 @@ mod tests {
                         done: 99,
                         total: 99,
                         checkpoint_held: false,
+                        activity: LeaseActivity::Running,
                     }),
                 ),
                 // The holder's own heartbeat, after the window closed.
@@ -586,6 +620,7 @@ mod tests {
                         done: 5,
                         total: 10,
                         checkpoint_held: false,
+                        activity: LeaseActivity::Running,
                     }),
                 ),
             ],

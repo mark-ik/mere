@@ -241,7 +241,7 @@ pub fn next_action(board: &JobBoard, me: &[u8; 32], offer: &HostOffer<'_>) -> Wo
 mod tests {
     use super::*;
     use crate::ident::ResourceId;
-    use crate::lease::{LeaseProgress, LeaseTerms};
+    use crate::lease::{LeaseActivity, LeaseProgress, LeaseTerms};
     use crate::policy::NetworkClass;
     use crate::spec::{
         CheckpointClass, ComputeClass, DeterminismClass, JobSpec, ResourceRequirements,
@@ -675,7 +675,8 @@ mod tests {
             LeaseProgress {
                 done: 4,
                 total: 10,
-                checkpoint_held: true
+                checkpoint_held: true,
+                activity: LeaseActivity::Running,
             }
         );
     }
