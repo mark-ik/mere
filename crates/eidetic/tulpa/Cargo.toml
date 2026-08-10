@@ -1,0 +1,17 @@
+[package]
+name = "tulpa"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Name reservation. Tulpa is the legend and memorial layer: what memory makes of history — legends, memorials, epithets, and the manifestations of the dead — sustained by continued attention. Not ordinary event history (that is codicil), and not descent (that is fili)."
+repository = "https://github.com/merely-made/tulpa"
+readme = "README.md"
+keywords = ["memory", "legend", "memorial", "history", "provenance"]
+categories = ["data-structures"]
+exclude = ["design_docs/"]
+
+# Own workspace root. Members arrive if the organ splits; until then the
+# reservation package is the only member.
+[workspace]
+
+[dependencies]
