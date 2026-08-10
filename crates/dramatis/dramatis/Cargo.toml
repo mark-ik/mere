@@ -1,0 +1,12 @@
+[package]
+name = "dramatis"
+version = "0.0.2"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Name reservation. Dramatis is the cast-list tier of the Mere platform: a possible facade over personae (your faces), gaz (stored key-rooted contacts), and gazette (handle resolution). The cast list holds both you and the other players; the member crates are the implementation."
+readme = "README.md"
+keywords = ["identity", "persona", "contacts", "trust", "credentials"]
+categories = ["data-structures"]
+
+[dependencies]
