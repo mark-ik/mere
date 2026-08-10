@@ -50,7 +50,9 @@ members = [
     "crates/stickleback",
     "crates/murm/murm",
     "crates/murm/transport",
+    "crates/dramatis/chatelaine",
     "crates/dramatis/dramatis",
+    "crates/dramatis/emblem",
     "crates/dramatis/gaz",
     "crates/dramatis/gazette",
     "crates/dramatis/persona-picker",
@@ -282,6 +284,9 @@ gazetteer = { package = "mere-gazetteer", path = "crates/dramatis/gazetteer" }
 gaz = { version = "0.0.1", path = "crates/dramatis/gaz" }
 # The cast-list tier's facade reservation; empty until something imports it.
 dramatis = { version = "0.0.2", path = "crates/dramatis/dramatis" }
+# The graded identity proofs and the never-shown secrets; reservations, no code.
+emblem = { version = "0.0.1", path = "crates/dramatis/emblem" }
+chatelaine = { version = "0.0.1", path = "crates/dramatis/chatelaine" }
 # The shared "which persona am I?" list. A Cambium view over the personae
 # roster, so the four applications with a GUI draw one picker rather than four.
 persona-picker = { package = "mere-persona-picker", path = "crates/dramatis/persona-picker" }
