@@ -28,6 +28,12 @@
 //! - **Not gaz or gazette.** Those keep and find the other players; castellan
 //!   guards and presents you.
 //!
-//! No implementation yet.
+//! Implementation begins with [`otp`], the algorithm half of the chatelaine's
+//! 2FA codes: given a secret and a clock, the digits; given an `otpauth://`
+//! URI, the configured generator. Storage, presentation, and gate-mediated
+//! release are later slices; see the castellan OTP plan in mere's design docs.
 
 #![doc(html_no_source)]
+#![warn(missing_docs)]
+
+pub mod otp;

@@ -10,3 +10,8 @@ keywords = ["credentials", "identity", "vault", "agent", "persona"]
 categories = ["authentication"]
 
 [dependencies]
+# HMAC + the three hashes RFC 6238 allows. RustCrypto, and sha2 is already a
+# workspace pin, so this adds one lineage rather than three.
+hmac = "0.12"
+sha1 = "0.10"
+sha2.workspace = true
