@@ -22,6 +22,9 @@ use std::collections::BTreeMap;
 use p2panda_core::Operation;
 use serde::{Deserialize, Serialize};
 
+use crate::fold::{ClaimFact, CompletionFact, GatheredJobLeases, Posted, ResultRecord};
+use crate::lease::{GrantFact, LeaseEnd, LeaseFact, LeaseFactBody, LeaseId, LeaseRecord};
+use crate::projection::{LeasePhase, LeasePolicy, phase_at};
 use crate::retention::JobBoardSnapshot;
 use crate::spec::{JobOutput, JobSpec};
 use crate::wire::{JobKind, MeshEvent, MeshExt, from_operation, verify};
@@ -85,6 +88,16 @@ pub struct Job {
     /// The poster's author (verifying) key bytes.
     pub posted_by: [u8; 32],
     pub state: JobState,
+    /// Admissible lease facts, clock-free. Empty unless the spec signed lease
+    /// terms, and skipped when empty so a pre-M3 snapshot keeps its bytes.
+    #[serde(default, skip_serializing_if = "LeaseRecord::is_empty")]
+    pub lease: LeaseRecord,
+    /// Devices whose claims are eligible for the *next* lease epoch, in
+    /// claim-operation-hash order — so the first still-eligible entry is the
+    /// winner every peer computes. Populated only for leased jobs, which is what
+    /// keeps an unleased job's snapshot bytes where they were.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next_claimants: Vec<Claimant>,
 }
 
 impl Job {
@@ -92,6 +105,33 @@ impl Job {
     /// or its manifest is present (V2).
     pub fn is_runnable(&self) -> bool {
         self.spec.is_some() || self.payload.is_some()
+    }
+
+    /// The lease envelope this job was posted under, if any.
+    pub fn lease_terms(&self) -> Option<&crate::lease::LeaseTerms> {
+        self.spec.as_ref().and_then(|spec| spec.lease.as_ref())
+    }
+
+    /// Where the lease stands at one observation time. The *only* job question
+    /// that needs a clock, and it takes the reading as an argument.
+    pub fn lease_at(&self, at_ms: u64, policy: &LeasePolicy) -> LeasePhase {
+        phase_at(&self.lease, self.lease_terms(), at_ms, policy)
+    }
+
+    /// Who would win the next epoch for a grant authored at `at_ms` — the same
+    /// answer the fold will reach when that grant arrives.
+    pub fn next_holder(&self, at_ms: u64) -> Option<[u8; 32]> {
+        self.next_claimants
+            .iter()
+            .find(|claimant| claimant.at_ms <= at_ms)
+            .map(|claimant| claimant.author)
+    }
+
+    /// Whether `me` has already proposed itself for the next epoch.
+    pub fn has_claimed(&self, me: &[u8; 32]) -> bool {
+        self.next_claimants
+            .iter()
+            .any(|claimant| &claimant.author == me)
     }
 }
 
@@ -101,42 +141,14 @@ pub struct JobBoard {
     jobs: BTreeMap<JobId, Job>,
 }
 
-/// A gathered posting, before claims and results are resolved against it.
-struct Posted {
-    kind: Option<JobKind>,
-    payload: Option<Vec<u8>>,
-    spec: Option<Box<JobSpec>>,
-    by: [u8; 32],
-}
-
-/// A gathered result, in whichever generation its author wrote.
-enum ResultRecord {
-    Inline(Vec<u8>),
-    Committed(Box<JobOutput>),
-}
-
-impl Posted {
-    /// Resolve one job's terminal state. A result only counts when it answers
-    /// the generation the job was posted in, and a V2 result must additionally
-    /// honour the signed grant — so a winner cannot rename the output slot,
-    /// overflow its ceiling, or substitute another resource.
-    fn resolve(&self, winner: [u8; 32], record: Option<&ResultRecord>) -> JobState {
-        match (record, &self.spec) {
-            (Some(ResultRecord::Inline(result)), None) => JobState::Done {
-                winner,
-                result: result.clone(),
-            },
-            (Some(ResultRecord::Committed(output)), Some(spec))
-                if output.validate_against(spec).is_ok() =>
-            {
-                JobState::Committed {
-                    winner,
-                    output: output.clone(),
-                }
-            }
-            _ => JobState::Claimed { winner },
-        }
-    }
+/// A device eligible for the next lease epoch, with the instant it proposed
+/// itself. The instant matters: a grant is judged against the field that
+/// existed when it was authored, so a worker must not try to grant on the
+/// strength of a claim signed later than its own clock reading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Claimant {
+    pub author: [u8; 32],
+    pub at_ms: u64,
 }
 
 impl JobBoard {
@@ -158,11 +170,16 @@ impl JobBoard {
     {
         // Gather phase.
         let mut posted: BTreeMap<JobId, Posted> = BTreeMap::new();
-        // job → claim-op-hash → claimant author. BTreeMap keys give the
-        // deterministic winner (lowest claim-op hash) for free.
-        let mut claims: BTreeMap<JobId, BTreeMap<[u8; 32], [u8; 32]>> = BTreeMap::new();
+        // job → claim-op-hash → claimant. BTreeMap keys give the deterministic
+        // winner (lowest claim-op hash) for free; the signed `at_ms` is what
+        // makes a claim eligible for a later lease epoch.
+        let mut claims: BTreeMap<JobId, BTreeMap<[u8; 32], ClaimFact>> = BTreeMap::new();
         // job → author → result, in whichever generation the author wrote.
         let mut results: BTreeMap<JobId, BTreeMap<[u8; 32], ResultRecord>> = BTreeMap::new();
+        // job → lease facts, assembled per job once its spec is known.
+        let mut leases: BTreeMap<JobId, GatheredJobLeases> = BTreeMap::new();
+        // Lease records carried in from a checkpoint, topped up by the tail.
+        let mut retained: BTreeMap<JobId, LeaseRecord> = BTreeMap::new();
 
         // Seed the gather maps from the accepted checkpoint. The all-zero
         // synthetic claim key sorts before any real operation hash, preserving
@@ -177,8 +194,17 @@ impl JobBoard {
                     by: job.posted_by,
                 },
             );
+            if !job.lease.is_empty() {
+                retained.insert(job.id, job.lease.clone());
+            }
             if let Some(winner) = job.state.winner() {
-                claims.entry(job.id).or_default().insert([0; 32], winner);
+                claims.entry(job.id).or_default().insert(
+                    [0; 32],
+                    ClaimFact {
+                        author: winner,
+                        at_ms: 0,
+                    },
+                );
             }
             match &job.state {
                 JobState::Done { winner, result } => {
@@ -237,11 +263,11 @@ impl JobBoard {
                         },
                     );
                 }
-                MeshEvent::JobClaimed { job, .. } => {
+                MeshEvent::JobClaimed { job, at_ms } => {
                     claims
                         .entry(JobId(job))
                         .or_default()
-                        .insert(*op.hash.as_bytes(), author);
+                        .insert(*op.hash.as_bytes(), ClaimFact { author, at_ms });
                 }
                 MeshEvent::JobDone { job, result, .. } => {
                     results
@@ -255,6 +281,94 @@ impl JobBoard {
                         .or_default()
                         .insert(author, ResultRecord::Committed(output));
                 }
+                MeshEvent::LeaseGranted {
+                    job,
+                    epoch,
+                    granted_at_ms,
+                    expires_at_ms,
+                } => {
+                    let operation = *op.hash.as_bytes();
+                    leases.entry(JobId(job)).or_default().grants.insert(
+                        operation,
+                        GrantFact {
+                            operation,
+                            author,
+                            epoch,
+                            granted_at_ms,
+                            expires_at_ms,
+                        },
+                    );
+                }
+                MeshEvent::LeaseHeartbeat {
+                    job,
+                    lease,
+                    progress,
+                    at_ms,
+                } => {
+                    let operation = *op.hash.as_bytes();
+                    leases.entry(JobId(job)).or_default().facts.insert(
+                        operation,
+                        LeaseFact {
+                            operation,
+                            author,
+                            lease: LeaseId(lease),
+                            at_ms,
+                            body: LeaseFactBody::Heartbeat(progress),
+                        },
+                    );
+                }
+                MeshEvent::LeaseReleased {
+                    job,
+                    lease,
+                    reason,
+                    at_ms,
+                } => {
+                    let operation = *op.hash.as_bytes();
+                    leases.entry(JobId(job)).or_default().facts.insert(
+                        operation,
+                        LeaseFact {
+                            operation,
+                            author,
+                            lease: LeaseId(lease),
+                            at_ms,
+                            body: LeaseFactBody::End(LeaseEnd::Released { reason, at_ms }),
+                        },
+                    );
+                }
+                MeshEvent::LeaseRevokedByOwner {
+                    job,
+                    lease,
+                    reason,
+                    at_ms,
+                } => {
+                    let operation = *op.hash.as_bytes();
+                    leases.entry(JobId(job)).or_default().facts.insert(
+                        operation,
+                        LeaseFact {
+                            operation,
+                            author,
+                            lease: LeaseId(lease),
+                            at_ms,
+                            body: LeaseFactBody::End(LeaseEnd::Reclaimed { reason, at_ms }),
+                        },
+                    );
+                }
+                MeshEvent::JobCompletedUnderLease {
+                    job,
+                    lease,
+                    output,
+                    at_ms,
+                } => {
+                    leases.entry(JobId(job)).or_default().completions.insert(
+                        *op.hash.as_bytes(),
+                        CompletionFact {
+                            author,
+                            lease: LeaseId(lease),
+                            at_ms,
+                            output,
+                        },
+                    );
+                }
                 MeshEvent::RetentionCheckpoint { .. } | MeshEvent::HistoryPruned { .. } => {}
             }
         }
@@ -265,10 +379,47 @@ impl JobBoard {
             let winner = claims
                 .get(&id)
                 .and_then(|c| c.first_key_value())
-                .map(|(_, claimant)| *claimant);
-            let state = match winner {
-                None => JobState::Posted,
-                Some(winner) => post.resolve(winner, results.get(&id).and_then(|r| r.get(&winner))),
+                .map(|(_, claim)| claim.author);
+            let empty_claims = BTreeMap::new();
+            let job_claims = claims.get(&id).unwrap_or(&empty_claims);
+            let gathered = leases.remove(&id).unwrap_or_default();
+
+            // Leases resolve first: on a leased job the terminal state is
+            // whichever epoch completed, not whoever won the first claim.
+            let leased = post
+                .spec
+                .as_deref()
+                .is_some_and(|spec| spec.lease.is_some());
+            let lease = match post.spec.as_deref() {
+                Some(spec) if leased => gathered.resolve(retained.remove(&id), spec, job_claims),
+                _ => LeaseRecord::default(),
+            };
+            // Who could take the next epoch, in the order every peer agrees on.
+            let next_claimants = match (leased, lease.next_epoch()) {
+                (true, Some((_, from_ms))) => job_claims
+                    .values()
+                    .filter(|claim| claim.at_ms >= from_ms)
+                    .map(|claim| Claimant {
+                        author: claim.author,
+                        at_ms: claim.at_ms,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            };
+            let state = match gathered.completed_output(&lease) {
+                Some((holder, output)) => JobState::Committed {
+                    winner: holder,
+                    output: Box::new(output.clone()),
+                },
+                None => match (lease.current(), winner) {
+                    (Some(epoch), _) => JobState::Claimed {
+                        winner: epoch.holder,
+                    },
+                    (None, None) => JobState::Posted,
+                    (None, Some(winner)) => {
+                        post.resolve(winner, results.get(&id).and_then(|r| r.get(&winner)))
+                    }
+                },
             };
             jobs.insert(
                 id,
@@ -279,10 +430,30 @@ impl JobBoard {
                     spec: post.spec,
                     posted_by: post.by,
                     state,
+                    lease,
+                    next_claimants,
                 },
             );
         }
         Self { jobs }
+    }
+
+    /// Every job's lease phase at one observation time — the `board.at(t)` the
+    /// plan asks for. The fold above never reads a clock; this is where one
+    /// enters, as an argument.
+    pub fn at<'a>(
+        &'a self,
+        at_ms: u64,
+        policy: &'a LeasePolicy,
+    ) -> impl Iterator<Item = (JobId, LeasePhase)> + 'a {
+        self.jobs
+            .values()
+            .map(move |job| (job.id, job.lease_at(at_ms, policy)))
+    }
+
+    /// One job's lease phase at an observation time.
+    pub fn phase_at(&self, id: JobId, at_ms: u64, policy: &LeasePolicy) -> Option<LeasePhase> {
+        self.job(id).map(|job| job.lease_at(at_ms, policy))
     }
 
     /// All jobs, in id order.
@@ -311,6 +482,7 @@ mod tests {
     use super::*;
     use crate::wire::to_operation;
     use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
+    use serde::Serialize;
 
     const MESH: [u8; 32] = [0x4d; 32];
 
@@ -514,6 +686,368 @@ mod tests {
         );
         let board = JobBoard::fold(MESH, [&posted_here, &posted_elsewhere]);
         assert_eq!(board.len(), 1, "only this mesh's jobs fold in");
+    }
+
+    fn v2_spec() -> JobSpec {
+        JobSpec::simple(
+            crate::ident::ResourceId::parse("esp.embed.lexical/v1").unwrap(),
+            "texts",
+            proofs::BlobRef::blake3(b"a batch"),
+            "vectors",
+            4096,
+            crate::spec::DeterminismClass::Exact,
+        )
+    }
+
+    fn v2_output(bytes: &[u8]) -> JobOutput {
+        JobOutput {
+            name: "vectors".to_string(),
+            blob: proofs::BlobRef::blake3(bytes),
+            resource: v2_spec().resource,
+            implementation: crate::ident::ImplementationId::parse("mesh.lexical.fnv1a/v1").unwrap(),
+            verification: crate::spec::VerificationClass::ExactBytes,
+        }
+    }
+
+    fn post_v2(kp: &Ed25519Keypair, spec: JobSpec) -> Operation<MeshExt> {
+        to_operation(
+            kp,
+            MESH,
+            &MeshEvent::JobPostedV2 {
+                spec: Box::new(spec),
+                nonce: 0,
+                at_ms: 1,
+            },
+            0,
+            None,
+        )
+    }
+
+    #[test]
+    fn a_v2_job_folds_posted_claimed_committed() {
+        let asker = keypair(1);
+        let worker = keypair(2);
+        let posted = post_v2(&asker, v2_spec());
+        let id = JobId(*posted.hash.as_bytes());
+
+        let board = JobBoard::fold(MESH, [&posted]);
+        let job = board.job(id).unwrap();
+        assert_eq!(job.state, JobState::Posted);
+        assert_eq!(job.kind, None);
+        assert_eq!(job.spec.as_deref(), Some(&v2_spec()));
+
+        let claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let output = v2_output(b"the vectors");
+        let done = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobDoneV2 {
+                job: id.0,
+                output: Box::new(output.clone()),
+                at_ms: 3,
+            },
+            1,
+            Some(*claim.hash.as_bytes()),
+        );
+        let board = JobBoard::fold(MESH, [&posted, &claim, &done]);
+        assert_eq!(
+            board.job(id).unwrap().state,
+            JobState::Committed {
+                winner: author(&worker),
+                output: Box::new(output)
+            }
+        );
+    }
+
+    #[test]
+    fn a_result_that_breaks_the_signed_grant_is_not_a_result() {
+        let asker = keypair(1);
+        let worker = keypair(2);
+        let posted = post_v2(&asker, v2_spec());
+        let id = JobId(*posted.hash.as_bytes());
+        let claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+
+        // Each of these is signed by the claim winner and still refused: the
+        // grant, not the signature, is what bounds a result.
+        let renamed = {
+            let mut o = v2_output(b"x");
+            o.name = "somewhere-else".to_string();
+            o
+        };
+        let oversize = {
+            let mut o = v2_output(b"x");
+            o.blob.byte_len = 4097;
+            o
+        };
+        let swapped = {
+            let mut o = v2_output(b"x");
+            o.resource = crate::ident::ResourceId::parse("mesh.echo/v1").unwrap();
+            o
+        };
+        for (n, output) in [renamed, oversize, swapped].into_iter().enumerate() {
+            let done = to_operation(
+                &worker,
+                MESH,
+                &MeshEvent::JobDoneV2 {
+                    job: id.0,
+                    output: Box::new(output),
+                    at_ms: 3,
+                },
+                1,
+                Some(*claim.hash.as_bytes()),
+            );
+            let board = JobBoard::fold(MESH, [&posted, &claim, &done]);
+            assert_eq!(
+                board.job(id).unwrap().state,
+                JobState::Claimed {
+                    winner: author(&worker)
+                },
+                "case {n} left the job done"
+            );
+        }
+    }
+
+    #[test]
+    fn a_result_from_the_other_generation_is_ignored() {
+        let asker = keypair(1);
+        let worker = keypair(2);
+        // An inline result cannot close a V2 job...
+        let v2 = post_v2(&asker, v2_spec());
+        let v2_id = JobId(*v2.hash.as_bytes());
+        let claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: v2_id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let inline = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobDone {
+                job: v2_id.0,
+                result: b"inline".to_vec(),
+                at_ms: 3,
+            },
+            1,
+            Some(*claim.hash.as_bytes()),
+        );
+        let board = JobBoard::fold(MESH, [&v2, &claim, &inline]);
+        assert_eq!(
+            board.job(v2_id).unwrap().state,
+            JobState::Claimed {
+                winner: author(&worker)
+            }
+        );
+
+        // ...and a committed output cannot close an M1 job.
+        let m1 = post(&asker, 0, None);
+        let m1_id = JobId(*m1.hash.as_bytes());
+        let m1_claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: m1_id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let committed = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobDoneV2 {
+                job: m1_id.0,
+                output: Box::new(v2_output(b"x")),
+                at_ms: 3,
+            },
+            1,
+            Some(*m1_claim.hash.as_bytes()),
+        );
+        let board = JobBoard::fold(MESH, [&m1, &m1_claim, &committed]);
+        assert_eq!(
+            board.job(m1_id).unwrap().state,
+            JobState::Claimed {
+                winner: author(&worker)
+            }
+        );
+    }
+
+    #[test]
+    fn a_malformed_spec_never_reaches_the_board() {
+        let asker = keypair(1);
+        let mut spec = v2_spec();
+        spec.output.max_bytes = 0;
+        let posted = post_v2(&asker, spec);
+        assert!(
+            JobBoard::fold(MESH, [&posted]).is_empty(),
+            "the fold is defence in depth behind the store's admission check"
+        );
+    }
+
+    #[test]
+    fn mixed_generation_replicas_converge_in_every_fold_order() {
+        let asker = keypair(1);
+        let worker = keypair(2);
+        let m1_post = post(&asker, 0, None);
+        let m1_id = JobId(*m1_post.hash.as_bytes());
+        let v2_post = to_operation(
+            &asker,
+            MESH,
+            &MeshEvent::JobPostedV2 {
+                spec: Box::new(v2_spec()),
+                nonce: 7,
+                at_ms: 1,
+            },
+            1,
+            Some(*m1_post.hash.as_bytes()),
+        );
+        let v2_id = JobId(*v2_post.hash.as_bytes());
+        let m1_claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: m1_id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let m1_done = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobDone {
+                job: m1_id.0,
+                result: b"job".to_vec(),
+                at_ms: 3,
+            },
+            1,
+            Some(*m1_claim.hash.as_bytes()),
+        );
+        let v2_claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: v2_id.0,
+                at_ms: 4,
+            },
+            2,
+            Some(*m1_done.hash.as_bytes()),
+        );
+        let v2_done = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobDoneV2 {
+                job: v2_id.0,
+                output: Box::new(v2_output(b"the vectors")),
+                at_ms: 5,
+            },
+            3,
+            Some(*v2_claim.hash.as_bytes()),
+        );
+
+        let ops = [&m1_post, &v2_post, &m1_claim, &m1_done, &v2_claim, &v2_done];
+        let expected = JobBoard::fold(MESH, ops);
+        assert_eq!(expected.len(), 2);
+        assert!(expected.jobs().all(|job| job.state.is_terminal()));
+
+        // Every rotation, plus the full reversal: arrival order is irrelevant
+        // to a mixed-generation replica just as it is to a single-generation one.
+        for shift in 0..ops.len() {
+            let mut rotated = ops;
+            rotated.rotate_left(shift);
+            assert_eq!(JobBoard::fold(MESH, rotated), expected, "rotation {shift}");
+        }
+        let mut reversed = ops;
+        reversed.reverse();
+        assert_eq!(JobBoard::fold(MESH, reversed), expected);
+    }
+
+    #[test]
+    fn an_m1_only_snapshot_still_hashes_to_its_pre_v2_bytes() {
+        // A stored checkpoint commits to `canonical_bytes()`. If the V2 fields
+        // changed that encoding for legacy jobs, every M1 checkpoint on disk
+        // would fail its own snapshot-reference check on the next validate.
+        #[derive(Serialize)]
+        enum LegacyJobState {
+            #[allow(dead_code)]
+            Posted,
+            Claimed {
+                winner: [u8; 32],
+            },
+            #[allow(dead_code)]
+            Done {
+                winner: [u8; 32],
+                result: Vec<u8>,
+            },
+        }
+        #[derive(Serialize)]
+        struct LegacyJob {
+            id: JobId,
+            kind: JobKind,
+            payload: Option<Vec<u8>>,
+            posted_by: [u8; 32],
+            state: LegacyJobState,
+        }
+        #[derive(Serialize)]
+        struct LegacySnapshot {
+            jobs: Vec<LegacyJob>,
+        }
+
+        let asker = keypair(1);
+        let worker = keypair(2);
+        let posted = post(&asker, 0, None);
+        let id = JobId(*posted.hash.as_bytes());
+        let claim = to_operation(
+            &worker,
+            MESH,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        let board = JobBoard::fold(MESH, [&posted, &claim]);
+        let snapshot = JobBoardSnapshot::from_board(&board);
+
+        let legacy = LegacySnapshot {
+            jobs: vec![LegacyJob {
+                id,
+                kind: JobKind::Echo,
+                payload: Some(b"job".to_vec()),
+                posted_by: author(&asker),
+                state: LegacyJobState::Claimed {
+                    winner: author(&worker),
+                },
+            }],
+        };
+        assert_eq!(
+            snapshot.canonical_bytes(),
+            p2panda_core::cbor::encode_cbor(&legacy).unwrap(),
+            "V2 fields must be invisible in an M1-only snapshot's bytes"
+        );
     }
 
     #[test]

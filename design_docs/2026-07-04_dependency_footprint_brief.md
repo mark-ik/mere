@@ -117,7 +117,7 @@ debug binary number is only useful as its own trend line.
 ## Related
 
 Burn-remote-over-iroh prior art recorded in the
-[mesh_lease_scheduler_plan](mere_docs/implementation_strategy/2026-06-30_mesh_lease_scheduler_plan.md)
+[mesh_lease_scheduler_plan](archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md)
 (same audit session). The measure-then-decide model this brief follows:
 [petgraph_rdf_plan](mere_docs/implementation_strategy/2026-06-18_petgraph_rdf_plan.md)
 (held-RDF-truth rejected on a benchmark, Phase 4 evidence-gated).

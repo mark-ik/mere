@@ -2,13 +2,16 @@
 
 **Date**: 2026-06-30
 
-**Status**: Active next slice; re-scoped 2026-08-09 after ESP consolidation.
+**Status**: **Complete 2026-08-09.** Re-scoped 2026-08-09 after ESP
+consolidation, then executed the same day. All eight done conditions carry a
+test or probe receipt; deferred points are carried forward in §7 of the
+[mesh lease scheduler plan](2026-06-30_mesh_lease_scheduler_plan.md).
 
 **Related**:
-[`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md),
-[`../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md`](../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md),
+[`2026-06-04_resource_coordination_brief.md`](../../mere_docs/research/2026-06-04_resource_coordination_brief.md),
+[`2026-06-12_mesh_m1_plan.md`](../2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md),
 [`2026-06-30_mesh_lease_scheduler_plan.md`](2026-06-30_mesh_lease_scheduler_plan.md),
-[`2026-08-08_esp_consolidation_plan.md`](2026-08-08_esp_consolidation_plan.md)
+[`2026-08-08_esp_consolidation_plan.md`](../../mere_docs/implementation_strategy/2026-08-08_esp_consolidation_plan.md)
 
 M2 turns the M1 convergence proof into a bounded execution substrate. Its whole
 claim is one versioned job namespace, one resource registry, and one useful
@@ -197,13 +200,39 @@ reclaim.
 
 ## 8. Done conditions
 
-- V2 jobs are signed, versioned, content-addressed, and backward-readable with
-  M1 history.
-- Namespace enforcement has positive and negative access tests.
-- One registry owns M1 compatibility adapters and the lexical ESP adapter.
-- Adding a test resource changes neither `wire.rs` nor `JobBoard::fold`.
-- The two-peer namespace-backed job and verification receipt pass.
-- Native and wasm lexical result behavior is classified honestly.
+Every line below names the receipt that closed it (all in
+`crates/mesh/mesh/src` unless stated).
+
+- **V2 jobs are signed, versioned, content-addressed, and backward-readable
+  with M1 history.** `wire::tests::v2_events_survive_cbor_and_signed_operation_round_trips`,
+  `wire::tests::adding_v2_variants_left_legacy_bytes_untouched`,
+  `board::tests::an_m1_only_snapshot_still_hashes_to_its_pre_v2_bytes`,
+  `board::tests::mixed_generation_replicas_converge_in_every_fold_order`.
+- **Namespace enforcement has positive and negative access tests.** The four
+  required negatives are `namespace::tests::{a_granted_input_reads_and_an_ungranted_one_does_not,
+  only_the_granted_output_slot_is_writable, an_oversized_output_fails_without_committing_anything,
+  a_digest_mismatch_fails_before_the_adapter_sees_bytes}`.
+- **One registry owns M1 compatibility adapters and the lexical ESP adapter.**
+  `resources::tests::every_builtin_registers_under_the_id_it_declares`,
+  `registry::tests::the_m1_kinds_run_through_the_v2_route`.
+- **Adding a test resource changes neither `wire.rs` nor `JobBoard::fold`.**
+  `registry::tests::a_test_resource_runs_end_to_end_without_touching_wire_or_fold`
+  registers `test.reverse/v1` entirely from its own test module.
+- **The two-peer namespace-backed job and verification receipt pass.**
+  `sync::tests::a_blob_backed_lexical_job_crosses_two_peers_and_verifies`, over
+  two real p2panda-net peers.
+- **Native and wasm lexical result behavior is classified honestly.**
+  Bit-identical on both: `crates/probes/mesh-lexical-wasm` compiles the same
+  `lexical_codec.rs` source and the real ESP provider to
+  wasm32-unknown-unknown, and Node reports the digest the native
+  `resources::lexical::tests::lexical_determinism_receipt` pins
+  (`4d0f647f…58aa01`, 801 canonical bytes). `VerificationClass::ExactBytes` is
+  therefore earned, not asserted.
+- **Malformed specs and results are rejected before mutation.**
+  `store::tests::a_malformed_v2_spec_or_result_is_refused_before_mutation`.
+- **A committed result cannot exceed its signed grant.**
+  `board::tests::a_result_that_breaks_the_signed_grant_is_not_a_result`,
+  `board::tests::a_result_from_the_other_generation_is_ignored`.
 
 ## 9. Progress
 
@@ -215,3 +244,46 @@ reclaim.
   from host-enforced namespace access; added async/cancellation requirements;
   corrected the first useful adapter from the whole-string stub to the lexical
   provider; and made exact-versus-tolerance verification an explicit receipt.
+- **2026-08-09 (execution)**: M2a–M2d landed in `crates/mesh/mesh`. New modules
+  `ident`, `spec`, `namespace`, `resource`, `registry`, `resources/{legacy,
+  lexical, lexical_codec}`; `wire` gained `JobPostedV2`/`JobDoneV2`; `board`
+  gained `JobState::Committed`. 74 lib tests green (`cargo test -p mere-mesh`),
+  clippy clean on the new code, every source file under the 600-LOC ceiling
+  (largest non-test body: `store.rs` at 429).
+
+  Structural learnings, per the implementation-feedback rule:
+
+  - **The retention snapshot is signed wire too.** `JobBoardSnapshot` rides
+    inside `MeshEvent::RetentionCheckpoint` and is committed to by digest, so
+    adding V2 fields to `Job` would have broken every stored M1 checkpoint's
+    own snapshot-reference check. The fix was the `MeshExt::prune_flag` trick
+    one level down: `kind` became `Option<JobKind>` (byte-identical when
+    `Some`) and `spec` is `skip_serializing_if`. The plan's "do not change the
+    fields of the existing signed CBOR variants" needed to reach *inside* a
+    variant, not just at it.
+  - **Checkpoint payload erasure was M1-shaped.** It keyed off
+    `payload.is_none()`, which is unconditionally true for a V2 job — under
+    `PayloadRule::Keep` it would have erased V2 posting bodies. Erasure is now
+    explicitly `spec.is_none()`; collecting a V2 *blob* is a different
+    operation with no implementation yet (carried forward).
+  - **One execution route was worth the churn.** Making `Echo`/`Blake3`
+    adapters and routing M1's inline payload through an ephemeral one-input
+    namespace deleted `worker::execute` outright, so there is no second path
+    that can skip namespace enforcement. `next_action` gained the host offer in
+    the same move: a device no longer claims work it cannot run.
+  - **Adapters cannot write.** `MeshResource::execute` returns bytes and the
+    runner commits them through the grant, so an adapter has no sink handle at
+    all. That was not in the plan; it fell out of keeping the trait
+    object-safe, and it removes a whole class of escape.
+  - **Exactness was cheaper to prove than to argue.** The lexical pipeline is
+    integer hashing plus one correctly-rounded `sqrt` and division, so it
+    *should* be bit-identical everywhere — but "should" is not a receipt. A
+    ~60-line probe that `#[path]`-includes the same codec source and runs it on
+    wasm32 under Node settled it in one run, and the tolerance branch of
+    `VerificationClass` stayed unused rather than speculative.
+
+  Deferred, with reasons, into §7 of the lease scheduler plan: peer-to-peer
+  blob delivery (operations replicate, blobs do not — the two-peer receipt
+  stages the input on both devices and says so), tolerant verification
+  comparison (`Verdict::NotCheckable` until a resource needs a decoder), and
+  V2 blob retention/collection.

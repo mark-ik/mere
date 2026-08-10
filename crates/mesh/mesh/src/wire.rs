@@ -18,6 +18,7 @@ use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};
 
+use crate::lease::{LeaseProgress, ReclaimReason, ReleaseReason};
 use crate::retention::RetentionCheckpoint;
 use crate::spec::{JobOutput, JobSpec};
 
@@ -96,6 +97,47 @@ pub enum MeshEvent {
     /// a verifier needs. Result bytes do not return inline.
     JobDoneV2 {
         job: [u8; 32],
+        output: Box<JobOutput>,
+        at_ms: u64,
+    },
+    /// M3: the deterministic claim winner for `epoch` binds itself to the job,
+    /// inside the envelope the job author signed. The holder is the operation's
+    /// author and the lease's identity is this operation's hash, so neither can
+    /// be forged into the body.
+    LeaseGranted {
+        job: [u8; 32],
+        epoch: u32,
+        granted_at_ms: u64,
+        expires_at_ms: u64,
+    },
+    /// M3: the holder is still on it. Silence for the job's allowed number of
+    /// intervals is what an observer reads as a lapse.
+    LeaseHeartbeat {
+        job: [u8; 32],
+        lease: [u8; 32],
+        progress: LeaseProgress,
+        at_ms: u64,
+    },
+    /// M3: the holder handed the lease back. About the work.
+    LeaseReleased {
+        job: [u8; 32],
+        lease: [u8; 32],
+        reason: ReleaseReason,
+        at_ms: u64,
+    },
+    /// M3: the holding device's own owner took the hardware back. About the
+    /// device — never a reliability signal against the worker.
+    LeaseRevokedByOwner {
+        job: [u8; 32],
+        lease: [u8; 32],
+        reason: ReclaimReason,
+        at_ms: u64,
+    },
+    /// M3: a committed output authored under a named lease. The plain
+    /// `JobDoneV2` path stays for jobs posted without lease terms.
+    JobCompletedUnderLease {
+        job: [u8; 32],
+        lease: [u8; 32],
         output: Box<JobOutput>,
         at_ms: u64,
     },

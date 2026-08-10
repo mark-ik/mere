@@ -154,7 +154,7 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(
-                space.fetch(&output.blob).await.unwrap(),
+                space.get(&output.blob).await.unwrap(),
                 Some(expected),
                 "{resource}"
             );

@@ -136,18 +136,41 @@ impl OperationPolicy<MeshExt> for MeshPolicy<'_> {
                         "only a history-pruned event may carry the prune flag",
                     ));
                 }
-                // V2 bodies carry attacker-supplied structure, so their bounds
-                // are re-established here — before the operation is stored, not
-                // when the board later folds it.
+                // V2 and M3 bodies carry attacker-supplied structure, so their
+                // bounds are re-established here — before the operation is
+                // stored, not when the board later folds it. Rules that need
+                // the *job* (is this author the epoch's claim winner? does the
+                // window fit the envelope?) belong to the fold, which has the
+                // spec and the claim set; admission checks what one operation
+                // can be judged on alone.
                 match &event {
                     MeshEvent::JobPostedV2 { spec, .. } => {
                         spec.validate()
                             .map_err(|err| Reject::new("invalid-job-spec", err.to_string()))?;
                     }
-                    MeshEvent::JobDoneV2 { output, .. } => {
+                    MeshEvent::JobDoneV2 { output, .. }
+                    | MeshEvent::JobCompletedUnderLease { output, .. } => {
                         output
                             .validate_self()
                             .map_err(|err| Reject::new("invalid-job-result", err.to_string()))?;
+                    }
+                    MeshEvent::LeaseGranted {
+                        granted_at_ms,
+                        expires_at_ms,
+                        ..
+                    } => {
+                        if expires_at_ms <= granted_at_ms {
+                            return Err(Reject::new(
+                                "invalid-lease-window",
+                                "a lease must expire after it is granted",
+                            ));
+                        }
+                        if expires_at_ms - granted_at_ms > crate::lease::MAX_LEASE_DURATION_MS {
+                            return Err(Reject::new(
+                                "invalid-lease-window",
+                                "lease window exceeds the longest a job may authorize",
+                            ));
+                        }
                     }
                     _ => {}
                 }
@@ -557,6 +580,108 @@ mod tests {
         assert!(store.accept(MESH, &valid_other).await.is_err());
         assert!(store.ops(MESH).await.unwrap().is_empty());
         assert!(store.ops(other).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_malformed_v2_spec_or_result_is_refused_before_mutation() {
+        use crate::ident::{ImplementationId, ResourceId};
+        use crate::spec::{DeterminismClass, JobInput, JobOutput, JobSpec, VerificationClass};
+        use proofs::BlobRef;
+
+        let store = MeshStore::in_memory();
+        let kp = keypair(1);
+        let good = JobSpec::simple(
+            ResourceId::parse("esp.embed.lexical/v1").unwrap(),
+            "texts",
+            BlobRef::blake3(b"batch"),
+            "vectors",
+            4096,
+            DeterminismClass::Exact,
+        );
+
+        let duplicate_names = {
+            let mut spec = good.clone();
+            spec.inputs.push(JobInput {
+                name: "texts".to_string(),
+                blob: BlobRef::blake3(b"other"),
+            });
+            spec
+        };
+        let oversized_grant = {
+            let mut spec = good.clone();
+            spec.output.max_bytes = crate::spec::MAX_OUTPUT_BYTES + 1;
+            spec
+        };
+        let bad_slot_name = {
+            let mut spec = good.clone();
+            spec.output.name = "Vectors!".to_string();
+            spec
+        };
+
+        for (n, spec) in [duplicate_names, oversized_grant, bad_slot_name]
+            .into_iter()
+            .enumerate()
+        {
+            let op = to_operation(
+                &kp,
+                MESH,
+                &MeshEvent::JobPostedV2 {
+                    spec: Box::new(spec),
+                    nonce: n as u64,
+                    at_ms: 1,
+                },
+                0,
+                None,
+            );
+            assert!(store.accept(MESH, &op).await.is_err(), "spec case {n}");
+        }
+
+        // A result whose identities do not parse is refused on its own, before
+        // any board is consulted.
+        let forged: ResourceId = p2panda_core::cbor::decode_cbor(
+            p2panda_core::cbor::encode_cbor(&"not an id")
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+        let bad_result = to_operation(
+            &kp,
+            MESH,
+            &MeshEvent::JobDoneV2 {
+                job: [9; 32],
+                output: Box::new(JobOutput {
+                    name: "vectors".to_string(),
+                    blob: BlobRef::blake3(b"x"),
+                    resource: forged,
+                    implementation: ImplementationId::parse("mesh.lexical.fnv1a/v1").unwrap(),
+                    verification: VerificationClass::ExactBytes,
+                }),
+                at_ms: 2,
+            },
+            0,
+            None,
+        );
+        assert!(store.accept(MESH, &bad_result).await.is_err());
+
+        assert!(
+            store.ops(MESH).await.unwrap().is_empty(),
+            "nothing malformed reached the store"
+        );
+
+        // The well-formed spec goes through the same door and lands.
+        let accepted = to_operation(
+            &kp,
+            MESH,
+            &MeshEvent::JobPostedV2 {
+                spec: Box::new(good),
+                nonce: 9,
+                at_ms: 1,
+            },
+            0,
+            None,
+        );
+        assert!(store.accept(MESH, &accepted).await.unwrap());
+        assert_eq!(store.board(MESH).await.unwrap().len(), 1);
     }
 
     #[tokio::test]

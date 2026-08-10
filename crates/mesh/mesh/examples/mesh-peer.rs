@@ -1,13 +1,19 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! mesh-peer — the milestone-1 two-machine rehearsal bin.
+//! mesh-peer — the two-machine rehearsal bin.
 //!
 //! One device posts a job into the personal space, another claims it and
 //! returns the result over LogSync. Run `work` on the workstation, copy its
 //! ticket, then `post` on the laptop with `--peer <ticket>`; paste the
 //! laptop's ticket into the workstation's stdin if the one-way bootstrap
 //! doesn't connect (both directions tagged is the proven test shape).
+//!
+//! `post` writes an M1 inline-payload job, because operations replicate here
+//! and blobs do not: a V2 spec names bytes the other device would have to
+//! already hold. The worker loop runs *both* generations through the M2
+//! resource registry, so a V2 job posted by a host that does move blobs is
+//! executed against a restricted namespace without changing this bin.
 //!
 //! ```text
 //! mesh-peer work [--peer <ticket>]
@@ -28,7 +34,11 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
-use mesh::{JobState, MeshEvent, MeshStore, SyncedMesh, WorkerAction, execute, next_action};
+use mesh::{
+    DevicePolicy, HostFacts, HostOffer, JobControl, JobState, MemoryBlobSpace, MeshEvent,
+    MeshStore, ResourceRegistry, SyncedMesh, WorkerAction, next_action, registry::run_job,
+    registry::run_legacy,
+};
 use muniment::Backend;
 use p2panda_core::Hash;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -116,8 +126,19 @@ fn print_board(board: &mesh::JobBoard) {
                 hex8(winner),
                 String::from_utf8_lossy(result)
             ),
+            JobState::Committed { winner, output } => format!(
+                "committed by {} → {} ({} bytes)",
+                hex8(winner),
+                hex8(&output.blob.digest.bytes),
+                output.blob.byte_len
+            ),
         };
-        println!("  job {} [{:?}] {}", hex8(&job.id.0), job.kind, state);
+        let asked = match (&job.spec, job.kind) {
+            (Some(spec), _) => spec.resource.to_string(),
+            (None, Some(kind)) => format!("{kind:?}"),
+            (None, None) => "?".to_string(),
+        };
+        println!("  job {} [{asked}] {state}", hex8(&job.id.0));
     }
 }
 
@@ -264,12 +285,79 @@ async fn run<B: Backend + Clone + Send + Sync + 'static>(
             }
         }
         Mode::Work => {
-            println!("working — watching the board for jobs…");
+            // What this device advertises. The blob space is device-local: a V2
+            // job whose input this machine does not hold simply fails to run,
+            // because a signed spec names bytes, it does not deliver them.
+            let registry = ResourceRegistry::builtin();
+            // The rehearsal bin lends unconditionally and reads no OS state, so
+            // its conditions are a constant. A real host swaps in the owner's
+            // configured policy and a fresh `DeviceConditions` each tick, and
+            // the loop below is unchanged.
+            let policy = DevicePolicy::permissive();
+            let blobs = MemoryBlobSpace::in_memory();
+            println!(
+                "working — watching the board for jobs (offering {})…",
+                registry
+                    .resources()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
             let mut last_status = String::new();
             loop {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 let board = synced.board().await.map_err(|e| format!("board: {e}"))?;
-                match next_action(&board, &me) {
+                let offer = HostOffer::new(&registry, HostFacts::cpu(1024), &policy).at(now_ms());
+                match next_action(&board, &me, &offer) {
+                    WorkerAction::Grant {
+                        job,
+                        epoch,
+                        granted_at_ms,
+                        expires_at_ms,
+                    } => {
+                        println!("taking a lease on job {} (epoch {epoch})", hex8(&job.0));
+                        synced
+                            .author(
+                                &author,
+                                &MeshEvent::LeaseGranted {
+                                    job: job.0,
+                                    epoch,
+                                    granted_at_ms,
+                                    expires_at_ms,
+                                },
+                            )
+                            .await
+                            .map_err(|e| format!("grant: {e}"))?;
+                    }
+                    WorkerAction::Heartbeat { job, lease } => {
+                        synced
+                            .author(
+                                &author,
+                                &MeshEvent::LeaseHeartbeat {
+                                    job: job.0,
+                                    lease: lease.0,
+                                    progress: Default::default(),
+                                    at_ms: now_ms(),
+                                },
+                            )
+                            .await
+                            .map_err(|e| format!("heartbeat: {e}"))?;
+                    }
+                    WorkerAction::Reclaim { job, lease, reason } => {
+                        println!("owner reclaim on job {} ({reason:?})", hex8(&job.0));
+                        synced
+                            .author(
+                                &author,
+                                &MeshEvent::LeaseRevokedByOwner {
+                                    job: job.0,
+                                    lease: lease.0,
+                                    reason,
+                                    at_ms: now_ms(),
+                                },
+                            )
+                            .await
+                            .map_err(|e| format!("reclaim: {e}"))?;
+                    }
                     WorkerAction::Claim(id) => {
                         println!("claiming job {}", hex8(&id.0));
                         synced
@@ -285,31 +373,54 @@ async fn run<B: Backend + Clone + Send + Sync + 'static>(
                     }
                     WorkerAction::Execute(id) => {
                         let job = board.job(id).expect("execute targets a known job");
-                        // `payload` is `None` only after an accepted checkpoint erased a
-                        // TERMINAL job's input (`PayloadRule::EraseTerminalAtCheckpoint`), and
-                        // `next_action` already guards on `payload.is_some()` before handing
-                        // back `Execute`. So a missing payload here is a broken invariant, not
-                        // a case to skip quietly.
-                        let payload = job
-                            .payload
-                            .as_deref()
-                            .expect("execute targets a job whose input is retained");
-                        let result = execute(job.kind, payload);
-                        println!(
-                            "executing job {} [{:?}] → {:?}",
-                            hex8(&id.0),
-                            job.kind,
-                            String::from_utf8_lossy(&result)
-                        );
-                        synced
-                            .author(
-                                &author,
-                                &MeshEvent::JobDone {
+                        // Cancellation is host-owned. This bin never cancels;
+                        // the handle exists so the seam is the real one.
+                        let (_cancel, control) = JobControl::new();
+                        let event = match &job.spec {
+                            Some(spec) => {
+                                let output = run_job(&registry, spec, &blobs, &blobs, &control)
+                                    .await
+                                    .map_err(|e| format!("run {}: {e}", spec.resource))?;
+                                println!(
+                                    "executed job {} [{}] → {} ({} bytes)",
+                                    hex8(&id.0),
+                                    spec.resource,
+                                    hex8(&output.blob.digest.bytes),
+                                    output.blob.byte_len
+                                );
+                                MeshEvent::JobDoneV2 {
+                                    job: id.0,
+                                    output: Box::new(output),
+                                    at_ms: now_ms(),
+                                }
+                            }
+                            None => {
+                                // `payload` is `None` only after an accepted checkpoint erased a
+                                // TERMINAL job's input, and `next_action` already guards on it
+                                // before handing back `Execute`. A missing payload here is a
+                                // broken invariant, not a case to skip quietly.
+                                let payload = job
+                                    .payload
+                                    .as_deref()
+                                    .expect("execute targets a job whose input is retained");
+                                let kind = job.kind.expect("an M1 job carries its kind");
+                                let result = run_legacy(&registry, kind, payload, &control)
+                                    .await
+                                    .map_err(|e| format!("run {kind:?}: {e}"))?;
+                                println!(
+                                    "executed job {} [{kind:?}] → {:?}",
+                                    hex8(&id.0),
+                                    String::from_utf8_lossy(&result)
+                                );
+                                MeshEvent::JobDone {
                                     job: id.0,
                                     result,
                                     at_ms: now_ms(),
-                                },
-                            )
+                                }
+                            }
+                        };
+                        synced
+                            .author(&author, &event)
                             .await
                             .map_err(|e| format!("return result: {e}"))?;
                     }

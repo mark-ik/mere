@@ -219,7 +219,7 @@ pub async fn run_legacy(
     );
     let output = run_job(registry, &spec, &scratch, &scratch, control).await?;
     scratch
-        .fetch(&output.blob)
+        .get(&output.blob)
         .await?
         .ok_or_else(|| RunError::Namespace(NamespaceError::MissingBlob("result".to_string())))
 }
@@ -341,7 +341,7 @@ mod tests {
         assert_eq!(output.name, "result");
         assert_eq!(output.blob, BlobRef::blake3(b"fedcba"));
         assert_eq!(
-            space.fetch(&output.blob).await.unwrap(),
+            space.get(&output.blob).await.unwrap(),
             Some(b"fedcba".to_vec())
         );
 
@@ -419,7 +419,7 @@ mod tests {
             Err(RunError::Resource(ResourceError::Cancelled(_)))
         ));
         assert_eq!(
-            space.fetch(&BlobRef::blake3(b"fedcba")).await.unwrap(),
+            space.get(&BlobRef::blake3(b"fedcba")).await.unwrap(),
             None,
             "a cancelled run leaves no output in the blob space"
         );

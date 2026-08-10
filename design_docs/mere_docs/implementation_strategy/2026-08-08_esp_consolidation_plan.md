@@ -29,9 +29,9 @@ holds the ledger, it does not absorb the lanes.
 - [shared_engram_commons_brief](../research/2026-07-24_shared_engram_commons_brief.md)
   + [commons_profile_v1](../design/2026-07-27_commons_profile_v1.md) — the
   commons is a profile over the substrate; multi-writer convergence answered.
-- [mesh_lease_scheduler_plan](2026-06-30_mesh_lease_scheduler_plan.md) — Lane 2
+- [mesh_lease_scheduler_plan](../../archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md) — Lane 2
   prior art: burn-remote as an ALPN on murm's iroh Router, leases ours.
-- [personal_mesh_substrate_m2_plan](2026-06-30_personal_mesh_substrate_m2_plan.md)
+- [personal_mesh_substrate_m2_plan](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md)
   — the versioned namespace/resource receipt that precedes leases.
 - [inference_provider_plan](2026-07-05_inference_provider_plan.md) (Lane 3),
   [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (Lane 1),

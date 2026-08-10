@@ -49,7 +49,7 @@ topics, and LogSync. Commitment roots live inside event bodies and projections.
 ## 1. Personal Mesh Substrate
 
 **Authority**:
-[`../implementation_strategy/2026-06-30_personal_mesh_substrate_m2_plan.md`](../implementation_strategy/2026-06-30_personal_mesh_substrate_m2_plan.md)
+[`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md)
 
 **Owns**: `crates/mesh`, the signed job operation grammar, the deterministic
 job board, `JobSpec`, `JobNamespace`, and the `MeshResource` adapter seam.
@@ -67,7 +67,7 @@ manifest and a resource adapter without changing the board/sync core.
 ## 2. Lease And Scheduler Semantics
 
 **Authority**:
-[`../implementation_strategy/2026-06-30_mesh_lease_scheduler_plan.md`](../implementation_strategy/2026-06-30_mesh_lease_scheduler_plan.md)
+[`2026-06-30_mesh_lease_scheduler_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md)
 
 **Owns**: owner priority, idle routing, revocable leases, heartbeat/reassign,
 checkpoint classes, device policy, and clean owner reclamation.

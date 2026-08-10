@@ -16,9 +16,10 @@
 
 use std::any::Any;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 
 use crate::ident::{ImplementationId, ResourceId};
+use crate::lease::LeaseProgress;
 use crate::namespace::{BoxFuture, JobNamespaceView, NamespaceError};
 use crate::spec::{ResourceRequirements, VerificationClass};
 
@@ -64,57 +65,151 @@ impl std::fmt::Debug for Prepared {
     }
 }
 
-/// The host's side of cancellation: keep this, hand the [`JobControl`] to the
-/// run. Dropping the handle does not cancel — a lost host is M3's owner-reclaim
-/// problem, not something a worker should infer.
-#[derive(Clone, Debug)]
-pub struct JobControlHandle {
-    cancelled: Arc<AtomicBool>,
+/// What the host is asking a running job to do. Escalating: once a run has been
+/// cancelled, a later checkpoint request cannot walk it back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ControlSignal {
+    /// Keep going.
+    Continue,
+    /// Reach a checkpoint boundary and stop there, reporting how far you got.
+    Checkpoint,
+    /// Stop now. Nothing is preserved.
+    Cancel,
 }
 
-impl JobControlHandle {
-    /// Ask the run to stop at its next cooperative point.
-    pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::SeqCst);
+/// Shared between the host's handle and the run's control.
+#[derive(Debug)]
+struct ControlState {
+    signal: AtomicU8,
+    done: AtomicU64,
+    total: AtomicU64,
+    checkpoint_held: AtomicBool,
+}
+
+impl ControlState {
+    fn escalate(&self, to: u8) {
+        self.signal.fetch_max(to, Ordering::SeqCst);
+    }
+
+    fn signal(&self) -> ControlSignal {
+        match self.signal.load(Ordering::SeqCst) {
+            0 => ControlSignal::Continue,
+            1 => ControlSignal::Checkpoint,
+            _ => ControlSignal::Cancel,
+        }
+    }
+
+    fn progress(&self) -> LeaseProgress {
+        LeaseProgress {
+            done: self.done.load(Ordering::SeqCst),
+            total: self.total.load(Ordering::SeqCst),
+            checkpoint_held: self.checkpoint_held.load(Ordering::SeqCst),
+        }
     }
 }
 
-/// The run's side of cancellation. Cooperative: an adapter calls
-/// [`check`](Self::check) between units of work.
+/// The host's side of execution control: keep this, hand the [`JobControl`] to
+/// the run. Dropping the handle does not cancel — a lost host is an owner-reclaim
+/// problem, not something a worker should infer from a dropped value.
+#[derive(Clone, Debug)]
+pub struct JobControlHandle {
+    state: Arc<ControlState>,
+}
+
+impl JobControlHandle {
+    /// Stop the run at its next cooperative point, preserving nothing.
+    pub fn cancel(&self) {
+        self.state.escalate(2);
+    }
+
+    /// Ask the run to stop at a checkpoint boundary instead. Ignored if the run
+    /// has already been cancelled.
+    pub fn request_checkpoint(&self) {
+        self.state.escalate(1);
+    }
+
+    pub fn signal(&self) -> ControlSignal {
+        self.state.signal()
+    }
+
+    /// What the run last reported — the heartbeat's payload.
+    pub fn progress(&self) -> LeaseProgress {
+        self.state.progress()
+    }
+}
+
+/// The run's side of execution control. Cooperative: an adapter calls
+/// [`check`](Self::check) or [`signal`](Self::signal) between units of work.
 #[derive(Clone, Debug)]
 pub struct JobControl {
-    cancelled: Arc<AtomicBool>,
+    state: Arc<ControlState>,
 }
 
 impl JobControl {
     /// A fresh handle/control pair. The host keeps the handle.
     pub fn new() -> (JobControlHandle, Self) {
-        let cancelled = Arc::new(AtomicBool::new(false));
+        let state = Arc::new(ControlState {
+            signal: AtomicU8::new(0),
+            done: AtomicU64::new(0),
+            total: AtomicU64::new(0),
+            checkpoint_held: AtomicBool::new(false),
+        });
         (
             JobControlHandle {
-                cancelled: cancelled.clone(),
+                state: state.clone(),
             },
-            Self { cancelled },
+            Self { state },
         )
     }
 
-    pub fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::SeqCst)
+    pub fn signal(&self) -> ControlSignal {
+        self.state.signal()
     }
 
-    /// The cooperative cancellation point.
+    pub fn is_cancelled(&self) -> bool {
+        self.signal() == ControlSignal::Cancel
+    }
+
+    /// The cooperative cancellation point, for a resource with nothing to
+    /// preserve. A checkpoint request is not an error here — a resource that
+    /// cannot checkpoint simply keeps going until cancelled.
     pub fn check(&self) -> Result<(), Cancelled> {
         if self.is_cancelled() {
             return Err(Cancelled);
         }
         Ok(())
     }
+
+    /// Publish progress for the host to heartbeat.
+    pub fn report(&self, done: u64, total: u64) {
+        self.state.done.store(done, Ordering::SeqCst);
+        self.state.total.store(total, Ordering::SeqCst);
+    }
+
+    /// Declare whether a resumable checkpoint now exists **on this device**.
+    pub fn hold_checkpoint(&self, held: bool) {
+        self.state.checkpoint_held.store(held, Ordering::SeqCst);
+    }
+
+    pub fn progress(&self) -> LeaseProgress {
+        self.state.progress()
+    }
 }
 
-/// The run was asked to stop.
+/// The run was asked to stop, with nothing preserved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("job was cancelled")]
 pub struct Cancelled;
+
+/// The run stopped at a checkpoint boundary it can name. The checkpoint itself
+/// is local to this device; another device still starts from nothing until a
+/// blob lane exists to carry it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("job stopped at checkpoint {completed_units}/{total_units}")]
+pub struct Checkpoint {
+    pub completed_units: u64,
+    pub total_units: u64,
+}
 
 /// Why an adapter could not produce a result.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -125,6 +220,8 @@ pub enum ResourceError {
     Input { name: String, reason: String },
     #[error(transparent)]
     Cancelled(#[from] Cancelled),
+    #[error(transparent)]
+    Checkpointed(#[from] Checkpoint),
     #[error("resource backend: {0}")]
     Backend(String),
     #[error("adapter's prepared state does not match its execute half")]
@@ -186,6 +283,42 @@ mod tests {
         // A clone of the control observes the same flag: the host cancels one
         // run, not one copy of it.
         assert!(control.clone().is_cancelled());
+    }
+
+    #[test]
+    fn signals_escalate_and_never_walk_back() {
+        let (handle, control) = JobControl::new();
+        assert_eq!(control.signal(), ControlSignal::Continue);
+        handle.request_checkpoint();
+        assert_eq!(control.signal(), ControlSignal::Checkpoint);
+        assert!(
+            control.check().is_ok(),
+            "a checkpoint request is not a cancellation"
+        );
+        handle.cancel();
+        assert_eq!(control.signal(), ControlSignal::Cancel);
+        handle.request_checkpoint();
+        assert_eq!(
+            control.signal(),
+            ControlSignal::Cancel,
+            "a late checkpoint request cannot un-cancel a run"
+        );
+    }
+
+    #[test]
+    fn the_run_reports_progress_the_host_can_heartbeat() {
+        let (handle, control) = JobControl::new();
+        assert_eq!(handle.progress(), LeaseProgress::default());
+        control.report(3, 10);
+        control.hold_checkpoint(true);
+        assert_eq!(
+            handle.progress(),
+            LeaseProgress {
+                done: 3,
+                total: 10,
+                checkpoint_held: true
+            }
+        );
     }
 
     #[test]

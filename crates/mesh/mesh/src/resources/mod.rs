@@ -8,12 +8,14 @@
 //! a host or test uses, and adding one touches neither `wire.rs` nor
 //! `JobBoard::fold`.
 
+pub mod delayed;
 pub mod legacy;
 pub mod lexical;
 pub mod lexical_codec;
 
 use std::sync::Arc;
 
+pub use delayed::DelayedResource;
 pub use legacy::{Blake3Resource, EchoResource};
 pub use lexical::LexicalEmbedResource;
 pub use lexical_codec::{CodecError, LexicalBatch, LexicalVectors};
@@ -33,22 +35,28 @@ pub fn legacy_resource_id(kind: JobKind) -> ResourceId {
 }
 
 /// Register everything this crate ships.
+///
+/// [`DelayedResource`] is included deliberately: the lease plan gates any
+/// long-running GPU or remote adapter behind a real owner-reclaim receipt, and
+/// this is the resource that receipt runs against. Its cost is bounded by the
+/// posted spec, and a device that does not want to offer it says so through
+/// [`DevicePolicy::allowed_resources`](crate::policy::DevicePolicy).
 pub fn register_builtin(registry: &mut ResourceRegistry) -> Result<(), RegistryError> {
     registry.register(Arc::new(EchoResource::new()))?;
     registry.register(Arc::new(Blake3Resource::new()))?;
     registry.register(Arc::new(LexicalEmbedResource::new()))?;
+    registry.register(Arc::new(DelayedResource::default()))?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::resource::MeshResource;
 
     #[test]
     fn every_builtin_registers_under_the_id_it_declares() {
         let registry = ResourceRegistry::builtin();
-        assert_eq!(registry.len(), 3);
+        assert_eq!(registry.len(), 4);
         for id in registry.resources() {
             let adapter = registry.get(id).expect("keyed by its own id");
             assert_eq!(&adapter.descriptor().resource, id);

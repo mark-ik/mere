@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-04
 **Status**: direction brief. All five lanes endorsed (Mark, 2026-07-04): burn is a crucial component and the app gets shaped around it. Each lane spins out to its own `implementation_strategy/` plan when picked up.
-**Related**: [local_intelligence_integration_research](2026-05-08_local_intelligence_integration_research.md) (the original burn-first stance; this brief extends it ecosystem-wide), [local_models_harness_brief](2026-06-24_local_models_harness_brief.md) (the provider seams + backend-by-target table), [geist_models_brief](2026-05-10_geist_models_brief.md) (LoRA adapters as engrams), [communal_compute_tiers_brief](2026-06-10_communal_compute_tiers_brief.md), [mesh_lease_scheduler_plan](../implementation_strategy/2026-06-30_mesh_lease_scheduler_plan.md) (burn-remote-over-iroh prior art), [data_oriented_doctrine_brief](../../2026-07-02_data_oriented_doctrine_brief.md), [dependency_footprint_brief](../../2026-07-04_dependency_footprint_brief.md).
+**Related**: [local_intelligence_integration_research](2026-05-08_local_intelligence_integration_research.md) (the original burn-first stance; this brief extends it ecosystem-wide), [local_models_harness_brief](2026-06-24_local_models_harness_brief.md) (the provider seams + backend-by-target table), [geist_models_brief](2026-05-10_geist_models_brief.md) (LoRA adapters as engrams), [communal_compute_tiers_brief](2026-06-10_communal_compute_tiers_brief.md), [mesh_lease_scheduler_plan](../../archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md) (burn-remote-over-iroh prior art), [data_oriented_doctrine_brief](../../2026-07-02_data_oriented_doctrine_brief.md), [dependency_footprint_brief](../../2026-07-04_dependency_footprint_brief.md).
 
 ## Thesis
 
@@ -63,7 +63,7 @@ cheap program; GPU needs resident data or heavier programs to pay).
 ## Lane 2: burn-remote over iroh as the fleet compute protocol
 
 The mesh lease scheduler's compute half, ready-made (prior art recorded in the
-[mesh_lease_scheduler_plan](../implementation_strategy/2026-06-30_mesh_lease_scheduler_plan.md)):
+[mesh_lease_scheduler_plan](../../archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md)):
 burn mounts as an ALPN on murm's existing `iroh::protocol::Router`, so it
 rides the same endpoint/identity/relay policy with no second connection pool.
 `RemoteTicket` / `PeerAuthorizer` is exactly the tessera/kith authorization

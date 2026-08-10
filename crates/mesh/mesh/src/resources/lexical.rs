@@ -77,8 +77,8 @@ impl MeshResource for LexicalEmbedResource {
             // One cooperative point per batch: a bounded, allocation-light run
             // this size has no useful interior. A resource that does have one
             // (M3's long jobs) checks inside its own loop; the seam is the same.
-            let vectors = embed_batch(&batch)
-                .map_err(|err| ResourceError::Backend(err.to_string()))?;
+            let vectors =
+                embed_batch(&batch).map_err(|err| ResourceError::Backend(err.to_string()))?;
             control.check()?;
             Ok(vectors.encode())
         })
@@ -134,7 +134,7 @@ mod tests {
         let output = run_job(&registry(), &spec, &space, &space, &control)
             .await
             .unwrap();
-        let bytes = space.fetch(&output.blob).await.unwrap().unwrap();
+        let bytes = space.get(&output.blob).await.unwrap().unwrap();
         let vectors = LexicalVectors::decode(&bytes).unwrap();
         assert_eq!(vectors.dimensions, 64);
         assert_eq!(vectors.vectors.len(), 3);
@@ -178,16 +178,19 @@ mod tests {
     /// is one correctly-rounded `sqrt` plus correctly-rounded divisions. No
     /// FMA contraction, no x87 excess precision, no reduction-order freedom.
     ///
-    /// The digest below is what this pipeline produces. `crates/probes/
-    /// mesh-lexical-wasm` compiles the same codec source to wasm32 and asserts
-    /// the same digest, which is what turns the argument into a receipt.
+    /// The argument is only a receipt because a second target ran it:
+    /// `crates/probes/mesh-lexical-wasm` compiles this exact codec source and
+    /// the real ESP provider to wasm32-unknown-unknown and produced the same
+    /// digest under Node on 2026-08-09 (801 canonical bytes, digest below).
+    /// If this pin ever moves, re-run that probe before re-pinning it — a
+    /// native-only change to the digest says nothing about the class.
     #[test]
     fn lexical_determinism_receipt() {
         let canonical = run_canonical(&batch().encode()).unwrap();
         let digest = blake3::hash(&canonical);
         assert_eq!(
             digest.to_hex().as_str(),
-            "0000000000000000000000000000000000000000000000000000000000000000",
+            "4d0f647fa7f15639aad9591ae9e466d48d9d029ef581d3a6d25ca10e5258aa01",
             "canonical lexical output digest moved; \
              re-run the wasm probe before re-pinning it"
         );

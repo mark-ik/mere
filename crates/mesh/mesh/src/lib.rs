@@ -36,8 +36,18 @@
 //! - [`resources`] — the shipped adapters: `mesh.echo/v1`, `mesh.blake3/v1`
 //!   (the M1 kinds, now behind one execution route) and
 //!   `esp.embed.lexical/v1`.
+//! - [`lease`] / [`projection`] — lending an owned device safely. The author
+//!   signs a [`LeaseTerms`] envelope once; the deterministic claim winner
+//!   grants itself a lease inside it. The fold keeps those facts **without a
+//!   clock** (signed timestamp against signed timestamp); liveness is a
+//!   separate question asked with an explicit observation time,
+//!   `job.lease_at(now_ms, &policy)`.
+//! - [`policy`] — [`DevicePolicy`] and [`DeviceConditions`]: what this device
+//!   will lend and what it is doing right now. Host-supplied; `mere-mesh` never
+//!   queries the OS. Owner reclaim outranks every job.
 //! - [`worker`] — the pure decision function ([`next_action`]), which selects
-//!   only work this host advertises capability for. The *host* drives the loop
+//!   only work this host advertises capability for and hands the owner's
+//!   reclaim priority ahead of everything else. The *host* drives the loop
 //!   (the `mesh-peer` bin now; turnstone's compute actor later).
 //! - [`store`] — the [`MeshStore`]: the shared muniment operation store behind
 //!   one policy-before-insert path that validates, admits, and indexes each op
@@ -53,12 +63,21 @@
 //!   path ([`SyncedMesh::author`]) and a real, non-placebo [`SyncStatus`].
 //!
 //! See the
-//! [mesh M2 plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-06-30_personal_mesh_substrate_m2_plan.md).
+//! [mesh M2 plan](https://github.com/merely-made/mere/blob/main/design_docs/archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md)
+//! (landed 2026-08-09) and the
+//! [lease scheduler plan](https://github.com/merely-made/mere/blob/main/design_docs/archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md)
+//! that followed it (both landed 2026-08-09). The lanes both plans leaned on
+//! and did not build — blob delivery above all — are the
+//! [mesh host lanes plan](https://github.com/merely-made/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
 
 pub mod board;
 pub mod drop_export;
+mod fold;
 pub mod ident;
+pub mod lease;
 pub mod namespace;
+pub mod policy;
+pub mod projection;
 pub mod registry;
 pub mod resource;
 pub mod resources;
@@ -72,14 +91,20 @@ pub mod worker;
 pub use board::{Job, JobBoard, JobId, JobState};
 pub use drop_export::{MeshDropPriorities, MeshDropPrivacy, MeshDropProfile, MeshDropSelector};
 pub use ident::{IdentError, ImplementationId, ResourceId};
+pub use lease::{
+    LeaseEnd, LeaseEpoch, LeaseId, LeaseProgress, LeaseRecord, LeaseTerms, LeaseTermsError,
+    ReclaimReason, ReleaseReason,
+};
 pub use namespace::{
     BlobSink, BlobSource, JobNamespaceView, MemoryBlobSpace, NamespaceError, OutputCommit,
 };
+pub use policy::{DeviceConditions, DevicePolicy, NetworkClass, QuietHours};
+pub use projection::{LapseReason, LeasePhase, LeasePolicy};
 pub use proofs::{BlobRef, Commitment, CommitmentDomain, CommitmentScheme, Digest, DigestAlg};
 pub use registry::{RegistryError, ResourceRegistry, RunError, Verdict, run_job, verify_output};
 pub use resource::{
-    Cancelled, JobControl, JobControlHandle, MeshResource, Prepared, ResourceDescriptor,
-    ResourceError,
+    Cancelled, Checkpoint, ControlSignal, JobControl, JobControlHandle, MeshResource, Prepared,
+    ResourceDescriptor, ResourceError,
 };
 pub use retention::{
     AvailabilityPolicy, CheckpointError, ErasurePolicy, JobBoardSnapshot, KeepBound, LogFrontier,

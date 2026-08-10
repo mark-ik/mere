@@ -29,7 +29,10 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Where granted input bytes come from. Host-owned: the mesh never resolves a
 /// blob on an adapter's behalf.
 pub trait BlobSource: Send + Sync {
-    fn fetch<'a>(&'a self, blob: &'a BlobRef) -> BoxFuture<'a, Result<Option<Vec<u8>>, NamespaceError>>;
+    fn fetch<'a>(
+        &'a self,
+        blob: &'a BlobRef,
+    ) -> BoxFuture<'a, Result<Option<Vec<u8>>, NamespaceError>>;
 }
 
 /// Where a granted output is committed.
@@ -103,6 +106,18 @@ impl<B: Backend> MunimentBlobSpace<B> {
             .await
             .map_err(|err| NamespaceError::Backend(err.to_string()))
     }
+
+    /// Ambient read of the device's own space. The *host* has this; a resource
+    /// never does — it sees only [`JobNamespaceView`].
+    pub async fn get(&self, blob: &BlobRef) -> Result<Option<Vec<u8>>, NamespaceError> {
+        let Ok(bytes) = blob.digest.as_32() else {
+            return Ok(None);
+        };
+        self.store
+            .get(&muniment::Hash::from_bytes(bytes))
+            .await
+            .map_err(|err| NamespaceError::Backend(err.to_string()))
+    }
 }
 
 impl<B: Backend + Send + Sync> BlobSource for MunimentBlobSpace<B> {
@@ -110,15 +125,7 @@ impl<B: Backend + Send + Sync> BlobSource for MunimentBlobSpace<B> {
         &'a self,
         blob: &'a BlobRef,
     ) -> BoxFuture<'a, Result<Option<Vec<u8>>, NamespaceError>> {
-        Box::pin(async move {
-            let Ok(bytes) = blob.digest.as_32() else {
-                return Ok(None);
-            };
-            self.store
-                .get(&muniment::Hash::from_bytes(bytes))
-                .await
-                .map_err(|err| NamespaceError::Backend(err.to_string()))
-        })
+        Box::pin(self.get(blob))
     }
 }
 
@@ -265,7 +272,10 @@ mod tests {
         let space = MemoryBlobSpace::in_memory();
         let granted = space.put(b"granted bytes").await.unwrap();
         let secret = space.put(b"the other job's private input").await.unwrap();
-        assert!(space.has(&secret).await.unwrap(), "the blob is held locally");
+        assert!(
+            space.has(&secret).await.unwrap(),
+            "the blob is held locally"
+        );
 
         let spec = spec_for(&granted);
         let view = JobNamespaceView::grant(&spec, &space, &space);
@@ -364,9 +374,6 @@ mod tests {
         let view = JobNamespaceView::grant(&spec, &space, &space);
         assert_eq!(view.read("texts").await.unwrap(), b"a batch of texts");
         assert_eq!(view.read("weights").await.unwrap(), b"model weights");
-        assert_eq!(
-            view.input_names().collect::<Vec<_>>(),
-            ["texts", "weights"]
-        );
+        assert_eq!(view.input_names().collect::<Vec<_>>(), ["texts", "weights"]);
     }
 }

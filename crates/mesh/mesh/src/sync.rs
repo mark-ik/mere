@@ -236,8 +236,14 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
 mod tests {
     use super::*;
     use crate::board::{JobId, JobState};
+    use crate::ident::ResourceId;
+    use crate::namespace::MemoryBlobSpace;
+    use crate::policy::DevicePolicy;
+    use crate::registry::{ResourceRegistry, Verdict, run_job, run_legacy, verify_output};
+    use crate::resource::JobControl;
+    use crate::spec::{DeterminismClass, HostFacts, JobSpec};
     use crate::wire::JobKind;
-    use crate::worker::{WorkerAction, execute, next_action};
+    use crate::worker::{HostOffer, WorkerAction, next_action};
     use identity::{IdentityProvider, InMemoryProvider};
     use muniment::MemoryBackend;
     use std::sync::Arc as StdArc;
@@ -337,9 +343,15 @@ mod tests {
         let id = JobId(*posted.hash.as_bytes());
 
         // B sees the job and its worker loop runs it: claim, execute, return.
+        let registry = ResourceRegistry::builtin();
+        let policy = DevicePolicy::permissive();
+        let offer = HostOffer::new(&registry, HostFacts::cpu(4096), &policy);
         wait_for_board(&bob, |b| b.job(id).is_some(), "bob sees the posted job").await;
         let board = bob.board().await.unwrap();
-        assert_eq!(next_action(&board, &bob_me), WorkerAction::Claim(id));
+        assert_eq!(
+            next_action(&board, &bob_me, &offer),
+            WorkerAction::Claim(id)
+        );
         bob.author(
             &bob_kp,
             &MeshEvent::JobClaimed {
@@ -357,12 +369,20 @@ mod tests {
         )
         .await;
         let board = bob.board().await.unwrap();
-        assert_eq!(next_action(&board, &bob_me), WorkerAction::Execute(id));
-        let job = board.job(id).unwrap();
-        let result = execute(
-            job.kind,
-            job.payload.as_deref().expect("claimed job has payload"),
+        assert_eq!(
+            next_action(&board, &bob_me, &offer),
+            WorkerAction::Execute(id)
         );
+        let job = board.job(id).unwrap();
+        let (_cancel, control) = JobControl::new();
+        let result = run_legacy(
+            &registry,
+            job.kind.expect("an M1 job carries its kind"),
+            job.payload.as_deref().expect("claimed job has payload"),
+            &control,
+        )
+        .await
+        .expect("bob runs the legacy job through the V2 route");
         bob.author(
             &bob_kp,
             &MeshEvent::JobDone {
@@ -447,5 +467,360 @@ mod tests {
             status.ops_received
         );
         assert!(status.last_activity_ms.is_some());
+    }
+
+    /// The M2 receipt: a blob-backed lexical embedding job crosses two peers,
+    /// runs inside a restricted namespace, converges as a content-addressed
+    /// result, and verifies on a local re-run — while a blob the job did not
+    /// name stays unreadable on the very device holding it.
+    ///
+    /// Blob *transport* is deliberately not proven here: moving bytes between
+    /// devices is the host's job (drop export, a fetch lane), and M2's claim is
+    /// about the namespace, not the courier. The test stages the granted input
+    /// on both devices to stand in for whatever courier a host uses.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_blob_backed_lexical_job_crosses_two_peers_and_verifies() {
+        use crate::namespace::{JobNamespaceView, NamespaceError};
+        use crate::resources::LexicalBatch;
+
+        let (alice_t, bob_t) = two_peers().await;
+        let alice = join(&alice_t).await;
+        let bob = join(&bob_t).await;
+
+        let alice_kp = InMemoryProvider::from_seed([62; 32])
+            .derive_keypair(b"mesh-author")
+            .unwrap();
+        let bob_kp = InMemoryProvider::from_seed([63; 32])
+            .derive_keypair(b"mesh-author")
+            .unwrap();
+        let bob_me = bob_kp.public_key().to_bytes();
+
+        // 1. Alice stores a batch and posts its address — not its bytes.
+        let batch = LexicalBatch::new(
+            64,
+            vec![
+                "async rust programming".to_string(),
+                "rust runtime internals".to_string(),
+                "italian dinner recipes".to_string(),
+            ],
+        )
+        .encode();
+        let alice_blobs = MemoryBlobSpace::in_memory();
+        let input = alice_blobs.put(&batch).await.unwrap();
+        let spec = JobSpec::simple(
+            ResourceId::parse("esp.embed.lexical/v1").unwrap(),
+            "texts",
+            input,
+            "vectors",
+            64 * 1024,
+            DeterminismClass::Exact,
+        );
+        let posted = alice
+            .author(
+                &alice_kp,
+                &MeshEvent::JobPostedV2 {
+                    spec: Box::new(spec.clone()),
+                    nonce: 1,
+                    at_ms: 10,
+                },
+            )
+            .await
+            .expect("alice posts the V2 job");
+        let id = JobId(*posted.hash.as_bytes());
+
+        // 2. Bob advertises the resource and claims the job.
+        let registry = ResourceRegistry::builtin();
+        let policy = DevicePolicy::permissive();
+        let offer = HostOffer::new(&registry, HostFacts::cpu(4096), &policy);
+        let bob_blobs = MemoryBlobSpace::in_memory();
+        bob_blobs.put(&batch).await.unwrap();
+        let private = bob_blobs.put(b"bob's private notes").await.unwrap();
+
+        wait_for_board(&bob, |b| b.job(id).is_some(), "bob sees the V2 job").await;
+        let board = bob.board().await.unwrap();
+        assert_eq!(
+            next_action(&board, &bob_me, &offer),
+            WorkerAction::Claim(id)
+        );
+        bob.author(
+            &bob_kp,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 20,
+            },
+        )
+        .await
+        .expect("bob claims");
+        wait_for_board(
+            &bob,
+            |b| matches!(b.job(id).map(|j| &j.state), Some(JobState::Claimed { winner }) if *winner == bob_me),
+            "bob's claim wins on his own board",
+        )
+        .await;
+
+        // 3. Bob's host grants a namespace for exactly this job and runs it.
+        let board = bob.board().await.unwrap();
+        assert_eq!(
+            next_action(&board, &bob_me, &offer),
+            WorkerAction::Execute(id)
+        );
+        let granted = board
+            .job(id)
+            .unwrap()
+            .spec
+            .clone()
+            .expect("a V2 job carries its spec");
+        let (_cancel, control) = JobControl::new();
+        let output = run_job(&registry, &granted, &bob_blobs, &bob_blobs, &control)
+            .await
+            .expect("bob runs the lexical job");
+
+        // 6. The private blob is on this device and still out of reach.
+        assert!(bob_blobs.has(&private).await.unwrap(), "bob holds the blob");
+        let view = JobNamespaceView::grant(&granted, &bob_blobs, &bob_blobs);
+        assert_eq!(
+            view.read("notes").await,
+            Err(NamespaceError::UngrantedInput("notes".to_string())),
+            "holding bytes locally does not make them reachable from a job"
+        );
+        assert_eq!(view.input_names().collect::<Vec<_>>(), ["texts"]);
+
+        // 4. The result converges to Alice as a committed output.
+        bob.author(
+            &bob_kp,
+            &MeshEvent::JobDoneV2 {
+                job: id.0,
+                output: Box::new(output.clone()),
+                at_ms: 30,
+            },
+        )
+        .await
+        .expect("bob commits the result");
+        let expected = output.blob.clone();
+        wait_for_board(
+            &alice,
+            move |b| {
+                matches!(
+                    b.job(id).map(|j| &j.state),
+                    Some(JobState::Committed { winner, output: o })
+                        if *winner == bob_me && o.blob == expected
+                )
+            },
+            "alice receives bob's committed output",
+        )
+        .await;
+
+        // 5. Alice re-runs it locally and the declared class holds.
+        assert_eq!(
+            verify_output(
+                &registry,
+                &spec,
+                &output,
+                &alice_blobs,
+                &alice_blobs,
+                &control
+            )
+            .await
+            .unwrap(),
+            Verdict::Reproduced
+        );
+    }
+
+    /// The M3 convergence receipt: an owner reclaim authored on one device
+    /// arrives at the other as a *reclaim*, the job reopens at the next epoch,
+    /// and the second device finishes it. Every lease timestamp is authored, so
+    /// only sync — not the clock — is what the test waits on.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_owner_reclaim_converges_and_the_other_peer_finishes_the_job() {
+        use crate::lease::{LeaseTerms, ReclaimReason};
+        use crate::projection::{LeasePhase, LeasePolicy};
+        use crate::resources::DelayedResource;
+        use proofs::BlobRef;
+
+        const LEASE_MS: u64 = 60_000;
+        let exact = LeasePolicy { max_skew_ms: 0 };
+
+        let (alice_t, bob_t) = two_peers().await;
+        let alice = join(&alice_t).await;
+        let bob = join(&bob_t).await;
+
+        let alice_kp = InMemoryProvider::from_seed([64; 32])
+            .derive_keypair(b"mesh-author")
+            .unwrap();
+        let bob_kp = InMemoryProvider::from_seed([65; 32])
+            .derive_keypair(b"mesh-author")
+            .unwrap();
+        let alice_me = alice_kp.public_key().to_bytes();
+        let bob_me = bob_kp.public_key().to_bytes();
+
+        // Alice posts a lendable job. Both devices hold the input.
+        let spec = JobSpec::simple(
+            ResourceId::parse("mesh.delayed/v1").unwrap(),
+            "payload",
+            BlobRef::blake3(b"seed"),
+            "result",
+            64,
+            DeterminismClass::Exact,
+        )
+        .leased(LeaseTerms::new(LEASE_MS, 10_000));
+        let posted = alice
+            .author(
+                &alice_kp,
+                &MeshEvent::JobPostedV2 {
+                    spec: Box::new(spec.clone()),
+                    nonce: 1,
+                    at_ms: 0,
+                },
+            )
+            .await
+            .expect("alice posts a leased job");
+        let id = JobId(*posted.hash.as_bytes());
+
+        // Bob claims and grants himself a lease inside Alice's envelope.
+        wait_for_board(&bob, |b| b.job(id).is_some(), "bob sees the leased job").await;
+        bob.author(
+            &bob_kp,
+            &MeshEvent::JobClaimed {
+                job: id.0,
+                at_ms: 1_000,
+            },
+        )
+        .await
+        .expect("bob claims");
+        wait_for_board(
+            &bob,
+            |b| b.job(id).is_some_and(|job| job.has_claimed(&bob_me)),
+            "bob's claim lands on his own board",
+        )
+        .await;
+        let grant = bob
+            .author(
+                &bob_kp,
+                &MeshEvent::LeaseGranted {
+                    job: id.0,
+                    epoch: 0,
+                    granted_at_ms: 2_000,
+                    expires_at_ms: 2_000 + LEASE_MS,
+                },
+            )
+            .await
+            .expect("bob grants himself the lease");
+        let lease = crate::lease::LeaseId(*grant.hash.as_bytes());
+
+        // Alice sees the lease as held by Bob, not as her own to take.
+        wait_for_board(
+            &alice,
+            move |b| {
+                b.job(id)
+                    .is_some_and(|job| job.lease_at(3_000, &exact).held_by(&bob_me))
+            },
+            "alice sees bob holding the lease",
+        )
+        .await;
+
+        // Bob's owner takes the device back mid-lease.
+        bob.author(
+            &bob_kp,
+            &MeshEvent::LeaseRevokedByOwner {
+                job: id.0,
+                lease: lease.0,
+                reason: ReclaimReason::ForegroundActivity,
+                at_ms: 6_000,
+            },
+        )
+        .await
+        .expect("bob's owner reclaims the device");
+        wait_for_board(
+            &alice,
+            move |b| {
+                matches!(
+                    b.job(id).map(|job| job.lease_at(7_000, &exact)),
+                    Some(LeasePhase::Reclaimed {
+                        reason: ReclaimReason::ForegroundActivity,
+                        ..
+                    })
+                )
+            },
+            "the reclaim converges to alice as a reclaim, not a failure",
+        )
+        .await;
+
+        // Alice takes the next epoch and finishes the job.
+        alice
+            .author(
+                &alice_kp,
+                &MeshEvent::JobClaimed {
+                    job: id.0,
+                    at_ms: 7_000,
+                },
+            )
+            .await
+            .expect("alice re-claims");
+        wait_for_board(
+            &alice,
+            move |b| {
+                b.job(id)
+                    .is_some_and(|job| job.next_holder(7_500) == Some(alice_me))
+            },
+            "alice is the eligible winner for epoch 1",
+        )
+        .await;
+        let second_grant = alice
+            .author(
+                &alice_kp,
+                &MeshEvent::LeaseGranted {
+                    job: id.0,
+                    epoch: 1,
+                    granted_at_ms: 7_500,
+                    expires_at_ms: 7_500 + LEASE_MS,
+                },
+            )
+            .await
+            .expect("alice grants epoch 1");
+
+        let registry = ResourceRegistry::builtin();
+        let blobs = MemoryBlobSpace::in_memory();
+        blobs.put(b"seed").await.unwrap();
+        let (_cancel, control) = JobControl::new();
+        let output = run_job(&registry, &spec, &blobs, &blobs, &control)
+            .await
+            .expect("alice runs the delayed job");
+        assert_eq!(
+            blobs.get(&output.blob).await.unwrap(),
+            Some(DelayedResource::expected(b"seed", 16))
+        );
+        alice
+            .author(
+                &alice_kp,
+                &MeshEvent::JobCompletedUnderLease {
+                    job: id.0,
+                    lease: *second_grant.hash.as_bytes(),
+                    output: Box::new(output.clone()),
+                    at_ms: 9_000,
+                },
+            )
+            .await
+            .expect("alice commits the result under her lease");
+
+        // Both peers converge on the same terminal state, attributed to Alice.
+        let expected = output.blob.clone();
+        for (peer, who) in [(&alice, "alice"), (&bob, "bob")] {
+            let expected = expected.clone();
+            wait_for_board(
+                peer,
+                move |b| {
+                    matches!(
+                        b.job(id).map(|job| &job.state),
+                        Some(JobState::Committed { winner, output: o })
+                            if *winner == alice_me && o.blob == expected
+                    ) && matches!(
+                        b.job(id).map(|job| job.lease_at(10_000, &exact)),
+                        Some(LeasePhase::Done { epoch: 1, .. })
+                    )
+                },
+                who,
+            )
+            .await;
+        }
     }
 }

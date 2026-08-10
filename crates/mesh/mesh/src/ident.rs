@@ -115,11 +115,7 @@ fn valid_segment(segment: &str) -> bool {
         return false;
     };
     let edge = |b: &u8| b.is_ascii_lowercase() || b.is_ascii_digit();
-    edge(first)
-        && edge(last)
-        && bytes
-            .iter()
-            .all(|b| edge(b) || matches!(b, b'-' | b'_'))
+    edge(first) && edge(last) && bytes.iter().all(|b| edge(b) || matches!(b, b'-' | b'_'))
 }
 
 #[cfg(test)]
@@ -169,7 +165,9 @@ mod tests {
     fn a_decoded_id_is_revalidated() {
         // Wire bytes bypass `parse`, so `validate` is the decode-side guard.
         let forged: ResourceId = p2panda_core::cbor::decode_cbor(
-            p2panda_core::cbor::encode_cbor(&"NOT AN ID").unwrap().as_slice(),
+            p2panda_core::cbor::encode_cbor(&"NOT AN ID")
+                .unwrap()
+                .as_slice(),
         )
         .unwrap();
         assert!(forged.validate().is_err());

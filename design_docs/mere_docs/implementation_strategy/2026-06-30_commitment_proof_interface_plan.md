@@ -5,7 +5,7 @@
 **Related**:
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md),
 [`2026-06-30_kith_capability_sharing_plan.md`](2026-06-30_kith_capability_sharing_plan.md),
-[`2026-06-30_mesh_lease_scheduler_plan.md`](2026-06-30_mesh_lease_scheduler_plan.md),
+[`2026-06-30_mesh_lease_scheduler_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md),
 [`../../moothold_docs/implementation_strategy/2026-06-30_bounty_verification_economy_plan.md`](../../moothold_docs/implementation_strategy/2026-06-30_bounty_verification_economy_plan.md)
 
 This plan owns the proof interface for moot epochs, tessera receipts, kith

@@ -111,9 +111,15 @@ impl MeshDropSelector {
             MeshEvent::JobPosted { .. } | MeshEvent::JobPostedV2 { .. } => {
                 self.privacy.include_job_inputs
             }
-            MeshEvent::JobDone { .. } | MeshEvent::JobDoneV2 { .. } => {
-                self.privacy.include_job_results
-            }
+            MeshEvent::JobDone { .. }
+            | MeshEvent::JobDoneV2 { .. }
+            | MeshEvent::JobCompletedUnderLease { .. } => self.privacy.include_job_results,
+            // Lease lifecycle names devices and times, not inputs or results.
+            // It travels with the claims it belongs to.
+            MeshEvent::LeaseGranted { .. }
+            | MeshEvent::LeaseHeartbeat { .. }
+            | MeshEvent::LeaseReleased { .. }
+            | MeshEvent::LeaseRevokedByOwner { .. } => true,
             MeshEvent::RetentionCheckpoint { checkpoint } => {
                 let contains_inputs = checkpoint
                     .snapshot
@@ -136,8 +142,15 @@ impl MeshDropSelector {
         match event {
             MeshEvent::RetentionCheckpoint { .. } => self.priorities.retention_checkpoint,
             MeshEvent::HistoryPruned { .. } => self.priorities.history_pruned,
-            MeshEvent::JobDone { .. } | MeshEvent::JobDoneV2 { .. } => self.priorities.job_done,
-            MeshEvent::JobClaimed { .. } => self.priorities.job_claimed,
+            MeshEvent::JobDone { .. }
+            | MeshEvent::JobDoneV2 { .. }
+            | MeshEvent::JobCompletedUnderLease { .. } => self.priorities.job_done,
+            // A lease fact is only useful next to the claim it settles.
+            MeshEvent::JobClaimed { .. }
+            | MeshEvent::LeaseGranted { .. }
+            | MeshEvent::LeaseHeartbeat { .. }
+            | MeshEvent::LeaseReleased { .. }
+            | MeshEvent::LeaseRevokedByOwner { .. } => self.priorities.job_claimed,
             MeshEvent::JobPosted { .. } | MeshEvent::JobPostedV2 { .. } => {
                 self.priorities.job_posted
             }

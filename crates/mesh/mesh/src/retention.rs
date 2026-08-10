@@ -353,6 +353,8 @@ mod tests {
                     winner: [3; 32],
                     result: b"result".to_vec(),
                 },
+                lease: Default::default(),
+                next_claimants: Vec::new(),
             }],
         };
         assert_eq!(snapshot.erase_terminal_payloads(), 1);

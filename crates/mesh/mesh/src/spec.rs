@@ -18,6 +18,7 @@ use proofs::BlobRef;
 use serde::{Deserialize, Serialize};
 
 use crate::ident::{IdentError, ImplementationId, ResourceId};
+use crate::lease::{LeaseTerms, LeaseTermsError};
 
 /// Most named inputs one job may carry.
 pub const MAX_INPUTS: usize = 32;
@@ -103,12 +104,22 @@ pub enum DeterminismClass {
     Observed,
 }
 
-/// Whether an interrupted run restarts or resumes. The scheduler that acts on
-/// this is M3; the wire records it now so M3 is not a breaking change.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// What happens to the work when a run is interrupted. The M3 plan called these
+/// `Interruptible` / `Checkpointable` / `NonInterruptible`; the two M2 names are
+/// kept because renaming them would change the encoded variant strings inside
+/// already-signed V2 specs, and they say the same thing from the work's side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum CheckpointClass {
+    /// Interruptible: re-dispatch starts again from nothing.
     Restart,
+    /// Checkpointable: the resource can stop at a boundary and report how far
+    /// it got. (Resuming *elsewhere* additionally needs a blob lane the mesh
+    /// does not have yet — see the lease plan's carried-forward section.)
     Resumable,
+    /// Not interruptible: the device finishes, or fails inside the owner's
+    /// configured grace window. Owner reclaim still wins; the grace window
+    /// changes how the handoff happens, not who has authority.
+    NonInterruptible,
 }
 
 /// The V2 job manifest.
@@ -120,6 +131,11 @@ pub struct JobSpec {
     pub requirements: ResourceRequirements,
     pub determinism: DeterminismClass,
     pub checkpoint: CheckpointClass,
+    /// The lease envelope the author signs once, at post time. `None` keeps M2
+    /// semantics: claim, run, commit, with no lending contract. Skipped when
+    /// absent so a pre-M3 spec still encodes to its original bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lease: Option<LeaseTerms>,
 }
 
 impl JobSpec {
@@ -145,12 +161,22 @@ impl JobSpec {
             requirements: ResourceRequirements::cpu(),
             determinism,
             checkpoint: CheckpointClass::Restart,
+            lease: None,
         }
+    }
+
+    /// Sign a lease envelope into this spec, making it a lendable job.
+    pub fn leased(mut self, terms: LeaseTerms) -> Self {
+        self.lease = Some(terms);
+        self
     }
 
     /// Every bound this spec must satisfy before it may mutate anything.
     pub fn validate(&self) -> Result<(), SpecError> {
         self.resource.validate()?;
+        if let Some(terms) = &self.lease {
+            terms.validate()?;
+        }
         if self.inputs.len() > MAX_INPUTS {
             return Err(SpecError::TooManyInputs(self.inputs.len()));
         }
@@ -195,6 +221,8 @@ pub enum SpecError {
     MalformedInputDigest(String),
     #[error("job spec grants {0} output bytes (max {MAX_OUTPUT_BYTES})")]
     OversizedGrant(u64),
+    #[error("job spec lease terms: {0}")]
+    Lease(#[from] LeaseTermsError),
 }
 
 /// Slot names are lowercase, start alphanumeric, and stay short: they are map
@@ -387,7 +415,13 @@ mod tests {
 
     #[test]
     fn malformed_names_and_counts_are_refused() {
-        for name in ["", "Texts", "-texts", "text s", &"t".repeat(MAX_NAME_LEN + 1)] {
+        for name in [
+            "",
+            "Texts",
+            "-texts",
+            "text s",
+            &"t".repeat(MAX_NAME_LEN + 1),
+        ] {
             let mut spec = spec();
             spec.inputs[0].name = name.to_string();
             assert!(spec.validate().is_err(), "{name:?} should be refused");
@@ -399,7 +433,10 @@ mod tests {
                 blob: BlobRef::blake3(b"x"),
             })
             .collect();
-        assert_eq!(spec.validate(), Err(SpecError::TooManyInputs(MAX_INPUTS + 1)));
+        assert_eq!(
+            spec.validate(),
+            Err(SpecError::TooManyInputs(MAX_INPUTS + 1))
+        );
     }
 
     #[test]
@@ -417,9 +454,10 @@ mod tests {
         spec.resource = super::super::ident::ResourceId::parse("mesh.echo/v1").unwrap();
         assert!(spec.validate().is_ok());
         // Only a decoded (unvalidated) id can be malformed, so round-trip one in.
-        let forged: ResourceId =
-            p2panda_core::cbor::decode_cbor(p2panda_core::cbor::encode_cbor(&"nope").unwrap().as_slice())
-                .unwrap();
+        let forged: ResourceId = p2panda_core::cbor::decode_cbor(
+            p2panda_core::cbor::encode_cbor(&"nope").unwrap().as_slice(),
+        )
+        .unwrap();
         spec.resource = forged;
         assert!(matches!(spec.validate(), Err(SpecError::Resource(_))));
     }
