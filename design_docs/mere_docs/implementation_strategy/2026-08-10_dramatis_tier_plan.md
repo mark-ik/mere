@@ -92,8 +92,8 @@ The port is **castellan** (ratified 2026-08-10; 0.0.1 claimed from
 ports/castellan, where it will found). Tiring-house is retired: its meaning is
 personae's, not the port's. The round also promoted **chatelaine** (the
 secrets, exercised never shown) and **emblem** (the graded proofs, made to be
-shown; what lands in someone else's gaz) to tier vocabulary; both names
-verified free, neither claimed yet.
+shown; what lands in someone else's gaz) to tier vocabulary; both claimed
+same day (0.0.1 reservations under crates/dramatis, Mark authorized).
 
 Both this direction and the gazette's feed direction are fleshed out in the
 [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md),

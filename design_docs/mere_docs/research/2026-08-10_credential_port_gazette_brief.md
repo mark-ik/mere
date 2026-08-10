@@ -140,9 +140,10 @@ artifact, two carriages.
    "ask every time" vs session grants (wallet_grant already models this).
 4. Where emblem and chatelaine live as code: chatelaine is plausibly the
    vault's stored-item taxonomy (personae substrate, castellan surface);
-   emblem's spine is personae's delegation module. Names verified free
-   2026-08-10; whether either becomes a crate follows the
-   module/crate/publish three-decisions rule.
+   emblem's spine is personae's delegation module. Both names claimed as
+   0.0.1 reservations under crates/dramatis (2026-08-10, Mark authorized);
+   whether either grows real code there follows the module/crate/publish
+   three-decisions rule.
 
 ---
 
