@@ -91,8 +91,7 @@ pub fn default_graph_reading_registry() -> GraphReadingRegistry {
                 ActorScope::All,
                 ReadingSurface::Spatial,
                 ReadingEmphasis::Identity,
-                Some("graph_layout:stack"),
-                false,
+                ReadingArrangement::Selectable("graph_layout:stack"),
             ),
             profile(
                 "changes",
@@ -101,8 +100,7 @@ pub fn default_graph_reading_registry() -> GraphReadingRegistry {
                 ActorScope::AdjacentRevision,
                 ReadingSurface::Spatial,
                 ReadingEmphasis::Change,
-                Some("graph_layout:stack"),
-                false,
+                ReadingArrangement::Selectable("graph_layout:stack"),
             ),
             profile(
                 "activity",
@@ -111,8 +109,7 @@ pub fn default_graph_reading_registry() -> GraphReadingRegistry {
                 ActorScope::All,
                 ReadingSurface::Spatial,
                 ReadingEmphasis::Activity,
-                Some("graph_layout:timeline"),
-                true,
+                ReadingArrangement::Locked("graph_layout:timeline"),
             ),
             profile(
                 "neighbors",
@@ -121,8 +118,7 @@ pub fn default_graph_reading_registry() -> GraphReadingRegistry {
                 ActorScope::FocusAndNeighbors,
                 ReadingSurface::Spatial,
                 ReadingEmphasis::FocusDistance,
-                Some("graph_layout:radial"),
-                false,
+                ReadingArrangement::Selectable("graph_layout:radial"),
             ),
             profile(
                 "matrix",
@@ -131,11 +127,16 @@ pub fn default_graph_reading_registry() -> GraphReadingRegistry {
                 ActorScope::All,
                 ReadingSurface::RelationMatrix,
                 ReadingEmphasis::Relation,
-                None,
-                true,
+                ReadingArrangement::None,
             ),
         ],
     }
+}
+
+enum ReadingArrangement {
+    Selectable(&'static str),
+    Locked(&'static str),
+    None,
 }
 
 fn profile(
@@ -145,9 +146,13 @@ fn profile(
     actor_scope: ActorScope,
     surface: ReadingSurface,
     emphasis: ReadingEmphasis,
-    default_arrangement: Option<&str>,
-    arrangement_locked: bool,
+    arrangement: ReadingArrangement,
 ) -> GraphReadingProfile {
+    let (default_arrangement, arrangement_locked) = match arrangement {
+        ReadingArrangement::Selectable(id) => (Some(id.to_owned()), false),
+        ReadingArrangement::Locked(id) => (Some(id.to_owned()), true),
+        ReadingArrangement::None => (None, true),
+    };
     GraphReadingProfile {
         id: id.to_owned(),
         label: label.to_owned(),
@@ -155,7 +160,7 @@ fn profile(
         actor_scope,
         surface,
         emphasis,
-        default_arrangement: default_arrangement.map(str::to_owned),
+        default_arrangement,
         arrangement_locked,
     }
 }
