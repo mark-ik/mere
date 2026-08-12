@@ -42,16 +42,19 @@ anchor embed's lib.rs cites).
   summon the node). Index staleness is surfaced honestly and
   `FormatMismatch` re-mints rather than erroring, per the crate's own
   doctrine. **Done when** "where did I read about X" answers from the
-  user's own trail.
+  user's own trail. *(Landed 2026-08-12; see §5.)*
 - **W3 — reports.** The trail/steward surface renders `top_domains` and
   `visits_histogram` from the fast-field columns (no re-index needed).
   Small; may ride W2's session.
-- **W4 — canvas semantic search.** Wire `embed::canvas_search` +
-  `field_bridge` into mere-canvas: a query becomes a similarity field
-  over the canvas through quint, with `persistence` saving the
+- **W4 — canvas semantic search.** Wire `canvas::canvas_search` +
+  `canvas::field_bridge` into the canvas's live surface: a query becomes a
+  similarity field over the canvas through quint, with
+  `esp::embed::persistence` (feature `persistence`) saving the
   `VectorIndex` via eidetic. Start on the lexical embedding provider
   (deterministic, no Burn), `bert` behind its existing feature per esp's
-  target matrix.
+  target matrix. *(Paths updated 2026-08-12 by the
+  [eidetic reorg](2026-08-12_eidetic_reorg_plan.md): the modules now live in
+  the crates that will use them, not in the deleted `mere-embed`.)*
 - **W5 — fusion.** `fuse()` merges W2's lexical ranking with W4's vector
   ranking in the omnibar. Gated on both.
 

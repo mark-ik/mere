@@ -18,6 +18,17 @@ genet-side patch consumption (14 edges). A crate is flagged only when it has
 recorded but a single consumer is often the design (a port, an adapter, a
 tier under construction).
 
+> **Caveat found in execution, 2026-08-12 — the map excludes dev edges.**
+> The reverse map filtered `kind != dev`, so consumers that are examples,
+> benches, or test-only are invisible to it. `mere-embed` was reported here
+> as a true zero and turned out to carry one: `eidetic-search` dev-depends
+> on it for the `eidetic-recall` example, the same bin that produced the
+> search plan's W1 receipt. Nothing was lost — the
+> [eidetic reorg](mere_docs/implementation_strategy/2026-08-12_eidetic_reorg_plan.md)
+> repointed it — but **every "zero consumers" row below carries this
+> caveat**. Re-run the census including dev edges before acting on another
+> one, and read a zero as "no library consumer", not "no consumer".
+
 ## 1. Not under-leveraged (the flags Mark raised that dissolve)
 
 - **import** — consumed by turnstone. Stays put; its scope (stored

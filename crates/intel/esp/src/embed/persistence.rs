@@ -28,7 +28,7 @@ use eidetic::{
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use crate::VectorIndex;
+use super::VectorIndex;
 
 /// Canonical bytes of the `VectorIndex` schema engram payload.
 ///
@@ -137,7 +137,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SimilarityMetric;
+    use crate::embed::SimilarityMetric;
     use eidetic::{ModerationState, ProvenanceOrigin, TrustLevel};
 
     // The in-memory store is muniment's (2026-07-12): the hand-rolled

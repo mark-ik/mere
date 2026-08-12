@@ -770,6 +770,20 @@ fn selected_ids(product: &ProductEngramV1) -> Result<HashSet<Uuid>, TransferErro
         .collect()
 }
 
+/// Lowercase hex of a SHA-256 digest.
+///
+/// Written out rather than `format!("{:x}", …)`: on the digest 0.11 row a
+/// digest is a `hybrid_array::Array`, which does not implement `LowerHex`
+/// the way `generic_array::GenericArray` did on 0.10. The test below already
+/// spelled it this way after the row bump; these call sites did not compile
+/// until the sha2 feature was actually turned on, so they kept the old form.
+fn hex_digest(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
 fn verify_content_facet(
     facets: &NodeFacetStore,
     input: &TransferBlobInput,
@@ -803,7 +817,7 @@ fn verify_content_facet(
         });
     }
     if let Some(expected) = content.get("sha256").and_then(serde_json::Value::as_str) {
-        let actual = format!("{:x}", Sha256::digest(&input.bytes));
+        let actual = hex_digest(&input.bytes);
         if !expected.eq_ignore_ascii_case(&actual) {
             return Err(TransferError::ContentMismatch {
                 node_id: input.node_id,
@@ -1137,7 +1151,7 @@ mod tests {
         fs::write(&path, b"real file bytes for Graphshell H6\n").unwrap();
         let file_bytes = fs::read(&path).unwrap();
         fs::remove_file(&path).unwrap();
-        let sha256 = format!("{:x}", Sha256::digest(&file_bytes));
+        let sha256 = hex_digest(&file_bytes);
         let file = host
             .create_file_metadata(LocalFileMetadata {
                 content_hash: sha256,

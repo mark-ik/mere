@@ -27,8 +27,8 @@ use quint::ast::ScalarField;
 use quint::projection::FieldProjection;
 use quint::registry::FieldId;
 
-use crate::VectorIndex;
-use crate::provider::SimilarityMetric;
+use esp::embed::VectorIndex;
+use esp::embed::provider::SimilarityMetric;
 
 /// Build a `ScalarField` rendering query-similarity as a sum of weighted
 /// gaussians per known node position. Keys missing from `node_positions`
@@ -107,8 +107,8 @@ fn euclidean(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StubEmbeddingProvider;
-    use crate::provider::EmbeddingProvider;
+    use esp::embed::StubEmbeddingProvider;
+    use esp::embed::provider::EmbeddingProvider;
     use quint::eval::eval_scalar;
     use quint::registry::FieldRegistry;
 

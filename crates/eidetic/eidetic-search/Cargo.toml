@@ -38,7 +38,7 @@ tempfile = "3"
 # unified `burn/wgpu` in. That is exactly the accidental fan-out this removes.
 import = { workspace = true }
 eidetic-fjall = { workspace = true }
-embed = { workspace = true, features = ["bert", "bert-wgpu"] }
+esp = { workspace = true, features = ["bert", "bert-wgpu", "persistence"] }
 
 # `test = true` runs the example's embedded mapper tests under `cargo test`.
 [[example]]

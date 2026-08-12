@@ -142,6 +142,14 @@ pub mod palette;
 
 mod edge_cells;
 mod fields;
+/// Query similarity over the canvas: the embedding→quint field bridge and the
+/// search surface built on it. Homed here in the 2026-08-12 eidetic reorg —
+/// they are canvas glue (quint fields over placed nodes) that had been parked
+/// in the intel tier, where nothing consumed them.
+pub mod canvas_search;
+pub mod field_bridge;
+pub use canvas_search::CanvasSearchSurface;
+pub use field_bridge::{build_query_similarity_field, register_query_similarity_field};
 pub mod fold_projection;
 mod frame;
 mod input;

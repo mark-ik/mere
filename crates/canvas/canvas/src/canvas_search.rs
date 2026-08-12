@@ -23,10 +23,10 @@ use std::hash::Hash;
 use quint::projection::FieldProjection;
 use quint::registry::FieldId;
 
-use crate::VectorIndex;
+use esp::embed::VectorIndex;
 use crate::field_bridge::register_query_similarity_field;
-use crate::provider::EmbeddingProvider;
-use crate::search::{SearchError, SemanticSearch};
+use esp::embed::provider::EmbeddingProvider;
+use esp::embed::search::{SearchError, SemanticSearch};
 
 /// Stateful canvas-aware search surface.
 ///
@@ -180,7 +180,7 @@ impl<K: Hash + Eq + Clone, P: EmbeddingProvider> CanvasSearchSurface<K, P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StubEmbeddingProvider;
+    use esp::embed::StubEmbeddingProvider;
     use quint::eval::eval_scalar;
     use quint::registry::{FieldDef, FieldRegistry};
 

@@ -70,8 +70,8 @@ use eidetic::{
 };
 use eidetic_fjall::FjallStore;
 use eidetic_search::{SearchError, TrailIndex, bootstrap_search_schema, fuse};
-use embed::VectorIndex;
-use embed::provider::EmbeddingProvider;
+use esp::embed::VectorIndex;
+use esp::embed::provider::EmbeddingProvider;
 use import::{
     HistoryTransitionKind, ImportedBookmarkItem, ImportedHistoryVisitItem, ImportedPageSeed,
     parse_bookmark_items,
@@ -213,8 +213,8 @@ fn url_ranking(hits: &[eidetic_search::Hit]) -> Vec<String> {
 fn load_provider(model_dir: &str, backend: &str) -> Result<Box<dyn EmbeddingProvider>, String> {
     let t = std::time::Instant::now();
     let provider: Box<dyn EmbeddingProvider> = match backend {
-        "cpu" => embed::bert::load_cpu(model_dir),
-        "wgpu" => embed::bert::load_wgpu(model_dir),
+        "cpu" => esp::embed::bert::load_cpu(model_dir),
+        "wgpu" => esp::embed::bert::load_wgpu(model_dir),
         other => return Err(format!("--backend must be cpu or wgpu, got {other:?}")),
     }
     .map_err(|e| format!("load embedding model from {model_dir}: {e}"))?;
@@ -227,13 +227,13 @@ fn load_provider(model_dir: &str, backend: &str) -> Result<Box<dyn EmbeddingProv
 
 /// The newest stored vector-index engram, if any.
 async fn load_vector_index(store: &mut FjallStore) -> Result<Option<VectorIndex<String>>, String> {
-    let manifests = embed::persistence::list_from_eidetic::<String>(store)
+    let manifests = esp::embed::persistence::list_from_eidetic::<String>(store)
         .await
         .map_err(|e| format!("list vector indices: {e}"))?;
     let Some(newest) = manifests.iter().max_by_key(|m| m.created_at) else {
         return Ok(None);
     };
-    embed::persistence::load_from_eidetic::<String>(store, &mut NoFetcher, newest.id)
+    esp::embed::persistence::load_from_eidetic::<String>(store, &mut NoFetcher, newest.id)
         .await
         .map_err(|e| format!("load vector index: {e}"))
 }
@@ -393,7 +393,7 @@ async fn run() -> Result<(), String> {
                 }
             }
             let stamp = now_ms();
-            let id = embed::persistence::save_to_eidetic(
+            let id = esp::embed::persistence::save_to_eidetic(
                 &mut store,
                 &vector_index,
                 PrivacyClass::LocalOnly,

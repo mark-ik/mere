@@ -44,7 +44,6 @@ members = [
     "crates/eidetic/eidetic-search",
     "crates/import",
     "crates/crawl",
-    "crates/intel/embed",
     "crates/intel/esp",
     "crates/intel/signals",
     "crates/stickleback",
@@ -242,7 +241,6 @@ eidetic-search = { package = "mere-eidetic-search", path = "crates/eidetic/eidet
 import = { path = "crates/import" }
 crawl = { package = "mere-crawl", path = "crates/crawl" }
 
-embed = { package = "mere-embed", path = "crates/intel/embed" }
 signals = { package = "mere-signals", path = "crates/intel/signals" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace

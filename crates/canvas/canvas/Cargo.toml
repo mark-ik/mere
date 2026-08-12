@@ -37,6 +37,10 @@ arrangements.workspace = true
 sceno.workspace = true
 scenomise.workspace = true
 quint.workspace = true
+# The embedding/retrieval core behind the query-similarity field and the canvas
+# search surface (2026-08-12 eidetic reorg). Default features only: esp's
+# default tree is serde-only, so this adds no burn and no tokenizers.
+esp.workspace = true
 forme.workspace = true
 # The scene-paint list + the cartography-geometry sidecar serialize (the host
 # persists the sidecar as JSON beside the session graph).
