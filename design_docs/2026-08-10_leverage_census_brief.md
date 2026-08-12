@@ -62,8 +62,8 @@ deprecated shims (vates, sibylla), the young dramatis tier
 |---|---|---|
 | `verso-tile` | Unconsumed anywhere, on both sides | The Blitz/Serval-convergence decision owns it: retire or re-seat after the netrender cut comparison |
 | `genet-scripted-worker` | The worker lane, unwired | Verify against the browser/PWA scripting doctrine; wire under pelt scripted or hold |
-| `genet-static-html` | Shows zero, but feature-gated pulls may hide behind `genet-documents` features | Verify with a feature-resolved metadata pass before judging |
-| `cambium-nematic` | The nematic adapter, no consumer | Smolweb-in-cambium is pelt's `--features smolweb` lane; check whether that path bypasses it |
+| `genet-static-html` | **Verified 2026-08-12: truly bare.** A 38-line MPL shell (no module doc, no consumers, no reference beyond the members list); the static lane landed in `genet-static-dom` + `genet-documents`, which never mentions it | Retire or absorb into `genet-static-dom`; nothing hides behind features |
+| `cambium-nematic` | **Verified 2026-08-12: bypassed.** Pelt's smolweb lane lowers through genet-documents → nematic → `EngineDocument`; "Cambium-native views and themes for Nematic smolweb content" has no taker | Hold, named destination: the first cambium app embedding smolweb natively (signalman, or a turnstone pane); retire at the convergence checkpoint if unclaimed |
 
 By-design zeros: pelt and genet-wpt (ports), tabard and fleece (today's
 stubs), test shims (`*_tests`, `servo-media-examples`,
@@ -89,11 +89,58 @@ scene-side at the freeze.
    husk audit in the same pass.~~ **Planned 2026-08-12:** the search surface
    wiring plan owns both; the audit closed "retire" (embed's glue is live,
    unwired) and found the real precondition (W1 capture).
-3. Registry-cluster audit (three unwired registers) + the shell-era
-   quartet, one session, verdicts recorded per crate.
-4. `verso-tile` at the Blitz/Serval convergence checkpoint; the two genet
-   verify items (static-html features, cambium-nematic path) fold into it.
+3. ~~Registry-cluster audit (three unwired registers) + the shell-era
+   quartet, one session, verdicts recorded per crate.~~ **Done 2026-08-12:**
+   §6 records the verdicts (nothing retires outright; persona-picker is the
+   wire-now item; content-contract pairs with genet-scripted-worker as one
+   unlanded lane).
+4. `verso-tile` at the Blitz/Serval convergence checkpoint. The two genet
+   verify items are **done 2026-08-12** (§3 rows): static-html is a bare
+   shell (retire/absorb), cambium-nematic is bypassed by pelt's lane
+   (hold, named destination).
 5. moothold reconciliation when the moot cluster next moves.
+
+## 6. Step-3 audit verdicts (2026-08-12, per crate)
+
+**Registry cluster** — all three are meerkat-era extractions (Slices 50–54
+of the 2026-05-01 workspace architecture proposal) whose consuming shell
+died with meerkat. None is dead weight on its own terms:
+
+- `register-input` — **hold, named destination**: it is the natural home
+  for configurable keybindings (action-id late binding is exactly the
+  configurability doctrine's shape). Wire into the cambium host input path
+  when a settings surface for bindings lands; retire only if that surface
+  is ruled out.
+- `register-knowledge` — **hold, named destination**: UDC validation,
+  scoring, and color hints serve the tagging/gloss surface. Wire when a
+  tagging UI lands; fold toward `mere-gloss` if it never does.
+- `register-protocol` — **reconcile**: the scheme-to-handler map with a
+  mod provider hook overlaps the participant-gate packs plan (packs
+  registering handlers at activation is this crate's provider path).
+  Either the pack activation lane consumes it, or it folds into
+  `register-viewer`.
+
+**Shell-era quartet** — one keep, one wire-now, one reconcile, one paired
+hold:
+
+- `mere-comms` — **keep**: the inbox model (`Conversation`/`Message`/
+  `ProtocolAdapter` over murm) is the comms pane waiting for its pane.
+  The moot cluster's current motion (radio-scopes-as-moots, 2026-08-12) is
+  its likeliest forcing consumer; the comms chain "ending in the air" is
+  a missing pane, not a dead model.
+- `mere-persona-picker` — **wire now, cheapest item on the board**: a
+  finished cambium `command_picker` view-model over `identity::roster`
+  that every app needs at startup. First consumer: woodshed pre-release
+  (already consumes personae + cambium).
+- `shell-state` — **reconcile with the pane taxonomy**: host-neutral
+  session-state types (focus authorities, palette, omnibar drafts, frame
+  view-models) that predate the Apparatus/Inspector/Steward split. Fold
+  what graphshell/turnstone actually project; archive the rest.
+- `content-contract` — **paired hold**: transfer-ready content messages
+  plus the flat byte transport *for browser workers* — the mere-side end
+  of the same lane as genet's `genet-scripted-worker` (also a zero). The
+  two zeros are one unlanded lane; they revive together under the
+  browser/PWA scripting doctrine or not at all.
 
 Raw census tables (full consumer lists per crate) were generated
 2026-08-10; regenerate with the §Method commands rather than trusting this
