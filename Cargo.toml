@@ -100,6 +100,10 @@ members = [
 ]
 exclude = [
     "crates/probes",
+    # A private cross-product port: it consumes the neighboring Retinue
+    # checkout during the integration phase, so it must not make the Mere
+    # workspace's ordinary build acquire a sibling checkout.
+    "ports/signalman",
 ]
 
 [workspace.package]

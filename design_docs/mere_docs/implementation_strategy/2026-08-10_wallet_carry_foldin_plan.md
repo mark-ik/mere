@@ -126,12 +126,19 @@ verbatim move wrong:
       Moving the envelope in as-is would install a second delegation model beside
       the first, inside the one crate that owns delegation. That is the
       duplication the generalize-don't-duplicate rule exists to stop.
-- [ ] **Spun out**: whether a device grant should BECOME a
+- [x] **Spun out**: whether a device grant should BECOME a
       `SignedDelegationCertificate` (device-scoped `CapabilityScope`, depth
       instead of `no-subdelegation`, wrapped epochs as a side-carriage) is a
       design question, not a mechanical move. It needs its own brief before
       anything relocates. Castellan reaches grant verification through that
       reconciliation, not through a copy.
+      **Answered 2026-08-11** in
+      [device grants and delegation certificates](../technical_architecture/2026-08-11_device_grant_delegation_reconciliation.md):
+      yes, but as a split rather than a move. The capability statement becomes
+      a certificate, the wrapped epoch material leaves the signed envelope for
+      its own record, and revocation gains a portable signed statement while
+      the roster demotes to a local fold. Execution is gated on the migration
+      posture, which is Mark's call.
 - [x] `wallet_grant.rs` (2803 lines) split in place into fourteen modules,
       largest 432: `errors` + `types` (pure shapes), `envelope` (the CBOR grant
       and its on-disk read/write), `pairing`, `epochs`, `records`, `wrapping`,

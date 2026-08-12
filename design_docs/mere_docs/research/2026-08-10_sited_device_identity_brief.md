@@ -7,6 +7,26 @@
 [projection proofs plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md) (P5),
 retinue's `2026-08-09_signalman_cambium_desktop_scope.md`.
 
+**Execution note, 2026-08-11:** the station-identity origin boundary below is
+implemented, deliberately short of commissioning and grant distribution.
+`postilion::StationConfig` now accepts a caller-supplied typed Reticulum
+identity and has no identity path, loader, or minting fallback. Castellan
+derives separate X25519 and Ed25519 material from domain-separated Personae
+children, and the new private `ports/signalman` adapter is the first consumer
+that turns it into a Retinue identity. Retinue itself does not depend on Mere,
+Castellan, or Personae.
+
+**Execution note, 2026-08-11, follow-on:** Castellan now wraps the current
+signed `DeviceGrantPayload` in a narrow `SitedStationGrant`: the Reticulum
+Ed25519 half must match the derived credential and the unlocked host Persona;
+the payload has exactly `transport.egress` and `no-subdelegation`, no personas
+or private epochs, and a mandatory expiry. Signalman only builds its public
+`StationConfig` after host-side signature, roster, revocation, key-binding, and
+strict expiry checks (`now >= expiry` refuses). A revoked id is refused before
+the generic issuer can write a replacement grant. Distribution or refresh to a
+remote station, device-side and mesh-wide revocation enforcement, the host-side
+placement record, and P5's geographic adapter remain open seams.
+
 The origin (Mark, 2026-08-10): castellan should manage derived, ephemeral
 device identities, so a sited radio holds nothing worth stealing. Radios "will
 probably be sited not under the ambit of a host and stolen at some point."

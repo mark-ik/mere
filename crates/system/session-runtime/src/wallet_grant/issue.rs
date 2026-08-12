@@ -4,8 +4,8 @@
 //! Issuing a remote-auth device grant: directly, from a pairing response, or
 //! from a minted ticket.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -20,6 +20,14 @@ pub fn issue_remote_auth_device_grant(
     spec: &RemoteAuthGrantSpec,
 ) -> io::Result<SignedDeviceGrant> {
     validate_remote_auth_spec(data_root, spec)?;
+
+    let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
+    if roster.revoked.contains(&spec.device_id) {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("device {} is revoked", spec.device_id.as_uuid()),
+        ));
+    }
 
     let seed = load_identity_seed(data_root)?.ok_or_else(|| {
         io::Error::new(
@@ -44,13 +52,6 @@ pub fn issue_remote_auth_device_grant(
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let grant_ref = save_signed_device_grant(data_root, &grant)?;
 
-    let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
-    if roster.revoked.contains(&spec.device_id) {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("device {} is revoked", spec.device_id.as_uuid()),
-        ));
-    }
     upsert_remote_auth_device_record(&mut roster, spec, grant_ref);
     save_device_roster(data_root, &roster)?;
 
@@ -175,9 +176,9 @@ pub fn issue_remote_auth_device_grant_from_ticket(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn issue_remote_auth_device_grant_updates_wallet_and_roster_state() {
@@ -243,6 +244,39 @@ mod tests {
     }
 
     #[test]
+    fn issue_remote_auth_device_grant_refuses_a_revoked_device_before_writing_a_grant() {
+        let root = temp_data_root("remote-auth-revoked-issue");
+        crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC").unwrap();
+        let spec = RemoteAuthGrantSpec {
+            device_id: fixture_device(),
+            delegatee_pubkey: DevicePublicKey::from(delegatee().public_key()),
+            label: "Ridge relay".into(),
+            exposure: DeviceExposure::ExposedEgress,
+            issued_at_ms: 1_700_000_001,
+            expires_at_ms: Some(1_800_000_001),
+            personas: Vec::new(),
+            scopes: vec!["transport.egress".into()],
+            attenuations: vec!["no-subdelegation".into()],
+            wrapped_private_epochs: Vec::new(),
+        };
+        let mut roster = crate::wallet_store::load_device_roster(&root)
+            .unwrap()
+            .expect("wallet bootstrap writes a roster");
+        roster.revoked.push(spec.device_id);
+        crate::wallet_store::save_device_roster(&root, &roster).unwrap();
+
+        let error = issue_remote_auth_device_grant(&root, &spec).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(
+            load_signed_device_grant(&root, spec.device_id)
+                .unwrap()
+                .is_none()
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn issue_remote_auth_device_grant_updates_capability_slots_for_every_granted_persona() {
         let root = temp_data_root("remote-auth-multi-persona-slots");
         crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC").unwrap();
@@ -275,7 +309,6 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&root);
     }
-
 
     #[test]
     fn issue_remote_auth_device_grant_from_pairing_wraps_private_epochs() {
@@ -374,5 +407,4 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&root);
     }
-
 }

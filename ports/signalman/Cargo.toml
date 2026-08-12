@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+
+[package]
+name = "mere-signalman"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.92"
+license = "MPL-2.0"
+repository = "https://github.com/merely-made/mere"
+publish = false
+description = "Private Mere port for commissioning and operating Retinue stations through Castellan."
+
+[dependencies]
+castellan = { path = "../castellan", features = ["station-grants"] }
+personae = { path = "../../crates/dramatis/personae" }
+postilion = { path = "../../../retinue/crates/postilion" }
+retinue = { path = "../../../retinue/crates/retinue", features = ["tulle-radio"] }
+session-runtime = { path = "../../crates/system/session-runtime" }
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
