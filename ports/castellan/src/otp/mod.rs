@@ -146,7 +146,10 @@ pub struct Otp {
 impl fmt::Debug for Otp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Otp")
-            .field("secret", &format_args!("<{} bytes redacted>", self.secret.len()))
+            .field(
+                "secret",
+                &format_args!("<{} bytes redacted>", self.secret.len()),
+            )
             .field("algorithm", &self.algorithm)
             .field("digits", &self.digits)
             .field("kind", &self.kind)

@@ -82,10 +82,10 @@ impl Device {
 
         // One store: the same iroh-blobs store the transport's router serves is
         // the space the restricted namespace reads from.
-        let space = Arc::new(TransportBlobSpace::new(self.blobs.clone()));
+        let space = Arc::new(TransportBlobSpace::for_mesh(self.blobs.clone(), MESH));
         let mut config = HostConfig::supervised(space.clone());
         config.registry = registry();
-        config.courier = Arc::new(TransportCourier::new(self.transport, self.blobs));
+        config.courier = Arc::new(TransportCourier::for_mesh(self.transport, self.blobs, MESH));
         config.clock = clock;
         config.conditions = Arc::new(ObservedConditions::spare());
         config.facts = HostFacts::cpu(4096);

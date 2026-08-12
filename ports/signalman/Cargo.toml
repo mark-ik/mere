@@ -12,11 +12,15 @@ publish = false
 description = "Private Mere port for commissioning and operating Retinue stations through Castellan."
 
 [dependencies]
+blake3 = "1.5"
 castellan = { path = "../castellan", features = ["station-grants"] }
 personae = { path = "../../crates/dramatis/personae" }
+p2panda-core = "0.7.0"
 postilion = { path = "../../../retinue/crates/postilion" }
 retinue = { path = "../../../retinue/crates/retinue", features = ["tulle-radio"] }
+serde = { version = "1", features = ["derive"] }
 session-runtime = { path = "../../crates/system/session-runtime" }
+tokio = { version = "1", features = ["rt", "sync", "time"] }
 zeroize = "1"
 
 [dev-dependencies]

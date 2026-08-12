@@ -100,6 +100,17 @@ impl SitedStationGrant {
             return Err(SitedStationGrantError::IssuerMismatch);
         }
 
+        if let Some(existing) = load_signed_device_grant(data_root, request.device_id)? {
+            let existing = Self::from_signed(existing)?;
+            if request.expires_at_ms <= existing.expires_at_ms() {
+                return Err(SitedStationGrantError::NonExtendingRenewal {
+                    device_id: request.device_id,
+                    existing_expires_at_ms: existing.expires_at_ms(),
+                    requested_expires_at_ms: request.expires_at_ms,
+                });
+            }
+        }
+
         let grant = issue_remote_auth_device_grant(data_root, &request.remote_auth_spec())?;
         Self::from_signed(grant)
     }
@@ -191,6 +202,29 @@ impl SitedStationGrant {
         &self.grant
     }
 
+    /// The mandatory fail-closed expiry of this grant.
+    pub fn expires_at_ms(&self) -> u64 {
+        self.grant
+            .payload
+            .expires_at_ms
+            .expect("validate_policy requires a station-grant expiry")
+    }
+
+    /// The RemoteAuth device this grant is bound to.
+    pub fn device_id(&self) -> DeviceId {
+        self.grant.payload.device_id
+    }
+
+    /// The Reticulum Ed25519 station key this grant authorizes.
+    pub fn station_ed25519_public_key(&self) -> [u8; 32] {
+        self.grant.payload.delegatee_pubkey.0
+    }
+
+    /// The Persona root that signed this grant.
+    pub fn issuer_public_key(&self) -> [u8; 32] {
+        self.grant.payload.delegator_pubkey.0
+    }
+
     fn validate_policy(&self) -> Result<(), SitedStationGrantError> {
         if !verify_device_grant(&self.grant)? {
             return Err(SitedStationGrantError::InvalidSignature);
@@ -241,6 +275,15 @@ pub enum SitedStationGrantError {
     WalletLocked,
     /// The credential's Persona did not match the host wallet root.
     IssuerMismatch,
+    /// A replacement grant did not extend the existing live window.
+    NonExtendingRenewal {
+        /// The station whose grant was being replaced.
+        device_id: DeviceId,
+        /// The existing grant's expiry time.
+        existing_expires_at_ms: u64,
+        /// The requested replacement expiry time.
+        requested_expires_at_ms: u64,
+    },
     /// The host store has no signed grant for this device.
     MissingGrant {
         /// The requested device.
@@ -337,6 +380,15 @@ impl fmt::Display for SitedStationGrantError {
             Self::IssuerMismatch => f.write_str(
                 "the station credential was derived by a different Persona than the host wallet",
             ),
+            Self::NonExtendingRenewal {
+                device_id,
+                existing_expires_at_ms,
+                requested_expires_at_ms,
+            } => write!(
+                f,
+                "replacement grant for sited station {} expires at {requested_expires_at_ms}, which does not extend existing expiry {existing_expires_at_ms}",
+                device_id.as_uuid()
+            ),
             Self::MissingGrant { device_id } => {
                 write!(f, "sited station grant missing for {}", device_id.as_uuid())
             }
@@ -432,5 +484,52 @@ mod tests {
         let error = SitedStationGrant::from_signed(signed).unwrap_err();
 
         assert!(matches!(error, SitedStationGrantError::ScopeViolation));
+    }
+
+    #[test]
+    fn a_station_grant_can_only_be_renewed_with_a_later_expiry() {
+        let root = tempfile::tempdir().unwrap();
+        let persona = personae::PersonaId::new();
+        let seed =
+            session_runtime::ensure_wallet_state(root.path(), persona, "Station host").unwrap();
+        let issuer = InMemoryProvider::from_seed(seed);
+        let device_id = DeviceId::new();
+        let key = issuer
+            .derive_keypair(b"sited-station-renewal-test")
+            .unwrap();
+        let first = SitedStationGrantRequest::new(
+            device_id,
+            key.public_key().to_bytes(),
+            "Ridge north",
+            100,
+            200,
+        )
+        .unwrap();
+        SitedStationGrant::issue(root.path(), issuer.master_public_key().to_bytes(), first)
+            .unwrap();
+
+        let replacement = SitedStationGrantRequest::new(
+            device_id,
+            key.public_key().to_bytes(),
+            "Ridge north",
+            150,
+            200,
+        )
+        .unwrap();
+        let error = SitedStationGrant::issue(
+            root.path(),
+            issuer.master_public_key().to_bytes(),
+            replacement,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SitedStationGrantError::NonExtendingRenewal {
+                existing_expires_at_ms: 200,
+                requested_expires_at_ms: 200,
+                ..
+            }
+        ));
     }
 }

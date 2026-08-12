@@ -128,9 +128,9 @@ pub fn derive_remote_auth_pairing_material(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn pairing_material_is_deterministic() {

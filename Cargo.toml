@@ -179,7 +179,7 @@ graphshell-network = { path = "crates/graphshell/graphshell-network" }
 knot = { path = "ports/knot" }
 # The credential-keeper port; reservation, no implementation (dramatis plan D4).
 castellan = { version = "0.0.1", path = "ports/castellan" }
-# The model-works port; reservation, no implementation (esp plan §4's consumer shape).
+# The model-works port; first real consumer of the mesh host supervisor.
 distillery = { version = "0.0.1", path = "ports/distillery" }
 # Shared pins the graphshell crates inherit.
 base64 = "0.22"

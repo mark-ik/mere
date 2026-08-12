@@ -99,7 +99,9 @@ impl<T> Codicil<T> {
     /// Includes every entry of a log written before causality existed, which
     /// is correct: they claimed nothing.
     pub fn roots(&self) -> impl Iterator<Item = Seq> + '_ {
-        (0..self.len()).map(|i| Seq(i as u64)).filter(|s| self.parents(*s).is_empty())
+        (0..self.len())
+            .map(|i| Seq(i as u64))
+            .filter(|s| self.parents(*s).is_empty())
     }
 
     /// Everything that led to `seq`, nearest first, excluding `seq` itself.
@@ -178,7 +180,10 @@ mod tests {
         assert!(log.parents(a).is_empty());
         assert!(log.parents(b).is_empty());
         assert_eq!(log.roots().collect::<Vec<_>>(), vec![a, b]);
-        assert!(log.effects(a).is_empty(), "nothing claimed to follow from it");
+        assert!(
+            log.effects(a).is_empty(),
+            "nothing claimed to follow from it"
+        );
     }
 
     #[test]
@@ -213,7 +218,10 @@ mod tests {
         assert!(log.concurrent(a, b), "neither led to the other");
         assert!(log.concurrent(after_a, b));
         assert!(!log.concurrent(a, after_a), "one led to the other");
-        assert!(!log.concurrent(a, a), "an entry is not concurrent with itself");
+        assert!(
+            !log.concurrent(a, a),
+            "an entry is not concurrent with itself"
+        );
     }
 
     #[test]
@@ -227,7 +235,10 @@ mod tests {
 
         for entry in [a, b, c] {
             for parent in log.parents(entry) {
-                assert!(parent.index() < entry.index(), "{parent:?} precedes {entry:?}");
+                assert!(
+                    parent.index() < entry.index(),
+                    "{parent:?} precedes {entry:?}"
+                );
             }
         }
     }
@@ -285,7 +296,10 @@ mod tests {
         for index in 0..log.len() {
             let at = Seq(index as u64);
             for parent in log.parents(at) {
-                assert!(applied.contains(parent), "{parent:?} was applied before {at:?}");
+                assert!(
+                    applied.contains(parent),
+                    "{parent:?} was applied before {at:?}"
+                );
             }
             applied.push(at);
         }

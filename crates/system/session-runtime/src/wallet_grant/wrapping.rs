@@ -4,8 +4,8 @@
 //! The retained per-device wrapping keys that let a later epoch rotation
 //! refresh a grant without rerunning the pairing ceremony.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -40,7 +40,10 @@ pub(crate) fn upsert_remote_auth_wrapping_key(
     save_remote_auth_wrapping_key_bridge(data_root, &bridge)
 }
 
-pub(crate) fn remove_remote_auth_wrapping_key(data_root: &Path, device_id: DeviceId) -> io::Result<()> {
+pub(crate) fn remove_remote_auth_wrapping_key(
+    data_root: &Path,
+    device_id: DeviceId,
+) -> io::Result<()> {
     let Some(mut bridge) = load_remote_auth_wrapping_key_bridge(data_root)? else {
         return Ok(());
     };

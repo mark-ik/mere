@@ -1,7 +1,7 @@
 # distillery
 
-Name reservation for **distillery**, the model-works port of the Mere
-platform.
+**Distillery** is the model-works port of the Mere platform. Its first authority
+slice is implemented as the first real consumer of `mere-mesh-host`.
 
 A distillery takes a raw mash and runs it, batch by batch, through stills into
 something concentrated. This port is that works for models: the harness where
@@ -24,8 +24,25 @@ embeds the same views; distillery is the standalone works).
 The trainer lane (Distillery-as-trainer, per the geist brief) lands here
 later, behind its own plan: training is one more job the works runs.
 
+## Current slice
+
+`Distillery<B>` composes a `MeshHost<B>`, drives its non-blocking supervisor
+ticks, and owns an explicit maintenance operation. Maintenance authors an
+owner-governed retention checkpoint, asks the mesh store which blob references
+are safe against both the checkpoint and the current replay tail, and can
+release this mesh's named custody tags. Collection is off by default.
+
+Releasing a tag is a logical custody change. Physical bytes disappear only
+when the collecting `mere-transport` store finds no remaining tag from another
+mesh or subsystem. A content hash reused by an unfinished or post-checkpoint
+job remains protected.
+
+The current proof is authority-only. There is no resident binary, Cambium view,
+Burn resource migration, Burn Remote adapter, model manifest browser, or
+trainer yet. Those remain separate slices rather than implied behavior.
+
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
-`ports/distillery`. No implementation yet.
+`ports/distillery`.
 
 ## License
 

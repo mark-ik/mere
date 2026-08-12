@@ -152,11 +152,11 @@ pub fn ensure_local_device_identity(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
-    use super::super::test_support::*;
-    use super::super::secrets::save_identity_seed;
     use super::super::RemoteAuthWrappingKeyRecord;
+    use super::super::secrets::save_identity_seed;
+    use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
     use uuid::Uuid;
 
     #[test]

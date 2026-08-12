@@ -167,9 +167,7 @@ fn hulls_position(hulls: &Hulls, item: &ScoreItem) -> Vec2 {
     Vec2::new(
         hulls.origin.x + coordinate.x * hulls.units_per_coordinate,
         hulls.origin.y
-            + coordinate.y
-                * hulls.units_per_coordinate
-                * if hulls.invert_y { -1.0 } else { 1.0 },
+            + coordinate.y * hulls.units_per_coordinate * if hulls.invert_y { -1.0 } else { 1.0 },
     )
 }
 
@@ -294,9 +292,7 @@ mod tests {
         let mut inside = false;
         for (index, a) in points.iter().enumerate() {
             let b = points[(index + 1) % points.len()];
-            if (a.y > p.y) != (b.y > p.y)
-                && p.x < a.x + (b.x - a.x) * (p.y - a.y) / (b.y - a.y)
-            {
+            if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (b.x - a.x) * (p.y - a.y) / (b.y - a.y) {
                 inside = !inside;
             }
         }
@@ -317,7 +313,12 @@ mod tests {
     fn cells_tile_the_bounds() {
         // Cover without overlap: the areas of the cells sum to the area of the
         // bounds, which a halo arrangement could never promise.
-        let scene = solve(&hulls_score(&[(-40.0, -40.0), (60.0, 10.0), (0.0, 55.0), (-20.0, 80.0)]));
+        let scene = solve(&hulls_score(&[
+            (-40.0, -40.0),
+            (60.0, 10.0),
+            (0.0, 55.0),
+            (-20.0, 80.0),
+        ]));
         assert_eq!(scene.regions.len(), 4);
 
         let total: f32 = scene

@@ -101,8 +101,11 @@ impl std::fmt::Display for ProofError {
             Self::Malformed => write!(f, "identity proof is the wrong length"),
             Self::BadKey => write!(f, "identity proof carries an invalid Ed25519 key"),
             Self::Unproven => {
-                write!(f, "identity proof does not sign this session's handshake hash")
-            },
+                write!(
+                    f,
+                    "identity proof does not sign this session's handshake hash"
+                )
+            }
         }
     }
 }
@@ -112,10 +115,7 @@ impl std::fmt::Display for ProofError {
 ///
 /// Both sides compute the same handshake hash, and only a peer that actually
 /// completed *this* handshake can sign it.
-pub(super) fn verify_proof(
-    payload: &[u8],
-    handshake_hash: &[u8],
-) -> Result<PeerID, ProofError> {
+pub(super) fn verify_proof(payload: &[u8], handshake_hash: &[u8]) -> Result<PeerID, ProofError> {
     if payload.len() != PROOF_LEN {
         return Err(ProofError::Malformed);
     }
@@ -178,7 +178,10 @@ mod tests {
         // one session presented in another.
         let master = keypair(1);
         let payload = build_proof(&master, &[42u8; 32]);
-        assert_eq!(verify_proof(&payload, &[43u8; 32]), Err(ProofError::Unproven));
+        assert_eq!(
+            verify_proof(&payload, &[43u8; 32]),
+            Err(ProofError::Unproven)
+        );
     }
 
     #[test]

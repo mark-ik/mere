@@ -4,7 +4,7 @@
 //! checkpoint a mesh, which policy revision applies, what the snapshot means,
 //! and whether a new frontier advances the accepted one.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use p2panda_core::cbor::encode_cbor;
 use proofs::{BlobRef, Commitment, CommitmentDomain, Digest};
@@ -293,12 +293,42 @@ pub fn job_blobs(job: &crate::board::Job) -> Vec<BlobRef> {
 ///
 /// Returns nothing at all until a checkpoint exists — there is no such thing as
 /// "converged" on a mesh that has never agreed anything.
-pub fn collectable_blobs(checkpoint: Option<&RetentionCheckpoint>) -> Vec<BlobRef> {
+///
+/// The current board matters as much as the checkpoint. A hash may be shared by
+/// several jobs, and a job posted after the accepted checkpoint may reuse a
+/// blob that an older terminal job also named. Such a blob stays protected
+/// until *every* current reference belongs to a terminal job settled by the
+/// checkpoint. Content addressing deduplicates bytes; retention therefore has
+/// to reason about references rather than jobs in isolation.
+pub fn collectable_blobs(
+    checkpoint: Option<&RetentionCheckpoint>,
+    current: &JobBoard,
+) -> Vec<BlobRef> {
+    let Some(checkpoint) = checkpoint else {
+        return Vec::new();
+    };
+
+    let settled: HashSet<JobId> = checkpoint
+        .snapshot
+        .jobs
+        .iter()
+        .filter(|job| job.state.is_terminal())
+        .map(|job| job.id)
+        .collect();
+    let protected: HashSet<BlobRef> = current
+        .jobs()
+        .filter(|job| !settled.contains(&job.id))
+        .flat_map(job_blobs)
+        .collect();
+    let mut emitted = HashSet::new();
+
     checkpoint
-        .into_iter()
-        .flat_map(|checkpoint| checkpoint.snapshot.jobs.iter())
+        .snapshot
+        .jobs
+        .iter()
         .filter(|job| job.state.is_terminal())
         .flat_map(job_blobs)
+        .filter(|blob| !protected.contains(blob) && emitted.insert(blob.clone()))
         .collect()
 }
 

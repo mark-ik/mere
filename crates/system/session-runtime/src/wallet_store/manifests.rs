@@ -5,12 +5,12 @@
 //! wallet per persona. Nothing here is sealed; secrets live in `secrets` and
 //! `devices`.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::PersonaId;
 
-use super::io::{load_json_optional, save_json_atomic, json_pretty_bytes};
+use super::io::{json_pretty_bytes, load_json_optional, save_json_atomic};
 use super::paths::{device_roster_path, identity_wallet_path, persona_wallet_path};
 use super::{CarryRef, DeviceRoster, IdentityWalletManifest, PersonaWalletManifest};
 
@@ -55,17 +55,17 @@ pub fn save_persona_wallet(data_root: &Path, wallet: &PersonaWalletManifest) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
-    use super::super::test_support::*;
-    use identity::{IdentityProvider, InMemoryProvider};
     use super::super::devices::load_device_grant;
+    use super::super::test_support::*;
+    use super::super::*;
+    use super::super::{
+        CapabilitySlotRef, DeviceExposure, DeviceGrantRef, DeviceId, DeviceMode, DevicePublicKey,
+        DeviceRecord, PersonaWalletRef,
+    };
+    use super::*;
+    use identity::{IdentityProvider, InMemoryProvider};
     use std::fs;
     use uuid::Uuid;
-    use super::super::{
-        CapabilitySlotRef, DeviceExposure, DeviceId, DeviceMode, DevicePublicKey, DeviceRecord,
-        DeviceGrantRef, PersonaWalletRef,
-    };
 
     #[test]
     fn missing_wallet_files_return_none() {

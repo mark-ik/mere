@@ -4,8 +4,8 @@
 //! Re-issuing the private-read grants of the devices that remain after a
 //! revocation, so they can still read under the rotated epoch.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -168,9 +168,9 @@ pub(crate) fn upsert_persona_capability_slots(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn revoke_remote_auth_device_refreshes_remaining_private_read_grants() {
@@ -417,5 +417,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&delegator_root);
         let _ = std::fs::remove_dir_all(&delegatee_root);
     }
-
 }

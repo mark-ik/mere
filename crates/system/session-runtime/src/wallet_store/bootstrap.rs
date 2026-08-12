@@ -4,25 +4,22 @@
 //! First-launch bootstrap: seed a copy-style root, or preserve whatever a
 //! delegated device already installed.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{IdentityProvider, InMemoryProvider, PersonaId};
 
 use super::devices::load_local_device_identity;
+use super::devices::local_device_identity_locked_at_startup;
 use super::epochs::ensure_persona_epoch_bridge;
 use super::manifests::{
     device_roster_ref, load_device_roster, load_identity_wallet, load_persona_wallet,
     save_device_roster, save_identity_wallet, save_persona_wallet,
 };
-use super::secrets::{
-    identity_seed_locked_at_startup, load_identity_seed, save_identity_seed,
-};
-use super::devices::local_device_identity_locked_at_startup;
+use super::secrets::{identity_seed_locked_at_startup, load_identity_seed, save_identity_seed};
 use super::{
-    DeviceExposure, DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster,
-    KeyEpochId, PersonaWalletManifest, PersonaWalletRef, WALLET_SCHEMA_VERSION,
-    derive_persona_chain_root,
+    DeviceExposure, DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, KeyEpochId,
+    PersonaWalletManifest, PersonaWalletRef, WALLET_SCHEMA_VERSION, derive_persona_chain_root,
 };
 
 /// Which wallet bootstrap posture the current data root resolved to.
@@ -142,11 +139,11 @@ pub fn ensure_wallet_state(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
-    use identity::StartupUnlockMode;
+    use super::super::*;
+    use super::*;
     use crate::device_settings_store::{DeviceSettings, save_device_settings};
+    use identity::StartupUnlockMode;
     use std::fs;
 
     #[test]

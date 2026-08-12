@@ -61,14 +61,14 @@ pub use group_session::{
     GroupSessionProcess,
 };
 pub use joined_space::{JoinError, JoinedSpace, lane_id};
-/// The transport parts [`JoinedSpace::join`] takes, re-exported so a domain
-/// crate can offer a join helper without importing a p2panda crate itself.
-pub use p2panda_net::{Endpoint, Gossip};
 /// The operation type [`JoinedSpace::publish`] takes, re-exported for the same
 /// reason: a host names it to push what it authored, and should not have to
 /// adopt p2panda-core to do so.
 pub use p2panda_core::Operation;
 pub use p2panda_encryption::data_scheme::GroupSecretId;
+/// The transport parts [`JoinedSpace::join`] takes, re-exported so a domain
+/// crate can offer a join helper without importing a p2panda crate itself.
+pub use p2panda_net::{Endpoint, Gossip};
 pub use processor::{
     Admission, HistoryAction, OperationPolicy, OperationProcessor, ProcessError, ProcessOutcome,
     Reject, StoreTarget,

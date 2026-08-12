@@ -76,7 +76,10 @@ impl<T> Codicil<T> {
 
     /// The causes recorded for an entry, or nothing.
     pub(crate) fn parents_of(&self, seq: Seq) -> &[Seq] {
-        self.parents.get(seq.index()).map(Vec::as_slice).unwrap_or(&[])
+        self.parents
+            .get(seq.index())
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     /// Records causes for an already-appended entry.

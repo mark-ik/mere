@@ -31,9 +31,9 @@ use uuid::Uuid;
 
 use crate::manifest::PersonaId;
 use crate::wallet_store::{
-    CapabilitySlotRef, CarryRef, DeviceExposure, DeviceGrantRef, DeviceId, DeviceMode, DevicePublicKey,
-    DeviceRecord, DeviceRoster, IdentityWalletManifest, KeyEpochId, LocalDeviceIdentity,
-    PersonaWalletManifest, PersonaWalletRef, RemoteAuthWrappingKeyBridge,
+    CapabilitySlotRef, CarryRef, DeviceExposure, DeviceGrantRef, DeviceId, DeviceMode,
+    DevicePublicKey, DeviceRecord, DeviceRoster, IdentityWalletManifest, KeyEpochId,
+    LocalDeviceIdentity, PersonaWalletManifest, PersonaWalletRef, RemoteAuthWrappingKeyBridge,
     RemoteAuthWrappingKeyRecord, device_grant_path, device_roster_ref, ensure_persona_epoch_bridge,
     load_current_private_epoch, load_device_grant, load_device_roster, load_identity_seed,
     load_identity_wallet, load_local_device_identity, load_persona_wallet,
@@ -41,7 +41,6 @@ use crate::wallet_store::{
     save_identity_wallet, save_persona_wallet, save_remote_auth_wrapping_key_bridge,
     stage_persona_private_epoch,
 };
-
 
 mod enroll;
 mod envelope;
@@ -52,11 +51,11 @@ mod pairing;
 mod records;
 mod refresh;
 mod revoke;
+#[cfg(test)]
+mod test_support;
 mod types;
 mod validate;
 mod wrapping;
-#[cfg(test)]
-mod test_support;
 
 /// Current schema version for typed device grants.
 pub const DEVICE_GRANT_SCHEMA_VERSION: u32 = 1;
@@ -72,7 +71,6 @@ pub const REMOTE_AUTH_PAIRING_TICKET_SCHEMA_VERSION: u32 = 1;
 pub const REMOTE_AUTH_PAIRING_SECRET_LEN: usize = 16;
 /// Schema version for a typed remote-auth enrollment bundle.
 pub const REMOTE_AUTH_ENROLLMENT_BUNDLE_SCHEMA_VERSION: u32 = 1;
-
 
 pub(crate) fn unix_time_ms() -> io::Result<u64> {
     let now = SystemTime::now()
@@ -94,7 +92,9 @@ pub(crate) fn remote_auth_capability_slot_id(device_id: DeviceId) -> String {
     format!("device-grant:{}", device_id.as_uuid())
 }
 
-pub(crate) use enroll::{install_remote_auth_enrollment_bundle_inner, restore_wrapped_private_epochs};
+pub(crate) use enroll::{
+    install_remote_auth_enrollment_bundle_inner, restore_wrapped_private_epochs,
+};
 pub(crate) use envelope::encode_payload;
 pub(crate) use epochs::wrapped_epoch_aad;
 pub(crate) use pairing::{derive_pairing_key_from_transcript, remote_auth_pairing_transcript};

@@ -652,9 +652,11 @@ impl P2pandaTransport {
                 .map_err(|e| TransportError::Backend(format!("peer id: {e}")))?;
             let connected = match &endpoint {
                 Some(endpoint) => endpoint
-                    .remote_info(iroh::PublicKey::from_bytes(info.node_id.as_bytes()).map_err(
-                        |e| TransportError::Backend(format!("peer key for remote_info: {e}")),
-                    )?)
+                    .remote_info(
+                        iroh::PublicKey::from_bytes(info.node_id.as_bytes()).map_err(|e| {
+                            TransportError::Backend(format!("peer key for remote_info: {e}"))
+                        })?,
+                    )
                     .await
                     .map(|remote| {
                         remote.addrs().any(|addr| {

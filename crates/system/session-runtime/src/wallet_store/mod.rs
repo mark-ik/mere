@@ -130,8 +130,8 @@ pub use secrets::{
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::test_support::*;
+    use super::*;
     use identity::{IdentityProvider, InMemoryProvider, PersonaId};
 
     /// The fold-in's disk-format invariant: `CarryRef` must serialize exactly
@@ -147,10 +147,8 @@ mod tests {
                 serde_json::to_string(&carry).unwrap(),
                 serde_json::to_string(&hash).unwrap()
             );
-            let reparsed: CarryRef = serde_json::from_str(
-                &serde_json::to_string(&hash).unwrap(),
-            )
-            .unwrap();
+            let reparsed: CarryRef =
+                serde_json::from_str(&serde_json::to_string(&hash).unwrap()).unwrap();
             assert_eq!(reparsed, carry);
         }
     }

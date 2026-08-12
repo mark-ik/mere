@@ -366,7 +366,10 @@ async fn the_peer_directory_separates_a_known_address_from_a_live_path() {
     let payload = b"traffic that forms a real path".to_vec();
     tokio::time::timeout(std::time::Duration::from_secs(20), async {
         loop {
-            alice_handle.publish(payload.clone()).await.expect("publish");
+            alice_handle
+                .publish(payload.clone())
+                .await
+                .expect("publish");
             tokio::select! {
                 msg = bob_rx.next() => {
                     if let Some(Ok(bytes)) = msg && bytes == payload { break }
@@ -410,5 +413,8 @@ async fn the_peer_directory_separates_a_known_address_from_a_live_path() {
         .add_peer_ticket(&ticket)
         .await
         .expect("the cached hint must round-trip through the ticket codec");
-    assert_eq!(parsed, bob_id, "the ticket names the peer it was cached for");
+    assert_eq!(
+        parsed, bob_id,
+        "the ticket names the peer it was cached for"
+    );
 }

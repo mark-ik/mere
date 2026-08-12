@@ -7,6 +7,19 @@ typed identity to Retinue's host library. The grant permits only
 `transport.egress`, has no persona or private-read authority, and fails closed
 at expiry. Retinue itself owns no Mere, Personae, or Castellan dependency.
 
+Grant, renewal, revocation, and acknowledgement travel as bounded signed
+control bodies inside normal authenticated LXMF messages. The Persona signs
+each control frame through a device-specific attested child; the station signs
+the acknowledgement with its derived Reticulum identity. A receiver accepts an
+exact retransmission after a lost acknowledgement, but accepts a replacement
+only before its prior deadline and only when the expiry grows. The receiver's
+snapshot is non-secret state to persist beside the device's delegated identity.
+`SitedStationHead` seals both through a caller-provided `SealedRecordStorage`,
+persists an accepted transition before returning its acknowledgement, and
+checks the receiver before every public radio operation. The process that
+selects a board's secure-storage root and the physical radio receipt remain
+deployment work.
+
 This integration package is intentionally a separate workspace while it uses
 the neighboring Retinue checkout. It is not a publishable dependency story.
 The portable boundary is `postilion::StationConfig`, which accepts a supplied

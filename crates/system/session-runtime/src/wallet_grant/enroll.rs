@@ -4,8 +4,8 @@
 //! The enrollment bundle a delegator hands a newly accepted device, and the
 //! install path that turns it into local wallet state.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -178,9 +178,9 @@ pub(crate) fn restore_wrapped_private_epochs(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn remote_auth_enrollment_bundle_round_trips_through_cbor() {
@@ -428,5 +428,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(&delegator_root);
         let _ = std::fs::remove_dir_all(&delegatee_root);
     }
-
 }

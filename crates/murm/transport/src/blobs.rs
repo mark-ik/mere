@@ -29,10 +29,12 @@
 //! still serve a blob to a sibling after the process that received it exited.
 
 use std::path::Path;
+use std::time::Duration;
 
 use bytes::Bytes;
-use iroh_blobs::store::fs::FsStore;
-use iroh_blobs::store::mem::MemStore;
+use iroh_blobs::store::GcConfig;
+use iroh_blobs::store::fs::{FsStore, options::Options as FsOptions};
+use iroh_blobs::store::mem::{MemStore, Options as MemOptions};
 use iroh_blobs::{Hash, api::Store};
 use thiserror::Error;
 
@@ -110,6 +112,23 @@ impl BlobStore {
         }
     }
 
+    /// Construct an in-memory store whose untagged bytes are collected on the
+    /// configured interval.
+    ///
+    /// Named tags are logical custody claims. Callers that want retention to
+    /// release physical bytes use this constructor, store through
+    /// [`put_bytes_named`](Self::put_bytes_named), and later delete that tag.
+    pub fn new_collecting(interval: Duration) -> Self {
+        Self {
+            store: Backing::Memory(MemStore::new_with_opts(MemOptions {
+                gc_config: Some(GcConfig {
+                    interval,
+                    add_protected: None,
+                }),
+            })),
+        }
+    }
+
     /// Open (or create) a blob store rooted at `root` on disk.
     ///
     /// Survives process restart, which is what makes this the resident
@@ -124,6 +143,33 @@ impl BlobStore {
         let store = FsStore::load(root).await.map_err(|e| {
             BlobError::Backend(format!("open blob store at {}: {e:?}", root.display()))
         })?;
+        Ok(Self {
+            store: Backing::File(store),
+        })
+    }
+
+    /// Open a persistent store whose untagged bytes are collected on the
+    /// configured interval.
+    pub async fn open_collecting(
+        root: impl AsRef<Path>,
+        interval: Duration,
+    ) -> Result<Self, BlobError> {
+        let root = root.as_ref();
+        std::fs::create_dir_all(root)
+            .map_err(|e| BlobError::Backend(format!("create blob root: {e}")))?;
+        let mut options = FsOptions::new(root);
+        options.gc = Some(GcConfig {
+            interval,
+            add_protected: None,
+        });
+        let store = FsStore::load_with_opts(root.join("blobs.db"), options)
+            .await
+            .map_err(|e| {
+                BlobError::Backend(format!(
+                    "open collecting blob store at {}: {e:?}",
+                    root.display()
+                ))
+            })?;
         Ok(Self {
             store: Backing::File(store),
         })
@@ -195,6 +241,59 @@ impl BlobStore {
         let hash = BlobHash(tag.hash);
         tracing::debug!(byte_count, ?hash, "blob stored");
         Ok(hash)
+    }
+
+    /// Put bytes under a caller-owned stable tag.
+    ///
+    /// Unlike [`put_bytes`](Self::put_bytes), this does not create an anonymous
+    /// permanent tag. Deleting `tag` releases this caller's custody while tags
+    /// owned by another mesh or subsystem keep shared content alive.
+    #[tracing::instrument(level = "debug", skip(self, bytes, tag))]
+    pub async fn put_bytes_named(
+        &self,
+        bytes: impl Into<Bytes>,
+        tag: impl AsRef<[u8]>,
+    ) -> Result<BlobHash, BlobError> {
+        let bytes: Bytes = bytes.into();
+        let byte_count = bytes.len();
+        let hash = self
+            .store()
+            .blobs()
+            .add_bytes(bytes)
+            .with_named_tag(tag)
+            .await
+            .map_err(|e| BlobError::Backend(format!("add_bytes named: {e:?}")))?
+            .hash;
+        let hash = BlobHash(hash);
+        tracing::debug!(byte_count, ?hash, "named blob stored");
+        Ok(hash)
+    }
+
+    /// Add or replace a stable custody tag for bytes already present.
+    pub async fn pin(&self, tag: impl AsRef<[u8]>, hash: BlobHash) -> Result<(), BlobError> {
+        if !self.has(hash).await? {
+            return Err(BlobError::NotFound(hash));
+        }
+        self.store()
+            .tags()
+            .set(tag, hash.0)
+            .await
+            .map_err(|e| BlobError::Backend(format!("set blob tag: {e:?}")))
+    }
+
+    /// Delete one logical custody tag.
+    ///
+    /// Returns whether the tag existed. Physical bytes remain while any other
+    /// tag names the same hash and are removed on the store's next configured
+    /// garbage-collection pass once no owner remains.
+    pub async fn release(&self, tag: impl AsRef<[u8]>) -> Result<bool, BlobError> {
+        let removed = self
+            .store()
+            .tags()
+            .delete(tag)
+            .await
+            .map_err(|e| BlobError::Backend(format!("delete blob tag: {e:?}")))?;
+        Ok(removed != 0)
     }
 
     /// Read all bytes for a hash. Errors if the blob is not in the
@@ -311,6 +410,18 @@ impl BlobStore {
             .map_err(|e| BlobError::Backend(format!("fetch: {e:?}")))?;
         Ok(())
     }
+
+    /// Fetch a blob and retain it under a caller-owned stable tag.
+    pub async fn fetch_from_named(
+        &self,
+        transport: &crate::P2pandaTransport,
+        peer: crate::PeerID,
+        hash: BlobHash,
+        tag: impl AsRef<[u8]>,
+    ) -> Result<(), BlobError> {
+        self.fetch_from(transport, peer, hash).await?;
+        self.pin(tag, hash).await
+    }
 }
 
 impl Default for BlobStore {
@@ -366,6 +477,35 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn named_custody_releases_only_its_own_claim() {
+        let store = BlobStore::new_collecting(Duration::from_millis(10));
+        let hash = store
+            .put_bytes_named(Bytes::from_static(b"shared bytes"), b"mesh/a")
+            .await
+            .unwrap();
+        store
+            .put_bytes_named(Bytes::from_static(b"shared bytes"), b"eidetic/a")
+            .await
+            .unwrap();
+
+        assert!(store.release(b"mesh/a").await.unwrap());
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(
+            store.has(hash).await.unwrap(),
+            "another subsystem's tag keeps shared content alive"
+        );
+
+        assert!(store.release(b"eidetic/a").await.unwrap());
+        for _ in 0..50 {
+            if !store.has(hash).await.unwrap() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("untagged bytes were not garbage-collected");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn get_missing_blob_returns_not_found() {
         let store = BlobStore::new();
         let other = BlobHash::from_bytes([0xee; 32]);
@@ -404,6 +544,36 @@ mod tests {
             "a restart must not lose staged bytes"
         );
         assert_eq!(reopened.get_bytes(hash).await.expect("get"), payload);
+    }
+
+    /// The resident-host backing applies the same named-custody rule as the
+    /// in-memory proof store. This covers the constructor Distillery will use
+    /// when it gains a process entry point.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn disk_backed_collecting_store_reclaims_released_bytes() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path().join("blobs");
+        let store = BlobStore::open_collecting(&root, Duration::from_millis(10))
+            .await
+            .expect("open collecting store");
+        let hash = store
+            .put_bytes_named(
+                Bytes::from_static(b"settled resident bytes"),
+                b"mesh/resident",
+            )
+            .await
+            .expect("put named bytes");
+
+        assert!(store.release(b"mesh/resident").await.expect("release"));
+        for _ in 0..100 {
+            if !store.has(hash).await.expect("has") {
+                store.shutdown().await.expect("shutdown");
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        store.shutdown().await.expect("shutdown");
+        panic!("the disk-backed collecting store kept released bytes");
     }
 
     /// A memory store answers the durability verbs rather than making every

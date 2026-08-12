@@ -145,7 +145,9 @@ impl Contact {
 
     /// The addresses still worth offering as a way to reach them.
     pub fn reachable(&self) -> impl Iterator<Item = &Endpoint> {
-        self.endpoints.iter().filter(|endpoint| endpoint.is_usable())
+        self.endpoints
+            .iter()
+            .filter(|endpoint| endpoint.is_usable())
     }
 
     /// Whether anything about this record should reach a person.
@@ -253,9 +255,8 @@ mod tests {
 
     #[test]
     fn a_mismatched_handle_binding_also_raises_an_alarm() {
-        let contact = alice().with_handle(
-            Handle::acct("a@x.org").with_binding(TrustState::Revoked { at_ms: 2 }),
-        );
+        let contact = alice()
+            .with_handle(Handle::acct("a@x.org").with_binding(TrustState::Revoked { at_ms: 2 }));
         assert!(contact.has_alarm());
     }
 

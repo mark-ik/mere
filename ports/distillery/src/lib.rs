@@ -1,5 +1,4 @@
-//! Name reservation for **distillery**, the model-works port of the Mere
-//! platform.
+//! **Distillery**, the model-works port of the Mere platform.
 //!
 //! A distillery takes a raw mash and runs it, batch by batch, through stills
 //! into something concentrated. This port is that works for models: the
@@ -28,6 +27,23 @@
 //! The trainer lane (Distillery-as-trainer, per the geist brief) lands here
 //! later, behind its own plan: training is one more job the works runs.
 //!
-//! No implementation yet.
+//! [`Distillery`] is the first real consumer of `mere-mesh-host`. Its v0
+//! authority drives the non-blocking supervisor and owns the explicit
+//! checkpoint/collection operation. Views remain a later slice; when they
+//! arrive they render the reports returned here rather than reconstructing
+//! authority state.
 
 #![doc(html_no_source)]
+#![warn(missing_docs)]
+
+mod authority;
+
+pub use authority::{
+    BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
+};
+
+/// Crate version.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Lifecycle stage marker.
+pub const STAGE: &str = "pre-alpha";

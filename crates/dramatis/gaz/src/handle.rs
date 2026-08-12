@@ -65,7 +65,10 @@ impl Handle {
     /// never met.
     pub fn normalized(&self) -> String {
         let lowered = self.value.trim().to_lowercase();
-        lowered.strip_prefix("acct:").unwrap_or(&lowered).to_string()
+        lowered
+            .strip_prefix("acct:")
+            .unwrap_or(&lowered)
+            .to_string()
     }
 
     /// Whether this handle matches a user-supplied string.
@@ -102,7 +105,10 @@ mod tests {
 
     #[test]
     fn a_fresh_handle_is_unverified() {
-        assert_eq!(Handle::acct("alice@example.org").binding, TrustState::Unverified);
+        assert_eq!(
+            Handle::acct("alice@example.org").binding,
+            TrustState::Unverified
+        );
     }
 
     #[test]

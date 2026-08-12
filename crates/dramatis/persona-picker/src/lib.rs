@@ -170,7 +170,10 @@ mod tests {
         ]));
         assert_eq!(items[0].shortcut.as_deref(), Some("in use"));
         assert_eq!(items[1].shortcut.as_deref(), Some("1 key"));
-        assert_eq!(items[2].shortcut, None, "a persona with no keys says nothing");
+        assert_eq!(
+            items[2].shortcut, None,
+            "a persona with no keys says nothing"
+        );
     }
 
     #[test]
@@ -204,7 +207,12 @@ mod tests {
         // The create row is matched by a sentinel id holding a NUL, which a
         // profile id from the vault cannot be. Belt and braces: it is appended
         // last, and the first match wins.
-        let items = roster_items(&roster(vec![entry("new-persona", "New persona…", 0, false)]));
+        let items = roster_items(&roster(vec![entry(
+            "new-persona",
+            "New persona…",
+            0,
+            false,
+        )]));
         assert_ne!(items[0].id, CREATE_ROW_ID);
         assert_eq!(items[1].id, CREATE_ROW_ID);
     }

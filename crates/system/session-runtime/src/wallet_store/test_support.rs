@@ -12,8 +12,7 @@ use uuid::Uuid;
 use super::{DeviceId, KeyEpochId, PersonaChainRoot};
 
 pub(super) fn temp_data_root(tag: &str) -> PathBuf {
-    let dir =
-        std::env::temp_dir().join(format!("mere-wallet-store-{tag}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("mere-wallet-store-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     dir
 }

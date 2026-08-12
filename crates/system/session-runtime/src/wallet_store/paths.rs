@@ -13,10 +13,10 @@ use uuid::Uuid;
 use crate::engine_profile_store::PERSONAS_DIR;
 
 use super::{
-    DeviceId, IDENTITY_AUTO_UNLOCK_ROOT_FILENAME, IDENTITY_DIR, IDENTITY_GRANTS_DIR,
-    IDENTITY_SEED_FILENAME, IDENTITY_WALLET_FILENAME, LOCAL_DEVICE_IDENTITY_FILENAME,
-    PERSONA_EPOCH_BRIDGE_FILENAME, PERSONA_WALLET_FILENAME, REMOTE_AUTH_WRAPPING_KEYS_FILENAME,
-    DEVICE_ROSTER_FILENAME,
+    DEVICE_ROSTER_FILENAME, DeviceId, IDENTITY_AUTO_UNLOCK_ROOT_FILENAME, IDENTITY_DIR,
+    IDENTITY_GRANTS_DIR, IDENTITY_SEED_FILENAME, IDENTITY_WALLET_FILENAME,
+    LOCAL_DEVICE_IDENTITY_FILENAME, PERSONA_EPOCH_BRIDGE_FILENAME, PERSONA_WALLET_FILENAME,
+    REMOTE_AUTH_WRAPPING_KEYS_FILENAME,
 };
 
 /// `<data_root>/identity/`
@@ -117,10 +117,9 @@ pub fn persona_epoch_bridge_path(data_root: &Path, persona: PersonaId) -> PathBu
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
-
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn listing_personas_counts_wallets_not_directories() {

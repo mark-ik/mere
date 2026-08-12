@@ -52,8 +52,8 @@ pub(super) async fn write_frame<S>(stream: &mut S, message: &[u8]) -> io::Result
 where
     S: AsyncWrite + Unpin,
 {
-    let length =
-        u16::try_from(message.len()).map_err(|_| io::Error::other("noise message exceeds 65535"))?;
+    let length = u16::try_from(message.len())
+        .map_err(|_| io::Error::other("noise message exceeds 65535"))?;
     stream.write_all(&length.to_be_bytes()).await?;
     stream.write_all(message).await?;
     stream.flush().await
@@ -161,9 +161,9 @@ where
                                     filled: 0,
                                 };
                             }
-                        },
+                        }
                     }
-                },
+                }
                 ReadState::Body { buffer, filled } => {
                     if *filled < buffer.len() {
                         let mut read = ReadBuf::new(&mut buffer[*filled..]);
@@ -176,7 +176,7 @@ where
                                     return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
                                 }
                                 *filled += got;
-                            },
+                            }
                         }
                     }
                     if *filled == buffer.len() {
@@ -195,7 +195,7 @@ where
                             filled: 0,
                         };
                     }
-                },
+                }
             }
         }
     }
@@ -236,8 +236,8 @@ where
             .write_message(&buf[..take], &mut ciphertext)
             .map_err(|e| io::Error::other(format!("noise encrypt: {e}")))?;
 
-        let length = u16::try_from(written)
-            .map_err(|_| io::Error::other("noise message exceeds 65535"))?;
+        let length =
+            u16::try_from(written).map_err(|_| io::Error::other("noise message exceeds 65535"))?;
         this.pending_write.reserve(2 + written);
         this.pending_write.extend_from_slice(&length.to_be_bytes());
         this.pending_write.extend_from_slice(&ciphertext[..written]);

@@ -5,8 +5,8 @@
 //! material staged for pairing-time wrapping, sealed at rest once a secret
 //! store is available.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{InMemoryProvider, PersonaId};
 
@@ -136,10 +136,10 @@ pub fn load_current_private_epoch(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
-    use super::super::test_support::*;
     use super::super::secrets::save_identity_seed;
+    use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
     use std::fs;
 
     #[test]

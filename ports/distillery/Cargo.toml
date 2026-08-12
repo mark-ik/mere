@@ -4,9 +4,18 @@ version = "0.0.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Name reservation. Distillery is the model-works port of the Mere platform: the harness where a ring of devices runs inference, embedding, and eventually training jobs. It surfaces the mesh job board, leases, device policy, and model manifests; esp is the seam it drives, the mesh is the queue it supervises."
+description = "The model-works port of the Mere platform: a host for mesh-supervised inference, embedding, and training jobs."
 readme = "README.md"
 keywords = ["inference", "embedding", "mesh", "harness", "compute"]
 categories = ["concurrency"]
 
 [dependencies]
+mesh.workspace = true
+mesh-host.workspace = true
+muniment.workspace = true
+thiserror = "1"
+
+[dev-dependencies]
+identity.workspace = true
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+transport.workspace = true
