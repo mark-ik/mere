@@ -140,10 +140,8 @@ grammar absorbs device grants as written.
   touching the others.
 - **The station adapter re-targets.** Small, because it is policy-only: it
   builds a `RemoteAuthGrantSpec` and nothing else.
-- **Scope atoms need reading once.** `transport.egress` and `identity.act`
-  are actions. `sync-membership-only` looks like an action narrowing wearing
-  an attenuation's clothes, and should be resolved when it moves rather than
-  copied across as an atom.
+- **Scope atoms need reading once.** Done as step 1 below, and cheaper than
+  expected: three real atoms, all straight actions.
 
 ## Open, and genuinely Mark's call
 
@@ -161,15 +159,45 @@ eidetic artifact or stays a wallet file.
 
 ## Sequence, when it runs
 
-Not started, and deliberately so: the migration posture above gates step 3,
-and castellan's station work is in flight on the current envelope.
+**Correction, 2026-08-12.** The first draft called step 2 separable and said
+it paid for itself immediately. It is separable from the *certificate
+conversion*, not from the *migration*: `wrapped_private_epochs` is a signed
+field, so removing it changes the payload bytes and invalidates the signature
+on every grant already on disk. Step 2 needs the same read window as step 3.
+Nothing below ships ahead of the posture decision.
 
-1. Map the scope atoms to actions, resolving `sync-membership-only`.
+1. ~~Map the scope atoms to actions.~~ **Done 2026-08-12**, see below.
 2. Wrapped epochs out of the payload into their own record, still on the
-   current envelope. This is separable and pays for itself immediately by
-   stopping refresh from re-signing an unchanged capability.
+   current envelope. Independent of the certificate conversion, and it stops
+   refresh from re-signing an unchanged capability.
 3. Capability statement to `SignedDelegationCertificate`, behind the agreed
    read window.
 4. Signed revocation, roster demoted to a fold.
 5. Station adapter re-targets; castellan reaches grant verification through
    personae rather than through session-runtime.
+
+### Step 1: what the atom survey found
+
+Three scope atoms are real and in use: `identity.act`, `private.read`, and
+`transport.egress`. All three map straight to `CapabilityScope.actions`.
+`sync-membership-only` is not real. It appears once in the workspace, as an
+example inside a doc comment, and was never implemented, so there is nothing
+to reconcile and the comment should go with the field.
+
+**`attenuations` is enforced nowhere.** Every occurrence across mere is a
+write, a test assertion, or a display string in graphshell's identity
+projection. The one apparent check is castellan's, and it asserts that a
+grant castellan itself just issued carries the atom it just put there. So
+`no-subdelegation` has never prevented a subdelegation. Mapping it to
+`remaining_delegation_depth: 0` is not a rename, it is the first time the
+constraint becomes real, because `attenuates()` refuses a parent whose depth
+is zero.
+
+**`scopes` is enforced in exactly two places, and both are one rule**: a spec
+carrying `private.read` must also carry the epoch material.
+`identity.act` and `transport.egress` are declarative and checked by nobody
+outside castellan's own station policy. That single enforced rule is exactly
+the coupling step 2 dissolves, a scope atom in the capability statement
+constraining the key carriage because the two share an envelope. After the
+split it becomes a ledger invariant, that a `private.read` certificate has a
+corresponding epoch record, which is where it belonged.

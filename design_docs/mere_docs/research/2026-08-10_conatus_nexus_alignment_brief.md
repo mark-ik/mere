@@ -6,6 +6,9 @@ renderling are "the trio of note now", dimforge is in an odd transition, and
 the goal is one physics solution across conatus and the isometry wing:
 "i am happy to adapt conatus and the rest to fit that new direction, but i
 wouldn't let rapier hold us back."
+**Ruled 2026-08-12 (Mark)**: perfect determinism is not required for the
+isometry wing; §4 is rewritten from a gate into an authority model, and the
+rapier exit (§5 A4) no longer waits on a determinism receipt.
 
 **Related**: the numen founding stack (numen → quint → seiche), the
 [scenograph expansion brief](2026-08-10_scenograph_expansion_brief.md)
@@ -59,29 +62,47 @@ seam doctrine this brief mirrors).
    per propagate-capability-up-the-stack. Founding an isometry-local physics
    vocabulary would be the duplication the ecosystem rule exists to prevent.
 
-## 4. The deciding axis: determinism
+## 4. The authority model: facts, not trajectories (ruled 2026-08-12)
 
-A P2P VTT wants lockstep or at least replay-stable simulation. GPU float
-ordering is classically non-deterministic across vendors; rapier documents a
-cross-platform determinism mode; nexus's determinism story is unrecorded in
-what we have read. **No GPU backend becomes authoritative without an
-empirical receipt**: the same scene stepped N times on two GPUs and CPU,
-trajectories compared. Until that receipt exists, the CPU path (seiche as
-today) stays authoritative and nexus is an accelerator lane (effects,
-fast-forward, soft-body flourish), which is also the honest reading of a
-pre-1.0 engine.
+The first draft made determinism the deciding axis. Mark ruled it out of
+that seat: perfect determinism is not necessary for the isometry wing. The
+multiplayer truth is **key, replayable facts represented correctly to hosts
+and guests alike**: adjudicated outcomes authored as facts and replicated
+over the rails isometry already rides (murm, stickleback, codicil). The
+simulation *between* facts is local color, free to diverge across devices,
+and losing nonessential data for excellent GPU throughput is a good trade.
+Bit-perfect representation stays valuable where it is cheap, but it gates
+nothing.
+
+What this keeps required: exactness at the fact boundary (an adjudicated
+outcome is one fact, not N slightly different ones), and identical
+*representation* of received facts on every peer. What it releases: lockstep
+networking, cross-vendor trajectory identity, and any obligation to keep
+rapier for its determinism mode. Per the ruling: do not preserve rapier for
+a determinism the gameplay does not need — **unless it composes nicely into
+nexus**, which turns rapier's fate into A0's composition question (shared
+parry/nalgebra types, a rapier-equivalent CPU path) rather than a
+determinism experiment.
 
 ## 5. Sequence, entrance-gated
 
-- **A0**: read nexus's actual API and determinism posture (docs + source),
-  and rapier's current determinism feature state. Cheap, unblocks everything.
+- **A0**: read nexus's actual API and its type lineage: does it keep parry
+  and nalgebra (seiche's colliders and mere-canvas hit-testing ride parry
+  shapes; if nexus keeps them, the hit seam survives a swap), and is its CPU
+  execution path a rapier equivalent (if so, rapier can exit entirely and
+  "composes into nexus" is answered by construction). Cheap, unblocks
+  everything.
 - **A1**: seiche integrator seam; rapier default; no consumer change.
 - **A2**: isometry adopts the conatus seam for its first physics slice; this
   is the receipt that the seam fits a game, not just a graph canvas.
-- **A3**: nexus behind a feature, CPU/GPU parity receipts, the determinism
-  experiment from §4.
-- **A4**: the rapier exit decision, made on A3's receipts rather than on
-  sentiment about dimforge's transition.
+- **A3**: nexus behind a feature, with behavioral receipts: forces within
+  tolerance, stable under load, the hit seam intact, fact-boundary outputs
+  exact. Bit-trajectory comparison is recorded if it is cheap and gates
+  nothing (§4 ruling).
+- **A4**: the rapier exit, decided on seat coverage plus A0's composition
+  answer, explicitly not on determinism (§4 ruling). If nexus's CPU path
+  covers the seats, rapier exits entirely; otherwise it stays only as the
+  CPU fallback backend behind the seam.
 
 ## 6. Non-goals
 

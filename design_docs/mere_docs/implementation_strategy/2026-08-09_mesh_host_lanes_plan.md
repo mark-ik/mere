@@ -3,7 +3,8 @@
 **Date**: 2026-08-09
 
 **Status**: Open. Re-cut 2026-08-09 after review, around a supervisor gate the
-first draft was missing entirely. **H0, H1 and H2 have landed**; the Burn
+first draft was missing entirely. **H0, H1 and H2 have landed. H2's physical
+sweep and first host consumption landed in Distillery on 2026-08-12.** The Burn
 migration is the next gate and is release-gated upstream.
 
 **Related**:
@@ -35,7 +36,7 @@ supervises running work.
 |---|---|
 | ~~**H0: Host supervisor**~~ | **Done 2026-08-09** — `mere-mesh-host`. Non-blocking in-flight jobs, real heartbeat state, cancellation before revoke, correct leased completion |
 | ~~**H1: Blob location and delivery**~~ | **Done 2026-08-10** — `DeviceAttested` + `TransportCourier`. Mesh author resolves to a transport endpoint through an existing master-signed attestation; disjoint-store two-host receipt passes |
-| ~~**H2: Retention safety**~~ | **Done 2026-08-10** — fail-closed on both the build and accept paths; blobs kept until an accepted checkpoint agrees the job is finished |
+| ~~**H2: Retention safety**~~ | **Done 2026-08-12** — fail-closed checkpoint rules plus Distillery's owner-controlled sweep; shared hashes and cross-subsystem custody remain protected |
 | **Burn migration** | Stable 0.22 dependency migration and existing backend baselines |
 | **Remote adapter** | Lease-bound authorization plus targeted session revocation |
 
@@ -245,15 +246,27 @@ it folded its own result, and dropping bytes on that basis would let a worker
 throw away a job's inputs before the poster had ever seen the answer. A
 checkpoint is the mesh's opinion. A device with no checkpoint collects nothing.
 
-`MeshStore::collectable_blobs` is the query; wiring an actual sweep (and
-emitting `RetentionEffect::BlobCollected`) is the host's, and is not done.
+`MeshStore::collectable_blobs` began as the query. The 2026-08-12 Distillery
+slice completed the host side: `Distillery::maintain` authors the checkpoint,
+queries the safe set, releases this mesh's stable transport-store tags when the
+owner enables collection, and reports `RetentionEffect::BlobCollected`.
+Collection defaults off.
+
+The real sweep exposed two rules the original H2 query had missed. First, a
+content-addressed hash may be shared: a post-checkpoint or unfinished job that
+reuses an older terminal job's input protects those bytes. The query therefore
+checks the current replay tail as well as the accepted checkpoint and emits a
+deduplicated set. Second, physical storage is shared across domains. Mesh tags
+are scoped by mesh id and hash; removing one leaves an Eidetic, other-mesh, or
+other-subsystem tag intact. A collecting `iroh-blobs` store removes the bytes
+only after the last custody tag is gone.
 
 ---
 
 ## 5. Burn migration
 
-Release-gated, not toolchain-gated: the published line is still
-`v0.22.0-pre.1`. Owned by the
+Release-gated, not toolchain-gated: the published line advanced to
+`v0.22.0-pre.2` on 2026-08-12, but stable 0.22 is still unavailable. Owned by the
 [Burn 0.22 migration plan](2026-08-09_burn_0_22_migration_plan.md).
 
 What can proceed now without waiting: baseline capture against the existing
@@ -365,3 +378,16 @@ classes, and remote tensor transport beyond the adapter gate above.
   "converged" as "terminal in an accepted checkpoint" rather than "terminal on
   my board": the second would let a worker drop a job's inputs before the poster
   had seen the answer. 117 mesh tests green.
+- **2026-08-12 (H2 host completion / Distillery v0)**: Distillery became the
+  first real `mere-mesh-host` consumer. Its authority drives supervisor ticks
+  and an explicit owner-governed checkpoint/collection operation. The sweep
+  added stable mesh-scoped custody tags to `mere-transport`, collecting disk
+  and memory store modes, a current-tail shared-hash guard, and a real joined
+  mesh receipt that executes `mesh.blake3/v1`, retains through completion, then
+  releases only after an accepted checkpoint. Views, the resident process,
+  Burn migration, and Burn Remote remain later gates.
+- **2026-08-12 (upstream gate check)**: crates.io now exposes Burn and Burn
+  Remote `0.22.0-pre.2`. Stable 0.22 remains unpublished, so the settled
+  production-migration gate stays closed. The remote-session design was read
+  against pre.1 and must be revalidated against the chosen release before its
+  adapter starts.

@@ -41,7 +41,7 @@ tier under construction).
 
 | Crate | Reading | Suggested disposition |
 |---|---|---|
-| `mere-mesh-host` | **The biggest one.** H0's supervisor, built explicitly as a reusable host service, and no host embeds it | Distillery v0 is the named consumer; wire it there first, turnstone second |
+| ~~`mere-mesh-host`~~ | **Resolved 2026-08-12.** Distillery v0 now embeds H0's supervisor and owns its first retention-maintenance projection | Keep Turnstone as the second-consumer proof when it needs the same authority |
 | `mere-eidetic-search` | BM25 + fast-fields + hybrid-fusion seam, unconsumed | The product search gap; turnstone omnibar/canvas search should consume it |
 | `mere-embed` | Its founding glue (persistence, quint field bridge, canvas search) lost its consumer when eidetic-search moved to esp | Audit: fold the live glue toward its users or retire the husk |
 | `mere-crawl` | Host-neutral frontier, nobody drives it | Hold as capability; census again after the gazette feed pipeline lands (crawl is its natural engine) |
@@ -52,8 +52,8 @@ tier under construction).
 | `scenograph` (facade) | Every consumer takes sceno/scenomise/scenotime directly | Make it the documented entry point or deprecate the facade |
 | `mere-eidetic-https-fetcher`, `-iroh-fetcher` | Proven in receipts, unwired in products | Gazette feed pipeline + mesh blob lane are the named destinations |
 
-By-design zeros, no action: ports and stubs (castellan, distillery,
-graphshell-web), deprecated shims (vates, sibylla), the young dramatis tier
+By-design zeros, no action: ports and stubs (castellan, graphshell-web),
+deprecated shims (vates, sibylla), the young dramatis tier
 (dramatis facade, chatelaine, emblem, gaz, gazette), tulpa (just homed).
 
 ## 3. True zeros, genet
@@ -83,8 +83,8 @@ scene-side at the freeze.
 
 ## 5. Sequence
 
-1. `mere-mesh-host` → distillery v0 (already reserved; the port founding doc
-   is the next act there).
+1. ~~`mere-mesh-host` → distillery v0.~~ **Done 2026-08-12:** the port now
+   consumes the supervisor and owns the owner-controlled retention sweep.
 2. `eidetic-search` into turnstone's search surface, and the `mere-embed`
    husk audit in the same pass.
 3. Registry-cluster audit (three unwired registers) + the shell-era
