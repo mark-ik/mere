@@ -86,3 +86,14 @@ store, not fixtures only.
   open in W1's done-condition: the headed receipt — a real browsing
   session's store re-minted through eidetic-search's `eidetic-recall`
   example. W2 is unblocked.
+- **2026-08-12 — W1 done condition closed** (turnstone `f22f61f`). Building
+  the receipt exposed one real gap: nothing flushed on a normal quit, so a
+  short session would have left an empty store. `ApplicationHandler::exiting`
+  now releases the trail store under a bounded ack (the scenario driver's
+  Done exits through the same hook). The receipt itself
+  (`scenarios/trail_capture.scn`, fresh profile): three `mere://`
+  navigations through the real shell landed as **1 trace, 3 traversals, 3
+  distinct pages**; `eidetic-recall index` minted a 3-document trail index
+  from the session's store; `search alpha` answered `mere://alpha` at 0.98
+  with the capture-time timestamp. "Where did I read about X" answers from
+  a real session's store. W1 is complete.
