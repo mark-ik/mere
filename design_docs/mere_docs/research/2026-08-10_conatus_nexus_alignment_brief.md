@@ -109,3 +109,20 @@ determinism experiment.
 - Replacing quint's Burn lowering with rust-gpu kernels.
 - A second physics vocabulary in isometry.
 - A renderling verdict (genet-side lane, separate brief).
+
+## 7. Progress
+
+- **2026-08-12 — A0 answered, by nexus's own manifests.** Nexus is not a
+  rapier replacement; it *contains* rapier. The workspace pins
+  `rapier2d`/`rapier3d` 0.34 and `parry2d`/`parry3d` 0.29, and
+  `nexus_rbd3d` depends on `rapier3d` + `parry3d` directly (math is glamx;
+  the GPU layer is khal + vortx, not wgpu-direct or rust-gpu-direct at the
+  manifest level). Both A0 questions close at once: parry survives, so
+  seiche's collider/hit seam carries over; and the CPU substrate *is*
+  rapier, so Mark's "unless it composes nicely into nexus" branch is
+  satisfied by construction. Consequence for A4: "rapier exits" reframes as
+  "rapier stops being our direct pin and becomes nexus's internal detail";
+  the A1 seam should target nexus's API surface and let it carry rapier,
+  rather than maintaining two integrator wrappings. Version note for A1:
+  align seiche's rapier pin toward 0.34/parry 0.29 so the two stacks don't
+  hold divergent parry generations in one graph.
