@@ -66,6 +66,7 @@ pub mod adapters;
 pub mod minimap;
 pub mod overlay;
 pub mod projection;
+pub mod representation;
 pub mod request;
 pub mod scene_out;
 pub mod signals;
@@ -75,6 +76,11 @@ pub mod strategy;
 pub use minimap::{MinimapDescriptor, MinimapOverlayKind};
 pub use overlay::Overlay;
 pub use projection::{PositionedEdge, PositionedNode, Projection, ProjectionMetadata};
+pub use representation::{
+    BehaviorBinding, GRAPH_REPRESENTATION_REGISTRY_SCHEMA, GraphRepresentationRegistry,
+    HostBehavior, HostGesture, PrimitiveBody, PrimitiveProfile, RepresentationProfile,
+    default_graph_representation_registry,
+};
 pub use request::{
     AxisValue, FormFactor, NodeFilter, ProjectionDimension, ProjectionRequest, TargetSize,
     ViewIntent,
