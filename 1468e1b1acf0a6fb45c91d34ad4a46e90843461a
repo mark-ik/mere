@@ -1,0 +1,23 @@
+ATTRIBUTION CORRECTION. This commit also carries another agent's Burn 0.22
+B1 work, swept in per the commit-the-whole-tree rule. The original message
+does not mention it anywhere, which is worse than the subject-line problem:
+a reader would attribute the burn fan-out cut to the crypto pass.
+
+Swept in, another agent's B1 (cut the accidental burn fan-out):
+  crates/eidetic/eidetic-search/Cargo.toml
+  crates/eidetic/eidetic-search/examples/eidetic-recall.rs
+  crates/intel/embed/Cargo.toml
+  crates/intel/embed/src/lib.rs
+  crates/intel/embed/tests/bert_full_pipeline.rs
+  crates/intel/esp/src/embed/provider.rs
+  crates/intel/esp/src/embed/bert/mod.rs
+  crates/intel/esp/src/embed/bert/provider.rs
+
+That work drops the direct burn dependency from embed and eidetic-search and
+moves construction to esp::embed::bert::load_cpu / load_wgpu. It is unrelated
+to the crypto row.
+
+The crypto work the message does describe is everything else: the seven pins
+(root Cargo.toml, personae, eidetic-core, session-runtime, castellan), the
+pinned sealed-record bytes in personae/src/seal.rs, castellan's KeyInit fix
+in otp/mod.rs, and the three design docs.
