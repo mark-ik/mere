@@ -67,3 +67,22 @@ anchor embed's lib.rs cites).
 W1 first; W2 and W3 follow it; W4 is independent of W2/W3 and may
 interleave; W5 last. Each slice lands with its own receipt against a real
 store, not fixtures only.
+
+## 5. Progress
+
+- **2026-08-12 — W1 landed** (turnstone `539dacc`). The trail-memory port
+  mirrors the recycle bin's actor shape exactly: session-scoped
+  `FjallStore` at `sessions/<id>/memory`, `BrowsingTrace` segments through
+  `BrowsingMemory`, `from` chained per owner inside the actor, flush on
+  segment fill and every lifecycle edge (switch, close, release — the
+  release rides the same Windows rename handshake as the bin, since the
+  memory store lives in the session dir). Capture rides the observation
+  drain as designed: the shell's `drain_app_events` is the first
+  production consumer of `App::take_events`, mapping
+  AddressOpened/NavigatedBack/NavigatedForward/Reloaded onto
+  UrlTyped/Back/Forward/Reload with the root identity's public key hex as
+  the owner tag. Three unit tests green (round trip with origin chaining,
+  self-flush on a full segment, event mapping); lib check clean. Still
+  open in W1's done-condition: the headed receipt — a real browsing
+  session's store re-minted through eidetic-search's `eidetic-recall`
+  example. W2 is unblocked.
