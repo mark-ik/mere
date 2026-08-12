@@ -42,8 +42,8 @@ tier under construction).
 | Crate | Reading | Suggested disposition |
 |---|---|---|
 | ~~`mere-mesh-host`~~ | **Resolved 2026-08-12.** Distillery v0 now embeds H0's supervisor and owns its first retention-maintenance projection | Keep Turnstone as the second-consumer proof when it needs the same authority |
-| `mere-eidetic-search` | BM25 + fast-fields + hybrid-fusion seam, unconsumed | The product search gap; turnstone omnibar/canvas search should consume it |
-| `mere-embed` | Its founding glue (persistence, quint field bridge, canvas search) lost its consumer when eidetic-search moved to esp | Audit: fold the live glue toward its users or retire the husk |
+| `mere-eidetic-search` | BM25 + fast-fields + hybrid-fusion seam, unconsumed | **Owned 2026-08-12** by the [search surface wiring plan](mere_docs/implementation_strategy/2026-08-12_search_surface_wiring_plan.md); the found precondition is capture (nothing authors `BrowsingTrace` yet) |
+| `mere-embed` | **Audited 2026-08-12: not a husk.** The esp re-export plus three built-but-unwired glue modules (persistence, field bridge, canvas search) | Keep; wires in as W4 of the search surface wiring plan |
 | `mere-crawl` | Host-neutral frontier, nobody drives it | Hold as capability; census again after the gazette feed pipeline lands (crawl is its natural engine) |
 | `moothold` | The t1–t3 federation home, while gemot/mooting/commons carry the live moot work | Reconcile with the moot cluster: absorb, or state the tier boundary that keeps it |
 | `register-input`, `register-knowledge`, `register-protocol` | Three of nine registry crates unwired | Registry-cluster audit: wire or fold into the six that are |
@@ -85,8 +85,10 @@ scene-side at the freeze.
 
 1. ~~`mere-mesh-host` → distillery v0.~~ **Done 2026-08-12:** the port now
    consumes the supervisor and owns the owner-controlled retention sweep.
-2. `eidetic-search` into turnstone's search surface, and the `mere-embed`
-   husk audit in the same pass.
+2. ~~`eidetic-search` into turnstone's search surface, and the `mere-embed`
+   husk audit in the same pass.~~ **Planned 2026-08-12:** the search surface
+   wiring plan owns both; the audit closed "retire" (embed's glue is live,
+   unwired) and found the real precondition (W1 capture).
 3. Registry-cluster audit (three unwired registers) + the shell-era
    quartet, one session, verdicts recorded per crate.
 4. `verso-tile` at the Blitz/Serval convergence checkpoint; the two genet

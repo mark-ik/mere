@@ -1,0 +1,69 @@
+# Search Surface Wiring Plan
+
+**Date**: 2026-08-12
+**Status**: open. Spun out of the
+[leverage census](../../2026-08-10_leverage_census_brief.md) (step 2), and
+carries the census's audit answer for `mere-embed` inside it.
+
+**Related**: eidetic-search's own crate docs (Phase 9, producer half), the
+esp consolidation plan (the split that left embed's glue behind), the
+2026-05-08 local-intelligence integration research (the architectural
+anchor embed's lib.rs cites).
+
+## 1. Audit results (verified 2026-08-12)
+
+- **`mere-embed` is not a husk; the census's "retire" branch is closed.**
+  It is the re-export shim over `esp::embed` plus three genuinely
+  mere-coupled modules, all built and all unwired: `persistence`
+  (save/load a `VectorIndex` through eidetic's typed-payload API),
+  `field_bridge` and `canvas_search` (project query similarity into
+  quint's field algebra over the graph canvas). Zero importers means
+  capability awaiting wiring, not deadness. Keep, and wire below.
+- **`eidetic-search` is the lexical half, ready.** `TrailIndex` minted
+  *from* `BrowsingTrace` engrams (derived state, re-mintable, format
+  version carried with the index): BM25 recall over titles/URLs/domains,
+  fast-field reports (`top_domains`, `visits_histogram`), and `fuse()`,
+  the engine-agnostic reciprocal-rank seam that deliberately takes both
+  rankings from the caller.
+- **The missing precondition is capture.** `BrowsingTrace` exists only
+  inside eidetic-core (model, tests, example). Turnstone authors none.
+  Recall without a corpus returns nothing, so the first slice is capture,
+  not search UI.
+
+## 2. Slices
+
+- **W1 — capture.** Turnstone authors `BrowsingTrace` engrams at
+  navigation commit points (the observe/session-lifecycle seam),
+  persona-scoped, into the existing eidetic store. **Done when** a real
+  browsing session yields traces that re-mint into a `TrailIndex` (run
+  eidetic-search's `eidetic-recall` example against the real store).
+- **W2 — recall in the omnibar.** A non-privileged omnibar lane queries
+  `TrailIndex::search`; hits render as actionable rows (open the page /
+  summon the node). Index staleness is surfaced honestly and
+  `FormatMismatch` re-mints rather than erroring, per the crate's own
+  doctrine. **Done when** "where did I read about X" answers from the
+  user's own trail.
+- **W3 — reports.** The trail/steward surface renders `top_domains` and
+  `visits_histogram` from the fast-field columns (no re-index needed).
+  Small; may ride W2's session.
+- **W4 — canvas semantic search.** Wire `embed::canvas_search` +
+  `field_bridge` into mere-canvas: a query becomes a similarity field
+  over the canvas through quint, with `persistence` saving the
+  `VectorIndex` via eidetic. Start on the lexical embedding provider
+  (deterministic, no Burn), `bert` behind its existing feature per esp's
+  target matrix.
+- **W5 — fusion.** `fuse()` merges W2's lexical ranking with W4's vector
+  ranking in the omnibar. Gated on both.
+
+## 3. Non-goals
+
+- The moot consume-half of `SearchIndexSpec` (deferred by its own doc).
+- A crawl-driven corpus (`mere-crawl` stays parked pending the gazette
+  feed pipeline, per the census).
+- New embedding backends beyond what esp already ships.
+
+## 4. Sequence
+
+W1 first; W2 and W3 follow it; W4 is independent of W2/W3 and may
+interleave; W5 last. Each slice lands with its own receipt against a real
+store, not fixtures only.
