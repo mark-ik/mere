@@ -1,0 +1,25 @@
+ATTRIBUTION CORRECTION. The subject describes only the design ruling, which
+is about 185 of this commit's 1087 inserted lines. The rest is another
+agent's in-flight work, swept in per the commit-the-whole-tree rule. The
+original message mentioned this in a closing paragraph but the subject did
+not, which is the part that misleads a reader of `git log --oneline`.
+
+Authored by this commit's author:
+  design_docs/mere_docs/technical_architecture/
+    2026-08-11_device_grant_delegation_reconciliation.md   (new, 175)
+  design_docs/DOC_README.md                                (index entry)
+  design_docs/mere_docs/implementation_strategy/
+    2026-08-10_wallet_carry_foldin_plan.md                 (W3 item resolved)
+
+Swept in, another agent's castellan sited-station work:
+  ports/castellan/src/reticulum.rs                         (station material)
+  ports/castellan/src/reticulum/grant.rs                   (SitedStationGrant)
+  ports/castellan/Cargo.toml, src/lib.rs                   (deps + feature)
+  ports/signalman/**                                       (private adapter)
+  Cargo.toml                                               (workspace exclude)
+  crates/system/session-runtime/src/wallet_grant/issue.rs
+  design_docs/mere_docs/research/
+    2026-08-10_sited_device_identity_brief.md              (their exec note)
+
+Verified before committing rather than assumed: castellan builds with and
+without the station-grants feature, and session-runtime's 247 lib tests pass.
