@@ -12,6 +12,7 @@
 //! - [`Grid`] — row-major grid with `sqrt(n)` columns
 //! - [`Radial`] — BFS rings from a focal node
 //! - [`Phyllotaxis`] — Fibonacci (golden-angle) spiral
+//! - [`Stack`] — directed topology arranged into readable layers
 //!
 //! All share [`StaticLayoutState`]: a simple damping field and step count.
 
@@ -559,5 +560,7 @@ fn distribute_ring<N: Clone + Eq + Hash>(
 
 pub mod phyllotaxis;
 pub use phyllotaxis::*;
+pub mod stack;
+pub use stack::*;
 #[cfg(test)]
 mod tests;

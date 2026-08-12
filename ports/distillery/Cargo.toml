@@ -1,0 +1,21 @@
+[package]
+name = "distillery"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The model-works port of the Mere platform: a host for mesh-supervised inference, embedding, and training jobs."
+readme = "README.md"
+keywords = ["inference", "embedding", "mesh", "harness", "compute"]
+categories = ["concurrency"]
+
+[dependencies]
+mesh.workspace = true
+mesh-host.workspace = true
+muniment.workspace = true
+thiserror = "1"
+
+[dev-dependencies]
+identity.workspace = true
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+transport.workspace = true

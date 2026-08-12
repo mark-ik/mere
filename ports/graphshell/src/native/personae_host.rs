@@ -25,8 +25,8 @@ use crate::identity::{
     VaultProtectionView, VaultView, load_carry_view,
 };
 use crate::identity_projection::{
-    DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1, PROFILE_SWITCH_INTENT,
-    RemoveSshKeyIntentV1, RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT,
+    DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1,
+    PROFILE_SWITCH_INTENT, RemoveSshKeyIntentV1, RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT,
     SIGNING_APPROVE_ONCE_INTENT, SIGNING_DENY_INTENT, SSH_GENERATE_INTENT,
     SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT, SigningDecisionIntentV1, SshUnlockPolicyIntentV1,
     SwitchProfileIntentV1,
@@ -685,10 +685,8 @@ mod tests {
         );
         storage.save_profile(&work).unwrap();
         storage.save_profile(&personal).unwrap();
-        let vault_dir = std::env::temp_dir().join(format!(
-            "graphshell-switch-receipt-{}",
-            std::process::id()
-        ));
+        let vault_dir =
+            std::env::temp_dir().join(format!("graphshell-switch-receipt-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&vault_dir);
         let host = PersonaeHost::new(
             IdentityVault::with_profile(storage, work),
@@ -710,7 +708,10 @@ mod tests {
 
         // Live: the host's own identity — the one the shared SSH agent
         // serves — is the new persona, and the snapshot marks it selected.
-        assert_ne!(IdentityProvider::master_public_key(&host).to_bytes(), before);
+        assert_ne!(
+            IdentityProvider::master_public_key(&host).to_bytes(),
+            before
+        );
         let snapshot = host.snapshot().unwrap();
         let selected: Vec<&str> = snapshot
             .profiles
@@ -742,7 +743,13 @@ mod tests {
             .is_err()
         );
         assert_eq!(
-            host.snapshot().unwrap().profiles.iter().find(|p| p.selected).unwrap().id,
+            host.snapshot()
+                .unwrap()
+                .profiles
+                .iter()
+                .find(|p| p.selected)
+                .unwrap()
+                .id,
             "personal"
         );
         let _ = std::fs::remove_dir_all(&vault_dir);

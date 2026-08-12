@@ -182,8 +182,8 @@ where
             .map_err(|e| backend("proof write", e))?;
     }
 
-    let peer = keys::verify_proof(&theirs, &handshake_hash)
-        .map_err(|e| backend("peer identity", e))?;
+    let peer =
+        keys::verify_proof(&theirs, &handshake_hash).map_err(|e| backend("peer identity", e))?;
 
     Ok((stream, peer))
 }

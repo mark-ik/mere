@@ -267,9 +267,12 @@ fn parse_from(args: Vec<String>) -> Result<Args, String> {
         // Resolving rather than guessing: personas are real cryptographic
         // identities, and syncing the wrong one is not a recoverable oops.
         None => {
-            let personas = session_runtime::wallet_store::list_personas(&data_root)
-                .map_err(|error| {
-                    format!("could not list personas under {}: {error}", data_root.display())
+            let personas =
+                session_runtime::wallet_store::list_personas(&data_root).map_err(|error| {
+                    format!(
+                        "could not list personas under {}: {error}",
+                        data_root.display()
+                    )
                 })?;
             match personas.as_slice() {
                 [only] => *only,
@@ -368,10 +371,8 @@ mod tests {
     };
 
     fn scratch(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "knot-sync-host-args-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("knot-sync-host-args-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

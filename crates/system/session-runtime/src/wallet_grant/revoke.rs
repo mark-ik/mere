@@ -4,8 +4,8 @@
 //! Revoking a delegated device: clearing its slots, rotating the epochs it
 //! could read, and cutting its access to each persona.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -135,12 +135,11 @@ pub(crate) fn revoke_persona_grant_access(
     Ok(rotated_personas)
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn revoke_remote_auth_device_clears_slots_and_rotates_future_write_epochs() {
@@ -287,7 +286,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
-
     #[test]
     fn revoke_remote_auth_device_rejects_copy_mode_devices() {
         let root = temp_data_root("remote-auth-revoke-copy");
@@ -317,5 +315,4 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&root);
     }
-
 }

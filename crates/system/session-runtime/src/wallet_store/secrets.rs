@@ -73,7 +73,9 @@ pub(super) fn looks_like_sealed_record(path: &Path) -> bool {
         && object.contains_key("ciphertext")
 }
 
-pub(super) fn wallet_local_secret_store(data_root: &Path) -> io::Result<Option<SealedRecordStorage>> {
+pub(super) fn wallet_local_secret_store(
+    data_root: &Path,
+) -> io::Result<Option<SealedRecordStorage>> {
     if runtime_manual_unlock_active(data_root) {
         return load_or_create_auto_unlock_root(identity_auto_unlock_root_path(data_root))
             .map(|root| root.map(|key| SealedRecordStorage::open_with_key(data_root, key)))
@@ -96,7 +98,10 @@ fn wallet_secret_record_root_key(seed: [u8; 32]) -> [u8; 32] {
     )
 }
 
-pub(super) fn wallet_secret_store_from_seed(data_root: &Path, seed: [u8; 32]) -> SealedRecordStorage {
+pub(super) fn wallet_secret_store_from_seed(
+    data_root: &Path,
+    seed: [u8; 32],
+) -> SealedRecordStorage {
     SealedRecordStorage::open_with_key(data_root, wallet_secret_record_root_key(seed))
 }
 
@@ -104,7 +109,9 @@ pub(super) fn wallet_secret_store(data_root: &Path) -> io::Result<Option<SealedR
     Ok(load_identity_seed(data_root)?.map(|seed| wallet_secret_store_from_seed(data_root, seed)))
 }
 
-pub(super) fn wallet_persona_secret_store(data_root: &Path) -> io::Result<Option<SealedRecordStorage>> {
+pub(super) fn wallet_persona_secret_store(
+    data_root: &Path,
+) -> io::Result<Option<SealedRecordStorage>> {
     if let Some(store) = wallet_secret_store(data_root)? {
         return Ok(Some(store));
     }
@@ -201,9 +208,9 @@ pub fn save_identity_seed(data_root: &Path, seed: [u8; 32]) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
     use crate::device_settings_store::{DeviceSettings, save_device_settings};
 
     #[test]

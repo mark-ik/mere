@@ -19,6 +19,7 @@
 //! attestations the ring publishes about itself, so a courier is handed master
 //! keys and does the obvious thing with them.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use mesh::{
@@ -74,15 +75,38 @@ fn blob_hash(blob: &BlobRef) -> Result<BlobHash, CourierError> {
         .map_err(|_| CourierError::MalformedDigest)
 }
 
+fn mesh_blob_tag(mesh_id: [u8; 32], digest: [u8; 32]) -> Vec<u8> {
+    let mut tag = Vec::with_capacity(82);
+    tag.extend_from_slice(b"mere/mesh/blob/v1\0");
+    tag.extend_from_slice(&mesh_id);
+    tag.extend_from_slice(&digest);
+    tag
+}
+
 /// This device's blobs, in the store its transport already serves.
 #[derive(Clone)]
 pub struct TransportBlobSpace {
     blobs: Arc<BlobStore>,
+    mesh_id: Option<[u8; 32]>,
 }
 
 impl TransportBlobSpace {
+    /// An indefinitely retained transport space for compatibility callers.
+    /// A production mesh host should use [`for_mesh`](Self::for_mesh), whose
+    /// named custody claims can be released after an accepted checkpoint.
     pub fn new(blobs: Arc<BlobStore>) -> Self {
-        Self { blobs }
+        Self {
+            blobs,
+            mesh_id: None,
+        }
+    }
+
+    /// A transport space whose blobs are retained under this mesh's own tag.
+    pub fn for_mesh(blobs: Arc<BlobStore>, mesh_id: [u8; 32]) -> Self {
+        Self {
+            blobs,
+            mesh_id: Some(mesh_id),
+        }
     }
 
     /// The underlying store, for wiring into a transport at bind time.
@@ -93,11 +117,13 @@ impl TransportBlobSpace {
     /// Stage bytes this device wants to hold — and, because this is the store
     /// the router serves, wants to be able to hand out.
     pub async fn put(&self, bytes: &[u8]) -> Result<BlobRef, NamespaceError> {
-        self.blobs
-            .put_bytes(bytes.to_vec())
-            .await
-            .map_err(|err| NamespaceError::Backend(err.to_string()))?;
-        Ok(BlobRef::blake3(bytes))
+        let blob = BlobRef::blake3(bytes);
+        let result = match self.tag(&blob) {
+            Some(tag) => self.blobs.put_bytes_named(bytes.to_vec(), tag).await,
+            None => self.blobs.put_bytes(bytes.to_vec()).await,
+        };
+        result.map_err(|err| NamespaceError::Backend(err.to_string()))?;
+        Ok(blob)
     }
 
     pub async fn has(&self, blob: &BlobRef) -> bool {
@@ -105,6 +131,45 @@ impl TransportBlobSpace {
             return false;
         };
         self.blobs.has(hash).await.unwrap_or(false)
+    }
+
+    /// Release this mesh's custody claims for settled blobs.
+    ///
+    /// The backing store may still hold a hash because another mesh or
+    /// subsystem tagged the same content. The returned count is the number of
+    /// mesh-owned tags actually removed, which makes repeated maintenance
+    /// idempotent.
+    pub async fn release(&self, blobs: &[BlobRef]) -> Result<u64, NamespaceError> {
+        if self.mesh_id.is_none() {
+            return Err(NamespaceError::Backend(
+                "an unscoped transport blob space cannot release custody".into(),
+            ));
+        }
+        let mut unique = HashSet::new();
+        let mut released = 0;
+        for blob in blobs {
+            if !unique.insert(blob.clone()) {
+                continue;
+            }
+            let Some(tag) = self.tag(blob) else {
+                continue;
+            };
+            if self
+                .blobs
+                .release(tag)
+                .await
+                .map_err(|err| NamespaceError::Backend(err.to_string()))?
+            {
+                released += 1;
+            }
+        }
+        Ok(released)
+    }
+
+    fn tag(&self, blob: &BlobRef) -> Option<Vec<u8>> {
+        let mesh_id = self.mesh_id?;
+        let digest = blob.digest.as_32().ok()?;
+        Some(mesh_blob_tag(mesh_id, digest))
     }
 }
 
@@ -145,11 +210,29 @@ impl BlobSink for TransportBlobSpace {
 pub struct TransportCourier {
     transport: Arc<P2pandaTransport>,
     blobs: Arc<BlobStore>,
+    mesh_id: Option<[u8; 32]>,
 }
 
 impl TransportCourier {
     pub fn new(transport: Arc<P2pandaTransport>, blobs: Arc<BlobStore>) -> Self {
-        Self { transport, blobs }
+        Self {
+            transport,
+            blobs,
+            mesh_id: None,
+        }
+    }
+
+    /// A courier that pins fetched bytes to one mesh's retention scope.
+    pub fn for_mesh(
+        transport: Arc<P2pandaTransport>,
+        blobs: Arc<BlobStore>,
+        mesh_id: [u8; 32],
+    ) -> Self {
+        Self {
+            transport,
+            blobs,
+            mesh_id: Some(mesh_id),
+        }
     }
 }
 
@@ -168,12 +251,16 @@ impl BlobCourier for TransportCourier {
                 // iroh-blobs verifies the BLAKE3 tree as it transfers, so a peer
                 // that sends the wrong bytes fails here rather than handing the
                 // namespace something it would have to catch later.
-                if self
-                    .blobs
-                    .fetch_from(&self.transport, peer, hash)
-                    .await
-                    .is_ok()
-                {
+                let fetched = match self.mesh_id {
+                    Some(mesh_id) => {
+                        let tag = mesh_blob_tag(mesh_id, hash.to_bytes());
+                        self.blobs
+                            .fetch_from_named(&self.transport, peer, hash, tag)
+                            .await
+                    }
+                    None => self.blobs.fetch_from(&self.transport, peer, hash).await,
+                };
+                if fetched.is_ok() {
                     return Ok(true);
                 }
             }
@@ -212,6 +299,7 @@ pub async fn deliver_inputs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[tokio::test]
     async fn the_transport_store_addresses_blobs_the_way_the_mesh_does() {
@@ -240,5 +328,26 @@ mod tests {
             .await
             .unwrap();
         assert!(!served, "not an error — a fact about the ring");
+    }
+
+    #[tokio::test]
+    async fn a_mesh_releases_only_its_own_custody_tag() {
+        const MESH: [u8; 32] = [0x4d; 32];
+        let store = Arc::new(BlobStore::new_collecting(Duration::from_millis(10)));
+        let space = TransportBlobSpace::for_mesh(store.clone(), MESH);
+        let bytes = b"shared content";
+        let blob = space.put(bytes).await.unwrap();
+        store
+            .put_bytes_named(bytes.to_vec(), b"eidetic/shared")
+            .await
+            .unwrap();
+
+        assert_eq!(space.release(std::slice::from_ref(&blob)).await.unwrap(), 1);
+        assert_eq!(space.release(std::slice::from_ref(&blob)).await.unwrap(), 0);
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(
+            space.has(&blob).await,
+            "eidetic's independent tag keeps the shared bytes present"
+        );
     }
 }

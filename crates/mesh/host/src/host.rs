@@ -191,6 +191,20 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
         self.config.policy = policy;
     }
 
+    /// Author an owner-governed retention checkpoint at this host's current
+    /// clock reading.
+    ///
+    /// This is explicit rather than part of [`tick`](Self::tick): retention is
+    /// an owner setting and may be refused while a live lease needs the event
+    /// prefix. A product host such as Distillery decides when maintenance runs.
+    pub async fn checkpoint(&self) -> Result<mesh::RetentionCheckpoint, HostError> {
+        let (_, checkpoint) = self
+            .synced
+            .checkpoint(&self.keypair, self.config.clock.now_ms())
+            .await?;
+        Ok(checkpoint)
+    }
+
     /// Tell the ring which persona master key authorized this device's mesh
     /// authoring key, so peers can turn its jobs into a transport address.
     ///

@@ -94,7 +94,12 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<(Otp, OtpUri), OtpUriError> {
     };
 
     let params = parse_query(query);
-    let get = |name: &str| params.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str());
+    let get = |name: &str| {
+        params
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+    };
 
     let secret = base32::decode(get("secret").ok_or(OtpUriError::MissingSecret)?)
         .map_err(OtpUriError::Secret)?;

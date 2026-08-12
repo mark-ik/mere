@@ -81,9 +81,9 @@ pub fn unwrap_private_epoch_material(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn wrap_private_epoch_material_round_trips() {

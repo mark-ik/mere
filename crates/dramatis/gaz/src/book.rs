@@ -286,11 +286,7 @@ mod tests {
         book.mark_contacted(&key(1), 100);
         book.mark_contacted(&key(2), 300);
 
-        let names: Vec<&str> = book
-            .recent(10)
-            .iter()
-            .map(|c| c.petname.as_str())
-            .collect();
+        let names: Vec<&str> = book.recent(10).iter().map(|c| c.petname.as_str()).collect();
         assert_eq!(names, vec!["Bob", "Alice"], "Carol was never contacted");
     }
 
@@ -328,7 +324,10 @@ mod tests {
             ),
         );
 
-        let kin: Vec<&str> = book.tier(ContactTier::Kin).map(|c| c.petname.as_str()).collect();
+        let kin: Vec<&str> = book
+            .tier(ContactTier::Kin)
+            .map(|c| c.petname.as_str())
+            .collect();
         assert_eq!(kin, vec!["Alice"]);
 
         let alarming: Vec<&str> = book.alarms().map(|c| c.petname.as_str()).collect();

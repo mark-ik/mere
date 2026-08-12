@@ -4,8 +4,8 @@
 //! Pre-flight checks: every grant spec and enrollment bundle is validated
 //! against wallet state before anything is written.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -13,7 +13,10 @@ use crate::wallet_store::*;
 
 use super::*;
 
-pub(crate) fn validate_remote_auth_spec(data_root: &Path, spec: &RemoteAuthGrantSpec) -> io::Result<()> {
+pub(crate) fn validate_remote_auth_spec(
+    data_root: &Path,
+    spec: &RemoteAuthGrantSpec,
+) -> io::Result<()> {
     for &persona in &spec.personas {
         if load_persona_wallet(data_root, persona)?.is_none() {
             return Err(io::Error::new(
@@ -147,9 +150,9 @@ pub(crate) fn validate_remote_auth_enrollment_bundle(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn issue_remote_auth_device_grant_rejects_unknown_persona_wallet() {
@@ -208,5 +211,4 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&root);
     }
-
 }

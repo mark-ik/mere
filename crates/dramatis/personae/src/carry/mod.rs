@@ -35,8 +35,13 @@ use crate::{
 pub const WALLET_SCHEMA_VERSION: u32 = 1;
 
 mod refs;
+mod scope;
 
 pub use refs::{CarryHashFn, CarryRef, CarryRefParseError};
+pub use scope::{
+    ACTION_IDENTITY_ACT, ACTION_PRIVATE_READ, ACTION_TRANSPORT_EGRESS,
+    DEVICE_AUTHORITY_DOMAIN, DEVICE_SCOPE_PATH, device_capability_scope,
+};
 
 // ── Identity-level records ───────────────────────────────────────────────────
 
@@ -441,8 +446,7 @@ mod tests {
     use super::*;
 
     // BLAKE3-256 of the empty input, from the BLAKE3 reference test vectors.
-    const EMPTY_BLAKE3: &str =
-        "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+    const EMPTY_BLAKE3: &str = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
 
     #[test]
     fn carry_ref_display_is_fn_colon_hex() {
@@ -469,7 +473,11 @@ mod tests {
     fn carry_ref_rejects_malformed_strings() {
         assert!("no-colon".parse::<CarryRef>().is_err());
         assert!("sha256:00".parse::<CarryRef>().is_err());
-        assert!(format!("blake3:{}", "0".repeat(63)).parse::<CarryRef>().is_err());
+        assert!(
+            format!("blake3:{}", "0".repeat(63))
+                .parse::<CarryRef>()
+                .is_err()
+        );
         assert!("blake3:zz".parse::<CarryRef>().is_err());
     }
 

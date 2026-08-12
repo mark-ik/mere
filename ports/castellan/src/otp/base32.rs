@@ -40,7 +40,10 @@ impl fmt::Display for Base32Error {
                 write!(f, "{n} base32 characters do not form whole bytes")
             }
             Base32Error::NonCanonical => {
-                write!(f, "trailing bits are not zero; the encoding is not canonical")
+                write!(
+                    f,
+                    "trailing bits are not zero; the encoding is not canonical"
+                )
             }
         }
     }

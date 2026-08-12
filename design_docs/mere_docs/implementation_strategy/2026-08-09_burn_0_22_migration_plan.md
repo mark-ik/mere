@@ -4,9 +4,9 @@
 
 **Status**: Release-gated. [`burn`](https://crates.io/crates/burn) and
 [`burn-remote`](https://crates.io/crates/burn-remote) are available only as
-`0.22.0-pre.1`; production migration waits for stable 0.22 unless Mark
-explicitly reopens that gate. An isolated prerelease compatibility probe is
-allowed.
+`0.22.0-pre.2` as of 2026-08-12; production migration waits for stable 0.22
+unless Mark explicitly reopens that gate. An isolated prerelease compatibility
+probe is allowed.
 
 **Related**:
 [`../research/2026-07-04_burn_utilization_brief.md`](../research/2026-07-04_burn_utilization_brief.md),
@@ -28,16 +28,14 @@ The live workspace has four direct Burn dependents:
 
 - `esp`: the production BERT, vector-kernel, and llama-family model boundary;
 - `quint`: the production field/tensor lowering boundary;
-- `mere-embed`: an optional dependency used only to name a backend in an
-  integration test; and
-- `mere-eidetic-search`: a dev dependency used by the recall example to name
-  CPU/WGPU backend types.
+- ~~`mere-embed`~~: **removed 2026-08-10 (B1)**; and
+- ~~`mere-eidetic-search`~~: **removed 2026-08-10 (B1)**.
 
 The older docs' `aether` and Sibylla/Vates inventory is stale after crate and
 ESP consolidation. The actual migration has two production roots, plus two
 test/example leaks.
 
-Burn 0.22.0-pre.1 declares Rust 1.95. The checkout currently uses Rust 1.97.1,
+Burn 0.22.0-pre.2 declares Rust 1.95. The checkout currently uses Rust 1.97.1,
 so MSRV is not the active gate. Release stability and backend/device API churn
 are.
 
@@ -78,6 +76,15 @@ When stable 0.22 appears:
    tests, and representative performance commands as the baseline.
 5. Capture `cargo tree` for every direct dependent and the default ESP tree.
 
+Items 4-5 were captured **ahead of the release** on 2026-08-10, so nothing has
+to be reconstructed once APIs have moved:
+[Burn 0.21 baseline](../testing/2026-08-10_burn_0_21_baseline.md). It also
+records what could *not* be run — the model-backed receipts, because
+`MERE_MINILM_DIR` is unset on this machine — so the 0.22 comparison does not
+mistake a never-green receipt for a regression. **The migration needs the
+MiniLM and TinyLlama checkpoints present**: without them the suites prove
+loading and shape, not arithmetic.
+
 Stop if stable 0.22 removes a required browser or existing-device capability.
 That becomes an upstream/fork decision before any manifest-wide bump.
 
@@ -101,6 +108,19 @@ dependency count.
 
 Done when `cargo metadata` shows only intentional production Burn boundaries,
 or each remaining leaf dependency has a concrete consumer justification.
+
+**Done 2026-08-10.** `cargo metadata` now shows two direct dependents, both
+production: `esp` and `quint`. There were **three** consumers naming a Burn
+type, not two — the third was `mere-embed`'s own lib doctest, which compiles
+under `cargo test` and held the dependency open just as firmly. Replaced with
+`esp::embed::bert::{load_cpu, load_wgpu, from_bytes_cpu}` returning
+`Box<dyn EmbeddingProvider>`, plus `impl EmbeddingProvider for Box<dyn
+EmbeddingProvider>` — without which a boxed provider cannot satisfy a generic
+bound and a runtime backend choice still needs a Burn type. `BertEmbeddingProvider<B>`
+stays public and justified: the constructors take the backend's *default*
+device, and a host that must register an existing `wgpu` queue needs the generic
+API. Full detail and the 0.21 numbers are in the
+[baseline receipt](../testing/2026-08-10_burn_0_21_baseline.md).
 
 ---
 
@@ -171,14 +191,18 @@ requirement must change. They contain no independent Burn ownership.
 
 ## 8. Optional prerelease compatibility probe
 
-While only `0.22.0-pre.1` exists, a detached branch/worktree may answer bounded
-questions:
+While only 0.22 prereleases exist, a detached branch/worktree may answer
+bounded questions against the newest prerelease:
 
 - how much ESP and Quint source changes;
 - whether WGPU and existing-device initialization still work;
 - whether `burn-remote` can mount its iroh protocol on an application-owned
   Router; and
-- how `RemoteTicket` and the authorizer callback map to a mesh lease reference.
+- how the authorizer callback maps to a mesh lease reference. (Answered on
+  2026-08-10 without needing the probe, by reading the 0.22.0-pre.1 source:
+  see [lease-bound remote sessions](../technical_architecture/2026-08-10_lease_bound_remote_sessions.md).
+  Note that **`RemoteTicket` does not exist** — this plan and the host lanes
+  plan both carried that name in error.)
 
 This probe may use a narrow temporary patch. It must not merge into main,
 publish crates, claim stable compatibility, or implement a second scheduler.
@@ -225,3 +249,7 @@ Stop on any of these conditions:
   surface is ESP plus Quint with two test/example leaks. Separated stable
   migration, accidental-fan-out cleanup, and an optional disposable prerelease
   probe from the later Burn Remote adapter.
+- **2026-08-12**: registry recheck found Burn and Burn Remote
+  `0.22.0-pre.2`, still with no stable 0.22. The release gate is unchanged.
+  Remote API claims elsewhere in the lane remain explicitly sourced to pre.1
+  and need a source recheck against the chosen migration version.

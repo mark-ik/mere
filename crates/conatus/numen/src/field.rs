@@ -130,8 +130,7 @@ impl FieldExtent {
                 max_x,
                 max_y,
             } => {
-                let inside =
-                    (x - min_x).min(max_x - x).min(y - min_y).min(max_y - y);
+                let inside = (x - min_x).min(max_x - x).min(y - min_y).min(max_y - y);
                 Some(inside)
             }
             FieldExtent::Polygon { points } => {

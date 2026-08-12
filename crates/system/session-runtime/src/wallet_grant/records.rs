@@ -4,8 +4,8 @@
 //! Upserts into the roster, the identity wallet's grant index, and the local
 //! device record.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
@@ -40,7 +40,11 @@ pub(crate) fn upsert_remote_auth_device_record(
     });
 }
 
-pub(crate) fn upsert_grant_index(wallet: &mut IdentityWalletManifest, device_id: DeviceId, grant_ref: CarryRef) {
+pub(crate) fn upsert_grant_index(
+    wallet: &mut IdentityWalletManifest,
+    device_id: DeviceId,
+    grant_ref: CarryRef,
+) {
     if let Some(existing) = wallet
         .grant_index
         .iter_mut()

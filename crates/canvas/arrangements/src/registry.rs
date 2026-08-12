@@ -227,6 +227,9 @@ where
     let _ = registry.register(Arc::new(BuiltinProvider::<super::Radial<N>, N>::new(
         radial_capability,
     )));
+    let _ = registry.register(Arc::new(BuiltinProvider::<super::Stack, N>::new(
+        stack_capability,
+    )));
     let _ = registry.register(Arc::new(BuiltinProvider::<super::Phyllotaxis, N>::new(
         phyllotaxis_capability,
     )));
@@ -278,6 +281,21 @@ fn radial_capability() -> LayoutCapability {
         recommended_max_node_count: Some(1_000),
         provenance: LayoutProvenance::Builtin,
         capability_tags: tags(&["radial", "hierarchical", "focus", "positional"]),
+    }
+}
+
+fn stack_capability() -> LayoutCapability {
+    LayoutCapability {
+        id: "graph_layout:stack".into(),
+        display_name: "Stack".into(),
+        description: Some("Directed topology arranged into readable layers.".into()),
+        category: LayoutCategory::Positional,
+        is_deterministic: true,
+        is_topology_sensitive: true,
+        supports_3d: false,
+        recommended_max_node_count: Some(2_000),
+        provenance: LayoutProvenance::Builtin,
+        capability_tags: tags(&["directed", "layered", "topology", "positional"]),
     }
 }
 

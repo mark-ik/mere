@@ -31,11 +31,7 @@ impl GpuPresenter {
         .await?;
         // The one browser-specific line: wgpu takes an `HtmlCanvasElement` as a
         // surface target the same way it takes a winit window.
-        let surface = core.create_surface(
-            wgpu::SurfaceTarget::Canvas(canvas),
-            width,
-            height,
-        )?;
+        let surface = core.create_surface(wgpu::SurfaceTarget::Canvas(canvas), width, height)?;
         let blitter = wgpu::util::TextureBlitter::new(core.device(), surface.format());
         Ok(Self {
             core,

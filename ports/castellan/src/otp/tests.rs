@@ -85,7 +85,10 @@ fn seconds_remaining_counts_down_within_the_step() {
     assert_eq!(otp.seconds_remaining_at(29), Some(1));
     assert_eq!(otp.seconds_remaining_at(30), Some(30));
     // Counter-based codes do not expire, so there is nothing to count down.
-    assert_eq!(Otp::hotp(RFC4226_SECRET.to_vec(), 0).seconds_remaining_at(0), None);
+    assert_eq!(
+        Otp::hotp(RFC4226_SECRET.to_vec(), 0).seconds_remaining_at(0),
+        None
+    );
 }
 
 #[test]
@@ -129,7 +132,9 @@ fn an_empty_secret_is_refused_rather_than_producing_a_code() {
 #[test]
 fn a_zero_period_is_refused() {
     assert_eq!(
-        Otp::totp(RFC4226_SECRET.to_vec()).with_period(0).unwrap_err(),
+        Otp::totp(RFC4226_SECRET.to_vec())
+            .with_period(0)
+            .unwrap_err(),
         OtpError::ZeroPeriod
     );
 }
@@ -191,8 +196,7 @@ fn defaults_apply_when_optional_parameters_are_absent() {
 
 #[test]
 fn an_hotp_uri_carries_its_counter() {
-    let (otp, _) =
-        parse_otpauth_uri("otpauth://hotp/alice?secret=MZXW6YTBOI&counter=7").unwrap();
+    let (otp, _) = parse_otpauth_uri("otpauth://hotp/alice?secret=MZXW6YTBOI&counter=7").unwrap();
     assert_eq!(otp.kind(), OtpKind::Hotp { counter: 7 });
 }
 
@@ -245,7 +249,10 @@ fn malformed_uris_are_refused_with_a_reason() {
     );
     assert!(matches!(
         parse_otpauth_uri("otpauth://totp/alice?secret=MZXW6YTBOI&digits=many").unwrap_err(),
-        OtpUriError::InvalidNumber { parameter: "digits", .. }
+        OtpUriError::InvalidNumber {
+            parameter: "digits",
+            ..
+        }
     ));
     assert!(matches!(
         parse_otpauth_uri("otpauth://totp/alice?secret=!!!").unwrap_err(),
@@ -258,10 +265,9 @@ fn malformed_uris_are_refused_with_a_reason() {
 #[test]
 fn a_parsed_uri_reproduces_the_rfc_vector() {
     // base32("12345678901234567890") = GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ
-    let (otp, _) = parse_otpauth_uri(
-        "otpauth://totp/rfc?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8",
-    )
-    .unwrap();
+    let (otp, _) =
+        parse_otpauth_uri("otpauth://totp/rfc?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8")
+            .unwrap();
     assert_eq!(otp.code_at_unix_time(59).unwrap(), "94287082");
     assert_eq!(otp.code_at_unix_time(1_234_567_890).unwrap(), "89005924");
 }

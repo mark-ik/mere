@@ -964,9 +964,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     set_text(&document, "detail-title", &model.selection);
     set_text(&document, "detail-address", &model.detail_address);
     set_text(&document, "action-status", &host.action_status);
-    if !host.action_draft_semantics_ready
-        || model.action_draft != host.rendered_action_draft
-    {
+    if !host.action_draft_semantics_ready || model.action_draft != host.rendered_action_draft {
         update_action_draft_semantics(&document, model.action_draft.as_ref())?;
         host.rendered_action_draft = model.action_draft.clone();
         host.action_draft_semantics_ready = true;

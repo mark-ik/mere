@@ -100,7 +100,11 @@ mod tests {
         assert_eq!(endpoint.last_used_ms, Some(100));
 
         endpoint.mark_used(50);
-        assert_eq!(endpoint.last_used_ms, Some(100), "a late event must not rewind");
+        assert_eq!(
+            endpoint.last_used_ms,
+            Some(100),
+            "a late event must not rewind"
+        );
 
         endpoint.mark_used(150);
         assert_eq!(endpoint.last_used_ms, Some(150));

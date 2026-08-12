@@ -347,7 +347,10 @@ mod tests {
         let personal = IdentityVault::open(&storage, &ProfileId("personal".into())).unwrap();
         assert_ne!(
             work.derive_keypair(b"woodshed.session").unwrap().to_seed(),
-            personal.derive_keypair(b"woodshed.session").unwrap().to_seed()
+            personal
+                .derive_keypair(b"woodshed.session")
+                .unwrap()
+                .to_seed()
         );
     }
 }

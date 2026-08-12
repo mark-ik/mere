@@ -117,7 +117,11 @@ async fn a_payload_larger_than_one_noise_message_survives_the_split() {
     stream.flush().await.unwrap();
 
     let received = server.await.unwrap();
-    assert_eq!(received.len(), size, "every byte crossed the frame boundary");
+    assert_eq!(
+        received.len(),
+        size,
+        "every byte crossed the frame boundary"
+    );
     assert_eq!(received, payload, "and in order, unaltered");
 }
 
@@ -178,7 +182,7 @@ async fn tampered_ciphertext_is_refused_rather_than_delivered() {
     let _ = stream.flush().await;
 
     match server.await.unwrap() {
-        Err(_) => {},
+        Err(_) => {}
         Ok(received) => assert_ne!(
             received, payload,
             "tampered ciphertext must never decrypt to the original plaintext"
@@ -205,7 +209,9 @@ async fn a_listener_hands_out_the_alpn_it_was_asked_for() {
     let dial_wanted = tokio::spawn(async move {
         // Order the dials so the unwanted one lands first.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        connect_to(&client_keys, addr, &wanted).await.map(|(s, _)| s)
+        connect_to(&client_keys, addr, &wanted)
+            .await
+            .map(|(s, _)| s)
     });
 
     let accepted = listener
@@ -274,10 +280,9 @@ async fn noise_over_an_iroh_stream_layers_a_second_identity() {
                 .connect(bob_carrier_id, alpn.clone())
                 .await
                 .expect("iroh connect");
-            let (mut secured, peer) =
-                secure_initiator(&alice_app, carrier_stream, &alpn)
-                    .await
-                    .expect("noise handshake over iroh");
+            let (mut secured, peer) = secure_initiator(&alice_app, carrier_stream, &alpn)
+                .await
+                .expect("noise handshake over iroh");
 
             secured.write_all(b"inside two envelopes").await.unwrap();
             secured.flush().await.unwrap();
@@ -296,10 +301,9 @@ async fn noise_over_an_iroh_stream_layers_a_second_identity() {
     );
     assert_eq!(accepted.ingress.transport, TransportKind::P2panda);
 
-    let (mut secured, noise_peer, inner_alpn) =
-        secure_responder(&bob_app, accepted.into_stream())
-            .await
-            .expect("noise handshake over iroh");
+    let (mut secured, noise_peer, inner_alpn) = secure_responder(&bob_app, accepted.into_stream())
+        .await
+        .expect("noise handshake over iroh");
 
     // And the session layer reports a different one, which is the point.
     assert_eq!(

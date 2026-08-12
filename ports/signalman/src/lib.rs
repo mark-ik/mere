@@ -1,0 +1,576 @@
+#![forbid(unsafe_code)]
+//! Signalman's Persona-backed Retinue station adapter.
+//!
+//! This port is the only layer here that knows both Castellan/Personae and
+//! Retinue. It derives a station-scoped Reticulum identity, binds its signing
+//! key to Castellan's narrow expiring RemoteAuth grant, and opens Retinue only
+//! behind a lease that stops the running station at expiry. Retinue does not
+//! know where the credential came from and never creates a local account file.
+
+use std::fmt;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use castellan::reticulum::ReticulumStationMaterial;
+use castellan::reticulum::grant::{
+    SitedStationGrant, SitedStationGrantError, SitedStationGrantRequest,
+};
+use personae::{IdentityError, IdentityProvider};
+use postilion::{Event, Sent, Station, StationConfig};
+use retinue::identity::{Identity, PrivateIdentity};
+use session_runtime::{DeviceId, RemoteAuthRevocationOutcome};
+use tokio::sync::Mutex;
+use zeroize::Zeroize;
+
+mod control;
+mod head;
+mod lease;
+
+pub use control::{
+    SITED_STATION_CONTROL_ACK_TITLE, SITED_STATION_CONTROL_TITLE, SitedStationControl,
+    SitedStationControlAck, SitedStationControlError, SitedStationControlReceiver,
+    SitedStationControlResult, SitedStationControlSigner,
+};
+pub use head::{RunningSitedStationHead, SitedStationHead, SitedStationHeadError};
+pub use lease::{SitedStationLease, SitedStationLeaseError};
+
+/// A Reticulum station credential derived for one sited device.
+///
+/// The underlying identity remains private. Callers can inspect its public
+/// form and construct a station configuration, but cannot ask this type to
+/// serialize or persist the secret.
+#[derive(Clone, Debug)]
+pub struct SitedStationCredential {
+    identity: PrivateIdentity,
+    issuer_public_key: [u8; 32],
+    control_signer: SitedStationControlSigner,
+}
+
+impl SitedStationCredential {
+    fn derive(provider: &dyn IdentityProvider, device_id: DeviceId) -> Result<Self, IdentityError> {
+        let material = ReticulumStationMaterial::derive(provider, device_id.as_uuid().as_bytes())?;
+        let mut secret = material.secret_bytes();
+        let identity = PrivateIdentity::from_secret_bytes(&secret);
+        secret.zeroize();
+        Ok(Self {
+            identity,
+            issuer_public_key: provider.master_public_key().to_bytes(),
+            control_signer: SitedStationControlSigner::derive(provider, device_id)?,
+        })
+    }
+
+    /// Derive a station credential from its durable host-side device id.
+    ///
+    /// The id is persisted only in the host's wallet grant and roster. It is
+    /// not a radio location or a device-local account file.
+    pub fn derive_for_device(
+        provider: &dyn IdentityProvider,
+        device_id: DeviceId,
+    ) -> Result<Self, IdentityError> {
+        Self::derive(provider, device_id)
+    }
+
+    /// The public Reticulum identity the station will announce.
+    pub fn public_identity(&self) -> &Identity {
+        self.identity.public()
+    }
+
+    /// The host-only signer for this station's grant and revoke controls.
+    ///
+    /// The signer is a device-specific Personae child. Its public attestation
+    /// travels in each control frame, while this credential keeps the signing
+    /// key inside the operator boundary.
+    pub fn control_signer(&self) -> &SitedStationControlSigner {
+        &self.control_signer
+    }
+
+    fn station_config(&self, port: impl Into<String>, name: impl Into<String>) -> StationConfig {
+        StationConfig::new(port, name, self.identity.clone())
+    }
+
+    /// Issue the only grant shape an unattended station can receive.
+    ///
+    /// The host wallet root must belong to the same Persona that derived this
+    /// credential. The resulting grant carries exactly `transport.egress`, no
+    /// personas, no private epochs, and a mandatory hard expiry.
+    pub fn issue_remote_auth_grant(
+        &self,
+        data_root: &Path,
+        device_id: DeviceId,
+        label: impl Into<String>,
+        issued_at_ms: u64,
+        expires_at_ms: u64,
+    ) -> Result<SitedStationGrant, SitedStationGrantError> {
+        let request = SitedStationGrantRequest::new(
+            device_id,
+            *self.public_identity().ed25519_bytes(),
+            label,
+            issued_at_ms,
+            expires_at_ms,
+        )?;
+        SitedStationGrant::issue(data_root, self.issuer_public_key, request)
+    }
+
+    /// Acquire a host-side lease for this station's current active grant.
+    pub fn acquire_lease(
+        &self,
+        data_root: &Path,
+        device_id: DeviceId,
+        now_ms: u64,
+    ) -> Result<SitedStationLease, SitedStationLeaseError> {
+        SitedStationLease::acquire(
+            data_root,
+            device_id,
+            *self.public_identity().ed25519_bytes(),
+            now_ms,
+        )
+    }
+
+    /// Open a Retinue station under a fail-closed host-side lease.
+    ///
+    /// The running port checks the grant before every public station action and
+    /// owns a deadline watchdog. A replacement grant can extend the live
+    /// station only when it is written before the current deadline; a failed
+    /// check drops the Retinue station and aborts its radio tasks.
+    pub async fn open_station(
+        &self,
+        data_root: &Path,
+        device_id: DeviceId,
+        port: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Result<SitedStation, SitedStationError> {
+        let now_ms = unix_time_ms()?;
+        let lease = self.acquire_lease(data_root, device_id, now_ms)?;
+        let station = Station::open(self.station_config(port, name))
+            .await
+            .map_err(SitedStationError::Station)?;
+        let after_open_ms = unix_time_ms()?;
+        lease.authorize_at(after_open_ms)?;
+        let usable_at_ms = unix_time_ms()?;
+        lease.accepted_expiry_at(usable_at_ms)?;
+        Ok(SitedStation::new(station, lease))
+    }
+}
+
+/// A running Retinue station whose public operations are lease-gated.
+///
+/// Its underlying `postilion::Station` stays private so callers cannot retain
+/// a bypass around expiry or revocation checks.
+pub struct SitedStation {
+    station: Arc<Mutex<Option<Station>>>,
+    lease: SitedStationLease,
+    watchdog: tokio::task::JoinHandle<()>,
+}
+
+impl SitedStation {
+    fn new(station: Station, lease: SitedStationLease) -> Self {
+        let station = Arc::new(Mutex::new(Some(station)));
+        let watchdog = tokio::spawn(watch_station_lease(lease.clone(), Arc::clone(&station)));
+        Self {
+            station,
+            lease,
+            watchdog,
+        }
+    }
+
+    /// The active authorization lease for status rendering.
+    pub fn lease(&self) -> &SitedStationLease {
+        &self.lease
+    }
+
+    /// Recheck the host grant before announcing the station.
+    pub async fn announce(&self) -> Result<(), SitedStationError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        station
+            .as_ref()
+            .ok_or(SitedStationError::Stopped)?
+            .announce();
+        Ok(())
+    }
+
+    /// Send one message, refusing to begin after expiry and interrupting the
+    /// operation at the current lease deadline.
+    pub async fn send_text(
+        &self,
+        prefix: &str,
+        body: &str,
+        patience: Duration,
+    ) -> Result<Sent, SitedStationError> {
+        let (now_ms, expires_at_ms) = self.authorize_now()?;
+        let window = remaining_window(now_ms, expires_at_ms);
+        let result = {
+            let station = self.station.lock().await;
+            let station = station.as_ref().ok_or(SitedStationError::Stopped)?;
+            tokio::time::timeout(window, station.send_text(prefix, body, patience)).await
+        };
+        match result {
+            Ok(result) => result.map_err(SitedStationError::Station),
+            Err(_) => self.stop_after_deadline().await,
+        }
+    }
+
+    /// Carry one signed grant renewal or revoke frame to an announced station.
+    ///
+    /// The destination is the full address or a unique prefix from a prior
+    /// [`Event::Message`]. The caller retains retry policy and records the
+    /// returned station-signed acknowledgement separately.
+    pub async fn send_control(
+        &self,
+        prefix: &str,
+        control: &SitedStationControl,
+        patience: Duration,
+    ) -> Result<Sent, SitedStationError> {
+        self.send_control_bytes(
+            prefix,
+            SITED_STATION_CONTROL_TITLE,
+            &control.to_bytes()?,
+            patience,
+        )
+        .await
+    }
+
+    /// Carry a station-signed acknowledgement back to the command sender.
+    pub async fn send_control_ack(
+        &self,
+        prefix: &str,
+        acknowledgement: &SitedStationControlAck,
+        patience: Duration,
+    ) -> Result<Sent, SitedStationError> {
+        self.send_control_bytes(
+            prefix,
+            SITED_STATION_CONTROL_ACK_TITLE,
+            &acknowledgement.to_bytes()?,
+            patience,
+        )
+        .await
+    }
+
+    /// Wait for the next event, returning instead when the active deadline
+    /// arrives so the caller cannot hold the station past expiry.
+    pub async fn next_event(&self) -> Result<Event, SitedStationError> {
+        let (now_ms, expires_at_ms) = self.authorize_now()?;
+        let window = remaining_window(now_ms, expires_at_ms);
+        let result = {
+            let mut station = self.station.lock().await;
+            let station = station.as_mut().ok_or(SitedStationError::Stopped)?;
+            tokio::time::timeout(window, station.next_event()).await
+        };
+        match result {
+            Ok(Some(event)) => Ok(event),
+            Ok(None) => Err(SitedStationError::Stopped),
+            Err(_) => self.stop_after_deadline().await,
+        }
+    }
+
+    /// Deliberately stop the station, for operator-initiated revocation or
+    /// shutdown. A new grant still needs a new station lease to restart it.
+    pub async fn stop(&self) {
+        self.lease.close();
+        self.watchdog.abort();
+        self.station.lock().await.take();
+    }
+
+    /// Revoke this station at the host, then drop the running Retinue station.
+    ///
+    /// The host stop is immediate. Sending that revocation across a remote
+    /// station's radio link is deliberately not implied by this local action.
+    pub async fn revoke(&self) -> Result<RemoteAuthRevocationOutcome, SitedStationError> {
+        let outcome = self.lease.revoke()?;
+        self.watchdog.abort();
+        self.station.lock().await.take();
+        Ok(outcome)
+    }
+
+    fn authorize_now(&self) -> Result<(u64, u64), SitedStationError> {
+        let checked_at_ms = unix_time_ms()?;
+        self.lease.authorize_at(checked_at_ms)?;
+        let usable_at_ms = unix_time_ms()?;
+        let expires_at_ms = self.lease.accepted_expiry_at(usable_at_ms)?;
+        Ok((usable_at_ms, expires_at_ms))
+    }
+
+    async fn stop_after_deadline<T>(&self) -> Result<T, SitedStationError> {
+        let now_ms = unix_time_ms()?;
+        match self.lease.authorize_at(now_ms) {
+            Ok(_) => Err(SitedStationError::OperationInterrupted),
+            Err(error) => {
+                self.station.lock().await.take();
+                Err(error.into())
+            }
+        }
+    }
+
+    async fn send_control_bytes(
+        &self,
+        prefix: &str,
+        title: &[u8],
+        body: &[u8],
+        patience: Duration,
+    ) -> Result<Sent, SitedStationError> {
+        let (now_ms, expires_at_ms) = self.authorize_now()?;
+        let window = remaining_window(now_ms, expires_at_ms);
+        let result = {
+            let station = self.station.lock().await;
+            let station = station.as_ref().ok_or(SitedStationError::Stopped)?;
+            tokio::time::timeout(window, station.send_bytes(prefix, title, body, patience)).await
+        };
+        match result {
+            Ok(result) => result.map_err(SitedStationError::Station),
+            Err(_) => self.stop_after_deadline().await,
+        }
+    }
+}
+
+impl Drop for SitedStation {
+    fn drop(&mut self) {
+        self.watchdog.abort();
+    }
+}
+
+/// Why a lease-gated station could not run an operation.
+#[derive(Debug)]
+pub enum SitedStationError {
+    /// The host clock could not be read.
+    Clock(std::time::SystemTimeError),
+    /// The current station lease denied the action.
+    Lease(SitedStationLeaseError),
+    /// A station-control frame could not be encoded.
+    Control(SitedStationControlError),
+    /// Retinue could not open or use its radio station.
+    Station(postilion::Error),
+    /// The station had already been stopped.
+    Stopped,
+    /// The station was renewed while a timed operation was being cancelled.
+    OperationInterrupted,
+}
+
+impl From<std::time::SystemTimeError> for SitedStationError {
+    fn from(error: std::time::SystemTimeError) -> Self {
+        Self::Clock(error)
+    }
+}
+
+impl From<SitedStationLeaseError> for SitedStationError {
+    fn from(error: SitedStationLeaseError) -> Self {
+        Self::Lease(error)
+    }
+}
+
+impl From<SitedStationControlError> for SitedStationError {
+    fn from(error: SitedStationControlError) -> Self {
+        Self::Control(error)
+    }
+}
+
+impl fmt::Display for SitedStationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clock(error) => write!(f, "could not read the station clock: {error}"),
+            Self::Lease(error) => write!(f, "station lease denied the operation: {error}"),
+            Self::Control(error) => write!(f, "station control frame failed: {error}"),
+            Self::Station(error) => write!(f, "Retinue station operation failed: {error}"),
+            Self::Stopped => f.write_str("sited station is stopped"),
+            Self::OperationInterrupted => f.write_str(
+                "station operation was interrupted at its old deadline after a grant renewal; retry it",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SitedStationError {}
+
+fn unix_time_ms() -> Result<u64, std::time::SystemTimeError> {
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH)?;
+    Ok(u64::try_from(duration.as_millis()).expect("unix millisecond count fits u64"))
+}
+
+fn remaining_window(now_ms: u64, expires_at_ms: u64) -> Duration {
+    Duration::from_millis(expires_at_ms.saturating_sub(now_ms))
+}
+
+async fn watch_station_lease(lease: SitedStationLease, station: Arc<Mutex<Option<Station>>>) {
+    loop {
+        let now_ms = match unix_time_ms() {
+            Ok(now_ms) => now_ms,
+            Err(_) => {
+                lease.close();
+                station.lock().await.take();
+                return;
+            }
+        };
+        let expires_at_ms = lease.expires_at_ms();
+        let window = remaining_window(now_ms, expires_at_ms);
+        tokio::time::sleep(window).await;
+
+        let now_ms = match unix_time_ms() {
+            Ok(now_ms) => now_ms,
+            Err(_) => {
+                lease.close();
+                station.lock().await.take();
+                return;
+            }
+        };
+        if lease.authorize_at(now_ms).is_err() {
+            station.lock().await.take();
+            return;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use personae::{InMemoryProvider, PersonaId};
+    use session_runtime::{DeviceId, ensure_wallet_state};
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn one_persona_and_station_scope_keep_the_same_reticulum_address() {
+        let provider = InMemoryProvider::from_seed([0x44; 32]);
+        let device_id = DeviceId::new();
+        let first = SitedStationCredential::derive_for_device(&provider, device_id).unwrap();
+        let second = SitedStationCredential::derive_for_device(&provider, device_id).unwrap();
+
+        assert_eq!(
+            first.public_identity().hash(),
+            second.public_identity().hash()
+        );
+    }
+
+    #[test]
+    fn station_scopes_cannot_share_a_reticulum_address_accidentally() {
+        let provider = InMemoryProvider::from_seed([0x44; 32]);
+        let first = SitedStationCredential::derive_for_device(&provider, DeviceId::new()).unwrap();
+        let second = SitedStationCredential::derive_for_device(&provider, DeviceId::new()).unwrap();
+
+        assert_ne!(
+            first.public_identity().hash(),
+            second.public_identity().hash()
+        );
+    }
+
+    #[test]
+    fn station_config_is_a_typed_injection_not_an_identity_path() {
+        let provider = InMemoryProvider::from_seed([0x44; 32]);
+        let credential =
+            SitedStationCredential::derive_for_device(&provider, DeviceId::new()).unwrap();
+        let config = credential.station_config("COM7", "Ridge north");
+
+        assert_eq!(config.port, "COM7");
+        assert_eq!(config.name, "Ridge north");
+        assert_eq!(
+            config.identity.public().hash(),
+            credential.public_identity().hash()
+        );
+    }
+
+    #[test]
+    fn station_lease_is_egress_only_renews_before_expiry_and_then_fails_closed() {
+        let root = tempdir().unwrap();
+        let seed = ensure_wallet_state(root.path(), PersonaId::new(), "Station host").unwrap();
+        let provider = InMemoryProvider::from_seed(seed);
+        let device_id = DeviceId::new();
+        let credential = SitedStationCredential::derive_for_device(&provider, device_id).unwrap();
+
+        let grant = credential
+            .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 100, 200)
+            .unwrap();
+        assert_eq!(grant.signed().payload.personas, Vec::new());
+        assert_eq!(grant.signed().payload.scopes, ["transport.egress"]);
+        assert_eq!(grant.signed().payload.attenuations, ["no-subdelegation"]);
+        assert!(grant.signed().payload.wrapped_private_epochs.is_empty());
+
+        let lease = credential
+            .acquire_lease(root.path(), device_id, 199)
+            .unwrap();
+        assert_eq!(lease.expires_at_ms(), 200);
+        credential
+            .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 199, 300)
+            .unwrap();
+        assert_eq!(lease.authorize_at(199).unwrap(), 300);
+        assert_eq!(lease.authorize_at(200).unwrap(), 300);
+
+        let expiry = lease.authorize_at(300).unwrap_err();
+        assert!(matches!(
+            expiry,
+            SitedStationLeaseError::DeadlineElapsed {
+                expires_at_ms: 300,
+                ..
+            }
+        ));
+        assert!(lease.is_closed());
+
+        credential
+            .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 300, 400)
+            .unwrap();
+        let closed = lease.authorize_at(301).unwrap_err();
+        assert!(matches!(closed, SitedStationLeaseError::Closed { .. }));
+    }
+
+    #[test]
+    fn station_lease_fails_closed_when_the_host_revokes_the_device() {
+        let root = tempdir().unwrap();
+        let seed = ensure_wallet_state(root.path(), PersonaId::new(), "Station host").unwrap();
+        let provider = InMemoryProvider::from_seed(seed);
+        let device_id = DeviceId::new();
+        let credential = SitedStationCredential::derive_for_device(&provider, device_id).unwrap();
+        credential
+            .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 100, 200)
+            .unwrap();
+        let lease = credential
+            .acquire_lease(root.path(), device_id, 199)
+            .unwrap();
+
+        let outcome = lease.revoke().unwrap();
+        assert_eq!(outcome.device_id, device_id);
+        let revoked = lease.authorize_at(199).unwrap_err();
+        assert!(matches!(revoked, SitedStationLeaseError::Closed { .. }));
+        assert!(lease.is_closed());
+    }
+
+    #[test]
+    fn a_replacement_written_after_the_last_accepted_deadline_cannot_revive_a_lease() {
+        let root = tempdir().unwrap();
+        let seed = ensure_wallet_state(root.path(), PersonaId::new(), "Station host").unwrap();
+        let provider = InMemoryProvider::from_seed(seed);
+        let device_id = DeviceId::new();
+        let credential = SitedStationCredential::derive_for_device(&provider, device_id).unwrap();
+        credential
+            .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 100, 200)
+            .unwrap();
+        let lease = credential
+            .acquire_lease(root.path(), device_id, 199)
+            .unwrap();
+
+        credential
+            .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 200, 300)
+            .unwrap();
+        let expired = lease.authorize_at(200).unwrap_err();
+
+        assert!(matches!(
+            expired,
+            SitedStationLeaseError::DeadlineElapsed {
+                expires_at_ms: 200,
+                ..
+            }
+        ));
+        assert!(lease.is_closed());
+    }
+
+    #[test]
+    fn commissioning_refuses_a_credential_from_another_persona() {
+        let root = tempdir().unwrap();
+        ensure_wallet_state(root.path(), PersonaId::new(), "Station host").unwrap();
+        let foreign_provider = InMemoryProvider::from_seed([0x77; 32]);
+        let credential =
+            SitedStationCredential::derive_for_device(&foreign_provider, DeviceId::new()).unwrap();
+
+        let error = credential
+            .issue_remote_auth_grant(root.path(), DeviceId::new(), "Ridge north", 100, 200)
+            .unwrap_err();
+        assert!(matches!(error, SitedStationGrantError::IssuerMismatch));
+    }
+}

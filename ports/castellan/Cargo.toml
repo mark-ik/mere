@@ -9,9 +9,21 @@ readme = "README.md"
 keywords = ["credentials", "identity", "vault", "agent", "persona"]
 categories = ["authentication"]
 
+[features]
+# The SitedStationGrant adapter uses Mere's host-side wallet store to issue and
+# check the existing signed RemoteAuth envelope. Keep the credential and OTP
+# library halves usable without that application-storage dependency.
+station-grants = ["dep:session-runtime"]
+
 [dependencies]
 # HMAC + the three hashes RFC 6238 allows. RustCrypto, and sha2 is already a
 # workspace pin, so this adds one lineage rather than three.
 hmac = "0.13"
+personae.workspace = true
 sha1 = "0.11"
 sha2.workspace = true
+session-runtime = { workspace = true, optional = true }
+zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"

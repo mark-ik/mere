@@ -7,6 +7,59 @@
 [projection proofs plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md) (P5),
 retinue's `2026-08-09_signalman_cambium_desktop_scope.md`.
 
+**Execution note, 2026-08-11:** the station-identity origin boundary below is
+implemented, deliberately short of commissioning and grant distribution.
+`postilion::StationConfig` now accepts a caller-supplied typed Reticulum
+identity and has no identity path, loader, or minting fallback. Castellan
+derives separate X25519 and Ed25519 material from domain-separated Personae
+children, and the new private `ports/signalman` adapter is the first consumer
+that turns it into a Retinue identity. Retinue itself does not depend on Mere,
+Castellan, or Personae.
+
+**Execution note, 2026-08-11, follow-on:** Castellan now wraps the current
+signed `DeviceGrantPayload` in a narrow `SitedStationGrant`: the Reticulum
+Ed25519 half must match the derived credential and the unlocked host Persona;
+the payload has exactly `transport.egress` and `no-subdelegation`, no personas
+or private epochs, and a mandatory expiry. Signalman only builds its public
+`StationConfig` after host-side signature, roster, revocation, key-binding, and
+strict expiry checks (`now >= expiry` refuses). A revoked id is refused before
+the generic issuer can write a replacement grant. Distribution or refresh to a
+remote station, device-side and mesh-wide revocation enforcement, the host-side
+placement record, and P5's geographic adapter remain open seams.
+
+**Execution note, 2026-08-11, live lease:** Signalman's private port now owns
+the running `postilion::Station`, rather than exposing an unchecked
+`StationConfig`. It reloads the host grant before each public station action
+and drops the station at its accepted deadline. A renewal must carry a strictly
+later expiry *and* be accepted by the live lease before the old deadline; a
+late replacement cannot resurrect it. Local host revocation closes and drops
+the station immediately. Distributing a renewal or stop signal to a remote
+headless station remains carrier work, not an implied property of the local
+wallet store.
+
+**Execution note, 2026-08-12, control carrier:** Signalman's port now defines
+a bounded control body over ordinary authenticated LXMF delivery: a
+Persona-attested, device-specific control key signs grant/renewal and revoke
+frames; the station's derived Reticulum key signs acknowledgements. The
+receiver admits the exact same grant again after a lost acknowledgement, but
+requires a different grant to extend the accepted deadline before that deadline
+passes. Its snapshot is deliberately non-secret state, to be persisted with the
+device's delegated identity by the eventual unattended station host. Postilion
+now offers generic binary LXMF carriage but owns none of those controls. No
+current board firmware interprets the control body yet, so this is not a
+physical delivery receipt.
+
+**Execution note, 2026-08-12, sealed station runtime:** Signalman now offers
+`SitedStationHead`, the unattended host runtime under its private port. It
+seals the delegated Reticulum identity and control-receiver snapshot through a
+caller-selected `SealedRecordStorage` record, writes an accepted control
+transition before returning its signed acknowledgement, and restores the same
+station address and permanent expiry/revocation closure after restart. Its
+watchdog observes durable receiver transitions, so revocation wakes and drops
+the running station rather than waiting for the former deadline. Choosing a
+board-backed storage root, dispatching received controls over a live radio,
+and proving a physical stop remain separate carrier/deployment receipts.
+
 The origin (Mark, 2026-08-10): castellan should manage derived, ephemeral
 device identities, so a sited radio holds nothing worth stealing. Radios "will
 probably be sited not under the ambit of a host and stolen at some point."

@@ -47,7 +47,7 @@ pub mod static_layouts;
 pub use static_layouts::{
     Grid, GridColumns, GridConfig, GridTraversal, Phyllotaxis, PhyllotaxisConfig,
     PhyllotaxisRadiusCurve, Radial, RadialAngularPolicy, RadialConfig, RadialUnreachablePolicy,
-    SpiralOrientation, StaticLayoutState, angles,
+    SpiralOrientation, Stack, StackConfig, StackFlow, StaticLayoutState, angles,
 };
 
 pub mod semantic_embedding;

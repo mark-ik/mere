@@ -28,10 +28,10 @@ fn default_registry_includes_grid() {
 #[test]
 fn default_registry_surfaces_all_builtins() {
     let registry = LayoutRegistry::<Id>::default();
-    // 8 built-ins, all positional. Force physics is seiche's domain, not an arrangement; the
+    // 9 built-ins, all positional. Force physics is seiche's domain, not an arrangement; the
     // similarity-driven projection (SemanticEdgeWeight) was retired once the seiche affinity force
     // reached parity.
-    assert_eq!(registry.len(), 8);
+    assert_eq!(registry.len(), 9);
 }
 
 #[test]
@@ -39,9 +39,9 @@ fn filter_by_category_partitions_cleanly() {
     let registry = LayoutRegistry::<Id>::default();
     let positional = registry.filter_by_category(LayoutCategory::Positional);
     let projection = registry.filter_by_category(LayoutCategory::Projection);
-    // 8 Positional (grid, radial, phyllotaxis, timeline, kanban, penrose, l-system,
+    // 9 Positional (grid, radial, stack, phyllotaxis, timeline, kanban, penrose, l-system,
     // semantic-embedding); the Projection category is empty since SemanticEdgeWeight was retired.
-    assert_eq!(positional.len(), 8);
+    assert_eq!(positional.len(), 9);
     assert_eq!(projection.len(), 0);
     assert!(
         registry

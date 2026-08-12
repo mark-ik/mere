@@ -4,8 +4,8 @@
 //! The signed grant envelope: canonical CBOR, issue and verify, content ref,
 //! and the on-disk read/write for one device's grant.
 
-use std::path::Path;
 use std::io;
+use std::path::Path;
 
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 
@@ -77,7 +77,10 @@ pub fn load_signed_device_grant(
 
 /// Save one signed device grant to `identity/grants/<device_id>.cbor`, returning
 /// the stable content hash callers can store in `grant_ref`.
-pub fn save_signed_device_grant(data_root: &Path, grant: &SignedDeviceGrant) -> io::Result<CarryRef> {
+pub fn save_signed_device_grant(
+    data_root: &Path,
+    grant: &SignedDeviceGrant,
+) -> io::Result<CarryRef> {
     let bytes = encode_signed_device_grant(grant)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     save_device_grant(data_root, grant.payload.device_id, &bytes)?;
@@ -91,9 +94,9 @@ pub fn signed_device_grant_path(data_root: &Path, device_id: DeviceId) -> std::p
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::*;
     use super::super::test_support::*;
+    use super::super::*;
+    use super::*;
 
     #[test]
     fn issued_device_grant_verifies() {

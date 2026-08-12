@@ -216,7 +216,7 @@ fn source_time_canvas_keeps_live_graph_and_arrangement_while_previewing_a_journa
 
 #[test]
 fn source_time_canvas_scrubs_every_canvas_arrangement_without_rewriting_live_truth() {
-    use crate::cartography_scene::{project_canvas_strategy, CANVAS_LAYOUT_STRATEGIES};
+    use crate::cartography_scene::{CANVAS_LAYOUT_STRATEGIES, project_canvas_strategy};
     use kernel::graph::{CapturedDelta, GraphJournal, Seq};
 
     let mut journal = GraphJournal::new();

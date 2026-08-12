@@ -6,7 +6,10 @@ with a high-latency, multi-transport substrate. Vocabulary follows
 retinue's
 [mesh scaling and asymmetric routing](../../../../retinue/design_docs/2026-08-09_mesh_scaling_and_asymmetric_routing.md);
 the two docs came from the same session and share the cost-metered-refusal
-pattern (Section 6 here, metering there).
+pattern (Section 6 here, metering there). The
+[radio-scopes-as-moots note](2026-08-12_radio_scopes_as_moots.md) (ratified
+2026-08-12) records the first consumer of this model outside mere: retinue's
+civic-deployment scopes.
 
 ## 1. Grants at the data layer
 

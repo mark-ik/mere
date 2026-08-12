@@ -381,8 +381,10 @@ impl<B: Backend + Clone> MeshStore<B> {
         mesh_id: [u8; 32],
     ) -> Result<Vec<proofs::BlobRef>, MeshStoreError> {
         let current = self.latest_checkpoint(mesh_id).await?;
+        let board = self.board(mesh_id).await?;
         Ok(crate::retention::collectable_blobs(
             current.as_ref().map(|stored| &stored.checkpoint),
+            &board,
         ))
     }
 
@@ -952,6 +954,39 @@ mod tests {
             collectable.contains(&input) && collectable.contains(&output_blob),
             "both the granted input and the committed output are now droppable: \
              {collectable:?}"
+        );
+
+        // Content addressing means another job can name the same bytes. A job
+        // posted after this checkpoint is not part of its agreement, so its
+        // reference protects the shared input even though the older job was
+        // settled. The older job's unshared output remains collectable.
+        let tail = to_operation(
+            &authority,
+            MESH,
+            &MeshEvent::JobPostedV2 {
+                spec: Box::new(JobSpec::simple(
+                    ResourceId::parse("mesh.echo/v1").unwrap(),
+                    "payload",
+                    input.clone(),
+                    "result",
+                    64,
+                    DeterminismClass::Exact,
+                )),
+                nonce: 1,
+                at_ms: 4_000,
+            },
+            3,
+            Some(*done.hash.as_bytes()),
+        );
+        store.insert(&tail).await.unwrap();
+        let collectable = store.collectable_blobs(MESH).await.unwrap();
+        assert!(
+            !collectable.contains(&input),
+            "a post-checkpoint job still references the shared input"
+        );
+        assert!(
+            collectable.contains(&output_blob),
+            "an unrelated settled output remains collectable"
         );
     }
 

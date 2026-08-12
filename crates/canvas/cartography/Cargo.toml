@@ -28,4 +28,5 @@ scenomise.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
+serde_json = "1.0"
 uuid = { version = "1.10", features = ["v4"] }
