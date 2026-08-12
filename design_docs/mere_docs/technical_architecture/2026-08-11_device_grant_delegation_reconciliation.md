@@ -143,19 +143,31 @@ grammar absorbs device grants as written.
 - **Scope atoms need reading once.** Done as step 1 below, and cheaper than
   expected: three real atoms, all straight actions.
 
-## Open, and genuinely Mark's call
+## Posture, settled 2026-08-12
 
-**Migration posture.** A device grant is re-issuable by whoever holds the
-master seed, so for local devices the cheap answer is to re-issue on next
-unlock and never write the old format again. Sited radios cut the other way:
-the whole point is that they are remote and unattended, so re-enrollment is
-the expensive operation. A dual-read window (accept both, write only
-certificates) costs a decoder and a deadline. Recommended, but it is a
-durability decision rather than a technical one.
+**Migration posture: re-issue now, no legacy decoder** (Mark). A device grant
+is re-issuable by whoever holds the master seed, so for reachable devices the
+cheap answer is to re-mint on next unlock and never write the old format
+again. Sited radios cut the other way, since re-enrollment is exactly the
+expensive operation for something remote and unattended, which is what made a
+dual-read window worth offering.
 
-Two smaller ones follow it: whether the certificate `domain` is the device
-family or the persona family, and whether the wrapped-epoch record is an
-eidetic artifact or stays a wallet file.
+What settled it is that the expensive case does not exist yet: signalman was
+founded 2026-08-11 and no station is sited, so every grant holder today is a
+machine Mark can reach. The window is open now and closes the first time a
+radio goes up.
+
+**This collapses the sequence below.** An intermediate on-disk format only
+earns its keep if a dual-read window has to span it, so the old envelope is
+replaced once rather than twice.
+
+**The `domain` question is also decided**, in the
+[migration plan](../implementation_strategy/2026-08-12_device_grant_certificate_migration_plan.md):
+the device authority family, on mechanics rather than taste, because
+`attenuates` compares domain first.
+
+Still open: whether the wrapped-epoch record is an eidetic artifact or stays a
+wallet file.
 
 ## Sequence, when it runs
 
