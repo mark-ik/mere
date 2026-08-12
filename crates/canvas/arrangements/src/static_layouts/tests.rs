@@ -174,3 +174,50 @@ fn pinned_nodes_skipped() {
     assert!(!deltas.contains_key(&0));
     assert!(deltas.contains_key(&1));
 }
+
+#[test]
+fn stack_places_sources_before_targets_and_keeps_siblings_together() {
+    let mut layout = Stack::new(StackConfig {
+        layer_gap: 100.0,
+        row_gap: 40.0,
+        ..Default::default()
+    });
+    let mut state = StaticLayoutState::default();
+    let input = scene(
+        vec![(0, 0.0, 0.0), (1, 0.0, 0.0), (2, 0.0, 0.0), (3, 0.0, 0.0)],
+        vec![(0, 1), (0, 2), (1, 3), (2, 3)],
+    );
+    let deltas = layout.step(
+        &input,
+        &mut state,
+        0.0,
+        &viewport(),
+        &LayoutExtras::default(),
+    );
+    let positions = apply(&deltas, &input);
+
+    assert!(positions[&0].x < positions[&1].x);
+    assert_eq!(positions[&1].x, positions[&2].x);
+    assert!(positions[&1].x < positions[&3].x);
+    assert_ne!(positions[&1].y, positions[&2].y);
+}
+
+#[test]
+fn stack_can_put_dependencies_before_consumers() {
+    let mut layout = Stack::new(StackConfig {
+        flow: StackFlow::TargetsFirst,
+        ..Default::default()
+    });
+    let mut state = StaticLayoutState::default();
+    let input = scene(vec![(0, 0.0, 0.0), (1, 0.0, 0.0)], vec![(0, 1)]);
+    let deltas = layout.step(
+        &input,
+        &mut state,
+        0.0,
+        &viewport(),
+        &LayoutExtras::default(),
+    );
+    let positions = apply(&deltas, &input);
+
+    assert!(positions[&1].x < positions[&0].x);
+}
