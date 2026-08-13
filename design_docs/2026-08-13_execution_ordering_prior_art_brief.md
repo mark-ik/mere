@@ -69,11 +69,13 @@ Woodshed's invalidation is signature-based rather than edge-based:
 the opposite of a dependency walk, which is why there is no conflation to
 fix rather than a hidden one.
 
-So the idea is worth holding and has nothing to attach to. It becomes real at
-the same moment section 3 does: when something inside a kernel has to decide
-what re-runs because something else changed. Until then, adding
-`Trigger`/`Observe` to a graph that only draws would be a distinction no code
-could branch on.
+So the idea is worth holding and has nothing to attach to in the graphs as
+they stand. It becomes real when something has to decide what re-runs because
+something else changed, and that moment now has a plan: the
+[graph behaviors plan](mere_docs/implementation_strategy/2026-08-13_graph_behaviors_plan.md)
+(same day, later) lands the split as a behavior's two capability scopes,
+watch = trigger and read-beyond-watch = observe, never as edge kinds on a
+data graph.
 
 ### 2.2 Depth-ordered scheduling, with backward scheduling a hard error
 
