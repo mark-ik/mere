@@ -20,13 +20,52 @@ old envelope is replaced once rather than twice.
 
 ## Phases
 
-- **M1** — the device scope convention in `personae::carry`, additive.
-- **M2** — the certificate and the separated epoch record; issue and enroll
-  write them.
+Revised 2026-08-12 after surveying what landed on top of M1. Two phases
+shrank because the pieces already exist; see the findings below.
+
+- **M1** — the device scope convention in `personae::carry`, additive. DONE.
+- **M2** — RemoteAuth device grants issued as certificates, plus the
+  separated epoch record. Verification delegates to `notochord`.
 - **M3** — re-issue on unlock; the old envelope reader is deleted, not kept.
-- **M4** — revocation as a signed statement; the roster demoted to a fold.
+- **M4** — the roster's `revoked` list demoted to a projection of
+  `notochord::RevocationLedger`. Smaller than planned: the ledger, the fold,
+  and the signed statement all exist already.
 - **M5** — consumers re-based; castellan reaches verification through
-  personae rather than session-runtime.
+  personae and notochord rather than session-runtime.
+
+## Findings
+
+### Two consumers of the delegation model already exist (2026-08-12)
+
+Surveyed before writing M2, and both change it.
+
+**`personae::ssh_ca::self_grant` already builds a device grant as a
+certificate.** `DelegationParent::Root(master)`, issuer and subject both the
+master, scope from `device_capability_scope`, depth 0, mandatory expiry. It is
+the **Copy**-mode shape: the device *is* the persona, so subject is the master
+key. M2's RemoteAuth shape differs in exactly one field, the subject, which is
+the delegate device's public key. That correspondence is worth keeping visible:
+`DeviceMode::Copy` and `DeviceMode::RemoteAuth` are self-grant and
+delegated-grant, and nothing else about the construction changes. The shared
+construction moves to `carry` and `self_grant` becomes a wrapper, rather than
+M2 writing a second near-copy.
+
+**`notochord` is the chain evaluator, and it is complete.**
+`crates/system/notochord/src/chain.rs` supplies `TrustedRoot`,
+`RevocationLedger` with `fold(&SignedDelegationRevocation)` and
+`revokes(&DelegationCertificate)`, and `validate_chain`, which checks
+signatures, signer attestation, root anchoring, link integrity, strict
+attenuation, revocation of any member, validity windows, and the leaf subject.
+M2 must not hand-roll verification; it calls this.
+
+The layering this reveals is the one the reconciliation doc argued for, and it
+already exists in the dependency graph: **personae owns the grammar, notochord
+evaluates it, session-runtime keeps the ledger.** `session-runtime` already
+depends on `notochord`, so no new edge is needed.
+
+The consequence for M4 is that "the roster demotes to a local fold" is mostly
+wiring rather than construction. The fold exists, the statement type exists,
+and the ledger is already the thing chain validation consults.
 
 ## Findings
 

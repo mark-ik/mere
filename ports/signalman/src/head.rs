@@ -18,10 +18,7 @@ use session_runtime::DeviceId;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{
-    SITED_STATION_CONTROL_ACK_TITLE, SitedStationControlAck, SitedStationControlError,
-    SitedStationControlReceiver,
-};
+use crate::{SitedStationControlAck, SitedStationControlError, SitedStationControlReceiver};
 
 const HEAD_RECORD_SCHEMA_VERSION: u16 = 1;
 
@@ -506,7 +503,7 @@ fn remaining_window(now_ms: u64, expires_at_ms: u64) -> Duration {
 
 #[cfg(test)]
 mod tests {
-    use personae::{IdentityProvider, InMemoryProvider, PersonaId};
+    use personae::{InMemoryProvider, PersonaId};
     use session_runtime::ensure_wallet_state;
     use tempfile::tempdir;
 
@@ -636,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn sealed_record_does_not_contain_the_station_secret_in_plaintext() {
+    fn sealed_record_requires_its_storage_key() {
         let storage_root = tempdir().unwrap();
         let storage = SealedRecordStorage::open_with_key(storage_root.path(), [0x57; 32]);
         let device_id = DeviceId::new();
@@ -646,7 +643,12 @@ mod tests {
 
         let text =
             std::fs::read_to_string(storage_root.path().join("station/ridge-north.json")).unwrap();
-        assert!(!text.contains("124"));
         assert!(!text.contains("station_secret"));
+
+        let wrong_key = SealedRecordStorage::open_with_key(storage_root.path(), [0x58; 32]);
+        assert!(matches!(
+            SitedStationHead::restore(wrong_key, "station/ridge-north.json"),
+            Err(SitedStationHeadError::Storage(_))
+        ));
     }
 }

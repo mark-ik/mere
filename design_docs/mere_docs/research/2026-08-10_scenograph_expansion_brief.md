@@ -10,6 +10,8 @@ standard: a question is answered by the consumer that forces it, and unforced
 surface does not ship.
 
 **Related**:
+[scenograph_content_catalog](2026-08-13_scenograph_content_catalog.md)
+(the content pass this brief prepared for, 2026-08-13),
 [scenograph_freeze_plan](../implementation_strategy/2026-07-24_scenograph_freeze_plan.md)
 (0.0.3 frozen and published 2026-07-24), the scene contract note
 (`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),

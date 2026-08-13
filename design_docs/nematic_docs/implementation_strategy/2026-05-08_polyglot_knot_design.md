@@ -366,6 +366,18 @@ Open question: keep a permanent CommonMark compat-parse mode for pasted markdown
 or convert-on-paste markdown → djot? Likely the former (cheap; preserves "paste
 anything" for import while djot is the native author format).
 
+## HTML projection (added 2026-08-13)
+
+`EngineDocument::to_html` landed in inker (now in genet:
+`components/inker/src/document/render/html.rs`) as the universal-browser
+projection beside `to_markdown` / `to_gemini` / `to_knot` / `to_gophermap` /
+`to_text`: a body-fragment emitter, fully escaped, semantic variants keeping
+their intent as class names, link predicates carried as `data-predicate`.
+Motivation: knot as the container that lets a stock phone browser read
+embedded gemtext/gopher/feed blocks idiomatically (the field-beacon concept
+in retinue's `2026-08-13_iot_device_concepts.md`). The knot stays the
+authored truth; HTML is a projection, not a round-trip format.
+
 ## Alignment — smolweb fidelity plan (2026-07-01)
 
 The semantic variants this design puts in knot bodies (`FeedEntry`, `MetadataRow`,

@@ -35,8 +35,12 @@ use crate::{
 pub const WALLET_SCHEMA_VERSION: u32 = 1;
 
 mod refs;
+mod grant;
 mod scope;
 
+pub use grant::{
+    device_grant_nonce, issue_device_grant, issue_remote_auth_grant, issue_self_grant,
+};
 pub use refs::{CarryHashFn, CarryRef, CarryRefParseError};
 pub use scope::{
     ACTION_IDENTITY_ACT, ACTION_PRIVATE_READ, ACTION_SSH_AGENT_FORWARD, ACTION_SSH_LOGIN,

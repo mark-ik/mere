@@ -160,8 +160,9 @@ What live means per application:
   contract this needs: sessions on a vanished endpoint are told
   (`Disconnected`), never shown a stale copy.
 
-`SettingMutability::Live` is the marker for Woodshed's settings row, with the
-row's `apply` doing the actual swap, not just remembering it.
+Woodshed took a different route to the same rule (see below): the row raises
+the shared picker rather than being a `Choice` whose `apply` swaps, so
+nothing there is `RestartRequired` either.
 
 **Graphshell is not just a consumer; it is a prior implementation.**
 `ports/graphshell/src/native/personae_host.rs::snapshot` already builds
@@ -227,11 +228,40 @@ write it.
   args remain for tests and receipts. `knot_endpoint` keeps explicit args
   only — it is spawned by hosts that already resolved.
 
-Remaining: **Woodshed** (the settings row: `SettingControl::Choice` over the
-roster, `SettingMutability::Live`, apply = remember + reopen the store), then
-**Hocket** — gated: its picker *is* the rotation surface, so it cannot be
-drawn before the contact-token migration is decided. Its persona-faceted
-timeline concept is sketched in
+### Landed 2026-08-09 (woodshed)
+
+**The `SettingControl::Choice` this plan specified was the wrong shape, and
+woodshed built the right one instead.** A dropdown over the roster would have
+re-drawn the persona list a third way; what landed is a "Switch persona…"
+button raising the shared picker as a gate, so the roster reads the same in
+Woodshed as in Turnstone. That is what the picker crate was extracted for, and
+the plan's own generalization argument points at it — the spec here was the
+part that had not caught up. The startup gate (P1) and live switching (P2) came
+with it, including the reset-before-restore that stops an outgoing persona's
+practice being written into the incoming one's store.
+
+Two decisions from that work worth carrying to the remaining consumers:
+
+- **The gate is not a lock.** Escape practises with no persona at all: no key,
+  no store, nothing kept. "Sealing is not a gate" carried one step further — a
+  tuner has to open for somebody who does not want to say who they are.
+- **Declining opens nothing, rather than falling back to the convention.** On
+  the only vault that reaches the gate (several personas, none chosen) the
+  convention resolves to `default` and *mints it*, so the fallback would have
+  added a third identity beside the user's two.
+
+What was still missing was smaller and is now done: the page offered to switch
+a persona it could not name. `open_backend` had the persona and the vault
+backend's own account of what holds the key, and only logged them; it now
+returns a `PracticeSeal` beside the backend, every branch answering, so
+"unsealed" always carries its reason. Settings reports three real states —
+sealed, unsealed-and-why, and a declined gate, which is checked first because
+the store never opened and a leftover seal would be a stale claim that the
+session is being kept.
+
+Remaining: **Hocket** — gated: its picker *is* the rotation surface, so it
+cannot be drawn before the contact-token migration is decided. Its
+persona-faceted timeline concept is sketched in
 [hocket's design docs](../../../../hocket/design_docs/2026-08-08_persona_timeline_design.md).
 
 ## Open

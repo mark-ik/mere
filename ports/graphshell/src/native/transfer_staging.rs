@@ -303,7 +303,10 @@ mod tests {
             .unwrap();
         let file = host
             .create_file_metadata(LocalFileMetadata {
-                content_hash: format!("{:x}", Sha256::digest(FILE_BYTES)),
+                content_hash: Sha256::digest(FILE_BYTES)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect(),
                 name: "s3-reference.txt".to_string(),
                 media_type: "text/plain".to_string(),
                 byte_len: FILE_BYTES.len() as u64,

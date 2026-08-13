@@ -313,32 +313,10 @@ pub fn self_grant<P: IdentityProvider>(
     valid_for_ms: u64,
     now_ms: u64,
 ) -> Result<SignedDelegationCertificate, crate::delegation::DelegationError> {
-    let master = provider.master_public_key().to_bytes();
-    let mut nonce = [0u8; 32];
-    nonce.copy_from_slice(
-        blake3::hash(
-            &[
-                device.as_uuid().as_bytes().as_slice(),
-                &now_ms.to_le_bytes(),
-            ]
-            .concat(),
-        )
-        .as_bytes(),
-    );
-    SignedDelegationCertificate::issue(
-        provider,
-        crate::delegation::DelegationCertificate::new(
-            crate::delegation::DelegationParent::Root(master),
-            master,
-            master,
-            crate::carry::device_capability_scope(device, actions.iter().copied()),
-            now_ms,
-            now_ms,
-            Some(now_ms.saturating_add(valid_for_ms)),
-            0,
-            nonce,
-        ),
-    )
+    // The construction lives in `carry::grant`, which the RemoteAuth device
+    // grant shares: the two modes differ only in the certificate's subject.
+    // Keeping one constructor is what keeps that difference legible.
+    crate::carry::issue_self_grant(provider, device, actions, valid_for_ms, now_ms)
 }
 
 /// The OpenSSH certificate serial standing for one device.

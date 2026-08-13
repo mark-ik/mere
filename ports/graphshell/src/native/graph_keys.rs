@@ -668,3 +668,57 @@ mod tests {
         assert_eq!(recipient_for_root(&published, [0xff; 32]), None);
     }
 }
+
+#[cfg(test)]
+mod retention_probe {
+    use super::*;
+    use stickleback::{
+        EpochRetentionFacts, GroupEncryptionProfile, EpochProposalBlocker, propose_epoch_pruning,
+    };
+
+    /// What retiring epochs would actually cost and permit here, measured
+    /// before building machinery for it.
+    ///
+    /// Two questions. Does the keyring grow in a way worth managing, and can
+    /// this domain safely prune at all?
+    #[test]
+    fn epoch_growth_is_small_and_pruning_is_blocked_for_a_reason() {
+        let mut keyring = DataKeyring::new();
+        keyring.rotate_random().unwrap();
+        let one = keyring.to_bytes().unwrap().len();
+        for _ in 0..49 {
+            keyring.rotate_random().unwrap();
+        }
+        let fifty = keyring.to_bytes().unwrap().len();
+        assert_eq!(keyring.epoch_count(), 50);
+
+        // One rotation per revocation. If each costs little, unbounded growth
+        // is a shape worth naming and not a pressure worth acting on.
+        let per_epoch = (fifty - one) / 49;
+        println!("keyring: 1 epoch = {one} bytes, 50 epochs = {fifty} bytes, {per_epoch}/epoch");
+        assert!(
+            per_epoch < 512,
+            "an epoch costs {per_epoch} bytes; if that were large, retention would be urgent"
+        );
+
+        // Graphshell retains every operation and has no checkpoint to rebuild
+        // a projection from, so it can supply none. Stickleback refuses to
+        // propose anything destructive without one, which is the correct
+        // answer rather than a limitation to work around: forgetting an epoch
+        // makes every operation sealed under it permanently unreadable.
+        let proposal = propose_epoch_pruning(
+            GroupEncryptionProfile::durable_data(4),
+            &keyring,
+            &EpochRetentionFacts::default(),
+        );
+        assert!(!proposal.is_executable());
+        assert!(proposal.forget.is_empty(), "nothing may be forgotten");
+        assert!(
+            proposal
+                .blockers
+                .contains(&EpochProposalBlocker::MissingCheckpoint),
+            "the blocker is the missing checkpoint, not something incidental: {:?}",
+            proposal.blockers.len()
+        );
+    }
+}
