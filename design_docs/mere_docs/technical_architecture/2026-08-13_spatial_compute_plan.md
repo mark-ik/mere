@@ -142,11 +142,38 @@ job when a canvas gets there. Receipt picture at
 `Code/testing/mere/p2_resident_graph.png` (50k dots, 149,990 edges, lit
 fraction 26.5 percent).
 
-**Still open before P2 closes:** quint/Burn writing the force pass into
-the resident buffer (the buffer handoff, in place of the probe's own
-repulsion kernel); the slot-stability decision (the probe holds n
-fixed); promotion of the kernels out of the probe into conatus proper
-with the rust-gpu carriage; and a windowed rather than offscreen run.
+**The Burn handoff landed 2026-08-13, same probe (`--burn` mode).**
+Burn adopts the shared device (`init_device` over the same handles
+netrender booted), a `[n, 4]` tensor's storage is filled from the
+resident position buffer by device-local copy, quint's own
+`forces::repulsion` runs in its own vocabulary, and the output tensor's
+raw `wgpu::Buffer` (via `TensorPrimitive::Float` to
+`client.get_resource`) is copied device-local into the resident forces
+buffer, which springs and integrate then consume. Ordering rides the
+one queue: copy-in submits, `client.flush()` submits Burn's recorded
+ops after it, copy-out submits after the flush. No force byte touches
+the CPU.
+
+The receipts, n = 4096, same constants both paths:
+
+    equivalence   mean relative error 1.05e-6, worst 1.38e-5
+    kernel        0.52 ms/frame
+    quint/burn   12.25 ms/frame
+
+The equivalence number is the handoff proven: quint's tensor program
+and the explicit kernel compute the same field to float precision
+through a chain the CPU never sees. The 24x gap is the two-regime
+taxonomy proven: n-body is exactly the algorithm shape that needs
+exact memory control (the tensor formulation materializes [n, n]
+intermediates, O(n squared) memory, and cannot reach 50k at all on an
+8 GB card), so the explicit lane owns the large-n field tier and the
+tensor lane serves small-to-mid canvases and the semantic-field
+couplings it was built for.
+
+**Still open before P2 closes:** the slot-stability decision (the
+probe holds n fixed); promotion of the kernels out of the probe into
+conatus proper with the rust-gpu carriage; and a windowed rather than
+offscreen run.
 
 ### P3. Wing projection
 
@@ -202,3 +229,26 @@ consumers named, or narrowed in writing with the reason.
   colours, so a distinct-colour blank-guard (calibrated on shaded 3D)
   false-alarms; the probe's guard is coverage (lit fraction between
   bounds) instead.
+- **2026-08-13 (Burn handoff):** a JIT compute runtime is a **greedy
+  tenant**. CubeCL boots its own devices with every adapter feature
+  (minus `MAPPABLE_PRIMARY_BUFFERS`) and full adapter limits, and its
+  WGSL compiler emits against adapter capability (u64 addressing when
+  the adapter has `SHADER_INT64`), so a shared device holding less than
+  the adapter fails shader validation at kernel launch. The tenancy
+  seam grew `TenantNeeds::greedy` for this shape (netrender
+  `1ce733be6`, receipt included): adapter features minus the traps,
+  adapter limits, netrender's minimum still raised. The third consumer
+  taught the seam what the first two could not.
+- **2026-08-13 (Burn handoff):** the interop chain is
+  `TensorPrimitive::Float` to `CubeclTensor { client, handle }` to
+  `client.get_resource(handle)` to `WgpuResource { buffer, offset }`,
+  with `client.flush()` as submit-without-wait. Burn tensor storage is
+  ordinary wgpu buffers on the shared queue, so device-local copies and
+  submission order are the whole synchronization story.
+- **2026-08-13 (Burn handoff):** quint's tensor repulsion is O(n
+  squared) **memory**, not just compute: `[n, n]` pairwise tensors put
+  50k out of reach entirely and cost 24x at 4096 against the tiled
+  kernel's O(n) working set. The taxonomy's line between the lanes is
+  measurable, and the crossover logic in seiche (Burn above 1000 nodes)
+  holds for the CPU-naive comparison it was written against but not
+  against a resident explicit kernel, which wins at every n measured.
