@@ -41,6 +41,24 @@ pub const ACTION_PRIVATE_READ: &str = "private.read";
 /// Carry traffic outward as an egress or availability anchor.
 pub const ACTION_TRANSPORT_EGRESS: &str = "transport.egress";
 
+/// Open an interactive session on the device.
+///
+/// The gate for [`crate::ssh_ca`]: a grant without this action mints no
+/// certificate at all. The four `ssh.*` actions below it are the ones
+/// OpenSSH models as certificate *extensions*, which are positive
+/// permissions — absent means denied. That correspondence is why the
+/// projection is mechanical: dropping an action from a grant drops the
+/// extension from every certificate minted after it, so
+/// [`CapabilityScope::attenuates`] and OpenSSH's own attenuation are the
+/// same operation seen twice.
+pub const ACTION_SSH_LOGIN: &str = "ssh.login";
+/// Allocate a terminal (`permit-pty`).
+pub const ACTION_SSH_PTY: &str = "ssh.pty";
+/// Forward an agent socket back to the device (`permit-agent-forwarding`).
+pub const ACTION_SSH_AGENT_FORWARD: &str = "ssh.agent-forward";
+/// Forward ports through the session (`permit-port-forwarding`).
+pub const ACTION_SSH_PORT_FORWARD: &str = "ssh.port-forward";
+
 /// Build the capability scope addressing one device's grant.
 pub fn device_capability_scope<I, S>(device: DeviceId, actions: I) -> CapabilityScope
 where
