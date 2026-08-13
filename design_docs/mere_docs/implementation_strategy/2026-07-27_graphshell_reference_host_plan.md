@@ -2003,18 +2003,59 @@ browser, two-device network, and real RF are different claims.
    count, because a graph quietly missing part of itself looks identical to a
    complete one.
 
-   Still to build, and two more found by reviewing:
+   **The reader set moved to the lane 2026-08-07, and revocation now falls out
+   of it.** Reviewing turned up a worse fault than the one being looked for:
+   a revocation performed on one device was *undone* by the next sweep on
+   another. Nothing misbehaved. Membership was applied as commands while the
+   condition behind it lived in each device's own settings file, so the device
+   that had not been told seated the departed device again, and the two
+   disagreed forever, each doing exactly as instructed.
 
+   Mark asked whether revocation could fall out of the right conditions rather
+   than be performed. It can, and the command shape is why it did not.
+
+   `AdmitReader` and `RetireReader` name the intent on the lane. Every device
+   folds the same set from the same operations, and the sweep reconciles toward
+   it: unseat every seat the set does not account for, seat every reader that
+   has published a pre-key. Idempotent, so running it twice changes nothing and
+   running it in a different order arrives in the same place.
+
+   Revocation is now `RetireReader` and nothing else. It removes no seat and
+   turns no epoch. Which device the unpair was typed on stopped mattering, and
+   so did whether that device holds a key.
+
+   **Write admission deliberately stayed local.** Moving it would be circular,
+   since the set being decided is the one the check would need, and it is not
+   required: readers and writers were already different sets, because a
+   receive-only device reads without writing. Authority moved into the fold
+   instead. Only a current reader may name another; the first admit bootstraps
+   on its author's own authority and seats that author too; an admit from a
+   writer who is not a reader is ignored rather than refused, because it was
+   validly authored and is simply not authoritative about this. The set cannot
+   empty out, or nobody could admit anyone again.
+
+   Pairing and readership are now separate grants, and three tests driving
+   hosts directly had to start saying both. That is the design surfacing rather
+   than a regression: pairing says where a device is, admitting says it may
+   read.
+
+   Receipt: `a_revocation_on_one_device_reaches_the_others`, three devices,
+   unignored. Two devices could never have caught this.
+
+   **On the ordering worry: largely dissolved rather than answered.** The
+   three-device test does exercise cross-author key steps and passes. The
+   reason it stopped being load bearing is structural, not empirical: a
+   converging loop reading a folded set does not care what order it learned
+   things in, where the command path cared a great deal. Pathological
+   interleavings remain unproven; they can no longer cause the class of harm
+   they could before.
+
+   Still to build:
+
+   - Epoch retention (`forget_authorized`). Now the pressing one: reconciliation
+     can turn epochs on its own, so growth is driven by an automatic path.
    - The receive-only path, which wants the pre-key carried with
      `PairingFacts` out of band as `node_id` and `root` already are.
-   - Epoch retention (`forget_authorized`), which matters more now that unpair
-     rotates automatically and every rotation adds an epoch.
-   - **Revocation depends on which device the unpair happens on.** Settings are
-     per device and unsynced, so unpairing on device A never reaches device B's
-     watch, and if A is not itself keyed nothing revokes at all.
-   - **`key_agreement()` orders by `(seq_num, hash)` across authors**, which is
-     not causal order, since `seq_num` is per author. Two devices work; three
-     with interleaved sequences is unproven.
 
 None of these decisions changes the product boundary or requires a new
 repository.
