@@ -24,7 +24,7 @@ required-features = ["agent"]
 # V3: inspect and manage the vault from a terminal.
 [[bin]]
 name = "personae-vault"
-path = "src/bin/personae-vault.rs"
+path = "src/bin/personae-vault/main.rs"
 required-features = ["ssh"]
 
 [features]

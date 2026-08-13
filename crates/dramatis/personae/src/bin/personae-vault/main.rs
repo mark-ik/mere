@@ -19,6 +19,9 @@
 //!   add-ssh <file> [--per-use]  import an OpenSSH private key
 //!   pub <mod[:instance]>        print an ssh slot's public key
 //!   remove <mod[:instance]>     remove a slot
+//!   ca                          print the profile's SSH certificate authority
+//!   mint <slot> --host <h>      mint a login certificate for a machine
+//!   enroll-host [user@]host     teach a machine to accept this authority
 //! ```
 //!
 //! Slot keys accept a unique prefix, so
@@ -34,6 +37,9 @@ use ssh_key::HashAlg;
 use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
 
+mod certs;
+use certs::{cmd_ca, cmd_enroll_host, cmd_mint};
+
 const USAGE: &str = "\
 usage: personae-vault [--dir <vault-dir>] [--profile <name>] <command>
 
@@ -45,6 +51,12 @@ commands:
   add-ssh <file> [--per-use]  import an OpenSSH private key
   pub <mod[:instance]>        print an ssh slot's public key
   remove <mod[:instance]>     remove a slot
+  ca [--patterns <pat>]       print this profile's SSH certificate authority
+  mint <slot> --host <h>      mint a login certificate for a machine
+        [--principal <p>] [--hours <n>] [--out <f>]
+        [--force-command <c>] [--source-address <cidr>]
+  enroll-host [user@]host     teach a machine to accept this authority
+        [--principal <p>] [--system]
 
 slot keys accept a unique prefix, e.g. `show ssh:SHA256:d3tQ`.
 set PERSONAE_PASSPHRASE to use the portable passphrase vault instead of
@@ -101,6 +113,9 @@ fn run() -> Result<(), String> {
         "add-ssh" => cmd_add_ssh(&*opened.storage, &cli.profile, &cli.rest),
         "pub" => cmd_pub(&*opened.storage, &cli.profile, &cli.rest),
         "remove" => cmd_remove(&*opened.storage, &cli.profile, &cli.rest),
+        "ca" => cmd_ca(&load(&*opened.storage, &cli.profile)?, &cli.rest),
+        "mint" => cmd_mint(&load(&*opened.storage, &cli.profile)?, &cli.rest),
+        "enroll-host" => cmd_enroll_host(&load(&*opened.storage, &cli.profile)?, &cli.rest),
         other => Err(format!("unknown command {other:?}\n\n{USAGE}")),
     }
 }

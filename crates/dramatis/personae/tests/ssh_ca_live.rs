@@ -265,3 +265,201 @@ fn a_live_sshd_accepts_a_minted_certificate() {
     );
     println!("sshd accepted the certificate; grant id {key_id} appears in its log");
 }
+
+/// The enrollment ceremony's claim, checked against `sshd` itself: one
+/// `cert-authority` line in a user's own `authorized_keys` — no root, no
+/// `sshd_config`, no daemon restart — is enough for every certificate that
+/// authority ever signs.
+///
+/// The fixture redirects `HOME`, so the script runs verbatim against a
+/// throwaway home rather than the tester's.
+#[test]
+#[ignore = "needs a local sshd; run explicitly with --ignored"]
+fn enrollment_teaches_a_host_to_accept_the_authority() {
+    let user = std::env::var("USER").expect("USER is set");
+    let dir = std::env::temp_dir().join(format!("personae-enroll-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join(".ssh")).expect("create fixture home");
+    set_mode(&dir, 0o700);
+    set_mode(&dir.join(".ssh"), 0o700);
+    let mut fixture = Fixture {
+        dir: dir.clone(),
+        sshd: None,
+        port: free_port(),
+    };
+
+    let provider = InMemoryProvider::from_seed([2; 32]);
+    let ca = SshCertAuthority::derive(&provider).expect("derive the CA");
+
+    // Run the real enrollment script against the fixture home. This is the
+    // same string `personae-vault enroll-host` pipes into `ssh`.
+    let line = personae::enroll::user_trust_line(&ca, &[user.clone()]).expect("trust line");
+    let script = personae::enroll::user_install_script(&line);
+    let enrolled = run_script(&script, &dir);
+    assert!(
+        enrolled.contains("enrolled"),
+        "the enrollment script did not confirm: {enrolled}"
+    );
+
+    let authorized = dir.join(".ssh/authorized_keys");
+    let contents = fs::read_to_string(&authorized).expect("read authorized_keys");
+    assert_eq!(
+        contents.lines().count(),
+        1,
+        "enrollment writes exactly one line, got:\n{contents}"
+    );
+    assert!(contents.starts_with("cert-authority,principals="));
+
+    // Re-running must replace rather than stack: enrollment is idempotent.
+    run_script(&script, &dir);
+    let contents = fs::read_to_string(&authorized).expect("read authorized_keys");
+    assert_eq!(
+        contents.lines().count(),
+        1,
+        "re-enrolling stacked a duplicate line:\n{contents}"
+    );
+
+    let host_key = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+    write_private(&dir.join("host_key"), &host_key);
+    let config = dir.join("sshd_config");
+    fs::write(
+        &config,
+        format!(
+            "Port {port}\n\
+             ListenAddress 127.0.0.1\n\
+             HostKey {dir}/host_key\n\
+             AuthorizedKeysFile {dir}/.ssh/authorized_keys\n\
+             PidFile {dir}/sshd.pid\n\
+             StrictModes no\n\
+             UsePAM no\n\
+             PasswordAuthentication no\n\
+             KbdInteractiveAuthentication no\n\
+             LogLevel VERBOSE\n",
+            port = fixture.port,
+            dir = dir.display(),
+        ),
+    )
+    .expect("write sshd_config");
+    // Note what is *not* in that config: no TrustedUserCAKeys. The trust
+    // lives entirely in the user's own authorized_keys.
+
+    let log = fs::File::create(dir.join("sshd.log")).expect("create log");
+    fixture.sshd = Some(
+        Command::new("/usr/sbin/sshd")
+            .args(["-D", "-e", "-f"])
+            .arg(&config)
+            .stderr(Stdio::from(log))
+            .stdout(Stdio::null())
+            .spawn()
+            .expect("spawn sshd"),
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while TcpListener::bind(("127.0.0.1", fixture.port)).is_ok() {
+        assert!(Instant::now() < deadline, "sshd never bound its port");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    // A key the host has never seen, carrying a certificate from the
+    // authority it now trusts.
+    let user_key = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+    let user_key_path = dir.join("id_ed25519");
+    write_private(&user_key_path, &user_key);
+    let grant = ssh_grant(&provider);
+    let cert = ca
+        .mint_user_cert(
+            &UserCertRequest {
+                grant: &grant,
+                subject: &PublicKey::from(&user_key),
+                principals: vec![user.clone()],
+                force_command: None,
+                source_address: None,
+            },
+            now_ms(),
+        )
+        .expect("mint");
+    let cert_path = dir.join("id_ed25519-cert.pub");
+    fs::write(&cert_path, cert.to_openssh().expect("encode")).expect("write cert");
+
+    let out = Command::new("ssh")
+        .args([
+            "-i",
+            user_key_path.to_str().unwrap(),
+            "-o",
+            &format!("CertificateFile={}", cert_path.display()),
+            "-o",
+            &format!("UserKnownHostsFile={}", dir.join("known_hosts").display()),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "BatchMode=yes",
+            "-p",
+            &fixture.port.to_string(),
+            &format!("{user}@127.0.0.1"),
+            "echo enrolled-login-ok",
+        ])
+        .output()
+        .expect("run ssh");
+
+    let sshd_log = fs::read_to_string(dir.join("sshd.log")).unwrap_or_default();
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("enrolled-login-ok"),
+        "login failed after enrollment\n--- ssh stderr ---\n{}\n--- sshd log ---\n{sshd_log}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // The bare key alone must still be refused: what was enrolled is the
+    // authority, not this key.
+    let bare = Command::new("ssh")
+        .args([
+            "-i",
+            user_key_path.to_str().unwrap(),
+            "-o",
+            "CertificateFile=/dev/null",
+            "-o",
+            &format!("UserKnownHostsFile={}", dir.join("known_hosts").display()),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "IdentitiesOnly=yes",
+            "-o",
+            "BatchMode=yes",
+            "-p",
+            &fixture.port.to_string(),
+            &format!("{user}@127.0.0.1"),
+            "echo should-not-happen",
+        ])
+        .output()
+        .expect("run ssh");
+    assert!(
+        !String::from_utf8_lossy(&bare.stdout).contains("should-not-happen"),
+        "the uncertified key logged in, so the host trusts more than the authority"
+    );
+    println!("one cert-authority line, no root: certified login accepted, bare key refused");
+}
+
+/// Run an enrollment script the way `ssh` would, but against `home`.
+fn run_script(script: &str, home: &Path) -> String {
+    let mut child = Command::new("sh")
+        .arg("-s")
+        .env("HOME", home)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn sh");
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(script.as_bytes())
+        .expect("write script");
+    let out = child.wait_with_output().expect("wait for sh");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
