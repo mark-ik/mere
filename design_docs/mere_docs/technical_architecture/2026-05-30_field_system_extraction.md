@@ -206,3 +206,76 @@ Not all at once. A workable order, each slice host-agnostic and testable:
 
 Steps 0–2 are the immediate host-agnostic work; step 3 is the load-bearing kernel
 change that deserves its own plan; step 4 is opportunistic cleanup.
+
+---
+
+## Settled positions are projections (ruled 2026-08-13, Mark)
+
+**A settled layout is a projection calculated from data, not data.** The
+saved, replicated things are the inputs: the graph, the field and coupling
+definitions, and any authored or pinned positions. Where the bodies come to
+rest under those forces is derived, and is allowed to differ between runs,
+machines, and backends the same way any other verdict in this stack is
+allowed to be recomputed rather than stored.
+
+The split this names is already in the crate layout rather than being
+invented here:
+
+- **`arrangements`** is the deterministic lane. Penrose, l-system,
+  phyllotaxis, axial, radial, grid, semantic-embedding, reached through
+  cartography's `LayoutStrategy`. Its manifest says "deterministic", and it
+  depends on no compute backend at all. Positions from this lane are
+  reproducible by construction.
+- **`seiche`** is the live force physics: bodies bound to node keys,
+  exclusion, springs, boundary, and quint field couplings, integrated over
+  time. Its output is the projection.
+
+### What this licenses
+
+GPU evaluation in the conatus lane is a **performance choice, not a fenced
+tier.** The wing's ambience-tier bar (place-graph plan §0.10: GPU float
+ordering varies by hardware, so GPU is barred from outcome-bearing facts)
+binds a game whose simulation outcomes are recorded facts inside a replay
+hash. It does not bind a layout that is recomputed from saved inputs. So
+`quint`'s `field-burn-wgpu` path, and a GPU dynamics substrate such as
+nexus2d, are both admissible here on cost and maturity grounds rather than
+being ruled out on reproducibility.
+
+### What keeps the ruling true
+
+Three ways a projection quietly becomes data, each worth refusing:
+
+1. **Persisting the settled layout as canonical position.** Caching it for
+   load speed is fine when it is re-derivable and marked as a cache. Saving
+   it as the position of record is not, because the next reader cannot tell
+   a cached projection from an authored placement.
+2. **A recorded decision reading settled positions.** Anything that turns
+   "where these came to rest" into a durable fact (a proximity claim, an
+   emitted relation, a stored grouping) has made the projection
+   outcome-bearing through the back door.
+3. **Tests asserting exact coordinates.** With a GPU backend admitted, a
+   coordinate assertion is a backend-equality assertion wearing a disguise.
+   Assert the invariants instead: that it settles, that nodes stop
+   overlapping, that a symmetric input produces a symmetric result, that a
+   stronger coupling moves things further. This is the diagnostics-assert-
+   invariants posture applied to a lane that is now allowed to be
+   numerically plural.
+
+Authored and pinned positions stay data throughout, and are the reason the
+distinction is drawable at all: a node the user placed is a fact about what
+the user did, while a node the solver pushed is a picture of the forces.
+
+### The one hard requirement that survives
+
+Determinism stops gating this lane; **device unity does not.**
+`quint::forces::repulsion_wgpu` currently takes `Device::default()`, which
+boots a second wgpu device beside the host's. Today that is confined to
+seiche's `gpu-bench` feature and ships to nobody, but any live use in a
+canvas would put two devices on one adapter, with separate allocators, a
+separate queue, no shared textures, and a readback at every boundary.
+`cubecl-wgpu` pins wgpu 29, the same major netrender is on, and Burn
+re-exports `init_device(setup: WgpuSetup, options)`, whose
+`WgpuSetup { instance, adapter, device, queue, backend }` maps field for
+field onto netrender's `WgpuHandles`. The fix is for the entry point to
+accept a device instead of defaulting one, which lets conatus ride the
+tenancy seam netrender landed 2026-08-10 as a compute tenant.
