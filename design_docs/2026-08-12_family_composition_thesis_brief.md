@@ -194,8 +194,8 @@ first three without the fourth.
 3. **The gradient as invariants.** Possession ⊇ disclosure ⊇ sync ⊇
    projection could become admission-boundary assertions (a score cannot
    select what the space does not carry; a space cannot carry what the grant
-   does not admit). Worth a testing-category pass in graphshell_docs when the
-   planes next move.
+   does not admit). Worth a `mere_docs/testing/` pass when the planes next
+   move.
 4. **Per-persona continuity vs correlation.** The chain's "continuity without
    homogenization" (same persona across apps by intent, different personae
    where separation matters, no app learning unrelated identity material) is
