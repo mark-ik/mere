@@ -71,6 +71,12 @@ pub enum CertMintError {
     /// A certificate with no principals is an OpenSSH "golden ticket".
     #[error("refusing to mint a certificate with no principals")]
     NoPrincipals,
+    /// The device holding this grant has been revoked.
+    #[error("device serial {serial} is revoked; this vault will not certify it")]
+    RevokedDevice {
+        /// The revoked device's certificate serial.
+        serial: u64,
+    },
     /// The CA key could not be derived from the identity provider.
     #[error("could not derive the certificate authority key")]
     Identity,
@@ -95,6 +101,12 @@ pub struct UserCertRequest<'a> {
     pub force_command: Option<String>,
     /// Addresses the certificate is usable from, in OpenSSH's CIDR list form.
     pub source_address: Option<String>,
+    /// What this vault has stopped certifying.
+    ///
+    /// Required rather than optional so that no caller can mint without
+    /// having considered revocation: pass an empty ledger to mean "nothing
+    /// is revoked", and say so deliberately.
+    pub ledger: &'a crate::ssh_krl::RevocationLedger,
 }
 
 /// What a host certificate should say.
@@ -188,6 +200,13 @@ impl SshCertAuthority {
         if request.principals.is_empty() {
             return Err(CertMintError::NoPrincipals);
         }
+        // The first line of revocation: a revoked device is simply never
+        // certified again, so its reach ends when its last certificate
+        // expires -- without contacting a single host.
+        let serial = device_serial(&request.grant.certificate.scope.resource);
+        if request.ledger.is_revoked(serial) {
+            return Err(CertMintError::RevokedDevice { serial });
+        }
 
         let (valid_after, valid_before) = user_cert_window(request.grant, now_ms);
         let mut builder = Builder::new(
@@ -198,10 +217,17 @@ impl SshCertAuthority {
         )
         .map_err(encoding)?;
         builder.cert_type(CertType::User).map_err(encoding)?;
-        // The key id is the audit trail and the revocation handle at once:
-        // OpenSSH logs it on every accepted login and a KRL can revoke by
-        // it, so the grant id has to be what it carries.
+        // The key id is the audit trail: OpenSSH logs it on every accepted
+        // login, so it carries the grant id that authorized this one.
         builder.key_id(key_id_for(&grant)).map_err(encoding)?;
+        // The serial is the *revocation* handle, and it has to be the
+        // device rather than the grant. A self-grant is re-issued on every
+        // mint, so its id is new each time and revoking one id would close
+        // exactly one certificate while the next mint walked around it. A
+        // serial derived from the device is stable, so a single KRL
+        // `serial:` line retires every certificate that machine ever
+        // carried — the outstanding ones and any minted later.
+        builder.serial(serial).map_err(encoding)?;
         builder.comment("personae").map_err(encoding)?;
         for principal in &request.principals {
             builder.valid_principal(principal).map_err(encoding)?;
@@ -315,6 +341,23 @@ pub fn self_grant<P: IdentityProvider>(
     )
 }
 
+/// The OpenSSH certificate serial standing for one device.
+///
+/// Derived from the device's own bytes so every certificate that device
+/// carries shares it, and non-zero because OpenSSH treats serial zero as
+/// "no serial" and refuses to revoke it.
+pub fn device_serial(device_resource: &[u8]) -> u64 {
+    let digest = blake3::hash(device_resource);
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&digest.as_bytes()[..8]);
+    u64::from_le_bytes(bytes).max(1)
+}
+
+/// The serial standing for a [`crate::carry::DeviceId`].
+pub fn serial_for_device(device: crate::carry::DeviceId) -> u64 {
+    device_serial(device.as_uuid().as_bytes())
+}
+
 /// The OpenSSH key id carried by a certificate minted from `grant`.
 ///
 /// Hex of the delegation id. [`crate::ssh_krl`] renders revocations against
@@ -423,6 +466,7 @@ mod tests {
     fn request<'a>(
         grant: &'a SignedDelegationCertificate,
         subject: &'a PublicKey,
+        ledger: &'a crate::ssh_krl::RevocationLedger,
     ) -> UserCertRequest<'a> {
         UserCertRequest {
             grant,
@@ -430,7 +474,12 @@ mod tests {
             principals: vec!["markik".into()],
             force_command: None,
             source_address: None,
+            ledger,
         }
+    }
+
+    fn clean() -> crate::ssh_krl::RevocationLedger {
+        crate::ssh_krl::RevocationLedger::new()
     }
 
     /// The plan's first validation: `ssh-key` 0.6 can mint and verify an
@@ -442,7 +491,10 @@ mod tests {
         let grant = grant_with(&provider, &[ACTION_SSH_LOGIN, ACTION_SSH_PTY], None);
         let subject = subject_key();
         let cert = ca
-            .mint_user_cert(&request(&grant, &PublicKey::from(&subject)), NOW_MS)
+            .mint_user_cert(
+                &request(&grant, &PublicKey::from(&subject), &clean()),
+                NOW_MS,
+            )
             .unwrap();
 
         assert!(cert.validate_at(NOW_MS / 1000, [&ca.fingerprint()]).is_ok());
@@ -490,14 +542,14 @@ mod tests {
             None,
         );
         let cert = ca
-            .mint_user_cert(&request(&full, &subject), NOW_MS)
+            .mint_user_cert(&request(&full, &subject, &clean()), NOW_MS)
             .unwrap();
         assert_eq!(cert.extensions().len(), 3);
         assert!(cert.extensions().contains_key("permit-pty"));
 
         let burner = grant_with(&provider, &[ACTION_SSH_LOGIN], None);
         let cert = ca
-            .mint_user_cert(&request(&burner, &subject), NOW_MS)
+            .mint_user_cert(&request(&burner, &subject, &clean()), NOW_MS)
             .unwrap();
         assert!(
             cert.extensions().is_empty(),
@@ -514,13 +566,13 @@ mod tests {
 
         let short = grant_with(&provider, &[ACTION_SSH_LOGIN], Some(NOW_MS + 60_000));
         let cert = ca
-            .mint_user_cert(&request(&short, &subject), NOW_MS)
+            .mint_user_cert(&request(&short, &subject, &clean()), NOW_MS)
             .unwrap();
         assert_eq!(cert.valid_before(), (NOW_MS + 60_000) / 1000);
 
         let endless = grant_with(&provider, &[ACTION_SSH_LOGIN], None);
         let cert = ca
-            .mint_user_cert(&request(&endless, &subject), NOW_MS)
+            .mint_user_cert(&request(&endless, &subject, &clean()), NOW_MS)
             .unwrap();
         assert_eq!(cert.valid_before(), (NOW_MS + MAX_CERT_TTL_MS) / 1000);
     }
@@ -535,14 +587,14 @@ mod tests {
         // No ssh.login: the grant is about some other device capability.
         let no_login = grant_with(&provider, &[crate::carry::ACTION_PRIVATE_READ], None);
         assert_eq!(
-            ca.mint_user_cert(&request(&no_login, &subject), NOW_MS),
+            ca.mint_user_cert(&request(&no_login, &subject, &clean()), NOW_MS),
             Err(CertMintError::NoLoginAction)
         );
 
         // Expired.
         let expired = grant_with(&provider, &[ACTION_SSH_LOGIN], Some(NOW_MS - 1));
         assert_eq!(
-            ca.mint_user_cert(&request(&expired, &subject), NOW_MS),
+            ca.mint_user_cert(&request(&expired, &subject, &clean()), NOW_MS),
             Err(CertMintError::OutsideGrantWindow { at_ms: NOW_MS })
         );
 
@@ -554,13 +606,14 @@ mod tests {
             .actions
             .insert(ACTION_SSH_PTY.into());
         assert_eq!(
-            ca.mint_user_cert(&request(&tampered, &subject), NOW_MS),
+            ca.mint_user_cert(&request(&tampered, &subject, &clean()), NOW_MS),
             Err(CertMintError::UnverifiedGrant)
         );
 
         // No principals is OpenSSH's "golden ticket": valid everywhere.
         let grant = grant_with(&provider, &[ACTION_SSH_LOGIN], None);
-        let mut bare = request(&grant, &subject);
+        let empty = clean();
+        let mut bare = request(&grant, &subject, &empty);
         bare.principals.clear();
         assert_eq!(
             ca.mint_user_cert(&bare, NOW_MS),
@@ -572,7 +625,7 @@ mod tests {
         foreign_cert.scope.domain = "moot".into();
         let foreign = SignedDelegationCertificate::issue(&provider, foreign_cert).unwrap();
         assert_eq!(
-            ca.mint_user_cert(&request(&foreign, &subject), NOW_MS),
+            ca.mint_user_cert(&request(&foreign, &subject, &clean()), NOW_MS),
             Err(CertMintError::WrongDomain("moot".into()))
         );
     }
@@ -585,7 +638,10 @@ mod tests {
         let ca = SshCertAuthority::derive(&provider).unwrap();
         let grant = grant_with(&provider, &[ACTION_SSH_LOGIN], None);
         let cert = ca
-            .mint_user_cert(&request(&grant, &PublicKey::from(&subject_key())), NOW_MS)
+            .mint_user_cert(
+                &request(&grant, &PublicKey::from(&subject_key()), &clean()),
+                NOW_MS,
+            )
             .unwrap();
         assert_eq!(cert.key_id(), key_id_for(&grant.certificate.id()));
         assert_eq!(cert.key_id().len(), 64);

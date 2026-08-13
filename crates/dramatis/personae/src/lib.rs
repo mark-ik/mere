@@ -73,6 +73,8 @@ pub mod ssh_ca;
 #[cfg(feature = "ssh")]
 pub mod ssh_face;
 #[cfg(feature = "ssh")]
+pub mod ssh_krl;
+#[cfg(feature = "ssh")]
 pub mod ssh_slot;
 pub mod startup_unlock;
 pub mod vault;

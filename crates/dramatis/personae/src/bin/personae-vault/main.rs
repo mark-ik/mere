@@ -23,6 +23,8 @@
 //!   mint <slot>                 mint a login certificate for this face
 //!   enroll-host [user@]host     teach a machine to accept this authority
 //!   face [work|research|burner] show or set this face's SSH reach
+//!   revoke <device>             stop certifying a machine
+//!   krl [--out <file>]          render/compile the revocation list
 //! ```
 //!
 //! Slot keys accept a unique prefix, so
@@ -39,7 +41,7 @@ use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
 
 mod certs;
-use certs::{cmd_ca, cmd_enroll_host, cmd_face, cmd_mint};
+use certs::{cmd_ca, cmd_enroll_host, cmd_face, cmd_krl, cmd_mint, cmd_revoke};
 
 const USAGE: &str = "\
 usage: personae-vault [--dir <vault-dir>] [--profile <name>] <command>
@@ -60,6 +62,8 @@ commands:
         [--principal <p>] [--system]
   face [work|research|burner] show or set this face's SSH reach
         [--principal <p>] [--command <c>]
+  revoke <device>             stop certifying a machine
+  krl [--out <file>]          render/compile the revocation list
 
 slot keys accept a unique prefix, e.g. `show ssh:SHA256:d3tQ`.
 set PERSONAE_PASSPHRASE to use the portable passphrase vault instead of
@@ -120,6 +124,8 @@ fn run() -> Result<(), String> {
         "mint" => cmd_mint(&load(&*opened.storage, &cli.profile)?, &cli.rest),
         "enroll-host" => cmd_enroll_host(&load(&*opened.storage, &cli.profile)?, &cli.rest),
         "face" => cmd_face(&*opened.storage, &cli.profile, &cli.rest),
+        "revoke" => cmd_revoke(&*opened.storage, &cli.profile, &cli.rest),
+        "krl" => cmd_krl(&load(&*opened.storage, &cli.profile)?, &cli.rest),
         other => Err(format!("unknown command {other:?}\n\n{USAGE}")),
     }
 }

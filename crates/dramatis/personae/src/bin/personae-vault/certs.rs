@@ -8,11 +8,13 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use personae::delegation::{DelegationRevocation, SignedDelegationRevocation};
 use personae::enroll::{self, device_id_for_host};
 use personae::ssh_ca::{SshCertAuthority, UserCertRequest};
 use personae::ssh_face::{self, FacePolicy};
+use personae::ssh_krl;
 use personae::vault::Profile;
-use personae::{InMemoryProvider, ssh_slot};
+use personae::{IdentityProvider, InMemoryProvider, ssh_slot};
 use ssh_key::public::PublicKey;
 
 use crate::format_key;
@@ -70,6 +72,7 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
             policy.principals.join(", ")
         ));
     }
+    let ledger = ssh_krl::load_ledger(profile).map_err(str_err)?;
     let provider = InMemoryProvider::from_seed(profile.master.to_seed());
     let grant = personae::ssh_ca::self_grant(
         &provider,
@@ -90,6 +93,7 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
                 // narrow a face further, never widen it.
                 force_command: flag(rest, "--force-command").or(policy.force_command.clone()),
                 source_address: flag(rest, "--source-address").or(policy.source_address.clone()),
+                ledger: &ledger,
             },
             now_ms(),
         )
@@ -200,6 +204,101 @@ fn resolve_ssh_key(profile: &Profile, typed: &str) -> Result<ssh_key::PrivateKey
             ))
         }
     }
+}
+
+/// Revoke a device: this vault stops certifying it, immediately.
+pub(crate) fn cmd_revoke(
+    storage: &dyn personae::vault::IdentityStorage,
+    id: &personae::vault::ProfileId,
+    rest: &[String],
+) -> Result<(), String> {
+    let name = rest
+        .first()
+        .filter(|arg| !arg.starts_with("--"))
+        .cloned()
+        .ok_or("revoke needs a device, e.g. `revoke thinkpad.local`")?;
+    let mut profile = storage
+        .load_profile(id)
+        .map_err(|err| format!("load profile: {err}"))?;
+    let device = device_id_for_host(&name);
+    let provider = InMemoryProvider::from_seed(profile.master.to_seed());
+    let policy = ssh_face::effective_policy(&profile).map_err(str_err)?;
+    let now = now_ms();
+
+    // Revocation names a grant, and the grant it names is one issued for
+    // this device: what closes the device is the serial they share.
+    let grant = personae::ssh_ca::self_grant(&provider, device, &policy.action_refs(), 1, now)
+        .map_err(|err| format!("name the device's grant: {err}"))?;
+    let revocation = SignedDelegationRevocation::issue(
+        &provider,
+        DelegationRevocation::new(
+            grant.certificate.id(),
+            provider.master_public_key().to_bytes(),
+            grant.certificate.scope.clone(),
+            now,
+            *blake3::hash(&now.to_le_bytes()).as_bytes(),
+        ),
+    )
+    .map_err(|err| format!("sign the revocation: {err}"))?;
+
+    let mut ledger = ssh_krl::load_ledger(&profile).map_err(str_err)?;
+    if !ledger.fold(&revocation, &name) {
+        return Err("the revocation did not verify".to_string());
+    }
+    ssh_krl::store_ledger(&mut profile, &ledger).map_err(str_err)?;
+    storage
+        .save_profile(&profile)
+        .map_err(|err| format!("save profile: {err}"))?;
+
+    let serial = personae::ssh_ca::serial_for_device(device);
+    println!("revoked {name} (certificate serial {serial})");
+    println!("  this vault will not certify it again, so its access ends when its");
+    println!("  last certificate expires (at most 12h)");
+    println!("  to close it on a host now: personae-vault krl --out <file>, then");
+    println!("  RevokedKeys in that host's sshd_config");
+    Ok(())
+}
+
+/// Render the revocation list, and compile it when ssh-keygen is present.
+pub(crate) fn cmd_krl(profile: &Profile, rest: &[String]) -> Result<(), String> {
+    let ledger = ssh_krl::load_ledger(profile).map_err(str_err)?;
+    if ledger.is_empty() {
+        println!("nothing is revoked");
+        return Ok(());
+    }
+    let spec = ledger.krl_spec();
+    let Some(out) = flag(rest, "--out") else {
+        print!("{spec}");
+        println!("# compile with: ssh-keygen -k -s <ca.pub> -f <krl> <this file>");
+        return Ok(());
+    };
+
+    // ssh-keygen needs the CA key on disk to bind serial and id records to
+    // the authority they revoke under, so it goes to a sibling file the
+    // caller can keep: it is public material, and a host deploying the KRL
+    // wants it anyway.
+    let ca = authority(profile)?;
+    let spec_path = format!("{out}.spec");
+    let ca_path = format!("{out}.ca.pub");
+    std::fs::write(&spec_path, &spec).map_err(|err| format!("write {spec_path}: {err}"))?;
+    std::fs::write(&ca_path, ca.trusted_user_ca_line().map_err(str_err)?)
+        .map_err(|err| format!("write {ca_path}: {err}"))?;
+
+    let status = Command::new("ssh-keygen")
+        .args(["-k", "-s", &ca_path, "-f", &out, &spec_path])
+        .status()
+        .map_err(|err| format!("run ssh-keygen: {err}"))?;
+    if !status.success() {
+        return Err(format!(
+            "ssh-keygen could not compile the KRL (spec left at {spec_path})"
+        ));
+    }
+    println!(
+        "wrote {out} ({} device(s) revoked)",
+        ledger.devices().count()
+    );
+    println!("  deploy: copy to the host and name it in sshd_config's RevokedKeys");
+    Ok(())
 }
 
 /// Show or set this face's SSH policy.

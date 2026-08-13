@@ -51,6 +51,7 @@ use crate::signing::{
 };
 use crate::ssh_ca::{self, SshCertAuthority, UserCertRequest};
 use crate::ssh_face;
+use crate::ssh_krl;
 use crate::ssh_slot::{self, SshSlot};
 use crate::vault::{IdentityStorage, IdentityVault, ProtocolKey, UnlockTier};
 use crate::{InMemoryProvider, enroll};
@@ -155,6 +156,7 @@ impl<S: IdentityStorage> VaultAgent<S> {
         let provider = InMemoryProvider::from_seed(profile.master.to_seed());
         let ca = SshCertAuthority::derive(&provider).ok()?;
         let policy = ssh_face::effective_policy(profile).ok()?;
+        let ledger = ssh_krl::load_ledger(profile).ok()?;
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .ok()?
@@ -174,6 +176,7 @@ impl<S: IdentityStorage> VaultAgent<S> {
                 principals: policy.principals.clone(),
                 force_command: policy.force_command.clone(),
                 source_address: policy.source_address.clone(),
+                ledger: &ledger,
             },
             now_ms,
         )

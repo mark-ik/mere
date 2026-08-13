@@ -24,8 +24,12 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use personae::carry::{ACTION_SSH_LOGIN, ACTION_SSH_PTY, DeviceId, device_capability_scope};
-use personae::delegation::{DelegationCertificate, DelegationParent, SignedDelegationCertificate};
-use personae::ssh_ca::{SshCertAuthority, UserCertRequest};
+use personae::delegation::{
+    DelegationCertificate, DelegationParent, DelegationRevocation, SignedDelegationCertificate,
+    SignedDelegationRevocation,
+};
+use personae::ssh_ca::{SshCertAuthority, UserCertRequest, serial_for_device};
+use personae::ssh_krl::RevocationLedger;
 use personae::{IdentityProvider, InMemoryProvider};
 use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
@@ -158,6 +162,7 @@ fn a_live_sshd_accepts_a_minted_certificate() {
                 principals: vec![user.clone()],
                 force_command: None,
                 source_address: None,
+                ledger: &RevocationLedger::new(),
             },
             now_ms(),
         )
@@ -377,6 +382,7 @@ fn enrollment_teaches_a_host_to_accept_the_authority() {
                 principals: vec![user.clone()],
                 force_command: None,
                 source_address: None,
+                ledger: &RevocationLedger::new(),
             },
             now_ms(),
         )
@@ -514,6 +520,7 @@ fn a_face_reaches_exactly_as_far_as_its_policy() {
                     principals,
                     force_command: force,
                     source_address: None,
+                    ledger: &RevocationLedger::new(),
                 },
                 now_ms(),
             )
@@ -578,6 +585,167 @@ fn a_face_reaches_exactly_as_far_as_its_policy() {
         "the client's own command ran despite force-command: {out:?}"
     );
     println!("work face in, burner refused on the same host, forced command in effect");
+}
+
+/// Revocation's second line, checked against `sshd`: a certificate that
+/// works is refused the moment a KRL naming its device is deployed — no
+/// restart, no waiting for expiry, and without the certificate itself ever
+/// being seen by whoever wrote the list.
+#[test]
+#[ignore = "needs a local sshd; run explicitly with --ignored"]
+fn a_deployed_krl_refuses_a_certificate_that_worked() {
+    let user = std::env::var("USER").expect("USER is set");
+    let dir = std::env::temp_dir().join(format!("personae-krl-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join(".ssh")).expect("create fixture home");
+    set_mode(&dir, 0o700);
+    set_mode(&dir.join(".ssh"), 0o700);
+    let mut fixture = Fixture {
+        dir: dir.clone(),
+        sshd: None,
+        port: free_port(),
+    };
+
+    let provider = InMemoryProvider::from_seed([4; 32]);
+    let ca = SshCertAuthority::derive(&provider).expect("derive the CA");
+    let ca_path = dir.join("ca.pub");
+    fs::write(&ca_path, ca.trusted_user_ca_line().expect("ca line")).expect("write ca.pub");
+    let line = personae::enroll::user_trust_line(&ca, &[user.clone()]).expect("trust line");
+    run_script(&personae::enroll::user_install_script(&line), &dir);
+
+    let device = DeviceId::from_uuid(uuid::Uuid::from_u128(0x2026_0812));
+    let grant = ssh_grant(&provider);
+    let key = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+    let key_path = dir.join("id_ed25519");
+    write_private(&key_path, &key);
+    let cert = ca
+        .mint_user_cert(
+            &UserCertRequest {
+                grant: &grant,
+                subject: &PublicKey::from(&key),
+                principals: vec![user.clone()],
+                force_command: None,
+                source_address: None,
+                ledger: &RevocationLedger::new(),
+            },
+            now_ms(),
+        )
+        .expect("mint");
+    let cert_path = dir.join("id_ed25519-cert.pub");
+    fs::write(&cert_path, cert.to_openssh().expect("encode")).expect("write cert");
+
+    // The KRL is in the config from the start, so proving revocation needs
+    // no restart: sshd reads the file per authentication attempt, which is
+    // what makes deploying one a copy rather than a maintenance window.
+    let krl_path = dir.join("revoked.krl");
+    compile_krl(&RevocationLedger::new(), &ca_path, &krl_path, &dir);
+
+    let host_key = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+    write_private(&dir.join("host_key"), &host_key);
+    let config = dir.join("sshd_config");
+    fs::write(
+        &config,
+        format!(
+            "Port {port}\nListenAddress 127.0.0.1\nHostKey {dir}/host_key\n\
+             AuthorizedKeysFile {dir}/.ssh/authorized_keys\nRevokedKeys {dir}/revoked.krl\n\
+             PidFile {dir}/sshd.pid\nStrictModes no\nUsePAM no\n\
+             PasswordAuthentication no\nKbdInteractiveAuthentication no\nLogLevel VERBOSE\n",
+            port = fixture.port,
+            dir = dir.display(),
+        ),
+    )
+    .expect("write sshd_config");
+    let log = fs::File::create(dir.join("sshd.log")).expect("create log");
+    fixture.sshd = Some(
+        Command::new("/usr/sbin/sshd")
+            .args(["-D", "-e", "-f"])
+            .arg(&config)
+            .stderr(Stdio::from(log))
+            .stdout(Stdio::null())
+            .spawn()
+            .expect("spawn sshd"),
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while TcpListener::bind(("127.0.0.1", fixture.port)).is_ok() {
+        assert!(Instant::now() < deadline, "sshd never bound its port");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let login = |marker: &str| -> String {
+        let out = Command::new("ssh")
+            .args([
+                "-i",
+                key_path.to_str().unwrap(),
+                "-o",
+                &format!("CertificateFile={}", cert_path.display()),
+                "-o",
+                &format!("UserKnownHostsFile={}", dir.join("known_hosts").display()),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "IdentitiesOnly=yes",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &fixture.port.to_string(),
+                &format!("{user}@127.0.0.1"),
+                &format!("echo {marker}"),
+            ])
+            .output()
+            .expect("run ssh");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+
+    assert!(
+        login("before-revocation").contains("before-revocation"),
+        "the certificate should work before anything is revoked"
+    );
+
+    // Revoke the device, compile the list, drop it in place.
+    let mut ledger = RevocationLedger::new();
+    let revocation = SignedDelegationRevocation::issue(
+        &provider,
+        DelegationRevocation::new(
+            grant.certificate.id(),
+            provider.master_public_key().to_bytes(),
+            grant.certificate.scope.clone(),
+            now_ms(),
+            [7; 32],
+        ),
+    )
+    .expect("sign the revocation");
+    assert!(ledger.fold(&revocation, "fixture-device"));
+    assert!(ledger.is_revoked(serial_for_device(device)));
+    compile_krl(&ledger, &ca_path, &krl_path, &dir);
+
+    let after = login("after-revocation");
+    let sshd_log = fs::read_to_string(dir.join("sshd.log")).unwrap_or_default();
+    assert!(
+        !after.contains("after-revocation"),
+        "the certificate still worked after its device was revoked\n{sshd_log}"
+    );
+    assert!(
+        sshd_log.contains("revoked") || sshd_log.contains("Revoked"),
+        "sshd should say why it refused\n{sshd_log}"
+    );
+    println!("same certificate: accepted before the KRL, refused after it, no restart");
+}
+
+/// Compile a ledger into the binary KRL `sshd` reads.
+fn compile_krl(ledger: &RevocationLedger, ca_path: &Path, krl_path: &Path, dir: &Path) {
+    let spec_path = dir.join("revoked.spec");
+    fs::write(&spec_path, ledger.krl_spec()).expect("write krl spec");
+    let status = Command::new("ssh-keygen")
+        .arg("-k")
+        .arg("-s")
+        .arg(ca_path)
+        .arg("-f")
+        .arg(krl_path)
+        .arg(&spec_path)
+        .stdout(Stdio::null())
+        .status()
+        .expect("run ssh-keygen -k");
+    assert!(status.success(), "ssh-keygen could not compile the KRL");
 }
 
 /// Run an enrollment script the way `ssh` would, but against `home`.
