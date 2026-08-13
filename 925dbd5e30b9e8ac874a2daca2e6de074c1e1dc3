@@ -1,0 +1,19 @@
+ATTRIBUTION CORRECTION. The subject describes a doc edit, but the largest
+thing in this commit is someone else's code: the M2 device-grant certificate
+constructor, swept in from a dirty tree while it was mid-verification.
+
+Swept in, the device grant certificate migration's M2 (part one):
+  crates/dramatis/personae/src/carry/grant.rs   (new, 213)
+  crates/dramatis/personae/src/carry/mod.rs     (module wiring)
+  crates/dramatis/personae/src/ssh_ca.rs        (self_grant delegates to it)
+  design_docs/.../2026-08-12_device_grant_certificate_migration_plan.md
+  design_docs/DOC_README.md
+
+That work is described in full in the following commit, "M2 part one: one
+constructor for both device modes", which carries its rationale, the nonce
+collision it fixes, and its test evidence. Read the two together: the code
+landed here, the account of it landed there.
+
+No history surgery was done to un-bundle this, deliberately. Sweeping is the
+house rule and is preferred to work sitting dirty; the only defect is that
+the message did not say what was swept, which is what this note repairs.
