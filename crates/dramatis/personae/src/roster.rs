@@ -190,16 +190,42 @@ pub fn create_profile(
     Ok(profile)
 }
 
+/// Open the vault at `dir` on a named persona, minting it when absent.
+///
+/// [`open_chosen`] is this with the convention ladder in front of it. An
+/// application whose user has just picked a persona calls this one, so the
+/// choice takes effect on its own rather than by way of the remembered file:
+/// a vault directory that cannot be written to would otherwise silently open
+/// somebody else.
+pub fn open_profile(
+    dir: &Path,
+    unlock: Unlock,
+    profile_id: &ProfileId,
+) -> Result<OpenedVault, IdentityError> {
+    vault_on(bootstrap::open_storage(dir, unlock)?, profile_id)
+}
+
 /// Open the vault at `dir` on whichever persona [`resolve_profile`] picks,
 /// minting it when absent.
 pub fn open_chosen(dir: &Path, unlock: Unlock) -> Result<OpenedVault, IdentityError> {
     let opened = bootstrap::open_storage(dir, unlock)?;
     let profile_id = resolve_profile(&*opened.storage, dir)?;
-    let (profile, created) = bootstrap::load_or_create_profile(&*opened.storage, &profile_id)?;
+    vault_on(opened, &profile_id)
+}
+
+/// Load (or mint) `profile_id` in an already-open storage and hand back the
+/// vault on it. Shared by both open paths so unlocking happens exactly once:
+/// a passphrase vault pays for Argon2 on open, and paying twice to name a
+/// profile would be felt.
+fn vault_on(
+    opened: bootstrap::OpenedStorage,
+    profile_id: &ProfileId,
+) -> Result<OpenedVault, IdentityError> {
+    let (profile, created) = bootstrap::load_or_create_profile(&*opened.storage, profile_id)?;
     Ok(OpenedVault {
         vault: IdentityVault::with_profile(opened.storage, profile),
         description: opened.description,
-        profile: profile_id,
+        profile: profile_id.clone(),
         created,
     })
 }

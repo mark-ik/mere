@@ -109,16 +109,34 @@ into the two homes its halves always had.
   been rewritten to the byte-iteration form, which is the tell. Fixed here
   anyway with a `hex_digest` helper at the two production sites, since it is
   two lines and the tree should not stay red.
-- **The second is left standing and flagged**: `ports/graphshell/web` is a
-  `cdylib` of wasm-only code (`muniment::IndexedDbBackend`,
-  `wgpu::SurfaceTarget::Canvas`) and is a plain workspace member, so
-  `cargo check --workspace` compiles it for the native host, where neither
-  symbol exists. That is why nobody runs the workspace check here, which is
-  in turn why the graphshell hole survived two days. The fix (a wasm-only
-  target gate, or exclusion from the default members with a documented
-  `--target wasm32-unknown-unknown` check) belongs to that port's owner, not
-  to this reorg. **This reorg's gate is therefore per-crate**, which is what
-  its done conditions record.
+- **The second was flagged, then fixed — the workspace has a green gate
+  again (2026-08-12).** `ports/graphshell/web` is a `cdylib` of wasm-only
+  code (`muniment::IndexedDbBackend`, `wgpu::SurfaceTarget::Canvas`) and is
+  a plain workspace member, so `cargo check --workspace` compiled it for the
+  native host, where neither symbol exists. That is why nobody ran the
+  workspace check here, which is in turn why the graphshell hole survived
+  two days.
+
+  **Fixed with a crate-level `#![cfg(target_arch = "wasm32")]`** on its lib
+  root (`ports/graphshell/src/web.rs`), so it compiles to nothing off wasm.
+  Chosen over moving it to `exclude`: an excluded crate becomes its own
+  workspace root and needs a second `Cargo.lock` and a hand-copied
+  `[patch]` table (the arrangement that makes signalman-desktop fragile),
+  whereas a gated member keeps sharing both. Its doc comment carries the
+  command that checks it for the target it is for.
+
+  **A third instance of the crypto-row hole surfaced in the same pass**, in
+  `src/bin/h6_transfer_peer/source.rs`. It had stayed hidden because bin
+  targets are only compiled by `--all-targets` or a workspace check — the
+  gate that could not run. It carries the byte-iteration idiom inline: a
+  bin links the library as an external crate, so `transfer::hex_digest`
+  (private) is out of reach.
+
+  **Receipts**: `cargo check --workspace --all-targets` on
+  x86_64-pc-windows-msvc exits 0 with zero error lines, and `cargo check -p
+  graphshell-web --target wasm32-unknown-unknown` exits 0. Use
+  `--all-targets`: the lib-only form is what let a bin carry a compile
+  error for two days.
 
 ## Done conditions
 

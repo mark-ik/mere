@@ -1,4 +1,18 @@
 //! Headed browser presenter for the Graphshell reference host.
+//!
+//! The whole crate is browser-only: it presents onto an
+//! `HtmlCanvasElement` through WebGPU and stores through IndexedDB, neither
+//! of which exists off wasm. The crate-level `cfg` below makes it compile to
+//! nothing on a native host, so `cargo check --workspace` — the gate that
+//! covers every other member — is not permanently red for a target this
+//! crate was never meant to build for. It stays a workspace member rather
+//! than an `exclude`d one so it keeps sharing the workspace lock and the
+//! root `[patch]` table; excluding it would mean maintaining a second copy
+//! of both.
+//!
+//! Check it for the target it is for:
+//! `cargo check -p graphshell-web --target wasm32-unknown-unknown`.
+#![cfg(target_arch = "wasm32")]
 
 mod web_events;
 mod web_gpu;

@@ -74,7 +74,14 @@ pub(crate) async fn serve(
     )
     .map_err(|error| error.to_string())?;
 
-    let sha256 = format!("{:x}", Sha256::digest(&file_bytes));
+    // Spelled out rather than `{:x}`: on the digest 0.11 row a digest is a
+    // `hybrid_array::Array`, which has no `LowerHex` impl. Same shape as
+    // `transfer::hex_digest`, which this bin cannot reach (a bin links the
+    // library as an external crate, and that helper is private to it).
+    let sha256: String = Sha256::digest(&file_bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
     let file_name = file
         .file_name()
         .and_then(|name| name.to_str())

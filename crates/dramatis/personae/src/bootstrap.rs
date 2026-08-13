@@ -34,6 +34,15 @@ pub enum Unlock {
 }
 
 impl Unlock {
+    /// A passphrase vault from raw bytes.
+    ///
+    /// The zeroizing wrapper is this crate's business, not its callers': an
+    /// application opening a portable vault should not have to take a
+    /// `zeroize` dependency to name the variant.
+    pub fn passphrase(passphrase: impl Into<Vec<u8>>) -> Self {
+        Self::Passphrase(Zeroizing::new(passphrase.into()))
+    }
+
     /// [`Unlock::Passphrase`] when [`PASSPHRASE_ENV`] is set, else
     /// [`Unlock::AutoOs`].
     pub fn from_env() -> Self {
