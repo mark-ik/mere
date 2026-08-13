@@ -15,7 +15,7 @@
 //! ```text
 //! let opened = bootstrap::open_storage(&dir, Unlock::from_env())?;
 //! let list = roster::read_roster(&*opened.storage, &dir, &opened.description)?;
-//! let view = persona_picker(&state, &list);
+//! let view = persona_picker_focused(&state, &list);  // or persona_picker
 //! // on PickerEvent::Chose(id): roster::remember_profile(&dir, &id)?, then reopen.
 //! ```
 
@@ -23,7 +23,7 @@
 
 use cambium::{
     Action, CommandEvent, CommandItem, CommandState, GenetCtx, GenetElement, View, command_picker,
-    map_action,
+    map_action, request_focus,
 };
 use identity::roster::{Roster, RosterEntry};
 use identity::vault::ProfileId;
@@ -119,20 +119,51 @@ pub fn persona_picker(
     state: &CommandState,
     roster: &Roster,
 ) -> impl View<CommandState, PickerEvent, GenetCtx, Element = GenetElement> + use<> {
+    picker(state, roster, false)
+}
+
+/// The persona picker, asking for the caret as it appears.
+///
+/// For an application that opens *on* this question. A startup gate has nothing
+/// else on screen to hold focus, so without the request every keyboard
+/// interaction the picker offers — the arrows, Enter, and the Escape that
+/// declines — waits on a Tab the user has no reason to press, and the list
+/// reads as a thing you can only click.
+///
+/// The request fires once, when the view first appears; holding it does not
+/// steal the caret back on later rebuilds (see
+/// [`request_focus`](cambium::request_focus)). A picker raised over a working
+/// screen usually wants [`persona_picker`] instead, so that focus stays where
+/// the user put it.
+pub fn persona_picker_focused(
+    state: &CommandState,
+    roster: &Roster,
+) -> impl View<CommandState, PickerEvent, GenetCtx, Element = GenetElement> + use<> {
+    picker(state, roster, true)
+}
+
+fn picker(
+    state: &CommandState,
+    roster: &Roster,
+    focus: bool,
+) -> impl View<CommandState, PickerEvent, GenetCtx, Element = GenetElement> + use<> {
     let items = roster_items(roster);
     // The ids come off the rows themselves, so the mapping back cannot drift
     // from what was drawn.
     let ids: Vec<String> = items.iter().map(|item| item.id.clone()).collect();
-    map_action(command_picker(state, &items), move |_state, event| {
-        let CommandEvent::Activate(path) = event else {
-            return PickerEvent::Dismissed;
-        };
-        match path.first().and_then(|index| ids.get(*index)) {
-            Some(id) if id == CREATE_ROW_ID => PickerEvent::CreateRequested,
-            Some(id) => PickerEvent::Chose(ProfileId(id.clone())),
-            None => PickerEvent::Dismissed,
-        }
-    })
+    map_action(
+        request_focus(command_picker(state, &items), focus),
+        move |_state, event| {
+            let CommandEvent::Activate(path) = event else {
+                return PickerEvent::Dismissed;
+            };
+            match path.first().and_then(|index| ids.get(*index)) {
+                Some(id) if id == CREATE_ROW_ID => PickerEvent::CreateRequested,
+                Some(id) => PickerEvent::Chose(ProfileId(id.clone())),
+                None => PickerEvent::Dismissed,
+            }
+        },
+    )
 }
 
 #[cfg(test)]
