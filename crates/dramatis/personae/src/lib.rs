@@ -54,6 +54,8 @@ pub mod agent;
 pub mod bootstrap;
 pub mod carry;
 pub mod delegation;
+#[cfg(feature = "ssh")]
+pub mod enroll;
 mod error;
 mod keypair;
 pub mod passphrase_root;
@@ -67,9 +69,9 @@ pub mod sealed_record_storage;
 #[cfg(feature = "agent")]
 pub mod signing;
 #[cfg(feature = "ssh")]
-pub mod enroll;
-#[cfg(feature = "ssh")]
 pub mod ssh_ca;
+#[cfg(feature = "ssh")]
+pub mod ssh_face;
 #[cfg(feature = "ssh")]
 pub mod ssh_slot;
 pub mod startup_unlock;

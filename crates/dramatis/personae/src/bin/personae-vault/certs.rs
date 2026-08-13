@@ -8,18 +8,16 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use personae::carry::{
-    ACTION_SSH_AGENT_FORWARD, ACTION_SSH_LOGIN, ACTION_SSH_PORT_FORWARD, ACTION_SSH_PTY,
-    device_capability_scope,
-};
+use personae::carry::device_capability_scope;
 use personae::delegation::{DelegationCertificate, DelegationParent, SignedDelegationCertificate};
 use personae::enroll::{self, device_id_for_host};
 use personae::ssh_ca::{SshCertAuthority, UserCertRequest};
+use personae::ssh_face::{self, FacePolicy};
 use personae::vault::Profile;
 use personae::{IdentityProvider, InMemoryProvider, ssh_slot};
 use ssh_key::public::PublicKey;
 
-use crate::resolve_key;
+use crate::format_key;
 
 // ─── the certificate authority ────────────────────────────────────────────
 
@@ -97,12 +95,17 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
         .transpose()?
         .unwrap_or(12);
 
-    let key = resolve_key(profile, slot_key)?;
-    let slot = profile.slots.get(&key).ok_or("slot vanished")?;
-    let private = ssh_slot::private_key_from_slot(slot).map_err(|err| format!("{err}"))?;
+    let private = resolve_ssh_key(profile, slot_key)?;
 
-    let actions = face_actions(&principal);
-    let grant = ssh_grant(profile, &host, &actions, hours)?;
+    let policy = ssh_face::effective_policy(profile).map_err(str_err)?;
+    if !policy.principals.contains(&principal) {
+        return Err(format!(
+            "face {:?} may not name principal {principal:?} (it carries: {})",
+            profile.id.0,
+            policy.principals.join(", ")
+        ));
+    }
+    let grant = ssh_grant(profile, &host, &policy.action_refs(), hours)?;
     let ca = authority(profile)?;
     let cert = ca
         .mint_user_cert(
@@ -110,8 +113,11 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
                 grant: &grant,
                 subject: &PublicKey::from(&private),
                 principals: vec![principal.clone()],
-                force_command: flag(rest, "--force-command"),
-                source_address: flag(rest, "--source-address"),
+                // The face's own limits outrank the command line: a flag may
+                // narrow a face further, never widen it.
+                force_command: flag(rest, "--force-command").or(policy.force_command.clone()),
+                source_address: flag(rest, "--source-address")
+                    .or(policy.source_address.clone()),
             },
             now_ms(),
         )
@@ -138,9 +144,16 @@ pub(crate) fn cmd_enroll_host(profile: &Profile, rest: &[String]) -> Result<(), 
         .first()
         .ok_or("enroll-host needs a target, e.g. `enroll-host markik@q-pc.local`")?;
     let (user, host) = enroll::split_target(target);
+    let policy = ssh_face::effective_policy(profile).map_err(str_err)?;
     let principal = flag(rest, "--principal")
         .or_else(|| user.map(str::to_string))
-        .unwrap_or_else(default_principal);
+        .unwrap_or_else(|| {
+            policy
+                .principals
+                .first()
+                .cloned()
+                .unwrap_or_else(default_principal)
+        });
     let ca = authority(profile)?;
 
     if rest.iter().any(|arg| arg == "--system") {
@@ -189,21 +202,83 @@ pub(crate) fn cmd_enroll_host(profile: &Profile, rest: &[String]) -> Result<(), 
     Ok(())
 }
 
-/// Which capabilities a face carries.
+/// Resolve a slot name among this profile's SSH *keys* only.
 ///
-/// The burner is the shape the plan asked for: it logs in and nothing else,
-/// so its certificates carry no extensions at all.
-fn face_actions(principal: &str) -> Vec<&'static str> {
-    if principal.contains("burner") {
-        vec![ACTION_SSH_LOGIN]
-    } else {
-        vec![
-            ACTION_SSH_LOGIN,
-            ACTION_SSH_PTY,
-            ACTION_SSH_AGENT_FORWARD,
-            ACTION_SSH_PORT_FORWARD,
-        ]
+/// The generic resolver matches any mod_id by prefix, and `ssh` is a prefix
+/// of `ssh-face`, so `mint ssh` became ambiguous the moment face policies
+/// existed. Minting needs a key, and a policy is not one.
+fn resolve_ssh_key(profile: &Profile, typed: &str) -> Result<ssh_key::PrivateKey, String> {
+    let mut matches: Vec<_> = ssh_slot::ssh_slots(profile)
+        .into_iter()
+        .filter(|slot| format_key(&slot.key).starts_with(typed))
+        .collect();
+    match matches.len() {
+        1 => Ok(matches.remove(0).private),
+        0 => Err(format!(
+            "no ssh key matches {typed:?} (`personae-vault list` shows what is there)"
+        )),
+        _ => {
+            let mut names: Vec<String> = matches
+                .iter()
+                .map(|slot| format_key(&slot.key))
+                .collect();
+            names.sort();
+            Err(format!(
+                "{typed:?} is ambiguous; it matches:\n  {}",
+                names.join("\n  ")
+            ))
+        }
     }
+}
+
+/// Show or set this face's SSH policy.
+pub(crate) fn cmd_face(
+    storage: &dyn personae::vault::IdentityStorage,
+    id: &personae::vault::ProfileId,
+    rest: &[String],
+) -> Result<(), String> {
+    let mut profile = storage
+        .load_profile(id)
+        .map_err(|err| format!("load profile: {err}"))?;
+
+    if let Some(shape) = rest.first().filter(|arg| !arg.starts_with("--")) {
+        let principal = flag(rest, "--principal").unwrap_or_else(|| id.0.clone());
+        let policy = match shape.as_str() {
+            "work" => FacePolicy::work(principal),
+            "research" => FacePolicy::research(principal),
+            "burner" => FacePolicy::burner(
+                principal,
+                flag(rest, "--command").unwrap_or_else(|| "true".into()),
+            ),
+            other => {
+                return Err(format!(
+                    "unknown face shape {other:?} (work, research, burner)"
+                ));
+            }
+        };
+        ssh_face::store_policy(&mut profile, &policy).map_err(str_err)?;
+        storage
+            .save_profile(&profile)
+            .map_err(|err| format!("save profile: {err}"))?;
+        println!("face {:?} is now a {shape} face", id.0);
+    }
+
+    let policy = ssh_face::effective_policy(&profile).map_err(str_err)?;
+    let stored = ssh_face::load_policy(&profile).map_err(str_err)?.is_some();
+    println!(
+        "face: {:?}{}",
+        id.0,
+        if stored { "" } else { " (no stored policy; showing the default)" }
+    );
+    println!("  principals: {}", policy.principals.join(", "));
+    println!("  actions:    {}", policy.action_refs().join(", "));
+    if let Some(command) = &policy.force_command {
+        println!("  forced:     {command}");
+    }
+    if let Some(addresses) = &policy.source_address {
+        println!("  from:       {addresses}");
+    }
+    Ok(())
 }
 
 fn default_principal() -> String {

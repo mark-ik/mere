@@ -22,6 +22,7 @@
 //!   ca                          print the profile's SSH certificate authority
 //!   mint <slot> --host <h>      mint a login certificate for a machine
 //!   enroll-host [user@]host     teach a machine to accept this authority
+//!   face [work|research|burner] show or set this face's SSH reach
 //! ```
 //!
 //! Slot keys accept a unique prefix, so
@@ -38,7 +39,7 @@ use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
 
 mod certs;
-use certs::{cmd_ca, cmd_enroll_host, cmd_mint};
+use certs::{cmd_ca, cmd_enroll_host, cmd_face, cmd_mint};
 
 const USAGE: &str = "\
 usage: personae-vault [--dir <vault-dir>] [--profile <name>] <command>
@@ -57,6 +58,8 @@ commands:
         [--force-command <c>] [--source-address <cidr>]
   enroll-host [user@]host     teach a machine to accept this authority
         [--principal <p>] [--system]
+  face [work|research|burner] show or set this face's SSH reach
+        [--principal <p>] [--command <c>]
 
 slot keys accept a unique prefix, e.g. `show ssh:SHA256:d3tQ`.
 set PERSONAE_PASSPHRASE to use the portable passphrase vault instead of
@@ -116,6 +119,7 @@ fn run() -> Result<(), String> {
         "ca" => cmd_ca(&load(&*opened.storage, &cli.profile)?, &cli.rest),
         "mint" => cmd_mint(&load(&*opened.storage, &cli.profile)?, &cli.rest),
         "enroll-host" => cmd_enroll_host(&load(&*opened.storage, &cli.profile)?, &cli.rest),
+        "face" => cmd_face(&*opened.storage, &cli.profile, &cli.rest),
         other => Err(format!("unknown command {other:?}\n\n{USAGE}")),
     }
 }
@@ -328,7 +332,7 @@ fn cmd_remove(
 
 // ─── formatting helpers ───────────────────────────────────────────────────
 
-fn format_key(key: &ProtocolKey) -> String {
+pub(crate) fn format_key(key: &ProtocolKey) -> String {
     match &key.instance {
         Some(instance) => format!("{}:{instance}", key.mod_id),
         None => key.mod_id.clone(),

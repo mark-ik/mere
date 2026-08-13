@@ -439,6 +439,136 @@ fn enrollment_teaches_a_host_to_accept_the_authority() {
     println!("one cert-authority line, no root: certified login accepted, bare key refused");
 }
 
+/// Faces, checked where it counts: the same host, the same authority, two
+/// personae with different reach. The burner is refused by `sshd` on the
+/// principal restriction alone, before its (empty) extensions matter, and a
+/// forced command replaces whatever the client asks for.
+#[test]
+#[ignore = "needs a local sshd; run explicitly with --ignored"]
+fn a_face_reaches_exactly_as_far_as_its_policy() {
+    let user = std::env::var("USER").expect("USER is set");
+    let dir = std::env::temp_dir().join(format!("personae-face-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join(".ssh")).expect("create fixture home");
+    set_mode(&dir, 0o700);
+    set_mode(&dir.join(".ssh"), 0o700);
+    let mut fixture = Fixture {
+        dir: dir.clone(),
+        sshd: None,
+        port: free_port(),
+    };
+
+    let provider = InMemoryProvider::from_seed([3; 32]);
+    let ca = SshCertAuthority::derive(&provider).expect("derive the CA");
+
+    // The host is enrolled for the work face's principal only.
+    let line = personae::enroll::user_trust_line(&ca, &[user.clone()]).expect("trust line");
+    run_script(&personae::enroll::user_install_script(&line), &dir);
+
+    let host_key = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+    write_private(&dir.join("host_key"), &host_key);
+    let config = dir.join("sshd_config");
+    fs::write(
+        &config,
+        format!(
+            "Port {port}\nListenAddress 127.0.0.1\nHostKey {dir}/host_key\n\
+             AuthorizedKeysFile {dir}/.ssh/authorized_keys\nPidFile {dir}/sshd.pid\n\
+             StrictModes no\nUsePAM no\nPasswordAuthentication no\n\
+             KbdInteractiveAuthentication no\nLogLevel VERBOSE\n",
+            port = fixture.port,
+            dir = dir.display(),
+        ),
+    )
+    .expect("write sshd_config");
+    let log = fs::File::create(dir.join("sshd.log")).expect("create log");
+    fixture.sshd = Some(
+        Command::new("/usr/sbin/sshd")
+            .args(["-D", "-e", "-f"])
+            .arg(&config)
+            .stderr(Stdio::from(log))
+            .stdout(Stdio::null())
+            .spawn()
+            .expect("spawn sshd"),
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while TcpListener::bind(("127.0.0.1", fixture.port)).is_ok() {
+        assert!(Instant::now() < deadline, "sshd never bound its port");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let key = PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519).unwrap();
+    let key_path = dir.join("id_ed25519");
+    write_private(&key_path, &key);
+    let grant = ssh_grant(&provider);
+
+    let mint = |principals: Vec<String>, force: Option<String>, name: &str| {
+        let cert = ca
+            .mint_user_cert(
+                &UserCertRequest {
+                    grant: &grant,
+                    subject: &PublicKey::from(&key),
+                    principals,
+                    force_command: force,
+                    source_address: None,
+                },
+                now_ms(),
+            )
+            .expect("mint");
+        let path = dir.join(format!("{name}-cert.pub"));
+        fs::write(&path, cert.to_openssh().expect("encode")).expect("write cert");
+        path
+    };
+    let login = |cert: &Path, command: &str| -> String {
+        let out = Command::new("ssh")
+            .args([
+                "-i",
+                key_path.to_str().unwrap(),
+                "-o",
+                &format!("CertificateFile={}", cert.display()),
+                "-o",
+                &format!("UserKnownHostsFile={}", dir.join("known_hosts").display()),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "IdentitiesOnly=yes",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &fixture.port.to_string(),
+                &format!("{user}@127.0.0.1"),
+                command,
+            ])
+            .output()
+            .expect("run ssh");
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+
+    // The work face: its principal is the one the host was enrolled for.
+    let work = mint(vec![user.clone()], None, "work");
+    assert!(
+        login(&work, "echo work-face-ok").contains("work-face-ok"),
+        "the work face should reach this host"
+    );
+
+    // The burner: same authority, same key, same host — a principal the
+    // enrollment line does not list.
+    let burner = mint(vec!["burner".into()], None, "burner");
+    assert!(
+        !login(&burner, "echo burner-got-in").contains("burner-got-in"),
+        "the burner's principal is not enrolled here; sshd must refuse it"
+    );
+
+    // A forced command outranks whatever the client asks for.
+    let forced = mint(vec![user.clone()], Some("echo forced-instead".into()), "forced");
+    let out = login(&forced, "echo client-asked-for-this");
+    assert!(out.contains("forced-instead"), "force-command did not run: {out:?}");
+    assert!(
+        !out.contains("client-asked-for-this"),
+        "the client's own command ran despite force-command: {out:?}"
+    );
+    println!("work face in, burner refused on the same host, forced command in effect");
+}
+
 /// Run an enrollment script the way `ssh` would, but against `home`.
 fn run_script(script: &str, home: &Path) -> String {
     let mut child = Command::new("sh")
