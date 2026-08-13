@@ -1,9 +1,10 @@
 # SSH CA Projection Plan
 
 **Date**: 2026-08-12
-**Status**: Open. Drafted the evening the wgpu-weld parity sweep ran its
-Intel-iMac leg over SSH and paid the bilateral toll three ways in one
-afternoon.
+**Status**: T1–T5 landed 2026-08-12, the same day this was drafted; see
+Progress for what the building of it corrected. Drafted the evening the
+wgpu-weld parity sweep ran its Intel-iMac leg over SSH and paid the
+bilateral toll three ways in one afternoon.
 **Related**:
 [personae founding](2026-07-08_personae_founding.md),
 [device_grant_delegation_reconciliation](../../../../design_docs/mere_docs/technical_architecture/2026-08-11_device_grant_delegation_reconciliation.md),
@@ -117,3 +118,76 @@ touching the target machine by hand.
 T1 then T2, and daily use is real — that is the sweep's toll gone. T3–T5
 harden. The kith/mesh consumption note graduates into the mesh host lanes
 plan when its remote-adapter gate opens; nothing here blocks on it.
+
+## Progress
+
+**2026-08-12: T1–T5 all landed, same day the plan was written.** New
+modules `ssh_ca`, `ssh_face`, `ssh_krl`, `enroll`; `personae-vault` gains
+`ca`, `mint`, `enroll-host`, `face`, `revoke`, `krl`; the agent serves
+certificates; `install-agent-linux.sh` completes the three ceremonies. 121
+unit tests plus four `--ignored` live tests that run a real unprivileged
+`sshd` in a temp directory: OpenSSH agreeing with our reading of its own
+formats is the one thing no in-crate assertion can establish.
+
+Four things the plan got wrong, each found by building it:
+
+1. **`TrustedUserCAKeys` needs root; `authorized_keys` does not.**
+   `sshd(8)` honours a `cert-authority` option on a line in a user's own
+   `authorized_keys`, which is per-account, needs no privilege, no daemon
+   reload, and nothing outside that home. That is now the default path and
+   the system-wide directive is the opt-in — for whole-machine trust and
+   for host certificates, which a daemon must offer and so still cost root.
+   The consequence for T2's validation is worth stating plainly: the
+   no-root path retires per-client `authorized_keys` sprawl but **not**
+   host-key TOFU. Only the root path retires both.
+
+2. **A grant is held by the machine carrying the credential, not the one
+   being logged into.** T2 first scoped grants to the target, which reads
+   well and promises something the format cannot keep: an OpenSSH
+   certificate has no destination field, so any host trusting the CA and
+   listing the principal accepts it. Scoping to the holder keeps the
+   promise revocation actually needs — a stolen laptop's authority dies
+   everywhere by revoking one grant. Restricting *which* hosts a face
+   reaches is a principals question, settled at enrollment; T3's live test
+   is exactly that mechanism (the burner is refused by `sshd` on the
+   principal, before its empty extension set is even consulted).
+
+3. **Revocation must key on the certificate serial, not the grant id.** A
+   self-grant is re-issued on every mint, so its `DelegationId` is new each
+   time: revoking one id closes one certificate while the next mint walks
+   around it. The serial is derived from the device instead, so one KRL
+   `serial:` line retires every certificate that machine ever carried,
+   outstanding and future. The key id keeps carrying the grant id, because
+   that is what `sshd` logs and what an auditor reads back. `mint_user_cert`
+   now takes the ledger as a *required* field, so no caller can mint
+   without considering revocation; the compiler found all five call sites.
+
+4. **The projection is more mechanical than expected, for a reason worth
+   keeping.** OpenSSH extensions are positive permissions — absent means
+   denied — so an action a grant omits is an extension the certificate
+   never carries. `CapabilityScope::attenuates` and OpenSSH's own
+   attenuation are the same operation seen twice, which is why a face
+   narrowing needs no translation layer at all.
+
+Smaller findings: adding an `ssh-face` slot made `mint ssh` ambiguous,
+because the generic slot resolver matches any `mod_id` by prefix and `ssh`
+is a prefix of `ssh-face` (minting now resolves among keys only, and the
+trap is worth remembering for any future `ssh-*` module); `sshd` re-reads
+`RevokedKeys` per authentication, so deploying a KRL is a copy rather than
+a maintenance window; and the agent's socket path is bounded by `SUN_LEN`,
+which a long scratch directory will exceed with a clear error.
+
+Not done, and honest about it:
+
+- **The three-OS login validation is one-third met.** The certificate-
+  serving agent was exercised end to end on this machine (an ED25519-CERT
+  and the bare key both listed; a login carrying no `-i` and no
+  `CertificateFile` accepted on CA trust alone). Windows and Linux have
+  ceremonies written and not run: neither machine was available, and a
+  login-session claim is exactly the kind that must not be inferred.
+- **No real machine has been enrolled.** Enrollment writes to a target's
+  `authorized_keys`, which is a persistent change to a machine, so it waits
+  on its owner's say-so rather than riding along with the implementation.
+- **The KRL deploy path stops at the file.** `krl --out` compiles a real
+  KRL; putting it in a host's `sshd_config` is root-side and deliberately
+  left as printed instructions.
