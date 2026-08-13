@@ -27,20 +27,16 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use base64::Engine;
 use knot::{
-    KNOT_PUBLISH_DOMAIN, KNOT_PUBLISH_READ_ACTION, KNOT_PUBLISH_SERVICE, KnotPublishCatalog,
-    KnotPublishHost, KnotPublishHostLimits, KnotPublishRead, KnotShareRecipient, KnotShareTicket,
-    KnotSyncEvent, KnotSyncStore, KnotVault, PublishRequest, decode_response, encode_request,
-    publication_path, publish_alpn, publish_policy, revoke_share,
+    KnotPublishCatalog, KnotPublishHost, KnotPublishHostLimits, KnotPublishRead,
+    KnotShareRecipient, KnotShareTicket, KnotSyncEvent, KnotSyncStore, KnotVault,
+    decode_share_ticket, encode_share_ticket, fetch_published_document, publish_alpn,
+    publish_policy, revoke_share,
 };
-use notochord::{
-    NetworkId, ProfileRef, RequestedAction, SessionHello, TrafficClass, TrustedRoot,
-    initiate_session, read_frame, write_frame,
-};
+use notochord::{NetworkId, ProfileRef, TrustedRoot};
 use personae::{IdentityProvider, InMemoryProvider};
 use transport::p2panda_transport::{MdnsDiscoveryMode, P2pandaTransport};
-use transport::{PeerID, Transport, initiator_binding};
+use transport::{PeerID, Transport};
 
 const ROOT_AUTHORITY: [u8; 32] = [7; 32];
 /// Bounded time for mDNS to populate the ticket-bound holder's address.
@@ -151,9 +147,8 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
             },
         )
         .map_err(|error| format!("issue reader share: {error}"))?;
-    let encoded_ticket = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&ticket).map_err(|error| format!("encode share ticket: {error}"))?,
-    );
+    let encoded_ticket =
+        encode_share_ticket(&ticket).map_err(|error| format!("encode share ticket: {error}"))?;
     let policy = publish_policy(
         network,
         vec![TrustedRoot {
@@ -209,15 +204,8 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
 async fn visit(encoded_ticket: &str, route: PeerRoute) -> Result<(), String> {
     let reader_seed = env_key("KNOT_PUBLISH_READER_SEED")?;
     let reader = InMemoryProvider::from_seed(reader_seed);
-    let ticket: KnotShareTicket = serde_json::from_slice(
-        &base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .decode(encoded_ticket)
-            .map_err(|error| format!("ticket encoding: {error}"))?,
-    )
-    .map_err(|error| format!("ticket JSON: {error}"))?;
-    if ticket.service_path != KNOT_PUBLISH_SERVICE || ticket.delegations.is_empty() {
-        return Err("ticket does not carry a publishing delegation".into());
-    }
+    let ticket =
+        decode_share_ticket(encoded_ticket).map_err(|error| format!("share ticket: {error}"))?;
     let carrier = P2pandaTransport::builder_from_seed(reader_seed)
         .alpns(vec![publish_alpn()])
         .mdns(MdnsDiscoveryMode::Active)
@@ -251,68 +239,41 @@ async fn visit(encoded_ticket: &str, route: PeerRoute) -> Result<(), String> {
             short(&ticket.publisher)
         );
     }
-    let started = Instant::now();
-    let outer = loop {
-        match carrier.connect(peer, publish_alpn()).await {
-            Ok(outer) => break outer,
-            Err(error) if route == PeerRoute::Mdns && started.elapsed() < MDNS_DIAL_DEADLINE => {
-                tokio::time::sleep(Duration::from_millis(250)).await;
-                let _ = error;
+    let read = match route {
+        PeerRoute::Ticket => {
+            fetch_published_document(&carrier, reader.master_keypair(), profile_ref(), &ticket)
+                .await
+                .map_err(|error| format!("read holder from ticket: {error}"))?
+        }
+        PeerRoute::Mdns => {
+            let started = Instant::now();
+            loop {
+                match fetch_published_document(
+                    &carrier,
+                    reader.master_keypair(),
+                    profile_ref(),
+                    &ticket,
+                )
+                .await
+                {
+                    Ok(read) => break read,
+                    Err(error)
+                        if error.allows_endpoint_fallback()
+                            && started.elapsed() < MDNS_DIAL_DEADLINE =>
+                    {
+                        tokio::time::sleep(Duration::from_millis(250)).await;
+                    }
+                    Err(error) if error.allows_endpoint_fallback() => {
+                        return Err(format!(
+                            "mDNS did not resolve the holder before {} seconds: {error}",
+                            MDNS_DIAL_DEADLINE.as_secs()
+                        ));
+                    }
+                    Err(error) => return Err(format!("read holder over mDNS: {error}")),
+                }
             }
-            Err(error) if route == PeerRoute::Mdns => {
-                return Err(format!(
-                    "mDNS did not resolve the holder before {} seconds: {error}",
-                    MDNS_DIAL_DEADLINE.as_secs()
-                ));
-            }
-            Err(error) => return Err(format!("dial holder from ticket: {error}")),
         }
     };
-    let (mut stream, noise_peer) =
-        transport::noise::secure_initiator(reader.master_keypair(), outer, &publish_alpn())
-            .await
-            .map_err(|error| format!("Noise: {error}"))?;
-    if noise_peer.to_bytes() != ticket.publisher {
-        return Err("Noise identity does not match the ticket publisher".into());
-    }
-    let hello = SessionHello::issue(
-        &reader,
-        ticket.network,
-        profile_ref(),
-        RequestedAction {
-            domain: KNOT_PUBLISH_DOMAIN.into(),
-            path: publication_path(ticket.publication),
-            action: KNOT_PUBLISH_READ_ACTION.into(),
-        },
-        TrafficClass::Interactive,
-        nonce(reader_seed),
-        &initiator_binding(&publish_alpn(), carrier.local_peer_id()),
-        ticket.delegations.clone(),
-    )
-    .map_err(|error| format!("sign session hello: {error}"))?;
-    let reply = initiate_session(&mut stream, &hello, &Default::default())
-        .await
-        .map_err(|error| format!("Notochord admission: {error}"))?;
-    if !reply.is_accept() {
-        return Err(format!("holder refused reader: {reply:?}"));
-    }
-    let limits = KnotPublishHostLimits::default().wire;
-    let request = encode_request(
-        &PublishRequest::GetCurrent {
-            publication: ticket.publication,
-        },
-        limits,
-    )
-    .map_err(|error| format!("encode request: {error}"))?;
-    write_frame(&mut stream, &request, limits.max_request_bytes)
-        .await
-        .map_err(|error| format!("write request: {error}"))?;
-    let response = read_frame(&mut stream, limits.max_response_bytes)
-        .await
-        .map_err(|error| format!("read response: {error}"))?;
-    let read = decode_response(&response, limits)
-        .and_then(|response| response.into_read())
-        .map_err(|error| format!("decode response: {error}"))?;
     let KnotPublishRead::Document(document) = read else {
         return Err("holder made the selected publication unavailable".into());
     };
@@ -363,12 +324,6 @@ fn profile_ref() -> ProfileRef {
         id: "mere.base".into(),
         revision: 1,
     }
-}
-
-fn nonce(seed: [u8; 32]) -> [u8; 32] {
-    let mut material = seed.to_vec();
-    material.extend_from_slice(&now_ms().to_le_bytes());
-    *blake3::hash(&material).as_bytes()
 }
 
 fn now_ms() -> u64 {

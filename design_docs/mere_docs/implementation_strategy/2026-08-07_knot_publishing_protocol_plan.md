@@ -1,9 +1,11 @@
 # Knot Publishing Protocol Plan
 
 **Date**: 2026-08-07
-**Status**: Scoped, not started. Direction settled 2026-08-07: **A then B**
-(§4). The existing K2 Graphshell projection rehearsal is useful precedent, not
-this protocol. Nothing in this plan is implemented.
+**Status**: Phase A implemented and physically receipted 2026-08-09. Direction
+remains **A then B** (§4). The existing K2 Graphshell projection rehearsal is
+useful precedent, not this protocol. Phase B has not begun: the Phase-A grammar
+needs real product use and an intended independent implementer before it is
+promoted into a compatibility commitment.
 
 **Scope**: Let one persona explicitly share selected, versioned Knot documents
 with another persona without giving that reader a paired-writer grant, a vault
@@ -141,6 +143,13 @@ different, unpaired persona on a second physical machine using a holder-issued
 share ticket; its bytes, media type, content digest, and causal head verify;
 and revoking the same reader prevents a later request from revealing any
 document byte.
+
+**Status (2026-08-09):** Complete. A Windows reader discovered a ThinkPad
+holder over direct LAN mDNS, read the selected `text/vnd.knot` source, and then
+received a refusal for the identical ticket after its reader delegation was
+revoked. The holder and reader used distinct fixture identities. The core
+reader client landed at `d2090c34`; the receipt runner is subsequently kept on
+that public client path so the physical proof and product client do not drift.
 
 ### Phase B — publish the stable contract
 
@@ -319,6 +328,10 @@ errors or panics.
 
 ### P0. Extract retained admission authority
 
+**Status:** Complete. `notochord::RetainedAuthority` owns retained-chain
+expiry, revocation, and scoped coverage; Graphshell consumes it for its
+projection-specific lifecycle status.
+
 **Files:** `crates/system/notochord/src/*` and
 `ports/graphshell/src/lifecycle.rs`.
 
@@ -332,6 +345,10 @@ expiry, and one-path-versus-neighbour scope checks without importing
 Graphshell.
 
 ### P1. Add the publication read model
+
+**Status:** Complete. Knot has an explicit catalog, eligibility checks,
+historical materialization, reader-bound ticket, and non-disclosing absence
+behaviour under focused tests.
 
 **Files:** `ports/knot/src/publish.rs` (new), `sync.rs`, `lib.rs`, and focused
 unit tests.
@@ -347,6 +364,9 @@ operation, and receive no bytes for a deleted, pending, conflicted, unlisted,
 or unrelated operation.
 
 ### P2. Add the private wire codec
+
+**Status:** Complete for Phase A. The bounded versioned candidate codec remains
+an implementation detail rather than a published grammar.
 
 **Files:** `ports/knot/src/publish_wire.rs` (new), `Cargo.toml`, and codec
 tests.
@@ -365,6 +385,9 @@ the protocol.
 
 ### P3. Add the Knot carrier and resident host
 
+**Status:** Complete. The host performs the Noise and Notochord admission path,
+retains authority through response selection, and observes later revocation.
+
 **Files:** `ports/knot/src/publish_carrier.rs` and
 `ports/knot/src/publish_host.rs` (new), `lib.rs`, normal dependencies on
 `notochord` and `transport` with its `noise` feature.
@@ -381,6 +404,11 @@ Noise-plus-Notochord path with separate holder and reader identities.
 
 ### P4. Compose an explicit holder and reader
 
+**Status:** Complete. `knot_publish_peer` uses distinct holder and reader
+identities, issues the holder's ticket out of band, and has both endpoint and
+direct-LAN mDNS receipt routes. Turnstone supplies explicit owner Publishing
+and recipient Shared Knot panes without treating personal sync as publication.
+
 **Files:** a focused `ports/knot/examples/knot_publish_peer.rs` receipt runner
 first; the resident Mere/Turnstone host when product exposure is chosen.
 
@@ -395,6 +423,11 @@ or starting personal sync.
 to add the peer, complete the secured session, and fetch the selected source.
 
 ### P5. Run the acceptance ladder
+
+**Status:** Complete through the Phase-A stop line. Focused unit/codec and
+in-memory Noise/Notochord receipts precede the successful Windows-to-ThinkPad
+direct-LAN read and its post-revocation refusal. Relay routing remains a later
+deployment receipt, not a prerequisite for LAN publishing.
 
 Run the following in order and preserve the distinction between them:
 
@@ -464,6 +497,10 @@ stays on disk but out of Git.
   separate from this single-holder, single-reader publishing slice.
 
 ## 9. Phase B specification work
+
+**Status:** Not entered. Do not turn the Phase-A candidate frames into a
+portable contract until product use stabilizes them and a second implementer
+has a concrete reason to consume the resulting vectors.
 
 Once its entry conditions hold, Phase B proceeds in this order:
 
