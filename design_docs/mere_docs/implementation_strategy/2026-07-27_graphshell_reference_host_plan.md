@@ -2050,12 +2050,31 @@ browser, two-device network, and real RF are different claims.
    interleavings remain unproven; they can no longer cause the class of harm
    they could before.
 
+   **Retention was measured 2026-08-07 and is not the pressure it was called**
+   (landed in `fbabd4ac`, a commit about device modes: shared tree again).
+
+   103 bytes per epoch, one epoch per revocation. A mesh retiring a device
+   every week for a decade spends 54 KB, in a record already rewritten on every
+   membership change. Calling it urgent was wrong.
+
+   The real finding is that pruning is not safe here at all, and stickleback
+   already says so. `propose_epoch_pruning` refuses without a checkpoint, and
+   this graph has none: it retains every operation, so forgetting an epoch
+   would make everything sealed under it permanently unreadable. The blocker is
+   `MissingCheckpoint`, and that is the right answer rather than something to
+   route around. Wiring `forget_authorized` would have been machinery for a
+   kilobyte-sized problem, behind a gate that would have refused anyway.
+
+   Retention becomes real only if the lane gains compaction. It should be taken
+   up then, with `EpochHoldReason::DecryptionReachability` naming the epochs a
+   checkpoint still needs, and not before. `native::graph_keys::retention_probe`
+   records both facts so nobody re-derives them.
+
    Still to build:
 
-   - Epoch retention (`forget_authorized`). Now the pressing one: reconciliation
-     can turn epochs on its own, so growth is driven by an automatic path.
    - The receive-only path, which wants the pre-key carried with
-     `PairingFacts` out of band as `node_id` and `root` already are.
+     `PairingFacts` out of band as `node_id` and `root` already are. Now the
+     only outstanding item on this decision.
 
 None of these decisions changes the product boundary or requires a new
 repository.
