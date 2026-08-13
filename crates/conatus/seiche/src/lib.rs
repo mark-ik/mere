@@ -120,6 +120,7 @@ mod sync;
 
 /// The rigid **scene** tier on [`Simulation`]: scene-decoration bodies, declarative [`SceneSpec`]
 /// loading + joints, world gravity, and the per-node tangibility lever.
+mod propose;
 mod scene_sim;
 
 /// The **fluid** tier on [`Simulation`]: loading the PBF pool and the two-way coupling between
