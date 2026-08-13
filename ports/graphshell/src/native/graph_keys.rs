@@ -673,7 +673,7 @@ mod tests {
 mod retention_probe {
     use super::*;
     use stickleback::{
-        EpochRetentionFacts, GroupEncryptionProfile, EpochProposalBlocker, propose_epoch_pruning,
+        EpochProposalBlocker, EpochRetentionFacts, GroupEncryptionProfile, propose_epoch_pruning,
     };
 
     /// What retiring epochs would actually cost and permit here, measured
@@ -694,8 +694,10 @@ mod retention_probe {
 
         // One rotation per revocation. If each costs little, unbounded growth
         // is a shape worth naming and not a pressure worth acting on.
+        // Measured: 103 bytes per epoch, one epoch per revocation. A mesh that
+        // retired a device every week for a decade would spend 54 KB, in a
+        // record rewritten on every membership change anyway.
         let per_epoch = (fifty - one) / 49;
-        println!("keyring: 1 epoch = {one} bytes, 50 epochs = {fifty} bytes, {per_epoch}/epoch");
         assert!(
             per_epoch < 512,
             "an epoch costs {per_epoch} bytes; if that were large, retention would be urgent"

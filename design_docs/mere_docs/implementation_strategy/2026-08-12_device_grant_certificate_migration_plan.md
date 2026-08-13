@@ -119,3 +119,35 @@ grammar. Recorded here and asserted in `carry::scope`'s tests.
       runs `is_well_formed` on both sides); dropping an action attenuates and
       the reverse does not; a different device never attenuates; a foreign
       domain never attenuates; and the `"/"`-is-a-leaf finding is pinned.
+
+### M2: certificates for device grants — personae half done 2026-08-12
+
+- [x] `carry/grant.rs`: one constructor for both device modes.
+      `issue_self_grant` (subject is the master, the `Copy` case) and
+      `issue_remote_auth_grant` (subject is the holder's device key) over a
+      shared `issue_device_grant`. Parent is the persona's own root, depth is
+      0, expiry is mandatory.
+- [x] `device_grant_nonce` binds the subject as well as the device and the
+      clock. The derivation lifted from `self_grant` used only device and
+      clock, so two holders granted the same device inside one millisecond
+      would have collided on a certificate id. Pinned by a test.
+- [x] `ssh_ca::self_grant` now delegates rather than carrying its own copy of
+      the construction, per generalize-don't-duplicate. Verified against its
+      seven tests, which drive it through the mint path.
+- [ ] The session-runtime half: the separated wrapped-epoch record keyed by
+      `DelegationId`, and `issue`/`enroll` writing certificates.
+
+### The ssh feature never compiled on Windows (M2)
+
+`cargo test -p personae --features ssh` failed to build on this workspace's
+primary platform, because `tests/ssh_ca_live.rs` carried `#![cfg(feature =
+"ssh")]` but no `#![cfg(unix)]` while using `os::unix::fs::PermissionsExt`
+and `Permissions::from_mode`. The target drives a real `sshd` and chmods its
+key files, so it is inherently Unix-only; it was simply missing the guard that
+says so.
+
+Found only because the dedup above forced a build under the feature. Worth
+noting as a pattern rather than a one-off: the `ssh` feature is not default,
+so the whole module and its 7 tests are invisible to a plain `cargo test -p
+personae`, which is why the edit had to be verified with `--features ssh`
+before it could be believed.

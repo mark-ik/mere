@@ -16,6 +16,10 @@
 //! authenticates the user running it to itself.
 
 #![cfg(feature = "ssh")]
+// Drives a real `sshd` and chmods its key files, so the target is Unix-only.
+// Without this guard `cargo test --features ssh` fails to compile on Windows,
+// which is where this workspace is primarily developed.
+#![cfg(unix)]
 
 use std::fs;
 use std::net::TcpListener;
