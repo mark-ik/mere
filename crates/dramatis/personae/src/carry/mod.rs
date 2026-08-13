@@ -39,8 +39,9 @@ mod scope;
 
 pub use refs::{CarryHashFn, CarryRef, CarryRefParseError};
 pub use scope::{
-    ACTION_IDENTITY_ACT, ACTION_PRIVATE_READ, ACTION_TRANSPORT_EGRESS,
-    DEVICE_AUTHORITY_DOMAIN, DEVICE_SCOPE_PATH, device_capability_scope,
+    ACTION_IDENTITY_ACT, ACTION_PRIVATE_READ, ACTION_SSH_AGENT_FORWARD, ACTION_SSH_LOGIN,
+    ACTION_SSH_PORT_FORWARD, ACTION_SSH_PTY, ACTION_TRANSPORT_EGRESS, DEVICE_AUTHORITY_DOMAIN,
+    DEVICE_SCOPE_PATH, device_capability_scope,
 };
 
 // ── Identity-level records ───────────────────────────────────────────────────

@@ -24,13 +24,13 @@ required-features = ["agent"]
 # V3: inspect and manage the vault from a terminal.
 [[bin]]
 name = "personae-vault"
-path = "src/bin/personae-vault.rs"
+path = "src/bin/personae-vault/main.rs"
 required-features = ["ssh"]
 
 [features]
 # SSH keys as vault slots (encode/decode/import). The CLI needs this much;
 # the agent needs the protocol stack on top.
-ssh = ["dep:ssh-key", "dep:signature"]
+ssh = ["dep:ssh-key", "dep:signature", "dep:gethostname"]
 agent = ["ssh", "dep:ssh-agent-lib", "dep:tokio", "dep:tracing-subscriber"]
 
 [dependencies]
@@ -51,6 +51,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # traits are how ssh-key exposes signing.
 ssh-agent-lib = { version = "0.6", optional = true }
 ssh-key = { version = "0.6", features = ["ed25519"], optional = true }
+# Hostname for the local device id (ssh_ca self-grants). Already in the
+# workspace lock via transitive deps; tiny (rustix + windows-link).
+gethostname = { version = "1", optional = true }
 signature = { version = "2", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"], optional = true }
 tracing-subscriber = { version = "0.3", optional = true }

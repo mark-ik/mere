@@ -41,6 +41,9 @@ identity, so application traffic is never signed with the master key directly.
 | `delegation` | `DelegationCertificate` / `SignedDelegationCertificate`, `DelegationRevocation` / `SignedDelegationRevocation`, `DelegationId`, `DelegationParent`, `CapabilityScope`, `DelegationError`, `delegation_signing_salt` |
 | `signing` | `ApprovalBroker`, `SigningRequest`, `SigningPolicy`, `SigningDecision`, `SigningAuthorization`, `SigningRecord`. Feature `agent` |
 | `ssh_slot` | `SshSlot`, `slot_for`, `private_key_from_slot`, `ssh_slots`, `find_by_public`, `protocol_key_for`, `SSH_MOD_ID`. Feature `ssh` |
+| `ssh_ca` | `SshCertAuthority`, `UserCertRequest`, `HostCertRequest`, `CertMintError`, `self_grant`, `key_id_for`, `ssh_ca_salt`, `MAX_CERT_TTL_MS`, `SSH_CA_MOD_ID`. The delegation grammar projected into OpenSSH certificates. Feature `ssh` |
+| `ssh_face` | `FacePolicy` (`work`/`research`/`burner`), `load_policy`, `store_policy`, `effective_policy`, `policy_key`, `SSH_FACE_MOD_ID`. What one face may do over SSH. Feature `ssh` |
+| `enroll` | `user_trust_line`, `user_install_script`, `system_sshd_snippet`, `known_hosts_line`, `device_id_for_host`, `local_device_id`, `local_host_name`, `split_target`, `ENROLLMENT_MARKER`. Feature `ssh` |
 | `agent` | `VaultAgent`, an `ssh-agent-lib` session over an `IdentityVault`. Feature `agent` |
 
 ## Features and binaries
@@ -51,10 +54,16 @@ identity, so application traffic is never signed with the master key directly.
 | `agent` | `ssh` plus `ssh-agent-lib`, `tokio`, `tracing-subscriber` | `agent`, `signing`; the `personae-agent` bin |
 
 `personae-agent` serves vault `ssh` slots over the OpenSSH agent protocol
-(Windows named pipe or Unix socket). `personae-vault` inspects and manages the
+(Windows named pipe or Unix socket), each offered twice: once as a
+freshly-minted personae certificate and once as the bare key, so a host that
+trusts the authority needs no per-key enrollment and a host that only knows
+the key still works. `personae-vault` inspects and manages the
 vault from a terminal. Both are feature-gated so the default dependency tree
-stays lean. `install-agent-windows.ps1` builds both bins and installs them plus
-a logon scheduled task on Windows.
+stays lean. `install-agent-windows.ps1`, `install-agent-macos.sh` and
+`install-agent-linux.sh` build both bins and register a login job on their
+platform (Task Scheduler plus a VBS relaunch loop, launchd, systemd
+`--user`). None of them handles the passphrase: each reads it at start from
+that platform's own secret store.
 
 Windows additionally pulls `windows-sys` for the DPAPI unlock backend.
 
