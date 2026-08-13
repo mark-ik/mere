@@ -105,10 +105,7 @@ pub fn system_sshd_snippet(
 }
 
 /// The client-side `known_hosts` line, for hosts that serve a host cert.
-pub fn known_hosts_line(
-    ca: &SshCertAuthority,
-    patterns: &str,
-) -> Result<String, CertMintError> {
+pub fn known_hosts_line(ca: &SshCertAuthority, patterns: &str) -> Result<String, CertMintError> {
     ca.known_hosts_ca_line(patterns)
 }
 
@@ -130,6 +127,22 @@ pub fn device_id_for_host(host: &str) -> crate::carry::DeviceId {
     let mut bytes = [0u8; 16];
     bytes.copy_from_slice(&digest.as_bytes()[..16]);
     crate::carry::DeviceId::from_uuid(uuid::Uuid::from_bytes(bytes))
+}
+
+/// This machine's hostname, lowercased.
+pub fn local_host_name() -> String {
+    gethostname::gethostname()
+        .to_string_lossy()
+        .to_ascii_lowercase()
+}
+
+/// The device id of the machine this is running on.
+///
+/// The default subject of a self-grant: authority is held by a device, and
+/// revoking it should retire *this* machine's reach (see
+/// [`crate::ssh_ca::self_grant`]).
+pub fn local_device_id() -> crate::carry::DeviceId {
+    device_id_for_host(&local_host_name())
 }
 
 /// Split `[user@]host` into its parts.
@@ -199,16 +212,22 @@ mod tests {
 
     #[test]
     fn targets_split_into_user_and_host() {
-        assert_eq!(split_target("markik@q-pc.local"), (Some("markik"), "q-pc.local"));
+        assert_eq!(
+            split_target("markik@q-pc.local"),
+            (Some("markik"), "q-pc.local")
+        );
         assert_eq!(split_target("q-pc.local"), (None, "q-pc.local"));
     }
 
     #[test]
     fn the_system_snippet_is_instructions_and_not_commands_we_run() {
         let ca = ca();
-        let snippet =
-            system_sshd_snippet(&ca, "/etc/ssh/personae_ca.pub", Some("/etc/ssh/host-cert.pub"))
-                .unwrap();
+        let snippet = system_sshd_snippet(
+            &ca,
+            "/etc/ssh/personae_ca.pub",
+            Some("/etc/ssh/host-cert.pub"),
+        )
+        .unwrap();
         assert!(snippet.contains("TrustedUserCAKeys /etc/ssh/personae_ca.pub"));
         assert!(snippet.contains("HostCertificate /etc/ssh/host-cert.pub"));
         assert!(snippet.starts_with("# Run as root on the target"));

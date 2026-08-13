@@ -8,13 +8,11 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use personae::carry::device_capability_scope;
-use personae::delegation::{DelegationCertificate, DelegationParent, SignedDelegationCertificate};
 use personae::enroll::{self, device_id_for_host};
 use personae::ssh_ca::{SshCertAuthority, UserCertRequest};
 use personae::ssh_face::{self, FacePolicy};
 use personae::vault::Profile;
-use personae::{IdentityProvider, InMemoryProvider, ssh_slot};
+use personae::{InMemoryProvider, ssh_slot};
 use ssh_key::public::PublicKey;
 
 use crate::format_key;
@@ -34,45 +32,6 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-/// A self-grant: the persona authorizing itself to log in to one machine.
-///
-/// Scoped to the target device so revoking it closes that machine and no
-/// other, and re-issued per mint rather than stored, which is the same
-/// posture the device-grant migration chose — a grant that is re-issued on
-/// unlock never needs a legacy decoder.
-fn ssh_grant(
-    profile: &Profile,
-    host: &str,
-    actions: &[&str],
-    hours: u64,
-) -> Result<SignedDelegationCertificate, String> {
-    let provider = InMemoryProvider::from_seed(profile.master.to_seed());
-    let master = provider.master_public_key().to_bytes();
-    let now = now_ms();
-    SignedDelegationCertificate::issue(
-        &provider,
-        DelegationCertificate::new(
-            DelegationParent::Root(master),
-            master,
-            master,
-            device_capability_scope(device_id_for_host(host), actions.iter().copied()),
-            now,
-            now,
-            Some(now + hours * 3_600_000),
-            0,
-            grant_nonce(host, now),
-        ),
-    )
-    .map_err(|err| format!("issue the ssh grant: {err}"))
-}
-
-fn grant_nonce(host: &str, now_ms: u64) -> [u8; 32] {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(host.as_bytes());
-    hasher.update(&now_ms.to_le_bytes());
-    *hasher.finalize().as_bytes()
-}
-
 pub(crate) fn cmd_ca(profile: &Profile, rest: &[String]) -> Result<(), String> {
     let ca = authority(profile)?;
     let patterns = flag(rest, "--patterns").unwrap_or_else(|| "*".to_string());
@@ -80,7 +39,10 @@ pub(crate) fn cmd_ca(profile: &Profile, rest: &[String]) -> Result<(), String> {
     println!("\n# TrustedUserCAKeys / cert-authority key");
     println!("{}", ca.trusted_user_ca_line().map_err(str_err)?.trim_end());
     println!("\n# ~/.ssh/known_hosts line for hosts serving a host certificate");
-    println!("{}", enroll::known_hosts_line(&ca, &patterns).map_err(str_err)?);
+    println!(
+        "{}",
+        enroll::known_hosts_line(&ca, &patterns).map_err(str_err)?
+    );
     Ok(())
 }
 
@@ -88,7 +50,10 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
     let slot_key = rest
         .first()
         .ok_or("mint needs a slot, e.g. `mint ssh:SHA256:d3tQ --host q-pc.local`")?;
-    let host = flag(rest, "--host").ok_or("mint needs --host <hostname>")?;
+    // The device is this machine unless told otherwise: a grant is held by
+    // the machine carrying the credential, which is what makes revoking a
+    // lost machine meaningful. See ssh_ca::self_grant.
+    let device_name = flag(rest, "--device").unwrap_or_else(enroll::local_host_name);
     let principal = flag(rest, "--principal").unwrap_or_else(default_principal);
     let hours = flag(rest, "--hours")
         .map(|value| value.parse::<u64>().map_err(|_| "--hours wants a number"))
@@ -105,7 +70,15 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
             policy.principals.join(", ")
         ));
     }
-    let grant = ssh_grant(profile, &host, &policy.action_refs(), hours)?;
+    let provider = InMemoryProvider::from_seed(profile.master.to_seed());
+    let grant = personae::ssh_ca::self_grant(
+        &provider,
+        device_id_for_host(&device_name),
+        &policy.action_refs(),
+        hours * 3_600_000,
+        now_ms(),
+    )
+    .map_err(|err| format!("issue the ssh grant: {err}"))?;
     let ca = authority(profile)?;
     let cert = ca
         .mint_user_cert(
@@ -116,8 +89,7 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
                 // The face's own limits outrank the command line: a flag may
                 // narrow a face further, never widen it.
                 force_command: flag(rest, "--force-command").or(policy.force_command.clone()),
-                source_address: flag(rest, "--source-address")
-                    .or(policy.source_address.clone()),
+                source_address: flag(rest, "--source-address").or(policy.source_address.clone()),
             },
             now_ms(),
         )
@@ -133,7 +105,7 @@ pub(crate) fn cmd_mint(profile: &Profile, rest: &[String]) -> Result<(), String>
         None => println!("{encoded}"),
     }
     eprintln!(
-        "minted for {principal}@{host}, valid {hours}h, grant {}",
+        "minted for {principal}, held by {device_name}, valid {hours}h, grant {}",
         &personae::ssh_ca::key_id_for(&grant.certificate.id())[..16]
     );
     Ok(())
@@ -198,7 +170,9 @@ pub(crate) fn cmd_enroll_host(profile: &Profile, rest: &[String]) -> Result<(), 
         "  no authorized_keys entry per client machine, and re-running this replaces \
          the line rather than stacking one"
     );
-    println!("  host-key prompts still apply; `enroll-host {target} --system` prints the root half");
+    println!(
+        "  host-key prompts still apply; `enroll-host {target} --system` prints the root half"
+    );
     Ok(())
 }
 
@@ -218,10 +192,7 @@ fn resolve_ssh_key(profile: &Profile, typed: &str) -> Result<ssh_key::PrivateKey
             "no ssh key matches {typed:?} (`personae-vault list` shows what is there)"
         )),
         _ => {
-            let mut names: Vec<String> = matches
-                .iter()
-                .map(|slot| format_key(&slot.key))
-                .collect();
+            let mut names: Vec<String> = matches.iter().map(|slot| format_key(&slot.key)).collect();
             names.sort();
             Err(format!(
                 "{typed:?} is ambiguous; it matches:\n  {}",
@@ -268,7 +239,11 @@ pub(crate) fn cmd_face(
     println!(
         "face: {:?}{}",
         id.0,
-        if stored { "" } else { " (no stored policy; showing the default)" }
+        if stored {
+            ""
+        } else {
+            " (no stored policy; showing the default)"
+        }
     );
     println!("  principals: {}", policy.principals.join(", "));
     println!("  actions:    {}", policy.action_refs().join(", "));

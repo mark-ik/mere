@@ -30,24 +30,30 @@
 //!   ssh-agent (plan §threat-model note).
 
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use signature::Signer;
 use ssh_agent_lib::agent::Session;
 use ssh_agent_lib::error::AgentError;
 use ssh_agent_lib::proto::extension::{QueryResponse, SessionBind};
+use ssh_agent_lib::proto::message::PublicCredential;
 use ssh_agent_lib::proto::{
     AddIdentity, Extension, PrivateCredential, RemoveIdentity, SignRequest, message,
 };
 use ssh_key::HashAlg;
 use ssh_key::Signature;
+use ssh_key::certificate::Certificate;
 use ssh_key::private::PrivateKey;
 use ssh_key::public::PublicKey;
 
 use crate::signing::{
     ApprovalBroker, SigningFailureCode, SigningPolicy, SigningRecordResult, SigningRequest,
 };
+use crate::ssh_ca::{self, SshCertAuthority, UserCertRequest};
+use crate::ssh_face;
 use crate::ssh_slot::{self, SshSlot};
 use crate::vault::{IdentityStorage, IdentityVault, ProtocolKey, UnlockTier};
+use crate::{InMemoryProvider, enroll};
 
 pub use crate::ssh_slot::{SSH_MOD_ID, protocol_key_for};
 
@@ -136,22 +142,69 @@ impl<S: IdentityStorage> VaultAgent<S> {
     fn find_by_public(&self, wanted: &PublicKey) -> Option<SshSlot> {
         ssh_slot::find_by_public(self.vault.lock().unwrap().current_profile(), wanted)
     }
+
+    /// Mint a login certificate for one identity from the vault's own
+    /// authority, or `None` if this profile cannot currently issue one.
+    ///
+    /// Minted per listing rather than cached: it costs one Ed25519
+    /// signature, and a certificate that is re-minted on demand can never
+    /// be the stale one left over from a policy that has since narrowed.
+    fn certificate_for(&self, slot: &SshSlot) -> Option<Certificate> {
+        let vault = self.vault.lock().unwrap();
+        let profile = vault.current_profile();
+        let provider = InMemoryProvider::from_seed(profile.master.to_seed());
+        let ca = SshCertAuthority::derive(&provider).ok()?;
+        let policy = ssh_face::effective_policy(profile).ok()?;
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()?
+            .as_millis() as u64;
+        let grant = ssh_ca::self_grant(
+            &provider,
+            enroll::local_device_id(),
+            &policy.action_refs(),
+            ssh_ca::MAX_CERT_TTL_MS,
+            now_ms,
+        )
+        .ok()?;
+        ca.mint_user_cert(
+            &UserCertRequest {
+                grant: &grant,
+                subject: &PublicKey::from(&slot.private),
+                principals: policy.principals.clone(),
+                force_command: policy.force_command.clone(),
+                source_address: policy.source_address.clone(),
+            },
+            now_ms,
+        )
+        .ok()
+    }
 }
 
 #[ssh_agent_lib::async_trait]
 impl<S: IdentityStorage + 'static> Session for VaultAgent<S> {
     async fn request_identities(&mut self) -> Result<Vec<message::Identity>, AgentError> {
-        Ok(self
-            .ssh_identities()
-            .into_iter()
-            .map(|identity| {
-                let public = PublicKey::from(&identity.private);
-                message::Identity {
-                    credential: public.key_data().clone().into(),
-                    comment: identity.private.comment().to_string(),
-                }
-            })
-            .collect())
+        // Each key is offered twice when it can be certified: the
+        // certificate first, so a host that trusts the authority needs no
+        // per-key enrollment, then the bare key, so a host that has only
+        // ever seen the key still works. `sign` resolves both to the same
+        // slot, because a credential's key_data is the key either way.
+        let mut identities = Vec::new();
+        for identity in self.ssh_identities() {
+            let public = PublicKey::from(&identity.private);
+            let comment = identity.private.comment().to_string();
+            if let Some(certificate) = self.certificate_for(&identity) {
+                identities.push(message::Identity {
+                    credential: PublicCredential::Cert(Box::new(certificate)),
+                    comment: format!("{comment} (personae certificate)"),
+                });
+            }
+            identities.push(message::Identity {
+                credential: public.key_data().clone().into(),
+                comment,
+            });
+        }
+        Ok(identities)
     }
 
     async fn sign(&mut self, request: SignRequest) -> Result<Signature, AgentError> {
@@ -339,10 +392,59 @@ mod tests {
             .await
             .unwrap();
 
+        // One key, two credentials: the personae certificate first so a
+        // host trusting the authority needs no per-key enrollment, then the
+        // bare key for hosts that only know the key. Both carry the same
+        // key data, which is why `sign` can resolve either to one slot.
         let listed = agent.request_identities().await.unwrap();
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].comment, "laptop");
+        assert_eq!(listed.len(), 2);
+        assert!(matches!(listed[0].credential, PublicCredential::Cert(_)));
+        assert_eq!(listed[0].comment, "laptop (personae certificate)");
+        assert!(matches!(listed[1].credential, PublicCredential::Key(_)));
+        assert_eq!(listed[1].comment, "laptop");
+        assert_eq!(
+            listed[0].credential.key_data(),
+            listed[1].credential.key_data()
+        );
         assert!(agent.vault.lock().unwrap().slot(&stored_key).is_some());
+    }
+
+    /// Signing must work when the client picks the certificate, since that
+    /// is the credential `ssh` prefers once one is offered.
+    #[tokio::test]
+    async fn a_certificate_credential_signs_with_its_underlying_key() {
+        let mut agent = test_agent();
+        let key = random_key("certified");
+        agent
+            .add_identity(AddIdentity {
+                credential: PrivateCredential::Key {
+                    privkey: key.key_data().clone(),
+                    comment: "certified".into(),
+                },
+            })
+            .await
+            .unwrap();
+
+        let listed = agent.request_identities().await.unwrap();
+        let certificate = listed
+            .iter()
+            .find(|identity| matches!(identity.credential, PublicCredential::Cert(_)))
+            .expect("a certificate is offered");
+        let signature = agent
+            .sign(SignRequest {
+                credential: certificate.credential.clone(),
+                data: b"over the certificate".to_vec(),
+                flags: 0,
+            })
+            .await
+            .expect("signing through the certificate credential");
+        assert!(
+            PublicKey::from(&key)
+                .key_data()
+                .verify(b"over the certificate", &signature)
+                .is_ok(),
+            "the signature must verify against the underlying key"
+        );
     }
 
     #[tokio::test]

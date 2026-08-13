@@ -267,6 +267,54 @@ impl SshCertAuthority {
     }
 }
 
+/// Issue the self-grant a persona holds over its own device.
+///
+/// The device is the machine *holding* the credential, not the one being
+/// logged into, and that is the load-bearing choice. An OpenSSH certificate
+/// has no destination field: any host trusting the CA and listing the
+/// principal accepts it, so scoping the grant to a target would promise a
+/// restriction the format cannot keep. Scoping it to the holder keeps the
+/// promise revocation actually needs — a stolen laptop's authority dies
+/// everywhere at once, by revoking one grant.
+///
+/// Restricting *which* hosts a face reaches is a principals question, not a
+/// grant question: enroll each host for the principals it should admit
+/// (see [`crate::enroll::user_trust_line`]).
+pub fn self_grant<P: IdentityProvider>(
+    provider: &P,
+    device: crate::carry::DeviceId,
+    actions: &[&str],
+    valid_for_ms: u64,
+    now_ms: u64,
+) -> Result<SignedDelegationCertificate, crate::delegation::DelegationError> {
+    let master = provider.master_public_key().to_bytes();
+    let mut nonce = [0u8; 32];
+    nonce.copy_from_slice(
+        blake3::hash(
+            &[
+                device.as_uuid().as_bytes().as_slice(),
+                &now_ms.to_le_bytes(),
+            ]
+            .concat(),
+        )
+        .as_bytes(),
+    );
+    SignedDelegationCertificate::issue(
+        provider,
+        crate::delegation::DelegationCertificate::new(
+            crate::delegation::DelegationParent::Root(master),
+            master,
+            master,
+            crate::carry::device_capability_scope(device, actions.iter().copied()),
+            now_ms,
+            now_ms,
+            Some(now_ms.saturating_add(valid_for_ms)),
+            0,
+            nonce,
+        ),
+    )
+}
+
 /// The OpenSSH key id carried by a certificate minted from `grant`.
 ///
 /// Hex of the delegation id. [`crate::ssh_krl`] renders revocations against
@@ -560,8 +608,10 @@ mod tests {
             .unwrap();
         assert_eq!(cert.cert_type(), CertType::Host);
         assert!(cert.validate_at(NOW_MS / 1000, [&ca.fingerprint()]).is_ok());
-        assert!(ca.known_hosts_ca_line("*.local").unwrap().starts_with(
-            "@cert-authority *.local ssh-ed25519 "
-        ));
+        assert!(
+            ca.known_hosts_ca_line("*.local")
+                .unwrap()
+                .starts_with("@cert-authority *.local ssh-ed25519 ")
+        );
     }
 }

@@ -27,13 +27,13 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::IdentityError;
 use crate::carry::{
     ACTION_SSH_AGENT_FORWARD, ACTION_SSH_LOGIN, ACTION_SSH_PORT_FORWARD, ACTION_SSH_PTY,
 };
 use crate::vault::{
     CredentialLineage, IdentitySlot, Profile, ProtocolKey, SecretBytes, UnlockTier,
 };
-use crate::IdentityError;
 
 /// The `mod_id` a face's SSH policy is stored under.
 pub const SSH_FACE_MOD_ID: &str = "ssh-face";
@@ -166,11 +166,7 @@ mod tests {
     use crate::vault::ProfileId;
 
     fn profile(id: &str) -> Profile {
-        Profile::new(
-            ProfileId(id.into()),
-            id,
-            Ed25519Keypair::from_seed([5; 32]),
-        )
+        Profile::new(ProfileId(id.into()), id, Ed25519Keypair::from_seed([5; 32]))
     }
 
     #[test]

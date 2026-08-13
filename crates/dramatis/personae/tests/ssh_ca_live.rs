@@ -23,12 +23,8 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use personae::carry::{
-    ACTION_SSH_LOGIN, ACTION_SSH_PTY, DeviceId, device_capability_scope,
-};
-use personae::delegation::{
-    DelegationCertificate, DelegationParent, SignedDelegationCertificate,
-};
+use personae::carry::{ACTION_SSH_LOGIN, ACTION_SSH_PTY, DeviceId, device_capability_scope};
+use personae::delegation::{DelegationCertificate, DelegationParent, SignedDelegationCertificate};
 use personae::ssh_ca::{SshCertAuthority, UserCertRequest};
 use personae::{IdentityProvider, InMemoryProvider};
 use ssh_key::private::PrivateKey;
@@ -69,8 +65,13 @@ fn free_port() -> u16 {
 }
 
 fn write_private(path: &Path, key: &PrivateKey) {
-    fs::write(path, key.to_openssh(LineEnding::LF).expect("encode key").as_bytes())
-        .expect("write private key");
+    fs::write(
+        path,
+        key.to_openssh(LineEnding::LF)
+            .expect("encode key")
+            .as_bytes(),
+    )
+    .expect("write private key");
     set_mode(path, 0o600);
 }
 
@@ -162,8 +163,11 @@ fn a_live_sshd_accepts_a_minted_certificate() {
         )
         .expect("mint the user cert");
     let cert_path = dir.join("id_ed25519-cert.pub");
-    fs::write(&cert_path, user_cert.to_openssh().expect("encode user cert"))
-        .expect("write user cert");
+    fs::write(
+        &cert_path,
+        user_cert.to_openssh().expect("encode user cert"),
+    )
+    .expect("write user cert");
 
     let config = dir.join("sshd_config");
     fs::write(
@@ -559,9 +563,16 @@ fn a_face_reaches_exactly_as_far_as_its_policy() {
     );
 
     // A forced command outranks whatever the client asks for.
-    let forced = mint(vec![user.clone()], Some("echo forced-instead".into()), "forced");
+    let forced = mint(
+        vec![user.clone()],
+        Some("echo forced-instead".into()),
+        "forced",
+    );
     let out = login(&forced, "echo client-asked-for-this");
-    assert!(out.contains("forced-instead"), "force-command did not run: {out:?}");
+    assert!(
+        out.contains("forced-instead"),
+        "force-command did not run: {out:?}"
+    );
     assert!(
         !out.contains("client-asked-for-this"),
         "the client's own command ran despite force-command: {out:?}"

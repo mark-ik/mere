@@ -20,7 +20,7 @@
 //!   pub <mod[:instance]>        print an ssh slot's public key
 //!   remove <mod[:instance]>     remove a slot
 //!   ca                          print the profile's SSH certificate authority
-//!   mint <slot> --host <h>      mint a login certificate for a machine
+//!   mint <slot>                 mint a login certificate for this face
 //!   enroll-host [user@]host     teach a machine to accept this authority
 //!   face [work|research|burner] show or set this face's SSH reach
 //! ```
@@ -53,8 +53,8 @@ commands:
   pub <mod[:instance]>        print an ssh slot's public key
   remove <mod[:instance]>     remove a slot
   ca [--patterns <pat>]       print this profile's SSH certificate authority
-  mint <slot> --host <h>      mint a login certificate for a machine
-        [--principal <p>] [--hours <n>] [--out <f>]
+  mint <slot>                 mint a login certificate for this face
+        [--principal <p>] [--hours <n>] [--out <f>] [--device <d>]
         [--force-command <c>] [--source-address <cidr>]
   enroll-host [user@]host     teach a machine to accept this authority
         [--principal <p>] [--system]
