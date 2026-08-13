@@ -279,3 +279,41 @@ re-exports `init_device(setup: WgpuSetup, options)`, whose
 field onto netrender's `WgpuHandles`. The fix is for the entry point to
 accept a device instead of defaulting one, which lets conatus ride the
 tenancy seam netrender landed 2026-08-10 as a compute tenant.
+
+### Amendment: physics proposes, the record disposes (2026-08-13, Mark)
+
+Physical composition is part of the canvas's meaning, not decoration over
+it. Contacts, containment, support, and weight are the interaction medium
+of a mere, and their parameters (mass laws, friction, restitution,
+collision predicates) are data-bound, per-mere configuration. That widens
+refusal 2 above by one deliberate door rather than repealing it:
+
+**A decision may read settled positions only through an explicit
+commitment.** A gesture (release over a bin) or a standing rule the user
+authored may promote a contact or containment event into a discrete,
+attributed fact at a named tick: a membership, an attachment, a placement.
+What is recorded is the resolved consequence; the trajectory that led
+there stays a projection and is discarded. This is the same
+resolve-then-commit grammar as Isometry's travel payloads: authority
+resolves once, the fact replays everywhere, and no replica ever
+re-simulates floats to agree on what happened. The fact plane replicates;
+the felt simulation stays local.
+
+Two tiers follow, coexisting on one canvas and one device:
+
+- **Tactile tier (CPU, rapier).** The dozens-to-hundreds of bodies a hand
+  actually manipulates: contacts, joints, stacking, sleeping. The source
+  of commitment events, and the reason rapier stays.
+- **Field tier (GPU, quint/burn).** Repulsion, ambient and semantic
+  fields at large N, resident per the ruling above, with the CPU solver
+  as the downlevel tier where WebGPU compute is absent.
+
+Rationale, recorded because it steers design rather than taste:
+conceptual metaphor theory (Lakoff and Johnson; Lakoff and Turner, "More
+Than Cool Reason") holds that abstract reasoning rides on physical image
+schemas: container, support, link, force, path, blockage, attraction. A
+physical dataspace makes the interface vocabulary coincide with the
+cognitive one instead of translating through chrome. The failure mode to
+refuse is decorative physics unbound to data (BumpTop): here every
+physical parameter is a data binding, and every consequential contact is
+a recorded fact.
