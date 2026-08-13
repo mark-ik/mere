@@ -42,14 +42,38 @@ are scheduled and run. `Observe` does not propagate: it establishes the
 dependency ordering and read access, and the observer reads upstream state
 when it happens to run for some other reason.
 
-This is the sharpest thing in the crate, and it is cheap. The distinction
-between "A must run before B" and "a change in A must cause B to run" is live
-in several of our graphs and is usually left implicit: the set graph, the
-container graph, and cambium's view rebuilds all conflate reachability with
-invalidation somewhere. Making it two edge constructors forces the question
-to be answered per edge, at the point where the author knows the answer,
-rather than inferred later by whoever is debugging a missing repaint or an
-over-eager one.
+This is the sharpest thing in the crate. Where it applies, making it two edge
+constructors forces the question to be answered per edge, at the point where
+the author knows the answer, rather than inferred later by whoever is
+debugging a missing repaint or an over-eager one.
+
+**It does not apply anywhere in the stack today.** The first version of this
+section claimed the set graph, the container graph, and cambium's view
+rebuilds each conflate reachability with invalidation. That was written from
+memory of those graphs rather than from reading them, and it is wrong on all
+three. None of them carries propagation semantics for the split to divide:
+
+- **The set graph** (`woodshedding::rehearsal`) is a display projection of
+  practice order. `SetGraphEdgeKind` has exactly one variant, `Next`, derived
+  from `nodes.windows(2)`, and every consumer either draws it, hides it (the
+  relation-visibility toggle), or hashes it into a rebuild signature. Nothing
+  runs downstream of a card.
+- **Chartulary's relations** are semantic: RDF-projecting predicates or
+  app-private families. A knowledge graph, not an execution graph, and
+  nothing in the crate invalidates along one.
+- **Cambium's view rebuilds** have no dependency edges at all, being
+  xilem-shaped structural diffing.
+
+Woodshed's invalidation is signature-based rather than edge-based:
+`leaves.rs` hashes the whole swatch and repaints when the hash moves. That is
+the opposite of a dependency walk, which is why there is no conflation to
+fix rather than a hidden one.
+
+So the idea is worth holding and has nothing to attach to. It becomes real at
+the same moment section 3 does: when something inside a kernel has to decide
+what re-runs because something else changed. Until then, adding
+`Trigger`/`Observe` to a graph that only draws would be a distinction no code
+could branch on.
 
 ### 2.2 Depth-ordered scheduling, with backward scheduling a hard error
 
@@ -176,3 +200,12 @@ Ecosystem figures from the crates.io API, including the reverse-dependency
 count. The rename is inferred from the two `.idea` files, which is strong but
 circumstantial. Armillary's shape is from its own `lib.rs`, not from memory of
 it, which is what caught the error corrected in section 3.
+
+**Corrected 2026-08-13, after publication.** Section 2.1 originally named
+three of our graphs as sites for the edge split. Reading them settled it the
+other way: `rehearsal.rs` (one edge kind, derived from window pairs, no
+propagating consumer), `chartulary/src/taxonomy.rs` (semantic predicates, no
+invalidation anywhere in the crate), and `leaves.rs` (whole-swatch hashing,
+not a dependency walk). The claim came from recollection rather than reading,
+which is the same failure this section exists to catch, and it survived one
+round of review because a brief about verification is not itself verified.
