@@ -1,6 +1,7 @@
 # Spatial Compute Plan (2026-08-13)
 
-**Status: founded 2026-08-13; P1 landed the same day.** The GPU
+**Status: founded 2026-08-13; P1 landed and P2's spike landed the same
+day.** The GPU
 architecture for conatus and its render consumers, ratified by Mark from
 the conatus discussion of 2026-08-13 (the projection ruling and its
 amendment in
@@ -115,6 +116,38 @@ The existing CPU Barnes-Hut stands as the downlevel tier.
 CPU traffic bounded to flags, receipts recorded beside the CPU path's
 numbers on the same machine.
 
+**Spike landed 2026-08-13** (`crates/probes/resident-graph`, standalone
+probe). Positions and velocities resident as padded 3D `vec4f`; three
+WGSL dispatches per frame (tiled all-pairs repulsion, springs by CSR
+gather with no float atomics, damped symplectic Euler with the settle
+reduction as one `atomicMax` over speed bits); the dots-and-lines tenant
+reads the same buffer in its vertex stages; netrender composes the
+master through the tenancy seam, booted with `TenantNeeds` as the seam's
+second consumer after paredros-room. The per-frame readback is four
+bytes.
+
+The numbers, RTX 4060 Laptop, 300-frame averages, frame = sim + draw +
+flag readback with full sync:
+
+    n        gpu resident   cpu barnes-hut (one force pass)
+    10,000       0.89 ms        26.3 ms
+    50,000      12.8  ms       318    ms
+    100,000     49.6  ms       813    ms
+
+The GPU column is honest O(n squared) (10k to 50k scales 14x, 50k to
+100k scales 3.9x) and still beats the CPU's O(n log n) at every
+measured size; the crossover where a GPU Barnes-Hut becomes necessary
+sits in the several-hundred-thousand range, which is the LBVH harvest's
+job when a canvas gets there. Receipt picture at
+`Code/testing/mere/p2_resident_graph.png` (50k dots, 149,990 edges, lit
+fraction 26.5 percent).
+
+**Still open before P2 closes:** quint/Burn writing the force pass into
+the resident buffer (the buffer handoff, in place of the probe's own
+repulsion kernel); the slot-stability decision (the probe holds n
+fixed); promotion of the kernels out of the probe into conatus proper
+with the rust-gpu carriage; and a windowed rather than offscreen run.
+
 ### P3. Wing projection
 
 Renderling reads the same lease for a genuine 2.5D/3D consumer:
@@ -148,3 +181,24 @@ consumers named, or narrowed in writing with the reason.
   `pin`/`unpin` (kinematic hold during drag, dynamic release) is the
   hold-and-release the commitment doctrine needs, so P1 added a
   read-only proposal query and no new mechanics.
+- **2026-08-13 (P2 spike):** kernels are WGSL in the probe, not
+  rust-gpu: cargo-gpu is not installed on this machine and the probe's
+  job was the residency numbers. The rust-gpu carriage is the promotion
+  step, when the kernels move into conatus proper. The lane taxonomy is
+  untouched: a WGSL kernel is still an explicit GPU program.
+- **2026-08-13 (P2 spike):** the cloud drifts. Across 2.5 billion
+  float pair-sums per frame, non-associativity leaves a net momentum
+  bias, and 300 frames walked the 50k cloud about 450 units off origin.
+  Under the projection ruling this is a shrug rather than a bug: the
+  capture fits its camera to measured bounds (a one-time presentation
+  readback, outside the flags-only frame discipline), and no fact-plane
+  consumer ever reads these floats. The same drift on the CPU path
+  would have been a determinism incident.
+- **2026-08-13 (P2 spike):** the honest frame includes a full CPU/GPU
+  sync per frame (the flag readback maps a staging buffer). A real host
+  double-buffers the flag and hides that latency; the probe pays it
+  openly so the numbers are conservative.
+- **2026-08-13 (P2 spike):** a flat-shaded graph is exactly three
+  colours, so a distinct-colour blank-guard (calibrated on shaded 3D)
+  false-alarms; the probe's guard is coverage (lit fraction between
+  bounds) instead.
