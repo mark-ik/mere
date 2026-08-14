@@ -9,6 +9,9 @@ rust-version = "1.92.0"
 description = "Portable graphshell session runtime state: session manifests, session graph/view sidecars, and worker declarations."
 
 [dependencies]
+# Certificate filenames are hex-encoded ids, so this is production code,
+# not a test helper: wallet_grant/certificate.rs encodes on the write path.
+hex = "0.4"
 # The platform data dir, for the family-shared identity root.
 dirs = "5"
 # The storage seam (2026-07-12): eidetic's Store is muniment::Backend.
@@ -47,4 +50,3 @@ pollster = "0.4"
 # The real fjall-backed Store, for the graph-engram persistence test that proves
 # an engram survives a store close + reopen (the "survives restart" condition).
 eidetic-fjall.workspace = true
-hex = "0.4"
