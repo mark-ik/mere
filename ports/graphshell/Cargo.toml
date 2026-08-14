@@ -150,6 +150,11 @@ path = "src/bin/h4_identity_receipt.rs"
 required-features = ["native"]
 
 [[bin]]
+name = "persona_switch_receipt"
+path = "src/bin/persona_switch_receipt.rs"
+required-features = ["native"]
+
+[[bin]]
 name = "graphshell_native_host"
 path = "src/bin/graphshell_native_host.rs"
 required-features = ["native"]
