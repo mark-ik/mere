@@ -227,6 +227,7 @@ impl Canvas {
                     restitution,
                     friction,
                     density,
+                    ..Default::default()
                 },
             );
         }

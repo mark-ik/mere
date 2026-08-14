@@ -114,13 +114,23 @@ pub use scene_spec::{
 mod node_body;
 pub use node_body::{NodeCollider, NodeMaterial};
 
+/// The **sieve**: collision predicates as data — nodes carry [`Kinds`], a sieve scene body
+/// blocks the kinds it names and passes the rest, computed by rapier's interaction groups
+/// with no per-frame work. (Tactile tier T2.)
+mod sift;
+pub use sift::Kinds;
+
 /// Node-body lifecycle on [`Simulation`]: reconciling the body set with the graph (`sync_*`),
 /// the spring-edge topology, and the body accessors the read model is built from.
 mod sync;
 
+/// Read-only geometric **proposals** ("physics proposes, the record disposes"): containments
+/// and supports, for the host to promote to facts at explicit commitments. (P1 + tactile T3.)
+mod propose;
+pub use propose::Support;
+
 /// The rigid **scene** tier on [`Simulation`]: scene-decoration bodies, declarative [`SceneSpec`]
 /// loading + joints, world gravity, and the per-node tangibility lever.
-mod propose;
 mod scene_sim;
 
 /// The **fluid** tier on [`Simulation`]: loading the PBF pool and the two-way coupling between
@@ -185,12 +195,6 @@ const SCENE_BODY_CAP: usize = 200;
 /// gates node-scene contact. (Physics scenes P1.)
 const NODE_GROUP: Group = Group::GROUP_1;
 const SCENE_GROUP: Group = Group::GROUP_2;
-
-/// Interaction groups for a node collider: member of [`NODE_GROUP`], colliding only
-/// with [`NODE_GROUP`] (intangible to the scene by default).
-fn node_groups() -> InteractionGroups {
-    InteractionGroups::new(NODE_GROUP, NODE_GROUP, InteractionTestMode::And)
-}
 
 /// Interaction groups for a scene-decoration collider: member of [`SCENE_GROUP`],
 /// colliding with the scene and admitting nodes (a node still passes through unless
@@ -316,6 +320,12 @@ pub struct Simulation {
     /// Scene-wide tangibility lever state (mirrors [`Self::set_nodes_tangible`]): when `true`, node
     /// bodies couple to the fluid (the graph stirs the pool); when `false` they pass through. (P4c.)
     nodes_tangible: bool,
+    /// The sieve state (tactile T2): each node's declared [`Kinds`] and each sieve scene
+    /// body's blocked set, remembered so body re-syncs and tangibility remasks compose.
+    sift: sift::Sift,
+    /// Per-node material overrides (tactile T1), remembered so a re-synced body comes back
+    /// with the material it was tuned to, not the spawn defaults.
+    node_materials: HashMap<NodeKey, NodeMaterial>,
     /// A continuous force-field over the scene's dynamic bodies (a whirlpool / well), if any. Keeps
     /// the actor ticking while set; cleared by [`Self::clear_scene`]. (Physics scenes P4 fields.)
     scene_field: Option<SceneField>,
@@ -367,6 +377,8 @@ impl Simulation {
             scene_perpetual: false,
             fluid: None,
             nodes_tangible: false,
+            sift: sift::Sift::default(),
+            node_materials: HashMap::new(),
             scene_field: None,
             emitters: Vec::new(),
         }

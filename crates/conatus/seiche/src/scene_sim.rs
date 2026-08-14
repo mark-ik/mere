@@ -9,8 +9,8 @@ use euclid::default::Point2D;
 use rapier2d::prelude::*;
 
 use crate::{
-    DEFAULT_ANGULAR_DAMPING, NODE_BODY_DENSITY, NODE_GROUP, SCENE_BODY_CAP, SCENE_GROUP,
-    SceneBodyId, SceneBodyType, SceneBodyView, SceneJoint, SceneSpec, Simulation, scene_groups,
+    DEFAULT_ANGULAR_DAMPING, NODE_BODY_DENSITY, SCENE_BODY_CAP, SceneBodyId, SceneBodyType,
+    SceneBodyView, SceneJoint, SceneSpec, Simulation, scene_groups,
 };
 
 /// Linear damping for scene-decoration bodies — low, so a drifting backdrop body
@@ -62,6 +62,7 @@ impl Simulation {
     pub fn remove_scene_body(&mut self, id: SceneBodyId) {
         if let Some((handle, _)) = self.scene_bodies.remove(&id) {
             self.scene_sprites.remove(&id);
+            self.sift.sieves.remove(&id);
             self.bodies.remove(
                 handle,
                 &mut self.islands,
@@ -88,6 +89,7 @@ impl Simulation {
         }
         self.scene_bodies.clear();
         self.scene_sprites.clear();
+        self.sift.sieves.clear();
         self.scene_perpetual = false;
         self.scene_field = None;
         self.emitters.clear();
@@ -248,10 +250,7 @@ impl Simulation {
     /// passes through), by re-masking its collider's filter. Node-node collision is
     /// unaffected. A no-op for an unknown node. (Physics scenes P2 — tangibility lever.)
     pub fn set_node_tangibility(&mut self, node: NodeKey, tangible: bool) {
-        let Some(&body_handle) = self.bodies_by_node.get(&node) else {
-            return;
-        };
-        self.remask_node(body_handle, tangible);
+        self.remask_node(node, tangible);
     }
 
     /// Set every node's tangibility at once (the scene-wide lever): `true` lets the graph
@@ -259,33 +258,11 @@ impl Simulation {
     /// is unaffected either way. (Physics scenes P2.)
     pub fn set_nodes_tangible(&mut self, tangible: bool) {
         self.nodes_tangible = tangible;
-        let handles: Vec<RigidBodyHandle> = self.bodies_by_node.values().copied().collect();
-        for handle in handles {
-            self.remask_node(handle, tangible);
-        }
-    }
-
-    /// Re-mask one node body's collider(s) to the intangible (`NODE`) or tangible
-    /// (`NODE | SCENE`) filter. (Physics scenes P2.)
-    fn remask_node(&mut self, body_handle: RigidBodyHandle, tangible: bool) {
-        let groups = if tangible {
-            InteractionGroups::new(
-                NODE_GROUP,
-                NODE_GROUP | SCENE_GROUP,
-                InteractionTestMode::And,
-            )
-        } else {
-            crate::node_groups()
-        };
-        let collider_handles: Vec<ColliderHandle> = self
-            .bodies
-            .get(body_handle)
-            .map(|b| b.colliders().to_vec())
-            .unwrap_or_default();
-        for ch in collider_handles {
-            if let Some(c) = self.colliders.get_mut(ch) {
-                c.set_collision_groups(groups);
-            }
+        let nodes: Vec<NodeKey> = self.bodies_by_node.keys().copied().collect();
+        for node in nodes {
+            // The full re-mask lives in `sift` (it composes kinds with
+            // tangibility, so the two axes cannot drift apart).
+            self.remask_node(node, tangible);
         }
     }
 }

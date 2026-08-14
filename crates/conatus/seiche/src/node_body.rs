@@ -75,6 +75,11 @@ pub struct NodeMaterial {
     pub friction: f32,
     /// Mass density (mass = density * area); higher is heavier and harder to push.
     pub density: f32,
+    /// How much world gravity acts on this node: `0.0` (the default — layout nodes never
+    /// fall) to `1.0` (full weight). Weight is opt-in per node, which is what lets a mere
+    /// say "old documents are heavy" without every node dropping off the canvas.
+    /// (Tactile tier T1.)
+    pub gravity_scale: f32,
 }
 
 impl Default for NodeMaterial {
@@ -83,6 +88,7 @@ impl Default for NodeMaterial {
             restitution: 0.0,
             friction: 0.0,
             density: NODE_BODY_DENSITY,
+            gravity_scale: 0.0,
         }
     }
 }
@@ -120,16 +126,19 @@ impl Simulation {
         }
     }
 
-    /// Apply each listed node's physical **material** (restitution / friction / density) to its
-    /// live body's colliders, re-applying immediately like [`set_linear_damping`](Self::set_linear_damping).
-    /// A density change re-derives the body's mass from its colliders, so a heavier node resists
-    /// pushing. The defaults match the spawn values, so an unconfigured node is a no-op. Nodes
-    /// without a body are skipped. (Node body & face — material.)
+    /// Apply each listed node's physical **material** (restitution / friction / density /
+    /// gravity scale) to its live body, re-applying immediately like
+    /// [`set_linear_damping`](Self::set_linear_damping), and remember it so a re-synced body
+    /// comes back tuned the same way. A density change re-derives the body's mass from its
+    /// colliders, so a heavier node resists pushing. The defaults match the spawn values, so
+    /// an unconfigured node is a no-op. Nodes without a body still have their material
+    /// remembered for when one appears. (Node body & face — material; tactile T1.)
     pub fn set_node_materials(
         &mut self,
         materials: impl IntoIterator<Item = (NodeKey, NodeMaterial)>,
     ) {
         for (node, material) in materials {
+            self.node_materials.insert(node, material);
             let Some(&body_handle) = self.bodies_by_node.get(&node) else {
                 continue;
             };
@@ -151,7 +160,24 @@ impl Simulation {
             // weight takes effect (distinct fields: `bodies` mut, `colliders` read).
             if let Some(body) = self.bodies.get_mut(body_handle) {
                 body.recompute_mass_properties_from_colliders(&self.colliders);
+                body.set_gravity_scale(material.gravity_scale, true);
             }
         }
+    }
+
+    /// The material a node's **live** body actually carries right now, read back off rapier
+    /// state (collider restitution / friction / density, body gravity scale) rather than the
+    /// remembered override — so a receipt can assert what was set is what runs. `None` for a
+    /// node with no body. (Tactile T1.)
+    pub fn node_material(&self, node: NodeKey) -> Option<NodeMaterial> {
+        let &handle = self.bodies_by_node.get(&node)?;
+        let body = self.bodies.get(handle)?;
+        let collider = self.colliders.get(*body.colliders().first()?)?;
+        Some(NodeMaterial {
+            restitution: collider.restitution(),
+            friction: collider.friction(),
+            density: collider.density(),
+            gravity_scale: body.gravity_scale(),
+        })
     }
 }

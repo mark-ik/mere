@@ -9,9 +9,7 @@ use crate::NodeKey;
 use euclid::default::Point2D;
 use rapier2d::prelude::*;
 
-use crate::{
-    DEFAULT_ANGULAR_DAMPING, NODE_BODY_DENSITY, NODE_BODY_RADIUS, Simulation, node_groups,
-};
+use crate::{DEFAULT_ANGULAR_DAMPING, NODE_BODY_RADIUS, Simulation};
 
 impl Simulation {
     /// Replace the topology the layout forces pull along (see
@@ -106,20 +104,24 @@ impl Simulation {
             if self.bodies_by_node.contains_key(&key) {
                 continue;
             }
+            // A re-synced body comes back with the material and kinds it was tuned to,
+            // not the spawn defaults — both are remembered per node. The default material
+            // keeps gravity scale 0: nodes never fall unless weight was opted into, so the
+            // graph layout is unaffected by a gravity scene. (Physics scenes P3; tactile T1/T2.)
+            let material = self.node_materials.get(&key).copied().unwrap_or_default();
             let body = RigidBodyBuilder::dynamic()
                 .translation(Vector::new(position.x, position.y))
                 .linear_damping(self.linear_damping)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
-                // Nodes never fall: scene gravity acts only on scene bodies, so the graph
-                // layout is unaffected by a gravity scene. (Physics scenes P3.)
-                .gravity_scale(0.0)
+                .gravity_scale(material.gravity_scale)
                 .build();
             let handle = self.bodies.insert(body);
+            let kinds = self.sift.node_kinds.get(&key).copied().unwrap_or_default();
             let collider = ColliderBuilder::ball(NODE_BODY_RADIUS)
-                .density(NODE_BODY_DENSITY)
-                .restitution(0.0)
-                .friction(0.0)
-                .collision_groups(node_groups())
+                .density(material.density)
+                .restitution(material.restitution)
+                .friction(material.friction)
+                .collision_groups(crate::sift::node_mask(kinds, self.nodes_tangible))
                 .build();
             self.colliders
                 .insert_with_parent(collider, handle, &mut self.bodies);
