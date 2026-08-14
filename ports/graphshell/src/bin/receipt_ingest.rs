@@ -26,7 +26,7 @@ use muniment::{BlobStore, RedbBackend};
 fn usage() -> ! {
     eprintln!(
         "usage: receipt_ingest --dir <receipt-dir> --store <blobs.redb> \
-         [--device <name>] [--dry-run]"
+         [--device <name>] [--inbox <dir> | --data-root <dir>] [--dry-run]"
     );
     std::process::exit(2);
 }
@@ -35,6 +35,7 @@ struct Args {
     dir: PathBuf,
     store: PathBuf,
     device: String,
+    inbox: Option<PathBuf>,
     dry_run: bool,
 }
 
@@ -42,6 +43,7 @@ fn parse_args() -> Args {
     let mut dir = None;
     let mut store = None;
     let mut device = None;
+    let mut inbox = None;
     let mut dry_run = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -49,6 +51,12 @@ fn parse_args() -> Args {
             "--dir" => dir = args.next().map(PathBuf::from),
             "--store" => store = args.next().map(PathBuf::from),
             "--device" => device = args.next(),
+            "--inbox" => inbox = args.next().map(PathBuf::from),
+            "--data-root" => {
+                inbox = args
+                    .next()
+                    .map(|root| receipts::inbox_dir(std::path::Path::new(&root)));
+            }
             "--dry-run" => dry_run = true,
             "-h" | "--help" => usage(),
             other => {
@@ -66,6 +74,7 @@ fn parse_args() -> Args {
         // availability is per device, and a wrong or missing name would claim
         // the bytes are somewhere they are not.
         device: device.unwrap_or_else(default_device),
+        inbox,
         dry_run,
     }
 }
@@ -109,14 +118,28 @@ async fn run(args: &Args) -> Result<(), ReceiptError> {
         return Ok(());
     }
 
-    // The events land beside the receipt rather than being pushed into a
-    // running replica: the resident host owns the authoring turn (it holds the
-    // signing identity and the log), and a CLI that wrote operations behind
-    // its back would be a second writer for the same graph.
+    // A copy beside the receipt, always: it is what an owner reads to see what
+    // is about to be authored on their behalf, and it keeps a receipt
+    // self-describing if it is ever moved by hand.
     let events_path = args.dir.join("graph-events.json");
     let json = serde_json::to_string_pretty(&ingested.events)
         .expect("personal graph events serialize");
     std::fs::write(&events_path, json)?;
     println!("wrote   {}", events_path.display());
+
+    // The hand-off. Deposited rather than authored here: the resident host
+    // owns the authoring turn, because it holds the signing identity and the
+    // log, and a CLI writing operations behind its back would be a second
+    // writer for one graph. With no inbox given, ingest still did its real
+    // work (the blobs are stored) and the events simply wait to be filed.
+    match &args.inbox {
+        Some(inbox) => {
+            let deposited =
+                receipts::write_to_inbox(inbox, ingested.node, &ingested.events)?;
+            println!("inbox   {}", deposited.display());
+            println!("        the resident host authors it within ~10s");
+        }
+        None => println!("inbox   (none given; pass --inbox or --data-root to file it)"),
+    }
     Ok(())
 }

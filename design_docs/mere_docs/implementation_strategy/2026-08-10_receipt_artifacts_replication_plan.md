@@ -174,8 +174,42 @@ More than expected, and the plan is mostly wiring because of it:
   `graph-events.json` beside the receipt rather than pushing them into a
   running replica. The resident host owns the authoring turn (it holds the
   signing identity and the log); a CLI writing operations behind its back
-  would be a second writer for one graph. Wiring the host to pick these up is
-  the small remaining step before R3.
+  would be a second writer for one graph.
+
+- **2026-08-10, the hand-off closed.** The resident host now picks the events
+  up, so the boundary above is a seam rather than a gap.
+
+  `receipts` became a module directory under the 600-line ceiling, split by
+  concern: `manifest` (the producing machine's *claim* — needs no store, no
+  async, no graph vocabulary), `ingest` (turning it into facts), `intake`
+  (the host side), and `mod` holding the sync lane. `receipt_ingest` gained
+  `--inbox` / `--data-root`; `device_sync` gained `spawn_receipt_intake`,
+  polling `<data_root>/receipts/inbox` every 10s beside the existing pairing,
+  card-refresh, and accept watches.
+
+  Three decisions in the intake worth keeping:
+
+  - **One turn per receipt.** A run is one fact; batching two runs into a turn
+    would leave a later reader unable to tell which events belonged to which.
+  - **Clear the file only after the turn succeeds.** Cleared before, a failed
+    author loses the receipt entirely; cleared after a failure, it simply
+    retries next poll. Applied files move to `inbox/applied/` rather than
+    being deleted — that directory is the local record of what this device
+    authored, and it is what a person reads when asking why a receipt did or
+    did not arrive.
+  - **A malformed hand-off is skipped, not fatal.** One bad file must not
+    wedge the intake loop for every later receipt; it stays put to be looked
+    at.
+
+  The events file is still written beside the receipt as well, because it is
+  what an owner reads to see what is about to be authored on their behalf.
+  Verified end to end: ingest deposits into the inbox and reports it; six
+  intake tests cover the absent inbox, round-trip, re-deposit, apply, the
+  malformed file, and the `applied/` directory not being scanned as a
+  receipt. 15 receipt tests, 196 graphshell lib tests.
+
+  **R3 is now the only step left**, and it is a reading surface rather than
+  plumbing.
 
   **Note for the next session:** `native::personae_host::tests::
   isolated_named_pipe_lists_and_signs_through_the_ssh_wire_protocol` fails

@@ -382,6 +382,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         decisions: Default::default(),
     }));
     spawn_card_refresh(Arc::clone(&host), Arc::clone(&surface));
+    spawn_receipt_intake(Arc::clone(&host), crate::receipts::inbox_dir(&data_root));
     spawn_accept_watch(host, Arc::clone(&surface));
     Ok(Some(surface))
 }
@@ -863,6 +864,63 @@ fn spawn_card_refresh(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle)
                     surface.write().await.cards = snapshot;
                 }
                 Err(error) => tracing::warn!(%error, "personal sync projection refresh failed"),
+            }
+        }
+    });
+}
+
+/// How often the host looks for receipts deposited by `receipt_ingest`.
+///
+/// Slow on purpose: a receipt arrives when a person runs a scenario on another
+/// machine, which is minutes apart at best, and the intake is a directory scan
+/// rather than something worth spinning on.
+const RECEIPT_POLL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Author receipts that ingest left in the inbox.
+///
+/// The resident host is the only writer for this graph, so ingest deposits and
+/// this authors. One turn per receipt: a run is one fact, and batching two
+/// runs into a turn would make a later reader unable to tell which events
+/// belonged to which.
+fn spawn_receipt_intake(host: Arc<PersonalSyncHost>, inbox: PathBuf) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(RECEIPT_POLL).await;
+            let waiting = match crate::receipts::pending(&inbox) {
+                Ok(waiting) if waiting.is_empty() => continue,
+                Ok(waiting) => waiting,
+                Err(error) => {
+                    tracing::warn!(%error, inbox = %inbox.display(), "receipt intake scan failed");
+                    continue;
+                }
+            };
+            for receipt in waiting {
+                let events = receipt.events.len();
+                match host.author(receipt.events).await {
+                    Ok(()) => {
+                        // Only now: a file cleared before the turn succeeded
+                        // would lose the receipt entirely, whereas one cleared
+                        // after a failure simply gets retried next poll.
+                        if let Err(error) = crate::receipts::mark_applied(&receipt.path) {
+                            tracing::warn!(
+                                %error,
+                                path = %receipt.path.display(),
+                                "authored a receipt but could not clear its file; \
+                                 it will be authored again next poll"
+                            );
+                        }
+                        tracing::info!(
+                            events,
+                            path = %receipt.path.display(),
+                            "authored a receipt into the personal graph"
+                        );
+                    }
+                    Err(error) => tracing::warn!(
+                        %error,
+                        path = %receipt.path.display(),
+                        "could not author a receipt; leaving it pending"
+                    ),
+                }
             }
         }
     });

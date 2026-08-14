@@ -20,6 +20,9 @@
 //!   cover this one?", mirroring `gemot::MootAuthorizationProvider`.
 //! - [`gate`] — the one authority pipeline: refuse petitions that touch a
 //!   grant projection, check authority, check scope, then commit attributed.
+//! - [`cascade`] — how far a wake travels: a bounded, deterministic rounds
+//!   loop over [`watch`]'s wake decisions, ending either settled or naming
+//!   the behaviors still answering each other.
 //! - [`watch`] — when a denizen runs: a standing subscription to a scope,
 //!   contained by what its subject may read, matched against a journal's
 //!   committed entries. The gate says whether a body may write; a watch says
@@ -42,12 +45,14 @@
 //! the order's laws and the delegation/revocation rounds it enables.
 
 pub mod cap;
+pub mod cascade;
 pub mod delegation;
 pub mod gate;
 pub mod grant;
 pub mod watch;
 
 pub use cap::{Cap, CapError, Capability, ScopePath, assert_capability_laws};
+pub use cascade::{Cascade, CascadeBudget, CascadeOutcome, CommittedEntry, Round, run_cascade};
 pub use delegation::{ChainError, DelegationTable, cap_path, mode_action, mode_actions, scope_for};
 pub use gate::{
     GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG, read_projection,

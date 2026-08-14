@@ -272,6 +272,24 @@ impl WatchTable {
         wakes
     }
 
+    /// Who `events` *would* wake, without advancing any cursor.
+    ///
+    /// The read-only twin of [`wake`](Self::wake), for naming the subjects a
+    /// cascade ran out of budget before reaching. Peeking must not consume:
+    /// the work is deferred to a later drain, not dropped, so the cursors have
+    /// to stay where they are.
+    pub fn would_wake(&self, events: &[WatchEvent<'_>]) -> Vec<Subject> {
+        let mut subjects: Vec<Subject> = self
+            .watches
+            .iter()
+            .filter(|watch| events.iter().any(|event| watch.matches(event)))
+            .map(|watch| watch.subject)
+            .collect();
+        subjects.sort_by_key(|subject| subject.0);
+        subjects.dedup();
+        subjects
+    }
+
     /// The whole table as persistable lines, one watch each.
     pub fn to_wire_lines(&self) -> Vec<String> {
         self.watches.iter().map(Watch::to_wire).collect()
