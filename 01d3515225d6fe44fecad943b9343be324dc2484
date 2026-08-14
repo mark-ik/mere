@@ -1,0 +1,22 @@
+ATTRIBUTION CORRECTION. The subject describes a doc edit. The commit also
+carries M2 part four of the device-grant certificate migration, swept off a
+dirty tree while it was mid-verification.
+
+Swept in:
+  crates/system/session-runtime/src/wallet_grant/certificate.rs
+    device_scope_certificate_path, device_grant_set_ref,
+    save_device_grant_set, load_device_grant_set, and four tests
+  crates/system/session-runtime/src/wallet_grant/mod.rs
+    the re-exports for the above
+
+That work is the storage seam the remaining flow switch depends on: the four
+wallet flows read and write grants through one pair of calls, so they cannot
+switch one at a time without leaving the tree reading one format while writing
+another. Its account, including why the set needs its own content ref, is in
+the following commit, "Record M2 part four: the storage seam".
+
+This is the third such sweep in this migration (see also the notes on
+1468e1b1 and f5951215, and commit 311b61a8 which named its sweep correctly).
+No history surgery was done to un-bundle any of them: sweeping is the house
+rule and is preferred to work sitting dirty. The defect each time is only that
+the message did not say what was swept, which is what these notes repair.
