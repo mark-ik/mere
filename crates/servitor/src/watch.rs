@@ -432,7 +432,9 @@ mod tests {
 
         let touched = [scope("trail/today")];
         assert!(
-            table.wake(&[event(1, &alice.to_hex(), &touched)]).is_empty(),
+            table
+                .wake(&[event(1, &alice.to_hex(), &touched)])
+                .is_empty(),
             "the full-hex convention refuses self-wake"
         );
         assert_eq!(
@@ -523,7 +525,12 @@ mod tests {
         let awkward = scope("trail/urn:chart:rel:cites");
         let mut table = WatchTable::new();
         table
-            .register(&reader(alice, "trail"), alice, awkward.clone(), "denizen:aa")
+            .register(
+                &reader(alice, "trail"),
+                alice,
+                awkward.clone(),
+                "denizen:aa",
+            )
             .unwrap();
         let line = table.watches()[0].to_wire();
         assert_eq!(Watch::parse(&line).unwrap().scope, awkward);

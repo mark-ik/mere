@@ -115,6 +115,15 @@ entirely in the denizen tier.
 (Vocabulary: **watch** ruled by Mark 2026-08-13, recorded in
 [TERMINOLOGY.md](../../TERMINOLOGY.md).)
 
+**Which graphs a scope can name (found building W0).** Segment-prefix
+matching fits a denizen's nested world, whose node ids *are* scope paths:
+the same strings `Gate::petition` already scope-checks. Mere's main graph
+keys nodes by `Uuid`, and a UUID is one opaque segment, so against that
+journal a `ScopePath` can only ever name one exact node or (via the root)
+everything. Watching a *region* of the main graph therefore needs a region
+vocabulary that does not exist yet. This does not block the matcher, which
+takes events rather than a journal, but it does gate W2: see W0.5.
+
 ### 3.2 Triggers ride the journal, not edges
 
 A watch matches **committed, attributed deltas**, never live mutation. The
@@ -123,7 +132,14 @@ tests entries `(cursor, live_cursor]` against the watch scope. Two built-in
 refusals:
 
 - **Self-authored entries never match the author's own watch.** The trivial
-  self-loop is unrepresentable rather than budgeted.
+  self-loop is unrepresentable rather than budgeted. One trap here, found
+  building W0: the two journals label the same subject differently.
+  chartulary carries `denizen:abcd1234` (`Subject::to_author`), while mere's
+  `GraphJournal` carries the full 64-char hex (turnstone
+  `remote_projection.rs`). A derived label would be right on one tier and
+  quietly wrong on the other, and being wrong means this refusal stops
+  working while the budget silently absorbs the spin. So the label is a
+  registration argument: a caller states which convention its journal uses.
 - Entries authored `pre-gate` match normally (they are ordinary history by
   the time a watch exists).
 
@@ -192,11 +208,25 @@ Carried over or ruled here:
 
 ## 4. Slices
 
-- **W0: watch table and matcher (headless, kernel-side).** A watch registry
-  keyed by subject (`Cap::Scope` + cursor), persisted beside the denizen
-  binding; a matcher over `GraphJournal` entries. Done when: registration
-  enforces watch ⊆ grant read scope; scope-prefix matching proven by test;
-  self-authored entries proven non-waking; cursors survive reload.
+- **W0: watch table and matcher (headless, kernel-side). LANDED
+  2026-08-13.** Built in `servitor` (`src/watch.rs`), which already owns
+  `Cap`, `Grant`, and the `AuthorityProvider` seam a watch is contained by.
+  `Watch { subject, scope, self_author, cursor }`, a `WatchTable` whose
+  `register` enforces the containment law against
+  `AuthorityProvider::covers(.., Mode::Read)`, and a `wake(events)` matcher
+  returning wakes in stable subject order. Persistence is servitor's own
+  `to_wire`/`parse` idiom rather than a serde dependency (space-separated,
+  scope last, because a scope segment may contain a colon and `Cap`'s wire
+  form could not carry one unambiguously). The matcher takes `WatchEvent`s
+  rather than a journal type, so it serves both tiers.
+- **W0.5: the main graph's region vocabulary. NEEDS A RULING.** What names
+  "a region of the main graph" for a watch (and for the read grant that must
+  contain it). Candidates, none built: **container membership** (structural,
+  matches the "under this container" reading of the inbox rule), **address
+  prefix** (genuinely hierarchical already, so `ScopePath` would work
+  unchanged for web nodes), **tag** (flat, so it is a predicate rather than a
+  scope and would not nest). Whatever is chosen also needs an adapter turning
+  `AttributedDelta`s into `WatchEvent`s. Blocks W2, not W1.
 - **W1: cascade runner at the drain (turnstone).** The bounded rounds loop
   of 3.3 wired to the existing after-dispatch drain and `RunDenizen` lane.
   Done when: a two-behavior mutual-wake fixture terminates at the budget
@@ -205,7 +235,9 @@ Carried over or ruled here:
   right subject; the whole cascade replays deterministically in a scenario
   run; lowering the budget setting from 4 to 1 takes effect on the next
   cascade without a restart.
-- **W2: trigger context into the body.** The matched-delta digest handed to
+- **W2: trigger context into the body.** *(Blocked on W0.5: "a node
+  appearing under a watched scope" is a main-graph watch.)* The matched-delta
+  digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
@@ -284,3 +316,18 @@ not automation).
 - 2026-08-13 (later): Mark ruled the three open questions (watch / install
   review / budget-as-setting); rulings folded into 3.1, 3.2, 3.3 and
   TERMINOLOGY.md. W1 and W2 done conditions extended accordingly.
+- 2026-08-13 (W0): landed in servitor. **43 tests pass** (32 existing plus
+  11 new), clippy clean in servitor's own files. All four done conditions
+  covered by name: containment enforced at registration (including the root
+  scope refused as a loophole, and a `Write` grant accepted as covering the
+  `Read` a watch needs), segment matching proven by `trail` not covering
+  `trailer`, self-waking refused under both author conventions, and cursors
+  proven to survive the wire round trip. Four beyond them: stable subject
+  ordering (what cascade determinism rests on), uninstall taking watches with
+  it, a malformed record failing the load rather than vanishing, and a
+  colon-bearing scope surviving the wire form. Two findings folded into 3.1
+  and 3.2, and W0.5 added: the main graph has no region vocabulary, so W2 is
+  blocked until Mark rules one.
+  Note for whoever runs the workspace clippy gate: `-D warnings` is red on
+  personae's deprecated `chacha20poly1305` `from_slice` calls, which is
+  pre-existing crypto-row residue and unrelated to this slice.

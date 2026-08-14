@@ -20,6 +20,10 @@
 //!   cover this one?", mirroring `gemot::MootAuthorizationProvider`.
 //! - [`gate`] — the one authority pipeline: refuse petitions that touch a
 //!   grant projection, check authority, check scope, then commit attributed.
+//! - [`watch`] — when a denizen runs: a standing subscription to a scope,
+//!   contained by what its subject may read, matched against a journal's
+//!   committed entries. The gate says whether a body may write; a watch says
+//!   what wakes it.
 //!
 //! A denizen's inner world (its grant projections, storage markers, registered
 //! commands, journal cursors) is an ordinary [`chartulary::GraphLog`]: the
@@ -41,6 +45,7 @@ pub mod cap;
 pub mod delegation;
 pub mod gate;
 pub mod grant;
+pub mod watch;
 
 pub use cap::{Cap, CapError, Capability, ScopePath, assert_capability_laws};
 pub use delegation::{ChainError, DelegationTable, cap_path, mode_action, mode_actions, scope_for};
@@ -48,6 +53,7 @@ pub use gate::{
     GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG, read_projection,
 };
 pub use grant::{AuthorityProvider, Grant, GrantTable, Mode};
+pub use watch::{Wake, Watch, WatchError, WatchEvent, WatchTable};
 
 /// A keyholder identity: the 32-byte public key of whoever acts. A device, a
 /// servitor, a persona, a peer, an agent are all subjects; what *kind* of
