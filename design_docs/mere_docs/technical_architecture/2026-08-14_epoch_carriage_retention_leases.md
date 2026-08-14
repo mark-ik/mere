@@ -1,6 +1,6 @@
 # Epoch carriage retention: leased slots
 
-**Proposed 2026-08-14, awaiting Mark's ratification.** Scopes ruling 4 of
+**Ratified 2026-08-14, by Mark.** Scopes ruling 4 of
 [epoch carriage and replication](2026-08-14_epoch_carriage_replication.md),
 which gated shipping on an unanswered retention question. Related: the
 [listener-executive lease doctrine](../../../../retinue/design_docs/2026-08-10_listener_executive_and_protocol_leases.md),
