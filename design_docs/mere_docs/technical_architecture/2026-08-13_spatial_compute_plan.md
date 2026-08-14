@@ -129,7 +129,10 @@ exact and fixed-point planes are the record's side; everything else is
 projection.
 
 First application is the wing's voxel ground (mesocosm
-`design_docs/2026-08-14` composition plan): mesocosm's `Ground` already
+`design_docs/2026-08-14_resident_views_composition_plan.md`, which also
+carries the **conatus-side lane briefs**: the `ResidentChunk` seam as a
+quint module, the nexus LBVH/radix harvest, and the CubeCL carriage
+decision, each with its ownership boundary): mesocosm's `Ground` already
 carries `revision` and a dirty-brick projection queue whose own doc
 comment states the law ("projection work queue, not world authority").
 The seam was latent in the tree before it was named.
