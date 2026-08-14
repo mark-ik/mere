@@ -334,9 +334,34 @@ Two defects the tests caught, both worth carrying as cautions:
 
 ## Remaining
 
-- **Creating a persona.** `PickerEvent::CreateRequested` reports the intent;
-  naming it is the application's flow. Woodshed's gate says where personas
-  come from today instead of dropping it; no application mints one yet.
+- ~~**Creating a persona.**~~ **Landed 2026-08-09 in graphshell**, as
+  `PROFILE_CREATE_INTENT` on the vault card beside generate and import: it is
+  the vault's action, not the action of whoever is in use.
+
+  **Not castellan**, though it was the other candidate. Castellan's own
+  charter excludes it: "the faces, their derivation roots, and the vault
+  substrate live in `personae`; castellan is the keeper who serves them."
+  Castellan holds the *chatelaine* (passwords, 2FA seeds, tokens, foreign key
+  material) and presents *emblems*. A persona's master key is neither of those
+  — it is the face itself.
+
+  Creating is deliberately not switching: a persona minted for another device
+  is not one the user is adopting, so the new card arrives carrying the
+  ordinary switch action.
+
+  The id is **constrained, not sanitized**. It becomes a filename in
+  `owner_settings::settings_path`, which replaces anything unsafe with `_`,
+  so accepting `a/b` would let it and `a_b` silently share one settings file.
+  The vault is safe either way (it hashes ids for record paths); the collision
+  is the hazard, and creation is the only place it can be refused rather than
+  papered over.
+
+  Woodshed's own [persona picker plan](../../../../../woodshed/design_docs/2026-08-12_persona_picker_plan.md)
+  P3 still wants a local name input for its gate's create row, which is not a
+  duplicate: the naming UI is app-local, the act (`roster::create_profile`) is
+  already shared. Worth noting that woodshed's gate only appears with **more
+  than one** persona, so its create row cannot be reached on a machine that
+  has none — which is exactly when you need it. Graphshell has no such gate.
 - **Hocket cannot go back.** Joining is one-way in the UI: there is no
   "return to my own identity", because that is a second rotation with the same
   cost and no caller has asked for it. The consent record is a single file, so

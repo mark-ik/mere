@@ -29,6 +29,8 @@ pub const DEVICE_REVOKE_INTENT: &str = "graphshell.identity.device.revoke";
 pub const DEVICE_REVOKE_SCHEMA: &str = "graphshell.identity.device.revoke/v1";
 pub const PROFILE_SWITCH_INTENT: &str = "graphshell.identity.profile.switch";
 pub const PROFILE_SWITCH_SCHEMA: &str = "graphshell.identity.profile.switch/v1";
+pub const PROFILE_CREATE_INTENT: &str = "graphshell.identity.profile.create";
+pub const PROFILE_CREATE_SCHEMA: &str = "graphshell.identity.profile.create/v1";
 
 /// Typed, secret-free signing decision payload.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +80,29 @@ pub struct RemoveSshKeyIntentV1 {
 pub struct RevokeDeviceIntentV1 {
     pub device_id: Uuid,
     pub confirmed: bool,
+}
+
+/// Mint a new persona in the vault.
+///
+/// The last thing in the family nothing could do: every application's picker
+/// has a create row, and each one told the user to go and run the
+/// `personae-vault` CLI. Graphshell is where it belongs because Graphshell is
+/// already the vault-management surface, holding generate / import / remove for
+/// SSH keys and the switch for personas.
+///
+/// Creating is deliberately not switching. A persona minted for another device
+/// or another purpose is not one you are necessarily becoming, so the new
+/// card arrives carrying the ordinary switch action and the choice stays the
+/// user's.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CreateProfileIntentV1 {
+    /// The id, which is also what the remembered choice and the settings
+    /// filenames are keyed by. Constrained at the host; see
+    /// `PersonaeHost::create_profile`.
+    pub id: String,
+    /// What to show. Free text, unlike the id.
+    pub display_name: String,
 }
 
 /// Switch the resident host to another persona, live.
@@ -146,6 +171,18 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 intent: SSH_IMPORT_NATIVE_INTENT,
                 schema: SSH_IMPORT_NATIVE_SCHEMA,
                 label: "Import SSH key…",
+                payload: None,
+                native_only: true,
+                input_form: None,
+            },
+            // On the vault card rather than beside a persona: it belongs to
+            // the vault, not to whoever is in use. `payload: None` is the
+            // established shape for an action whose fields the native host
+            // collects, the same as the two above.
+            IdentityProjectionAction {
+                intent: PROFILE_CREATE_INTENT,
+                schema: PROFILE_CREATE_SCHEMA,
+                label: "New persona…",
                 payload: None,
                 native_only: true,
                 input_form: None,
@@ -717,6 +754,28 @@ mod tests {
             !serde_json::to_string(remove.payload.as_ref().unwrap())
                 .unwrap()
                 .contains("private")
+        );
+    }
+
+    #[test]
+    fn creating_a_persona_belongs_to_the_vault_not_to_a_persona() {
+        // It is the vault's action, not the action of whoever is in use, so it
+        // rides the vault card beside generate and import rather than being
+        // repeated on every profile.
+        let cards = project_identity(&snapshot(SigningPolicy::PerUse));
+        let vault = cards
+            .iter()
+            .find(|card| card.key == "identity:vault")
+            .unwrap();
+        let create = vault
+            .actions
+            .iter()
+            .find(|action| action.intent == PROFILE_CREATE_INTENT)
+            .expect("the vault card offers persona creation");
+        assert!(create.native_only, "minting a key is not a remote grant");
+        assert!(
+            create.payload.is_none(),
+            "the name is collected by the native host, like generate and import"
         );
     }
 

@@ -25,8 +25,9 @@ use crate::identity::{
     VaultProtectionView, VaultView, load_carry_view,
 };
 use crate::identity_projection::{
-    DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1,
-    PROFILE_SWITCH_INTENT, RemoveSshKeyIntentV1, RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT,
+    CreateProfileIntentV1, DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1,
+    PROFILE_CREATE_INTENT, PROFILE_SWITCH_INTENT, RemoveSshKeyIntentV1, RevokeDeviceIntentV1,
+    SIGNING_APPROVE_IDLE_INTENT,
     SIGNING_APPROVE_ONCE_INTENT, SIGNING_DENY_INTENT, SSH_GENERATE_INTENT,
     SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT, SigningDecisionIntentV1, SshUnlockPolicyIntentV1,
     SwitchProfileIntentV1,
@@ -53,6 +54,13 @@ pub enum IdentityIntentError {
     PublicEncoding,
     #[error("SSH key comment must be at most 256 printable characters")]
     InvalidComment,
+    #[error(
+        "a persona id must be 1-64 characters of letters, digits, hyphen or underscore, so it \
+         survives becoming a filename unchanged"
+    )]
+    InvalidProfileId,
+    #[error("a persona name must be 1-256 printable characters")]
+    InvalidProfileName,
     #[error("short idle approval must be between 1 and 86400 seconds")]
     InvalidIdleWindow,
     #[error("SSH key removal requires explicit confirmation")]
@@ -96,6 +104,16 @@ pub enum IdentityIntentOutcome {
     SshKeyMutation(SshKeyMutationReceipt),
     DeviceRevocation(DeviceRevocationReceipt),
     ProfileSwitch(ProfileSwitchReceipt),
+    ProfileCreated(ProfileCreatedReceipt),
+}
+
+/// Public facts produced by minting a persona. No key material: the master
+/// public key is reported as a fingerprint, the way the profile cards do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfileCreatedReceipt {
+    pub id: String,
+    pub display_name: String,
+    pub master_public_fingerprint: String,
 }
 
 /// Public facts produced by a live profile switch.
@@ -513,6 +531,53 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         })
     }
 
+    /// Mint a persona in the vault.
+    ///
+    /// **Does not switch to it.** Creating an identity and becoming it are
+    /// separate decisions: a persona minted for another device or another
+    /// purpose is not one the user is necessarily adopting, and the new card
+    /// carries the ordinary switch action for when they are.
+    ///
+    /// The id is constrained rather than sanitized. It reaches a filename in
+    /// `owner_settings::settings_path`, which replaces anything unsafe with
+    /// `_`; accepting `a/b` here would mean it and `a_b` silently share one
+    /// settings file. Refusing at the point of creation is the only place that
+    /// cannot be worked around later.
+    pub fn create_profile(
+        &self,
+        payload: CreateProfileIntentV1,
+    ) -> Result<ProfileCreatedReceipt, IdentityIntentError> {
+        let id = payload.id.trim();
+        if id.is_empty()
+            || id.chars().count() > 64
+            || !id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(IdentityIntentError::InvalidProfileId);
+        }
+        let display_name = payload.display_name.trim();
+        if display_name.is_empty()
+            || display_name.chars().count() > 256
+            || display_name.chars().any(char::is_control)
+        {
+            return Err(IdentityIntentError::InvalidProfileName);
+        }
+        // `roster::create_profile` refuses a taken id, which is the guard that
+        // matters: minting over a persona would replace its master key and
+        // every certificate rooted on it.
+        let vault = self.vault.lock().unwrap();
+        let profile = roster::create_profile(vault.storage(), &ProfileId(id.to_string()), display_name)?;
+        Ok(ProfileCreatedReceipt {
+            id: profile.id.0,
+            display_name: profile.display_name,
+            master_public_fingerprint: format!(
+                "blake3:{}",
+                blake3::hash(&profile.master.public_key().to_bytes()).to_hex()
+            ),
+        })
+    }
+
     /// Apply one typed action emitted by [`crate::identity_projection`].
     pub fn apply_intent(
         &self,
@@ -558,6 +623,11 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
                 let payload: SwitchProfileIntentV1 = serde_json::from_slice(payload)?;
                 self.switch_profile(payload)
                     .map(IdentityIntentOutcome::ProfileSwitch)
+            }
+            PROFILE_CREATE_INTENT => {
+                let payload: CreateProfileIntentV1 = serde_json::from_slice(payload)?;
+                self.create_profile(payload)
+                    .map(IdentityIntentOutcome::ProfileCreated)
             }
             _ => Err(IdentityIntentError::UnknownIntent),
         }
@@ -666,6 +736,154 @@ mod tests {
         assert!(!json.contains("BEGIN OPENSSH PRIVATE KEY"));
         assert!(!json.contains("5a5a5a5a5a5a5a5a"));
         assert_eq!(snapshot.vault.agent, AgentListenerView::StandaloneRetained);
+    }
+
+    #[test]
+    fn a_created_persona_joins_the_vault_and_the_host_stays_where_it_was() {
+        // Creating and becoming are separate decisions: a persona minted for
+        // another device is not one the user is adopting.
+        let storage = InMemoryStorage::new();
+        let work = Profile::new(
+            ProfileId("work".into()),
+            "Work",
+            Ed25519Keypair::from_seed([0x31; 32]),
+        );
+        storage.save_profile(&work).unwrap();
+        let host = PersonaeHost::new(
+            IdentityVault::with_profile(storage, work),
+            None,
+            VaultProtectionView::Ephemeral,
+        );
+        let before = IdentityProvider::master_public_key(&host).to_bytes();
+
+        let outcome = host
+            .apply_intent(
+                PROFILE_CREATE_INTENT,
+                &serde_json::to_vec(&CreateProfileIntentV1 {
+                    id: "alt".into(),
+                    display_name: "Late Night Alt".into(),
+                })
+                .unwrap(),
+            )
+            .unwrap();
+
+        match outcome {
+            IdentityIntentOutcome::ProfileCreated(receipt) => {
+                assert_eq!(receipt.id, "alt");
+                assert_eq!(receipt.display_name, "Late Night Alt");
+                assert!(receipt.master_public_fingerprint.starts_with("blake3:"));
+            }
+            other => panic!("expected a creation receipt, got {other:?}"),
+        }
+
+        let snapshot = host.snapshot().unwrap();
+        let mut ids: Vec<&str> = snapshot.profiles.iter().map(|p| p.id.as_str()).collect();
+        ids.sort();
+        assert_eq!(ids, ["alt", "work"], "the new persona is in the roster");
+        assert_eq!(
+            snapshot
+                .profiles
+                .iter()
+                .filter(|p| p.selected)
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            ["work"],
+            "creating does not switch"
+        );
+        assert_eq!(
+            IdentityProvider::master_public_key(&host).to_bytes(),
+            before,
+            "and the host still speaks as the persona it had"
+        );
+    }
+
+    #[test]
+    fn an_id_that_would_not_survive_becoming_a_filename_is_refused() {
+        // `owner_settings::settings_path` replaces anything unsafe with `_`,
+        // so accepting `a/b` here would mean it and `a_b` silently share one
+        // settings file. Refusing at creation is the only place that cannot be
+        // worked around later.
+        let host = PersonaeHost::new(
+            IdentityVault::with_profile(
+                InMemoryStorage::new(),
+                Profile::new(
+                    ProfileId("work".into()),
+                    "Work",
+                    Ed25519Keypair::from_seed([0x32; 32]),
+                ),
+            ),
+            None,
+            VaultProtectionView::Ephemeral,
+        );
+        for bad in ["../../evil", "a/b", "with space", "", "   "] {
+            assert!(
+                matches!(
+                    host.create_profile(CreateProfileIntentV1 {
+                        id: bad.into(),
+                        display_name: "Whatever".into(),
+                    }),
+                    Err(IdentityIntentError::InvalidProfileId)
+                ),
+                "{bad:?} must be refused"
+            );
+        }
+        assert!(
+            host.create_profile(CreateProfileIntentV1 {
+                id: "a".repeat(65),
+                display_name: "Long".into(),
+            })
+            .is_err()
+        );
+        // And a name that is only whitespace, or carries control characters.
+        for bad in ["", "   ", "two\nlines"] {
+            assert!(
+                matches!(
+                    host.create_profile(CreateProfileIntentV1 {
+                        id: "fine".into(),
+                        display_name: bad.into(),
+                    }),
+                    Err(IdentityIntentError::InvalidProfileName)
+                ),
+                "{bad:?} must be refused as a name"
+            );
+        }
+        assert_eq!(
+            host.snapshot().unwrap().profiles.len(),
+            1,
+            "nothing was minted by any of the refusals"
+        );
+    }
+
+    #[test]
+    fn creating_over_an_existing_persona_is_refused() {
+        // The guard that matters: minting over a persona replaces its master
+        // key and every certificate rooted on it.
+        let storage = InMemoryStorage::new();
+        let work = Profile::new(
+            ProfileId("work".into()),
+            "Work",
+            Ed25519Keypair::from_seed([0x33; 32]),
+        );
+        storage.save_profile(&work).unwrap();
+        let before = work.master.public_key().to_bytes();
+        let host = PersonaeHost::new(
+            IdentityVault::with_profile(storage, work),
+            None,
+            VaultProtectionView::Ephemeral,
+        );
+
+        assert!(
+            host.create_profile(CreateProfileIntentV1 {
+                id: "work".into(),
+                display_name: "Impostor".into(),
+            })
+            .is_err()
+        );
+        assert_eq!(
+            IdentityProvider::master_public_key(&host).to_bytes(),
+            before,
+            "the existing persona keeps its key"
+        );
     }
 
     #[test]

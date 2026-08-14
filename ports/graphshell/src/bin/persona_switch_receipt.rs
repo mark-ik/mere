@@ -29,7 +29,8 @@ use std::path::PathBuf;
 
 use graphshell::identity::VaultProtectionView;
 use graphshell::identity_projection::{
-    PROFILE_SWITCH_INTENT, SwitchProfileIntentV1, project_identity, render_identity_surface,
+    CreateProfileIntentV1, PROFILE_CREATE_INTENT, PROFILE_SWITCH_INTENT, SwitchProfileIntentV1,
+    project_identity, render_identity_surface,
 };
 use graphshell::native::personae_host::{IdentityIntentOutcome, PersonaeHost};
 use personae::bootstrap::{self, Unlock};
@@ -212,7 +213,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "and a refused switch leaves the host where it was"
     );
 
+    // ── Creating: the last thing in the family nothing could do. It joins the
+    // roster without switching, and it refuses an id that would not survive
+    // becoming a filename.
+    let created = host.apply_intent(
+        PROFILE_CREATE_INTENT,
+        &serde_json::to_vec(&CreateProfileIntentV1 {
+            id: "studio".to_string(),
+            display_name: "Studio".to_string(),
+        })?,
+    )?;
+    let IdentityIntentOutcome::ProfileCreated(created) = created else {
+        return Err("a create intent returned some other outcome".into());
+    };
+    let with_studio = host.snapshot()?;
+    let mut roster_ids: Vec<&str> = with_studio
+        .profiles
+        .iter()
+        .map(|profile| profile.id.as_str())
+        .collect();
+    roster_ids.sort();
+    assert_eq!(roster_ids, ["alt", "studio", "work"], "the persona is in the vault");
+    assert_eq!(
+        with_studio
+            .profiles
+            .iter()
+            .filter(|profile| profile.selected)
+            .map(|profile| profile.id.as_str())
+            .collect::<Vec<_>>(),
+        ["alt"],
+        "creating is not switching"
+    );
+    let hostile = host.apply_intent(
+        PROFILE_CREATE_INTENT,
+        &serde_json::to_vec(&CreateProfileIntentV1 {
+            id: "../../evil".to_string(),
+            display_name: "Escape".to_string(),
+        })?,
+    );
+    assert!(hostile.is_err(), "an id that cannot be a filename is refused");
+    assert_eq!(
+        host.snapshot()?.profiles.len(),
+        3,
+        "and the refusal minted nothing"
+    );
+    std::fs::write(
+        out.join("03_after_create.html"),
+        render_identity_surface(&host.snapshot()?),
+    )?;
+
     let receipt = json!({
+        "claim_created": {
+            "id": created.id,
+            "display_name": created.display_name,
+            "fingerprint": created.master_public_fingerprint,
+            "roster_after": roster_ids,
+            "switched_by_creating": false,
+            "hostile_id_refused": true,
+        },
         "claim_live": {
             "session_reconnected": false,
             "served_before": listed_before,
