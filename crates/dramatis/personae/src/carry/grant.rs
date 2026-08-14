@@ -25,6 +25,8 @@
 //! [`DeviceMode::Copy`]: super::DeviceMode::Copy
 //! [`DeviceMode::RemoteAuth`]: super::DeviceMode::RemoteAuth
 
+use std::collections::BTreeMap;
+
 use crate::delegation::{
     DelegationCertificate, DelegationError, DelegationParent, SignedDelegationCertificate,
 };
@@ -143,6 +145,95 @@ pub fn issue_persona_device_grant(
         valid_for_ms,
         now_ms,
     )
+}
+
+/// Every certificate one device grant comprises.
+///
+/// The old envelope was a single signature covering a device, an action list,
+/// and a persona list at once. Splitting the issuer per persona splits the
+/// grant into a set, and the action partition decides which certificate each
+/// action lands on: device-scoped actions on one master-issued certificate,
+/// persona-scoped actions on one certificate per persona.
+///
+/// Both halves are optional and a real grant often has only one. A sited radio
+/// carries `device` alone; a grant that only lets a laptop act as two personae
+/// carries two `personas` entries and no `device`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceGrantSet {
+    /// Device-wide authority, issued by the master.
+    pub device: Option<SignedDelegationCertificate>,
+    /// Per-persona authority, each issued by that persona's own chain root.
+    pub personas: BTreeMap<PersonaId, SignedDelegationCertificate>,
+}
+
+impl DeviceGrantSet {
+    /// Every certificate in the set, device first.
+    pub fn certificates(&self) -> impl Iterator<Item = &SignedDelegationCertificate> {
+        self.device.iter().chain(self.personas.values())
+    }
+
+    /// Whether the set contains no authority at all.
+    pub fn is_empty(&self) -> bool {
+        self.device.is_none() && self.personas.is_empty()
+    }
+}
+
+/// Issue the full certificate set for one device grant.
+///
+/// Returns [`DelegationError::MalformedCertificate`] when the requested
+/// actions include persona-scoped ones but no persona is named: nothing could
+/// issue such a capability, and silently dropping it would hand back a grant
+/// narrower than the caller asked for without saying so.
+pub fn issue_device_grant_set(
+    master_seed: [u8; 32],
+    device: DeviceId,
+    holder: DevicePublicKey,
+    actions: &[&str],
+    personas: &[PersonaId],
+    valid_for_ms: u64,
+    now_ms: u64,
+) -> Result<DeviceGrantSet, DelegationError> {
+    let (device_actions, persona_actions) = super::partition_actions(actions.iter().copied());
+    if !persona_actions.is_empty() && personas.is_empty() {
+        return Err(DelegationError::MalformedCertificate);
+    }
+
+    let device_certificate = if device_actions.is_empty() {
+        None
+    } else {
+        let master = InMemoryProvider::from_seed(master_seed);
+        Some(issue_remote_auth_grant(
+            &master,
+            device,
+            holder,
+            &device_actions,
+            valid_for_ms,
+            now_ms,
+        )?)
+    };
+
+    let mut persona_certificates = BTreeMap::new();
+    if !persona_actions.is_empty() {
+        for &persona in personas {
+            persona_certificates.insert(
+                persona,
+                issue_persona_device_grant(
+                    master_seed,
+                    persona,
+                    device,
+                    holder,
+                    &persona_actions,
+                    valid_for_ms,
+                    now_ms,
+                )?,
+            );
+        }
+    }
+
+    Ok(DeviceGrantSet {
+        device: device_certificate,
+        personas: persona_certificates,
+    })
 }
 
 #[cfg(test)]
@@ -330,5 +421,86 @@ mod tests {
             .unwrap()
         };
         assert_eq!(args().certificate.id(), args().certificate.id());
+    }
+
+    fn set(actions: &[&str], personas: &[PersonaId]) -> DeviceGrantSet {
+        issue_device_grant_set(
+            MASTER_SEED,
+            device(),
+            holder(),
+            actions,
+            personas,
+            60_000,
+            NOW_MS,
+        )
+        .expect("issuing the grant set")
+    }
+
+    /// The sited-radio shape: device authority only, and no persona ever
+    /// learns about it.
+    #[test]
+    fn a_station_grant_is_one_device_certificate_and_nothing_else() {
+        let set = set(&[ACTION_TRANSPORT_EGRESS], &[]);
+
+        let device_certificate = set.device.as_ref().expect("a device certificate");
+        assert!(set.personas.is_empty());
+        assert!(device_certificate.verify());
+        assert!(
+            device_certificate
+                .certificate
+                .scope
+                .actions
+                .contains(ACTION_TRANSPORT_EGRESS)
+        );
+    }
+
+    #[test]
+    fn actions_land_on_the_certificate_whose_authority_covers_them() {
+        let set = set(
+            &[ACTION_TRANSPORT_EGRESS, crate::carry::ACTION_IDENTITY_ACT],
+            &[persona(1)],
+        );
+
+        let device_actions = &set.device.as_ref().unwrap().certificate.scope.actions;
+        assert!(device_actions.contains(ACTION_TRANSPORT_EGRESS));
+        assert!(!device_actions.contains(crate::carry::ACTION_IDENTITY_ACT));
+
+        let persona_actions = &set.personas[&persona(1)].certificate.scope.actions;
+        assert!(persona_actions.contains(crate::carry::ACTION_IDENTITY_ACT));
+        assert!(!persona_actions.contains(ACTION_TRANSPORT_EGRESS));
+    }
+
+    /// Silently dropping the persona half would hand back a grant narrower
+    /// than the caller asked for, without saying so.
+    #[test]
+    fn persona_actions_with_no_persona_named_are_refused() {
+        let error = issue_device_grant_set(
+            MASTER_SEED,
+            device(),
+            holder(),
+            &[crate::carry::ACTION_IDENTITY_ACT],
+            &[],
+            60_000,
+            NOW_MS,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, DelegationError::MalformedCertificate));
+    }
+
+    #[test]
+    fn each_persona_in_the_set_is_issued_by_its_own_authority() {
+        let set = set(
+            &[crate::carry::ACTION_IDENTITY_ACT],
+            &[persona(1), persona(2)],
+        );
+
+        assert!(set.device.is_none());
+        assert_eq!(set.personas.len(), 2);
+        assert_ne!(
+            set.personas[&persona(1)].certificate.issuer,
+            set.personas[&persona(2)].certificate.issuer
+        );
+        assert!(set.certificates().all(|c| c.verify()));
     }
 }

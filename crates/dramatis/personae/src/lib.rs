@@ -105,7 +105,9 @@ pub use crate::vault::{
 ///
 /// v0 uses [`PersonaId::default_persona`] for every session. v1 promotes
 /// this into user-managed persona manifests and per-persona vault roots.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct PersonaId(pub uuid::Uuid);
 
 impl PersonaId {

@@ -161,12 +161,25 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     if !relays.is_empty() {
         tracing::info!(relays = relays.len(), "personal sync will register relays");
     }
+    // The receipt lane rides alongside whatever the owner selected. Its facets
+    // are added rather than configured because a device that ingests receipts
+    // always wants their provenance: a receipt whose `receipt.run` facet was
+    // filtered out replicates as a bare title, which is the failure this lane
+    // exists to prevent. Blob availability comes on with it, since a receipt
+    // without its captures is half a fact.
+    let mut facets = sync.lanes.facets.clone();
+    for facet in crate::receipts::sync_facets() {
+        if !facets.iter().any(|selected| selected == facet) {
+            facets.push(facet.to_string());
+        }
+    }
     let selection = SyncSelection::default()
-        .with_facets(sync.lanes.facets.clone())
+        .with_facets(facets)
         .with_access_records(sync.lanes.access_records)
         .with_saved_scenes(sync.lanes.saved_scenes)
         .with_handler_preferences(sync.lanes.handler_preferences)
-        .with_blob_availability(sync.lanes.blob_availability);
+        .with_blob_availability(sync.lanes.blob_availability || true)
+        .with_synthetic_addresses([crate::receipts::sync_address_rule()]);
 
     // The cached-address rung: every hint recorded by a previous run rides in
     // as a best-effort address, so a device that has connected once can redial

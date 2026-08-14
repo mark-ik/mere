@@ -59,6 +59,37 @@ pub const ACTION_SSH_AGENT_FORWARD: &str = "ssh.agent-forward";
 /// Forward ports through the session (`permit-port-forwarding`).
 pub const ACTION_SSH_PORT_FORWARD: &str = "ssh.port-forward";
 
+/// Whether an action is exercised *on behalf of a persona*.
+///
+/// This partition decides who issues a certificate carrying the action. Acting
+/// as a persona and reading its private lane are that persona's authority to
+/// delegate, so they are issued by the persona's own chain root. Carrying
+/// traffic outward or opening a session on the device are the device's own
+/// authority and are issued by the master.
+///
+/// A sited radio is the case that forces the distinction: it holds
+/// [`ACTION_TRANSPORT_EGRESS`] and no personas at all, so a purely per-persona
+/// split would issue it nothing. Unknown actions are treated as
+/// device-scoped, which is the narrower reading: an action nobody has
+/// classified does not get a persona's authority behind it by default.
+pub fn is_persona_scoped_action(action: &str) -> bool {
+    matches!(action, ACTION_IDENTITY_ACT | ACTION_PRIVATE_READ)
+}
+
+/// Split an action set into its device-scoped and persona-scoped halves.
+///
+/// Returned in that order. Either half may be empty: a station carries only
+/// device actions, and a grant that only lets a device act as a persona
+/// carries only persona ones.
+pub fn partition_actions<'a, I>(actions: I) -> (Vec<&'a str>, Vec<&'a str>)
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    actions
+        .into_iter()
+        .partition(|action| !is_persona_scoped_action(action))
+}
+
 /// Build the capability scope addressing one device's grant.
 pub fn device_capability_scope<I, S>(device: DeviceId, actions: I) -> CapabilityScope
 where
@@ -122,5 +153,42 @@ mod tests {
     fn the_device_scope_path_is_a_leaf_not_a_root() {
         assert!(path_covers(DEVICE_SCOPE_PATH, DEVICE_SCOPE_PATH));
         assert!(!path_covers(DEVICE_SCOPE_PATH, "/anything"));
+    }
+
+    #[test]
+    fn only_acting_and_private_reading_belong_to_a_persona() {
+        assert!(is_persona_scoped_action(ACTION_IDENTITY_ACT));
+        assert!(is_persona_scoped_action(ACTION_PRIVATE_READ));
+        assert!(!is_persona_scoped_action(ACTION_TRANSPORT_EGRESS));
+        assert!(!is_persona_scoped_action(ACTION_SSH_LOGIN));
+    }
+
+    /// An action nobody has classified must not inherit a persona's authority
+    /// by accident. Device-scoped is the narrower default.
+    #[test]
+    fn an_unknown_action_is_device_scoped() {
+        assert!(!is_persona_scoped_action("something.new"));
+    }
+
+    #[test]
+    fn partitioning_splits_device_actions_from_persona_actions() {
+        let (device, persona) = partition_actions([
+            ACTION_TRANSPORT_EGRESS,
+            ACTION_IDENTITY_ACT,
+            ACTION_SSH_LOGIN,
+            ACTION_PRIVATE_READ,
+        ]);
+        assert_eq!(device, [ACTION_TRANSPORT_EGRESS, ACTION_SSH_LOGIN]);
+        assert_eq!(persona, [ACTION_IDENTITY_ACT, ACTION_PRIVATE_READ]);
+    }
+
+    /// The sited-radio case, which is what forces the partition to exist: a
+    /// station carries transport only and no personas, so a purely
+    /// per-persona split would have issued it nothing at all.
+    #[test]
+    fn a_station_partitions_to_device_actions_only() {
+        let (device, persona) = partition_actions([ACTION_TRANSPORT_EGRESS]);
+        assert_eq!(device, [ACTION_TRANSPORT_EGRESS]);
+        assert!(persona.is_empty());
     }
 }

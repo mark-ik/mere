@@ -39,11 +39,13 @@ mod grant;
 mod scope;
 
 pub use grant::{
+    DeviceGrantSet, issue_device_grant_set,
     issue_persona_device_grant,
     device_grant_nonce, issue_device_grant, issue_remote_auth_grant, issue_self_grant,
 };
 pub use refs::{CarryHashFn, CarryRef, CarryRefParseError};
 pub use scope::{
+    is_persona_scoped_action, partition_actions,
     ACTION_IDENTITY_ACT, ACTION_PRIVATE_READ, ACTION_SSH_AGENT_FORWARD, ACTION_SSH_LOGIN,
     ACTION_SSH_PORT_FORWARD, ACTION_SSH_PTY, ACTION_TRANSPORT_EGRESS, DEVICE_AUTHORITY_DOMAIN,
     DEVICE_SCOPE_PATH, device_capability_scope,

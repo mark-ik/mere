@@ -147,9 +147,44 @@ grammar. Recorded here and asserted in `carry::scope`'s tests.
       certificate id **and** its content ref are unchanged after epoch
       material lands, which is the exact operation the old envelope could not
       perform without re-signing.
+### M2 part three: the grant set — done 2026-08-12
+
+- [x] `carry::is_persona_scoped_action` / `partition_actions`: the action
+      partition. `identity.act` and `private.read` are a persona's authority to
+      delegate; `transport.egress` and the `ssh.*` set are the device's own.
+      Unknown actions default to device-scoped, the narrower reading.
+- [x] `carry::DeviceGrantSet` and `issue_device_grant_set`: one device
+      certificate issued by the master plus one per persona issued by that
+      persona's chain root, with the partition deciding which actions land
+      where. Refuses persona-scoped actions when no persona is named, rather
+      than silently returning a narrower grant than asked for.
+- [x] `PersonaId` gained `PartialOrd`/`Ord` so the set can be a `BTreeMap`.
+      Additive, and a deterministic order is what a persona-keyed map wants
+      anyway.
+- [x] Twelve tests. Suites green at personae 97, session-runtime 253, plus a
+      non-test `cargo check` and the `ssh,agent` lanes.
 - [ ] **Remaining for M2**: switching `issue` / `enroll` / `refresh` /
-      `revoke` to the new records and deleting the envelope. Everything above
-      is additive; the old path is still the live one.
+      `revoke` onto the set and deleting the envelope. Everything so far is
+      additive; the old path is still the live one.
+
+### The empty-persona case forced the action partition
+
+The reconciliation doc and this plan both assumed a device grant became "one
+certificate per persona." Castellan's sited-station grant is the
+counterexample, and it is the real shipping case: `transport.egress`, no
+personas at all. A purely per-persona split issues it **nothing**.
+
+So a grant is a *set*, and which certificate an action lands on depends on
+whose authority covers it. Carrying traffic outward is the device's own
+authority and needs no persona behind it. Acting as a persona is that
+persona's authority to delegate and cannot exist without one. The partition
+falls out of that question rather than being imposed.
+
+This is the third time contact with the code has corrected the ruling's cost
+line, after "the principal gap is a newtype" and "per-persona certificates
+need per-persona issuers." The pattern is consistent: the delegation grammar
+keeps being more specific than the envelope it replaces, and each specificity
+is a decision the envelope had been leaving implicit.
 
 ### The persona split needs per-persona issuers, which is bigger than costed
 

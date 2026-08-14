@@ -38,6 +38,9 @@ pub mod network_carrier;
 pub mod personal_sync;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod policy_projection;
+/// Receipt ingest: a scenario-receipt directory becomes personal-graph facts.
+#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+pub mod receipts;
 #[cfg(feature = "web")]
 pub mod product;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
