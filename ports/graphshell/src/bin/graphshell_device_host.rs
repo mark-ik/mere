@@ -79,6 +79,8 @@ struct PairRequest {
     node_id: String,
     root: Option<String>,
     label: String,
+    /// Relayed for a device that cannot announce itself.
+    prekey: Option<String>,
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -165,6 +167,8 @@ fn parse_args() -> Result<Args, String> {
     let mut pair_root = None;
     #[cfg(feature = "personal-sync")]
     let mut pair_label = String::new();
+    #[cfg(feature = "personal-sync")]
+    let mut pair_prekey = None;
     #[cfg(feature = "personal-sync")]
     let mut unpair_node = None;
     #[cfg(feature = "personal-sync")]
@@ -258,6 +262,16 @@ fn parse_args() -> Result<Args, String> {
             "--pair-label" => {
                 pair_label = argv.next().ok_or("--pair-label needs a value")?;
             }
+            // Only needed for a device with no roster root here. It cannot
+            // author, so it cannot announce itself, and this device relays what
+            // it disclosed instead. Validated now rather than at relay time, so
+            // a mistyped paste fails where the person can still see it.
+            #[cfg(feature = "personal-sync")]
+            "--pair-prekey" => {
+                let value = argv.next().ok_or("--pair-prekey needs a value")?;
+                owner_settings::parse_hex(&value).map_err(|error| error.to_string())?;
+                pair_prekey = Some(value);
+            }
             #[cfg(feature = "personal-sync")]
             "--pairing-facts" => pairing_facts = true,
             #[cfg(feature = "personal-sync")]
@@ -340,6 +354,7 @@ fn parse_args() -> Result<Args, String> {
             node_id,
             root: pair_root,
             label: pair_label,
+            prekey: pair_prekey,
         }),
         #[cfg(feature = "personal-sync")]
         unpair: unpair_node,
@@ -430,13 +445,14 @@ fn pair_device(args: &Args, request: &PairRequest) -> Result<String, String> {
         None => None,
     };
     let profile_id = resolve_cli_profile(args)?;
-    let outcome = pairing::pair_device(
+    let outcome = pairing::pair_device_with_prekey(
         &owner_settings::default_app_dir(),
         &profile_id,
         node,
         root,
         &request.label,
         now_ms(),
+        request.prekey.clone(),
     )
     .map_err(|error| error.to_string())?;
     Ok(match outcome {

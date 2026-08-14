@@ -752,4 +752,80 @@ mod retention_probe {
             proposal.blockers.len()
         );
     }
+
+    /// A receive-only device has no roster root, so every operation it authors
+    /// is refused, including the one that would announce it. Its bundle has to
+    /// be carried, and carrying it must not let the carrier speak for it.
+    #[test]
+    fn a_relayed_bundle_still_authenticates_its_own_subject() {
+        let owner_dir = tempfile::tempdir().unwrap();
+        let quiet_dir = tempfile::tempdir().unwrap();
+        let (_owner_identity, owner_opened) = open_device(0xb1, owner_dir.path());
+        let (quiet_identity, quiet_opened) = open_device(0xb2, quiet_dir.path());
+        let mut owner = owner_opened.group;
+        let quiet = quiet_opened.group;
+
+        // What the quiet device discloses with its pairing facts. It comes
+        // from the persisted session, not a fresh mint, because a second
+        // session would orphan the seat the lane will hear about.
+        let disclosed = quiet.published_bundle().to_vec();
+        assert!(!disclosed.is_empty(), "a session must keep a bundle to disclose");
+        assert_eq!(
+            disclosed,
+            quiet_opened.publish.unwrap().to_bytes().unwrap(),
+            "the persisted bundle is the one the session minted, not another"
+        );
+
+        // The owner relays it. The relay authors the event, and the bundle
+        // still names the quiet device: carrying it asserts nothing on that
+        // device's behalf beyond what it already signed.
+        let relayed = PersonalGraphEvent::PublishPrekey {
+            bundle: disclosed.clone(),
+        };
+        owner.create().unwrap();
+        let report = owner
+            .absorb_admitted(
+                &[step(&_owner_identity, &relayed)],
+                &SyncRoster::new([quiet_identity.master_public_key().to_bytes()]),
+            )
+            .unwrap();
+        assert_eq!(
+            report.registered,
+            vec![quiet.member()],
+            "the relayed bundle registers its subject, not its carrier"
+        );
+
+        // And the root it resolves to is the quiet device's, so reconciliation
+        // seats the right device when that root is admitted as a reader.
+        let steps = [step(&_owner_identity, &relayed)];
+        use personae::IdentityProvider;
+        assert_eq!(
+            recipient_for_root(&steps, quiet_identity.master_public_key().to_bytes()),
+            Some(quiet.member())
+        );
+        assert_eq!(
+            root_for_recipient(&steps, quiet.member()),
+            Some(quiet_identity.master_public_key().to_bytes()),
+            "a relayed bundle resolves to its subject in both directions"
+        );
+    }
+
+    /// Reopening must hand back the same bundle, or a device that discloses
+    /// its facts twice would offer two seats and be keyed into neither.
+    #[test]
+    fn the_disclosed_bundle_survives_a_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let identity = personae::InMemoryProvider::from_seed([0xb3; 32]);
+        let first = GraphKeyGroup::open(&identity, GRAPH, dir.path()).unwrap();
+        let disclosed = first.group.published_bundle().to_vec();
+        drop(first);
+
+        let reopened = GraphKeyGroup::open(&identity, GRAPH, dir.path()).unwrap();
+        assert!(reopened.publish.is_none(), "reopening mints nothing");
+        assert_eq!(
+            reopened.group.published_bundle(),
+            disclosed.as_slice(),
+            "the same bundle, so pairing facts read the same twice"
+        );
+    }
 }

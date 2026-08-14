@@ -202,6 +202,19 @@ pub struct PairedDevice {
     /// candidate, not a wrong belief.
     #[serde(default)]
     pub last_endpoint: Option<String>,
+    /// Readability: this device's group pre-key bundle, hex encoded, as
+    /// disclosed with its pairing facts.
+    ///
+    /// Recorded only for a device that cannot announce itself, which is one
+    /// with no [`root`](Self::root): it authors nothing, so nothing it says
+    /// reaches the lane. A device that can author publishes its own and this
+    /// stays `None`.
+    ///
+    /// Held rather than published once and forgotten, because the lane may not
+    /// have been reachable at the moment of pairing and the relay has to be
+    /// able to try again.
+    #[serde(default)]
+    pub prekey: Option<String>,
 }
 
 /// Which lanes leave this device.
@@ -318,6 +331,18 @@ impl SyncSettings {
         label: &str,
         at_ms: u64,
     ) -> bool {
+        self.pair_with_prekey(node_id, root, label, at_ms, None)
+    }
+
+    /// Record a pairing along with a pre-key its device cannot publish itself.
+    pub fn pair_with_prekey(
+        &mut self,
+        node_id: [u8; 32],
+        root: Option<[u8; 32]>,
+        label: &str,
+        at_ms: u64,
+        prekey: Option<String>,
+    ) -> bool {
         let node_id = hex32(&node_id);
         if self
             .paired_devices
@@ -333,6 +358,7 @@ impl SyncSettings {
             added_ms: at_ms,
             pairing_id: Some(uuid::Uuid::new_v4().to_string()),
             last_endpoint: None,
+            prekey: prekey.filter(|prekey| !prekey.trim().is_empty()),
         });
         true
     }

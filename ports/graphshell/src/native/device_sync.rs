@@ -487,6 +487,14 @@ fn spawn_pairing_watch(
                 applied.insert(node, next);
             }
 
+            let relayed: std::collections::BTreeMap<[u8; 32], Option<String>> = sync
+                .paired_devices
+                .iter()
+                .filter_map(|device| {
+                    let node = owner_settings::parse_hex32(&device.node_id).ok()?;
+                    Some((node, device.prekey.clone()))
+                })
+                .collect();
             let arrivals: Vec<([u8; 32], Option<[u8; 32]>)> = desired
                 .iter()
                 .filter(|(node, _)| !applied.contains_key(*node))
@@ -507,6 +515,31 @@ fn spawn_pairing_watch(
                                     node = %owner_settings::hex32(&node),
                                     "could not admit the paired device as a reader"
                                 );
+                            }
+                        }
+                        // Relay a pre-key its owner could not publish. The
+                        // bundle authenticates its own subject, so carrying it
+                        // asserts nothing on that device's behalf beyond what
+                        // it already signed.
+                        if let Some(prekey) = relayed.get(&node).cloned().flatten() {
+                            match owner_settings::parse_hex(&prekey) {
+                                Ok(bundle) => {
+                                    if let Err(error) = host
+                                        .author(vec![PersonalGraphEvent::PublishPrekey { bundle }])
+                                        .await
+                                    {
+                                        tracing::warn!(
+                                            %error,
+                                            node = %owner_settings::hex32(&node),
+                                            "could not relay the paired device's pre-key; it                                              stays reachable but unreadable until this succeeds"
+                                        );
+                                    }
+                                }
+                                Err(error) => tracing::warn!(
+                                    %error,
+                                    node = %owner_settings::hex32(&node),
+                                    "the paired device's recorded pre-key is unreadable"
+                                ),
                             }
                         }
                         tracing::info!(

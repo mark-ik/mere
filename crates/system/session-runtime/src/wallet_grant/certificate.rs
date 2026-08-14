@@ -20,7 +20,8 @@ use std::path::{Path, PathBuf};
 
 use identity::carry::WALLET_SCHEMA_VERSION;
 use identity::delegation::{DelegationId, SignedDelegationCertificate};
-use identity::{ACTION_PRIVATE_READ, PersonaId};
+use identity::PersonaId;
+use identity::carry::ACTION_PRIVATE_READ;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use serde::{Deserialize, Serialize};
 
@@ -206,7 +207,7 @@ pub fn check_epoch_carriage(
 #[cfg(test)]
 mod tests {
     use identity::carry::{DevicePublicKey, issue_persona_device_grant};
-    use identity::{ACTION_TRANSPORT_EGRESS, KeyEpochId};
+    use identity::carry::{ACTION_TRANSPORT_EGRESS, KeyEpochId};
 
     use super::*;
 
@@ -237,7 +238,7 @@ mod tests {
     fn material() -> WrappedEpochMaterial {
         WrappedEpochMaterial {
             persona_id: persona(),
-            epoch_id: KeyEpochId::from_uuid(uuid::Uuid::from_u128(0x9003)),
+            epoch_id: KeyEpochId(uuid::Uuid::from_u128(0x9003)),
             wrap_format: "test/v1".into(),
             wrapped_key: vec![1, 2, 3],
         }

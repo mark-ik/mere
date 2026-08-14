@@ -1,7 +1,7 @@
 # Spatial Compute Plan (2026-08-13)
 
-**Status: founded 2026-08-13; P1 landed and P2's spike landed the same
-day.** The GPU
+**Status: founded 2026-08-13; P1, P2's spike, the Burn handoff, and P3
+all landed the same day. P4 is next, and now has its evidence.** The GPU
 architecture for conatus and its render consumers, ratified by Mark from
 the conatus discussion of 2026-08-13 (the projection ruling and its
 amendment in
@@ -186,10 +186,55 @@ proof.
 **Done when:** the same buffer serves two projections with no format
 fork and no readback inserted to make either work.
 
+**Landed 2026-08-13** (`paredros/probes/ambience-lease`, a wing-side
+probe with the kernel shape copied rather than shared, per the plan).
+20,000 ambience motes in a resident padded-3D buffer; explicit-regime
+WGSL kernels drift them on a swirl-plus-updraft field wrapped to a
+torus; renderling draws them as instanced octahedra under a real
+perspective camera and a PBR sun; netrender composes. 300 frames at
+**3.6 ms average** (worst 5.9). Cloud bounds x [-120, 120], y
+[-110, 10], z [-120, 120]: **z carries real extent**, the axis no 2D
+canvas exercised and the reason padded 3D was chosen before any
+consumer needed it. Receipt at
+`Code/testing/paredros/p3_ambience_lease.png`, 73 distinct colours
+(PBR-shaded, so a colour-count guard is right here where mere's flat
+2D graph needed coverage instead).
+
+**The done-condition holds, and the format did not fork.** Both
+consumers read the same `vec4f` padded-3D layout, and no readback was
+inserted to make either work: mere's tenant binds the buffer in its
+vertex stage, the wing's consumer receives it through an adapter
+dispatch, and in both cases the CPU sees nothing per frame.
+
+**The consumers are not symmetric, and that is the finding.**
+
 ### P4. Promote the lease
 
 Only after P3. **Done when:** the contract is extracted with both
 consumers named, or narrowed in writing with the reason.
+
+**P3's evidence for the shape.** The draft lease had six fields. Two
+were used as data, one became an assertion, and one that mattered was
+missing:
+
+- `count` — used by both consumers.
+- `coordinate space and units` — used, as the extent the wing consumer
+  frames its camera from.
+- `position format and dimension` — used as an assertion (the adapter
+  kernel indexes `vec4f`; a different stride needs a different kernel)
+  rather than as data anything branches on.
+- `buffer offset, size, usages` — **producer-side, and insufficient.**
+  A consumer that cannot bind the buffer needs a *destination*
+  descriptor instead: where its own storage begins and how far apart
+  its slots sit. The draft had no such field.
+- `stable slot/count information` — validated in an unexpected place.
+  Not only the producer's slots must be stable; the **consumer's
+  allocation order** is part of the contract (see the findings).
+- `generation/frame epoch` — validated by contact rather than design.
+  renderling replaces its slab buffer when the allocator grows, so a
+  bind group built against the old one goes stale. The probe attaches
+  once after commit and would break on growth; the epoch is what makes
+  that detectable rather than silent.
 
 ## 3. Stop rules
 
@@ -203,6 +248,36 @@ consumers named, or narrowed in writing with the reason.
   before P4.
 
 ## Findings
+
+- **2026-08-13 (P3):** a second consumer may be unable to bind the
+  lease at all. renderling addresses geometry through a craballoc slab
+  rather than caller-supplied buffers, so the wing consumer reads the
+  lease through an **adapter kernel that writes into renderling's own
+  storage** (three `bitcast` stores into a transform's first three
+  words). The mismatch cost one small kernel, and the neutrality claim
+  survives in a better form: the producer publishes a readable lease
+  and each consumer adapts, rather than every consumer being obliged to
+  bind the same way.
+- **2026-08-13 (P3):** the consumer's allocation order is part of the
+  contract. Allocating a transform and its primitive in one loop put a
+  primitive descriptor between every pair of transforms, so the slab
+  stride became 27 words instead of the transform's own 10 and the
+  adapter's indexing broke. Allocating all transforms in one unbroken
+  pass fixes it. An assertion that checked contiguity rather than
+  trusting it turned a corrupted-scene hunt into a two-minute fix.
+- **2026-08-13 (P3):** renderling shades through PBR, so a lit picture
+  needs a material *and* a light, and its intensities are physical.
+  `Lux::OUTDOOR_OVERCAST_HIGH` (1000) rendered the motes nearly black;
+  `OUTDOOR_DIRECT_SUNLIGHT_HIGH` (130,000) reads correctly. Unlit
+  vertex colours draw fine without either, which is what the probe did
+  first and why its first colour-count guard misfired.
+- **2026-08-13 (P3):** an unnormalized radial swirl grows with radius,
+  so outer motes were flung into the clamp and the cloud collapsed onto
+  its own boundary. Normalizing the tangential force and wrapping every
+  axis to a torus gives a cloud that fills its volume. Ambience physics
+  is presentation under the projection ruling, so this is taste rather
+  than truth, but the failure mode is worth naming: a force whose
+  magnitude scales with position will find the boundary.
 
 - **2026-08-13 (P1):** the gesture vocabulary already existed. seiche's
   `pin`/`unpin` (kinematic hold during drag, dynamic release) is the

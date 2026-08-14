@@ -134,8 +134,53 @@ grammar. Recorded here and asserted in `carry::scope`'s tests.
 - [x] `ssh_ca::self_grant` now delegates rather than carrying its own copy of
       the construction, per generalize-don't-duplicate. Verified against its
       seven tests, which drive it through the mint path.
-- [ ] The session-runtime half: the separated wrapped-epoch record keyed by
-      `DelegationId`, and `issue`/`enroll` writing certificates.
+### M2 part two: the records — done 2026-08-12
+
+- [x] `carry::issue_persona_device_grant`: issuance under one persona's own
+      authority, signed by a provider seeded from the persona's derived
+      keypair, anchored at that persona's `PersonaChainRoot`.
+- [x] `wallet_grant/certificate.rs`: `WrappedEpochRecord` keyed by
+      `DelegationId`, certificate and record storage, and
+      `check_epoch_carriage`.
+- [x] Eleven tests across the two crates. The load-bearing one is
+      `appending_an_epoch_leaves_the_certificate_untouched`: it asserts the
+      certificate id **and** its content ref are unchanged after epoch
+      material lands, which is the exact operation the old envelope could not
+      perform without re-signing.
+- [ ] **Remaining for M2**: switching `issue` / `enroll` / `refresh` /
+      `revoke` to the new records and deleting the envelope. Everything above
+      is additive; the old path is still the live one.
+
+### The persona split needs per-persona issuers, which is bigger than costed
+
+The reconciliation doc costed `personas: Vec<PersonaId>` at "one certificate
+per persona ... more records." Building it showed the records are the small
+part.
+
+A certificate has one issuer, and `SignedDelegationCertificate::issue`
+requires the provider's master public key to *equal* that issuer. Per-persona
+certificates therefore need per-persona **signing identities**, not just per
+persona rows. They exist: `persona_wallet_salt` and `derive_persona_chain_root`
+were already there, and the name says what they were for. So issuance seeds a
+provider from the persona's derived keypair and anchors the certificate at
+`DelegationParent::Root(persona_chain_root)`.
+
+The consequence worth flagging is on the verifying side. The wallet's trusted
+root set stops being one entry and becomes **one `TrustedRoot` per persona**,
+`authority` and `issuer` both that persona's chain root. Anything evaluating a
+device grant has to know which personas it trusts, rather than knowing one
+master key. That is the correct shape, and it is what buys the independence
+the ruling wanted, but it is an architectural change rather than a bookkeeping
+one and it lands in M5 when consumers re-base.
+
+Two shapes were considered and rejected before this one. Encoding personas as
+scope *actions* would make attenuation work for free but conflates what a
+device may do with whom it may do it for, and revoking one persona would still
+mean re-issuing the whole certificate, losing the only benefit. A
+master → persona → device **chain** reads better but does not fit:
+`attenuates` requires the child's `resource` to equal the parent's, so the
+persona link would have to be minted per device, which is not what a persona
+link means.
 
 ### The ssh feature never compiled on Windows (M2)
 

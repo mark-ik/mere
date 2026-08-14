@@ -48,6 +48,23 @@ pub fn pair_device(
     label: &str,
     at_ms: u64,
 ) -> Result<PairOutcome, DeviceSyncError> {
+    pair_device_with_prekey(app_dir, profile, node_id, root, label, at_ms, None)
+}
+
+/// Pair a device, carrying a pre-key it has no way to publish itself.
+///
+/// The pre-key is only meaningful for a device with no roster root: it authors
+/// nothing, so nothing it says reaches the lane, and without a relay it would
+/// be reachable and never readable.
+pub fn pair_device_with_prekey(
+    app_dir: &Path,
+    profile: &ProfileId,
+    node_id: [u8; 32],
+    root: Option<[u8; 32]>,
+    label: &str,
+    at_ms: u64,
+    prekey: Option<String>,
+) -> Result<PairOutcome, DeviceSyncError> {
     let path = owner_settings::settings_path(app_dir, profile);
     let mut settings = OwnerSettings::load(&path)?;
     let sync = settings.sync.get_or_insert_with(SyncSettings::default);
@@ -59,7 +76,7 @@ pub fn pair_device(
             path: path.display().to_string(),
         });
     }
-    if !sync.pair(node_id, root, label, at_ms) {
+    if !sync.pair_with_prekey(node_id, root, label, at_ms, prekey) {
         return Ok(PairOutcome::AlreadyPaired);
     }
     settings.save(&path)?;
