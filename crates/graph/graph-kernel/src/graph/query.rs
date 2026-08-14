@@ -223,6 +223,48 @@ impl Graph {
     /// Rebuild derived containment edges from current node URLs.
     ///
     /// Derived relations are additive/read-only and are never persisted.
+    /// Derive the containment this one node's address implies, at the moment
+    /// the node is created.
+    ///
+    /// The **UrlPath half** of [`rebuild_derived_containment_relations`],
+    /// applied to a single node. It exists because that rebuild runs only on
+    /// snapshot load, which used to mean a node visited under a folder had no
+    /// containment edge until the session was saved and reloaded. Anything
+    /// reading containment live (a graph behavior's watch, which names a
+    /// region by its container) saw nothing there. Deriving at creation makes
+    /// containment mean the same thing live and loaded.
+    ///
+    /// The **Domain half is deliberately not here.** A domain anchor is the
+    /// shallowest node on a host, so minting one node can re-anchor every
+    /// other node sharing that host: a whole-graph fact, which stays with the
+    /// whole-graph rebuild. This one is purely local, which is what makes it
+    /// cheap enough to run per node.
+    pub fn derive_containment_for(&mut self, key: NodeKey) {
+        let Some(node) = self.get_node(key) else {
+            return;
+        };
+        let Ok(parsed) = url::Url::parse(node.url()) else {
+            return;
+        };
+        let Some(parent_url) = containment_parent_url(&parsed) else {
+            return;
+        };
+        let Some((parent_key, _)) = self.get_node_by_url(&parent_url) else {
+            return;
+        };
+        if parent_key == key {
+            return;
+        }
+        // Child to container, the direction the rebuild uses.
+        let _ = self.assert_relation(
+            key,
+            parent_key,
+            EdgeAssertion::Containment {
+                sub_kind: ContainmentSubKind::UrlPath,
+            },
+        );
+    }
+
     pub(crate) fn rebuild_derived_containment_relations(&mut self) {
         let edge_ids: Vec<EdgeKey> = self.inner.inner().edge_indices().collect();
         let mut empty_edges = Vec::new();

@@ -635,6 +635,10 @@ impl Canvas {
                 url: url.to_string(),
             },
         );
+        // Containment before the topology hook, so a node minted under a
+        // folder belongs to it from its first frame rather than from the next
+        // load (see `Graph::derive_containment_for`).
+        self.graph.derive_containment_for(key);
         self.reconcile_derived();
         self.view.set_position(key, seed);
         self.physics.seed(vec![(key, seed)]);
@@ -696,6 +700,10 @@ impl Canvas {
         }
         // Re-sync derived state (bodies, edges, node pool), then seed the new node
         // near the anchor and re-settle.
+        // Containment before the topology hook, so a node minted under a
+        // folder belongs to it from its first frame rather than from the next
+        // load (see `Graph::derive_containment_for`).
+        self.graph.derive_containment_for(key);
         self.reconcile_derived();
         self.view.set_position(key, seed);
         self.physics.seed(vec![(key, seed)]);

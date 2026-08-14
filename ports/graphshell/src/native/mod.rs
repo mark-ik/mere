@@ -1,6 +1,7 @@
 //! Native authorities hosted by Graphshell.
 
 pub mod browser_host;
+pub mod app_admission;
 pub mod device_broker;
 #[cfg(feature = "personal-sync")]
 pub mod device_sync;

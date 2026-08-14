@@ -364,3 +364,39 @@ Three ways forward:
 Option 2 wants a short plan of its own (what admits a first-party app, and how
 it proves it is one) before code. Everything it needs on the publishing side
 already exists and is tested.
+
+### 6.1 Decided: a second endpoint (Mark, 2026-08-14)
+
+Option 2. A first-party application and a web extension are different kinds
+of caller, so they get different doors; the browser allowlist stays exactly as
+narrow as it is.
+
+**The design, in one paragraph.** `native::app_admission` defines a distinct
+endpoint (`GRAPHSHELL_APP_ENDPOINT`, defaulting to a per-user pipe on Windows
+and a socket under `XDG_RUNTIME_DIR` elsewhere), a distinct hello schema so a
+client at the wrong door is refused with a reason instead of half-speaking the
+other protocol, an `AppId` label, and a default-deny `AllowedApps` whose
+default set is `turnstone`.
+
+**What proves "first-party" is the endpoint's permissions, not the name.** The
+socket and pipe are the owner's, so reaching them at all means running as the
+owner. The app id is a label: it tells the host and the operator which
+application is connected and lets an owner turn one off. It is deliberately
+not treated as a credential, and this gate is deliberately only the first of
+two, the same shape the browser path has: the ordinary session admission
+behind it still decides what the app may see.
+
+**Landed:** the admission module with eight tests, including that a browser
+hello is refused by schema with a message naming the right endpoint, that an
+unknown app is refused, that a device may admit none, and that the default
+endpoint is never the browser one.
+
+**Next:** serve it. `device_broker`'s `serve`/`connect` already do the
+transport for the browser door and the shape carries over unchanged; the
+resident host then composes the same `IdentityEndpoint` it composes for a
+browser, with the receipts reader already wired. Then turnstone opens the
+session and renders the cards.
+
+**Not yet verified.** Written against a workspace that would not build:
+`mere-canvas` is mid-move against a `kernel::graph::Graph` method. Retry with
+`cargo test -p graphshell --features personal-sync --lib app_admission`.
