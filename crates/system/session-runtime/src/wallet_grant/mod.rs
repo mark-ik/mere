@@ -51,6 +51,7 @@ mod migrate;
 mod pairing;
 mod records;
 mod refresh;
+mod revocation;
 mod revoke;
 #[cfg(test)]
 mod test_support;
@@ -117,6 +118,10 @@ pub(crate) use wrapping::{
 pub(crate) use migrate::legacy_grant_hint;
 pub use migrate::{
     LegacyGrant, reissue_legacy_grant, retire_legacy_grant, survey_legacy_grants,
+};
+pub use revocation::{
+    device_is_fully_revoked, fold_revocations, load_revocation_ledger, revocation_ledger_path,
+    revoke_device_certificates, revoked_certificate_count, save_revocation_ledger,
 };
 pub use certificate::{
     decode_device_grant_set, encode_device_grant_set,

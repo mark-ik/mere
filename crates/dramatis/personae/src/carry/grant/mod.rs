@@ -34,6 +34,10 @@ use crate::{IdentityProvider, InMemoryProvider, PersonaId};
 
 use super::{DeviceId, DevicePublicKey, device_capability_scope};
 
+mod revoke;
+
+pub use revoke::revoke_device_grant_set;
+
 /// Issuer-chosen uniqueness for one device grant.
 ///
 /// Bound to the subject as well as the device and the clock, so a persona can

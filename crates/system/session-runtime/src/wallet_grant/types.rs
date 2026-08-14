@@ -5,6 +5,7 @@
 //! responses, enrollment bundles, and the specs the flows take as input.
 
 use identity::carry::DeviceGrantSet;
+use identity::delegation::SignedDelegationRevocation;
 
 use super::WrappedEpochRecord;
 use identity::{Ed25519Signature, PersonaId};
@@ -143,4 +144,10 @@ pub struct RemoteAuthRevocationOutcome {
     pub already_revoked: bool,
     pub rotated_personas: Vec<PersonaId>,
     pub refreshed_devices: Vec<DeviceId>,
+    /// The signed statements withdrawing every certificate the device held.
+    ///
+    /// Returned rather than only filed, because these are what travels: a
+    /// caller hands them to peers, or to the radio itself if it can still be
+    /// reached. The wallet's own copy is already folded into its ledger.
+    pub statements: Vec<SignedDelegationRevocation>,
 }

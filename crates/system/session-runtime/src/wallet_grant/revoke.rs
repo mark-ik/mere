@@ -57,6 +57,17 @@ pub fn revoke_remote_auth_device(
         ));
     }
 
+    // Mint the portable statements first, then let the roster follow them.
+    // The list is a projection now: the signed statements are the record, and
+    // they are what a peer or a stolen radio's neighbours can actually verify.
+    let seed = load_identity_seed(data_root)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "wallet root missing identity/master.seed; bootstrap the wallet first",
+        )
+    })?;
+    let statements = revoke_device_certificates(data_root, seed, device_id, unix_time_ms()?)?;
+
     let already_revoked = roster.revoked.contains(&device_id);
     if !already_revoked {
         roster.revoked.push(device_id);
@@ -74,6 +85,7 @@ pub fn revoke_remote_auth_device(
         already_revoked,
         rotated_personas,
         refreshed_devices,
+        statements,
     })
 }
 
@@ -234,6 +246,25 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The seam M4 exists for: revoking produces statements a peer could
+    /// verify, not just a local list entry.
+    #[test]
+    fn revoking_returns_portable_statements_and_folds_them() {
+        let root = temp_data_root("remote-auth-revoke-statements");
+        crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC").unwrap();
+        let spec = sample_remote_auth_spec();
+        let set = issue_remote_auth_device_grant(&root, &spec).unwrap();
+
+        let outcome = revoke_remote_auth_device(&root, spec.device_id).unwrap();
+
+        assert_eq!(outcome.statements.len(), set.certificates().count());
+        assert!(outcome.statements.iter().all(|statement| statement.verify()));
+        assert!(
+            crate::wallet_grant::device_is_fully_revoked(&root, spec.device_id).unwrap(),
+            "the wallet's own ledger should already carry them"
+        );
     }
 
     #[test]

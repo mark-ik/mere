@@ -271,6 +271,40 @@ scope list rather than defaulting.
 - [x] Seven tests. Green: session-runtime 257, personae 97, castellan 31,
       signalman 16.
 
+### M4: revocation that travels — DONE 2026-08-12
+
+Smaller than planned, as the survey predicted: notochord already had the
+ledger, the fold, and the issuer check. What was missing was minting the
+statements and giving the wallet somewhere to keep them.
+
+- [x] `carry::revoke_device_grant_set` mints one statement per certificate,
+      each signed by the authority that issued it: the master for the
+      device-scoped certificate, each persona's own chain root for its own.
+      `RevocationLedger::revokes` refuses a statement whose declared issuer
+      does not match the certificate's, so any other signing would produce
+      statements nobody honours.
+- [x] `wallet_grant/revocation.rs` keeps the wallet's ledger at
+      `identity/grants/revocations.cbor`, folds statements, and answers
+      `device_is_fully_revoked`.
+- [x] `revoke_remote_auth_device` mints and folds before touching the roster,
+      and returns the statements in its outcome. They are what travels; the
+      wallet's copy is already filed.
+- [x] `carry/grant.rs` split to `grant/mod.rs` + `grant/revoke.rs`; it had
+      reached 601 lines, one over the ceiling.
+- [x] Nine tests. Green: session-runtime 263, personae 100.
+
+#### Partial revocation is now expressible, and stays visible
+
+`device_is_fully_revoked` requires *every* certificate to be withdrawn, and
+`revoked_certificate_count` reports the partial state rather than flattening
+it. Withdrawing one persona's authority while a device keeps carrying traffic
+is a real operation now; under one signature over one payload it was not
+expressible at all, which is the whole reason the persona split was worth its
+extra records.
+
+The roster's `revoked` list survives, demoted to the projection it should
+always have been. The statements are the record; the list is the index.
+
 #### Noted, not fixed
 
 `ports/graphshell/src/bin/persona_switch_receipt.rs` does not compile, from a
