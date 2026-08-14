@@ -23,9 +23,14 @@ state**: a cold-stolen locked device, a leaked pairing secret, an old device
 backup. Against that attacker the replica set is a second keyring copy that
 `purge_deleted` cannot reach. Locally this copy does not exist, because
 rotation already *replaces* rather than accumulates:
-`refresh_remote_auth_private_read_grant` retains-out the persona's old entry,
-pushes the re-wrap, and `save_wrapped_epoch_record` overwrites the wallet
-file. The local wallet holds current material only.
+`refresh_remote_auth_private_read_grant` clears the record and pushes the
+re-wrap, and `save_wrapped_epoch_record` overwrites the wallet file. The local
+wallet holds current material only.
+
+(Corrected 2026-08-14: this read "retains-out the persona's old entry", which
+was true until the blinding landed the same day. The record is keyed by one
+persona's certificate, so every entry in it is that persona's and the clear is
+unconditional. The premise is stronger than when it was written, not weaker.)
 
 So retention's whole job is: **make cooperative replicas converge to the same
 current-version-only state the local wallet already maintains, within a
