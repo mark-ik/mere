@@ -17,7 +17,8 @@ use personae::carry::DeviceGrantSet;
 use personae::{IdentityProvider, InMemoryProvider};
 use session_runtime::{
     DeviceExposure, DeviceGrantError, DeviceId, DeviceMode, DevicePublicKey, RemoteAuthGrantSpec,
-    certificate_device_id, device_grant_set_ref, issue_remote_auth_device_grant,
+    certificate_device_id, device_grant_set_ref, device_is_fully_revoked,
+    issue_remote_auth_device_grant,
     load_device_grant_set, load_device_roster, load_identity_seed,
 };
 
@@ -139,6 +140,14 @@ impl SitedStationGrant {
             .ok_or(SitedStationGrantError::MissingGrant { device_id })?;
         let station_grant = Self::from_signed(grant)?;
 
+        // Both records are consulted, because they answer different questions.
+        // The roster list is this host's own index of what it revoked. The
+        // ledger holds signed statements, which is what a revocation arriving
+        // from a peer looks like: honouring only the list would mean a station
+        // withdrawn elsewhere kept its authority here.
+        if device_is_fully_revoked(data_root, device_id)? {
+            return Err(SitedStationGrantError::Revoked { device_id });
+        }
         let roster = load_device_roster(data_root)?.ok_or(SitedStationGrantError::MissingRoster)?;
         if roster.revoked.contains(&device_id) {
             return Err(SitedStationGrantError::Revoked { device_id });

@@ -214,7 +214,9 @@ pub use switcher_thumbnail::{
 };
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
 pub use wallet_grant::{
-    certificate_device_id, decode_device_grant_set, encode_device_grant_set,
+    GrantStanding, assess_device_grant, certificate_device_id, decode_device_grant_set,
+    device_is_fully_revoked, encode_device_grant_set, fold_revocations, load_revocation_ledger,
+    revoke_device_certificates, revoked_certificate_count, wallet_trusted_roots,
     device_grant_set_ref, load_device_grant_set,
     save_device_grant_set, load_wrapped_epoch_record, save_wrapped_epoch_record,
     WrappedEpochRecord, requires_epoch_material,

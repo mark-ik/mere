@@ -55,6 +55,7 @@ mod revocation;
 mod revoke;
 #[cfg(test)]
 mod test_support;
+mod trust;
 mod types;
 mod validate;
 mod wrapping;
@@ -118,6 +119,9 @@ pub(crate) use wrapping::{
 pub(crate) use migrate::legacy_grant_hint;
 pub use migrate::{
     LegacyGrant, reissue_legacy_grant, retire_legacy_grant, survey_legacy_grants,
+};
+pub use trust::{
+    GrantStanding, assess_device_grant, wallet_trusted_roots,
 };
 pub use revocation::{
     device_is_fully_revoked, fold_revocations, load_revocation_ledger, revocation_ledger_path,

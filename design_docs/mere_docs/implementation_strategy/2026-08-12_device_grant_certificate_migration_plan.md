@@ -305,6 +305,45 @@ extra records.
 The roster's `revoked` list survives, demoted to the projection it should
 always have been. The statements are the record; the list is the index.
 
+### M5: the verifying side — DONE 2026-08-12. **The migration is complete.**
+
+The architectural consequence flagged in M2 part two, now built. A verifier
+used to need one thing, the master public key. It needs **one root per
+persona**, because each persona issues its own device certificates under its
+own chain root.
+
+- [x] `wallet_trusted_roots` assembles them: the master root for
+      device-scoped certificates, one per persona for its own. The persona
+      roots need no unlock, because each persona wallet already stores its
+      `chain_root`; only the master key is a parameter, since the wallet does
+      not keep it beside its manifests.
+- [x] `assess_device_grant` evaluates a set through
+      `notochord::validate_chain`, so signatures, signer attestation, root
+      anchoring, attenuation, revocation, and validity windows are all checked
+      by the evaluator rather than re-implemented here.
+- [x] `GrantStanding` reports **per certificate**, with `holds_any_authority`
+      deliberately distinct from `is_wholly_valid`. A device whose persona
+      authority was withdrawn while its transport authority stands is still
+      carrying traffic, and collapsing that to one boolean would flatten what
+      the split exists to keep visible.
+- [x] Six tests, including the one that names the point: a persona
+      certificate presented against a master-only root set fails
+      `UntrustedRoot`. Its signature is perfectly good; it is simply from an
+      authority this verifier has not been told to trust.
+
+#### A real hole closed on the way
+
+`SitedStationGrant::load_active` consulted the roster's `revoked` list and
+nothing else. That list is this host's own index of what *it* revoked, so a
+revocation arriving from a peer as a signed statement, folded into the ledger,
+would have been ignored and the station would have kept its authority here.
+It now consults both.
+
+#### Final state
+
+Green across every consumer: session-runtime 269, personae 100, knot 81,
+castellan 31, signalman 16.
+
 #### Noted, not fixed
 
 `ports/graphshell/src/bin/persona_switch_receipt.rs` does not compile, from a
