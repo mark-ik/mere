@@ -94,6 +94,7 @@ pub struct Resident {
     repulse: wgpu::ComputePipeline,
     springs: wgpu::ComputePipeline,
     integrate: wgpu::ComputePipeline,
+    spirv: bool,
 }
 
 fn buffer(
@@ -111,6 +112,41 @@ fn buffer(
 }
 
 impl Resident {
+    /// The kernel module: SPIR-V compiled from `quint-shaders`' Rust
+    /// source when the adapter can take it, WGSL otherwise.
+    ///
+    /// The Rust source is the source of truth and the `.spv` travels
+    /// with the crate, so a consumer needs no rust-gpu toolchain. The
+    /// WGSL is the same three kernels, kept as the downlevel path:
+    /// browsers have no SPIR-V ingestion, and `SPIRV_SHADER_PASSTHROUGH`
+    /// is a Vulkan-side feature an adapter may not offer. Both are
+    /// checked against the same CPU anchor by this crate's receipts.
+    fn kernels(device: &wgpu::Device) -> (wgpu::ShaderModule, bool) {
+        if device
+            .features()
+            .contains(wgpu::Features::PASSTHROUGH_SHADERS)
+        {
+            let words = wgpu::util::make_spirv_raw(include_bytes!("../shaders/quint_shaders.spv"));
+            // SAFETY: the module is this crate's own committed artifact,
+            // built by rust-gpu from `quint-shaders` and validated by
+            // spirv-val at build time. Passthrough skips naga entirely,
+            // so that provenance is the whole guarantee.
+            let module = unsafe {
+                device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
+                    label: Some("quint resident kernels (spir-v)"),
+                    spirv: Some(words),
+                    ..Default::default()
+                })
+            };
+            return (module, true);
+        }
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("quint resident kernels (wgsl)"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/resident.wgsl").into()),
+        });
+        (module, false)
+    }
+
     /// Build the lane on the host's device. `positions` is the initial
     /// padded-3D scatter; `adjacency` the springs' CSR.
     pub fn new(
@@ -188,10 +224,7 @@ impl Resident {
             mapped_at_creation: false,
         });
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("quint resident kernels"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/resident.wgsl").into()),
-        });
+        let (shader, spirv) = Self::kernels(device);
 
         let entries: Vec<wgpu::BindGroupLayoutEntry> = (0..7u32)
             .map(|binding| wgpu::BindGroupLayoutEntry {
@@ -265,7 +298,16 @@ impl Resident {
             repulse: pipeline("repulse"),
             springs: pipeline("springs"),
             integrate: pipeline("integrate"),
+            spirv,
         }
+    }
+
+    /// Whether the lane is running the SPIR-V built from
+    /// `quint-shaders`' Rust source, rather than the WGSL fallback. A
+    /// receipt that does not check this can pass while the committed
+    /// artifact never executes.
+    pub fn using_spirv(&self) -> bool {
+        self.spirv
     }
 
     pub fn params(&self) -> Params {

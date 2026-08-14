@@ -118,16 +118,22 @@ pub fn integrate(
 
     let speed = libm_sqrt(v.dot(v));
     unsafe {
+        // QueueFamily scope, not Device: everything that touches this
+        // word is in one dispatch on one queue, and Device scope under
+        // the Vulkan memory model needs a capability
+        // (VulkanMemoryModelDeviceScopeKHR) this target does not
+        // declare.
         spirv_std::arch::atomic_u_max::<
             u32,
-            { spirv_std::memory::Scope::Device as u32 },
+            { spirv_std::memory::Scope::QueueFamily as u32 },
             { spirv_std::memory::Semantics::NONE.bits() },
         >(&mut settle[0], speed.to_bits());
     }
 }
 
-/// `f32::sqrt` is not available in core on the SPIR-V target; this is
-/// the intrinsic spelled out.
+/// `f32::sqrt` is not in core on the SPIR-V target. spirv-std re-exports
+/// `num_traits`, whose `Float` is implemented for the GPU float types
+/// and lowers to the native instruction.
 fn libm_sqrt(x: f32) -> f32 {
-    unsafe { spirv_std::arch::sqrt(x) }
+    spirv_std::num_traits::Float::sqrt(x)
 }

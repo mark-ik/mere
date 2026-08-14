@@ -44,8 +44,12 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
         force_fallback_adapter: false,
     }))
     .ok()?;
+    // Ask for passthrough where the adapter has it, so the receipts
+    // exercise the committed SPIR-V rather than only the WGSL fallback.
+    let passthrough = adapter.features() & wgpu::Features::PASSTHROUGH_SHADERS;
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("quint resident test"),
+        required_features: passthrough,
         ..Default::default()
     }))
     .ok()?;
@@ -81,6 +85,14 @@ fn the_kernel_computes_quints_own_force_law() {
             targets: &[],
         },
         params,
+    );
+    println!(
+        "kernel source: {}",
+        if resident.using_spirv() {
+            "SPIR-V from quint-shaders"
+        } else {
+            "WGSL fallback"
+        }
     );
     resident.repulse_only();
     let theirs = resident.read_forces();
@@ -217,5 +229,74 @@ fn springs_pull_two_bodies_to_their_rest_length() {
     assert!(
         (separation - 60.0).abs() < 2.0,
         "the spring settled at {separation}, not its 60 rest length"
+    );
+}
+
+#[test]
+fn the_committed_spirv_is_what_runs_where_the_adapter_allows_it() {
+    // The artifact receipt. `quint-shaders` compiles to a `.spv` that
+    // travels with the crate; without this, every other test here could
+    // pass on the WGSL fallback while the committed SPIR-V never
+    // executed once.
+    let Some((device, queue)) = device() else {
+        eprintln!("no wgpu adapter: skipping the SPIR-V receipt");
+        return;
+    };
+    if !device
+        .features()
+        .contains(wgpu::Features::PASSTHROUGH_SHADERS)
+    {
+        eprintln!("adapter has no passthrough: the WGSL fallback is the only path here");
+        return;
+    }
+
+    let n = 256;
+    let positions = scatter(n, 180.0);
+    let offsets = no_edges(n);
+    let params = Params {
+        repulsion: 4_000.0,
+        min_distance: 4.0,
+        ..Default::default()
+    };
+    let resident = Resident::new(
+        &device,
+        &queue,
+        &positions,
+        Adjacency {
+            offsets: &offsets,
+            targets: &[],
+        },
+        params,
+    );
+    assert!(
+        resident.using_spirv(),
+        "the adapter allows passthrough but the lane took the WGSL path"
+    );
+
+    // And the Rust-authored kernel computes the same law as the anchor,
+    // which is the point of writing it in Rust at all.
+    resident.repulse_only();
+    let theirs = resident.read_forces();
+    let xs: Vec<f32> = positions.iter().map(|p| p[0]).collect();
+    let ys: Vec<f32> = positions.iter().map(|p| p[1]).collect();
+    let (fx, fy) = repulsion_reference(
+        &xs,
+        &ys,
+        RepulsionParams {
+            strength: params.repulsion,
+            softening: params.min_distance,
+        },
+    );
+    let mut mean = 0.0f64;
+    for (i, force) in theirs.iter().enumerate() {
+        let magnitude = (fx[i] * fx[i] + fy[i] * fy[i]).sqrt().max(1e-6);
+        let dx = force[0] - fx[i];
+        let dy = force[1] - fy[i];
+        mean += ((dx * dx + dy * dy).sqrt() / magnitude) as f64;
+    }
+    mean /= n as f64;
+    assert!(
+        mean < 1e-3,
+        "the SPIR-V kernel disagrees with quint's law: mean relative error {mean:.2e}"
     );
 }

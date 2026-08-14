@@ -1,0 +1,17 @@
+[
+  {
+    "source_path": "../quint/shaders/quint_shaders.spv",
+    "entry_point": "integrate",
+    "wgsl_entry_point": "integrate"
+  },
+  {
+    "source_path": "../quint/shaders/quint_shaders.spv",
+    "entry_point": "repulse",
+    "wgsl_entry_point": "repulse"
+  },
+  {
+    "source_path": "../quint/shaders/quint_shaders.spv",
+    "entry_point": "springs",
+    "wgsl_entry_point": "springs"
+  }
+]

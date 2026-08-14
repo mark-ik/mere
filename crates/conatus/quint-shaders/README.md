@@ -1,108 +1,86 @@
 # quint-shaders
 
-The resident lane's kernels in Rust, for compilation to SPIR-V by
-rust-gpu. `src/lib.rs` is the intended source of truth for what the GPU
-runs: repulsion, springs, and integration, written so the force law
-reads the same way it does in `quint::forces`.
+The resident lane's kernels in Rust, compiled to SPIR-V by rust-gpu.
+`src/lib.rs` is the source of truth for what the GPU runs: repulsion,
+springs, and integration, written so the force law reads the same way
+it does in `quint::forces`.
 
-**What ships today is `quint/shaders/resident.wgsl`, not a `.spv` built
-from here.** The two are line-for-line equivalent, with matching entry
-points and bindings, so swapping the shader module is the only change
-the promotion needs once the blocker below clears. That equivalence is
-checked the only way that means anything: `quint`'s resident receipt
-compares the running kernel against `forces::repulsion_reference`, the
-burn-free CPU anchor.
+**The carriage works.** `shaders/quint_shaders.spv` in `quint` is built
+from this crate and committed, so a consumer needs no rust-gpu
+toolchain; `quint::resident` loads it through `PASSTHROUGH_SHADERS`
+where the adapter allows, and falls back to the equivalent
+`shaders/resident.wgsl` where it does not (browsers have no SPIR-V
+ingestion, and passthrough is a feature an adapter may lack). Both
+paths are checked against `forces::repulsion_reference`, and
+`the_committed_spirv_is_what_runs_where_the_adapter_allows_it` asserts
+the artifact actually executes rather than passing on the fallback.
 
-## The blocker (2026-08-13)
-
-The rust-gpu carriage could not be completed on this machine, and the
-reason is worth recording because it reaches further than this crate.
-
-`cargo-gpu` installs and runs (from git; the crates.io `cargo-gpu
-0.1.0` is a placeholder that prints "Coming Soon"). The wall is a
-version pincer between the codegen backend and the ecosystem:
-
-- **rust-gpu at the fork family's rev** (`05b34493`, the one
-  `renderling` and every wing probe pin) declares
-  `glam = ">=0.22, <=0.30"` in its own workspace. Current `glam
-  0.30.10` satisfies that range and emits `#[rust_gpu::vector::v1]`,
-  which this backend rejects: *unknown `rust_gpu` attribute, expected
-  `rust_gpu::spirv`*, 41 errors before it stops. Pinning glam in the
-  shader crate does not help, because spirv-std resolves through
-  rust-gpu's own workspace requirement.
-- **rust-gpu at cargo-gpu's default rev** (`877bd869`) installs a
-  nightly too old to parse `edition = "2024"` manifests, which the
-  shared crates.io registry is now full of, so resolution fails before
-  compilation starts.
-- Taking `spirv-std` from crates.io instead pulls a modern `libm` whose
-  128-bit integer math cannot lower to SPIR-V: 439 missing-intrinsic
-  errors.
-
-**The finding that matters beyond this crate:** `renderling`'s own 45
-committed `.spv` were last built upstream on 2026-03-22, and its
-lockfile pins `glam 0.30.10`. So the fork cannot rebuild its own
-shaders here either. The rust-gpu carriage in the wing is *inherited*,
-not reproducible: fine while nobody edits a renderling shader, and a
-wall the day someone does.
-
-## What the latest development says (checked 2026-08-13)
-
-**rust-gpu v0.10.0-alpha.1**, released 2026-04-17, is the version that
-closes the pincer *in principle*: it pins nightly-2026-04-11 (new
-enough for edition 2024), is itself updated to the 2024 edition, and
-explicitly supports glam 0.30, requiring at least `0.30.8`. So the
-`rust_gpu::vector` attribute that 0.9 rejects is the *new* ABI, and
-glam has been chasing 0.10 rather than drifting away from it. The fix
-is upward, not backward.
-
-Bumping this crate to `spirv-std 0.10.0-alpha.1` from crates.io was
-tried the same day and does not build either: 112 errors inside
-spirv-std's own `vec_trunc_impls` against glam. That is alpha churn in
-the published crate rather than anything about these kernels; the
-matching git rev, or the first non-alpha 0.10, is the next thing to
-try.
-
-**And there is nothing to unify.** rust-gpu is a *build-time*
-toolchain and `.spv` is the artifact, so a shader crate compiled by
-0.10 and renderling's compiled by 0.9 never meet: they share only the
-device that loads their modules. Two rust-gpu versions in the
-ecosystem is not the hazard two wgpu versions would be. This crate can
-move alone, and should, as soon as a 0.10 builds.
-
-The separate, larger question is renderling's own shaders, and the
-answer there is *not yet*: upstream renderling still pins the same
-0.9 rev (and wgpu 26, where our fork is already at 29). Migrating its
-45 entry points to spirv-std 0.10 would put the fork further ahead of
-upstream on a second axis with no reference to follow. The watch
-condition is upstream moving; then the fork rebases and inherits the
-migration rather than authoring it.
-
-## What would clear it
-
-For **this crate**, in order of preference: `spirv-std` from the
-rust-gpu git 0.10 branch at a rev that builds; the first non-alpha
-0.10 release; or 0.9 with glam pinned below `rust_gpu::vector` *and*
-that pin honoured through spirv-std's own workspace requirement, which
-needs a `[patch]` on the rust-gpu checkout rather than a dependency
-line here. The check is cheap to repeat: bump the version, run the
-build command below, and see.
-
-For **renderling's shaders**, wait for upstream, and watch
-`schell/renderling`'s workspace `spirv-std` pin. Doing it ourselves
-means a 0.9-to-0.10 API migration across 45 entry points with no
-reference implementation, on a fork already carrying a wgpu bump.
-Worth it only when a renderling shader actually needs editing.
-
-## Building, when it clears
+## Building
 
 ```
-cargo gpu build --shader-crate . --output-dir ../quint/shaders \
-  --auto-install-rust-toolchain \
-  --spirv-builder-source https://github.com/Rust-GPU/rust-gpu \
-  --spirv-builder-version <a rev that compiles current glam>
+cargo gpu build --shader-crate . --output-dir ../quint/shaders   --auto-install-rust-toolchain   --spirv-builder-source C:/Users/mark_/Code/crates/rust-gpu
 ```
 
-Then point `quint::resident`'s shader module at the produced `.spv` via
-`wgpu::util::make_spirv`, commit the artifact, and keep this crate as
-the source it was built from. That is the renderling carriage: the
-artifact travels, the toolchain does not.
+The source is the **local rust-gpu fork**, one commit ahead of upstream
+main, and `cargo-gpu` is likewise installed from a local clone pointed
+at that fork (`cargo install --path crates/cargo-gpu`, with its
+`spirv-builder` dependency repointed). Both are needed because the fix
+lives in `rustc_codegen_spirv-types`, which cargo-gpu links directly.
+`rust-toolchain.toml` here pins the nightly rust-gpu itself pins.
+
+## The fork: one line, and an upstream bug
+
+rust-gpu main fails against the toolchain its own `rust-toolchain.toml`
+pins. Target-spec selection reads
+
+    if rustc_version >= Version::new(1, 97, 0)
+
+and the pinned nightly reports `1.97.0-nightly`. semver sorts a
+pre-release *before* its release, so `1.97.0-nightly < 1.97.0`, the
+older spec variant is chosen, and it emits `allows-weak-linkage` —
+exactly the key rustc 1.97 removed. The build dies in `rustc --print`
+with *unknown field `allows-weak-linkage`*.
+
+The fork (`Code/crates/rust-gpu`, branch `mark-ik/prerelease-version-gate`)
+compares on the version triple alone, which is what every gate in that
+function means. The window is one release wide: later nightlies
+(`1.98.0-nightly`) already pass, because the triple comparison
+dominates. **Worth reporting upstream**; when it lands, the fork
+retires and the build command points back at the git source.
+
+## What this cost, and what it did not
+
+Three false trails, recorded so they are not walked again:
+
+- `spirv-std` from crates.io drags a modern `libm` whose 128-bit
+  integer math cannot lower to SPIR-V (439 missing-intrinsic errors).
+- The published `spirv-std 0.10.0-alpha.1` fails differently: 112
+  errors inside its own `vec_trunc_impls`. Use the git source.
+- rust-gpu at the fork family's old rev (`05b34493`) admits
+  `glam <=0.30` while current glam emits a `rust_gpu::vector`
+  attribute that backend rejects. The fix was upward, not a pin
+  backward.
+
+Two kernel-side adjustments were needed for the SPIR-V target, both
+sensible on their own terms: `f32::sqrt` is not in core there, so the
+kernels use `spirv_std::num_traits::Float`; and the settle reduction's
+atomic uses `QueueFamily` scope rather than `Device`, since everything
+touching that word is one dispatch on one queue and `Device` scope
+under the Vulkan memory model needs a capability this target does not
+declare.
+
+**And there is still nothing to unify.** rust-gpu is a *build-time*
+toolchain and `.spv` is the artifact, so this crate compiled by the
+fork and renderling's shaders compiled by 0.9 never meet: they share
+only the device that loads their modules. Two rust-gpu versions is not
+the hazard two wgpu versions would be.
+
+The separate question is renderling's own shaders. Upstream renderling
+still pins the old 0.9 rev (and wgpu 26, where our fork is already at
+29), and its 45 committed `.spv` were last built upstream 2026-03-22,
+so the fork cannot rebuild them either. That carriage stays inherited
+rather than reproducible until upstream moves — fine while nobody edits
+a renderling shader. The fork above would likely unblock that too, but
+migrating 45 entry points from spirv-std 0.9 to 0.10 is a separate job
+with no reference to follow, and worth doing only when a renderling
+shader actually needs editing.
