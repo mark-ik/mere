@@ -557,6 +557,31 @@ pub fn parse_hex32(value: &str) -> Result<[u8; 32], OwnerSettingsError> {
     Ok(out)
 }
 
+/// Decode hex of any length, for values that are not fixed-width keys.
+///
+/// A relayed pre-key bundle is the case: it is a whole encoded structure
+/// rather than a 32-byte identifier, so `parse_hex32` cannot read it. Empty
+/// input is refused rather than decoding to nothing, because a pre-key nobody
+/// typed and one somebody typed wrongly should not look the same.
+pub fn parse_hex(value: &str) -> Result<Vec<u8>, OwnerSettingsError> {
+    let value = value.trim();
+    if value.is_empty() || !value.len().is_multiple_of(2) || !value.chars().all(|c| c.is_ascii_hexdigit())
+    {
+        return Err(OwnerSettingsError::NotHex {
+            value: value.to_string(),
+        });
+    }
+    (0..value.len() / 2)
+        .map(|index| {
+            u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).map_err(|_| {
+                OwnerSettingsError::NotHex {
+                    value: value.to_string(),
+                }
+            })
+        })
+        .collect()
+}
+
 pub fn hex32(bytes: &[u8; 32]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
