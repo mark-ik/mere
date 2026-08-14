@@ -180,13 +180,11 @@ cannot be a **sealed** eidetic payload, on bootstrap grounds: eidetic's sealer
 derives its payload key from the epoch secret, and the epoch secret is what
 this record delivers. Sealing it would require the key it carries.
 
-What remains is narrower and worth asking properly: should the record be an
-**unsealed, content-addressed** eidetic artifact? It needs no seal of eidetic's
-because its `wrapped_key` is already encrypted to a pairing key held separately
-in `identity/remote_auth_wrapping_keys`. Storing it that way would buy content
-addressing, provenance, and sync. So the real question is whether epoch
-carriage should replicate at all, which is a sync-policy question rather than a
-storage-location one.
+What remains is narrower and worth asking properly: should epoch carriage
+replicate at all? **Answered 2026-08-14** in
+[epoch carriage and replication](2026-08-14_epoch_carriage_replication.md): it
+may, at `TrustedPeersOnly`, but not until the record's plaintext identifiers
+are blinded, and retention gates shipping. It stays `LocalOnly` until then.
 
 ## Sequence, when it runs
 
