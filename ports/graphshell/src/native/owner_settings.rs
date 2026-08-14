@@ -569,7 +569,9 @@ pub fn parse_hex32(value: &str) -> Result<[u8; 32], OwnerSettingsError> {
 /// typed and one somebody typed wrongly should not look the same.
 pub fn parse_hex(value: &str) -> Result<Vec<u8>, OwnerSettingsError> {
     let value = value.trim();
-    if value.is_empty() || !value.len().is_multiple_of(2) || !value.chars().all(|c| c.is_ascii_hexdigit())
+    if value.is_empty()
+        || !value.len().is_multiple_of(2)
+        || !value.chars().all(|c| c.is_ascii_hexdigit())
     {
         return Err(OwnerSettingsError::NotHex {
             value: value.to_string(),

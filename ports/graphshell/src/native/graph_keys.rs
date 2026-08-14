@@ -713,7 +713,10 @@ mod tests {
         // from the persisted session, not a fresh mint, because a second
         // session would orphan the seat the lane will hear about.
         let disclosed = quiet.published_bundle().to_vec();
-        assert!(!disclosed.is_empty(), "a session must keep a bundle to disclose");
+        assert!(
+            !disclosed.is_empty(),
+            "a session must keep a bundle to disclose"
+        );
         assert_eq!(
             disclosed,
             quiet_opened.publish.unwrap().to_bytes().unwrap(),

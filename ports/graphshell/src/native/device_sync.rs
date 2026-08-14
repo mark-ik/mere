@@ -178,7 +178,14 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         .with_access_records(sync.lanes.access_records)
         .with_saved_scenes(sync.lanes.saved_scenes)
         .with_handler_preferences(sync.lanes.handler_preferences)
-        .with_blob_availability(sync.lanes.blob_availability || true)
+        // Left as the owner set it. With the lane off, a receipt still
+        // replicates whole — its artifacts facet carries every blake3 hash —
+        // and only *which device holds the bytes* goes unsaid, which is a
+        // separate thing an owner may reasonably decline.
+        .with_blob_availability(sync.lanes.blob_availability)
+        // The only synthetic rule the resident host installs today. If a
+        // second lane ever needs one, extend this list rather than calling
+        // the setter twice: it replaces rather than appends.
         .with_synthetic_addresses([crate::receipts::sync_address_rule()]);
 
     // The cached-address rung: every hint recorded by a previous run rides in
