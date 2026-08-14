@@ -664,6 +664,39 @@ mod tests {
         });
     }
 
+    /// R1's guard. A facet the sync selection does not list is silently not
+    /// projected, so a receipt gaining a third facet without gaining a lane
+    /// entry would replicate half-formed and nothing would say so. This makes
+    /// that a test failure instead.
+    #[test]
+    fn every_emitted_facet_is_in_the_sync_lane() {
+        pollster::block_on(async {
+            let dir = tempfile::tempdir().unwrap();
+            write_receipt(dir.path(), b"frame bytes");
+            let store = BlobStore::new(MemoryBackend::new());
+            let ingested = ingest_directory(dir.path(), &store, "laptop")
+                .await
+                .unwrap();
+
+            let lane = sync_facets();
+            for event in &ingested.events {
+                if let PersonalGraphEvent::SetFacet { facet, .. } = event {
+                    assert!(
+                        lane.contains(&facet.as_str()),
+                        "`{facet}` is emitted but not in sync_facets(), so it \
+                         would not replicate",
+                    );
+                }
+            }
+
+            // And the node has to match the projection rule, or a device that
+            // declines the lane still materializes bare receipt nodes.
+            assert!(ingested.address.starts_with(&sync_address_rule().prefix));
+            assert_eq!(sync_address_rule().facet, FACET_RUN);
+            assert!(lane.contains(&FACET_RUN));
+        });
+    }
+
     #[test]
     fn a_directory_without_a_manifest_is_not_a_receipt() {
         pollster::block_on(async {

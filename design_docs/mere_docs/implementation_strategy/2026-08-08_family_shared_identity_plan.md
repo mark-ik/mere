@@ -104,7 +104,7 @@ choice is a hand-written enum per host delegating all six methods.
 | **Knot's binaries** | correct as-is | `knot_endpoint` and `knot_sync_host` take the root as an argument by design, so a test can point them at a scratch profile. The caller decides, and turnstone's caller now says the shared root. |
 | **Cleromancy** | nothing to wire | It has no identity. `CLEROMANCY_ROOT` holds product state (the redb store, sync settings); `admitted.rs` says outright that identity and transport stay outside. |
 | **Isometry** | nothing to wire | `isometry-net` takes an `Ed25519Keypair` as a parameter. No persistent identity exists yet; when one does, `roster::open_shared` is the call. |
-| **Hocket** | wired 2026-08-09 | Adopted into the vault keeping its key, or kept deliberately apart when the family persona is somebody else. See below. |
+| **Hocket** | wired 2026-08-09 | Adopted into the vault keeping its key, or kept deliberately apart when the family persona is somebody else, with a confirmed one-way switch between the two. See below. |
 
 ### Woodshed's sealing is not a gate
 
@@ -294,13 +294,46 @@ than a leap: nothing switches until they ask, and the cost is on screen when
 they do. Its persona-faceted timeline concept is sketched separately in
 [hocket's design docs](../../../../hocket/design_docs/2026-08-08_persona_timeline_design.md).
 
+### The switch surface (hocket, 2026-08-09)
+
+Landed, and it is a confirmation rather than a picker. Hocket has exactly one
+persona to offer — the family one — so a list of one row would be ceremony;
+what the moment needs is the cost, stated in terms of a thing the user has
+already handed to people. The confirmation names the first twelve characters
+of the token on screen and says it stops reaching them.
+
+**Consent is recorded against the key, not the profile name.** The user agreed
+to be a particular person, not to follow whatever the family choice later
+becomes. A family persona that moves to a different identity puts Hocket back
+to `Apart` and asks again, rather than rotating a second time on the strength
+of a decision made about somebody else. This is the rung that would have been
+missed by storing a `follow_family` boolean, which is the obvious shape.
+
+Accepting also clears the addressed reply: it belonged to the old identity's
+conversation, and the next hand-off would otherwise go out as somebody the
+peer no longer recognises.
+
+Two defects the tests caught, both worth carrying as cautions:
+
+- `settle_home` was handed an `Unlock` and then called `Unlock::from_env()`
+  again part way through. That works by luck on a machine using
+  `PERSONAE_PASSPHRASE` and fails everywhere else. Settling is now one vault
+  open that answers everything.
+- `fingerprint()` and `contact_token()` read the sealed record rather than the
+  identity being spoken as, so after a switch the screen would have shown the
+  old key while signing with the new one. Any application that can speak as
+  something other than its own record needs its display routed through the
+  same accessor its signing uses.
+
 ## Remaining
 
-- **Hocket's switch surface.** The picker over the roster, with the
-  token-rotation warning as its confirm step, plus a re-share prompt after.
 - **Creating a persona.** `PickerEvent::CreateRequested` reports the intent;
   naming it is the application's flow. Woodshed's gate says where personas
   come from today instead of dropping it; no application mints one yet.
+- **Hocket cannot go back.** Joining is one-way in the UI: there is no
+  "return to my own identity", because that is a second rotation with the same
+  cost and no caller has asked for it. The consent record is a single file, so
+  the mechanism is there if it is ever wanted.
 
 ## Open
 
