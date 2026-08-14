@@ -86,9 +86,16 @@ pub struct RevokeDeviceIntentV1 {
 ///
 /// The last thing in the family nothing could do: every application's picker
 /// has a create row, and each one told the user to go and run the
-/// `personae-vault` CLI. Graphshell is where it belongs because Graphshell is
-/// already the vault-management surface, holding generate / import / remove for
-/// SSH keys and the switch for personas.
+/// `personae-vault` CLI.
+///
+/// **This sits in the wrong port and is here on purpose, for now.** By the
+/// port law, identity is a capability the stack owns, castellan is its port,
+/// and graphshell is an application that *composes* it — the law names the
+/// failure of a capability "trapped inside its first application" and this is
+/// that failure. Graphshell hosts it because graphshell has the only working
+/// identity surface and castellan is still a name reservation. When castellan
+/// grows its surface this moves, along with the rest of H4 (SSH generate /
+/// import / remove, device revoke, profile switch).
 ///
 /// Creating is deliberately not switching. A persona minted for another device
 /// or another purpose is not one you are necessarily becoming, so the new

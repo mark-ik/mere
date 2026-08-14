@@ -338,12 +338,40 @@ Two defects the tests caught, both worth carrying as cautions:
   `PROFILE_CREATE_INTENT` on the vault card beside generate and import: it is
   the vault's action, not the action of whoever is in use.
 
-  **Not castellan**, though it was the other candidate. Castellan's own
-  charter excludes it: "the faces, their derivation roots, and the vault
-  substrate live in `personae`; castellan is the keeper who serves them."
-  Castellan holds the *chatelaine* (passwords, 2FA seeds, tokens, foreign key
-  material) and presents *emblems*. A persona's master key is neither of those
-  — it is the face itself.
+  **It belongs in castellan, and it is in graphshell. Recorded as a
+  misplacement, not a decision.**
+
+  I first argued castellan was excluded by its own charter — "the faces, their
+  derivation roots, and the vault substrate live in `personae`; castellan is
+  the keeper who serves them" — and read that as a prohibition on minting. It
+  is not. It is a statement about who owns the *repository*, which the
+  composition thesis states outright: "Castellan owns no repository: identity
+  truth is personae's (dramatis tier), and castellan is the keeper — custody
+  without ownership." Not owning the store is not the same as not acting on it.
+  By the reading I used, graphshell would be excluded too, since it also does
+  not own `Profile`; it calls the same `roster::create_profile`.
+
+  The [port law](../../2026-08-12_family_composition_thesis_brief.md) settles
+  it the other way: "the stack owns the capability; the port is its
+  first-party, coherent, embeddable embodiment; and another application
+  composes the relevant subset." Identity is the capability, `personae` is the
+  stack that owns it, **castellan is its port**, and graphshell is an
+  application that composes it. The same paragraph names the failure this
+  prevents: "where a capability is technically reusable but practically
+  trapped inside its first application." Putting persona creation in
+  graphshell — the first application that happened to grow an identity
+  surface — is that failure, committed knowingly now that it is written down.
+
+  This is larger than the create intent. Graphshell's whole H4 identity
+  surface (SSH generate / import / remove, device revoke, profile switch, and
+  now create) is by the port law castellan's surface, composed by graphshell
+  rather than owned by it. That predates this plan and is not its to fix, but
+  the create action should not be cited as precedent for staying put.
+
+  Castellan today is a name reservation with two library halves (OTP, the
+  reticulum device credential) and no product surface, so the honest state is:
+  the act works, its tests pass, and its home is founding work nobody has
+  started.
 
   Creating is deliberately not switching: a persona minted for another device
   is not one the user is adopting, so the new card arrives carrying the
