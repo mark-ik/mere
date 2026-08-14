@@ -45,14 +45,53 @@ shaders here either. The rust-gpu carriage in the wing is *inherited*,
 not reproducible: fine while nobody edits a renderling shader, and a
 wall the day someone does.
 
+## What the latest development says (checked 2026-08-13)
+
+**rust-gpu v0.10.0-alpha.1**, released 2026-04-17, is the version that
+closes the pincer *in principle*: it pins nightly-2026-04-11 (new
+enough for edition 2024), is itself updated to the 2024 edition, and
+explicitly supports glam 0.30, requiring at least `0.30.8`. So the
+`rust_gpu::vector` attribute that 0.9 rejects is the *new* ABI, and
+glam has been chasing 0.10 rather than drifting away from it. The fix
+is upward, not backward.
+
+Bumping this crate to `spirv-std 0.10.0-alpha.1` from crates.io was
+tried the same day and does not build either: 112 errors inside
+spirv-std's own `vec_trunc_impls` against glam. That is alpha churn in
+the published crate rather than anything about these kernels; the
+matching git rev, or the first non-alpha 0.10, is the next thing to
+try.
+
+**And there is nothing to unify.** rust-gpu is a *build-time*
+toolchain and `.spv` is the artifact, so a shader crate compiled by
+0.10 and renderling's compiled by 0.9 never meet: they share only the
+device that loads their modules. Two rust-gpu versions in the
+ecosystem is not the hazard two wgpu versions would be. This crate can
+move alone, and should, as soon as a 0.10 builds.
+
+The separate, larger question is renderling's own shaders, and the
+answer there is *not yet*: upstream renderling still pins the same
+0.9 rev (and wgpu 26, where our fork is already at 29). Migrating its
+45 entry points to spirv-std 0.10 would put the fork further ahead of
+upstream on a second axis with no reference to follow. The watch
+condition is upstream moving; then the fork rebases and inherits the
+migration rather than authoring it.
+
 ## What would clear it
 
-Any one of: a rust-gpu rev whose codegen accepts current glam; a glam
-version pinned below the `rust_gpu::vector` attribute *and* honoured
-through spirv-std's own workspace requirement (a `[patch]` on the
-rust-gpu checkout would do it); or a newer rust-gpu whose toolchain
-parses edition 2024. This is upstream drift rather than anything about
-these kernels, so the check is cheap to repeat later.
+For **this crate**, in order of preference: `spirv-std` from the
+rust-gpu git 0.10 branch at a rev that builds; the first non-alpha
+0.10 release; or 0.9 with glam pinned below `rust_gpu::vector` *and*
+that pin honoured through spirv-std's own workspace requirement, which
+needs a `[patch]` on the rust-gpu checkout rather than a dependency
+line here. The check is cheap to repeat: bump the version, run the
+build command below, and see.
+
+For **renderling's shaders**, wait for upstream, and watch
+`schell/renderling`'s workspace `spirv-std` pin. Doing it ourselves
+means a 0.9-to-0.10 API migration across 45 entry points with no
+reference implementation, on a fork already carrying a wgpu bump.
+Worth it only when a renderling shader actually needs editing.
 
 ## Building, when it clears
 
