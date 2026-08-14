@@ -46,8 +46,13 @@ vocabulary:
 - **"Every app is its own repository/datalake"** → every application owns its
   **source truth** (the 2026-07-22 ruling: "Turnstone, Woodshed, Isometry,
   Hocket, and a radio-management application remain the authorities over
-  their native data"). The spatial unit of that truth is **a mere** — whose
-  lexicon entry already banks *datalake* as the closest borrowed term. The
+  their native data"). The spatial unit of that truth is **a mere**, which
+  sits at the intersection of two borrowed terms of art: a *dataspace* on the
+  integration axis (heterogeneous sources related pay-as-you-go, without
+  upfront schema unification) and a *datalake* on the storage axis (raw
+  native retention, schema-on-read). Ruled 2026-08-13 and recorded in
+  [`TERMINOLOGY.md`](TERMINOLOGY.md), with the *reservoir* gloss for the case
+  where the lake term's derivative-copy connotation would mislead. The
   prospects brief's "thin hosts wiring the three seams" and the chain's "rich
   repositories" are the same claim from opposite ends: thin over the
   substrate, rich in domain authority.
