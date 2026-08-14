@@ -311,9 +311,12 @@ More than expected, and the plan is mostly wiring because of it:
   multi-thread runtime, so the blocking read moves off the async worker), and
   `browser_host` hands it to the endpoint.
 
-  **Verification is incomplete and this is the honest state.** The graphshell
-  half compiles clean; the workspace does not, because a concurrent
-  `session-runtime` `wallet_grant` refactor has `identity.rs` importing
-  symbols that have moved. Three read-through tests are written and unrun:
-  read-through serves a stored blob, absence stays a miss with no reader, and
-  the cache evicts oldest-first inside its budget. They want a green tree.
+  **Verified once the tree went green.** The concurrent `session-runtime`
+  `wallet_grant` refactor landed, and `cargo test -p graphshell --features
+  personal-sync --lib` is **207 passed, 0 failed**, up from 204 by exactly the
+  three read-through tests: read-through serves a stored blob, absence stays a
+  miss with no reader, and the cache evicts oldest-first inside its budget.
+  Twenty-five receipt and read-through tests in all. The CLI was re-run end to
+  end against the changed hand-off: the inbox entry now carries `source`
+  beside `events`, and the node id, blob hash and event count are unchanged
+  from before the format moved.
