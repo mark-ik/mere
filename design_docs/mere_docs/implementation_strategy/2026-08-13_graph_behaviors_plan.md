@@ -289,8 +289,8 @@ Carried over or ruled here:
   `blake3(source)`, so changing what a pack wakes on changes its identity and
   re-reviews; and `install_caps` grants a READ scope over the watched region,
   so the containment law holds by construction rather than by hope.
-  **Remaining:** the inbox rule is not built, so there is no headed receipt.
-  The original text follows. The matched-delta digest handed to
+  **Remaining, and BLOCKED: the inbox rule cannot fire live today.** See
+  W2.5. The original text follows. The matched-delta digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
@@ -298,6 +298,31 @@ Carried over or ruled here:
   the rings before anything is granted; the inbox rule runs headed; its
   edit is attributed in the inspector; and uninstalling the denizen removes
   the watch with it.
+- **W2.5: containment is only derived on load. NEEDS A RULING.** Found trying
+  to build the inbox rule. The ruled region vocabulary rests on
+  `EdgeFamily::Containment` edges, and in mere those edges are *derived from
+  URL structure* by `Graph::rebuild_derived_containment_relations`, which is
+  `pub(crate)` and has exactly one caller: `snapshot/from.rs`, the load path.
+  Nothing derives containment when a node is visited, and `Canvas` exposes
+  `graph()` and `facets_mut()` but no way for the app to assert a relation.
+  So a node visited under `mere://inbox` gains no containment edge until the
+  session is saved and reloaded, its ancestry stays a bare id, and the folder's
+  watch never matches. The wake machinery is fine; the region it watches is not
+  materialized in a live session. Three ways out:
+  1. **Derive incrementally on visit** (recommended): give `Canvas` a method
+     that asserts the new node's URL-path and domain parents at creation, and
+     have `visit` call it. Containment then means the same thing live and
+     loaded, which is the property the watch actually needs. Today's
+     rebuild is whole-graph, so this wants the per-node form, not a call to
+     the existing function.
+  2. **Derive in the behaviors adapter**: `ancestry_scopes` falls back to URL
+     parents when no edge exists. No kernel change, but it duplicates the
+     derivation rule in a second place, and the two would drift.
+  3. **Leave it**: watches match only after a reload. Cheapest and wrong; a
+     behavior that works tomorrow but not today is worse than one that says
+     it does not work.
+  Whichever is chosen, an end-to-end inbox-rule test and its headed receipt
+  follow immediately: every other link in the chain is already proven.
 - **W3: app-tier watches.** `AppEvent` watches at the observe drain, ring
   vocabulary unchanged. Done when: a behavior wakes on `SessionSwitched`
   without polling, and the scenario log shows the wake attributed.
@@ -362,6 +387,13 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-13 (W2, last piece): stopped before building the inbox rule. The
+  containment edges the ruled vocabulary rests on are derived only on snapshot
+  load, so the rule cannot fire in a live session and a test cannot even stage
+  the edge (no public assert path). Recorded as W2.5 with three options and a
+  recommendation, rather than guessed at. Everything else in the chain is
+  proven: 261 pass.
 
 - 2026-08-13 (unblocking): gemot's group bridge still imported
   `IdentityHandle` and `OperationId` from `p2panda_auth::traits` after another
