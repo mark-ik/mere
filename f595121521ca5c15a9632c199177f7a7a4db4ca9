@@ -1,0 +1,30 @@
+ATTRIBUTION CORRECTION. The subject claims M2 part two, but most of that work
+is not in this commit, and most of what IS here belongs to someone else.
+
+M2 part two's code landed in 311b61a8, "Checkpoint the device-grant
+certificate split in flight", which another agent committed off a dirty tree
+while the work was mid-verification. That commit is honestly named.
+
+What this commit actually contains:
+  design_docs/.../2026-08-12_device_grant_certificate_migration_plan.md
+    the M2 part two progress entry and its findings              (mine, 49)
+  crates/system/session-runtime/src/wallet_grant/certificate.rs
+    import-path fixes only                                        (mine, 7)
+
+  swept in per the commit-the-whole-tree rule, and unnamed in the message:
+  ports/graphshell/src/native/graph_keys.rs, device_sync.rs,
+    owner_settings.rs, pairing.rs, src/bin/graphshell_device_host.rs
+  design_docs/.../2026-08-13_spatial_compute_plan.md
+                                                        (not mine, ~250)
+
+The finding this commit's message records is the one worth keeping: the
+reconciliation doc priced the persona split at "more records," but a
+certificate has one issuer and issue() requires the provider's master key to
+equal it, so per-persona certificates need per-persona signing identities.
+The consequence is that a verifier's trusted root set becomes one TrustedRoot
+per persona rather than one master key. That is architectural and lands in M5.
+
+No history surgery was done to repair this. An amend was attempted and hit
+the wrong commit, because another agent had committed in between; that was
+reverted by restoring their message verbatim from the reflog, and this note
+is the correct repair for a message that has commits on top of it.
