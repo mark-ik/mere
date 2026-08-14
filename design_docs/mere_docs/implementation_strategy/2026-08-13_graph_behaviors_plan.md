@@ -280,9 +280,17 @@ Carried over or ruled here:
   rather than a missing one, so a script can always ask. Uninstall now calls
   `WatchTable::remove_subject`: residency, authority, and standing
   subscriptions end together.
-  **Remaining:** the install review does not yet show the watch beside the
-  rings (the ruled condition), and the inbox rule is not built, so there is no
-  headed receipt. The original text follows. The matched-delta digest handed to
+  The **install review now names the watch** (the ruled condition): a pack
+  declares `-- @watch <url>` in its source, the review row reads "wakes on:
+  <url>" beside the rings, and confirming registers it. Three properties fall
+  out rather than being built: the declaration is an *address* because an
+  author cannot know a UUID (install resolves it, minting the target with
+  `visit` if absent); it lives *in the source*, and the subject is
+  `blake3(source)`, so changing what a pack wakes on changes its identity and
+  re-reviews; and `install_caps` grants a READ scope over the watched region,
+  so the containment law holds by construction rather than by hope.
+  **Remaining:** the inbox rule is not built, so there is no headed receipt.
+  The original text follows. The matched-delta digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
@@ -411,3 +419,13 @@ not automation).
   two fail together. The default lane's one red is a `place::lanes` timeout
   that passes alone in 8s, a flake under concurrent builds, and untouched by
   this work.
+- 2026-08-13 (W2, review half): the watch declaration and install registration
+  landed (turnstone `59573a6`). **Not verified**: the source compiles clean,
+  but its test has not run, because mere's tree has been mid-migration in two
+  sibling sessions for ~20 minutes (the wallet_grant device-grant split, and a
+  `p2panda_auth` import in gemot), so turnstone's dependency chain does not
+  build. Committed rather than left dirty, since in-flight work in these trees
+  was swept into sibling commits three times today and an accurate message
+  beats an inaccurate one. **Re-run `cargo test --lib --features piccolo` once
+  mere is green**, and check that the longer review row still passes the
+  <96-char guard in `denizen.rs`.
