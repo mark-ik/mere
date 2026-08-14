@@ -1,7 +1,8 @@
 # Spatial Compute Plan (2026-08-13)
 
-**Status: complete 2026-08-13.** P1 through P4 all decided and their
-work landed. P4 is a narrowing rather than an extraction (see below),
+**Status: complete 2026-08-13; amended 2026-08-14 (§0.5: lanes are
+program shapes, resident-views law).** P1 through P4 all decided and
+their work landed. P4 is a narrowing rather than an extraction (see below),
 with its one live hazard closed in code. Every open item is closed:
 slot stability ruled, the kernels promoted into `quint::resident` with
 the rust-gpu carriage working, and the windowed run presented. What
@@ -66,6 +67,72 @@ aggregation plus its own opening-angle traversal), the rust-gpu kernel
 organization and shared-struct CPU/GPU pattern, and the proven SPIR-V to
 WGSL browser pipeline. Watch condition for adoption: tactile body count
 outgrowing CPU rapier.
+
+## 0.5 Amendment (2026-08-14): lanes are program shapes, and views are the composition
+
+Ratified from the voxel composition discussion (Mark, 2026-08-14). Two
+corrections and one law, none of which disturb P1-P4's receipts.
+
+**Lanes divide by program shape, not by toolchain.** Section 0 drew the
+tensor/explicit line as if it were the Burn-vs-rust-gpu line. CubeCL
+straddles it: it is a real kernel language (shared memory, workgroup
+barriers, plane ops, atomics, comptime unrolling) whose runtime is also
+Burn's substrate. The Burn-handoff finding that tensor repulsion is
+O(n squared) memory was a fact about tensor-graph program shape, never
+about the toolchain. So the explicit lane has two carriages:
+
+- **CubeCL-JIT**: raw `#[cube]` kernels. Composes with Burn handles
+  natively (`ArrayArg::from_raw_parts` over the same allocation),
+  greedy tenant, compiles at first launch.
+- **rust-gpu-AOT**: committed `.spv`, minimal tenant, no runtime
+  compiler. Renderling's world, and right where a consumer must not
+  carry a JIT. quint's kernels stay here; migrating them to CubeCL is
+  an option purchased only by a measured need for Burn-handle interop
+  on layout state.
+
+Render shaders on either carriage create no boundary, provided they
+read the same allocation through a stable buffer contract.
+
+**The allocator direction is a one-way street.** Burn/CubeCL can hand
+its allocations outward (`client.get_resource` yields the wgpu buffer),
+but cannot cheaply adopt a foreign buffer as a tensor. So resident
+state that Burn must address is allocated through the CubeCL client and
+leased outward to tracers, meshers, and render tenants: allocation
+flows from the compute side out. This is the lease posture with Burn as
+the producing allocator, and it is why ownership of resident
+allocations sits with conatus below.
+
+**The resident-views law.** Authoritative state is never inside any
+consumer; each consumer receives a resident view of it. This is the
+graph architecture applied to spatial state, and it is one doctrine:
+
+- one identity and revision history per substrate;
+- plural typed views over the same facts (tensor view, kernel view,
+  tracer view, mesher input, collision input, persistence view),
+  without copies, each declaring shape, type, units, validity, and
+  dependencies;
+- consumers produce proposals or projections; only the owning record
+  commits consequences (**Burn proposes; the record disposes**);
+- caches and GPU allocations are disposable; unchanged facts cause no
+  recomputation; the durability boundary reads accepted deltas,
+  checkpoints, hashes, and small reductions, never whole planes (the
+  4-byte readback pattern from P2);
+- a reusable view is promoted only after multiple real consumers prove
+  it (the same promotion rule as the lease).
+
+A resident substrate is a **tensor bundle**, not one homogeneous
+tensor: exact planes (occupancy, palette, provenance, flags),
+fixed-point simulation planes (replay-exact), learned and derived
+planes (projections; float drift is a shrug), and temporary planes
+(scratch). The plane taxonomy is also the fact-bearing ruling: the
+exact and fixed-point planes are the record's side; everything else is
+projection.
+
+First application is the wing's voxel ground (mesocosm
+`design_docs/2026-08-14` composition plan): mesocosm's `Ground` already
+carries `revision` and a dirty-brick projection queue whose own doc
+comment states the law ("projection work queue, not world authority").
+The seam was latent in the tree before it was named.
 
 ## 1. The lease (not yet promoted)
 
