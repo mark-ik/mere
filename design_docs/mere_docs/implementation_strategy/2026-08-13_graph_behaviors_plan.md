@@ -269,9 +269,20 @@ Carried over or ruled here:
   cascade without a restart. (The headless halves of the first two and of the
   budget clause are covered by W1a; what remains is the wiring and the headed
   receipt.)
-- **W2: trigger context into the body.** *(Unblocked 2026-08-13: W0.5's
-  containment adapter shipped with W1b, so "a node appearing under a watched
-  scope" is now expressible.)* The matched-delta digest handed to
+- **W2: trigger context into the body. MOSTLY LANDED 2026-08-13.** A woken
+  body reads `mere.trigger()`, beside `mere.snapshot()` and gated on the same
+  `app.read` capability because it describes the graph. It returns a
+  `TriggerContext`: per matched entry, the journal seq, the author, and the
+  node ids that moved. A **digest, not the deltas**, so a body is not coupled
+  to the kernel's 44 variants or their evolution; and the nodes are each
+  scope's *last* segment, since ancestry is written outermost-first and the
+  tail is what actually changed. A hand-invoked run gets an empty context
+  rather than a missing one, so a script can always ask. Uninstall now calls
+  `WatchTable::remove_subject`: residency, authority, and standing
+  subscriptions end together.
+  **Remaining:** the install review does not yet show the watch beside the
+  rings (the ruled condition), and the inbox rule is not built, so there is no
+  headed receipt. The original text follows. The matched-delta digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
@@ -388,3 +399,15 @@ not automation).
   has five shapes, not four: `ReplayBranchHistoryByIds` carries
   `child_id`/`parent_id`, which a field-name sweep misses, so a history
   branch would have woken nobody.
+- 2026-08-13 (W2): the trigger context landed in turnstone. **250 tests pass
+  with `--features piccolo`** (up from 236 default), including a body that
+  dispatches only when something woke it and refuses the digest without
+  `app.read`. Two incidental finds. The **piccolo test lane did not compile at
+  HEAD**: three `App.canvas` references outlived a rename to `graph_runtimes`,
+  so `cargo test --features piccolo` had not been run in a while; fixed here
+  because testing `mere.trigger()` required it. And the **sandbox carries no
+  `string` library**, so the fixture compares against the empty wire form
+  instead of searching it, with the exact form pinned by a unit test so the
+  two fail together. The default lane's one red is a `place::lanes` timeout
+  that passes alone in 8s, a flake under concurrent builds, and untouched by
+  this work.
