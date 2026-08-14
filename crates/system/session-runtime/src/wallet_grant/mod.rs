@@ -47,6 +47,7 @@ mod enroll;
 mod epochs;
 mod errors;
 mod issue;
+mod migrate;
 mod pairing;
 mod records;
 mod refresh;
@@ -113,6 +114,10 @@ pub(crate) use wrapping::{
     load_remote_auth_wrapping_key, remove_remote_auth_wrapping_key, upsert_remote_auth_wrapping_key,
 };
 
+pub(crate) use migrate::legacy_grant_hint;
+pub use migrate::{
+    LegacyGrant, reissue_legacy_grant, retire_legacy_grant, survey_legacy_grants,
+};
 pub use certificate::{
     decode_device_grant_set, encode_device_grant_set,
     certificate_device_id,

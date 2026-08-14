@@ -30,7 +30,7 @@ pub fn build_remote_auth_enrollment_bundle(
     if grant.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("device grant certificates missing for {}", device_id.as_uuid()),
+            legacy_grant_hint(data_root, device_id),
         ));
     }
     if !grant.certificates().all(|certificate| certificate.verify()) {

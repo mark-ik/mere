@@ -26,7 +26,8 @@ shrank because the pieces already exist; see the findings below.
 - **M1** — the device scope convention in `personae::carry`, additive. DONE.
 - **M2** — RemoteAuth device grants issued as certificates, plus the
   separated epoch record. Verification delegates to `notochord`.
-- **M3** — re-issue on unlock; the old envelope reader is deleted, not kept.
+- **M3** — retiring legacy grants. DONE, but not as "re-issue on unlock":
+  see the finding below, which the posture forces.
 - **M4** — the roster's `revoked` list demoted to a projection of
   `notochord::RevocationLedger`. Smaller than planned: the ledger, the fold,
   and the signed statement all exist already.
@@ -227,6 +228,48 @@ faithfully recording the churn as if it were correct.
 - **`no-subdelegation` is enforced.** It was a string atom no code read.
   Castellan's station policy now checks `remaining_delegation_depth == 0`,
   and the grammar refuses to extend a chain past it.
+
+### M3: retiring legacy grants — DONE 2026-08-12
+
+**The migration cannot be automatic, and the posture is why.** M3 was written
+into the plan as "re-issue on unlock," which assumed the wallet could re-mint
+each grant from what it already knew. It cannot. What a grant *permitted* lived
+in the signed payload, and "no legacy decoder" means refusing to read the
+payload, so the scopes are exactly the thing that does not survive. Re-minting
+from a default would either widen a device's authority or narrow it in silence,
+and both are worse than asking.
+
+That is not an argument against the posture, which remains right: a dual-read
+window would have carried the old codec forward indefinitely for grants that
+are cheap to re-issue while no radio is sited. It is the price of the choice,
+and it should have been named when the choice was made rather than discovered
+in M3.
+
+What survives outside the payload turns the restatement into a confirmation
+rather than an act of memory, and `survey_legacy_grants` recovers it without
+opening a single grant byte:
+
+- the roster keeps each device's label, mode, exposure, and public key;
+- each persona wallet keeps a capability slot named for the device, so **the
+  persona set is fully recoverable**.
+
+Only the scopes must be restated, and `reissue_legacy_grant` refuses an empty
+scope list rather than defaulting.
+
+- [x] `survey_legacy_grants`, `reissue_legacy_grant`, `retire_legacy_grant`.
+- [x] `retire_legacy_grant` refuses while a device is stranded, so the last
+      record that a device ever had authority cannot be deleted before that
+      authority is restored.
+- [x] Private-lane material is not recoverable either: it was wrapped to a
+      pairing key inside the payload. A device that needs it is re-paired, not
+      re-issued. Recorded in the code at the point that would otherwise look
+      like an omission.
+- [x] `legacy_grant_hint` makes the failure attributable. A stranded device
+      used to report only "certificates missing", which reads like corruption;
+      enrol and revoke now say the device predates the format and point at the
+      survey.
+- [x] Seven tests. Green: session-runtime 257, personae 97, castellan 31,
+      signalman 16.
 
 #### Noted, not fixed
 
