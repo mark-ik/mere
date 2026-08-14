@@ -979,6 +979,35 @@ impl PersonalSyncHost {
             .collect::<Vec<_>>();
         nodes.sort_by_key(|node| node.id);
         for node in nodes.into_iter().take(MAX_NODE_CARDS) {
+            // A receipt carries its whole story in facets, so the generic
+            // node card below would render it as a title and an address and
+            // drop every fact that makes it evidence. Ask the receipts module
+            // for its own shape first.
+            let facet_of = |facet: &str| {
+                projection
+                    .graph
+                    .facets()
+                    .get(&node.id, &chartulary::FacetId::new(facet))
+            };
+            let run = facet_of(crate::receipts::FACET_RUN);
+            if let Some(card) = crate::receipts::receipt_card(
+                &node.title,
+                &node.url(),
+                run,
+                facet_of(crate::receipts::FACET_ARTIFACTS),
+            ) {
+                cards.push(SupplementalCard {
+                    adapter: "graphshell.receipt".into(),
+                    source_id: node.id.to_string(),
+                    card,
+                    // Nothing to act on: a receipt records what already
+                    // happened, and re-running it is a thing you do at the
+                    // machine, not from a card.
+                    actions: Vec::new(),
+                });
+                continue;
+            }
+
             let mut tags = node.tags.iter().cloned().collect::<Vec<_>>();
             tags.sort();
             cards.push(SupplementalCard {

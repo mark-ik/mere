@@ -116,6 +116,8 @@ pub(crate) use wrapping::{
 };
 
 pub use certificate::{
+    device_grant_set_ref, device_scope_certificate_path, load_device_grant_set,
+    save_device_grant_set,
     WrappedEpochRecord, check_epoch_carriage, decode_certificate, decode_epoch_record,
     device_certificate_path, encode_certificate, encode_epoch_record, load_device_certificate,
     load_wrapped_epoch_record, requires_epoch_material, save_device_certificate,

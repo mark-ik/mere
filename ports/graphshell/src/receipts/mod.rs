@@ -22,10 +22,12 @@
 //! alone**, because it holds the signing identity and the log, and a second
 //! writer for one graph is a bug waiting to happen.
 
+pub mod card;
 pub mod ingest;
 pub mod intake;
 pub mod manifest;
 
+pub use card::{CARD_FACETS, is_receipt, receipt_card};
 pub use ingest::{IngestedReceipt, ingest_directory, ingest_manifest};
 pub use manifest::{
     ADDRESS_PREFIX, FACET_ARTIFACTS, FACET_RUN, ManifestArtifact, ReceiptError,

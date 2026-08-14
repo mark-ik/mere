@@ -855,6 +855,7 @@ mod tests {
         let pipe = ClientOptions::new().open(&endpoint).unwrap();
         let mut client = Client::new(pipe);
         let identities = client.request_identities().await.unwrap();
+        eprintln!("PROBE {:?}", identities.iter().map(|i| i.comment.clone()).collect::<Vec<_>>());
         assert_eq!(identities.len(), 1);
         assert_eq!(identities[0].comment, "wire-receipt");
         assert_eq!(

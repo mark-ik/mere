@@ -38,7 +38,7 @@ crate-type = ["dylib", "rlib"]
 # another share only the device that loads them. 0.10 is what clears
 # the 0.9 pincer (its toolchain parses edition 2024, and it wants glam
 # 0.30.8+ rather than rejecting it).
-spirv-std = "0.10.0-alpha.1"
+spirv-std = { git = "https://github.com/Rust-GPU/rust-gpu.git", rev = "eb73c07837c31b4eca701237e04ef1a46432e57b" }
 
 # Its own workspace: the SPIR-V target needs a build profile mere's
 # workspace does not set, and this crate is never built for the host.

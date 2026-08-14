@@ -15,10 +15,11 @@
 //! evaluates them; this module writes them down and holds the one invariant
 //! that used to live inside the payload validator.
 
+use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use identity::carry::WALLET_SCHEMA_VERSION;
+use identity::carry::{DeviceGrantSet, WALLET_SCHEMA_VERSION};
 use identity::delegation::{DelegationId, SignedDelegationCertificate};
 use identity::PersonaId;
 use identity::carry::ACTION_PRIVATE_READ;
@@ -177,6 +178,102 @@ pub fn load_wrapped_epoch_record(
     }
 }
 
+/// `<data_root>/identity/grants/<device_id>/device.cert`
+///
+/// The master-issued half of a grant set. Named rather than keyed by a
+/// persona because it belongs to no persona; a station has only this file.
+pub fn device_scope_certificate_path(data_root: &Path, device: DeviceId) -> PathBuf {
+    identity_grants_dir(data_root)
+        .join(device.as_uuid().to_string())
+        .join("device.cert")
+}
+
+/// Content ref standing for a whole grant set.
+///
+/// The roster and the wallet index each hold one ref per device, and a grant
+/// is now several certificates, so the ref covers the set: the device
+/// certificate's id if present, then each persona's id in `BTreeMap` order.
+/// Certificate ids already commit to their full contents, so hashing the ids
+/// is enough to make this change when any member changes.
+pub fn device_grant_set_ref(set: &DeviceGrantSet) -> CarryRef {
+    let mut bytes = Vec::new();
+    match &set.device {
+        Some(certificate) => {
+            bytes.push(1);
+            bytes.extend_from_slice(&certificate.certificate.id().0);
+        }
+        None => bytes.push(0),
+    }
+    for (persona, certificate) in &set.personas {
+        bytes.extend_from_slice(persona.as_uuid().as_bytes());
+        bytes.extend_from_slice(&certificate.certificate.id().0);
+    }
+    CarryRef::of(bytes.as_slice())
+}
+
+/// Persist every certificate in a grant set, returning the set's content ref.
+pub fn save_device_grant_set(
+    data_root: &Path,
+    device: DeviceId,
+    set: &DeviceGrantSet,
+) -> io::Result<CarryRef> {
+    if let Some(certificate) = &set.device {
+        let bytes = encode_certificate(certificate).map_err(invalid_data)?;
+        let path = device_scope_certificate_path(data_root, device);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, &bytes)?;
+    }
+    for (&persona, certificate) in &set.personas {
+        save_device_certificate(data_root, device, persona, certificate)?;
+    }
+    Ok(device_grant_set_ref(set))
+}
+
+/// Load every certificate stored for one device.
+///
+/// Reads the directory rather than taking a persona list, so a caller that has
+/// forgotten which personas granted a device still recovers the whole set.
+pub fn load_device_grant_set(data_root: &Path, device: DeviceId) -> io::Result<DeviceGrantSet> {
+    let mut set = DeviceGrantSet {
+        device: None,
+        personas: BTreeMap::new(),
+    };
+
+    match std::fs::read(device_scope_certificate_path(data_root, device)) {
+        Ok(bytes) => set.device = Some(decode_certificate(&bytes).map_err(invalid_data)?),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+
+    let dir = identity_grants_dir(data_root).join(device.as_uuid().to_string());
+    let entries = match std::fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(set),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("cert") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        // `device.cert` is the master-issued half, already loaded above.
+        let Ok(uuid) = stem.parse::<uuid::Uuid>() else {
+            continue;
+        };
+        let bytes = std::fs::read(&path)?;
+        set.personas.insert(
+            PersonaId(uuid),
+            decode_certificate(&bytes).map_err(invalid_data)?,
+        );
+    }
+    Ok(set)
+}
+
 /// Check the carriage invariant for one stored certificate.
 ///
 /// A certificate carrying `private.read` must have a wrapped-epoch record with
@@ -322,5 +419,76 @@ mod tests {
 
         assert!(!requires_epoch_material(&certificate));
         check_epoch_carriage(root.path(), &certificate, persona()).unwrap();
+    }
+
+    fn issue_set(actions: &[&str], personas: &[PersonaId]) -> DeviceGrantSet {
+        identity::carry::issue_device_grant_set(
+            MASTER_SEED,
+            device(),
+            DevicePublicKey([0x7a; 32]),
+            actions,
+            personas,
+            60_000,
+            NOW_MS,
+        )
+        .expect("issuing the grant set")
+    }
+
+    /// The station shape end to end: one file on disk, and reading it back
+    /// without being told which personas to look for still recovers the set.
+    #[test]
+    fn a_station_set_round_trips_through_storage() {
+        let root = tempfile::tempdir().unwrap();
+        let set = issue_set(&[ACTION_TRANSPORT_EGRESS], &[]);
+        save_device_grant_set(root.path(), device(), &set).unwrap();
+
+        let back = load_device_grant_set(root.path(), device()).unwrap();
+        assert_eq!(back, set);
+        assert!(back.device.is_some());
+        assert!(back.personas.is_empty());
+    }
+
+    #[test]
+    fn a_mixed_set_round_trips_with_every_member() {
+        let root = tempfile::tempdir().unwrap();
+        let other = PersonaId::from_uuid(uuid::Uuid::from_u128(0x9004));
+        let set = issue_set(
+            &[ACTION_TRANSPORT_EGRESS, identity::carry::ACTION_IDENTITY_ACT],
+            &[persona(), other],
+        );
+        save_device_grant_set(root.path(), device(), &set).unwrap();
+
+        let back = load_device_grant_set(root.path(), device()).unwrap();
+        assert_eq!(back, set);
+        assert_eq!(back.personas.len(), 2);
+        assert!(back.certificates().all(|c| c.verify()));
+    }
+
+    #[test]
+    fn an_unknown_device_loads_as_an_empty_set() {
+        let root = tempfile::tempdir().unwrap();
+        let set = load_device_grant_set(root.path(), device()).unwrap();
+
+        assert!(set.is_empty());
+    }
+
+    /// The roster keeps one ref per device, so that ref has to move whenever
+    /// any member of the set does.
+    #[test]
+    fn the_set_ref_tracks_every_member() {
+        let station = issue_set(&[ACTION_TRANSPORT_EGRESS], &[]);
+        let with_persona = issue_set(
+            &[ACTION_TRANSPORT_EGRESS, identity::carry::ACTION_IDENTITY_ACT],
+            &[persona()],
+        );
+
+        assert_ne!(
+            device_grant_set_ref(&station),
+            device_grant_set_ref(&with_persona)
+        );
+        assert_eq!(
+            device_grant_set_ref(&station),
+            device_grant_set_ref(&station.clone())
+        );
     }
 }

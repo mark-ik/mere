@@ -335,7 +335,3 @@ Two defects the tests caught, both worth carrying as cautions:
   cost and no caller has asked for it. The consent record is a single file, so
   the mechanism is there if it is ever wanted.
 
-## Open
-
-- **Creating a persona.** `PickerEvent::CreateRequested` reports the intent;
-  naming it is the application's flow. No application has one.
