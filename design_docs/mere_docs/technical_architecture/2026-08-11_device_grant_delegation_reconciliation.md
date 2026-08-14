@@ -166,8 +166,27 @@ replaced once rather than twice.
 the device authority family, on mechanics rather than taste, because
 `attenuates` compares domain first.
 
-Still open: whether the wrapped-epoch record is an eidetic artifact or stays a
-wallet file.
+**Corrected 2026-08-13 (Mark).** This doc previously left open "whether the
+wrapped-epoch record is an eidetic artifact or stays a wallet file". That is a
+false alternative, and Mark caught it: the wallet is *already* an eidetic
+consumer. `engram_seal::WalletEpochSealer` implements eidetic's `PayloadSealer`,
+and its own header states the relation exactly — the store holds bytes, the
+wallet owns the epoch key, and the sealer binds them. Eidetic is a store;
+the wallet is a keyring and a ledger. A record is not in one *instead of* the
+other.
+
+Restated, the question also mostly answers itself. The wrapped-epoch record
+cannot be a **sealed** eidetic payload, on bootstrap grounds: eidetic's sealer
+derives its payload key from the epoch secret, and the epoch secret is what
+this record delivers. Sealing it would require the key it carries.
+
+What remains is narrower and worth asking properly: should the record be an
+**unsealed, content-addressed** eidetic artifact? It needs no seal of eidetic's
+because its `wrapped_key` is already encrypted to a pairing key held separately
+in `identity/remote_auth_wrapping_keys`. Storing it that way would buy content
+addressing, provenance, and sync. So the real question is whether epoch
+carriage should replicate at all, which is a sync-policy question rather than a
+storage-location one.
 
 ## Sequence, when it runs
 
