@@ -2070,11 +2070,28 @@ browser, two-device network, and real RF are different claims.
    checkpoint still needs, and not before. `native::graph_keys::retention_probe`
    records both facts so nobody re-derives them.
 
-   Still to build:
+   **The receive-only path landed 2026-08-07, and this decision is settled.**
+   A receive-only device has no roster root, so every operation it authors is
+   refused, including the one that would announce it. It could be admitted as a
+   reader and never keyed, which would have made read-without-write a promise
+   the design could not keep.
 
-   - The receive-only path, which wants the pre-key carried with
-     `PairingFacts` out of band as `node_id` and `root` already are. Now the
-     only outstanding item on this decision.
+   The bundle travels with its pairing facts beside `node_id` and `root`, the
+   settings record holds it, and the watch publishes it on the device's behalf
+   when the pairing is applied. Held rather than published once and forgotten,
+   because the lane may be unreachable at the moment of pairing.
+
+   Relaying asserts nothing. The bundle attests back to its own root, so a
+   relayed one registers its subject and not its carrier and resolves to that
+   subject in both directions; that is what the receipt pins, because the
+   safety of relaying rests on it entirely. `GroupSession` mints a bundle only
+   at creation, so the group persists its own and hands the same one back after
+   a restart: a second would offer a second seat and the device would be keyed
+   into neither.
+
+   What remains is not this decision. Sealing is opt-in per graph via
+   `sync.encrypted`, which is the honest state until somebody wants it on by
+   default, and epoch retention waits on lane compaction as recorded above.
 
 None of these decisions changes the product boundary or requires a new
 repository.
