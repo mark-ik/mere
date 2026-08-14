@@ -363,6 +363,15 @@ not automation).
 
 ## Progress
 
+- 2026-08-13 (unblocking): gemot's group bridge still imported
+  `IdentityHandle` and `OperationId` from `p2panda_auth::traits` after another
+  session's bump to p2panda 0.7, which broke every crate downstream including
+  turnstone. An actor is now `p2panda_core::identity::Author` and `OperationId`
+  moved to `p2panda-core`; `Author` also requires serde where `IdentityHandle`
+  did not, so `MootGroupHandle` derives it. Fixed in mere `38d5546a` (gemot:
+  111 pass) because it blocked verifying anything at all, not because the
+  subsystem is this plan's.
+
 - 2026-08-13: plan written. Substrate grounded against journal.rs,
   commit.rs, gate.rs/cap.rs, denizen.rs/component.rs/ring.rs, observe.rs,
   all read this session. No code yet.
@@ -420,12 +429,9 @@ not automation).
   that passes alone in 8s, a flake under concurrent builds, and untouched by
   this work.
 - 2026-08-13 (W2, review half): the watch declaration and install registration
-  landed (turnstone `59573a6`). **Not verified**: the source compiles clean,
-  but its test has not run, because mere's tree has been mid-migration in two
-  sibling sessions for ~20 minutes (the wallet_grant device-grant split, and a
-  `p2panda_auth` import in gemot), so turnstone's dependency chain does not
-  build. Committed rather than left dirty, since in-flight work in these trees
-  was swept into sibling commits three times today and an accurate message
-  beats an inaccurate one. **Re-run `cargo test --lib --features piccolo` once
-  mere is green**, and check that the longer review row still passes the
-  <96-char guard in `denizen.rs`.
+  landed (turnstone `59573a6`), committed unverified because mere's tree was
+  mid-migration in two sibling sessions and turnstone would not build.
+  **Now verified: 261 pass with `--features piccolo`**, including
+  `the_review_names_the_watch_and_confirming_registers_it` and the <96-char
+  review-row guard, which the longer row still clears. One of the two blockers
+  cleared on its own; the other needed fixing (below).
