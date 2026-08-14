@@ -463,6 +463,10 @@ impl SyncSettings {
                     // should bind to it, and it has no history to hint from.
                     pairing_id: None,
                     last_endpoint: None,
+                    // Receive-only, and nothing supplied one: an
+                    // override that authors nothing has no prekey to
+                    // hold, matching what `pair` itself records.
+                    prekey: None,
                 })
                 .collect();
         }
