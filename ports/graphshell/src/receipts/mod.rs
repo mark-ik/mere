@@ -33,7 +33,10 @@ pub use manifest::{
     ADDRESS_PREFIX, FACET_ARTIFACTS, FACET_RUN, ManifestArtifact, ReceiptError,
     ReceiptManifest,
 };
-pub use intake::{PendingReceipt, inbox_dir, mark_applied, pending, write_to_inbox};
+pub use intake::{
+    InboxEntry, PendingReceipt, captures_in, inbox_dir, mark_applied, pending,
+    write_to_inbox,
+};
 
 use crate::personal_sync::SyntheticAddressRule;
 

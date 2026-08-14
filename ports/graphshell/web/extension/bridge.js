@@ -7,6 +7,7 @@ const port = extensionApi.runtime.connectNative("org.mere.graphshell");
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const actionForms = globalThis.GraphshellActionForm;
+const resourceChunks = globalThis.GraphshellResourceChunk;
 
 let nextId = 1;
 let projection = null;
@@ -73,6 +74,18 @@ function openSession() {
   }, "open");
 }
 
+function requestResource(resource, kind) {
+  if (!resourceChunks) {
+    throw new Error("The browser resource puller is unavailable.");
+  }
+  const assembly = new resourceChunks.ResourceAssembly(snapshot.session, resource);
+  request(assembly.nextRequest(), {
+    ...kind,
+    type: "resource",
+    assembly,
+  });
+}
+
 function responseBody(response) {
   if (response.body.Err) {
     throw new Error(response.body.Err.message);
@@ -104,20 +117,32 @@ function handleResponse(response) {
       }
     }
     for (const item of resources) {
-      request({
-        Resource: {
-          session: snapshot.session,
-          resource: item.offer.resource,
-        },
-      }, { type: "resource", item });
+      requestResource(item.offer.resource, { item });
     }
     setStatus(`Admitted · loading ${resources.length} public cards`);
     return;
   }
   if (kind?.type === "resource") {
-    const resource = body.Resource;
-    const card = JSON.parse(decoder.decode(new Uint8Array(resource.bytes)));
+    const bytes = kind.assembly.accept(body.ResourceChunk);
+    if (bytes === null) {
+      request(kind.assembly.nextRequest(), kind);
+      return;
+    }
+    if (kind.media) {
+      if (!(kind.item.media instanceof Map)) {
+        kind.item.media = new Map();
+      }
+      kind.item.media.set(JSON.stringify(kind.assembly.resource), bytes);
+      setStatus(
+        `Admitted · ${cardsNode.childElementCount} public cards · ${kind.item.media.size} media resource(s)`,
+      );
+      return;
+    }
+    const card = JSON.parse(decoder.decode(bytes));
     renderCard(card, kind.item);
+    for (const media of Array.isArray(card.media) ? card.media : []) {
+      requestResource(media, { item: kind.item, media: true });
+    }
     setStatus(`Admitted · ${cardsNode.childElementCount} public cards`);
     return;
   }

@@ -5,7 +5,7 @@
 //! carrier must admit a session before passing this endpoint to
 //! `serve_admitted_session`; nothing here invents a second principal field.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
@@ -33,6 +33,18 @@ use crate::native::browser_host::now_ms;
 use crate::native::personae_host::PersonaeHost;
 
 pub const IDENTITY_SESSION: &str = "native:personae";
+
+/// Reads a blob the endpoint does not hold, by content hash.
+///
+/// Synchronous because the resource trait is; a composer over an async store
+/// bridges it (see [`IdentityEndpoint::with_reader`]).
+pub type ResourceReader = Box<dyn Fn(&ContentHash) -> Option<Vec<u8>> + Send + Sync>;
+
+/// How much read-through content the endpoint keeps resident.
+///
+/// Generous enough that browsing a run's captures does not re-read on every
+/// chunk, small enough that a graph of thousands cannot exhaust memory.
+const READ_CACHE_BUDGET: usize = 64 * 1024 * 1024;
 
 /// One card composed beside the Personae surface.
 ///
@@ -140,6 +152,14 @@ pub struct IdentityEndpoint<S: IdentityStorage> {
     /// Blobs granted to this browser by an accepted transfer, kept out of
     /// `resources` because a projection refresh replaces that map wholesale.
     released: BTreeMap<ContentHash, Vec<u8>>,
+    /// Reads a blob this endpoint does not hold, from wherever the composing
+    /// host keeps them. `None` means resources are exactly what was staged.
+    reader: Option<ResourceReader>,
+    /// What `reader` has produced, bounded by [`READ_CACHE_BUDGET`].
+    fetched: BTreeMap<ContentHash, Vec<u8>>,
+    /// Insertion order, for evicting the oldest first.
+    fetched_order: VecDeque<ContentHash>,
+    fetched_bytes: usize,
     instance_actions: Vec<BTreeSet<String>>,
     supplemental_cards: Vec<SupplementalCard>,
     /// Where an accepted transfer is recorded. `None` leaves the accept action
@@ -181,6 +201,10 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
             last_public_snapshot: None,
             resources: BTreeMap::new(),
             released: BTreeMap::new(),
+            reader: None,
+            fetched: BTreeMap::new(),
+            fetched_order: VecDeque::new(),
+            fetched_bytes: 0,
             instance_actions: Vec::new(),
             supplemental_cards: Vec::new(),
             decisions: None,
@@ -293,11 +317,56 @@ impl<S: IdentityStorage + 'static> IdentityEndpoint<S> {
 
     /// Identity resources first, then blobs released by an accepted transfer.
     /// Both are readable by an admitted browser; only the second was granted.
-    fn bytes_for(&self, resource: &ContentHash) -> Option<&[u8]> {
-        self.resources
-            .get(resource)
-            .or_else(|| self.released.get(resource))
-            .map(Vec::as_slice)
+    /// The bytes for a resource, reading through to the store if the endpoint
+    /// does not already hold them.
+    ///
+    /// Takes `&mut self` because a read populates the cache; both callers
+    /// already had `&mut self`. Staged and released blobs are answered without
+    /// touching the reader, so a transfer still costs nothing extra.
+    fn bytes_for(&mut self, resource: &ContentHash) -> Option<&[u8]> {
+        if self.resources.contains_key(resource) {
+            return self.resources.get(resource).map(Vec::as_slice);
+        }
+        if self.released.contains_key(resource) {
+            return self.released.get(resource).map(Vec::as_slice);
+        }
+        if !self.fetched.contains_key(resource) {
+            let bytes = (self.reader.as_ref()?)(resource)?;
+            self.admit_fetched(*resource, bytes);
+        }
+        self.fetched.get(resource).map(Vec::as_slice)
+    }
+
+    /// Cache a read blob, evicting oldest-first to stay inside the budget.
+    ///
+    /// Bounded rather than unbounded because the whole point of reading
+    /// through is that the store may hold far more than fits in memory; a
+    /// cache that grew without limit would reintroduce exactly the problem
+    /// the read-through solves.
+    fn admit_fetched(&mut self, resource: ContentHash, bytes: Vec<u8>) {
+        let size = bytes.len();
+        while self.fetched_bytes + size > READ_CACHE_BUDGET {
+            let Some(oldest) = self.fetched_order.pop_front() else {
+                break;
+            };
+            if let Some(dropped) = self.fetched.remove(&oldest) {
+                self.fetched_bytes -= dropped.len();
+            }
+        }
+        self.fetched_bytes += size;
+        self.fetched_order.push_back(resource);
+        self.fetched.insert(resource, bytes);
+    }
+
+    /// Read blobs this endpoint does not hold from the composing host's store.
+    ///
+    /// The endpoint deliberately does not know what a store is: it lives in
+    /// the `native` cone and the stores live in `web`/`personal-sync`, and the
+    /// resource trait is synchronous while a store read is not. So the
+    /// composer supplies a closure and decides how to bridge that (a
+    /// multi-thread runtime can use `block_in_place`).
+    pub fn with_reader(&mut self, reader: ResourceReader) {
+        self.reader = Some(reader);
     }
 
     pub fn host(&self) -> &Arc<PersonaeHost<S>> {
@@ -614,6 +683,86 @@ mod tests {
     use crate::identity_projection::{
         GenerateSshKeyIntentV1, SSH_GENERATE_INTENT, SshUnlockPolicyIntentV1,
     };
+
+    /// Content a card names but nothing staged is read through to the store.
+    /// This is what lets a receipt's captures be opened without holding every
+    /// capture in the graph resident.
+    #[test]
+    fn a_resource_absent_from_memory_is_read_through() {
+        let (mut endpoint, _) = endpoint_with_private_sentinel();
+        let bytes = b"capture pixels".to_vec();
+        let hash = ContentHash::of(&bytes);
+        let served = bytes.clone();
+        endpoint.with_reader(Box::new(move |asked| {
+            (*asked == hash).then(|| served.clone())
+        }));
+
+        let response = endpoint
+            .resource(ResourceRequest {
+                session: endpoint.session(),
+                resource: hash,
+            })
+            .expect("the store answers for a blob it holds");
+        assert_eq!(response.bytes, bytes);
+
+        // An unknown hash is still a miss: read-through must not invent bytes.
+        assert!(
+            endpoint
+                .resource(ResourceRequest {
+                    session: endpoint.session(),
+                    resource: ContentHash::of(b"never stored"),
+                })
+                .is_err()
+        );
+    }
+
+    /// Without a reader the endpoint serves exactly what was staged, which is
+    /// the behaviour every composer had before read-through existed.
+    #[test]
+    fn no_reader_means_no_invention() {
+        let (mut endpoint, _) = endpoint_with_private_sentinel();
+        assert!(
+            endpoint
+                .resource(ResourceRequest {
+                    session: endpoint.session(),
+                    resource: ContentHash::of(b"anything"),
+                })
+                .is_err()
+        );
+    }
+
+    /// The read cache is bounded, so browsing a large graph cannot grow
+    /// memory without limit.
+    #[test]
+    fn the_read_cache_evicts_oldest_first() {
+        let (mut endpoint, _) = endpoint_with_private_sentinel();
+        // Each blob is a quarter of the budget, so the fifth evicts the first.
+        let size = READ_CACHE_BUDGET / 4;
+        let blobs: Vec<Vec<u8>> = (0..5u8).map(|n| vec![n; size]).collect();
+        let table: Vec<(ContentHash, Vec<u8>)> = blobs
+            .iter()
+            .map(|b| (ContentHash::of(b), b.clone()))
+            .collect();
+        let lookup = table.clone();
+        endpoint.with_reader(Box::new(move |asked| {
+            lookup
+                .iter()
+                .find(|(hash, _)| hash == asked)
+                .map(|(_, bytes)| bytes.clone())
+        }));
+
+        for (hash, _) in &table {
+            endpoint.bytes_for(hash).expect("each blob reads through");
+        }
+        assert!(
+            endpoint.fetched_bytes <= READ_CACHE_BUDGET,
+            "the cache stayed inside its budget",
+        );
+        assert!(
+            !endpoint.fetched.contains_key(&table[0].0),
+            "the oldest was evicted to make room",
+        );
+    }
 
     fn endpoint_with_private_sentinel() -> (IdentityEndpoint<InMemoryStorage>, String) {
         let mut private =

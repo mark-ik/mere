@@ -46,28 +46,6 @@ pub(super) fn delegatee() -> Ed25519Keypair {
         .unwrap()
 }
 
-pub(super) fn sample_payload() -> DeviceGrantPayload {
-    let delegator = delegator();
-    let delegatee = delegatee();
-    let mut payload = DeviceGrantPayload::new_remote_auth(
-        fixture_device(),
-        DevicePublicKey::from(delegator.public_key()),
-        DevicePublicKey::from(delegatee.public_key()),
-        1_700_000_001,
-    );
-    payload.expires_at_ms = Some(1_800_000_001);
-    payload.personas.push(fixture_persona());
-    payload.scopes = vec!["identity.act".into(), "private.read".into()];
-    payload.attenuations = vec!["no-subdelegation".into()];
-    payload.wrapped_private_epochs.push(WrappedEpochMaterial {
-        persona_id: fixture_persona(),
-        epoch_id: fixture_epoch(),
-        wrap_format: "xchacha20poly1305-v1".into(),
-        wrapped_key: vec![0xde, 0xad, 0xbe, 0xef],
-    });
-    payload
-}
-
 pub(super) fn sample_remote_auth_spec() -> RemoteAuthGrantSpec {
     RemoteAuthGrantSpec {
         device_id: fixture_device(),
@@ -130,4 +108,24 @@ pub(super) fn sample_pairing_response() -> RemoteAuthPairingResponse {
         label: "Pocket relay".into(),
         exposure: DeviceExposure::ExposedEgress,
     }
+}
+
+#[cfg(test)]
+pub(super) fn stored_epochs_for(
+    data_root: &std::path::Path,
+    set: &identity::carry::DeviceGrantSet,
+    persona: identity::PersonaId,
+) -> Vec<WrappedEpochMaterial> {
+    let Some(certificate) = set.personas.get(&persona) else {
+        return Vec::new();
+    };
+    load_wrapped_epoch_record(data_root, certificate.certificate.id())
+        .expect("reading the epoch record")
+        .map(|record| record.epochs)
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+pub(super) fn all_certificates_verify(set: &identity::carry::DeviceGrantSet) -> bool {
+    !set.is_empty() && set.certificates().all(|certificate| certificate.verify())
 }

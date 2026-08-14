@@ -274,6 +274,16 @@ pub fn load_device_grant_set(data_root: &Path, device: DeviceId) -> io::Result<D
     Ok(set)
 }
 
+/// The device a certificate addresses, read back out of its scope resource.
+///
+/// `device_capability_scope` puts the device uuid's 16 bytes there, so this is
+/// the inverse. Returns `None` for a scope built by something else, which is
+/// how a certificate from a foreign domain fails closed here.
+pub fn certificate_device_id(certificate: &SignedDelegationCertificate) -> Option<DeviceId> {
+    let bytes: [u8; 16] = certificate.certificate.scope.resource.as_slice().try_into().ok()?;
+    Some(DeviceId::from_uuid(uuid::Uuid::from_bytes(bytes)))
+}
+
 /// Check the carriage invariant for one stored certificate.
 ///
 /// A certificate carrying `private.read` must have a wrapped-epoch record with

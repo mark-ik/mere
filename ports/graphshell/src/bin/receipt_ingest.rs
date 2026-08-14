@@ -135,7 +135,7 @@ async fn run(args: &Args) -> Result<(), ReceiptError> {
     match &args.inbox {
         Some(inbox) => {
             let deposited =
-                receipts::write_to_inbox(inbox, ingested.node, &ingested.events)?;
+                receipts::write_to_inbox(inbox, ingested.node, &args.dir, &ingested.events)?;
             println!("inbox   {}", deposited.display());
             println!("        the resident host authors it within ~10s");
         }

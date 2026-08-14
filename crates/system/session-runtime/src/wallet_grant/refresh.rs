@@ -54,36 +54,26 @@ pub(crate) fn refresh_remote_auth_private_read_grant(
     let Some(wrapping_key) = load_remote_auth_wrapping_key(data_root, device_id)? else {
         return Ok(None);
     };
-    let Some(existing_grant) = load_signed_device_grant(data_root, device_id)? else {
+    let grant = load_device_grant_set(data_root, device_id)?;
+    if grant.is_empty() {
         return Ok(None);
-    };
-    match verify_device_grant(&existing_grant)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
-    {
-        true => {}
-        false => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "signed device grant for {} failed signature verification",
-                    device_id.as_uuid()
-                ),
-            ));
-        }
     }
-    if !existing_grant
-        .payload
-        .scopes
-        .iter()
-        .any(|scope| scope == "private.read")
-    {
-        return Ok(None);
+    if !grant.certificates().all(|certificate| certificate.verify()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "device grant certificates for {} failed signature verification",
+                device_id.as_uuid()
+            ),
+        ));
     }
 
-    let mut payload = existing_grant.payload.clone();
     let mut changed = false;
     for &persona in rotated_personas {
-        if !payload.personas.contains(&persona) {
+        let Some(certificate) = grant.personas.get(&persona) else {
+            continue;
+        };
+        if !requires_epoch_material(certificate) {
             continue;
         }
         let Some(epoch) = load_current_private_epoch(data_root, persona)? else {
@@ -95,43 +85,26 @@ pub(crate) fn refresh_remote_auth_private_read_grant(
                 ),
             ));
         };
-        payload
-            .wrapped_private_epochs
-            .retain(|wrapped| wrapped.persona_id != persona);
-        payload.wrapped_private_epochs.push(
+        let id = certificate.certificate.id();
+        let mut record =
+            load_wrapped_epoch_record(data_root, id)?.unwrap_or_else(|| WrappedEpochRecord::new(id));
+        record.epochs.retain(|wrapped| wrapped.persona_id != persona);
+        record.epochs.push(
             wrap_private_epoch_material(persona, epoch.epoch_id, &epoch.epoch_secret, wrapping_key)
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?,
         );
+        save_wrapped_epoch_record(data_root, &record)?;
         changed = true;
     }
     if !changed {
         return Ok(None);
     }
 
-    let refreshed_grant = issue_device_grant(provider.master_keypair(), payload)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-    let grant_ref = save_signed_device_grant(data_root, &refreshed_grant)?;
-
-    let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
-    if let Some(device) = roster
-        .devices
-        .iter_mut()
-        .find(|record| record.device_id == device_id)
-    {
-        device.grant_ref = Some(grant_ref);
-    }
-    save_device_roster(data_root, &roster)?;
-
-    let mut identity_wallet = load_identity_wallet(data_root)?.unwrap_or_default();
-    upsert_grant_index(&mut identity_wallet, device_id, grant_ref);
-    identity_wallet.device_roster_ref = Some(device_roster_ref(&roster)?);
-    save_identity_wallet(data_root, &identity_wallet)?;
-    upsert_persona_capability_slots(
-        data_root,
-        &refreshed_grant.payload.personas,
-        device_id,
-        grant_ref,
-    )?;
+    // Nothing else is written. The capability statement did not change, so its
+    // certificate, its signature, and every ref standing for it are untouched.
+    // Under the old envelope this same rotation re-signed the grant and pushed
+    // a new grant_ref through the roster, the wallet index, and every persona
+    // capability slot.
     Ok(Some(device_id))
 }
 
@@ -236,7 +209,7 @@ mod tests {
             }],
         )
         .unwrap();
-        let second_grant_ref_before = device_grant_ref(&second_grant_before.0).unwrap();
+        let second_grant_ref_before = device_grant_set_ref(&second_grant_before.0);
 
         let outcome = revoke_remote_auth_device(&root, first_device).unwrap();
         assert_eq!(outcome.rotated_personas, vec![fixture_persona()]);
@@ -255,22 +228,20 @@ mod tests {
         );
         assert_ne!(refreshed_epoch.epoch_id, initial_epoch.epoch_id);
 
-        let refreshed_second_grant = load_signed_device_grant(&root, second_device)
-            .unwrap()
-            .expect("second grant should persist");
-        let refreshed_second_grant_ref = device_grant_ref(&refreshed_second_grant).unwrap();
+        let refreshed_second_grant = load_device_grant_set(&root, second_device).unwrap();
+        let refreshed_second_grant_ref = device_grant_set_ref(&refreshed_second_grant);
         assert_ne!(refreshed_second_grant_ref, second_grant_ref_before);
         assert_eq!(
-            refreshed_second_grant.payload.wrapped_private_epochs.len(),
+            stored_epochs_for(&root, &refreshed_second_grant, second_persona()).len(),
             1
         );
         assert_eq!(
-            refreshed_second_grant.payload.wrapped_private_epochs[0].epoch_id,
+            stored_epochs_for(&root, &refreshed_second_grant, second_persona())[0].epoch_id,
             refreshed_epoch.epoch_id
         );
         assert_eq!(
             unwrap_private_epoch_material(
-                &refreshed_second_grant.payload.wrapped_private_epochs[0],
+                &stored_epochs_for(&root, &refreshed_second_grant, second_persona())[0],
                 second_grant_before.1.wrapping_key,
             )
             .unwrap(),
@@ -406,11 +377,9 @@ mod tests {
         assert_eq!(restored_epoch.epoch_id, delegator_epoch.epoch_id);
         assert_eq!(restored_epoch.epoch_secret, delegator_epoch.epoch_secret);
 
-        let restored_grant = load_signed_device_grant(&delegatee_root, second_device)
-            .unwrap()
-            .expect("delegatee grant should persist");
+        let restored_grant = load_device_grant_set(&delegatee_root, second_device).unwrap();
         assert_eq!(
-            restored_grant.payload.wrapped_private_epochs[0].epoch_id,
+            stored_epochs_for(&delegatee_root, &restored_grant, fixture_persona())[0].epoch_id,
             delegator_epoch.epoch_id
         );
 

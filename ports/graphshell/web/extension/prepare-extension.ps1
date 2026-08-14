@@ -15,6 +15,7 @@ New-Item -ItemType Directory -Path $destinationPath -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $scriptRoot "background.js") -Destination $destinationPath
 Copy-Item -LiteralPath (Join-Path $scriptRoot "capture-model.js") -Destination $destinationPath
 Copy-Item -LiteralPath (Join-Path $scriptRoot "action-form.js") -Destination $destinationPath
+Copy-Item -LiteralPath (Join-Path $scriptRoot "resource-chunk.js") -Destination $destinationPath
 Copy-Item -LiteralPath (Join-Path $scriptRoot "bridge.html") -Destination $destinationPath
 Copy-Item -LiteralPath (Join-Path $scriptRoot "bridge.css") -Destination $destinationPath
 Copy-Item -LiteralPath (Join-Path $scriptRoot "bridge.js") -Destination $destinationPath

@@ -26,25 +26,28 @@ pub fn build_remote_auth_enrollment_bundle(
             format!("device {} is revoked", device_id.as_uuid()),
         ));
     }
-    let grant = load_signed_device_grant(data_root, device_id)?.ok_or_else(|| {
-        io::Error::new(
+    let grant = load_device_grant_set(data_root, device_id)?;
+    if grant.is_empty() {
+        return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("signed device grant missing for {}", device_id.as_uuid()),
-        )
-    })?;
-    match verify_device_grant(&grant)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
-    {
-        true => {}
-        false => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "signed device grant failed signature verification",
-            ));
+            format!("device grant certificates missing for {}", device_id.as_uuid()),
+        ));
+    }
+    if !grant.certificates().all(|certificate| certificate.verify()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "device grant certificate failed signature verification",
+        ));
+    }
+    let granted_personas: Vec<PersonaId> = grant.personas.keys().copied().collect();
+    let mut epochs = Vec::new();
+    for certificate in grant.personas.values() {
+        if let Some(record) = load_wrapped_epoch_record(data_root, certificate.certificate.id())? {
+            epochs.push(record);
         }
     }
-    let mut persona_wallets = Vec::with_capacity(grant.payload.personas.len());
-    for &persona in &grant.payload.personas {
+    let mut persona_wallets = Vec::with_capacity(granted_personas.len());
+    for &persona in &granted_personas {
         let wallet = load_persona_wallet(data_root, persona)?.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
@@ -54,6 +57,7 @@ pub fn build_remote_auth_enrollment_bundle(
         persona_wallets.push(wallet);
     }
     Ok(RemoteAuthEnrollmentBundle {
+        epochs,
         schema_version: REMOTE_AUTH_ENROLLMENT_BUNDLE_SCHEMA_VERSION,
         ticket_id: None,
         grant,
@@ -110,18 +114,21 @@ pub(crate) fn install_remote_auth_enrollment_bundle_inner(
         )
     })?;
 
-    let grant_ref = save_signed_device_grant(data_root, &bundle.grant)?;
+    let grant_ref = save_device_grant_set(data_root, local.device_id, &bundle.grant)?;
+    for record in &bundle.epochs {
+        save_wrapped_epoch_record(data_root, record)?;
+    }
     for wallet in &bundle.persona_wallets {
         save_persona_wallet(data_root, wallet)?;
     }
-    if !bundle.grant.payload.wrapped_private_epochs.is_empty() {
+    if !bundle.epochs.is_empty() {
         let wrapping_key = wrapping_key.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "remote-auth enrollment bundle carries wrapped private epochs; install needs the pairing-derived wrapping key",
             )
         })?;
-        restore_wrapped_private_epochs(data_root, &bundle.grant, wrapping_key)?;
+        restore_wrapped_private_epochs(data_root, &bundle.epochs, wrapping_key)?;
     }
 
     let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
@@ -151,8 +158,8 @@ pub(crate) fn install_remote_auth_enrollment_bundle_inner(
     save_identity_wallet(data_root, &identity_wallet)?;
     upsert_persona_capability_slots(
         data_root,
-        &bundle.grant.payload.personas,
-        bundle.grant.payload.device_id,
+        &bundle.grant.personas.keys().copied().collect::<Vec<_>>(),
+        local.device_id,
         grant_ref,
     )?;
     Ok(())
@@ -160,10 +167,10 @@ pub(crate) fn install_remote_auth_enrollment_bundle_inner(
 
 pub(crate) fn restore_wrapped_private_epochs(
     data_root: &Path,
-    grant: &SignedDeviceGrant,
+    records: &[WrappedEpochRecord],
     wrapping_key: [u8; 32],
 ) -> io::Result<()> {
-    for wrapped in &grant.payload.wrapped_private_epochs {
+    for wrapped in records.iter().flat_map(|record| &record.epochs) {
         let epoch_secret = unwrap_private_epoch_material(wrapped, wrapping_key)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
         stage_persona_private_epoch(
@@ -189,7 +196,17 @@ mod tests {
         let bundle = RemoteAuthEnrollmentBundle {
             schema_version: REMOTE_AUTH_ENROLLMENT_BUNDLE_SCHEMA_VERSION,
             ticket_id: Some(Uuid::from_u128(0xfeed)),
-            grant: issue_device_grant(&delegator(), sample_payload()).unwrap(),
+            grant: identity::carry::issue_device_grant_set(
+                [21; 32],
+                fixture_device(),
+                DevicePublicKey::from(delegatee().public_key()),
+                &["identity.act", "private.read"],
+                &[fixture_persona()],
+                100_000,
+                1_700_000_001,
+            )
+            .unwrap(),
+            epochs: Vec::new(),
             persona_wallets: vec![PersonaWalletManifest::new(
                 fixture_persona(),
                 chain_root,
@@ -280,10 +297,8 @@ mod tests {
 
         install_remote_auth_enrollment_bundle(&delegatee_root, &bundle).unwrap();
 
-        let restored_grant = load_signed_device_grant(&delegatee_root, local.device_id)
-            .unwrap()
-            .expect("delegatee grant should persist");
-        let grant_ref = device_grant_ref(&restored_grant).unwrap();
+        let restored_grant = load_device_grant_set(&delegatee_root, local.device_id).unwrap();
+        let grant_ref = device_grant_set_ref(&restored_grant);
         assert_eq!(restored_grant, grant);
 
         let restored_wallet =

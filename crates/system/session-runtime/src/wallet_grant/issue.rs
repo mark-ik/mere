@@ -7,6 +7,7 @@
 use std::io;
 use std::path::Path;
 
+use identity::carry::{DeviceGrantSet, issue_device_grant_set};
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
 use crate::wallet_store::*;
@@ -128,7 +129,7 @@ pub(crate) fn store_wrapped_epochs(
 pub fn issue_remote_auth_device_grant_from_pairing(
     data_root: &Path,
     spec: &PairedRemoteAuthGrantSpec,
-) -> io::Result<(SignedDeviceGrant, RemoteAuthPairingMaterial)> {
+) -> io::Result<(DeviceGrantSet, RemoteAuthPairingMaterial)> {
     validate_paired_remote_auth_spec(data_root, spec)?;
 
     let seed = load_identity_seed(data_root)?.ok_or_else(|| {
@@ -188,7 +189,7 @@ pub fn issue_remote_auth_device_grant_from_ticket(
     ticket: &RemoteAuthPairingTicket,
     response: &RemoteAuthPairingResponse,
     private_epochs: Vec<PrivateEpochPlaintext>,
-) -> io::Result<(SignedDeviceGrant, RemoteAuthPairingMaterial)> {
+) -> io::Result<(DeviceGrantSet, RemoteAuthPairingMaterial)> {
     let now_ms = unix_time_ms()?;
     if is_expired(ticket.expires_at_ms, now_ms) {
         return Err(io::Error::new(
@@ -243,17 +244,15 @@ mod tests {
         let mut spec = sample_remote_auth_spec();
         spec.wrapped_private_epochs = vec![wrapped];
         let grant = issue_remote_auth_device_grant(&root, &spec).unwrap();
-        assert!(verify_device_grant(&grant).unwrap());
+        assert!(all_certificates_verify(&grant));
         assert_eq!(
-            unwrap_private_epoch_material(&grant.payload.wrapped_private_epochs[0], wrapping_key)
+            unwrap_private_epoch_material(&stored_epochs_for(&root, &grant, fixture_persona())[0], wrapping_key)
                 .unwrap(),
             b"private-epoch-seed".to_vec()
         );
 
-        let restored = load_signed_device_grant(&root, spec.device_id)
-            .unwrap()
-            .expect("grant should persist");
-        let grant_ref = device_grant_ref(&restored).unwrap();
+        let restored = load_device_grant_set(&root, spec.device_id).unwrap();
+        let grant_ref = device_grant_set_ref(&restored);
 
         let roster = crate::wallet_store::load_device_roster(&root)
             .unwrap()
@@ -315,9 +314,7 @@ mod tests {
         let error = issue_remote_auth_device_grant(&root, &spec).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
         assert!(
-            load_signed_device_grant(&root, spec.device_id)
-                .unwrap()
-                .is_none()
+            load_device_grant_set(&root, spec.device_id).unwrap().is_empty()
         );
 
         let _ = std::fs::remove_dir_all(&root);
@@ -342,7 +339,7 @@ mod tests {
             wrapped_private_epochs: Vec::new(),
         };
         let grant = issue_remote_auth_device_grant(&root, &spec).unwrap();
-        let grant_ref = device_grant_ref(&grant).unwrap();
+        let grant_ref = device_grant_set_ref(&grant);
 
         for persona in [fixture_persona(), second_persona()] {
             let wallet = crate::wallet_store::load_persona_wallet(&root, persona)
@@ -364,11 +361,11 @@ mod tests {
 
         let spec = sample_paired_remote_auth_spec();
         let (grant, pairing) = issue_remote_auth_device_grant_from_pairing(&root, &spec).unwrap();
-        assert!(verify_device_grant(&grant).unwrap());
+        assert!(all_certificates_verify(&grant));
         assert_eq!(pairing.short_auth_string.len(), 6);
         assert_eq!(
             unwrap_private_epoch_material(
-                &grant.payload.wrapped_private_epochs[0],
+                &stored_epochs_for(&root, &grant, fixture_persona())[0],
                 pairing.wrapping_key
             )
             .unwrap(),
@@ -422,7 +419,7 @@ mod tests {
         }];
         let (grant, pairing) =
             issue_remote_auth_device_grant_from_ticket(&root, &ticket, &response, epochs).unwrap();
-        assert!(verify_device_grant(&grant).unwrap());
+        assert!(all_certificates_verify(&grant));
         assert_eq!(
             parse_remote_auth_pairing_code(&format_remote_auth_pairing_code(ticket.pairing_secret))
                 .unwrap(),
@@ -430,7 +427,7 @@ mod tests {
         );
         assert_eq!(
             unwrap_private_epoch_material(
-                &grant.payload.wrapped_private_epochs[0],
+                &stored_epochs_for(&root, &grant, fixture_persona())[0],
                 pairing.wrapping_key
             )
             .unwrap(),

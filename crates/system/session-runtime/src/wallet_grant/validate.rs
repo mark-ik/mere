@@ -83,16 +83,21 @@ pub(crate) fn validate_remote_auth_enrollment_bundle(
     data_root: &Path,
     bundle: &RemoteAuthEnrollmentBundle,
 ) -> io::Result<()> {
-    match verify_device_grant(&bundle.grant)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
+    if bundle.grant.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "remote-auth enrollment bundle carries no grant certificates",
+        ));
+    }
+    if !bundle
+        .grant
+        .certificates()
+        .all(|certificate| certificate.verify())
     {
-        true => {}
-        false => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "remote-auth enrollment bundle grant failed signature verification",
-            ));
-        }
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "remote-auth enrollment bundle grant failed signature verification",
+        ));
     }
 
     let local = load_local_device_identity(data_root)?.ok_or_else(|| {
@@ -101,37 +106,56 @@ pub(crate) fn validate_remote_auth_enrollment_bundle(
             "local delegated-device identity missing; generate a pairing response first",
         )
     })?;
-    if bundle.grant.payload.device_id != local.device_id {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!(
-                "grant targets device {}, but local delegated identity is {}",
-                bundle.grant.payload.device_id.as_uuid(),
-                local.device_id.as_uuid()
-            ),
-        ));
+    // Every certificate in the set must address this device and name this
+    // holder. The old envelope carried one device id and one delegatee for the
+    // whole grant; a set has to be checked member by member, or one stray
+    // certificate would ride in on the others' validity.
+    for certificate in bundle.grant.certificates() {
+        match certificate_device_id(certificate) {
+            Some(device) if device == local.device_id => {}
+            Some(device) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "grant targets device {}, but local delegated identity is {}",
+                        device.as_uuid(),
+                        local.device_id.as_uuid()
+                    ),
+                ));
+            }
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "grant certificate does not address a device",
+                ));
+            }
+        }
+        if certificate.certificate.subject != local.public_key().0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "grant subject does not match the local delegated-device identity",
+            ));
+        }
     }
-    if bundle.grant.payload.delegatee_pubkey != local.public_key() {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "grant delegatee pubkey does not match the local delegated-device identity",
-        ));
-    }
-    if is_expired(bundle.grant.payload.expires_at_ms, unix_time_ms()?) {
+    let earliest_expiry = bundle
+        .grant
+        .certificates()
+        .filter_map(|certificate| certificate.certificate.expires_at_ms)
+        .min();
+    if is_expired(earliest_expiry, unix_time_ms()?) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             format!(
                 "remote-auth enrollment grant for device {} is expired",
-                bundle.grant.payload.device_id.as_uuid()
+                local.device_id.as_uuid()
             ),
         ));
     }
 
     let grant_personas: BTreeSet<_> = bundle
         .grant
-        .payload
         .personas
-        .iter()
+        .keys()
         .map(|persona| *persona.as_uuid())
         .collect();
     let bundled_personas: BTreeSet<_> = bundle

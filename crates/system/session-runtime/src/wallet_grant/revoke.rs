@@ -11,6 +11,8 @@ use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider, PersonaId};
 
 use crate::wallet_store::*;
 
+use identity::carry::DeviceGrantSet;
+
 use super::*;
 
 /// Revoke one delegated remote-auth device, clear its active persona wallet
@@ -20,22 +22,18 @@ pub fn revoke_remote_auth_device(
     data_root: &Path,
     device_id: DeviceId,
 ) -> io::Result<RemoteAuthRevocationOutcome> {
-    let grant = load_signed_device_grant(data_root, device_id)?.ok_or_else(|| {
-        io::Error::new(
+    let grant = load_device_grant_set(data_root, device_id)?;
+    if grant.is_empty() {
+        return Err(io::Error::new(
             io::ErrorKind::NotFound,
-            format!("signed device grant missing for {}", device_id.as_uuid()),
-        )
-    })?;
-    match verify_device_grant(&grant)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?
-    {
-        true => {}
-        false => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "signed device grant failed signature verification",
-            ));
-        }
+            format!("device grant certificates missing for {}", device_id.as_uuid()),
+        ));
+    }
+    if !grant.certificates().all(|certificate| certificate.verify()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "device grant certificate failed signature verification",
+        ));
     }
 
     let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
@@ -68,7 +66,7 @@ pub fn revoke_remote_auth_device(
     identity_wallet.device_roster_ref = Some(device_roster_ref(&roster)?);
     save_identity_wallet(data_root, &identity_wallet)?;
 
-    let rotated_personas = revoke_persona_grant_access(data_root, &grant)?;
+    let rotated_personas = revoke_persona_grant_access(data_root, device_id, &grant)?;
     remove_remote_auth_wrapping_key(data_root, device_id)?;
     let refreshed_devices = refresh_remote_auth_private_read_grants(data_root, &rotated_personas)?;
     Ok(RemoteAuthRevocationOutcome {
@@ -81,16 +79,17 @@ pub fn revoke_remote_auth_device(
 
 pub(crate) fn revoke_persona_grant_access(
     data_root: &Path,
-    grant: &SignedDeviceGrant,
+    device_id: DeviceId,
+    grant: &DeviceGrantSet,
 ) -> io::Result<Vec<PersonaId>> {
-    let slot_id = remote_auth_capability_slot_id(grant.payload.device_id);
-    let private_read = grant
-        .payload
-        .scopes
-        .iter()
-        .any(|scope| scope == "private.read");
+    let slot_id = remote_auth_capability_slot_id(device_id);
+    // Whether a persona's private lane was exposed is now a per-certificate
+    // question, not one flag for the whole grant: revoking a device that could
+    // read one persona's private lane and only act for another must rotate the
+    // first and leave the second alone.
     let mut rotated_personas = Vec::new();
-    for &persona in &grant.payload.personas {
+    for (&persona, certificate) in &grant.personas {
+        let private_read = requires_epoch_material(certificate);
         let mut wallet = load_persona_wallet(data_root, persona)?.ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
@@ -108,13 +107,17 @@ pub(crate) fn revoke_persona_grant_access(
             }
         }
 
+        // The epochs the device actually holds now live in the record keyed by
+        // this persona's certificate, so ask that record rather than the grant.
+        let held = load_wrapped_epoch_record(data_root, certificate.certificate.id())?;
         let should_rotate = private_read
-            && grant
-                .payload
-                .wrapped_private_epochs
-                .iter()
-                .filter(|epoch| epoch.persona_id == persona)
-                .any(|epoch| wallet.private_epoch_head == epoch.epoch_id);
+            && held.is_some_and(|record| {
+                record
+                    .epochs
+                    .iter()
+                    .filter(|epoch| epoch.persona_id == persona)
+                    .any(|epoch| wallet.private_epoch_head == epoch.epoch_id)
+            });
         let next_epoch = if should_rotate {
             let next_epoch = KeyEpochId::new();
             wallet.private_epoch_head = next_epoch;
@@ -181,7 +184,7 @@ mod tests {
             ],
         };
         let grant = issue_remote_auth_device_grant(&root, &spec).unwrap();
-        let grant_ref = device_grant_ref(&grant).unwrap();
+        let grant_ref = device_grant_set_ref(&grant);
 
         let outcome = revoke_remote_auth_device(&root, spec.device_id).unwrap();
         assert!(!outcome.already_revoked);
@@ -292,10 +295,17 @@ mod tests {
         crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC").unwrap();
 
         let copy_device = DeviceId::new();
-        let mut payload = sample_payload();
-        payload.device_id = copy_device;
-        let grant = issue_device_grant(&delegator(), payload).unwrap();
-        save_signed_device_grant(&root, &grant).unwrap();
+        let grant = identity::carry::issue_device_grant_set(
+            [21; 32],
+            copy_device,
+            DevicePublicKey::from(delegatee().public_key()),
+            &["identity.act", "private.read"],
+            &[fixture_persona()],
+            100_000,
+            1_700_000_001,
+        )
+        .unwrap();
+        save_device_grant_set(&root, copy_device, &grant).unwrap();
 
         let mut roster = crate::wallet_store::load_device_roster(&root)
             .unwrap()

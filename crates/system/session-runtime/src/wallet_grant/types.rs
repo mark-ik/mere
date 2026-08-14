@@ -4,6 +4,9 @@
 //! The wire shapes: grant payloads and signatures, pairing tickets and
 //! responses, enrollment bundles, and the specs the flows take as input.
 
+use identity::carry::DeviceGrantSet;
+
+use super::WrappedEpochRecord;
 use identity::{Ed25519Signature, PersonaId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -23,86 +26,6 @@ pub struct WrappedEpochMaterial {
     pub wrap_format: String,
     /// Opaque wrapped key bytes. The pairing flow fills these later.
     pub wrapped_key: Vec<u8>,
-}
-
-/// The signed remote-auth grant payload.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DeviceGrantPayload {
-    pub schema_version: u32,
-    pub device_id: DeviceId,
-    pub delegator_pubkey: DevicePublicKey,
-    pub delegatee_pubkey: DevicePublicKey,
-    pub issued_at_ms: u64,
-    #[serde(default)]
-    pub expires_at_ms: Option<u64>,
-    /// The persona set this device may act for.
-    #[serde(default)]
-    pub personas: Vec<PersonaId>,
-    /// Named scope atoms. Examples: `identity.act`, `private.read`,
-    /// `transport.egress`.
-    #[serde(default)]
-    pub scopes: Vec<String>,
-    /// Named attenuation atoms. Examples: `no-subdelegation`,
-    /// `sync-membership-only`.
-    #[serde(default)]
-    pub attenuations: Vec<String>,
-    /// The wrapped private-lane epoch material the device needs to read
-    /// already-issued private content without receiving the master seed.
-    #[serde(default)]
-    pub wrapped_private_epochs: Vec<WrappedEpochMaterial>,
-}
-
-impl DeviceGrantPayload {
-    /// Build a remote-auth payload with no expiry, attenuation, or wrapped key
-    /// material yet. The pairing flow fills those later.
-    pub fn new_remote_auth(
-        device_id: DeviceId,
-        delegator_pubkey: DevicePublicKey,
-        delegatee_pubkey: DevicePublicKey,
-        issued_at_ms: u64,
-    ) -> Self {
-        Self {
-            schema_version: DEVICE_GRANT_SCHEMA_VERSION,
-            device_id,
-            delegator_pubkey,
-            delegatee_pubkey,
-            issued_at_ms,
-            expires_at_ms: None,
-            personas: Vec::new(),
-            scopes: Vec::new(),
-            attenuations: Vec::new(),
-            wrapped_private_epochs: Vec::new(),
-        }
-    }
-}
-
-/// Stored signature bytes over the canonical CBOR payload.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct DeviceGrantSignature(pub Vec<u8>);
-
-impl DeviceGrantSignature {
-    pub fn to_signature(&self) -> Result<Ed25519Signature, DeviceGrantError> {
-        let bytes: [u8; 64] = self
-            .0
-            .as_slice()
-            .try_into()
-            .map_err(|_| DeviceGrantError::InvalidSignatureLength)?;
-        Ok(Ed25519Signature::from_bytes(&bytes))
-    }
-}
-
-impl From<Ed25519Signature> for DeviceGrantSignature {
-    fn from(value: Ed25519Signature) -> Self {
-        Self(value.to_bytes().to_vec())
-    }
-}
-
-/// One signed device grant stored at `identity/grants/<device_id>.cbor`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SignedDeviceGrant {
-    pub payload: DeviceGrantPayload,
-    pub signature: DeviceGrantSignature,
 }
 
 /// Inputs for issuing and persisting one remote-auth device grant.
@@ -176,7 +99,14 @@ pub struct RemoteAuthEnrollmentBundle {
     /// delegatee to recover the cached PAKE-derived wrapping key path.
     #[serde(default)]
     pub ticket_id: Option<Uuid>,
-    pub grant: SignedDeviceGrant,
+    pub grant: DeviceGrantSet,
+    /// The wrapped epoch records the grant's persona certificates authorise.
+    ///
+    /// Carried beside the certificates rather than inside them, so the
+    /// delegatee receives key material without the capability statement having
+    /// to be re-signed every time an epoch rotates.
+    #[serde(default)]
+    pub epochs: Vec<WrappedEpochRecord>,
     #[serde(default)]
     pub persona_wallets: Vec<PersonaWalletManifest>,
 }

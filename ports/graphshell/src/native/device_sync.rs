@@ -376,10 +376,28 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         paired_devices,
         identity.master_public_key().to_bytes(),
     );
+    // The read-through into the replicating store. `block_in_place` because
+    // the resource trait a session serves is synchronous while a store read is
+    // not; this runs on the multi-thread runtime the resident host already
+    // uses, so the blocking call moves off the async worker rather than
+    // stalling it.
+    let reader_host = Arc::clone(&host);
+    let blob_reader: Arc<crate::native::device_broker::BlobReader> =
+        Arc::new(move |resource: &graphshell_protocol::ContentHash| {
+            let host = Arc::clone(&reader_host);
+            let hash = transport::BlobHash::from_bytes(resource.0);
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current()
+                    .block_on(async { host.blobs().get_bytes(hash).await })
+                    .ok()
+                    .map(|bytes| bytes.to_vec())
+            })
+        });
     let surface: DeviceSurfaceHandle = Arc::new(tokio::sync::RwLock::new(DeviceSurface {
         cards: host.supplemental_cards().await?,
         released_blobs: Vec::new(),
         decisions: Default::default(),
+        blob_reader: Some(blob_reader),
     }));
     spawn_card_refresh(Arc::clone(&host), Arc::clone(&surface));
     spawn_receipt_intake(Arc::clone(&host), crate::receipts::inbox_dir(&data_root));
@@ -869,6 +887,51 @@ fn spawn_card_refresh(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle)
     });
 }
 
+/// Put a receipt's captures into the store that replicates.
+///
+/// Ingest computes the hashes anywhere; only the host can put bytes in the
+/// transport store its peers fetch from, which is why this is here and not in
+/// the CLI. Verifies each file against the hash the graph is about to claim,
+/// so a receipt cannot advertise a blob whose bytes say something else.
+async fn stage_captures(
+    host: &PersonalSyncHost,
+    receipt: &crate::receipts::PendingReceipt,
+) -> Result<usize, String> {
+    let captures = crate::receipts::captures_in(&receipt.events);
+    let mut staged = 0;
+    for (name, expected) in captures {
+        // Already staged (a re-poll, or the same capture from another run):
+        // skip rather than re-read and re-put. A store error here is reported
+        // rather than treated as absent, so a broken store does not look like
+        // an endless supply of missing blobs.
+        if host
+            .blobs()
+            .has(transport::BlobHash::from_bytes(expected))
+            .await
+            .map_err(|error| format!("{name}: {error}"))?
+        {
+            continue;
+        }
+        let path = receipt.source.join(&name);
+        let bytes = std::fs::read(&path)
+            .map_err(|error| format!("{}: {error}", path.display()))?;
+        let hash = host
+            .blobs()
+            .put_bytes(bytes)
+            .await
+            .map_err(|error| format!("{name}: {error}"))?;
+        if hash.as_bytes() != &expected {
+            return Err(format!(
+                "{name}: bytes hash to {} but the receipt claims {}",
+                owner_settings::hex32(hash.as_bytes()),
+                owner_settings::hex32(&expected),
+            ));
+        }
+        staged += 1;
+    }
+    Ok(staged)
+}
+
 /// How often the host looks for receipts deposited by `receipt_ingest`.
 ///
 /// Slow on purpose: a receipt arrives when a person runs a scenario on another
@@ -896,6 +959,29 @@ fn spawn_receipt_intake(host: Arc<PersonalSyncHost>, inbox: PathBuf) {
             };
             for receipt in waiting {
                 let events = receipt.events.len();
+                // Stage the capture bytes into the store that replicates
+                // BEFORE authoring. The events include availability facts
+                // saying this device holds these blobs, and a peer acts on
+                // those by fetching; authoring first would advertise captures
+                // no peer could ever receive. A capture that cannot be staged
+                // is fatal for this receipt rather than skipped, for the same
+                // reason: a half-staged receipt makes a claim it cannot meet.
+                match stage_captures(&host, &receipt).await {
+                    Ok(0) => {}
+                    Ok(staged) => tracing::info!(
+                        staged,
+                        path = %receipt.path.display(),
+                        "staged receipt captures into the replicating store"
+                    ),
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            path = %receipt.path.display(),
+                            "could not stage a receipt's captures; leaving it pending"
+                        );
+                        continue;
+                    }
+                }
                 match host.author(receipt.events).await {
                     Ok(()) => {
                         // Only now: a file cleared before the turn succeeded

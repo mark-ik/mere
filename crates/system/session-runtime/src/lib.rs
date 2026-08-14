@@ -214,25 +214,22 @@ pub use switcher_thumbnail::{
 };
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
 pub use wallet_grant::{
-    DEVICE_GRANT_SCHEMA_VERSION, DeviceGrantError, DeviceGrantPayload, DeviceGrantSignature,
-    EnrollmentBundleError, PairedRemoteAuthGrantSpec, PairingCodeError, PairingMaterialError,
+    DEVICE_GRANT_SCHEMA_VERSION, DeviceGrantError, EnrollmentBundleError, PairedRemoteAuthGrantSpec, PairingCodeError, PairingMaterialError,
     PairingTicketError, PrivateEpochPlaintext, REMOTE_AUTH_ENROLLMENT_BUNDLE_SCHEMA_VERSION,
     REMOTE_AUTH_PAIRING_SAS_CONTEXT_V1, REMOTE_AUTH_PAIRING_SECRET_LEN,
     REMOTE_AUTH_PAIRING_TICKET_SCHEMA_VERSION, REMOTE_AUTH_PAIRING_WRAP_CONTEXT_V1,
     RemoteAuthEnrollmentBundle, RemoteAuthGrantSpec, RemoteAuthPairingMaterial,
     RemoteAuthPairingResponse, RemoteAuthPairingTicket, RemoteAuthPairingTicketRequest,
-    RemoteAuthRevocationOutcome, SignedDeviceGrant, WRAPPED_PRIVATE_EPOCH_FORMAT_V1,
+    RemoteAuthRevocationOutcome, WRAPPED_PRIVATE_EPOCH_FORMAT_V1,
     WrappedEpochError, WrappedEpochMaterial, build_remote_auth_enrollment_bundle,
     decode_remote_auth_enrollment_bundle, decode_remote_auth_pairing_ticket,
-    decode_signed_device_grant, derive_remote_auth_pairing_material, device_grant_ref,
-    encode_remote_auth_enrollment_bundle, encode_remote_auth_pairing_ticket,
-    encode_signed_device_grant, format_remote_auth_pairing_code,
+    derive_remote_auth_pairing_material, encode_remote_auth_enrollment_bundle, encode_remote_auth_pairing_ticket,
+    format_remote_auth_pairing_code,
     install_remote_auth_enrollment_bundle, install_remote_auth_enrollment_bundle_with_wrapping_key,
-    issue_device_grant, issue_remote_auth_device_grant,
+    issue_remote_auth_device_grant,
     issue_remote_auth_device_grant_from_pairing, issue_remote_auth_device_grant_from_ticket,
-    load_signed_device_grant, mint_remote_auth_pairing_ticket, parse_remote_auth_pairing_code,
-    revoke_remote_auth_device, save_signed_device_grant, signed_device_grant_path,
-    unwrap_private_epoch_material, verify_device_grant, wrap_private_epoch_material,
+    mint_remote_auth_pairing_ticket, parse_remote_auth_pairing_code,
+    revoke_remote_auth_device, unwrap_private_epoch_material, wrap_private_epoch_material,
 };
 pub use wallet_store::{
     CapabilitySlotRef, DEVICE_ROSTER_FILENAME, DeviceExposure, DeviceGrantRef, DeviceId,

@@ -158,7 +158,7 @@ pub fn issue_persona_device_grant(
 /// Both halves are optional and a real grant often has only one. A sited radio
 /// carries `device` alone; a grant that only lets a laptop act as two personae
 /// carries two `personas` entries and no `device`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DeviceGrantSet {
     /// Device-wide authority, issued by the master.
     pub device: Option<SignedDelegationCertificate>,

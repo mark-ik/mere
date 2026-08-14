@@ -3,15 +3,18 @@
 //! Ingest can happen anywhere — a CLI, a test, a future importer — but
 //! **authoring belongs to the resident host alone**, because it holds the
 //! signing identity and the log. So ingest deposits an events file in an
-//! inbox and this picks it up. The file is the hand-off, and it is a plain
-//! JSON array so an owner can read what is about to be authored on their
-//! behalf before it is.
+//! inbox and this picks it up. The file is the hand-off: readable JSON, so
+//! an owner can see what is about to be authored on their behalf, and it
+//! names the source directory because staging the capture bytes into the
+//! replicating store is the host's job, not ingest's.
 //!
 //! Everything here is ordinary library code with tests rather than logic
 //! reachable only by running the host, which is the same reason
 //! `device_sync`'s settings and pairing work sits beside it.
 
 use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
 
 use crate::personal_sync::PersonalGraphEvent;
 
@@ -27,13 +30,71 @@ fn applied_dir(inbox: &Path) -> PathBuf {
     inbox.join("applied")
 }
 
+/// What a deposited receipt hands the host.
+///
+/// Carries the source directory as well as the events, because the bytes are
+/// the host's job: ingest can compute a capture's hash anywhere, but only the
+/// host can put it in the store that replicates. A receipt whose availability
+/// facts named blobs the host never held would advertise captures no peer
+/// could ever fetch.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct InboxEntry {
+    /// The receipt directory the artifacts can be read from.
+    pub source: PathBuf,
+    /// The events to author, in the order ingest produced them.
+    pub events: Vec<PersonalGraphEvent>,
+}
+
 /// One receipt waiting to be authored.
 #[derive(Clone, Debug)]
 pub struct PendingReceipt {
     /// The file it came from.
     pub path: PathBuf,
+    /// Where its artifact bytes live.
+    pub source: PathBuf,
     /// The events to author, in the order ingest produced them.
     pub events: Vec<PersonalGraphEvent>,
+}
+
+/// The captures an entry's events refer to, as `(file name, blake3)`.
+///
+/// Read back out of the artifacts facet rather than passed alongside it, so
+/// there is one statement of what a receipt's captures are and the host
+/// stages exactly what the graph will claim.
+pub fn captures_in(events: &[PersonalGraphEvent]) -> Vec<(String, [u8; 32])> {
+    let mut found = Vec::new();
+    for event in events {
+        let PersonalGraphEvent::SetFacet { facet, value, .. } = event else {
+            continue;
+        };
+        if facet != crate::receipts::FACET_ARTIFACTS {
+            continue;
+        }
+        let Some(items) = value.as_array() else { continue };
+        for item in items {
+            let (Some(name), Some(hex)) = (
+                item.get("name").and_then(|v| v.as_str()),
+                item.get("blake3").and_then(|v| v.as_str()),
+            ) else {
+                continue;
+            };
+            if let Some(hash) = parse_hex32(hex) {
+                found.push((name.to_string(), hash));
+            }
+        }
+    }
+    found
+}
+
+fn parse_hex32(hex: &str) -> Option<[u8; 32]> {
+    if hex.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (index, pair) in hex.as_bytes().chunks_exact(2).enumerate() {
+        out[index] = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+    }
+    Some(out)
 }
 
 /// Deposit a receipt's events for the resident host to author.
@@ -43,11 +104,16 @@ pub struct PendingReceipt {
 pub fn write_to_inbox(
     inbox: &Path,
     node: uuid::Uuid,
+    source: &Path,
     events: &[PersonalGraphEvent],
 ) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(inbox)?;
     let path = inbox.join(format!("{node}.json"));
-    let json = serde_json::to_string_pretty(events).map_err(std::io::Error::other)?;
+    let entry = InboxEntry {
+        source: source.to_path_buf(),
+        events: events.to_vec(),
+    };
+    let json = serde_json::to_string_pretty(&entry).map_err(std::io::Error::other)?;
     std::fs::write(&path, json)?;
     Ok(path)
 }
@@ -69,8 +135,12 @@ pub fn pending(inbox: &Path) -> std::io::Result<Vec<PendingReceipt>> {
             continue;
         }
         let text = std::fs::read_to_string(&path)?;
-        match serde_json::from_str::<Vec<PersonalGraphEvent>>(&text) {
-            Ok(events) => found.push(PendingReceipt { path, events }),
+        match serde_json::from_str::<InboxEntry>(&text) {
+            Ok(entry) => found.push(PendingReceipt {
+                path,
+                source: entry.source,
+                events: entry.events,
+            }),
             Err(_) => continue,
         }
     }
@@ -125,7 +195,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let inbox = inbox_dir(dir.path());
         let node = Uuid::from_u128(1);
-        write_to_inbox(&inbox, node, &events()).unwrap();
+        write_to_inbox(&inbox, node, dir.path(), &events()).unwrap();
 
         let found = pending(&inbox).unwrap();
         assert_eq!(found.len(), 1);
@@ -138,8 +208,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let inbox = inbox_dir(dir.path());
         let node = Uuid::from_u128(1);
-        write_to_inbox(&inbox, node, &events()).unwrap();
-        write_to_inbox(&inbox, node, &events()).unwrap();
+        write_to_inbox(&inbox, node, dir.path(), &events()).unwrap();
+        write_to_inbox(&inbox, node, dir.path(), &events()).unwrap();
         assert_eq!(pending(&inbox).unwrap().len(), 1);
     }
 
@@ -147,7 +217,7 @@ mod tests {
     fn applying_clears_the_pending_file_and_keeps_the_record() {
         let dir = tempfile::tempdir().unwrap();
         let inbox = inbox_dir(dir.path());
-        let path = write_to_inbox(&inbox, Uuid::from_u128(1), &events()).unwrap();
+        let path = write_to_inbox(&inbox, Uuid::from_u128(1), dir.path(), &events()).unwrap();
 
         mark_applied(&path).unwrap();
 
@@ -164,7 +234,7 @@ mod tests {
     fn a_malformed_file_is_skipped_not_fatal() {
         let dir = tempfile::tempdir().unwrap();
         let inbox = inbox_dir(dir.path());
-        write_to_inbox(&inbox, Uuid::from_u128(1), &events()).unwrap();
+        write_to_inbox(&inbox, Uuid::from_u128(1), dir.path(), &events()).unwrap();
         std::fs::write(inbox.join("garbage.json"), "{not json").unwrap();
 
         let found = pending(&inbox).unwrap();
@@ -181,9 +251,9 @@ mod tests {
     fn the_applied_directory_is_not_scanned_as_a_receipt() {
         let dir = tempfile::tempdir().unwrap();
         let inbox = inbox_dir(dir.path());
-        let path = write_to_inbox(&inbox, Uuid::from_u128(1), &events()).unwrap();
+        let path = write_to_inbox(&inbox, Uuid::from_u128(1), dir.path(), &events()).unwrap();
         mark_applied(&path).unwrap();
-        write_to_inbox(&inbox, Uuid::from_u128(2), &events()).unwrap();
+        write_to_inbox(&inbox, Uuid::from_u128(2), dir.path(), &events()).unwrap();
 
         assert_eq!(
             pending(&inbox).unwrap().len(),

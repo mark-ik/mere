@@ -21,6 +21,7 @@ web_root=$(CDPATH= cd -- "$script_root/.." && pwd)
 mkdir -p "$destination_path"
 cp "$script_root/background.js" "$destination_path/background.js"
 cp "$script_root/capture-model.js" "$destination_path/capture-model.js"
+cp "$script_root/resource-chunk.js" "$destination_path/resource-chunk.js"
 cp "$script_root/bridge.html" "$destination_path/bridge.html"
 cp "$script_root/bridge.css" "$destination_path/bridge.css"
 cp "$script_root/bridge.js" "$destination_path/bridge.js"

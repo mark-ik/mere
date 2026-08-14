@@ -136,20 +136,50 @@ if (!firstOffer) {
   throw new Error("identity snapshot contained no portable card");
 }
 
-writeMessage({
-  type: "request",
-  request: {
-    id: 3,
-    body: {
-      Resource: {
-        session: snapshot.session,
-        resource: firstOffer.resource,
+const chunks = [];
+let offset = 0;
+let totalLength = null;
+let requestId = 3;
+for (;;) {
+  writeMessage({
+    type: "request",
+    request: {
+      id: requestId,
+      body: {
+        ResourceChunk: {
+          session: snapshot.session,
+          resource: firstOffer.resource,
+          offset,
+          length: 64 * 1024,
+        },
       },
     },
-  },
-});
-const resource = responseBody(await readMessage()).Resource;
-const resourceText = Buffer.from(resource.bytes).toString("utf8");
+  });
+  const chunk = responseBody(await readMessage()).ResourceChunk;
+  if (!chunk || chunk.offset !== offset) {
+    throw new Error(`resource chunk did not continue at ${offset}`);
+  }
+  if (totalLength === null) {
+    totalLength = chunk.total_len;
+  } else if (totalLength !== chunk.total_len) {
+    throw new Error("resource chunk changed the total length");
+  }
+  const bytes = Buffer.from(chunk.bytes, "base64");
+  if (bytes.length === 0 && offset < totalLength) {
+    throw new Error("resource chunk made no progress");
+  }
+  chunks.push(bytes);
+  offset += bytes.length;
+  requestId += 1;
+  if (offset >= totalLength) {
+    break;
+  }
+}
+const resource = Buffer.concat(chunks);
+if (resource.length !== totalLength) {
+  throw new Error(`resource assembled ${resource.length} bytes, expected ${totalLength}`);
+}
+const resourceText = resource.toString("utf8");
 const card = JSON.parse(resourceText);
 if (resourceText.includes("PRIVATE KEY")) {
   throw new Error("browser resource disclosed private key material");
@@ -157,7 +187,7 @@ if (resourceText.includes("PRIVATE KEY")) {
 
 writeMessage({
   type: "request",
-  request: { id: 4, body: "Close" },
+  request: { id: requestId, body: "Close" },
 });
 const closed = responseBody(await readMessage());
 if (closed !== "Closed") {

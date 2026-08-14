@@ -36,7 +36,7 @@ const BROKER_HELLO_SCHEMA: &str = "mere.graphshell/device-broker-hello/v1";
 /// the same host and read at the same moment, and threading a second
 /// `Arc<RwLock<_>>` through the broker for each new kind is how plumbing
 /// multiplies.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct DeviceSurface {
     /// Public, read-only cards composed beside the Personae surface.
     pub cards: Vec<SupplementalCard>,
@@ -47,6 +47,28 @@ pub struct DeviceSurface {
     /// the surface for a session must hand that session the same queue the
     /// resident host drains, not a copy of it.
     pub decisions: TransferDecisions,
+    /// Reads a blob from the resident host's replicating store, for content a
+    /// card refers to but no transfer staged — a receipt's captures, above
+    /// all. `None` on a surface composed without sync, which then serves only
+    /// what it holds.
+    pub blob_reader: Option<Arc<BlobReader>>,
+}
+
+/// The store read behind [`DeviceSurface::blob_reader`].
+pub type BlobReader = dyn Fn(&ContentHash) -> Option<Vec<u8>> + Send + Sync;
+
+// Hand-written because a closure has no `Debug`. Reports whether a reader is
+// present rather than trying to describe it: whether this surface can reach
+// the store is the fact a log line wants.
+impl std::fmt::Debug for DeviceSurface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeviceSurface")
+            .field("cards", &self.cards.len())
+            .field("released_blobs", &self.released_blobs.len())
+            .field("decisions", &self.decisions)
+            .field("blob_reader", &self.blob_reader.is_some())
+            .finish()
+    }
 }
 
 pub type DeviceSurfaceHandle = Arc<RwLock<DeviceSurface>>;

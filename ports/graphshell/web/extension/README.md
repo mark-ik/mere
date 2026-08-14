@@ -13,11 +13,11 @@ resident device host.
 | `background.js` | Browser action opens `graph.html`; history and permission listeners; the bounded `storage.local` capture queue |
 | `capture-model.js` | `GraphshellCaptureModel`: default policy, visit sanitization, queue bounds |
 | `action-form.js` | `GraphshellActionForm`: builds an intent payload from an advertised `input_form` |
-| `bridge.html`, `bridge.css`, `bridge.js` | The native surface: connects `org.mere.graphshell`, renders identity cards and advertised actions |
+| `bridge.html`, `bridge.css`, `bridge.js`, `resource-chunk.js` | The native surface: connects `org.mere.graphshell`, pulls bounded resource chunks, renders identity cards and advertised actions |
 | `prepare-extension.ps1`, `prepare-extension.sh` | Assemble one unpacked extension directory |
 | `install-native-host.ps1`, `install-native-host.sh` | Register the native host for the current user |
 | `native-host.chromium.json.in`, `native-host.firefox.json.in` | Native-host manifest templates; `__GRAPHSHELL_NATIVE_HOST__` is replaced with the binary path |
-| `smoke-action-form.mjs`, `smoke-capture-model.mjs`, `smoke-capture-background.mjs`, `smoke-native-host.mjs`, `smoke-transfer-accept.mjs` | Node smoke tests |
+| `smoke-action-form.mjs`, `smoke-capture-model.mjs`, `smoke-capture-background.mjs`, `smoke-native-host.mjs`, `smoke-transfer-accept.mjs`, `smoke-resource-chunk.mjs` | Node smoke tests |
 
 `prepare-extension` also copies `index.html` (as `graph.html`), `styles.css`,
 `loader.js`, `extension-profile.js`, `GraphshellSans.ttf`, and `pkg/` from the

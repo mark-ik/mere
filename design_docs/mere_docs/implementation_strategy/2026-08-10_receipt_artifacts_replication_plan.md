@@ -271,3 +271,49 @@ More than expected, and the plan is mostly wiring because of it:
   **So the two steps left for a lens are small and separable**: a store-backed
   `bytes_for` on the host, and an outbound session from turnstone. Neither is
   receipt-specific.
+
+- **2026-08-10, the store-backed read — and a defect it uncovered.** Asking
+  for read-through turned up something worse than the missing read: **R0 put
+  the captures in the wrong store.**
+
+  There are two blob stores in play. `receipt_ingest` wrote to a muniment
+  `BlobStore<RedbBackend>`, while the personal graph replicates through
+  `PersonalSyncHost::blobs()`, a `transport::BlobStore` over iroh, and that is
+  what `fetch_blob_by_availability` reads when a peer acts on an availability
+  fact. So every receipt was authoring `ObserveBlobAvailability` facts saying
+  "this device holds blob H" for blobs that were never in the store a peer
+  fetches from. The claim was one this device could not honour, and it would
+  have failed at the far end, on another machine, long after the run — the
+  worst possible place to find it. R1's "blobs ride transfer staging" was not
+  actually true for receipts.
+
+  **The fix moves byte-staging to the host**, which is where it always
+  belonged: only the resident host can put bytes in the store its peers fetch
+  from. The inbox hand-off is now an `InboxEntry` carrying the source
+  directory as well as the events; `device_sync::stage_captures` reads each
+  capture named by the artifacts facet, puts it into `host.blobs()`, and
+  **verifies the resulting hash against what the graph is about to claim**
+  before authoring. Staging happens *before* the turn, and a capture that
+  cannot be staged leaves the receipt pending rather than authoring a promise
+  it cannot keep. `captures_in` reads the list back out of the facet rather
+  than taking it alongside, so there is one statement of what a receipt's
+  captures are.
+
+  **Then the read-through itself.** `IdentityEndpoint` gained an optional
+  `ResourceReader` and a byte-budgeted cache (64 MiB, oldest-first eviction);
+  `bytes_for` answers from `resources` and `released` first, so transfers cost
+  nothing extra, and reads through only on a miss. The endpoint deliberately
+  does not know what a store is — it lives in the `native` cone while the
+  stores live in `web`/`personal-sync`, and the resource trait is synchronous
+  while a store read is not. So the composer supplies the closure:
+  `DeviceSurface` carries a `blob_reader`, `device_sync` builds it over
+  `host.blobs()` with `block_in_place` (the resident host is already on a
+  multi-thread runtime, so the blocking read moves off the async worker), and
+  `browser_host` hands it to the endpoint.
+
+  **Verification is incomplete and this is the honest state.** The graphshell
+  half compiles clean; the workspace does not, because a concurrent
+  `session-runtime` `wallet_grant` refactor has `identity.rs` importing
+  symbols that have moved. Three read-through tests are written and unrun:
+  read-through serves a stored blob, absence stays a miss with no reader, and
+  the cache evicts oldest-first inside its budget. They want a green tree.

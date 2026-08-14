@@ -44,7 +44,6 @@ use crate::wallet_store::{
 
 mod certificate;
 mod enroll;
-mod envelope;
 mod epochs;
 mod errors;
 mod issue;
@@ -96,7 +95,6 @@ pub(crate) fn remote_auth_capability_slot_id(device_id: DeviceId) -> String {
 pub(crate) use enroll::{
     install_remote_auth_enrollment_bundle_inner, restore_wrapped_private_epochs,
 };
-pub(crate) use envelope::encode_payload;
 pub(crate) use epochs::wrapped_epoch_aad;
 pub(crate) use pairing::{derive_pairing_key_from_transcript, remote_auth_pairing_transcript};
 pub(crate) use records::{
@@ -116,6 +114,7 @@ pub(crate) use wrapping::{
 };
 
 pub use certificate::{
+    certificate_device_id,
     device_grant_set_ref, device_scope_certificate_path, load_device_grant_set,
     save_device_grant_set,
     WrappedEpochRecord, check_epoch_carriage, decode_certificate, decode_epoch_record,
@@ -127,11 +126,6 @@ pub use enroll::{
     build_remote_auth_enrollment_bundle, decode_remote_auth_enrollment_bundle,
     encode_remote_auth_enrollment_bundle, install_remote_auth_enrollment_bundle,
     install_remote_auth_enrollment_bundle_with_wrapping_key,
-};
-pub use envelope::{
-    decode_signed_device_grant, device_grant_ref, encode_signed_device_grant, issue_device_grant,
-    load_signed_device_grant, save_signed_device_grant, signed_device_grant_path,
-    verify_device_grant,
 };
 pub use epochs::{unwrap_private_epoch_material, wrap_private_epoch_material};
 pub use errors::{
@@ -149,8 +143,8 @@ pub use pairing::{
 };
 pub use revoke::revoke_remote_auth_device;
 pub use types::{
-    DeviceGrantPayload, DeviceGrantSignature, PairedRemoteAuthGrantSpec, PrivateEpochPlaintext,
+    PairedRemoteAuthGrantSpec, PrivateEpochPlaintext,
     RemoteAuthEnrollmentBundle, RemoteAuthGrantSpec, RemoteAuthPairingMaterial,
     RemoteAuthPairingResponse, RemoteAuthPairingTicket, RemoteAuthPairingTicketRequest,
-    RemoteAuthRevocationOutcome, SignedDeviceGrant, WrappedEpochMaterial,
+    RemoteAuthRevocationOutcome, WrappedEpochMaterial,
 };

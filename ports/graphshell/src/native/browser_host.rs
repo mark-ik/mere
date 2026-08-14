@@ -255,6 +255,13 @@ where
                 surface.cards,
             );
             endpoint.with_decisions(surface.decisions);
+            // Content a card names but no transfer staged — a receipt's
+            // captures — is read from the store on demand rather than held
+            // resident, so browsing a graph of receipts costs one blob at a
+            // time instead of all of them.
+            if let Some(reader) = surface.blob_reader.clone() {
+                endpoint.with_reader(Box::new(move |resource| reader(resource)));
+            }
             // A transfer whose bytes are too large to hold resident is refused
             // here rather than part-served: the session continues without it,
             // and the reason is logged where the operator can see it. Serving
@@ -500,6 +507,9 @@ mod tests {
                 cards: vec![supplemental],
                 released_blobs: Vec::new(),
                 decisions: Default::default(),
+                // This test serves only what it stages; read-through is the
+                // resident host's composition, not the broker's.
+                blob_reader: None,
             },
         );
         let browser = async {
