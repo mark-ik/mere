@@ -366,7 +366,15 @@ fn report_pairing_facts(args: &Args) -> Result<String, String> {
     let (profile, _created) = bootstrap::load_or_create_profile(&*opened.storage, &profile_id)
         .map_err(|error| error.to_string())?;
     let vault = IdentityVault::with_profile(opened.storage, profile);
-    let facts = pairing::pairing_facts(&vault, &owner_settings::default_app_dir(), &profile_id)
+    let app_dir = owner_settings::default_app_dir();
+    // The data root is where the key group's sealed session lives, so passing
+    // it is what makes the pre-key appear in these facts. Resolving it the
+    // same way the resident host does keeps the two from disagreeing about
+    // where this device's session is.
+    let data_root =
+        device_sync::resolve_data_root(&app_dir, &args.vault_dir, args.data_root.clone())
+            .map_err(|error| error.to_string())?;
+    let facts = pairing::pairing_facts(&vault, &app_dir, &profile_id, Some(&data_root))
         .map_err(|error| error.to_string())?;
     let Some(facts) = facts else {
         return Err(format!(

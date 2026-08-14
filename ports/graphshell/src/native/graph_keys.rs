@@ -64,6 +64,14 @@ pub struct GraphKeyGroup {
     session: GroupSession,
     storage: SealedRecordStorage,
     record: PathBuf,
+    /// This device's own pre-key bundle, kept because the session can only
+    /// mint one at creation and never again.
+    ///
+    /// A device that cannot author has no way to put this on the lane itself,
+    /// so somebody else must carry it. Holding on to it is what makes that
+    /// possible at any later moment rather than only in the instant the
+    /// session was first opened.
+    bundle: Vec<u8>,
 }
 
 impl GraphKeyGroup {
@@ -80,28 +88,49 @@ impl GraphKeyGroup {
         let storage = SealedRecordStorage::open_with_key(root, storage_key(identity, graph)?);
         let record =
             PathBuf::from("graphshell/group-sessions").join(format!("{}.session", hex(&graph)));
+        let bundle_record = record.with_extension("prekey");
         if let Some(bytes) = storage.load_record::<Vec<u8>>(&record)? {
+            let bundle = storage
+                .load_record::<Vec<u8>>(&bundle_record)?
+                .unwrap_or_default();
             return Ok(OpenedKeyGroup {
                 group: Self {
                     session: GroupSession::from_bytes(&bytes)?,
                     storage,
                     record,
+                    bundle,
                 },
                 publish: None,
             });
         }
         let (session, bundle) =
             GroupSession::new(GroupSessionId(graph), &BorrowedProvider(identity))?;
+        let bundle_bytes = bundle.to_bytes()?;
         let group = Self {
             session,
             storage,
             record,
+            bundle: bundle_bytes.clone(),
         };
         group.persist()?;
+        group.storage.save_record(&bundle_record, &bundle_bytes)?;
         Ok(OpenedKeyGroup {
             group,
             publish: Some(bundle),
         })
+    }
+
+    /// This device's pre-key bundle, for somebody else to carry.
+    ///
+    /// Public by construction and self-authenticating: it attests back to this
+    /// device's Personae root, so relaying it proves nothing about the relay
+    /// and everything about its subject. That is what lets a device which
+    /// cannot author still be keyed.
+    ///
+    /// Empty for a session created before this was persisted, which is
+    /// reported rather than papered over.
+    pub fn published_bundle(&self) -> &[u8] {
+        &self.bundle
     }
 
     /// This device's recipient id, which is what another member adds.

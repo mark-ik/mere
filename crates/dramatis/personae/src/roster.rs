@@ -179,13 +179,37 @@ pub fn create_profile(
     id: &ProfileId,
     display_name: impl Into<String>,
 ) -> Result<Profile, IdentityError> {
+    import_profile(storage, id, display_name, Ed25519Keypair::generate())
+}
+
+/// Adopt an identity an application already holds, as a persona, keeping its
+/// key.
+///
+/// The migration primitive for an application that minted its own identity
+/// before the shared vault existed. **The master key is carried over
+/// unchanged**, which is the whole point: an application's durable public key
+/// is frequently already in the world — pasted to a peer as a contact token,
+/// naming the signer of envelopes it sent — and minting a fresh one would
+/// silently turn its user into a different person. Hocket is the first caller;
+/// its own pre-vault rename took the same care for the same reason.
+///
+/// Refuses an id that is taken, exactly like [`create_profile`], and here the
+/// refusal is load-bearing rather than tidy: the taken profile is somebody's
+/// real persona, and overwriting it would destroy every certificate rooted on
+/// it. Callers adopt into a free id or leave the vault alone.
+pub fn import_profile(
+    storage: &dyn IdentityStorage,
+    id: &ProfileId,
+    display_name: impl Into<String>,
+    master: Ed25519Keypair,
+) -> Result<Profile, IdentityError> {
     if storage.list_profiles()?.iter().any(|s| &s.id == id) {
         return Err(IdentityError::Backend(format!(
             "persona {:?} already exists",
             id.0
         )));
     }
-    let profile = Profile::new(id.clone(), display_name, Ed25519Keypair::generate());
+    let profile = Profile::new(id.clone(), display_name, master);
     storage.save_profile(&profile)?;
     Ok(profile)
 }
@@ -333,6 +357,57 @@ mod tests {
         assert!(roster.is_empty());
         assert!(roster.chosen_entry().is_none());
         assert_eq!(roster.chosen, ProfileId(DEFAULT_PROFILE.into()));
+    }
+
+    #[test]
+    fn an_adopted_identity_keeps_the_key_it_arrived_with() {
+        // The property the migration rests on: an application's durable public
+        // key is already in the world, so adoption must not mint a new one.
+        let storage = InMemoryStorage::new();
+        let existing = Ed25519Keypair::from_seed([9u8; 32]);
+        let before = existing.public_key().to_bytes();
+
+        import_profile(&storage, &ProfileId("mine".into()), "Mine", existing).unwrap();
+
+        let loaded = storage.load_profile(&ProfileId("mine".into())).unwrap();
+        assert_eq!(
+            loaded.master.public_key().to_bytes(),
+            before,
+            "the fingerprint a peer already has still resolves"
+        );
+    }
+
+    #[test]
+    fn adopting_over_an_existing_persona_is_refused_and_changes_nothing() {
+        // Here the refusal is load-bearing: the taken profile is somebody's
+        // real persona, and overwriting it destroys every certificate rooted
+        // on it.
+        let storage = seeded(&["work"]);
+        let before = storage
+            .load_profile(&ProfileId("work".into()))
+            .unwrap()
+            .master
+            .public_key()
+            .to_bytes();
+
+        assert!(
+            import_profile(
+                &storage,
+                &ProfileId("work".into()),
+                "Imported",
+                Ed25519Keypair::from_seed([7u8; 32]),
+            )
+            .is_err()
+        );
+        assert_eq!(
+            storage
+                .load_profile(&ProfileId("work".into()))
+                .unwrap()
+                .master
+                .public_key()
+                .to_bytes(),
+            before
+        );
     }
 
     #[test]

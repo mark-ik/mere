@@ -99,6 +99,20 @@ pub struct PairingFacts {
     /// Authority. Common to every graph this profile joins, so it is disclosed
     /// on request rather than logged.
     pub root: [u8; 32],
+    /// Readability: this device's group pre-key bundle, hex encoded.
+    ///
+    /// Here because a receive-only device cannot put it on the lane itself. It
+    /// has no roster root, so every operation it authors is refused, including
+    /// the one that would announce it. Without somebody carrying this, such a
+    /// device could be admitted as a reader and never actually keyed, which
+    /// would make read-without-write a promise the design could not keep.
+    ///
+    /// Safe to paste. The bundle attests back to `root`, so relaying it proves
+    /// nothing about the relay and everything about its subject; a forged one
+    /// is refused when the lane admits it.
+    ///
+    /// Empty when this device has no key group session yet.
+    pub prekey: String,
 }
 
 /// Compute this device's pairing facts without opening the store.
@@ -106,6 +120,7 @@ pub fn pairing_facts<P: IdentityProvider + ?Sized>(
     identity: &P,
     app_dir: &Path,
     profile: &ProfileId,
+    data_root: Option<&Path>,
 ) -> Result<Option<PairingFacts>, DeviceSyncError> {
     let stored = OwnerSettings::load(&owner_settings::settings_path(app_dir, profile))?;
     let Some(sync) = stored.sync.filter(|sync| !sync.graph.trim().is_empty()) else {
@@ -117,11 +132,52 @@ pub fn pairing_facts<P: IdentityProvider + ?Sized>(
         .map_err(|error| {
             DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string()))
         })?;
+    // Read from the session this device already has rather than minting one:
+    // creating a second session would orphan the first, and this device's seat
+    // is whichever one the lane has heard of.
+    let prekey = match data_root {
+        Some(root) => {
+            let key_root = key_group_root(root, &sync, graph);
+            match crate::native::graph_keys::GraphKeyGroup::open(identity, graph, &key_root) {
+                Ok(opened) => hex(opened.group.published_bundle()),
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        "could not read this device's group pre-key; a device pairing with                          these facts will be reachable but not readable"
+                    );
+                    String::new()
+                }
+            }
+        }
+        None => String::new(),
+    };
     Ok(Some(PairingFacts {
         graph,
         node_id: transport_key.public_key().to_bytes(),
         root: identity.master_public_key().to_bytes(),
+        prekey,
     }))
+}
+
+/// Where the key group's sealed session lives, which is beside the graph
+/// store and named for the same graph.
+fn key_group_root(
+    data_root: &Path,
+    sync: &owner_settings::SyncSettings,
+    graph: [u8; 32],
+) -> std::path::PathBuf {
+    sync.store_path
+        .clone()
+        .unwrap_or_else(|| {
+            data_root
+                .join("personal-sync")
+                .join(format!("{}.redb", owner_settings::hex32(&graph)))
+        })
+        .with_extension("keys")
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 #[cfg(test)]

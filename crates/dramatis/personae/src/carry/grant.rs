@@ -25,10 +25,10 @@
 //! [`DeviceMode::Copy`]: super::DeviceMode::Copy
 //! [`DeviceMode::RemoteAuth`]: super::DeviceMode::RemoteAuth
 
-use crate::IdentityProvider;
 use crate::delegation::{
     DelegationCertificate, DelegationError, DelegationParent, SignedDelegationCertificate,
 };
+use crate::{IdentityProvider, InMemoryProvider, PersonaId};
 
 use super::{DeviceId, DevicePublicKey, device_capability_scope};
 
@@ -100,6 +100,49 @@ pub fn issue_remote_auth_grant<P: IdentityProvider>(
     now_ms: u64,
 ) -> Result<SignedDelegationCertificate, DelegationError> {
     issue_device_grant(provider, device, holder.0, actions, valid_for_ms, now_ms)
+}
+
+/// Issue a device grant **under one persona's own authority**.
+///
+/// The old signed envelope carried `personas: Vec<PersonaId>` as a field, so
+/// one signature spoke for every persona at once and withdrawing a device from
+/// one persona meant re-issuing the authority of all of them. A certificate
+/// has one issuer, so the persona set becomes one certificate per persona,
+/// each anchored at that persona's own [`PersonaChainRoot`] and each revocable
+/// without touching the others. That independence is the point; the extra
+/// records are the price.
+///
+/// The signing identity is the persona's derived keypair, not the master.
+/// [`SignedDelegationCertificate::issue`] requires the provider's master
+/// public key to equal the certificate's issuer, so the persona is a provider
+/// in its own right here, seeded from its derived key.
+///
+/// A verifier trusts these by carrying one `TrustedRoot` per persona, with
+/// `authority` and `issuer` both the persona chain root.
+///
+/// [`PersonaChainRoot`]: super::PersonaChainRoot
+pub fn issue_persona_device_grant(
+    master_seed: [u8; 32],
+    persona: PersonaId,
+    device: DeviceId,
+    holder: DevicePublicKey,
+    actions: &[&str],
+    valid_for_ms: u64,
+    now_ms: u64,
+) -> Result<SignedDelegationCertificate, DelegationError> {
+    let master = InMemoryProvider::from_seed(master_seed);
+    let persona_keypair = master
+        .derive_keypair(&super::persona_wallet_salt(persona))
+        .map_err(|_| DelegationError::Identity)?;
+    let persona_provider = InMemoryProvider::from_seed(persona_keypair.to_seed());
+    issue_remote_auth_grant(
+        &persona_provider,
+        device,
+        holder,
+        actions,
+        valid_for_ms,
+        now_ms,
+    )
 }
 
 #[cfg(test)]
@@ -209,5 +252,83 @@ mod tests {
         .unwrap();
 
         assert_ne!(first.certificate.id(), second.certificate.id());
+    }
+
+    const MASTER_SEED: [u8; 32] = [0x4d; 32];
+
+    fn persona(n: u128) -> PersonaId {
+        PersonaId::from_uuid(uuid::Uuid::from_u128(n))
+    }
+
+    #[test]
+    fn a_persona_grant_is_issued_by_that_persona_not_the_master() {
+        let master = InMemoryProvider::from_seed(MASTER_SEED);
+        let grant = issue_persona_device_grant(
+            MASTER_SEED,
+            persona(1),
+            device(),
+            holder(),
+            &[ACTION_TRANSPORT_EGRESS],
+            60_000,
+            NOW_MS,
+        )
+        .unwrap();
+
+        let expected = crate::carry::derive_persona_chain_root(MASTER_SEED, persona(1)).unwrap();
+        assert_eq!(grant.certificate.issuer, expected.0);
+        assert_ne!(grant.certificate.issuer, master.master_public_key().to_bytes());
+        assert_eq!(grant.certificate.subject, holder().0);
+        assert!(grant.verify());
+    }
+
+    /// The independence the per-persona split exists to buy: two personas
+    /// granting the same device produce two certificates with two issuers,
+    /// so revoking one leaves the other standing.
+    #[test]
+    fn two_personas_granting_one_device_are_independent_certificates() {
+        let first = issue_persona_device_grant(
+            MASTER_SEED,
+            persona(1),
+            device(),
+            holder(),
+            &[ACTION_TRANSPORT_EGRESS],
+            60_000,
+            NOW_MS,
+        )
+        .unwrap();
+        let second = issue_persona_device_grant(
+            MASTER_SEED,
+            persona(2),
+            device(),
+            holder(),
+            &[ACTION_TRANSPORT_EGRESS],
+            60_000,
+            NOW_MS,
+        )
+        .unwrap();
+
+        assert_ne!(first.certificate.issuer, second.certificate.issuer);
+        assert_ne!(first.certificate.id(), second.certificate.id());
+        assert!(first.verify());
+        assert!(second.verify());
+    }
+
+    /// A persona's authority is reproducible from the master seed, which is
+    /// what lets M3 re-mint every grant on unlock without stored key material.
+    #[test]
+    fn persona_issuance_is_deterministic_for_one_seed() {
+        let args = || {
+            issue_persona_device_grant(
+                MASTER_SEED,
+                persona(1),
+                device(),
+                holder(),
+                &[ACTION_TRANSPORT_EGRESS],
+                60_000,
+                NOW_MS,
+            )
+            .unwrap()
+        };
+        assert_eq!(args().certificate.id(), args().certificate.id());
     }
 }

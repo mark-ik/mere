@@ -39,6 +39,7 @@ mod grant;
 mod scope;
 
 pub use grant::{
+    issue_persona_device_grant,
     device_grant_nonce, issue_device_grant, issue_remote_auth_grant, issue_self_grant,
 };
 pub use refs::{CarryHashFn, CarryRef, CarryRefParseError};

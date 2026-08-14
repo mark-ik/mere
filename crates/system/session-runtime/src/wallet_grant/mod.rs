@@ -42,6 +42,7 @@ use crate::wallet_store::{
     stage_persona_private_epoch,
 };
 
+mod certificate;
 mod enroll;
 mod envelope;
 mod epochs;
@@ -114,6 +115,12 @@ pub(crate) use wrapping::{
     load_remote_auth_wrapping_key, remove_remote_auth_wrapping_key, upsert_remote_auth_wrapping_key,
 };
 
+pub use certificate::{
+    WrappedEpochRecord, check_epoch_carriage, decode_certificate, decode_epoch_record,
+    device_certificate_path, encode_certificate, encode_epoch_record, load_device_certificate,
+    load_wrapped_epoch_record, requires_epoch_material, save_device_certificate,
+    save_wrapped_epoch_record, wrapped_epoch_record_path,
+};
 pub use enroll::{
     build_remote_auth_enrollment_bundle, decode_remote_auth_enrollment_bundle,
     encode_remote_auth_enrollment_bundle, install_remote_auth_enrollment_bundle,
