@@ -7,8 +7,20 @@ crate; the three below are separate members of mere's workspace.
 | Crate | Contents | Depends on |
 |---|---|---|
 | [`numen`](numen) | Field definitions as plain data: `ScalarField` / `VectorField`, `Field`, `Coupling`, `EdgePath`. | serde, uuid, strum |
-| [`quint`](quint) | The runtime algebra: `FieldRegistry`, `FieldProjection`, `eval_scalar` / `eval_vector` / `grad_scalar`, optional Rhai authoring and Burn lowering. | numen, serde, uuid, optional burn + rhai |
+| [`quint`](quint) | The runtime algebra: `FieldRegistry`, `FieldProjection`, `eval_scalar` / `eval_vector` / `grad_scalar`, optional Rhai authoring, and two GPU lanes: Burn lowering (`field-burn`) and the **resident lane** (`field-gpu`), whose kernels advance positions that never leave the device. | numen, serde, uuid, optional burn + rhai + wgpu |
+| [`quint-shaders`](quint-shaders) | The resident lane's kernels in Rust, for rust-gpu. Not built today; see its README for the toolchain blocker and what ships instead. | spirv-std |
 | [`seiche`](seiche) | Force integration: a rapier `Simulation`, built-in layout forces, field couplings, scenes, fluid. | rapier2d, petgraph, quint, numen, euclid, tracing |
+
+The resident lane is the explicit-regime half of the spatial compute
+plan (`design_docs/mere_docs/technical_architecture/2026-08-13_spatial_compute_plan.md`):
+positions and velocities live in GPU buffers as padded 3D `vec4f`, three
+dispatches advance them, and the only per-frame readback is a four-byte
+settle word. It sits beside the Burn lane rather than replacing it. Burn
+serves dense field evaluation and semantic couplings; the resident lane
+serves the n-body step, where the tensor formulation's `[n, n]`
+intermediates are the wrong shape. The device is always the host's:
+quint never boots one, because a second device on the same adapter
+cannot share a buffer with the renderer.
 
 Dependency direction is numen to quint to seiche. Each crate publishes under its
 own name and stays independent of any graph kernel or renderer. All three are

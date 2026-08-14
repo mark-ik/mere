@@ -30,12 +30,21 @@
 pub use numen::field_ast as ast;
 pub mod coupling;
 pub mod eval;
-#[cfg(feature = "field-burn")]
+// The force laws. The burn-lowered passes inside are feature-gated;
+// the module itself is not, because `repulsion_reference` is the
+// burn-free anchor both GPU lanes are checked against, and an anchor
+// that needs the thing it anchors is no anchor.
 pub mod forces;
+
 #[cfg(feature = "field-burn")]
 pub mod lower_burn;
 pub mod projection;
 pub mod registry;
+/// The explicit-regime lane: resident buffers advanced by kernels the
+/// host dispatches. Feature-gated because it needs wgpu; see the
+/// module docs for how it relates to the Burn lane beside it.
+#[cfg(feature = "field-gpu")]
+pub mod resident;
 #[cfg(feature = "field-rhai")]
 pub mod rhai_bindings;
 

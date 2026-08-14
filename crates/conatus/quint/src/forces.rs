@@ -14,6 +14,7 @@
 //! (measured in the timing test), where the GPU's throughput beats the better
 //! asymptotics on CPU.
 
+#[cfg(feature = "field-burn")]
 use burn::tensor::{Tensor, backend::Backend};
 
 /// Parameters for the repulsion pass.
@@ -43,6 +44,7 @@ impl Default for RepulsionParams {
 /// `[N]` force components `(fx, fy)`. Force on body i:
 /// `strength · Σ_{j} (p_i − p_j) / (|p_i − p_j|² + ε²)^{3/2}`. The `j = i` term
 /// vanishes (numerator zero), so it is summed over all j including self.
+#[cfg(feature = "field-burn")]
 pub fn repulsion<B: Backend>(
     xs: Tensor<B, 1>,
     ys: Tensor<B, 1>,
@@ -118,7 +120,10 @@ pub fn repulsion_reference(
     (fx, fy)
 }
 
-#[cfg(test)]
+// Every test in here drives the burn lane; the burn-free anchor they
+// compare against is exercised by the resident lane's receipt in
+// `tests/resident.rs`, which needs no burn at all.
+#[cfg(all(test, feature = "field-burn"))]
 mod tests {
     use super::*;
     use burn::backend::NdArray;
