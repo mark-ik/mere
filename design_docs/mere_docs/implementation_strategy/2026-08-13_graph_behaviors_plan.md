@@ -112,8 +112,8 @@ graph but as the two capability scopes of a behavior: watch = trigger, read
 beyond watch = observe. The data graphs stay declarative; agency lives
 entirely in the denizen tier.
 
-(Vocabulary: "watch" is used throughout as the working noun. Naming is
-Mark's ruling to make; nothing below hangs on the word.)
+(Vocabulary: **watch** ruled by Mark 2026-08-13, recorded in
+[TERMINOLOGY.md](../../TERMINOLOGY.md).)
 
 ### 3.2 Triggers ride the journal, not edges
 
@@ -131,6 +131,13 @@ App-tier watches (on `AppEvent`, e.g. "a session switched") are the same
 shape at the observe drain, and land in a later slice; the graph tier comes
 first because attribution and scopes already exist there.
 
+**Watches are reviewed at install** (ruled 2026-08-13): they ride the pack
+manifest beside the rings, so the review screen shows *when this runs* next
+to *what it may touch* before either is granted. A watch added after
+install is a widening and re-reviews, the same posture pack upgrades
+already have. Registration still enforces the containment law regardless of
+how the watch arrived.
+
 ### 3.3 The cascade runner
 
 Firing a behavior produces petitions; petitions commit; commits can wake
@@ -143,9 +150,13 @@ after-dispatch drain, post-commit, per the chartulary consumer discipline:
    (the matched deltas, digested).
 3. Their petitions commit through the gate as today, attributed to their
    subjects. Advance cursors.
-4. Repeat from 1 with the new entries, up to a **cascade budget** of rounds.
-   Exhausting the budget is loud: an `AppEvent` and a visible notice naming
-   the behaviors still waking each other, per the no-silent-caps rule.
+4. Repeat from 1 with the new entries, up to the **cascade budget** of
+   rounds. The budget is a setting (ruled 2026-08-13, per the
+   configurability doctrine): default 4, live-switchable, floor 1; there is
+   no "unlimited" value, because an unbounded cascade is the failure mode
+   the budget exists to name. Exhausting it is loud: an `AppEvent` and a
+   visible notice naming the behaviors still waking each other, per the
+   no-silent-caps rule.
 
 Termination is structural: finite rounds times a per-run step budget, plus
 self-authored entries never re-waking their author. Determinism comes from
@@ -192,13 +203,16 @@ Carried over or ruled here:
   with the loud event on screen; a linear A-wakes-B chain settles in one
   cascade; every behavior-authored entry in the journal reads back with the
   right subject; the whole cascade replays deterministically in a scenario
-  run.
+  run; lowering the budget setting from 4 to 1 takes effect on the next
+  cascade without a restart.
 - **W2: trigger context into the body.** The matched-delta digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
-  petition). Done when: the inbox rule runs headed, its edit is attributed
-  in the inspector, and uninstalling the denizen removes the watch with it.
+  petition). Done when: the install review screen shows the watch beside
+  the rings before anything is granted; the inbox rule runs headed; its
+  edit is attributed in the inspector; and uninstalling the denizen removes
+  the watch with it.
 - **W3: app-tier watches.** `AppEvent` watches at the observe drain, ring
   vocabulary unchanged. Done when: a behavior wakes on `SessionSwitched`
   without polling, and the scenario log shows the wake attributed.
@@ -250,19 +264,23 @@ not automation).
   already covers how a behavior travels; wiring its *triggers* across murm
   or retinue is its own future plan).
 
-## 7. Open questions for Mark
+## 7. Rulings (all three open questions closed 2026-08-13)
 
-1. The noun. "Watch" is used here; alternatives: standing order, reflex,
-   tropism. TERMINOLOGY.md gets the ruling, not this plan.
-2. Whether a watch is part of the pack manifest (reviewed at install beside
-   the rings) or only grantable post-install. Install-time review is the
-   drafted assumption, since a behavior that wakes itself is exactly what
-   review should see.
-3. Cascade budget default (drafted: 4 rounds), and whether the budget is a
-   setting per the configurability doctrine.
+1. **The noun is watch.** Recorded in TERMINOLOGY.md beside denizen and
+   petition.
+2. **Watches are reviewed at install**, in the pack manifest beside the
+   rings; post-install additions are widenings and re-review (folded into
+   3.2).
+3. **The cascade budget is a setting**: default 4 rounds, live-switchable,
+   floor 1, no unlimited value (folded into 3.3). W1's done conditions gain
+   one clause: changing the setting takes effect on the next cascade
+   without a restart.
 
 ## Progress
 
 - 2026-08-13: plan written. Substrate grounded against journal.rs,
   commit.rs, gate.rs/cap.rs, denizen.rs/component.rs/ring.rs, observe.rs,
   all read this session. No code yet.
+- 2026-08-13 (later): Mark ruled the three open questions (watch / install
+  review / budget-as-setting); rulings folded into 3.1, 3.2, 3.3 and
+  TERMINOLOGY.md. W1 and W2 done conditions extended accordingly.
