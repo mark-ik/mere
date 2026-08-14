@@ -128,7 +128,12 @@ pub(crate) fn install_remote_auth_enrollment_bundle_inner(
                 "remote-auth enrollment bundle carries wrapped private epochs; install needs the pairing-derived wrapping key",
             )
         })?;
-        restore_wrapped_private_epochs(data_root, &bundle.epochs, wrapping_key)?;
+        let candidates: Vec<(PersonaId, KeyEpochId)> = bundle
+            .persona_wallets
+            .iter()
+            .map(|wallet| (wallet.persona_id, wallet.private_epoch_head))
+            .collect();
+        restore_wrapped_private_epochs(data_root, &bundle.epochs, &candidates, wrapping_key)?;
     }
 
     let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
@@ -165,20 +170,31 @@ pub(crate) fn install_remote_auth_enrollment_bundle_inner(
     Ok(())
 }
 
+/// Stage the private epochs an enrollment bundle carries.
+///
+/// The records no longer say which persona and epoch each entry serves, so the
+/// installing device resolves them instead of reading them: it already knows
+/// its personas and their epoch heads from the bundle's own manifests, and it
+/// holds the wrapping key, so it can compute each candidate's blinded index and
+/// match. An entry that matches no candidate is simply not for this device and
+/// is skipped, which is the correct behaviour for a record that may one day
+/// replicate.
 pub(crate) fn restore_wrapped_private_epochs(
     data_root: &Path,
     records: &[WrappedEpochRecord],
+    candidates: &[(PersonaId, KeyEpochId)],
     wrapping_key: [u8; 32],
 ) -> io::Result<()> {
     for wrapped in records.iter().flat_map(|record| &record.epochs) {
-        let epoch_secret = unwrap_private_epoch_material(wrapped, wrapping_key)
-            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        stage_persona_private_epoch(
-            data_root,
-            wrapped.persona_id,
-            wrapped.epoch_id,
-            &epoch_secret,
-        )?;
+        let Some(&(persona_id, epoch_id)) = candidates.iter().find(|(persona, epoch)| {
+            wrapped.index == blinded_epoch_index(*persona, *epoch, wrapping_key)
+        }) else {
+            continue;
+        };
+        let epoch_secret =
+            unwrap_private_epoch_material(wrapped, persona_id, epoch_id, wrapping_key)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        stage_persona_private_epoch(data_root, persona_id, epoch_id, &epoch_secret)?;
     }
     Ok(())
 }

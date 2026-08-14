@@ -128,6 +128,7 @@ pub use revocation::{
     revoke_device_certificates, revoked_certificate_count, save_revocation_ledger,
 };
 pub use certificate::{
+    remove_wrapped_epoch_record,
     decode_device_grant_set, encode_device_grant_set,
     certificate_device_id,
     device_grant_set_ref, device_scope_certificate_path, load_device_grant_set,
@@ -142,7 +143,10 @@ pub use enroll::{
     encode_remote_auth_enrollment_bundle, install_remote_auth_enrollment_bundle,
     install_remote_auth_enrollment_bundle_with_wrapping_key,
 };
-pub use epochs::{unwrap_private_epoch_material, wrap_private_epoch_material};
+pub use epochs::{
+    BlindedEpochIndex, blinded_epoch_index, unwrap_private_epoch_material,
+    wrap_private_epoch_material,
+};
 pub use errors::{
     DeviceGrantError, EnrollmentBundleError, PairingCodeError, PairingMaterialError,
     PairingTicketError, WrappedEpochError,
@@ -158,7 +162,7 @@ pub use pairing::{
 };
 pub use revoke::revoke_remote_auth_device;
 pub use types::{
-    PairedRemoteAuthGrantSpec, PrivateEpochPlaintext,
+    EpochCarriage, PairedRemoteAuthGrantSpec, PrivateEpochPlaintext,
     RemoteAuthEnrollmentBundle, RemoteAuthGrantSpec, RemoteAuthPairingMaterial,
     RemoteAuthPairingResponse, RemoteAuthPairingTicket, RemoteAuthPairingTicketRequest,
     RemoteAuthRevocationOutcome, WrappedEpochMaterial,

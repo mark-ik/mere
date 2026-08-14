@@ -14,6 +14,9 @@ pub(super) fn temp_data_root(tag: &str) -> std::path::PathBuf {
     dir
 }
 
+/// The wrapping key the fixtures blind against.
+pub(super) const FIXTURE_WRAPPING_KEY: [u8; 32] = [0x2b; 32];
+
 pub(super) fn fixture_device() -> DeviceId {
     DeviceId::from_uuid(Uuid::from_u128(0xaaa1))
 }
@@ -57,11 +60,17 @@ pub(super) fn sample_remote_auth_spec() -> RemoteAuthGrantSpec {
         personas: vec![fixture_persona()],
         scopes: vec!["identity.act".into(), "private.read".into()],
         attenuations: vec!["no-subdelegation".into()],
-        wrapped_private_epochs: vec![WrappedEpochMaterial {
+        wrapped_private_epochs: vec![EpochCarriage {
             persona_id: fixture_persona(),
-            epoch_id: fixture_epoch(),
-            wrap_format: "xchacha20poly1305-v1".into(),
-            wrapped_key: vec![0xde, 0xad, 0xbe, 0xef],
+            material: WrappedEpochMaterial {
+                index: blinded_epoch_index(
+                    fixture_persona(),
+                    fixture_epoch(),
+                    FIXTURE_WRAPPING_KEY,
+                ),
+                wrap_format: "xchacha20poly1305-v1".into(),
+                wrapped_key: vec![0xde, 0xad, 0xbe, 0xef],
+            },
         }],
     }
 }

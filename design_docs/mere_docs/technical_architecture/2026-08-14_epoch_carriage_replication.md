@@ -26,8 +26,8 @@ the expensive operation for exactly the devices that most need this. But
 
 1. **Epoch carriage may replicate, at `TrustedPeersOnly`.** Never at
    `MootScoped` or `PublicPortable`.
-2. **Not until the record's plaintext identifiers are blinded.** As written it
-   would trade a persona-separation guarantee for an availability convenience.
+2. ~~Not until the record's plaintext identifiers are blinded.~~ **Done
+   2026-08-14**, construction below.
 3. **Eidetic's sealer is not the mechanism.** The record must stay
    self-protecting, and that must be stated at the call site rather than
    inherited by accident.
@@ -100,9 +100,62 @@ rotation, where a superseded record is replaced rather than accumulated. Both
 need the trusted-peer set to be revocable, which is the same shape as retinue's
 open revocation-propagation question.
 
+**Scoped 2026-08-14:** a retention design combining both candidates, and
+decoupling them from the revocation-propagation question, is proposed in
+[epoch carriage retention: leased slots](2026-08-14_epoch_carriage_retention_leases.md).
+
+## The blinding, as built
+
+`WrappedEpochMaterial` now carries a `BlindedEpochIndex` in place of
+`persona_id` and `epoch_id`:
+
+```rust
+index = keyed_hash(derive_key(BLIND_INDEX_CONTEXT, wrapping_key),
+                   wrapped_epoch_aad(persona, epoch))
+```
+
+The blinding key is derived from the device's own pairing-derived wrapping key
+under its own context, so it cannot be confused with the key-wrapping use of the
+same secret. The message is `wrapped_epoch_aad`, which was already the canonical
+encoding of the pair, so the index and the AEAD's associated data now commit to
+exactly the same bytes.
+
+Two devices holding material for the same persona therefore produce different
+indices, because each has a different pairing key. That is the property the
+whole exercise was for, and it is asserted directly.
+
+Nothing was weakened to get it. The ciphertext was always bound to (persona,
+epoch) through its AAD, so the plaintext fields were only ever a lookup
+convenience. `unwrap_private_epoch_material` now takes the pair the caller
+expects, which means the pair is checked twice: once against the index, for a
+legible `WrongEntry` rather than an opaque AEAD failure, and once by the AAD,
+for the guarantee.
+
+### What it cost, and what it taught
+
+Three call sites had been reading identifiers off the record, and each one
+became clearer for having to state what it actually wanted:
+
+- **Enrollment** resolves rather than reads. The installing device already knows
+  its personas and their epoch heads from the bundle's own manifests, and it
+  holds the wrapping key, so it computes each candidate's index and matches. An
+  entry matching no candidate is simply not for this device and is skipped,
+  which is the correct behaviour for a record that may one day replicate.
+- **Refresh** replaces instead of filtering. The record is keyed by *one
+  persona's* certificate, so by construction every entry in it belongs to that
+  persona and there is nothing to keep. Blinded entries never need to be read in
+  order to be superseded.
+- **Revocation** asks presence, not identity. It used to compare the stored
+  epoch id against the persona's head, which after blinding would have required
+  the device's wrapping key — and the direct issue path never retains one. That
+  exposed a real coupling rather than a test artifact. Presence is the better
+  question anyway: over-rotating on a revocation costs a re-wrap, while
+  under-rotating leaves a withdrawn device holding a live epoch. Idempotence now
+  comes from **deleting the record on revoke**, which a withdrawn device should
+  not keep regardless.
+
 ## What this does not decide
 
-- **The blinding construction.** Ruling 2 names the requirement, not the scheme.
 - **Retention policy.** Ruling 4. Until it is answered, epoch carriage stays
   `LocalOnly`, which is also eidetic's default and today's behaviour, so nothing
   ships in an undecided state.
@@ -112,7 +165,8 @@ open revocation-propagation question.
 
 ## Consequence for today's code
 
-None immediately, and deliberately. `WrappedEpochRecord` is a wallet file at
-`identity/grants/epochs/<certificate-id>.cbor` and stays one. This doc exists so
-that the first person to reach for replication finds the two preconditions
-already stated rather than discovering the persona leak in review.
+`WrappedEpochRecord` is still a wallet file at
+`identity/grants/epochs/<certificate-id>.cbor`, and still `LocalOnly`, because
+retention remains unanswered. What changed is that it no longer discloses
+anything if it does travel: precondition one is met, and the record now carries
+no identifier an observer can correlate.

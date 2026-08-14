@@ -105,13 +105,15 @@ pub(crate) fn grant_lifetime_ms(issued_at_ms: u64, expires_at_ms: Option<u64>) -
 pub(crate) fn store_wrapped_epochs(
     data_root: &Path,
     set: &DeviceGrantSet,
-    wrapped: &[WrappedEpochMaterial],
+    wrapped: &[EpochCarriage],
 ) -> io::Result<()> {
     for (&persona, certificate) in &set.personas {
+        // Routing is read off the carriage, which the issuer states plainly,
+        // rather than off the material, which is blinded once stored.
         let mine: Vec<_> = wrapped
             .iter()
-            .filter(|material| material.persona_id == persona)
-            .cloned()
+            .filter(|carriage| carriage.persona_id == persona)
+            .map(|carriage| carriage.material.clone())
             .collect();
         if mine.is_empty() {
             continue;
@@ -158,6 +160,10 @@ pub fn issue_remote_auth_device_grant_from_pairing(
                 &epoch.epoch_secret,
                 pairing.wrapping_key,
             )
+            .map(|material| EpochCarriage {
+                persona_id: epoch.persona_id,
+                material,
+            })
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
         })
         .collect::<io::Result<Vec<_>>>()?;
@@ -242,11 +248,19 @@ mod tests {
         )
         .unwrap();
         let mut spec = sample_remote_auth_spec();
-        spec.wrapped_private_epochs = vec![wrapped];
+        spec.wrapped_private_epochs = vec![EpochCarriage {
+            persona_id: fixture_persona(),
+            material: wrapped,
+        }];
         let grant = issue_remote_auth_device_grant(&root, &spec).unwrap();
         assert!(all_certificates_verify(&grant));
         assert_eq!(
-            unwrap_private_epoch_material(&stored_epochs_for(&root, &grant, fixture_persona())[0], wrapping_key)
+            unwrap_private_epoch_material(
+                &stored_epochs_for(&root, &grant, fixture_persona())[0],
+                fixture_persona(),
+                fixture_epoch(),
+                wrapping_key,
+            )
                 .unwrap(),
             b"private-epoch-seed".to_vec()
         );
@@ -366,6 +380,8 @@ mod tests {
         assert_eq!(
             unwrap_private_epoch_material(
                 &stored_epochs_for(&root, &grant, fixture_persona())[0],
+                fixture_persona(),
+                fixture_epoch(),
                 pairing.wrapping_key
             )
             .unwrap(),
@@ -428,6 +444,8 @@ mod tests {
         assert_eq!(
             unwrap_private_epoch_material(
                 &stored_epochs_for(&root, &grant, fixture_persona())[0],
+                fixture_persona(),
+                fixture_epoch(),
                 pairing.wrapping_key
             )
             .unwrap(),

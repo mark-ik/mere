@@ -121,15 +121,20 @@ pub(crate) fn revoke_persona_grant_access(
 
         // The epochs the device actually holds now live in the record keyed by
         // this persona's certificate, so ask that record rather than the grant.
-        let held = load_wrapped_epoch_record(data_root, certificate.certificate.id())?;
-        let should_rotate = private_read
-            && held.is_some_and(|record| {
-                record
-                    .epochs
-                    .iter()
-                    .filter(|epoch| epoch.persona_id == persona)
-                    .any(|epoch| wallet.private_epoch_head == epoch.epoch_id)
-            });
+        let certificate_id = certificate.certificate.id();
+        let held = load_wrapped_epoch_record(data_root, certificate_id)?;
+        // The question is whether this device was given private-lane material
+        // for this persona at all. It used to be asked by reading the epoch id
+        // out of the record and comparing it to the head; the entries are
+        // blinded now, and matching them would need the device's wrapping key,
+        // which the direct issue path never retains.
+        //
+        // Presence is the right question anyway. Over-rotating on a revocation
+        // costs a re-wrap; under-rotating leaves a withdrawn device holding a
+        // live epoch. Idempotence comes from removing the record below rather
+        // than from narrowing the test.
+        let should_rotate =
+            private_read && held.is_some_and(|record| !record.epochs.is_empty());
         let next_epoch = if should_rotate {
             let next_epoch = KeyEpochId::new();
             wallet.private_epoch_head = next_epoch;
@@ -139,6 +144,10 @@ pub(crate) fn revoke_persona_grant_access(
         } else {
             None
         };
+
+        // A withdrawn device keeps no carriage. This is also what makes a second
+        // revoke a no-op rather than a second rotation.
+        remove_wrapped_epoch_record(data_root, certificate_id)?;
 
         if changed {
             save_persona_wallet(data_root, &wallet)?;
@@ -179,20 +188,26 @@ mod tests {
             scopes: vec!["identity.act".into(), "private.read".into()],
             attenuations: vec!["no-subdelegation".into()],
             wrapped_private_epochs: vec![
-                wrap_private_epoch_material(
-                    fixture_persona(),
-                    first_epoch.epoch_id,
-                    &first_epoch.epoch_secret,
-                    [21; 32],
-                )
-                .unwrap(),
-                wrap_private_epoch_material(
-                    second_persona(),
-                    second_epoch.epoch_id,
-                    &second_epoch.epoch_secret,
-                    [22; 32],
-                )
-                .unwrap(),
+                EpochCarriage {
+                    persona_id: fixture_persona(),
+                    material: wrap_private_epoch_material(
+                        fixture_persona(),
+                        first_epoch.epoch_id,
+                        &first_epoch.epoch_secret,
+                        [21; 32],
+                    )
+                    .unwrap(),
+                },
+                EpochCarriage {
+                    persona_id: second_persona(),
+                    material: wrap_private_epoch_material(
+                        second_persona(),
+                        second_epoch.epoch_id,
+                        &second_epoch.epoch_secret,
+                        [22; 32],
+                    )
+                    .unwrap(),
+                },
             ],
         };
         let grant = issue_remote_auth_device_grant(&root, &spec).unwrap();
@@ -287,13 +302,16 @@ mod tests {
             scopes: vec!["identity.act".into(), "private.read".into()],
             attenuations: vec!["no-subdelegation".into()],
             wrapped_private_epochs: vec![
-                wrap_private_epoch_material(
-                    fixture_persona(),
-                    current_epoch.epoch_id,
-                    &current_epoch.epoch_secret,
-                    [23; 32],
-                )
-                .unwrap(),
+                EpochCarriage {
+                    persona_id: fixture_persona(),
+                    material: wrap_private_epoch_material(
+                        fixture_persona(),
+                        current_epoch.epoch_id,
+                        &current_epoch.epoch_secret,
+                        [23; 32],
+                    )
+                    .unwrap(),
+                },
             ],
         };
         issue_remote_auth_device_grant(&root, &spec).unwrap();

@@ -5,7 +5,7 @@
 //! live in GPU buffers as padded 3D `vec4f`; three dispatches per frame
 //! advance them; the only per-frame readback is a four-byte settle
 //! word. A consumer that wants to draw them binds
-//! [`Resident::positions`] directly, or, if its renderer addresses
+//! [`crate::resident::Resident::positions`] directly, or, if its renderer addresses
 //! memory some other way, publishes from it with a kernel of its own.
 //!
 //! # Which lane this is
@@ -25,9 +25,13 @@
 //! The device is the host's, never this crate's. A second device on the
 //! same adapter cannot share a buffer with the renderer, which is the
 //! failure the wing's tenancy seam exists to prevent, so
-//! [`Resident::new`] takes handles rather than booting.
+//! [`crate::resident::Resident::new`] takes handles rather than booting.
 
 use bytemuck::{Pod, Zeroable};
+
+mod chunk;
+
+pub use chunk::*;
 
 /// One step's constants. Mirrors `quint-shaders`'s `Params` word for
 /// word; [`Resident::new`] asserts the sizes agree, so a field added on

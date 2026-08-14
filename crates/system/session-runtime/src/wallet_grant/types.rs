@@ -7,7 +7,7 @@
 use identity::carry::DeviceGrantSet;
 use identity::delegation::SignedDelegationRevocation;
 
-use super::WrappedEpochRecord;
+use super::{BlindedEpochIndex, WrappedEpochRecord};
 use identity::{Ed25519Signature, PersonaId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,13 +20,33 @@ use super::{
 /// One wrapped private-epoch bundle handed to a remote-auth device.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WrappedEpochMaterial {
-    pub persona_id: PersonaId,
-    pub epoch_id: KeyEpochId,
+    /// Which persona and epoch this entry serves, legible only to a holder of
+    /// the device's wrapping key.
+    ///
+    /// The identifiers used to sit here in plaintext, which meant a replicated
+    /// record disclosed which personas existed, which devices served them, and
+    /// how often epochs rotated. See the epoch carriage replication decision.
+    /// They were only ever a lookup convenience: the ciphertext is already
+    /// bound to the same pair through its AEAD associated data, so blinding
+    /// them costs nothing cryptographically.
+    pub index: BlindedEpochIndex,
     /// The wrap algorithm/version tag. v1 keeps this stringly-typed so the
     /// storage seam can land before the concrete wrap mechanism hardens.
     pub wrap_format: String,
     /// Opaque wrapped key bytes. The pairing flow fills these later.
     pub wrapped_key: Vec<u8>,
+}
+
+/// One epoch's wrapped material, with the routing the *issuer* still knows.
+///
+/// The issuing side names the persona plainly, because it is deciding where
+/// the material goes. Only the stored, replicable record is blinded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EpochCarriage {
+    /// The persona whose private lane this material opens.
+    pub persona_id: PersonaId,
+    /// The wrapped material itself.
+    pub material: WrappedEpochMaterial,
 }
 
 /// Inputs for issuing and persisting one remote-auth device grant.
@@ -41,7 +61,7 @@ pub struct RemoteAuthGrantSpec {
     pub personas: Vec<PersonaId>,
     pub scopes: Vec<String>,
     pub attenuations: Vec<String>,
-    pub wrapped_private_epochs: Vec<WrappedEpochMaterial>,
+    pub wrapped_private_epochs: Vec<EpochCarriage>,
 }
 
 /// One plaintext private-epoch bundle the delegator wraps during pairing.

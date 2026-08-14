@@ -31,7 +31,7 @@ pub(crate) fn validate_remote_auth_spec(
                 io::ErrorKind::InvalidInput,
                 format!(
                     "wrapped epoch persona {} is not authorized by this grant",
-                    wrapped.persona_id.as_uuid()
+                    "<blinded>"
                 ),
             ));
         }
@@ -197,11 +197,17 @@ mod tests {
         crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC").unwrap();
 
         let mut spec = sample_remote_auth_spec();
-        spec.wrapped_private_epochs.push(WrappedEpochMaterial {
+        spec.wrapped_private_epochs.push(EpochCarriage {
             persona_id: second_persona(),
-            epoch_id: fixture_epoch(),
-            wrap_format: "xchacha20poly1305-v1".into(),
-            wrapped_key: vec![0xca, 0xfe],
+            material: WrappedEpochMaterial {
+                index: blinded_epoch_index(
+                    second_persona(),
+                    fixture_epoch(),
+                    FIXTURE_WRAPPING_KEY,
+                ),
+                wrap_format: "xchacha20poly1305-v1".into(),
+                wrapped_key: vec![0xca, 0xfe],
+            },
         });
         let err = issue_remote_auth_device_grant(&root, &spec).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);

@@ -36,6 +36,8 @@ impl std::error::Error for DeviceGrantError {}
 /// Crypto/format error for wrapped private-epoch material.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WrappedEpochError {
+    /// The material is not the entry for the requested persona and epoch.
+    WrongEntry,
     UnsupportedWrapFormat(String),
     InvalidWrappedKeyLength,
     Encrypt,
@@ -45,6 +47,10 @@ pub enum WrappedEpochError {
 impl fmt::Display for WrappedEpochError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::WrongEntry => write!(
+                f,
+                "wrapped epoch material is not the entry for the requested persona and epoch"
+            ),
             Self::UnsupportedWrapFormat(format) => {
                 write!(f, "unsupported wrapped private epoch format: {format}")
             }

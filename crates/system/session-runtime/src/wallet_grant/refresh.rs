@@ -88,7 +88,12 @@ pub(crate) fn refresh_remote_auth_private_read_grant(
         let id = certificate.certificate.id();
         let mut record =
             load_wrapped_epoch_record(data_root, id)?.unwrap_or_else(|| WrappedEpochRecord::new(id));
-        record.epochs.retain(|wrapped| wrapped.persona_id != persona);
+        // Replace rather than filter. The record is keyed by *this persona's*
+        // certificate, so by construction every entry in it is this persona's;
+        // there is nothing to keep. That also means the blinded entries never
+        // need to be read to be superseded, which is the property that lets the
+        // identifiers stay blinded.
+        record.epochs.clear();
         record.epochs.push(
             wrap_private_epoch_material(persona, epoch.epoch_id, &epoch.epoch_secret, wrapping_key)
                 .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?,
@@ -241,13 +246,19 @@ mod tests {
             stored_epochs_for(&root, &refreshed_second_grant, fixture_persona()).len(),
             1
         );
+        let wrapping_key = second_grant_before.1.wrapping_key;
         assert_eq!(
-            stored_epochs_for(&root, &refreshed_second_grant, fixture_persona())[0].epoch_id,
-            refreshed_epoch.epoch_id
+            stored_epochs_for(&root, &refreshed_second_grant, fixture_persona())[0].index,
+            blinded_epoch_index(fixture_persona(), refreshed_epoch.epoch_id, wrapping_key),
+            "the stored entry is the refreshed epoch's, matched the only way a holder can"
         );
         assert_eq!(
             unwrap_private_epoch_material(
                 &stored_epochs_for(&root, &refreshed_second_grant, fixture_persona())[0],
+                fixture_persona(),
+                // The refreshed epoch, not the original: a refresh replaces the
+                // entry, so asking for the old pair now fails at the index.
+                refreshed_epoch.epoch_id,
                 second_grant_before.1.wrapping_key,
             )
             .unwrap(),
@@ -385,8 +396,12 @@ mod tests {
 
         let restored_grant = load_device_grant_set(&delegatee_root, second_device).unwrap();
         assert_eq!(
-            stored_epochs_for(&delegatee_root, &restored_grant, fixture_persona())[0].epoch_id,
-            delegator_epoch.epoch_id
+            stored_epochs_for(&delegatee_root, &restored_grant, fixture_persona())[0].index,
+            blinded_epoch_index(
+                fixture_persona(),
+                delegator_epoch.epoch_id,
+                second_pairing.1.wrapping_key,
+            )
         );
 
         let _ = std::fs::remove_dir_all(&delegator_root);

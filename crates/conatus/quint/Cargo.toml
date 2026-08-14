@@ -22,7 +22,7 @@ numen = { path = "../numen", version = "0.1" }
 uuid = { version = "1", default-features = false, features = ["serde"] }
 # Burn-backed lowering of the field algebra (AST -> a fused tensor program).
 # ndarray backend for portable per-target compute; generic over `B: Backend`.
-burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
+burn = { version = "0.21", default-features = false, features = ["std"], optional = true }
 # Rhai composition surface for fields, couplings, and edge-path rules.
 rhai = { version = "1.20", default-features = false, features = ["std"], optional = true }
 # The resident lane's device types. The device itself is always the
@@ -30,6 +30,11 @@ rhai = { version = "1.20", default-features = false, features = ["std"], optiona
 # adapter cannot share a buffer with the renderer.
 wgpu = { version = "29", default-features = false, features = ["wgsl"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
+# Resident planes are allocated by CubeCL, then viewed by Burn and raw
+# wgpu consumers. This is the direction CubeCL supports without a copy:
+# compute allocations can be exported, while foreign buffers cannot be
+# cheaply adopted as tensors.
+cubecl = { version = "0.10", default-features = false, features = ["std", "wgpu"], optional = true }
 
 # The burn tree reaches getrandom on wasm; 0.4 needs its wasm_js backend
 # feature enabled by someone in the graph (compile_error! otherwise). Same
@@ -42,11 +47,18 @@ uuid = { version = "1", default-features = false, features = ["js"] }
 
 [features]
 default = []
-# The explicit-regime lane: kernels the host dispatches on its own
-# device, with positions resident between frames. Optional because it
-# drags wgpu, and quint's default build stays portable.
-field-gpu = ["dep:wgpu", "dep:bytemuck"]
-field-burn = ["dep:burn"]
+# The resident lane: CubeCL-owned allocations with Burn and raw-kernel
+# views on the host's existing device. Optional because it drags the GPU
+# carriage, and quint's default build stays portable.
+field-gpu = [
+    "dep:wgpu",
+    "dep:bytemuck",
+    "dep:cubecl",
+    "dep:burn",
+    "burn/wgpu",
+    "dep:getrandom",
+]
+field-burn = ["dep:burn", "burn/ndarray"]
 # Adds the wgpu backend so consumers can target GPU evaluation.
 field-burn-wgpu = ["field-burn", "burn/wgpu", "dep:getrandom"]
 field-rhai = ["dep:rhai"]
