@@ -12,7 +12,7 @@ use personae::signing::{PendingSigningRequest, SigningRecord};
 use serde::{Deserialize, Serialize};
 use session_runtime::{
     DeviceExposure, DeviceMode, RecoveryPolicy, load_device_roster, load_identity_wallet,
-    load_signed_device_grant, verify_device_grant,
+    load_device_grant_set, load_wrapped_epoch_record, requires_epoch_material,
 };
 
 /// Storage protection selected for the resident vault.
@@ -160,30 +160,64 @@ pub fn load_carry_view(data_root: &Path) -> io::Result<CarryView> {
                 grant_ref: grant_ref.clone(),
             });
 
-            match load_signed_device_grant(data_root, device.device_id)? {
-                Some(grant) => {
-                    let signature_valid = verify_device_grant(&grant).ok();
+            // A grant is a set now, so the projection summarises across its
+            // members: the union of every certificate's actions, the personas
+            // that issued one each, and the earliest expiry, which is the one
+            // that actually ends the device's authority.
+            let grant = load_device_grant_set(data_root, device.device_id)?;
+            match grant.is_empty() {
+                false => {
+                    let signature_valid =
+                        Some(grant.certificates().all(|certificate| certificate.verify()));
+                    let mut scopes: Vec<String> = grant
+                        .certificates()
+                        .flat_map(|certificate| certificate.certificate.scope.actions.iter())
+                        .map(|action| action.to_string())
+                        .collect();
+                    scopes.sort();
+                    scopes.dedup();
+                    let mut wrapped_epoch_count = 0;
+                    for certificate in grant.personas.values() {
+                        if requires_epoch_material(certificate)
+                            && let Some(record) =
+                                load_wrapped_epoch_record(data_root, certificate.certificate.id())?
+                        {
+                            wrapped_epoch_count += record.epochs.len();
+                        }
+                    }
                     view.grants.push(DeviceGrantView {
                         device_id,
                         grant_ref,
                         signature_valid,
-                        issued_at_ms: grant.payload.issued_at_ms,
-                        expires_at_ms: grant.payload.expires_at_ms,
+                        issued_at_ms: grant
+                            .certificates()
+                            .map(|certificate| certificate.certificate.issued_at_ms)
+                            .min()
+                            .unwrap_or_default(),
+                        expires_at_ms: grant
+                            .certificates()
+                            .filter_map(|certificate| certificate.certificate.expires_at_ms)
+                            .min(),
                         personas: grant
-                            .payload
                             .personas
-                            .iter()
+                            .keys()
                             .map(|persona| persona.as_uuid().to_string())
                             .collect(),
-                        scopes: grant.payload.scopes,
-                        attenuations: grant.payload.attenuations,
-                        wrapped_epoch_count: grant.payload.wrapped_private_epochs.len(),
+                        scopes,
+                        // `no-subdelegation` is no longer an atom carried in a
+                        // list nobody read; depth 0 in the grammar is the fact.
+                        attenuations: grant
+                            .certificates()
+                            .all(|c| c.certificate.remaining_delegation_depth == 0)
+                            .then(|| vec!["no-subdelegation".to_string()])
+                            .unwrap_or_default(),
+                        wrapped_epoch_count,
                     });
                 }
-                None if device.grant_ref.is_some() => view
+                true if device.grant_ref.is_some() => view
                     .unavailable
                     .push(format!("grant bytes unavailable for device {device_id}")),
-                None => {}
+                true => {}
             }
         }
     } else {

@@ -231,7 +231,7 @@ mod tests {
         spec.scopes = vec!["identity.act".into(), "transport.egress".into()];
         spec.wrapped_private_epochs.clear();
         let grant = issue_remote_auth_device_grant(&root, &spec).unwrap();
-        assert!(grant.payload.wrapped_private_epochs.is_empty());
+        assert!(stored_epochs_for(&root, &grant, fixture_persona()).is_empty());
 
         let _ = std::fs::remove_dir_all(&root);
     }

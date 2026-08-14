@@ -478,10 +478,14 @@ mod tests {
         let grant = credential
             .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 100, 200)
             .unwrap();
-        assert_eq!(grant.signed().payload.personas, Vec::new());
-        assert_eq!(grant.signed().payload.scopes, ["transport.egress"]);
-        assert_eq!(grant.signed().payload.attenuations, ["no-subdelegation"]);
-        assert!(grant.signed().payload.wrapped_private_epochs.is_empty());
+        let set = grant.signed();
+        assert!(set.personas.is_empty(), "a station gets no persona authority");
+        let certificate = set.device.as_ref().expect("a device certificate");
+        assert_eq!(
+            certificate.certificate.scope.actions.iter().collect::<Vec<_>>(),
+            ["transport.egress"]
+        );
+        assert_eq!(certificate.certificate.remaining_delegation_depth, 0);
 
         let lease = credential
             .acquire_lease(root.path(), device_id, 199)

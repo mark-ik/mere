@@ -114,6 +114,7 @@ pub(crate) use wrapping::{
 };
 
 pub use certificate::{
+    decode_device_grant_set, encode_device_grant_set,
     certificate_device_id,
     device_grant_set_ref, device_scope_certificate_path, load_device_grant_set,
     save_device_grant_set,

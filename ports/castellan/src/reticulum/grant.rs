@@ -1,20 +1,24 @@
 //! Narrow, expiring RemoteAuth grants for sited Reticulum stations.
 //!
-//! The underlying `DeviceGrantPayload` remains the wallet carry layer's
-//! current signed envelope. This adapter fixes the station policy over that
-//! envelope: one derived station signing key, `transport.egress` only, no
-//! persona or private-lane authority, no subdelegation, and a mandatory hard
-//! expiry. It deliberately does not decide the later reconciliation with
-//! `SignedDelegationCertificate`.
+//! A station grant is a `DeviceGrantSet` holding exactly one device-scoped
+//! `SignedDelegationCertificate`. This adapter fixes the station policy over
+//! it: one derived station signing key, `transport.egress` only, no persona
+//! authority at all, no subdelegation, and a mandatory hard expiry.
+//!
+//! The reconciliation this module once deferred is settled: the device grant
+//! *is* a delegation certificate now, so `no-subdelegation` is read as
+//! `remaining_delegation_depth == 0` and enforced by the grammar rather than
+//! asserted as a string atom nobody checked.
 
 use std::fmt;
 use std::path::Path;
 
+use personae::carry::DeviceGrantSet;
 use personae::{IdentityProvider, InMemoryProvider};
 use session_runtime::{
     DeviceExposure, DeviceGrantError, DeviceId, DeviceMode, DevicePublicKey, RemoteAuthGrantSpec,
-    SignedDeviceGrant, device_grant_ref, issue_remote_auth_device_grant, load_device_roster,
-    load_identity_seed, load_signed_device_grant, verify_device_grant,
+    certificate_device_id, device_grant_set_ref, issue_remote_auth_device_grant,
+    load_device_grant_set, load_device_roster, load_identity_seed,
 };
 
 /// The sole capability a sited station can receive.
@@ -79,7 +83,7 @@ impl SitedStationGrantRequest {
 /// A signed RemoteAuth envelope that passed the sited-station policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SitedStationGrant {
-    grant: SignedDeviceGrant,
+    grant: DeviceGrantSet,
 }
 
 impl SitedStationGrant {
@@ -100,7 +104,7 @@ impl SitedStationGrant {
             return Err(SitedStationGrantError::IssuerMismatch);
         }
 
-        if let Some(existing) = load_signed_device_grant(data_root, request.device_id)? {
+        if let Some(existing) = Some(load_device_grant_set(data_root, request.device_id)?).filter(|set| !set.is_empty()) {
             let existing = Self::from_signed(existing)?;
             if request.expires_at_ms <= existing.expires_at_ms() {
                 return Err(SitedStationGrantError::NonExtendingRenewal {
@@ -116,7 +120,7 @@ impl SitedStationGrant {
     }
 
     /// Check a signed envelope's static station policy and signature.
-    pub fn from_signed(grant: SignedDeviceGrant) -> Result<Self, SitedStationGrantError> {
+    pub fn from_signed(grant: DeviceGrantSet) -> Result<Self, SitedStationGrantError> {
         let station_grant = Self { grant };
         station_grant.validate_policy()?;
         Ok(station_grant)
@@ -131,7 +135,7 @@ impl SitedStationGrant {
         station_ed25519_public_key: [u8; 32],
         now_ms: u64,
     ) -> Result<Self, SitedStationGrantError> {
-        let grant = load_signed_device_grant(data_root, device_id)?
+        let grant = Some(load_device_grant_set(data_root, device_id)?).filter(|set| !set.is_empty())
             .ok_or(SitedStationGrantError::MissingGrant { device_id })?;
         let station_grant = Self::from_signed(grant)?;
 
@@ -153,7 +157,7 @@ impl SitedStationGrant {
         if device.device_pubkey != DevicePublicKey(station_ed25519_public_key) {
             return Err(SitedStationGrantError::StationKeyMismatch { device_id });
         }
-        let expected_ref = device_grant_ref(&station_grant.grant)?;
+        let expected_ref = device_grant_set_ref(&station_grant.grant);
         if device.grant_ref != Some(expected_ref) {
             return Err(SitedStationGrantError::RosterGrantMismatch { device_id });
         }
@@ -173,20 +177,16 @@ impl SitedStationGrant {
         now_ms: u64,
     ) -> Result<(), SitedStationGrantError> {
         self.validate_policy()?;
-        if self.grant.payload.device_id != device_id {
+        if self.device_id() != device_id {
             return Err(SitedStationGrantError::DeviceMismatch {
                 expected: device_id,
-                actual: self.grant.payload.device_id,
+                actual: self.device_id(),
             });
         }
-        if self.grant.payload.delegatee_pubkey != DevicePublicKey(station_ed25519_public_key) {
+        if self.station_ed25519_public_key() != station_ed25519_public_key {
             return Err(SitedStationGrantError::StationKeyMismatch { device_id });
         }
-        let expires_at_ms = self
-            .grant
-            .payload
-            .expires_at_ms
-            .expect("validate_policy requires a station-grant expiry");
+        let expires_at_ms = self.expires_at_ms();
         if now_ms >= expires_at_ms {
             return Err(SitedStationGrantError::Expired {
                 device_id,
@@ -197,57 +197,84 @@ impl SitedStationGrant {
         Ok(())
     }
 
+    /// The single device-scoped certificate a station grant is made of.
+    ///
+    /// `validate_policy` guarantees it is present, so the accessors below may
+    /// rely on it. A station carries device authority and nothing else: no
+    /// persona ever delegates to it.
+    fn certificate(&self) -> &personae::delegation::SignedDelegationCertificate {
+        self.grant
+            .device
+            .as_ref()
+            .expect("validate_policy requires a device certificate")
+    }
+
     /// Borrow the signed wallet envelope for transport or durable storage.
-    pub fn signed(&self) -> &SignedDeviceGrant {
+    pub fn signed(&self) -> &DeviceGrantSet {
         &self.grant
+    }
+
+    /// When this grant was issued.
+    pub fn issued_at_ms(&self) -> u64 {
+        self.certificate().certificate.issued_at_ms
     }
 
     /// The mandatory fail-closed expiry of this grant.
     pub fn expires_at_ms(&self) -> u64 {
-        self.grant
-            .payload
+        self.certificate()
+            .certificate
             .expires_at_ms
             .expect("validate_policy requires a station-grant expiry")
     }
 
     /// The RemoteAuth device this grant is bound to.
     pub fn device_id(&self) -> DeviceId {
-        self.grant.payload.device_id
+        certificate_device_id(self.certificate())
+            .expect("validate_policy requires a device-scoped certificate")
     }
 
     /// The Reticulum Ed25519 station key this grant authorizes.
     pub fn station_ed25519_public_key(&self) -> [u8; 32] {
-        self.grant.payload.delegatee_pubkey.0
+        self.certificate().certificate.subject
     }
 
     /// The Persona root that signed this grant.
     pub fn issuer_public_key(&self) -> [u8; 32] {
-        self.grant.payload.delegator_pubkey.0
+        self.certificate().certificate.issuer
     }
 
     fn validate_policy(&self) -> Result<(), SitedStationGrantError> {
-        if !verify_device_grant(&self.grant)? {
+        let Some(certificate) = self.grant.device.as_ref() else {
+            return Err(SitedStationGrantError::ScopeViolation);
+        };
+        if !certificate.verify() {
             return Err(SitedStationGrantError::InvalidSignature);
         }
-        let payload = &self.grant.payload;
-        if payload.personas.len() != 0 {
+        // A station holds device authority and nothing else. A persona
+        // certificate in the set would mean some persona had delegated to an
+        // unattended radio, which is exactly what this port refuses.
+        if !self.grant.personas.is_empty() {
             return Err(SitedStationGrantError::PersonaAuthority);
         }
-        if payload.wrapped_private_epochs.len() != 0 {
-            return Err(SitedStationGrantError::PrivateEpochMaterial);
-        }
-        if payload.scopes.as_slice() != [TRANSPORT_EGRESS_SCOPE] {
+        if certificate_device_id(certificate).is_none() {
             return Err(SitedStationGrantError::ScopeViolation);
         }
-        if payload.attenuations.as_slice() != [NO_SUBDELEGATION_ATTENUATION] {
+        let scope = &certificate.certificate.scope;
+        if scope.actions.len() != 1 || !scope.actions.contains(TRANSPORT_EGRESS_SCOPE) {
+            return Err(SitedStationGrantError::ScopeViolation);
+        }
+        // `no-subdelegation` used to be a string atom nobody enforced. The
+        // grammar enforces it now, so this reads the depth instead.
+        if certificate.certificate.remaining_delegation_depth != 0 {
             return Err(SitedStationGrantError::AttenuationViolation);
         }
-        let expires_at_ms = payload
+        let expires_at_ms = certificate
+            .certificate
             .expires_at_ms
             .ok_or(SitedStationGrantError::MissingExpiry)?;
-        if expires_at_ms <= payload.issued_at_ms {
+        if expires_at_ms <= certificate.certificate.issued_at_ms {
             return Err(SitedStationGrantError::InvalidExpiryWindow {
-                issued_at_ms: payload.issued_at_ms,
+                issued_at_ms: certificate.certificate.issued_at_ms,
                 expires_at_ms,
             });
         }
@@ -461,29 +488,31 @@ impl std::error::Error for SitedStationGrantError {}
 #[cfg(test)]
 mod tests {
     use personae::{IdentityProvider, InMemoryProvider};
-    use session_runtime::{DeviceGrantPayload, issue_device_grant};
 
     use super::*;
 
     #[test]
     fn a_signed_grant_with_extra_authority_is_not_a_sited_station_grant() {
-        let issuer = InMemoryProvider::from_seed([0x51; 32]);
+        let seed = [0x51; 32];
+        let issuer = InMemoryProvider::from_seed(seed);
         let station = issuer.derive_keypair(b"sited-station-grant-test").unwrap();
         let device_id = DeviceId::new();
-        let mut payload = DeviceGrantPayload::new_remote_auth(
+        // A grant carrying identity.act as well: the extra action lands on a
+        // persona certificate, so the set has persona authority in it and the
+        // station policy must refuse it.
+        let signed = personae::carry::issue_device_grant_set(
+            seed,
             device_id,
-            DevicePublicKey::from(issuer.master_public_key()),
             DevicePublicKey::from(station.public_key()),
+            &[TRANSPORT_EGRESS_SCOPE, "identity.act"],
+            &[personae::PersonaId::new()],
             100,
-        );
-        payload.expires_at_ms = Some(200);
-        payload.scopes = vec![TRANSPORT_EGRESS_SCOPE.into(), "identity.act".into()];
-        payload.attenuations = vec![NO_SUBDELEGATION_ATTENUATION.into()];
-
-        let signed = issue_device_grant(issuer.master_keypair(), payload).unwrap();
+            100,
+        )
+        .unwrap();
         let error = SitedStationGrant::from_signed(signed).unwrap_err();
 
-        assert!(matches!(error, SitedStationGrantError::ScopeViolation));
+        assert!(matches!(error, SitedStationGrantError::PersonaAuthority));
     }
 
     #[test]

@@ -229,19 +229,25 @@ mod tests {
         assert_ne!(refreshed_epoch.epoch_id, initial_epoch.epoch_id);
 
         let refreshed_second_grant = load_device_grant_set(&root, second_device).unwrap();
+        // The ref is UNCHANGED, and that is the point of the split. Rotating a
+        // private epoch replaces key material the device holds; it does not
+        // change what the device is permitted to do. Under the old envelope
+        // this assertion was assert_ne!, because appending an epoch re-signed
+        // the capability statement and pushed a new ref through the roster,
+        // the wallet index, and every persona capability slot.
         let refreshed_second_grant_ref = device_grant_set_ref(&refreshed_second_grant);
-        assert_ne!(refreshed_second_grant_ref, second_grant_ref_before);
+        assert_eq!(refreshed_second_grant_ref, second_grant_ref_before);
         assert_eq!(
-            stored_epochs_for(&root, &refreshed_second_grant, second_persona()).len(),
+            stored_epochs_for(&root, &refreshed_second_grant, fixture_persona()).len(),
             1
         );
         assert_eq!(
-            stored_epochs_for(&root, &refreshed_second_grant, second_persona())[0].epoch_id,
+            stored_epochs_for(&root, &refreshed_second_grant, fixture_persona())[0].epoch_id,
             refreshed_epoch.epoch_id
         );
         assert_eq!(
             unwrap_private_epoch_material(
-                &stored_epochs_for(&root, &refreshed_second_grant, second_persona())[0],
+                &stored_epochs_for(&root, &refreshed_second_grant, fixture_persona())[0],
                 second_grant_before.1.wrapping_key,
             )
             .unwrap(),

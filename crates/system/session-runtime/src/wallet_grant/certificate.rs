@@ -274,6 +274,19 @@ pub fn load_device_grant_set(data_root: &Path, device: DeviceId) -> io::Result<D
     Ok(set)
 }
 
+/// Canonical bytes of a whole grant set, for transport.
+///
+/// A station's set is one certificate, so this stays a single small record on
+/// the wire; a laptop's carries its persona certificates alongside.
+pub fn encode_device_grant_set(set: &DeviceGrantSet) -> Result<Vec<u8>, DeviceGrantError> {
+    encode_cbor(set).map_err(|_| DeviceGrantError::Encode)
+}
+
+/// Decode a grant set from canonical bytes.
+pub fn decode_device_grant_set(bytes: &[u8]) -> Result<DeviceGrantSet, DeviceGrantError> {
+    decode_cbor(bytes).map_err(|_| DeviceGrantError::Decode)
+}
+
 /// The device a certificate addresses, read back out of its scope resource.
 ///
 /// `device_capability_scope` puts the device uuid's 16 bytes there, so this is

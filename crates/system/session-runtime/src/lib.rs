@@ -214,6 +214,10 @@ pub use switcher_thumbnail::{
 };
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
 pub use wallet_grant::{
+    certificate_device_id, decode_device_grant_set, encode_device_grant_set,
+    device_grant_set_ref, load_device_grant_set,
+    save_device_grant_set, load_wrapped_epoch_record, save_wrapped_epoch_record,
+    WrappedEpochRecord, requires_epoch_material,
     DEVICE_GRANT_SCHEMA_VERSION, DeviceGrantError, EnrollmentBundleError, PairedRemoteAuthGrantSpec, PairingCodeError, PairingMaterialError,
     PairingTicketError, PrivateEpochPlaintext, REMOTE_AUTH_ENROLLMENT_BUNDLE_SCHEMA_VERSION,
     REMOTE_AUTH_PAIRING_SAS_CONTEXT_V1, REMOTE_AUTH_PAIRING_SECRET_LEN,

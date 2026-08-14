@@ -16,7 +16,7 @@ use personae::{
 use retinue::identity::{Identity, PrivateIdentity};
 use serde::{Deserialize, Serialize};
 use session_runtime::{
-    DeviceGrantError, DeviceId, decode_signed_device_grant, encode_signed_device_grant,
+    DeviceGrantError, DeviceId, decode_device_grant_set, encode_device_grant_set,
 };
 
 /// LXMF title identifying a version-one station-control frame.
@@ -74,10 +74,12 @@ impl SitedStationControlSigner {
                 actual: grant.device_id(),
             });
         }
-        let bytes = encode_signed_device_grant(grant.signed())
+        // The set is what travels now, not a single envelope. A station's set
+        // is one device certificate, so this stays one record on the wire.
+        let bytes = encode_device_grant_set(grant.signed())
             .map_err(|_| SitedStationControlError::Encode)?;
         self.sign(
-            grant.signed().payload.issued_at_ms,
+            grant.issued_at_ms(),
             SitedStationControlCommand::Grant { grant: bytes },
         )
     }
@@ -180,7 +182,7 @@ impl SitedStationControl {
     pub fn device_id(&self) -> Result<DeviceId, SitedStationControlError> {
         match &self.body.command {
             SitedStationControlCommand::Grant { grant } => {
-                Ok(SitedStationGrant::from_signed(decode_signed_device_grant(grant)?)?.device_id())
+                Ok(SitedStationGrant::from_signed(decode_device_grant_set(grant)?)?.device_id())
             }
             SitedStationControlCommand::Revoke { device_id, .. } => Ok(*device_id),
         }
@@ -579,7 +581,7 @@ impl SitedStationControlReceiver {
                 });
             }
         }
-        let incoming = SitedStationGrant::from_signed(decode_signed_device_grant(bytes)?)?;
+        let incoming = SitedStationGrant::from_signed(decode_device_grant_set(bytes)?)?;
         self.assert_grant_binding(&incoming)?;
         frame.verify(incoming.issuer_public_key(), self.device_id)?;
         incoming.authorize_at(self.device_id, self.station_ed25519_public_key, now_ms)?;
@@ -634,7 +636,7 @@ impl SitedStationControlReceiver {
     fn current_grant(&self) -> Result<Option<SitedStationGrant>, SitedStationControlError> {
         self.grant
             .as_deref()
-            .map(decode_signed_device_grant)
+            .map(decode_device_grant_set)
             .transpose()?
             .map(SitedStationGrant::from_signed)
             .transpose()

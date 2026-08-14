@@ -182,10 +182,59 @@ mechanical.
       id already commits to its own contents.
 - [x] Four more tests, session-runtime 257 and personae 97, plus a non-test
       `cargo check`.
-- [ ] **Remaining for M2**: switching `issue` / `enroll` / `refresh` /
-      `revoke` onto the seam and deleting the envelope. Everything so far is
-      additive; the old path is still the live one and nothing on disk is
-      half-migrated.
+### M2 part five: the flows switch and the envelope dies — DONE 2026-08-12
+
+**M2 is complete.** `envelope.rs` is deleted and `DeviceGrantPayload`,
+`SignedDeviceGrant`, and `DeviceGrantSignature` are gone from the tree. No
+legacy decoder was kept, per the posture.
+
+- [x] `issue` builds and stores a `DeviceGrantSet`, with epoch material
+      written per persona certificate.
+- [x] `enroll` reads and installs the set; `RemoteAuthEnrollmentBundle` gained
+      an `epochs` field, so the delegatee receives key material beside the
+      certificates rather than inside them.
+- [x] `refresh` **writes only the epoch record**, and the payoff is now a
+      test rather than a claim (below).
+- [x] `revoke` asks each persona certificate whether it carried
+      `private.read`, instead of consulting one flag for the whole grant.
+- [x] `validate` checks every member of the set: each must address this device
+      and name this holder, and the effective expiry is the earliest in the
+      set.
+- [x] Consumers re-based: castellan, signalman, and graphshell's identity
+      projection.
+- [x] Green: session-runtime 250, personae 97, castellan 31, knot 81,
+      signalman 16.
+
+#### The one test that changed meaning
+
+`revoke_remote_auth_device_refreshes_remaining_private_read_grants` asserted
+`assert_ne!` on the grant ref across a refresh. It now asserts `assert_eq!`.
+
+That inversion is the whole migration in one line. Rotating a private epoch
+replaces key material a device holds; it does not change what the device is
+permitted to do. The old envelope could not express that difference, so every
+rotation re-signed the capability statement and pushed a new ref through the
+roster, the wallet index, and every persona capability slot. The test was
+faithfully recording the churn as if it were correct.
+
+#### Two behaviours deliberately tightened
+
+- **Expiry is mandatory.** `grant_lifetime_ms` refuses a spec with no
+  `expires_at_ms`, where the old envelope allowed `None`. The delegation
+  grammar still permits an unbounded certificate, so this is a narrowing at
+  the wallet rather than a limitation: a device grant that never expires is
+  what the sited-radio case must not be able to mint by omission.
+- **`no-subdelegation` is enforced.** It was a string atom no code read.
+  Castellan's station policy now checks `remaining_delegation_depth == 0`,
+  and the grammar refuses to extend a chain past it.
+
+#### Noted, not fixed
+
+`ports/graphshell/src/bin/persona_switch_receipt.rs` does not compile, from a
+borrow of a temporary. Pre-existing and not this work: the commit that added
+it says so in its subject, "Add the persona-switch receipt, not yet compiled".
+The `gemot` / `p2panda_auth` trait errors in the workspace check are likewise
+someone else's in-flight work.
 
 The remaining surface is smaller than it looked. Counting references to
 `DeviceGrantPayload` and `sample_payload` across `wallet_grant`: eight are in
