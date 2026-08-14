@@ -58,6 +58,15 @@ tiers make the gaps addressable:
   ad hoc, and nothing behind content can cross the wire, because the
   contract has no place for it.
 
+**Product register (recorded 2026-08-14, Mark)**: above these contract
+tiers, *scene* in product speech means a reusable total projection regime:
+every lever (arrangement, backdrop, representations, motion, grammar) flexed
+toward one intent, portable across datasets, obeying the orrery's laws. That
+is the brand mark's "the projection decides what a node *is*" made a design
+unit. The [content catalog](2026-08-13_scenograph_content_catalog.md) deck 2
+holds that register; the contract's Scene type is what a regime emits when
+applied to a dataset.
+
 ## 3. Lanes, each with its forcing consumer
 
 ### L1. Woodshed adoption (open now; the release gate)

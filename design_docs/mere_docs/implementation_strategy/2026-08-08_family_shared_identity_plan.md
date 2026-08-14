@@ -199,6 +199,13 @@ the profile. It could show which persona you are on and could not change it.
   family; the receipt says whether remembering happened, because "everyone
   follows" and "just here" are different promises.
 
+**Observed 2026-08-09**, not just unit-tested: `persona_switch_receipt` holds
+one agent session across a switch, never reconnecting it, and it stops serving
+`work`'s SSH key and starts serving `alt`'s. That is the live claim in its
+strong form; a session that had to reconnect would not have proved it. The
+remembered choice and the projection's before/after offers are in the same
+receipt (`testing/mere/persona_switch`).
+
 ### Landed 2026-08-09 (turnstone, knot)
 
 **Turnstone** — `identity.rs::open_vault` was the last production

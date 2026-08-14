@@ -177,7 +177,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|profile| profile.id.as_str())
         .collect();
     assert_eq!(selected, ["alt"], "the marker follows the switch");
-    let offered_after: Vec<&str> = project_identity(&after)
+    let cards_after = project_identity(&after);
+    let offered_after: Vec<&str> = cards_after
         .iter()
         .filter(|card| {
             card.actions

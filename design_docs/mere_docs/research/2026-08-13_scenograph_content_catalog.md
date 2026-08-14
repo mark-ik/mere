@@ -9,6 +9,9 @@ are tracked design space, not commitments. The family standard holds: a
 candidate ships only when a consumer forces it. Each entry names its likeliest
 forcing consumer where one is visible today; consumers named here are
 candidates for that role, not work already ordered.
+**Revised 2026-08-14 (Mark)**: deck 2 rebuilt from consumer archetypes to
+scenes proper, reusable total projection regimes; the archetypes survive
+inside the entries as founding and transfer datasets.
 
 **Related**:
 [scenograph_expansion_brief](2026-08-10_scenograph_expansion_brief.md)
@@ -32,9 +35,10 @@ Method notes:
 - Decks run utility first, novelty last. **shipped** means it exists today;
   **core** means it is in the frozen contract's recognized vocabulary;
   unmarked entries are open-tail candidates.
-- The decks compose: a deck-2 scene archetype is roughly one arrangement plus
-  one backdrop plus representation choices. That composition is the swatch
-  pipeline, so anything named here lands as a template, not a hardcode.
+- The decks divide labor: decks 1, 3, 4, and 5 name single levers; deck 2
+  names scenes, regimes that fix every lever toward one intent. All of it is
+  the swatch pipeline, so anything named here lands as a template, not a
+  hardcode.
 
 ## 1. Arrangements
 
@@ -66,30 +70,96 @@ the richer local end. This deck names candidates for the portable tier.
 
 ## 2. Scenes
 
-Archetypes a consumer would assemble from the tiers. Graphshell remote is the
-standing discipline for all ten: each must survive the wire to a viewer with
-no source access.
+Definition (Mark, 2026-08-14): a scene is a cohesive projection of a dataset
+built from graph primitive representations, tailored to a situation yet
+reusable, so it applies beyond its founding dataset. A scene flexes every
+lever toward one intent; the other decks name the levers, this deck names the
+regimes. Changing one lever yields a variant of the same scene, never a new
+one. The brand mark's law is the bar for entry: **the projection decides what
+a node is**. A recipe that leaves a node being what the orrery already showed
+is a variant. And the receipt that a recipe is a scene: it re-applies to a
+second dataset and still reads true.
 
-1. **Set graph** (L1, the release gate): staged cards as numbered nodes, Next
-   edges for order, one fanned relation per reason. Woodshed.
-2. **Whole-graph canvas** (shipped): the orrery, the root swatch over shared
-   truth. Turnstone.
-3. **Encounter map**: pixel backdrop that picks, token sprites, regions as
-   zones, props hit-transparent. Isometry.
-4. **Compendium table**: grid arrangement of card representations over a page
-   surface. Isometry's data grid.
-5. **Station chart**: geographic backdrop, radio nodes with liveness badges,
-   link edges weighted by traffic. Signalman.
-6. **Fretboard diagram**: lattice space, finger positions as glyphs,
-   voice-leading edges. Woodshed.
-7. **Rehearsal filmstrip**: a lane of scenotime snapshots as mini-scenes;
-   the L4 and L5 meeting point.
-8. **Spread reading**: spread arrangement, drawn cards as sprites, annotation
-   edges to journal nodes. Cleromancy.
-9. **Replay stage**: a scene re-projected from scenotime diffs over host
-   time; the games wing's session record and the motion lane's proof.
-10. **Embedded slice**: a small-scope swatch living inside a document or a
-    second host; the anti-shell receipt as a scene archetype.
+The orrery is scene zero, the reference regime, and every scene obeys its
+laws: curation over truth (a scene never writes truth), node identity carried
+everywhere, per-instance visibility, the shared element-model hit contract,
+one pipeline. Miscibility follows: because every scene is a point in the same
+lever space, levers pour between them (Atlas ground under Chronicle's axis
+reads as a travel chronicle; Mosaic tiles inside Fog read as an exploration
+gallery). Mechanically a scene lands as the template mechanism at graph
+scope, parametric, persona-persisted, carrying product intent. Naming: scenes
+are a third register beside surfaces and arrangements; where a scene grew
+from a brand projection (Mosaic, Atlas) the scene carries the brand name and
+its placement lever keeps the same plain word in the arrangement register.
+Graphshell remote stays the standing discipline: every scene must survive the
+wire to a viewer with no source access.
+
+1. **Mosaic**: the collection, browsed whole. Adjacency-tiled placement where
+   nearness carries kinship; nodes are edge-to-edge tiles with snapshot or
+   sprite faces; edges withdraw into adjacency itself and fan only on
+   selection; the tiles are the ground, so there is nothing behind them.
+   Grammar: sort, filter, regroup. Founding: the compendium gallery.
+   Transfer: bookmarks, a sample library, the whole graph at census zoom.
+   Here a node is a tile.
+2. **Atlas**: where things are. Geographic placement over a basemap; nodes as
+   badge glyphs at true positions; edges as routed ways; regions as
+   territories; the camera speaks map grammar and the world holds still. The
+   host supplies placement facts; nodes never persist coordinates. Founding:
+   sited radios. Transfer: contacts by locale, photos by place, isometry's
+   overmap rendering through it. Here a node is a marker.
+3. **Tabletop**: tangible play on a ground that means something. Board
+   placement (position is user truth) over the one backdrop that picks;
+   nodes as sprites with authored hulls and material character; regions as
+   zones; edges withdrawn except measurement ghosts. Grammar: grab, drop,
+   measure. Founding: isometry encounters. Transfer: seating charts, floor
+   plans, play diagramming. Here a node is a piece.
+4. **Chronicle**: when, and what followed. A timeline spine on an era-banded
+   ribbon; events as cards, spans as meters; edges as arcs over the axis for
+   cause and sequence; scenotime is native, the scrub transport replays
+   diffs as motion. Founding: practice and journal history. Transfer: git
+   history, the browsing trace, radio traffic; the rehearsal filmstrip is
+   its strip form. Here a node is an event.
+5. **Circuit**: how it is wired. Grid-snapped blocks with ports; edges as
+   orthogonally routed traces, direction always drawn, weight as trace
+   width, bundling at density; blueprint backdrop. Grammar: follow the wire,
+   select a node and light its closure. Founding: the workspace dependency
+   graph. Transfer: audio signal chains, radio chains, build pipelines. Here
+   a node is a component.
+6. **Loom**: parallel streams and their crossings. Lanes on a shared axis;
+   nodes as cards in lane order; in-lane edges withdraw because order
+   carries them, and cross-lane edges become the star of the view; flow
+   pulses along the axis. Founding: the set beside practice state in
+   woodshed. Transfer: channel traffic, multi-track loops, kanban with
+   dependencies. Here a node is a beat in a stream.
+7. **Spotlight**: one thing, and everything that touches it. The focus
+   centered, neighbors ringed by rank; the full fan of cells at the focus so
+   every relation is individually legible; context dimmed to glyphs; the
+   rest withdrawn, as curation only. Grammar: re-focus to walk the graph.
+   Founding: the multi-node connections swatch. Transfer: a contact's
+   dossier, an entity audit, impact tracing. Here a node is a witness.
+8. **Rosette**: cyclic and angular relations. Members on a wheel bound to a
+   cycle; angular position carries the data; edges as chords across the disc
+   (aspects); a sky chart or plain wheel behind; time rotates the wheel.
+   Founding: cleromancy's ephemeris chart. Transfer: the circle of fifths,
+   the year wheel, and text (Mark, 2026-08-14): lines and stanzas as
+   stations on the meter's own cycle, chords as recurrence, rhyme,
+   assonance, repeated lemmas, semantic kinship, with chord span carrying
+   meaning (an end-rhyme spans a stanza; internal rhyme and alliteration
+   are the short chords). Candidate forcing consumer: knot, as a
+   creative-writing analysis scene over a document's interior; derived
+   analysis edges arrive as revealed cells and crystallize only when the
+   writer keeps them. Here a node is a station on the cycle.
+9. **Fog**: the known against the unknown. Visited members lit and placed;
+   unvisited ghosts at the fog line; the traveled path is the one privileged
+   polyline; the backdrop darkens away from the visited. Grammar: step,
+   peek, claim. Founding: the browsing trace corpus. Transfer: VTT fog of
+   war, a research reading front, codebase exploration. Here a node is
+   territory.
+10. **Grove**: tending a living collection. Spiral growth by age; freshness
+    as a field, bloom to wilt on the face; tended members brighten, stale
+    ones fade; edges as root lines shown only while tending. Grammar: prune,
+    touch, graft. Founding: the notes and memory garden. Transfer: feeds,
+    dependency pins due for bumps, task rot. Here a node is a planting.
 
 ## 3. Backdrops
 
@@ -174,8 +244,10 @@ runs the LOD ladder from collapsed to expressive.
 
 ## Where this feeds
 
-Placement against the tiers happens per the brief's method: each entry is
-scene, arrangement, or backdrop surface before it is code. The likely first
-pulls: deck 1's Lanes and Spread ride L1 and the cleromancy consumer, deck 3's
-entries 1 and 2 are L2's entrance prototypes, deck 5's Flow is the first L5
-receipt. Everything else waits for its consumer.
+Placement against the tiers happens per the brief's method. Scenes need no
+contract surface of their own: they land as graph-scope templates over the
+shared pipeline, and it is their levers that force contract work. The likely
+first pulls: Tabletop and Atlas force L2's backdrop prototypes, Loom rides
+L1's set graph, Chronicle's scrub transport is the natural first L5 consumer
+and deck 5's Flow its cheapest receipt. Everything else waits for its
+consumer.
