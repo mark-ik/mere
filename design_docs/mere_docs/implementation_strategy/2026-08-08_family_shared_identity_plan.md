@@ -362,16 +362,14 @@ Two defects the tests caught, both worth carrying as cautions:
   graphshell — the first application that happened to grow an identity
   surface — is that failure, committed knowingly now that it is written down.
 
-  This is larger than the create intent. Graphshell's whole H4 identity
-  surface (SSH generate / import / remove, device revoke, profile switch, and
-  now create) is by the port law castellan's surface, composed by graphshell
-  rather than owned by it. That predates this plan and is not its to fix, but
-  the create action should not be cited as precedent for staying put.
-
-  Castellan today is a name reservation with two library halves (OTP, the
-  reticulum device credential) and no product surface, so the honest state is:
-  the act works, its tests pass, and its home is founding work nobody has
-  started.
+  **Resolved 2026-08-14: the keeper was founded and the whole surface moved.**
+  Not just the create intent — the read model, the projection, and
+  `PersonaeHost` all live in castellan behind the `keeper` feature, with
+  graphshell re-exporting them at its pre-founding paths so no call site
+  changed. The persona-switch receipt now imports castellan directly, which is
+  the port law's own proof: a consumer composing the capability without going
+  through its first application. See the
+  [keeper founding plan](2026-08-14_castellan_keeper_founding_plan.md).
 
   Creating is deliberately not switching: a persona minted for another device
   is not one the user is adopting, so the new card arrives carrying the

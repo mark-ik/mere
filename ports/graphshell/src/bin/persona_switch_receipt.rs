@@ -20,6 +20,11 @@
 //! cargo run -p graphshell --bin persona_switch_receipt -- <output-dir>
 //! ```
 //!
+//! Since the keeper founding this receipt imports castellan directly, which is
+//! itself part of the proof: the port law wants the capability composable
+//! without going through its first application, and this binary is a consumer
+//! that never names graphshell's identity paths.
+//!
 //! The vault is created under the output directory and unlocked by a fixed
 //! passphrase, deliberately: `Unlock::AutoOs` exists on Windows only, and a
 //! receipt that silently skipped elsewhere would print "passed" with no
@@ -27,12 +32,12 @@
 
 use std::path::PathBuf;
 
-use graphshell::identity::VaultProtectionView;
-use graphshell::identity_projection::{
+use castellan::authority::{IdentityIntentOutcome, PersonaeHost};
+use castellan::projection::{
     CreateProfileIntentV1, PROFILE_CREATE_INTENT, PROFILE_SWITCH_INTENT, SwitchProfileIntentV1,
     project_identity, render_identity_surface,
 };
-use graphshell::native::personae_host::{IdentityIntentOutcome, PersonaeHost};
+use castellan::view::VaultProtectionView;
 use personae::bootstrap::{self, Unlock};
 use personae::roster;
 use personae::ssh_slot::{protocol_key_for, slot_for};

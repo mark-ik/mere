@@ -1,5 +1,4 @@
-//! Name reservation for **castellan**, the credential-keeper port of the Mere
-//! platform.
+//! **Castellan**, the credential-keeper port of the Mere platform.
 //!
 //! A castellan holds a keep in trust for its lord: custody without ownership,
 //! and the office of the gate. This port is that keeper for your credentials.
@@ -32,12 +31,31 @@
 //! and a clock, the digits; given an `otpauth://` URI, the configured
 //! generator. [`reticulum`] is Castellan's first device-identity issue seam:
 //! it derives a radio credential from a supplied Persona provider without
-//! creating a device-local account file. Storage, presentation, and
-//! gate-mediated release remain later slices; see the castellan OTP plan in
+//! creating a device-local account file.
+//!
+//! The **keeper surface** (feature `keeper`, founded 2026-08-14) is the two
+//! halves made real, moved home from graphshell where they first grew:
+//!
+//! - [`view`] — the secret-free read model. What a host may know.
+//! - [`projection`] — the cards and typed intents. What a host may show and
+//!   offer.
+//! - [`authority`] — [`authority::PersonaeHost`], the resident keeper. What
+//!   only the castellan does.
+//!
+//! Graphshell composes all three (and re-exports them at their old paths);
+//! any other host embeds the subset it needs without inheriting graphshell.
+//! Storage of foreign secrets, CXF import, and gate-mediated release remain
+//! later slices; see the castellan OTP plan and the keeper founding plan in
 //! mere's design docs.
 
 #![doc(html_no_source)]
 #![warn(missing_docs)]
 
+#[cfg(feature = "keeper")]
+pub mod authority;
 pub mod otp;
+#[cfg(feature = "keeper")]
+pub mod projection;
 pub mod reticulum;
+#[cfg(feature = "keeper")]
+pub mod view;

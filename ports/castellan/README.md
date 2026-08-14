@@ -1,7 +1,6 @@
 # castellan
 
-Name reservation for **castellan**, the credential-keeper port of the Mere
-platform.
+**Castellan**, the credential-keeper port of the Mere platform.
 
 A castellan holds a keep in trust for its lord: custody without ownership, and
 the office of the gate. This port is that keeper for your credentials. It
@@ -25,7 +24,29 @@ The boundaries are the point: not [personae](https://crates.io/crates/personae)
 players; castellan guards and presents you).
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
-`ports/castellan`. No implementation yet.
+`ports/castellan`.
+
+## State (2026-08-14)
+
+Implemented:
+
+- `otp` — RFC 6238/4226 codes and `otpauth://` URIs (the chatelaine's 2FA
+  algorithm half).
+- `reticulum` — the first device-identity issue seam: a radio credential
+  derived from a Persona provider, no device-local account file.
+- feature `keeper` — the two halves made real, moved home from graphshell
+  where they first grew: `view` (the secret-free read model), `projection`
+  (the cards and typed intents: signing decisions, SSH generate/import/
+  remove, device revoke, persona switch, persona create), and `authority`
+  (`PersonaeHost`, the resident keeper that holds the vault, serves the SSH
+  agent, and brokers approvals).
+
+Graphshell composes all three and re-exports them at its pre-founding paths,
+so it is the first host rather than the owner. The intent wire strings keep
+their `graphshell.identity.*` values for now; renaming the wire vocabulary is
+a separate decision. Storage of foreign secrets, CXF import, and
+gate-mediated release are later slices — see the keeper founding plan and the
+credential port brief in mere's `design_docs`.
 
 ## License
 

@@ -17,6 +17,7 @@ native = [
     "dep:graphshell-stdio",
     "dep:light-file-dialog",
     "dep:notochord",
+    "dep:castellan",
     "dep:personae",
     "dep:rand_core",
     "dep:serde",
@@ -87,6 +88,10 @@ light-file-dialog = { version = "3.21.3", optional = true }
 # The application composes Personae: the profile Graphshell speaks as. The
 # protocol and client crates deliberately do not depend on it.
 notochord = { workspace = true, features = ["tokio"], optional = true }
+# The identity keeper: view, projection, authority. Graphshell composes it
+# and re-exports it at the pre-founding paths (identity, identity_projection,
+# native::personae_host).
+castellan = { workspace = true, features = ["keeper"], optional = true }
 personae = { workspace = true, features = ["agent"], optional = true }
 p2panda-core = { version = "0.7.0", optional = true }
 p2panda-store = { version = "0.7.0", default-features = false, optional = true }
