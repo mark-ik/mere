@@ -269,9 +269,9 @@ Carried over or ruled here:
   cascade without a restart. (The headless halves of the first two and of the
   budget clause are covered by W1a; what remains is the wiring and the headed
   receipt.)
-- **W2: trigger context into the body.** *(Blocked on W0.5: "a node
-  appearing under a watched scope" is a main-graph watch.)* The matched-delta
-  digest handed to
+- **W2: trigger context into the body.** *(Unblocked 2026-08-13: W0.5's
+  containment adapter shipped with W1b, so "a node appearing under a watched
+  scope" is now expressible.)* The matched-delta digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
