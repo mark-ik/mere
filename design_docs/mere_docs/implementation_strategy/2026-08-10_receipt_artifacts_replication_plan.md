@@ -1,8 +1,8 @@
 # Receipt Artifacts Replication Plan
 
 **Date**: 2026-08-10
-**Status**: R0, R1 and R2 built 2026-08-10. R3 (a turnstone receipts lens)
-deferred as planned. See §5.
+**Status**: R0-R3 built 2026-08-10. R3 landed in the projection rather than
+turnstone, for the reason in §5; one gap named there. See §5.
 **Scope**: receipts — scenario receipts, frame captures, screenshots, and
 their provenance manifests — as content-addressed artifacts in the personal
 graph, replicated across the owner's own devices by the stack itself.
@@ -217,3 +217,42 @@ More than expected, and the plan is mostly wiring because of it:
   work and re-running at HEAD — it fails identically without it. Unrelated to
   receipts; likely the concurrent wallet-grant work or the live personae
   agent on this machine.
+
+- **2026-08-10, R3: the reading surface.** `receipts::card` plus a branch in
+  `supplemental_cards`. 22 receipt tests, 204 graphshell lib tests.
+
+  **Built somewhere other than the plan said, for a reason worth recording.**
+  R3 was written as "a receipts view in turnstone". Turnstone turns out to be
+  a graphshell endpoint *provider* (it publishes its own graph through
+  `remote_projection`), not a personal-graph consumer, and it does not enable
+  `personal-sync`. Putting the lens there would have meant pulling p2panda and
+  stickleback into the app purely to read. So the card is built where the
+  receipts already are — in the projection the resident host publishes — and
+  any admitted session reads it over the ordinary session protocol. Turnstone
+  already has `graphshell-client`, so a turnstone lens remains available
+  without a new dependency edge. The surface moved; the destination did not.
+
+  Without this a receipt replicated as a generic "Synced graph node" card
+  showing a title and an address, dropping every fact in its facets. That is
+  the failure the whole lane exists to prevent, so the card is the point of
+  the exercise rather than decoration. It reports repo, scenario, machine,
+  system, session type, commit, when, and result, and carries each capture's
+  blake3 in `PortableCardV1::media`, the field the protocol already resolves
+  through `ResourceRequest`.
+
+  Two deliberate touches: **a dirty checkout is said twice**, in the commit
+  line and as a badge, because it is the single fact that decides whether the
+  pixels are evidence about a commit and a reader skimming badges must not
+  miss it. And **missing or malformed artifacts degrade rather than vanish** —
+  a bad hash is dropped rather than guessed, and the receipt still reads as a
+  receipt.
+
+  **The honest remaining gap.** A session can *ask* for a capture (the hash is
+  in the right field), but `IdentityEndpoint::bytes_for` resolves only from
+  its in-memory `resources` and `released` maps, so a blob living in the redb
+  store answers `MissingResource`. Clicking through to the pixels therefore
+  needs the endpoint to reach the blob store — which is the same seam any
+  graph node's content would need, not a receipt-specific one, and it wants
+  designing rather than bodging (loading every capture into memory is exactly
+  what the bounded `released` map exists to avoid). Named here as the next
+  step; everything up to it is done.
