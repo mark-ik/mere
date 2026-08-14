@@ -221,16 +221,26 @@ More than expected, and the plan is mostly wiring because of it:
 - **2026-08-10, R3: the reading surface.** `receipts::card` plus a branch in
   `supplemental_cards`. 22 receipt tests, 204 graphshell lib tests.
 
-  **Built somewhere other than the plan said, for a reason worth recording.**
-  R3 was written as "a receipts view in turnstone". Turnstone turns out to be
-  a graphshell endpoint *provider* (it publishes its own graph through
-  `remote_projection`), not a personal-graph consumer, and it does not enable
-  `personal-sync`. Putting the lens there would have meant pulling p2panda and
-  stickleback into the app purely to read. So the card is built where the
-  receipts already are â€” in the projection the resident host publishes â€” and
-  any admitted session reads it over the ordinary session protocol. Turnstone
-  already has `graphshell-client`, so a turnstone lens remains available
-  without a new dependency edge. The surface moved; the destination did not.
+  **Which half was built, and a correction (Mark, same day).** R3 was written
+  as "a receipts view in turnstone", and a first pass here claimed turnstone
+  was an endpoint *provider* and not a consumer. That was wrong, and the
+  correct picture matters because it makes the destination closer rather than
+  further. Turnstone is **both**: `remote_projection` publishes its own graph
+  as an endpoint, *and* it carries working `graphshell-client` machinery —
+  `ClientState::apply_snapshot`, presentation resolution, and the full
+  `NeedsResource` to `resource` to `apply_resource` fetch loop in
+  `resolve_all`. That client is exercised loopback in the G3 canary, against
+  turnstone's own endpoint. What turnstone lacks is an **outbound session to
+  another mere**, not the ability to consume one; browsing other meres is its
+  design intent (the 2026-07-22 remote-lens ruling names a "remote turnstone
+  lens" explicitly), and it keeps its own graph regardless.
+
+  So this phase built the **publishing half**, and it belongs where it is on
+  its own merits: the card is produced by whoever holds the receipts. A
+  turnstone receipts lens is then "open a session to the resident host and
+  render its supplemental cards" — no new dependency edge, no `personal-sync`
+  in the app, and no client code that does not already exist and pass its
+  canary.
 
   Without this a receipt replicated as a generic "Synced graph node" card
   showing a title and an address, dropping every fact in its facets. That is
@@ -247,12 +257,17 @@ More than expected, and the plan is mostly wiring because of it:
   a bad hash is dropped rather than guessed, and the receipt still reads as a
   receipt.
 
-  **The honest remaining gap.** A session can *ask* for a capture (the hash is
-  in the right field), but `IdentityEndpoint::bytes_for` resolves only from
-  its in-memory `resources` and `released` maps, so a blob living in the redb
-  store answers `MissingResource`. Clicking through to the pixels therefore
-  needs the endpoint to reach the blob store â€” which is the same seam any
-  graph node's content would need, not a receipt-specific one, and it wants
-  designing rather than bodging (loading every capture into memory is exactly
-  what the bounded `released` map exists to avoid). Named here as the next
-  step; everything up to it is done.
+  **The remaining gap is purely server-side**, which the correction above
+  sharpens. The client half is done and proven: turnstone's `resolve_all`
+  already turns a `NeedsResource` into a fetch and applies the response. What
+  is missing is that `IdentityEndpoint::bytes_for` resolves only its
+  in-memory `resources` and `released` maps, so a capture living in the redb
+  blob store answers `MissingResource`. Clicking through therefore needs a
+  store-backed resource path on the publishing side — the same seam any graph
+  node's content needs, not a receipt-specific one, and worth designing
+  rather than bodging, since loading every capture into memory is exactly
+  what the bounded `released` map exists to avoid.
+
+  **So the two steps left for a lens are small and separable**: a store-backed
+  `bytes_for` on the host, and an outbound session from turnstone. Neither is
+  receipt-specific.

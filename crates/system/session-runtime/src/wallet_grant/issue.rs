@@ -18,7 +18,7 @@ use super::*;
 pub fn issue_remote_auth_device_grant(
     data_root: &Path,
     spec: &RemoteAuthGrantSpec,
-) -> io::Result<SignedDeviceGrant> {
+) -> io::Result<DeviceGrantSet> {
     validate_remote_auth_spec(data_root, spec)?;
 
     let mut roster = load_device_roster(data_root)?.unwrap_or_else(DeviceRoster::new);
@@ -35,22 +35,21 @@ pub fn issue_remote_auth_device_grant(
             "wallet root missing identity/master.seed; bootstrap the wallet first",
         )
     })?;
-    let provider = InMemoryProvider::from_seed(seed);
-    let mut payload = DeviceGrantPayload::new_remote_auth(
+    let valid_for_ms = grant_lifetime_ms(spec.issued_at_ms, spec.expires_at_ms)?;
+    let actions: Vec<&str> = spec.scopes.iter().map(String::as_str).collect();
+    let set = issue_device_grant_set(
+        seed,
         spec.device_id,
-        DevicePublicKey::from(provider.master_public_key()),
         spec.delegatee_pubkey,
+        &actions,
+        &spec.personas,
+        valid_for_ms,
         spec.issued_at_ms,
-    );
-    payload.expires_at_ms = spec.expires_at_ms;
-    payload.personas = spec.personas.clone();
-    payload.scopes = spec.scopes.clone();
-    payload.attenuations = spec.attenuations.clone();
-    payload.wrapped_private_epochs = spec.wrapped_private_epochs.clone();
+    )
+    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
-    let grant = issue_device_grant(provider.master_keypair(), payload)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let grant_ref = save_signed_device_grant(data_root, &grant)?;
+    let grant_ref = save_device_grant_set(data_root, spec.device_id, &set)?;
+    store_wrapped_epochs(data_root, &set, &spec.wrapped_private_epochs)?;
 
     upsert_remote_auth_device_record(&mut roster, spec, grant_ref);
     save_device_roster(data_root, &roster)?;
@@ -72,7 +71,55 @@ pub fn issue_remote_auth_device_grant(
     save_identity_wallet(data_root, &identity_wallet)?;
     upsert_persona_capability_slots(data_root, &spec.personas, spec.device_id, grant_ref)?;
 
-    Ok(grant)
+    Ok(set)
+}
+
+/// How long a grant is valid for, from the spec's issue and expiry stamps.
+///
+/// A certificate's expiry is mandatory here where the old envelope allowed
+/// `None`. The delegation grammar itself permits an unbounded certificate, so
+/// this is a deliberate narrowing rather than a limitation: a device grant
+/// that never expires is exactly what the sited-radio case must not be able
+/// to mint by omission.
+pub(crate) fn grant_lifetime_ms(issued_at_ms: u64, expires_at_ms: Option<u64>) -> io::Result<u64> {
+    let expires = expires_at_ms.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a device grant must expire; supply expires_at_ms",
+        )
+    })?;
+    expires.checked_sub(issued_at_ms).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("device grant expires_at_ms {expires} is not after issued_at_ms {issued_at_ms}"),
+        )
+    })
+}
+
+/// Write the wrapped epoch material for each persona certificate in a set.
+///
+/// The material is grouped by the certificate that authorises it, so a persona
+/// only ever receives the epochs its own grant covers, and appending later
+/// touches this record alone.
+pub(crate) fn store_wrapped_epochs(
+    data_root: &Path,
+    set: &DeviceGrantSet,
+    wrapped: &[WrappedEpochMaterial],
+) -> io::Result<()> {
+    for (&persona, certificate) in &set.personas {
+        let mine: Vec<_> = wrapped
+            .iter()
+            .filter(|material| material.persona_id == persona)
+            .cloned()
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let mut record = WrappedEpochRecord::new(certificate.certificate.id());
+        record.epochs = mine;
+        save_wrapped_epoch_record(data_root, &record)?;
+    }
+    Ok(())
 }
 
 /// Issue one remote-auth device grant directly from a shared pairing secret and
