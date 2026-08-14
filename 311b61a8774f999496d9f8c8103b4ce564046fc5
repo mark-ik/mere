@@ -1,0 +1,1 @@
+Also carries roster::import_profile (mere, personae): the migration primitive that adopts an application's existing identity into the vault keeping its master key, plus its two tests. Swept in from a concurrent session; see the note on 300b231b.
