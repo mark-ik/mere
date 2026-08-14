@@ -219,22 +219,44 @@ Carried over or ruled here:
   scope last, because a scope segment may contain a colon and `Cap`'s wire
   form could not carry one unambiguously). The matcher takes `WatchEvent`s
   rather than a journal type, so it serves both tiers.
-- **W0.5: the main graph's region vocabulary. NEEDS A RULING.** What names
-  "a region of the main graph" for a watch (and for the read grant that must
-  contain it). Candidates, none built: **container membership** (structural,
-  matches the "under this container" reading of the inbox rule), **address
-  prefix** (genuinely hierarchical already, so `ScopePath` would work
-  unchanged for web nodes), **tag** (flat, so it is a predicate rather than a
-  scope and would not nest). Whatever is chosen also needs an adapter turning
-  `AttributedDelta`s into `WatchEvent`s. Blocks W2, not W1.
-- **W1: cascade runner at the drain (turnstone).** The bounded rounds loop
-  of 3.3 wired to the existing after-dispatch drain and `RunDenizen` lane.
+- **W0.5: the main graph's region vocabulary. RULED: container membership
+  (Mark, 2026-08-13).** Containment is already real in the kernel:
+  `EdgeFamily::Containment` with seven sub-kinds (`UrlPath`, `Domain`,
+  `FileSystem`, `UserFolder`, `ClipSource`, `NotebookSection`,
+  `CollectionMember`), so this is a vocabulary the graph has rather than one
+  to invent. The design that follows: **a node's watch scope is its
+  containment ancestry**, written as a `ScopePath` of UUIDs
+  (`containerUuid/memberUuid/...`). Segment-prefix coverage then means what
+  it should with no change to `Cap`: a watch naming a container covers
+  everything under it, transitively, and a watch naming the full path covers
+  exactly one node. Two details the implementation settles, neither a
+  blocker: a node reachable by several containment sub-kinds has *several*
+  ancestry paths, which `WatchEvent.scopes` already accommodates by being a
+  slice; and a node removed by the delta being matched has no ancestry left
+  to compute, so it falls back to its own id as a single segment (matching an
+  exact-node watch or the root, and nothing else). The adapter lives host-side
+  in turnstone, which has both the graph and the journal; putting it in
+  graph-kernel would drag personae's crypto into a wasm-clean crate through
+  servitor. Unblocks W2.
+- **W1a: the cascade runner itself (headless). LANDED 2026-08-13.** The
+  bounded rounds loop of 3.3, in `servitor::cascade`: `CascadeBudget` (a
+  setting, floored at 1, no unlimited value), `run_cascade` taking a
+  host-supplied runner closure so no body-running lives here, and a
+  `Cascade { rounds, outcome }` whose `BudgetExhausted` names the subjects
+  still waking each other. Exhaustion **defers** rather than consumes: the
+  naming peek (`WatchTable::would_wake`) advances no cursor, so work a
+  cascade ran out of budget for is still there on the next drain.
+- **W1b: wire it to the drain (turnstone).** The loop above at the existing
+  after-dispatch drain, over the `RunDenizen` lane, with the budget read from
+  settings and exhaustion surfaced as an `AppEvent` and a visible notice.
   Done when: a two-behavior mutual-wake fixture terminates at the budget
   with the loud event on screen; a linear A-wakes-B chain settles in one
   cascade; every behavior-authored entry in the journal reads back with the
   right subject; the whole cascade replays deterministically in a scenario
   run; lowering the budget setting from 4 to 1 takes effect on the next
-  cascade without a restart.
+  cascade without a restart. (The headless halves of the first two and of the
+  budget clause are covered by W1a; what remains is the wiring and the headed
+  receipt.)
 - **W2: trigger context into the body.** *(Blocked on W0.5: "a node
   appearing under a watched scope" is a main-graph watch.)* The matched-delta
   digest handed to
@@ -331,3 +353,17 @@ not automation).
   Note for whoever runs the workspace clippy gate: `-D warnings` is red on
   personae's deprecated `chacha20poly1305` `from_slice` calls, which is
   pre-existing crypto-row residue and unrelated to this slice.
+- 2026-08-13 (W0.5 ruled, W1a): Mark ruled container membership; the ancestry
+  design above is written against `edge_taxonomy.rs`, which already carries
+  `EdgeFamily::Containment`. `servitor::cascade` landed with it. **51 tests
+  pass** (8 cascade, 11 watch, 32 existing). The cascade tests cover a chain
+  settling, a two-scope relay settling, mutual waking stopping at the budget
+  with both subjects named, deferred work surviving exhaustion, a budget of
+  one, the floor, an empty wake set never calling the runner, and two
+  identical runs producing identical rounds.
+  One fixture was wrong before it was right, and the correction is the
+  interesting part: the first "relay settles" test had both subjects watching
+  the same scope with a runner that committed unconditionally, which is not a
+  relay but two behaviors answering each other, and it correctly exhausted
+  the budget. A real relay needs distinct scopes and a last link that writes
+  where nobody is watching. The test now says so in its name.

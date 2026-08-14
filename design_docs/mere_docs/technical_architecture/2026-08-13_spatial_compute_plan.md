@@ -1,7 +1,9 @@
 # Spatial Compute Plan (2026-08-13)
 
-**Status: founded 2026-08-13; P1, P2's spike, the Burn handoff, and P3
-all landed the same day. P4 is next, and now has its evidence.** The GPU
+**Status: founded 2026-08-13; P1 through P4 all decided the same day.**
+P1, P2's spike, the Burn handoff, and P3 landed as code; **P4 is
+decided as a narrowing rather than an extraction** (see below), with
+its one live hazard closed in code. The GPU
 architecture for conatus and its render consumers, ratified by Mark from
 the conatus discussion of 2026-08-13 (the projection ruling and its
 amendment in
@@ -236,6 +238,82 @@ missing:
   once after commit and would break on growth; the epoch is what makes
   that detectable rather than silent.
 
+### The verdict: narrowed, not extracted (2026-08-13)
+
+**No crate is created.** The bar is two *real* consumers, and both of
+today's are probes: receipts, not shipped code. mere's resident-graph
+is untracked by the probes convention; the wing's ambience-lease is a
+wing-side spike. Extracting a shared crate from two probes would
+declare a portable profile in advance, which is the thing the wing's
+own doctrine refuses, and would bind two repositories to a struct of
+three scalars before either ships a consumer of it.
+
+What is promoted instead is **the convention, written here**, plus one
+piece of enforced code (below). The contract in its post-P3 form:
+
+    A resident spatial buffer is published, not shared.
+
+    The producer states:
+      count                      how many slots
+      position format            padded 3D, vec4f, xyz meaningful
+      coordinate space and units what the numbers mean
+      slot stability             the rule below
+
+    The consumer states, when it cannot bind:
+      destination base and stride  where its own storage begins,
+                                   and how far apart its slots sit
+      allocation order             contiguity, if the adapter indexes
+                                   by stride
+
+    Either side may raise the epoch, and the reader of a stale epoch
+    rebinds before publishing.
+
+Three properties of that shape are worth stating because P3 taught
+each one against expectation:
+
+1. **Publication is asymmetric.** A consumer that cannot bind the
+   buffer is not a degenerate case; it is renderling, the wing's own
+   renderer. So the contract describes a buffer and leaves acquisition
+   to the consumer, rather than requiring everyone to bind alike.
+2. **The consumer's own layout is contract.** Allocation order,
+   destination base, and stride live on the consumer's side and the
+   producer must be told them. A producer-only descriptor is half a
+   contract.
+3. **The epoch is the only part that must be enforced rather than
+   documented**, because its failure is silent. Hence the code.
+
+**Slot stability, ruled here** (the P2 open): a slot is a free list
+with a per-slot generation, never compaction. A consumer may hold a
+slot index across frames, so compaction that moves subjects between
+slots invalidates held indices with no signal; a free list keeps
+indices stable and a generation makes reuse detectable. Compaction is
+permitted only behind an epoch bump, which by rule forces every
+consumer to rebind. Neither probe needs this yet (both hold count
+fixed), and it is ruled now because it is a producer-side decision
+that a shipped canvas will need before its first node is removed.
+
+**Promotion trigger, named:** the contract becomes a crate when a
+*shipped* producer and a *shipped* consumer exist, which in practice
+means when the kernels leave the probes for conatus proper (the P2
+open) and a real canvas or wing scene consumes them. At that point
+the natural home is beside whatever owns the producer's state, not a
+new crate wedged between the repositories, and the destination half
+belongs to the consumer's own crate.
+
+**Enforced now, in code:** the epoch, in
+`paredros/probes/ambience-lease`. renderling's allocator already
+publishes the signal (`SlabBuffer::is_new_this_commit`, whose craballoc
+documentation says it exists so downstream bind groups can be
+rebuilt); the probe commits each frame, re-attaches when the buffer was
+recreated, and provokes growth deliberately with one 400,000-vertex
+allocation. The control is what makes it a receipt: with `--no-reattach`
+the same run skips the re-attach, and pixels changed across the growth
+fall from **10.86% to 0.00%**. The producer publishes into an orphaned
+buffer while renderling reads the new one, and the cloud freezes
+without erroring. Both numbers come from one probe under one flag,
+because an absence is evidence only when the same run can show the
+positive case.
+
 ## 3. Stop rules
 
 - No recorded decision reads settled positions except through an
@@ -248,6 +326,15 @@ missing:
   before P4.
 
 ## Findings
+
+- **2026-08-13 (P4):** a growth receipt that never grows is worse than
+  none. The first attempt to provoke reallocation allocated 40,000
+  more transforms; they fit in the allocator's existing slack, so the
+  epoch never fired, the assertion passed vacuously in an earlier
+  draft, and the frame cost 600 ms for nothing. One large allocation
+  past the slack is what actually recreates the buffer. Provoking the
+  event beats waiting for it, and checking that the provocation
+  *worked* beats trusting it.
 
 - **2026-08-13 (P3):** a second consumer may be unable to bind the
   lease at all. renderling addresses geometry through a craballoc slab
