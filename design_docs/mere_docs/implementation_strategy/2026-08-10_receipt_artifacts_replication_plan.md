@@ -226,7 +226,7 @@ More than expected, and the plan is mostly wiring because of it:
   was an endpoint *provider* and not a consumer. That was wrong, and the
   correct picture matters because it makes the destination closer rather than
   further. Turnstone is **both**: `remote_projection` publishes its own graph
-  as an endpoint, *and* it carries working `graphshell-client` machinery —
+  as an endpoint, *and* it carries working `graphshell-client` machinery â€”
   `ClientState::apply_snapshot`, presentation resolution, and the full
   `NeedsResource` to `resource` to `apply_resource` fetch loop in
   `resolve_all`. That client is exercised loopback in the G3 canary, against
@@ -238,7 +238,7 @@ More than expected, and the plan is mostly wiring because of it:
   So this phase built the **publishing half**, and it belongs where it is on
   its own merits: the card is produced by whoever holds the receipts. A
   turnstone receipts lens is then "open a session to the resident host and
-  render its supplemental cards" — no new dependency edge, no `personal-sync`
+  render its supplemental cards" â€” no new dependency edge, no `personal-sync`
   in the app, and no client code that does not already exist and pass its
   canary.
 
@@ -263,7 +263,7 @@ More than expected, and the plan is mostly wiring because of it:
   is missing is that `IdentityEndpoint::bytes_for` resolves only its
   in-memory `resources` and `released` maps, so a capture living in the redb
   blob store answers `MissingResource`. Clicking through therefore needs a
-  store-backed resource path on the publishing side — the same seam any graph
+  store-backed resource path on the publishing side â€” the same seam any graph
   node's content needs, not a receipt-specific one, and worth designing
   rather than bodging, since loading every capture into memory is exactly
   what the bounded `released` map exists to avoid.

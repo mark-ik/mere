@@ -41,12 +41,23 @@ older spec variant is chosen, and it emits `allows-weak-linkage` —
 exactly the key rustc 1.97 removed. The build dies in `rustc --print`
 with *unknown field `allows-weak-linkage`*.
 
-The fork (`Code/crates/rust-gpu`, branch `mark-ik/prerelease-version-gate`)
-compares on the version triple alone, which is what every gate in that
-function means. The window is one release wide: later nightlies
+The fork (`Code/crates/rust-gpu`, branch `mark-ik/prerelease-version-gate`,
+pushed to `github.com/mark-ik/rust-gpu`) compares on the version triple
+alone, which is what every gate in that function means.
+
+**Deliberately not reported upstream** (Mark, 2026-08-13). The window
+is one release wide and closes by itself: later nightlies
 (`1.98.0-nightly`) already pass, because the triple comparison
-dominates. **Worth reporting upstream**; when it lands, the fork
-retires and the build command points back at the git source.
+dominates once the minor differs. rust-gpu is mid-0.10 development and
+this is transient build churn rather than a design gap, so it is not
+worth a maintainer's attention. A draft issue and PR body sit on the
+fork's branch (`UPSTREAM_DRAFT.md`) in case it proves durable instead.
+
+**Retire the fork by re-checking, not by waiting for a fix.** When
+rust-gpu's pinned nightly moves past the 1.97 line, plain upstream
+should build: point `--spirv-builder-source` back at the git URL, drop
+the local `spirv-std` path, and reinstall cargo-gpu from git. If that
+works, delete the fork remote.
 
 ## What this cost, and what it did not
 

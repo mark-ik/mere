@@ -396,8 +396,12 @@ positive case.
   fork comparing on the version triple clears it
   (`Code/crates/rust-gpu`, branch `mark-ik/prerelease-version-gate`),
   and cargo-gpu must be rebuilt against that fork because it links
-  `rustc_codegen_spirv-types` directly. Worth reporting upstream; the
-  window is one release wide. Full detail in `quint-shaders/README.md`.
+  `rustc_codegen_spirv-types` directly. **Not reported upstream** by
+  Mark's ruling: the window is one release wide and closes when their
+  pinned nightly moves past 1.97, so it is transient build churn during
+  active 0.10 work rather than a design gap. Retire the fork by
+  re-checking plain upstream later, not by waiting on a fix. Full
+  detail in `quint-shaders/README.md`.
 - **2026-08-13 (carriage):** a receipt that a `.spv` *exists* is not a
   receipt that it *runs*. The first passing suite took the WGSL
   fallback throughout, because the test device never requested
