@@ -1,9 +1,13 @@
 # Spatial Compute Plan (2026-08-13)
 
-**Status: founded 2026-08-13; P1 through P4 all decided the same day.**
-P1, P2's spike, the Burn handoff, and P3 landed as code; **P4 is
-decided as a narrowing rather than an extraction** (see below), with
-its one live hazard closed in code. The GPU
+**Status: complete 2026-08-13.** P1 through P4 all decided and their
+work landed. P4 is a narrowing rather than an extraction (see below),
+with its one live hazard closed in code. Every open item is closed:
+slot stability ruled, the kernels promoted into `quint::resident` with
+the rust-gpu carriage working, and the windowed run presented. What
+remains is not this plan's: the promotion trigger for the lease
+(a shipped producer and consumer) and the renderling shader-edit wall,
+both with named watch conditions. The GPU
 architecture for conatus and its render consumers, ratified by Mark from
 the conatus discussion of 2026-08-13 (the projection ruling and its
 amendment in
@@ -172,10 +176,17 @@ intermediates, O(n squared) memory, and cannot reach 50k at all on an
 tensor lane serves small-to-mid canvases and the semantic-field
 couplings it was built for.
 
-**Still open before P2 closes:** the slot-stability decision (the
-probe holds n fixed); promotion of the kernels out of the probe into
-conatus proper with the rust-gpu carriage; and a windowed rather than
-offscreen run.
+**P2's opens, all closed 2026-08-13.** Slot stability is ruled under
+P4 (a free list with per-slot generations, never compaction). The
+kernels are promoted into `quint::resident` behind a `field-gpu`
+feature, **with the rust-gpu carriage working**: `quint-shaders`
+compiles Rust to a committed `quint_shaders.spv` that the lane loads
+through `PASSTHROUGH_SHADERS`, falling back to the equivalent WGSL
+where an adapter lacks it, with a receipt asserting the artifact is
+what actually executes. And the windowed run is
+`paredros/probes/ambience-lease`'s `live` binary: the same lane at
+vsync in a winit window, worst steady-state frame 24.8 ms, receipt at
+`Code/testing/paredros/p2_live_ambience.png`.
 
 ### P3. Wing projection
 
@@ -370,11 +381,28 @@ positive case.
   `pin`/`unpin` (kinematic hold during drag, dynamic release) is the
   hold-and-release the commitment doctrine needs, so P1 added a
   read-only proposal query and no new mechanics.
-- **2026-08-13 (P2 spike):** kernels are WGSL in the probe, not
-  rust-gpu: cargo-gpu is not installed on this machine and the probe's
-  job was the residency numbers. The rust-gpu carriage is the promotion
-  step, when the kernels move into conatus proper. The lane taxonomy is
-  untouched: a WGSL kernel is still an explicit GPU program.
+- **2026-08-13 (P2 spike):** kernels were WGSL in the probe, because
+  the probe's job was the residency numbers. **Superseded the same
+  day**: the promotion carries real rust-gpu, and WGSL survives as the
+  downlevel path rather than the only one. The lane taxonomy was never
+  at stake either way, since a WGSL kernel is an explicit GPU program
+  too.
+- **2026-08-13 (carriage):** rust-gpu main fails against the toolchain
+  its own `rust-toolchain.toml` pins. Its target-spec gate reads
+  `rustc_version >= Version::new(1, 97, 0)` while the pinned nightly
+  reports `1.97.0-nightly`, and semver sorts a pre-release *before* its
+  release, so the older spec variant is chosen and emits
+  `allows-weak-linkage`, the very key rustc 1.97 removed. A one-line
+  fork comparing on the version triple clears it
+  (`Code/crates/rust-gpu`, branch `mark-ik/prerelease-version-gate`),
+  and cargo-gpu must be rebuilt against that fork because it links
+  `rustc_codegen_spirv-types` directly. Worth reporting upstream; the
+  window is one release wide. Full detail in `quint-shaders/README.md`.
+- **2026-08-13 (carriage):** a receipt that a `.spv` *exists* is not a
+  receipt that it *runs*. The first passing suite took the WGSL
+  fallback throughout, because the test device never requested
+  `PASSTHROUGH_SHADERS`. The lane now reports which source it built
+  from and a test asserts the SPIR-V path where the adapter allows it.
 - **2026-08-13 (P2 spike):** the cloud drifts. Across 2.5 billion
   float pair-sums per frame, non-associativity leaves a net momentum
   bias, and 300 frames walked the 50k cloud about 450 units off origin.
