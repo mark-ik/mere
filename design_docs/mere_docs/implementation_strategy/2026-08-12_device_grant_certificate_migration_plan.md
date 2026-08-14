@@ -163,9 +163,35 @@ grammar. Recorded here and asserted in `carry::scope`'s tests.
       anyway.
 - [x] Twelve tests. Suites green at personae 97, session-runtime 253, plus a
       non-test `cargo check` and the `ssh,agent` lanes.
+### M2 part four: the storage seam — done 2026-08-12
+
+The four flows all read and write grants through one pair of calls, so they
+cannot switch one at a time without leaving the tree reading one format and
+writing another. This phase builds the replacement pair so the switch becomes
+mechanical.
+
+- [x] `device_scope_certificate_path`: the master-issued half is
+      `<device>/device.cert`, named rather than persona-keyed because it
+      belongs to no persona. A station has only this file.
+- [x] `save_device_grant_set` / `load_device_grant_set`. Loading reads the
+      device's directory rather than taking a persona list, so a caller that
+      has forgotten which personas granted a device still recovers the set.
+- [x] `device_grant_set_ref`: the roster and wallet index each hold one ref
+      per device, and a grant is now several certificates, so the ref covers
+      the set. Hashing member certificate ids suffices because a certificate
+      id already commits to its own contents.
+- [x] Four more tests, session-runtime 257 and personae 97, plus a non-test
+      `cargo check`.
 - [ ] **Remaining for M2**: switching `issue` / `enroll` / `refresh` /
-      `revoke` onto the set and deleting the envelope. Everything so far is
-      additive; the old path is still the live one.
+      `revoke` onto the seam and deleting the envelope. Everything so far is
+      additive; the old path is still the live one and nothing on disk is
+      half-migrated.
+
+The remaining surface is smaller than it looked. Counting references to
+`DeviceGrantPayload` and `sample_payload` across `wallet_grant`: eight are in
+`envelope.rs`, which the switch deletes outright, and the rest are one or two
+call sites each in `issue`, `enroll`, `revoke`, `types`, and `test_support`.
+The flows are long, but they touch the grant itself in very few places.
 
 ### The empty-persona case forced the action partition
 

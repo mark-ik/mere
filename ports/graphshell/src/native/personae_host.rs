@@ -854,10 +854,20 @@ mod tests {
 
         let pipe = ClientOptions::new().open(&endpoint).unwrap();
         let mut client = Client::new(pipe);
+        // One slot, two offers. A certifiable key is offered as its
+        // certificate first, so a host that trusts the authority needs no
+        // per-key enrollment, and then bare, so a host that has only ever seen
+        // the key still works. Both resolve to the same slot when signing,
+        // because a credential's key data is the key either way.
         let identities = client.request_identities().await.unwrap();
-        eprintln!("PROBE {:?}", identities.iter().map(|i| i.comment.clone()).collect::<Vec<_>>());
-        assert_eq!(identities.len(), 1);
-        assert_eq!(identities[0].comment, "wire-receipt");
+        assert_eq!(
+            identities
+                .iter()
+                .map(|identity| identity.comment.as_str())
+                .collect::<Vec<_>>(),
+            ["wire-receipt (personae certificate)", "wire-receipt"],
+            "the wire offers the certificate before the bare key"
+        );
         assert_eq!(
             host.snapshot().unwrap().vault.agent,
             AgentListenerView::ReceiptEndpoint {
