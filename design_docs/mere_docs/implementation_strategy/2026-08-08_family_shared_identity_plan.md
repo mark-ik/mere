@@ -104,7 +104,7 @@ choice is a hand-written enum per host delegating all six methods.
 | **Knot's binaries** | correct as-is | `knot_endpoint` and `knot_sync_host` take the root as an argument by design, so a test can point them at a scratch profile. The caller decides, and turnstone's caller now says the shared root. |
 | **Cleromancy** | nothing to wire | It has no identity. `CLEROMANCY_ROOT` holds product state (the redb store, sync settings); `admitted.rs` says outright that identity and transport stay outside. |
 | **Isometry** | nothing to wire | `isometry-net` takes an `Ed25519Keypair` as a parameter. No persistent identity exists yet; when one does, `roster::open_shared` is the call. |
-| **Hocket** | **blocked, deliberately** | See below. |
+| **Hocket** | wired 2026-08-09 | Adopted into the vault keeping its key, or kept deliberately apart when the family persona is somebody else. See below. |
 
 ### Woodshed's sealing is not a gate
 
@@ -119,7 +119,7 @@ right order.
 This closes the "deferred: host wiring" item on woodshed's
 [`2026-07-08_personae_sealed_session.md`](../../../../../woodshed/design_docs/2026-07-08_personae_sealed_session.md).
 
-### Hocket is a key rotation, not a wiring change
+### Hocket looked like a key rotation (superseded 2026-08-09)
 
 `hocket-genet/src/identity.rs` holds a live app-private identity: a
 `SealedIdentityProvider` under Hocket's own data root, with a **contact token**
@@ -259,10 +259,48 @@ sealed, unsealed-and-why, and a declined gate, which is checked first because
 the store never opened and a leftover seal would be a stale claim that the
 session is being kept.
 
-Remaining: **Hocket** — gated: its picker *is* the rotation surface, so it
-cannot be drawn before the contact-token migration is decided. Its
-persona-faceted timeline concept is sketched in
+### Landed 2026-08-09 (hocket)
+
+**The rotation was avoidable, so it was avoided.** This plan called Hocket "a
+key rotation, not a wiring change" and left it blocked on a product decision
+about tokens in the wild. That framing assumed the shared vault has to mint or
+impose a key. It does not: a keypair can move into a vault profile unchanged,
+which is exactly what Hocket's own pre-vault rename did when it re-sealed a
+record under a new name and kept the fingerprint.
+
+`roster::import_profile` (personae) is that primitive — adopt an identity,
+keep its key. `create_profile` now delegates to it, and its refusal to write
+over a taken id carries more weight here: the taken profile is somebody's real
+persona and overwriting it destroys every certificate rooted on it.
+
+`LocalIdentity` settles one of three homes, and only the harmless one writes:
+
+| Vault state | Outcome | Why |
+|---|---|---|
+| Family persona absent | **Family** — Hocket's key adopted into it | Nothing to lose; the user gains a shared persona and their fingerprint does not move. |
+| Family persona present, different key | **Apart** — vault untouched, Hocket keeps its own | Adopting over it destroys the other persona's certificates; following it silently makes the user a different person to every peer holding their token. |
+| No vault | **Local** — the pre-vault sealed record | Unchanged from before this wiring. |
+
+Which of the three a machine lands in depends on run order (a hocket-first
+user adopts; a turnstone-first user goes Apart), and that is inherent rather
+than a defect. What matters is that the divergence is *visible*: the circle
+now reads "your persona X is a different key, and moving to it would change
+the contact token you have already shared", beside the token rather than
+buried in settings.
+
+**So Hocket is not blocked; the decision is the user's, per machine.** The
+picker wired to that sentence is the remaining step, and it is a step rather
+than a leap: nothing switches until they ask, and the cost is on screen when
+they do. Its persona-faceted timeline concept is sketched separately in
 [hocket's design docs](../../../../hocket/design_docs/2026-08-08_persona_timeline_design.md).
+
+## Remaining
+
+- **Hocket's switch surface.** The picker over the roster, with the
+  token-rotation warning as its confirm step, plus a re-share prompt after.
+- **Creating a persona.** `PickerEvent::CreateRequested` reports the intent;
+  naming it is the application's flow. Woodshed's gate says where personas
+  come from today instead of dropping it; no application mints one yet.
 
 ## Open
 
