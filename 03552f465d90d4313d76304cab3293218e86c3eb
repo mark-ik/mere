@@ -1,0 +1,26 @@
+ATTRIBUTION CORRECTION. The subject describes receipt-capture staging. This
+commit also carries the destructive half of the device-grant certificate
+migration, swept off a dirty tree while it was mid-verification.
+
+Swept in:
+  DELETED crates/system/session-runtime/src/wallet_grant/envelope.rs
+  crates/system/session-runtime/src/wallet_grant/issue.rs
+    the flow now builds and stores a DeviceGrantSet
+  crates/system/session-runtime/src/wallet_grant/enroll.rs
+    reads and installs the set; the bundle gained an epochs field
+  crates/system/session-runtime/src/wallet_grant/revoke.rs
+    private.read asked per persona certificate, not per grant
+  crates/system/session-runtime/src/wallet_grant/types.rs
+    DeviceGrantPayload, SignedDeviceGrant, DeviceGrantSignature removed
+  crates/system/session-runtime/src/wallet_grant/test_support.rs
+
+This is the commit in which the old signed envelope stopped existing. Its
+account, including the assertion that inverted from assert_ne! to assert_eq!
+and the two behaviours deliberately tightened, is in the following commit,
+"M2 complete: the flows switch, and the envelope is deleted".
+
+Fourth sweep in this migration. See also the notes on 1468e1b1, f5951215, and
+01d35152; 311b61a8 named its own sweep correctly. No history surgery was done
+to un-bundle any of them, deliberately: sweeping is the house rule and beats
+work sitting dirty. The only defect is a message that did not say what it
+carried, which is what these notes repair.
