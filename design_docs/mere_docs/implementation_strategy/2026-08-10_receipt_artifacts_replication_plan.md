@@ -320,3 +320,47 @@ More than expected, and the plan is mostly wiring because of it:
   end against the changed hand-off: the inbox entry now carries `source`
   beside `events`, and the node id, blob hash and event count are unchanged
   from before the format moved.
+
+## 6. The lens, and the one decision in front of it
+
+R3's publishing half is done and verified. What remains is turnstone opening
+an **outbound session to the resident host**, and investigating it turned up a
+gate that is a design choice rather than wiring, so it is recorded here rather
+than guessed at.
+
+**The client machinery is not the problem.** Turnstone already carries
+`graphshell-client` and drives the whole loop — `apply_snapshot`, resolve,
+`NeedsResource` to `resource` to `apply_resource` — in the G3 canary. The
+transports exist too: `StdioCarrier::spawn` speaks the carrier protocol to a
+child endpoint, and `relay_browser_native_messages` shows the
+connect-and-hello shape for the resident device endpoint.
+
+**The gate is admission.** The resident host's device endpoint admits
+*browser extensions only*: `AllowedExtensions` is a chromium/firefox extension
+id allowlist, and the broker hello carries a `BrowserLauncher`. A first-party
+native app has no identity there. And this matters specifically because the
+receipts live on the **resident** host's surface — the one holding the
+personal graph and the replicating blob store — not on any endpoint a client
+can spawn for itself.
+
+Three ways forward:
+
+1. **Widen the browser allowlist** to admit a first-party native launcher.
+   Cheapest, and the worst: that allowlist's entire job is to be narrow, and
+   putting a native app through it weakens the one check keeping arbitrary
+   extensions out.
+2. **A second endpoint on the resident host for first-party apps**, with its
+   own admission, reusing the same session protocol and the same
+   `IdentityEndpoint` composition (including the read-through reader already
+   wired). **Recommended.** It keeps the browser gate exactly as narrow as it
+   is, and it says plainly that a first-party app and a web extension are
+   different kinds of caller with different trust.
+3. **Turnstone spawns its own `graphshell_native_host`.** Works today with no
+   new admission at all, and is the reason to check before building: that
+   endpoint serves the identity projection, *not* the resident host's
+   personal-sync surface, so it would show no receipts. It is a working
+   session to the wrong authority.
+
+Option 2 wants a short plan of its own (what admits a first-party app, and how
+it proves it is one) before code. Everything it needs on the publishing side
+already exists and is tested.
