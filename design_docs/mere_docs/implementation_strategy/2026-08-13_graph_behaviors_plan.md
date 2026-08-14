@@ -246,9 +246,21 @@ Carried over or ruled here:
   still waking each other. Exhaustion **defers** rather than consumes: the
   naming peek (`WatchTable::would_wake`) advances no cursor, so work a
   cascade ran out of budget for is still there on the next drain.
-- **W1b: wire it to the drain (turnstone).** The loop above at the existing
-  after-dispatch drain, over the `RunDenizen` lane, with the budget read from
-  settings and exhaustion surfaced as an `AppEvent` and a visible notice.
+- **W1b: wire it to the drain (turnstone). MOSTLY LANDED 2026-08-13.**
+  `src/behaviors.rs` is the adapter and the drain: `touched_ids` (exhaustive
+  over all 44 `CapturedDelta` variants, so a new one fails to compile until
+  classified), `ancestry_scopes` (W0.5's containment walk), `entries_since`,
+  and `drain`. `App::update` now splits into `dispatch` plus the drain, so a
+  woken body sees the world the action left. Woken subjects run through
+  `run_denizen_for_cascade`, which is the ordinary `RunDenizen` lane by
+  another name: a behavior is a denizen whose run was triggered, and a second
+  path would mean a second set of rules. Exhaustion reports as
+  `AppEvent::CascadeExhausted`, naming the residents by label.
+  **Remaining:** the budget is a live `App` field read per cascade but is not
+  yet persisted in `ApplicationSettings` or exposed as a settings row (that
+  reaches the app only through the settings pane's provider, so it is real
+  threading, and adding the field before the wiring would be dead config);
+  and the headed scenario receipt is not captured.
   Done when: a two-behavior mutual-wake fixture terminates at the budget
   with the loud event on screen; a linear A-wakes-B chain settles in one
   cascade; every behavior-authored entry in the journal reads back with the
@@ -367,3 +379,12 @@ not automation).
   relay but two behaviors answering each other, and it correctly exhausted
   the budget. A real relay needs distinct scopes and a last link that writes
   where nobody is watching. The test now says so in its name.
+- 2026-08-13 (W1b): the drain landed in turnstone. **236 tests pass**, 5 of
+  them new, clippy clean in the touched files. Two findings from reading
+  rather than assuming. **Containment points from the member to the
+  container**: the kernel asserts `assert_relation(child, parent,
+  Containment)`, so ancestry follows *outgoing* edges, and walking incoming
+  ones would have built every watch tree upside down. And the delta grouping
+  has five shapes, not four: `ReplayBranchHistoryByIds` carries
+  `child_id`/`parent_id`, which a field-name sweep misses, so a history
+  branch would have woken nobody.
