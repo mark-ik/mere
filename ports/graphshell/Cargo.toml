@@ -165,6 +165,13 @@ path = "src/bin/graphshell_device_host.rs"
 required-features = ["personal-sync"]
 
 [[bin]]
+name = "receipt_ingest"
+path = "src/bin/receipt_ingest.rs"
+# Needs the personal-graph event vocabulary and muniment's redb backend, both
+# of which arrive with personal-sync.
+required-features = ["personal-sync"]
+
+[[bin]]
 name = "h4d_browser_receipt_host"
 path = "src/bin/h4d_browser_receipt_host.rs"
 required-features = ["native"]

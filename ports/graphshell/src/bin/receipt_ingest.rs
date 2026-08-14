@@ -76,9 +76,13 @@ fn default_device() -> String {
         .unwrap_or_else(|_| "unknown-device".to_string())
 }
 
-fn main() {
+// `block_on` rather than a spawned task: muniment's `Backend` is `?Send` so a
+// browser main thread can await OPFS promises, which means this future never
+// crosses threads. Nothing here wants concurrency anyway.
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
     let args = parse_args();
-    if let Err(error) = pollster::block_on(run(&args)) {
+    if let Err(error) = run(&args).await {
         eprintln!("receipt_ingest: {error}");
         std::process::exit(1);
     }

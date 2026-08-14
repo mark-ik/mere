@@ -1,7 +1,8 @@
 # Receipt Artifacts Replication Plan
 
 **Date**: 2026-08-10
-**Status**: Planned, nothing executed. Substrate inventory code-verified.
+**Status**: R0, R1 and R2 built 2026-08-10. R3 (a turnstone receipts lens)
+deferred as planned. See §5.
 **Scope**: receipts — scenario receipts, frame captures, screenshots, and
 their provenance manifests — as content-addressed artifacts in the personal
 graph, replicated across the owner's own devices by the stack itself.
@@ -123,3 +124,62 @@ More than expected, and the plan is mostly wiring because of it:
 - **2026-08-10**: planned. Substrate inventory verified against
   `device_sync.rs`, `mesh/src/lib.rs`, and the transfer staging surface;
   the dogfood-over-adopt ruling recorded here and in workspace memory.
+
+- **2026-08-10, later: R0-R2 built.** `ports/graphshell/src/receipts.rs`
+  (the ingest) plus `src/bin/receipt_ingest.rs` (the CLI). Nine tests green.
+
+  **R0 — the schema and ingest.** A receipt directory becomes a node id, an
+  address, and a list of `PersonalGraphEvent`s. Three decisions worth keeping:
+
+  - **The node id is a v5 UUID over the receipt's address**, and the address
+    is built from the run's own facts (repo, host, scenario, timestamp) rather
+    than the directory name — so the same run ingested from a copied or
+    renamed directory is still the same receipt, and re-ingest reaches the
+    same node instead of minting a second.
+  - **Ingest reads no clock.** Every timestamp comes from the manifest,
+    because the facts are about when the *run* happened. That is also what
+    makes the events byte-identical across re-ingests, which is what the
+    idempotency test actually asserts.
+  - **Ingest verifies rather than trusts.** The manifest's per-artifact
+    SHA-256 was computed on the producing machine; the arriving bytes are
+    re-hashed and a mismatch is a hard error, so a receipt corrupted in
+    transit cannot enter the graph looking sound. Blobs then store under
+    blake3, and the dedup test proves two machines capturing identical pixels
+    yield one blob.
+
+  **R1 — replication, which was NOT free after all.** The plan said "nothing
+  new to build if the inventory is right"; checking `SyncSelection::projects`
+  found otherwise. `SetFacet` projects only for facets the selection lists, so
+  receipts would have replicated as bare titled nodes carrying none of their
+  provenance — the exact failure this lane exists to prevent, and silent.
+  Fixed by naming the lane once in `receipts::sync_facets()` /
+  `sync_address_rule()` and merging it in `device_sync.rs`. Receipt addresses
+  are synthetic, so they follow their facet the way the transfer carrier does:
+  a device that declines the lane materializes no receipt nodes at all rather
+  than a list of empty titles. A test pins the regression (any emitted facet
+  missing from the lane fails the build). `blob_availability` is deliberately
+  left as the owner set it: with the lane off a receipt still replicates whole
+  — the artifacts facet carries every blake3 hash — and only *which device
+  holds the bytes* goes unsaid.
+
+  **R2 — the lane feeds itself.** `receipt_ingest` verified end to end on a
+  real directory: same node, same blob, byte-identical events across three
+  runs. `genet/scripts/remote-receipt.ps1` gained `-IngestBin` /
+  `-IngestStore` / `-IngestDevice`, so a run on the ThinkPad becomes a graph
+  fact in the motion that fetched it. Genet takes a path rather than learning
+  where mere lives. Ingest failure is warned, not fatal: a fetched receipt is
+  worth keeping even when the graph is unavailable.
+
+  **One boundary held deliberately.** The CLI writes the authored events to
+  `graph-events.json` beside the receipt rather than pushing them into a
+  running replica. The resident host owns the authoring turn (it holds the
+  signing identity and the log); a CLI writing operations behind its back
+  would be a second writer for one graph. Wiring the host to pick these up is
+  the small remaining step before R3.
+
+  **Note for the next session:** `native::personae_host::tests::
+  isolated_named_pipe_lists_and_signs_through_the_ssh_wire_protocol` fails
+  (2 identities, expected 1). Verified pre-existing by stashing only this
+  work and re-running at HEAD — it fails identically without it. Unrelated to
+  receipts; likely the concurrent wallet-grant work or the live personae
+  agent on this machine.
