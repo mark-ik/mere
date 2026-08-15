@@ -55,14 +55,53 @@ keeps what is genuinely composition rather than capability:
   README change from "Name reservation" to a dated statement of what is
   implemented: OTP, the reticulum credential seam, and the keeper surface.
 
+## Verified
+
+Four feature combinations, because adding an optional-dep feature is the way
+to break the ones nobody runs: default (29 tests), `station-grants`, `keeper`
+(46 tests), and `keeper,station-grants`. Graphshell: 106 lib tests, all bins
+under `personal-sync`, and the persona-switch receipt rerun green while
+importing castellan directly.
+
+Every consumer of the three moved paths is inside graphshell itself (the
+endpoint, `browser_host`, `device_broker`, `session_loop`, `app`, and four
+receipt bins). No sibling repo names them, so the shims are the whole
+compatibility surface.
+
+## Resolved after the move
+
+**`identity_endpoint` stays in graphshell, and the line is not close.** It
+names ~23 `graphshell_protocol` types plus `graphshell_endpoint`'s serving
+machinery (`ProjectionCatalog`, `ProjectionSource`, `IntentSink`) and the
+sceno/scenotime scene stack. Castellan's projection names three
+(`PortableCardV1`, `CardValueV1`, `ActionFormV1`). The endpoint is the adapter
+that *serves* castellan's cards over graphshell's protocol — composition, and
+the count is the evidence.
+
+**The `castellan → graphshell-protocol` direction is the one real wart, and
+it is cheap today.** The three types castellan needs are neutral by content —
+"a deliberately small semantic card, not a serialized widget tree" — and the
+crate is light (six dependencies: base64, blake3, sceno, scenotime, serde,
+serde_json). So nothing is being dragged; what is wrong is only that the
+identity port names an application's crate.
+
+Two ways out, both **Mark's call because both are naming decisions**:
+
+1. Extract the card vocabulary (`PortableCardV1`, `CardValueV1`,
+   `ActionFormV1`, `ContentHash`) into a neutral crate both depend on. It
+   meets the crate bar — a portable subset with a real consumer that wants it
+   without the protocol — but it needs a name.
+2. Rename `graphshell-protocol` to what it is. It is the family's projection
+   contract, not graphshell's; the crate is named after the portal that
+   happened to define it. This is the same shape of correction the keeper
+   founding just made, one layer down.
+
+Doing neither is also defensible while castellan is the only outside consumer.
+
 ## Follow-ups, not this pass
 
-- The dependency direction `castellan → graphshell-protocol` is right today
-  (the protocol crate is the family's projection contract, not the port),
-  but if the card types outgrow graphshell's namespace they belong in a
-  neutral contract crate.
-- `identity_endpoint` could arguably move too (the brief's authority half
-  "answers participant-gate petitions"); it stays because it is built on
-  graphshell-endpoint machinery and the serving seam is the application's.
 - Publishing castellan 0.0.2 with the keeper feature needs graphshell-protocol
-  publishable first; not scheduled.
+  publishable first; not scheduled, and entangled with the question above.
+- The wire strings (`graphshell.identity.*`) are the third instance of the
+  same naming question, at the protocol level rather than the crate level.
+  Worth deciding all three together rather than piecemeal.
