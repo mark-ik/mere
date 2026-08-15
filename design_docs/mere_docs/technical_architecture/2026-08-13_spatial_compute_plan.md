@@ -57,8 +57,19 @@ tactile tier stays CPU rapier (contacts, joints, stacking, the source of
 commitment events); the field tier goes GPU-resident, with the CPU
 solver as the downlevel tier where WebGPU compute is absent.
 
-**The wgpu-29 row** (netrender, renderling fork, cubecl, khal, kiss3d)
-is bumped as a row, never one crate at a time.
+**The wgpu row** (netrender, renderling fork, cubecl, khal, kiss3d) is
+bumped as a row, never one crate at a time.
+
+**The row is currently split, and that is a live break (2026-08-15).**
+netrender main moved to wgpu 30 (`7aa8c88d3`, pushed) while mere and the
+wing still pin 29. A `wgpu::Buffer` does not cross a major version, so
+every lease and resident view in this plan stops at that boundary as a
+type error. Consumers are green today only where a lock still holds
+netrender at a pre-30 commit. Moving to 30 costs prereleases on the
+compute side (`cubecl-wgpu 0.11.0-pre.2` wants `^30.0.0`, `burn
+0.22.0-pre.2`) against stable `burn 0.21` / `cubecl 0.10` on 29. The
+regime is indifferent to which version wins; it is not indifferent to
+two of them.
 
 **Nexus is a quarry, not a dependency.** Harvest: Morton sorting and
 Karras-style hierarchy construction and refit (shared machinery for BH
