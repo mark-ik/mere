@@ -20,7 +20,7 @@ pollster = "0.4"
 rustls-pki-types = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
-session-runtime.workspace = true
+pandect.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
 tracing.workspace = true
 url = "2"

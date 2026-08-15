@@ -93,7 +93,7 @@ pub(super) fn wallet_local_secret_store(
 
 fn wallet_secret_record_root_key(seed: [u8; 32]) -> [u8; 32] {
     blake3::derive_key(
-        "mere.session_runtime.wallet_store.secret_records.v1",
+        "mere.pandect.wallet_store.secret_records.v1",
         seed.as_slice(),
     )
 }

@@ -120,11 +120,11 @@ fn a_retained_graphshell_session_saves_a_real_knot_file() {
 fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
     let root = tempdir().unwrap();
     let persona = personae::PersonaId::new();
-    let settings = session_runtime::DeviceSettings {
+    let settings = pandect::DeviceSettings {
         startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
     };
-    session_runtime::save_device_settings(root.path(), &settings).unwrap();
-    session_runtime::wallet_store::ensure_wallet_state(
+    pandect::save_device_settings(root.path(), &settings).unwrap();
+    pandect::wallet_store::ensure_wallet_state(
         root.path(),
         persona,
         "Knot process receipt",

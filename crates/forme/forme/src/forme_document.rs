@@ -89,7 +89,7 @@ pub struct FormeDocument {
 
 impl FormeDocument {
     /// A fresh, empty curated forme bound to `graph_id`. Timestamps are `0`
-    /// until `session-runtime`'s store stamps them.
+    /// until `pandect`'s store stamps them.
     pub fn new(graph_id: GraphId, label: Option<String>) -> Self {
         Self {
             id: FormeId::new(),

@@ -7,7 +7,7 @@
 //! decomposition: this is graph-scene material (member-keyed world positions
 //! plus the per-member representation overrides), so it lives with the canvas;
 //! platen keeps the Tree (pane) geometry. The host persists it as the
-//! `arrangement.*` facet family (session-runtime `arrangement_facets`, in
+//! `arrangement.*` facet family (pandect `arrangement_facets`, in
 //! `facets.json`) — the planned bespoke sidecar file was obviated by the facet
 //! convergence before any host wired it.
 
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// The save-time snapshot of the canvas's *settled* layout: the live positions
 /// live in the seiche read model and the kernel graph carries none at all, so
 /// without persisting this a session's layout is lost on reload. The host
-/// persists it family-by-family as `arrangement.*` facets (session-runtime
+/// persists it family-by-family as `arrangement.*` facets (pandect
 /// `arrangement_facets`), one facet id per field group below.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct CartographyGeometry {
@@ -207,6 +207,6 @@ impl CartographyGeometry {
     // `to_persisted_json` / `from_persisted_json` — the bespoke-sidecar half —
     // left with the facet convergence: no host ever wired the cartography.json
     // sidecar, and the durable arrangement now persists as `arrangement.*`
-    // facets (session-runtime `arrangement_facets`). This type remains as the
+    // facets (pandect `arrangement_facets`). This type remains as the
     // canvas's save-time read surface (`Canvas::cartography_geometry`).
 }

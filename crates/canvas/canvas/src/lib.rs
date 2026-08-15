@@ -352,7 +352,7 @@ pub struct Canvas {
     ///
     /// After the node-image externalization a node carries a ~40-byte handle,
     /// not bytes, so the paint path cannot read pixels off the node any more.
-    /// The host resolves a handle through `session_runtime::image_store` (that
+    /// The host resolves a handle through `pandect::image_store` (that
     /// read is async and store-backed, neither of which belongs in the frame
     /// loop) and registers the decoded RGBA here via
     /// [`register_resolved_image`](Self::register_resolved_image). An

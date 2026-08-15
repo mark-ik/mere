@@ -3,7 +3,9 @@ name = "mere-forme"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-publish = false
+# Publishable from 2026-08-14, in pandect's dependency closure. The
+# mere- prefix is long-standing: bare `forme` is an HTML template engine.
+publish = true
 description = "Per-graph-view workbench arrangement authority for Mere — projects graph members + edges into a workbench arrangement (tree-shaped or otherwise)"
 
 [features]

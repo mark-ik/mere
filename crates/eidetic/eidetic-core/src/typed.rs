@@ -476,7 +476,7 @@ mod tests {
     }
 
     /// Trivial reversible sealer for wiring tests (XOR). Real AEAD crypto is
-    /// tested in the `seal` module and in session-runtime's `WalletEpochSealer`;
+    /// tested in the `seal` module and in pandect's `WalletEpochSealer`;
     /// here we only prove the `save_typed_sealed` / `load_typed_sealed` plumbing.
     struct XorSealer;
 

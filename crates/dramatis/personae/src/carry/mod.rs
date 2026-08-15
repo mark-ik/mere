@@ -3,11 +3,11 @@
 
 //! The carry model: the wallet record types a persona travels with.
 //!
-//! Folded in from mere's `session-runtime::wallet_store` per the 2026-07-08
+//! Folded in from mere's `pandect::wallet_store` per the 2026-07-08
 //! founding ruling (executed 2026-08-10; see mere's wallet carry fold-in
 //! plan). This module is the *model* only: record types, content refs, and
 //! derivation. It knows no filesystem, reads no policy, and holds no seal
-//! seam; mere's `session-runtime` keeps the store adapter (paths, sealed
+//! seam; mere's `pandect` keeps the store adapter (paths, sealed
 //! records, bootstrap), and the epoch seal seam stays there because it
 //! implements eidetic's `PayloadSealer`.
 //!

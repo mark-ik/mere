@@ -537,7 +537,7 @@ pub enum ImageRole {
 /// store (node image externalization plan): the BLAKE3-256 digest of the stored
 /// PNG bytes plus the decoded dimensions. ~40 bytes and no pixels, so a graph of
 /// 50k nodes carries references, not image data. The kernel only *carries* the
-/// handle; `session-runtime::image_store` computes the digest and owns the blob
+/// handle; `pandect::image_store` computes the digest and owns the blob
 /// under `content/image/<hex>`, which is why the digest is a plain `[u8; 32]`
 /// here (no eidetic dependency in the kernel).
 #[derive(

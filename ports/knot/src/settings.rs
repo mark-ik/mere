@@ -5,7 +5,7 @@
 //! uuid, so every device carrying that persona's epoch addresses the same
 //! space and needs the same answer to "who else writes here".
 //!
-//! Deliberately not `session_runtime::settings_store`, which is the app's
+//! Deliberately not `pandect::settings_store`, which is the app's
 //! surface preferences (tab cap, theme, shellbar). Deliberately not
 //! Graphshell's owner settings either: that file is keyed by Personae profile
 //! and carries a graph name, lane selection, and paired *node* ids, none of
@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 /// Where a persona's Knot sync settings live: beside the vault they configure.
 pub fn knot_settings_path(data_root: &Path, persona: PersonaId) -> PathBuf {
     data_root
-        .join(session_runtime::PERSONAS_DIR)
+        .join(pandect::PERSONAS_DIR)
         .join(persona.as_uuid().to_string())
         .join("knot-sync.json")
 }

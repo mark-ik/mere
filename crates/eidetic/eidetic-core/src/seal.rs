@@ -14,7 +14,7 @@
 //! ## Where the key lives
 //!
 //! Eidetic sits *below* the wallet, so it cannot reach the epoch key material.
-//! The key is owned by the host (`session-runtime` / the wallet), which
+//! The key is owned by the host (`pandect` / the wallet), which
 //! implements [`PayloadSealer`] over the wallet's per-persona epoch history.
 //! This module only defines the boundary and the seal-aware read/write helpers,
 //! keeping the private-memory core crypto-light and wasm-friendly (the same

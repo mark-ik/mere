@@ -4,7 +4,10 @@ version = "0.0.1"
 authors = ["@mark-ik"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
-publish = false
+# Publishable from 2026-08-14: pandect (now pandect) is going to
+# crates.io and this is in its dependency closure. Bare `kernel` belongs to
+# a stranger (Abstract Reactive Streams), hence the mere- prefix.
+publish = true
 rust-version = "1.92.0"
 description = "Portable identity, authority, and mutation kernel for the Mere browser. Renamed from graphshell-core."
 

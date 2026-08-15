@@ -10,7 +10,7 @@
 //! `GraphSnapshot` types support `rkyv` if compact binary persistence is needed
 //! later, without touching the [`Graph`] API.
 //!
-//! Relocated from `session-runtime::session_graph_store` so the clean host can
+//! Relocated from `pandect::session_graph_store` so the clean host can
 //! persist the graph without depending on the substrate session crate (mirrors
 //! the `forme::store` relocation).
 

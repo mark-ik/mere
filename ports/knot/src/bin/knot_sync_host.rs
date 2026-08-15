@@ -17,7 +17,7 @@
 //! ```
 //!
 //! Both positionals are optional. Omitted, the family answers: the shared
-//! root ([`session_runtime::shared_root`]), and the sole persona wallet under
+//! root ([`pandect::shared_root`]), and the sole persona wallet under
 //! it — the ordinary machine runs `knot_sync_host` bare. Zero or several
 //! personas are told plainly rather than guessed among, and a scratch root or
 //! explicit persona still overrides, which is what the tests and receipts use.
@@ -261,14 +261,14 @@ fn parse_from(args: Vec<String>) -> Result<Args, String> {
         ),
         _ => return Err(usage()),
     };
-    let data_root = data_root.unwrap_or_else(session_runtime::shared_root::shared_root);
+    let data_root = data_root.unwrap_or_else(pandect::shared_root::shared_root);
     let persona = match persona {
         Some(persona) => persona,
         // Resolving rather than guessing: personas are real cryptographic
         // identities, and syncing the wrong one is not a recoverable oops.
         None => {
             let personas =
-                session_runtime::wallet_store::list_personas(&data_root).map_err(|error| {
+                pandect::wallet_store::list_personas(&data_root).map_err(|error| {
                     format!(
                         "could not list personas under {}: {error}",
                         data_root.display()
@@ -366,7 +366,7 @@ fn init_logging(path: Option<&Path>) -> Result<(), std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use session_runtime::wallet_store::{
+    use pandect::wallet_store::{
         KeyEpochId, PersonaChainRoot, PersonaWalletManifest, save_persona_wallet,
     };
 

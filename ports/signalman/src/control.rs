@@ -15,7 +15,7 @@ use personae::{
 };
 use retinue::identity::{Identity, PrivateIdentity};
 use serde::{Deserialize, Serialize};
-use session_runtime::{
+use pandect::{
     DeviceGrantError, DeviceId, decode_device_grant_set, encode_device_grant_set,
 };
 
@@ -844,7 +844,7 @@ fn decode<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, SitedStationC
 #[cfg(test)]
 mod tests {
     use personae::{InMemoryProvider, PersonaId};
-    use session_runtime::{DeviceId, ensure_wallet_state};
+    use pandect::{DeviceId, ensure_wallet_state};
     use tempfile::tempdir;
 
     use super::*;

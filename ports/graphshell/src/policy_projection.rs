@@ -1,7 +1,7 @@
 //! N4: host-facing projection of Notochord owner policy.
 //!
 //! The editable model stays in Notochord and persistence stays in
-//! session-runtime. This module turns that model into plain settings rows and
+//! pandect. This module turns that model into plain settings rows and
 //! a headed receipt. It never serializes carrier facts or an admitted
 //! principal.
 
@@ -13,7 +13,7 @@ use notochord::{
     NetworkId, OwnerNetworkPolicy, OwnerPolicyEdit, OwnerPolicySet, ProfileRef, ServiceAccess,
     ServiceRule,
 };
-use session_runtime::{PersonaId, load_notochord_policy, save_notochord_policy};
+use pandect::{PersonaId, load_notochord_policy, save_notochord_policy};
 
 use crate::admission::PROJECTION_SERVICE;
 

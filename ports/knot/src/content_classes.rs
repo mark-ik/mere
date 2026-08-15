@@ -3,7 +3,7 @@
 use chartulary::{CLASS_FACET, ClassRegistry, ContentClass, FacetId};
 use eidetic::{MereNativeFieldSpec, MereNativeSchemaBuilder, SchemaDefinition, SchemaFormat};
 use serde_json::json;
-use session_runtime::SchemaFacetValidator;
+use pandect::SchemaFacetValidator;
 
 /// The general files-in-place class.
 pub const FILE_CLASS: &str = "knot.file";

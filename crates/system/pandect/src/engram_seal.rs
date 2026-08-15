@@ -27,7 +27,7 @@ use crate::wallet_store::{KeyEpochId, load_current_private_epoch};
 const ENGRAM_SEAL_FORMAT_V1: &str = "xchacha20poly1305-v1";
 /// BLAKE3 derive-key context turning a variable-length epoch secret into the
 /// 32-byte payload-sealing key. Distinct from any wallet wrapping context.
-const ENGRAM_SEAL_KEY_CONTEXT: &str = "mere.session_runtime.engram_seal.key.v1";
+const ENGRAM_SEAL_KEY_CONTEXT: &str = "mere.pandect.engram_seal.key.v1";
 
 fn derive_engram_key(epoch_secret: &[u8]) -> [u8; 32] {
     blake3::derive_key(ENGRAM_SEAL_KEY_CONTEXT, epoch_secret)

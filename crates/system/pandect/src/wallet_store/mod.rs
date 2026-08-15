@@ -33,7 +33,7 @@
 //! Split 2026-08-10 (wallet carry fold-in plan, W2): the carry *model* now
 //! lives in `personae::carry` and this tree is the store adapter, one module
 //! per concern. The re-exports below keep every existing consumer path
-//! (`session_runtime::wallet_store::*`) spelled the same.
+//! (`pandect::wallet_store::*`) spelled the same.
 
 mod bootstrap;
 mod devices;
@@ -93,7 +93,7 @@ pub const PERSONA_EPOCH_BRIDGE_FILENAME: &str = "private-epoch-bridge.json";
 // 2026-08-10_wallet_carry_foldin_plan.md). This module keeps the store
 // adapter: path layout, device-settings policy, sealed-record wiring, and
 // bootstrap. The re-exports keep every existing consumer path
-// (`session_runtime::wallet_store::*`) compiling unchanged.
+// (`pandect::wallet_store::*`) compiling unchanged.
 pub use identity::carry::{
     CapabilitySlotRef, CarryHashFn, CarryRef, CarryRefParseError, DeviceExposure, DeviceGrantRef,
     DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, IdentityWalletManifest,

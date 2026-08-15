@@ -22,7 +22,7 @@ p2panda-core = "0.7.0"
 postilion = { version = "=0.1.0", git = "https://github.com/merely-made/retinue.git", rev = "10d193762784ed254d434f6c80ffa1a5a680c918" }
 retinue = { version = "=0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "10d193762784ed254d434f6c80ffa1a5a680c918", features = ["tulle-radio"] }
 serde = { version = "1", features = ["derive"] }
-session-runtime = { path = "../../crates/system/session-runtime" }
+pandect = { path = "../../crates/system/pandect" }
 tokio = { version = "1", features = ["rt", "sync", "time"] }
 zeroize = "1"
 

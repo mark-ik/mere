@@ -22,7 +22,7 @@ use personae::{
     IdentityProvider, IdentityStorage, IdentityVault, ProfileId, ProtocolKey, UnlockTier, roster,
 };
 use serde::{Deserialize, Serialize};
-use session_runtime::{DeviceId, revoke_remote_auth_device};
+use pandect::{DeviceId, revoke_remote_auth_device};
 use ssh_key::{Algorithm, PrivateKey, PublicKey};
 use uuid::Uuid;
 
@@ -369,7 +369,7 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         Ok(receipt)
     }
 
-    /// Revoke one delegated device through session-runtime's live authority.
+    /// Revoke one delegated device through pandect's live authority.
     pub fn revoke_device(
         &self,
         request: RevokeDeviceIntentV1,

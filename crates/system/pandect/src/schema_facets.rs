@@ -227,7 +227,7 @@ mod tests {
             ProvenanceRecord {
                 origin: ProvenanceOrigin::Generated,
                 upstream: Vec::new(),
-                tooling: Some("session-runtime-test".into()),
+                tooling: Some("pandect-test".into()),
                 generated_at: created_at,
             },
             TrustEnvelope::self_asserted(),

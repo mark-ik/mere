@@ -11,7 +11,7 @@ use std::path::Path;
 
 use personae::signing::{PendingSigningRequest, SigningRecord};
 use serde::{Deserialize, Serialize};
-use session_runtime::{
+use pandect::{
     DeviceExposure, DeviceMode, RecoveryPolicy, load_device_roster, load_identity_wallet,
     load_device_grant_set, load_wrapped_epoch_record, requires_epoch_material,
 };
@@ -98,7 +98,7 @@ pub struct DeviceGrantView {
     pub wrapped_epoch_count: usize,
 }
 
-/// Carry state loaded from session-runtime without importing secret bridges.
+/// Carry state loaded from pandect without importing secret bridges.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CarryView {
     pub recovery_policy: Option<String>,
@@ -255,7 +255,7 @@ fn recovery_policy_label(policy: RecoveryPolicy) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use session_runtime::{
+    use pandect::{
         DeviceId, DevicePublicKey, DeviceRecord, DeviceRoster, IdentityWalletManifest, PersonaId,
         PersonaWalletRef, save_device_roster, save_identity_wallet,
     };
@@ -275,7 +275,7 @@ mod tests {
             persona_id: PersonaId::default_persona(),
         });
         let roster = DeviceRoster {
-            schema_version: session_runtime::WALLET_SCHEMA_VERSION,
+            schema_version: pandect::WALLET_SCHEMA_VERSION,
             devices: vec![DeviceRecord {
                 device_id,
                 device_pubkey: DevicePublicKey([0x33; 32]),

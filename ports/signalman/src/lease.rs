@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use castellan::reticulum::grant::{SitedStationGrant, SitedStationGrantError};
-use session_runtime::{DeviceId, RemoteAuthRevocationOutcome, revoke_remote_auth_device};
+use pandect::{DeviceId, RemoteAuthRevocationOutcome, revoke_remote_auth_device};
 
 /// Host-side authorization state for one running station.
 #[derive(Clone, Debug)]

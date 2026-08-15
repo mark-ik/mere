@@ -14,7 +14,7 @@ use personae::{IdentityError, SealedRecordStorage};
 use postilion::{Event, Sent, Station, StationConfig};
 use retinue::identity::{Identity, PrivateIdentity};
 use serde::{Deserialize, Serialize};
-use session_runtime::DeviceId;
+use pandect::DeviceId;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -504,7 +504,7 @@ fn remaining_window(now_ms: u64, expires_at_ms: u64) -> Duration {
 #[cfg(test)]
 mod tests {
     use personae::{InMemoryProvider, PersonaId};
-    use session_runtime::ensure_wallet_state;
+    use pandect::ensure_wallet_state;
     use tempfile::tempdir;
 
     use super::*;

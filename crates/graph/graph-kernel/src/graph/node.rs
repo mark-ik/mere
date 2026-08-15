@@ -10,7 +10,7 @@
 //!
 //! Browser-runtime state (scroll/form restore, viewer override, compat
 //! mode, webview lifecycle) left this struct on 2026-07-09 for the
-//! host-owned `BrowserNodeState` sidecar (session-runtime
+//! host-owned `BrowserNodeState` sidecar (pandect
 //! `browser_node_state`), per the mere/turnstone boundary pass plan
 //! slice C: the graph library holds graph facts; what the browser
 //! knows about a node rides beside the graph, keyed by node id.
@@ -39,7 +39,7 @@ pub struct Node {
     /// Content-addressed preview imagery, keyed by role. The node carries
     /// ~40-byte [`ImageRef`] handles; the pixels live in the durable blob
     /// store under `content/image/<hex>` (see
-    /// `session-runtime::image_store`).
+    /// `pandect::image_store`).
     ///
     /// This is the node-image externalization plan's phase 2. Inline
     /// `thumbnail_png` / `favicon_rgba` bytes used to ride here and dominated

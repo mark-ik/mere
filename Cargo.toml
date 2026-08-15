@@ -12,7 +12,7 @@ members = [
     "crates/shell/chrome",
     "crates/shell/comms",
     "crates/incipit",
-    "crates/system/session-runtime",
+    "crates/system/pandect",
     "crates/system/luggage",
     "crates/system/fetch",
     "crates/system/content-contract",
@@ -137,7 +137,7 @@ cartography = { package = "mere-cartography", path = "crates/canvas/cartography"
 # graph-layout; seiche owns live force physics.
 arrangements = { path = "crates/canvas/arrangements" }
 linked-data = { package = "mere-linked-data", path = "crates/graph/linked-data" }
-kernel = { package = "mere-kernel", path = "crates/graph/graph-kernel" }
+kernel = { package = "mere-kernel", version = "0.0.1", path = "crates/graph/graph-kernel" }
 graphlets = { path = "crates/graph/graphlets" }
 # The graph-canvas content-root (was `orrery`; that name retired to the Merely
 # product tier ladder, 2026-07-09 — see the boundary pass plan amendments).
@@ -159,14 +159,14 @@ scenomise = { path = "crates/scenograph/scenomise" }
 scenotime = { version = "0.0.3", path = "crates/scenograph/scenotime" }
 # The remaining families absorbed 2026-07-23. Consumers keep using
 # `<dep>.workspace = true`, so only this block knows where each one lives.
-personae = { path = "crates/dramatis/personae" }
-notochord = { path = "crates/system/notochord" }
-codicil = { path = "crates/eidetic/codicil" }
-chartulary = { path = "crates/eidetic/chartulary" }
+personae = { version = "0.1.1", path = "crates/dramatis/personae" }
+notochord = { version = "0.1.0", path = "crates/system/notochord" }
+codicil = { version = "0.1.1", path = "crates/eidetic/codicil" }
+chartulary = { version = "0.2.0", path = "crates/eidetic/chartulary" }
 scholia = { path = "crates/eidetic/scholia" }
 # The legend/memorial view over a codicil log; reservation, no implementation.
 tulpa = { version = "0.0.2", path = "crates/eidetic/tulpa" }
-numen = { path = "crates/conatus/numen" }
+numen = { version = "0.1.1", path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
 esp = { path = "crates/intel/esp" }
@@ -194,10 +194,10 @@ fetch = { package = "mere-fetch", path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
 proofs = { package = "mere-proofs", version = "0.1.0", path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
-incipit = { path = "crates/incipit" }
+incipit = { version = "0.2.0", path = "crates/incipit" }
 chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
 comms = { package = "mere-comms", path = "crates/shell/comms" }
-session-runtime = { path = "crates/system/session-runtime" }
+pandect = { path = "crates/system/pandect" }
 # Self-update over signed manifests (the cargo-packager-updater fork; ruled
 # 2026-07-24: name luggage, home mere). Apps consume it via git dep like the
 # rest of the family; mere itself will when its own packaging lands.
@@ -223,7 +223,7 @@ weld-engine = { git = "https://github.com/merely-made/genet.git", branch = "main
 # Published as `mere-forme`: the crates.io name `forme` is owned by someone else
 # (an HTML template engine). The `package =` alias keeps every `use forme::...`
 # in the tree working, so this rename is one line, not a sweep.
-forme = { package = "mere-forme", path = "crates/forme/forme" }
+forme = { package = "mere-forme", version = "0.1.0", path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
@@ -233,7 +233,7 @@ roster = { package = "mere-roster", path = "crates/domain/roster" }
 trail = { package = "mere-trail", path = "crates/domain/trail" }
 workbench = { path = "crates/platen/domain/workbench" }
 
-eidetic = { package = "mere-eidetic", path = "crates/eidetic/eidetic-core", default-features = false }
+eidetic = { package = "mere-eidetic", version = "0.0.1", path = "crates/eidetic/eidetic-core", default-features = false }
 eidetic-fjall = { package = "mere-eidetic-fjall", path = "crates/eidetic/eidetic-fjall" }
 eidetic-https-fetcher = { package = "mere-eidetic-https-fetcher", path = "crates/eidetic/eidetic-https-fetcher" }
 eidetic-iroh-fetcher = { package = "mere-eidetic-iroh-fetcher", path = "crates/eidetic/eidetic-iroh-fetcher" }

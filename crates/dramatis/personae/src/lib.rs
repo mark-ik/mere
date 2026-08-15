@@ -9,7 +9,7 @@
 //!
 //! Promoted from mere's `persona/identity`. The carry layer (device roster,
 //! capability grants, private-epoch history — the portable-persona spine) folds
-//! in as it lifts out of mere's `session-runtime`; personae is the whole
+//! in as it lifts out of mere's `pandect`; personae is the whole
 //! trust-plane root, not only the key primitives.
 //!
 //! ## Quick start

@@ -49,7 +49,7 @@ impl Graph {
     /// Attach a stored image reference under `role`, reporting whether the
     /// node changed.
     ///
-    /// The caller stores the blob first (`session_runtime::image_store::
+    /// The caller stores the blob first (`pandect::image_store::
     /// save_image`) and passes the handle; the kernel neither hashes nor
     /// holds pixels. Because references are content-addressed, re-depositing
     /// an unchanged image compares equal here and reports `false`, so an

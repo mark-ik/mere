@@ -13,7 +13,7 @@ categories = ["authentication"]
 # The SitedStationGrant adapter uses Mere's host-side wallet store to issue and
 # check the existing signed RemoteAuth envelope. Keep the credential and OTP
 # library halves usable without that application-storage dependency.
-station-grants = ["dep:session-runtime"]
+station-grants = ["dep:pandect"]
 # The keeper surface (founded 2026-08-14): the secret-free read model, the
 # card/intent projection, and the resident PersonaeHost authority, moved home
 # from graphshell per the port law. One feature rather than an embeddable/
@@ -26,7 +26,7 @@ keeper = [
   "dep:rand_core",
   "dep:serde",
   "dep:serde_json",
-  "dep:session-runtime",
+  "dep:pandect",
   "dep:ssh-agent-lib",
   "dep:ssh-key",
   "dep:thiserror",
@@ -42,7 +42,7 @@ hmac = "0.13"
 personae.workspace = true
 sha1 = "0.11"
 sha2.workspace = true
-session-runtime = { workspace = true, optional = true }
+pandect = { workspace = true, optional = true }
 zeroize = "1"
 # ── keeper surface ────────────────────────────────────────────────────────
 blake3 = { workspace = true, optional = true }

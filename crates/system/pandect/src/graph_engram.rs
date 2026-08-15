@@ -13,7 +13,7 @@
 //! read-only (immutability holds); editing forks a thaw.
 //!
 //! The graph binding lives here rather than in eidetic-core because eidetic is
-//! deliberately graph-agnostic; session-runtime is the lowest crate that knows
+//! deliberately graph-agnostic; pandect is the lowest crate that knows
 //! both [`GraphSnapshot`] and the eidetic [`Store`]. It is store-backend-agnostic
 //! (it speaks the `Store` trait), so it is not filesystem-gated like the
 //! `graph.json` sidecar — a wasm host's OPFS store works the same way.
@@ -175,7 +175,7 @@ fn graph_engram_provenance(created_at: Timestamp) -> ProvenanceRecord {
         origin: ProvenanceOrigin::Generated,
         upstream: Vec::new(),
         tooling: Some(
-            concat!("session-runtime/graph-engram@", env!("CARGO_PKG_VERSION")).to_string(),
+            concat!("pandect/graph-engram@", env!("CARGO_PKG_VERSION")).to_string(),
         ),
         generated_at: created_at,
     }
@@ -372,7 +372,7 @@ pub async fn compose_graph_engrams_sealed(
         upstream: ids.to_vec(),
         tooling: Some(
             concat!(
-                "session-runtime/graph-engram-compose@",
+                "pandect/graph-engram-compose@",
                 env!("CARGO_PKG_VERSION")
             )
             .to_string(),

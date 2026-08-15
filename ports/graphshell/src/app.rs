@@ -495,7 +495,7 @@ mod tests {
         use personae::{
             Ed25519Keypair, IdentityVault, InMemoryStorage, Profile, ProfileId, UnlockTier,
         };
-        use session_runtime::{
+        use pandect::{
             DeviceExposure, DeviceId, DevicePublicKey, PersonaId, RemoteAuthGrantSpec,
             ensure_wallet_state, issue_remote_auth_device_grant, load_device_roster,
         };
@@ -616,7 +616,7 @@ mod tests {
                 .unwrap()
                 .revoked
                 .contains(&device_id),
-            "the session-runtime roster remains mutation authority"
+            "the pandect roster remains mutation authority"
         );
 
         let snapshot = endpoint

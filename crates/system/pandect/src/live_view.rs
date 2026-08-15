@@ -242,7 +242,7 @@ pub async fn save_live_view_record_sealed(
             origin: ProvenanceOrigin::Generated,
             upstream: Vec::new(),
             tooling: Some(
-                concat!("session-runtime/live-view@", env!("CARGO_PKG_VERSION")).to_string(),
+                concat!("pandect/live-view@", env!("CARGO_PKG_VERSION")).to_string(),
             ),
             generated_at: created_at,
         },

@@ -19,7 +19,7 @@ use castellan::reticulum::grant::{
 use personae::{IdentityError, IdentityProvider};
 use postilion::{Event, Sent, Station, StationConfig};
 use retinue::identity::{Identity, PrivateIdentity};
-use session_runtime::{DeviceId, RemoteAuthRevocationOutcome};
+use pandect::{DeviceId, RemoteAuthRevocationOutcome};
 use tokio::sync::Mutex;
 use zeroize::Zeroize;
 
@@ -422,7 +422,7 @@ async fn watch_station_lease(lease: SitedStationLease, station: Arc<Mutex<Option
 #[cfg(test)]
 mod tests {
     use personae::{InMemoryProvider, PersonaId};
-    use session_runtime::{DeviceId, ensure_wallet_state};
+    use pandect::{DeviceId, ensure_wallet_state};
     use tempfile::tempdir;
 
     use super::*;

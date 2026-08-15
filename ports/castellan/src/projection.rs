@@ -216,7 +216,7 @@ pub fn project_identity(snapshot: &IdentitySurfaceSnapshot) -> Vec<IdentityProje
                 value(
                     "Authority",
                     if snapshot.carry.unavailable.is_empty() {
-                        "session-runtime ready".to_string()
+                        "pandect ready".to_string()
                     } else {
                         snapshot.carry.unavailable.join("; ")
                     },

@@ -70,7 +70,7 @@ impl Graph {
                 node.title = pnode.title.clone();
                 node.tags = pnode.tags.iter().cloned().collect();
                 // References only. Legacy inline bytes are externalized by the
-                // host before conversion (`session_runtime::image_store::
+                // host before conversion (`pandect::image_store::
                 // migrate_legacy_images`), because hashing and blob storage
                 // are the store's job, not the kernel's. A snapshot that still
                 // carries them here has skipped that pass — see

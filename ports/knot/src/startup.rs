@@ -1,6 +1,6 @@
 //! Startup-unlocked personal Knot authority.
 //!
-//! This is the production seam between session-runtime's Personae wallet and
+//! This is the production seam between pandect's Personae wallet and
 //! Knot's sealed, signed document store. Callers name a data root and persona;
 //! recovered epoch bytes and every derived key stay inside Knot.
 
@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use p2panda_core::SigningKey;
 use personae::{Ed25519Keypair, PersonaId};
-use session_runtime::wallet_store;
+use pandect::wallet_store;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
@@ -172,7 +172,7 @@ impl StartupUnlockedPersonalVault {
 ///
 /// The device component of the writer derivation. It is public on purpose: it
 /// only has to be *distinct* per device, since the secrecy of the writer comes
-/// from the persona epoch it is mixed with. Reusing session-runtime's local
+/// from the persona epoch it is mixed with. Reusing pandect's local
 /// device identity rather than minting a Knot-private one keeps a device one
 /// device across the whole system.
 pub fn local_device_root(data_root: &Path, label: &str) -> Result<[u8; 32], String> {
@@ -185,7 +185,7 @@ pub fn local_device_root(data_root: &Path, label: &str) -> Result<[u8; 32], Stri
 
 pub fn persona_vault_root(data_root: &Path, persona: PersonaId) -> PathBuf {
     data_root
-        .join(session_runtime::PERSONAS_DIR)
+        .join(pandect::PERSONAS_DIR)
         .join(persona.as_uuid().to_string())
         .join(KNOT_VAULT_DIR)
 }
@@ -193,7 +193,7 @@ pub fn persona_vault_root(data_root: &Path, persona: PersonaId) -> PathBuf {
 #[cfg(all(test, windows))]
 mod tests {
     use graphshell_endpoint::{ProjectionCatalog, ProjectionSource};
-    use session_runtime::{DeviceSettings, save_device_settings};
+    use pandect::{DeviceSettings, save_device_settings};
     use tempfile::tempdir;
 
     use super::*;

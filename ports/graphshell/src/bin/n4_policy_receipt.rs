@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use session_runtime::PersonaId;
+use pandect::PersonaId;
 
 fn main() {
     let output = std::env::args_os()

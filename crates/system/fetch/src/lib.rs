@@ -32,7 +32,7 @@ use armillary::{ActorHandle, Emitter, Wake, spawn};
 use eidetic::Store;
 use netfetcher::{CookieRecord, CookieStore, InMemoryCookieJar, SameSite, SameSiteContext};
 use serde::{Deserialize, Serialize};
-use session_runtime::PersonaId;
+use pandect::PersonaId;
 use tokio::runtime::Builder;
 
 /// The most redirects a smolweb fetch will follow before giving up.

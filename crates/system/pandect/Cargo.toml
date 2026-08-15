@@ -1,12 +1,16 @@
 [package]
-name = "session-runtime"
-version = "0.0.1"
+name = "pandect"
+version = "0.1.0"
 authors = ["@mark-ik"]
 license = "MIT OR Apache-2.0"
 edition = "2024"
-publish = false
+# Publishable from 2026-08-14 as `pandect`.
+publish = true
 rust-version = "1.92.0"
-description = "Portable graphshell session runtime state: session manifests, session graph/view sidecars, and worker declarations."
+readme = "README.md"
+keywords = ["session", "state", "manifest", "wallet", "mere"]
+categories = ["data-structures"]
+description = "Pandect: everything a Mere session gathers under one cover. Session manifests, graph and view sidecars, worker declarations, content and facet stores, settings, and the persona wallet carry lane -- a complete digest of one running session's record."
 
 [dependencies]
 # Certificate filenames are hex-encoded ids, so this is production code,

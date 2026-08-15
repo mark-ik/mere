@@ -15,7 +15,7 @@ use std::path::Path;
 
 use personae::carry::DeviceGrantSet;
 use personae::{IdentityProvider, InMemoryProvider};
-use session_runtime::{
+use pandect::{
     DeviceExposure, DeviceGrantError, DeviceId, DeviceMode, DevicePublicKey, RemoteAuthGrantSpec,
     certificate_device_id, device_grant_set_ref, device_is_fully_revoked,
     issue_remote_auth_device_grant,
@@ -529,7 +529,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let persona = personae::PersonaId::new();
         let seed =
-            session_runtime::ensure_wallet_state(root.path(), persona, "Station host").unwrap();
+            pandect::ensure_wallet_state(root.path(), persona, "Station host").unwrap();
         let issuer = InMemoryProvider::from_seed(seed);
         let device_id = DeviceId::new();
         let key = issuer
