@@ -155,7 +155,7 @@ note set; three of the four turned out to be already-answered by code nobody
 had looked at together.
 
 1. **Action intents stay out of the contract, permanently.** Not "not yet".
-   `graphshell-protocol` already carries the whole vocabulary and binds an
+   `chirograph` already carries the whole vocabulary and binds an
    invocation to `sceno`'s `InstanceId` plus `scenotime`'s `SceneEpoch` and
    `Revision`. Its `IntentResult::Stale` is expressible *only* because the
    protocol sees epoch and revision together, so a sceno-side intent type

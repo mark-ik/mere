@@ -69,7 +69,7 @@ chartulary = { workspace = true, optional = true }
 eidetic = { workspace = true, optional = true }
 graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
 graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
-graphshell-protocol = { path = "../../crates/graphshell/graphshell-protocol" }
+chirograph.workspace = true
 mere = { path = "../../crates/mere", default-features = false, features = ["graph", "canvas"], optional = true }
 muniment = { workspace = true, optional = true }
 sceno.workspace = true

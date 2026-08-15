@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use base64::Engine;
 use graphshell_client::{ResolvedContent, ResolvedPresentation};
-use graphshell_protocol::{AdvertisedAction, SceneSnapshot, SemanticRole};
+use chirograph::{AdvertisedAction, SceneSnapshot, SemanticRole};
 
 use crate::canary::{CanaryError, CanaryRun, run_loopback_canary};
 

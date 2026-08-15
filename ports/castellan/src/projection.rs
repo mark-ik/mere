@@ -12,7 +12,7 @@
 
 use std::fmt::Write;
 
-use graphshell_protocol::{ActionFormV1, CardValueV1, PortableCardV1};
+use chirograph::{ActionFormV1, CardValueV1, PortableCardV1};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;

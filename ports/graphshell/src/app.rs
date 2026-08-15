@@ -2,7 +2,7 @@
 
 use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionSource};
-use graphshell_protocol::{
+use chirograph::{
     CacheRetention, CapabilityProfile, ContentHash, IntentInvocation, IntentResult,
     PresentationCapability, ProjectionSession, ProjectionSnapshot, ResourceRequest,
 };
@@ -271,7 +271,7 @@ impl<B: Backend> GraphshellApp<B> {
 mod tests {
     use std::collections::BTreeSet;
 
-    use graphshell_protocol::IntentResult;
+    use chirograph::IntentResult;
     use mere::kernel::address::AddressKind;
     use mere::kernel::graph::{EdgeFamily, RelationKind};
     use muniment::{Backend, MemoryBackend};

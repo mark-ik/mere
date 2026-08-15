@@ -1,6 +1,6 @@
 //! User-configurable offers for handing an address to another application.
 
-use graphshell_protocol::{AdvertisedAction, IntentEffect, IntentReference, PresentationSemantics};
+use chirograph::{AdvertisedAction, IntentEffect, IntentReference, PresentationSemantics};
 use mere::kernel::address::AddressKind;
 use serde::{Deserialize, Serialize};
 

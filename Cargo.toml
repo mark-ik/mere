@@ -85,7 +85,8 @@ members = [
     "crates/scenograph/scenomise",
     "crates/scenograph/scenotime",
     "crates/scenograph/scenograph",
-    "crates/graphshell/graphshell-protocol",
+    "crates/chirograph",
+    "crates/titulus",
     "crates/graphshell/graphshell-client",
     "crates/graphshell/graphshell-endpoint",
     "crates/graphshell/graphshell-stdio",
@@ -153,9 +154,9 @@ armillary = { path = "crates/armillary" }
 # footprints, spaces, measurements) — git sibling consumed one-way, local
 # checkout via the gitignored `.cargo/config.toml` patch. cartography emits
 # sceno scenes (the P2 consumption slice; projection_proofs_plan).
-sceno = { path = "crates/scenograph/sceno" }
+sceno = { version = "0.0.3", path = "crates/scenograph/sceno" }
 scenomise = { path = "crates/scenograph/scenomise" }
-scenotime = { path = "crates/scenograph/scenotime" }
+scenotime = { version = "0.0.3", path = "crates/scenograph/scenotime" }
 # The remaining families absorbed 2026-07-23. Consumers keep using
 # `<dep>.workspace = true`, so only this block knows where each one lives.
 personae = { path = "crates/dramatis/personae" }
@@ -169,7 +170,11 @@ numen = { path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
 esp = { path = "crates/intel/esp" }
-graphshell-protocol = { path = "crates/graphshell/graphshell-protocol" }
+# The projection contract, executed in duplicate (was graphshell-protocol;
+# renamed 2026-08-14 because the contract is the family's, not the portal's).
+chirograph = { version = "0.0.1", path = "crates/chirograph" }
+# The card vocabulary chirograph re-exports and castellan wants without the wire.
+titulus = { version = "0.0.1", path = "crates/titulus" }
 graphshell-client = { path = "crates/graphshell/graphshell-client" }
 graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }

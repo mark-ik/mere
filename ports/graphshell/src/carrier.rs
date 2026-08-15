@@ -123,7 +123,7 @@ pub enum ProjectionAcceptError {
 ///
 /// On `Ok(Ok(session))` the stream has cleared admission *and* carries an
 /// action this service serves, so it is ready for `SessionOpen`. Nothing in
-/// `graphshell-protocol` restates any of it: the protocol negotiates version
+/// `chirograph` restates any of it: the protocol negotiates version
 /// and capabilities only, because the principal was settled here.
 ///
 /// `transport` is borrowed; see the module docs on why owning it would lose

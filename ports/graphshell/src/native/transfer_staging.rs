@@ -16,7 +16,7 @@
 //! destination can ask for.
 
 use eidetic::Hash;
-use graphshell_protocol::ContentHash;
+use chirograph::ContentHash;
 use muniment::{Backend, BlobStore};
 use transport::BlobHash;
 
@@ -517,7 +517,7 @@ mod tests {
         assert_eq!(released[0].1, FILE_BYTES);
         assert_eq!(
             released[0].0,
-            graphshell_protocol::ContentHash::of(FILE_BYTES),
+            chirograph::ContentHash::of(FILE_BYTES),
             "the browser addresses this blob by its own hash of the same bytes"
         );
 

@@ -79,7 +79,7 @@ the bar. Crates.io package names survive every move; only repository homes,
 | sibylla | `sibylla` | mere |
 | conatus | `numen`, `quint`, `seiche` | mere (currently crates.io pins; become workspace paths) |
 | scenograph | `sceno`, `scenomise`, `scenotime`, `scenograph` | mere, turnstone, isometry, graphshell |
-| graphshell | `graphshell-protocol`, `graphshell-client`, `graphshell-endpoint`, `graphshell-stdio`, `graphshell` | turnstone, isometry |
+| graphshell | `chirograph`, `graphshell-client`, `graphshell-endpoint`, `graphshell-stdio`, `graphshell` | turnstone, isometry |
 
 Notes:
 
@@ -149,7 +149,7 @@ standalone repo waits for a third consumer.
    discipline inside Mere, while the reference application lives at
    `ports/graphshell`: checks are scoped to those crates plus the Scenograph four:
    no kernel or product dependency from the portable crates, wasm32 check for
-   `graphshell-protocol`/`-client`, warning-denying clippy. Genet's
+   `chirograph`/`-client`, warning-denying clippy. Genet's
    `genet-host-api` is the precedent that contracts stay honest inside a
    platform repo only when the checks are mechanical.
 3. **History preserved.** Every absorption is a subtree/merge that keeps the

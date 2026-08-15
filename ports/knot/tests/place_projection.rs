@@ -30,7 +30,7 @@ use graphshell::network_carrier::{
 };
 use graphshell::session_notices::serve_admitted_session_notifying;
 use graphshell_endpoint::ResumableProjectionSource;
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession, ResumeRequest,
     SaveTextV1, SessionStatus,
 };
@@ -168,7 +168,7 @@ fn read_document(
     sceno::InstanceId,
     String,
     Vec<u8>,
-    graphshell_protocol::AdvertisedAction,
+    chirograph::AdvertisedAction,
 ) {
     retained
         .resolve_all(session)

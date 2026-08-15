@@ -29,7 +29,7 @@ copy is dead (its last commit is "Archived: moved in the 2026-07-23 repo
 consolidation") and is not a freeze blocker, but no live work should be done
 against it.
 
-**F1 evidence.** `graphshell-protocol` carries a complete intent vocabulary:
+**F1 evidence.** `chirograph` carries a complete intent vocabulary:
 `IntentReference`, `IntentEffect` (`Curation` / `DomainTruth` /
 `ExternalEffect`), `AdvertisedAction` (intent, label, explanation,
 payload_schema, effect), `IntentInvocation` (session, `target: InstanceId`,
@@ -219,7 +219,7 @@ than deferred.
 ```text
 cargo test -p sceno -p scenomise -p scenotime
 cargo test -p cartography
-cargo test -p graphshell-protocol -p graphshell-client
+cargo test -p chirograph -p graphshell-client
 cargo fmt --all -- --check
 git diff --check
 ```
@@ -264,7 +264,7 @@ replaced by a Rulings section.
 
 **Verified.** 45 family tests green, up from 29 (sceno 19, scenomise 9,
 scenotime 17), plus mere-cartography, graphshell, graphshell-client and
-graphshell-protocol. `cargo fmt --check` clean across the touched crates,
+chirograph. `cargo fmt --check` clean across the touched crates,
 which also required normalizing pre-existing failures in `scenomise/relax.rs`
 (4 hunks) and `cartography/scene_out.rs` (3): both already failed at HEAD
 before this work, verified by stashing.

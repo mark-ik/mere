@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
-use graphshell_protocol::{CarrierRequestBody, CarrierResponseBody, ResumeRequest};
+use chirograph::{CarrierRequestBody, CarrierResponseBody, ResumeRequest};
 use notochord::{
     LocalNetworkPolicy, NetworkId, ProfileRef, RevocationLedger, ServiceAccess, ServiceRule,
     TrustedRoot,
@@ -424,7 +424,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
 
-    use graphshell_protocol::{
+    use chirograph::{
         CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponseBody,
         EndpointDescriptor, IntentInvocation, IntentResult, PortableCardV1, ProjectionRequest,
         ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, SessionOpen,
@@ -647,7 +647,7 @@ mod tests {
                     .unwrap()
                     .unwrap(),
                 BrowserHostMessage::Response {
-                    response: graphshell_protocol::CarrierResponse {
+                    response: chirograph::CarrierResponse {
                         body: Ok(CarrierResponseBody::Closed),
                         ..
                     }
@@ -793,7 +793,7 @@ mod tests {
                     .unwrap()
                     .unwrap(),
                 BrowserHostMessage::Response {
-                    response: graphshell_protocol::CarrierResponse {
+                    response: chirograph::CarrierResponse {
                         body: Ok(CarrierResponseBody::Closed),
                         ..
                     }

@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use graphshell::admission::open_session;
 use graphshell::carrier::projection_alpn;
-use graphshell_protocol::{
+use chirograph::{
     CarrierRequest, CarrierRequestBody, CarrierResponse, ProjectionSession, ResumeRequest,
     Revision, SceneEpoch,
 };

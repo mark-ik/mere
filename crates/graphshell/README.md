@@ -6,7 +6,7 @@ carrier.
 
 | Crate | Contents |
 |---|---|
-| `graphshell-protocol` | Session messages (score, scene, presentation, resource, resume, status, intent); the `Carrier` trait; `CarrierError` |
+| `chirograph` | Session messages (score, scene, presentation, resource, resume, status, intent); the `Carrier` trait; `CarrierError` |
 | `graphshell-client` | `ClientState` (snapshots, diffs, resume, resource cache, cache policy), `RetainedEndpointSession`, `ActionDraft` |
 | `graphshell-endpoint` | `ProjectionCatalog`, `ProjectionSource`, `PresentationSource`, `IntentSink`, `ResumableProjectionSource`, `ProjectionNoticeSource`, `LiveViewReferenceGate`, `dispatch_common` |
 | `graphshell-stdio` | `StdioCarrier` plus `serve_basic`, `serve_resumable`, `serve_resumable_notifying`: NDJSON over a child process's standard streams |
@@ -22,14 +22,14 @@ implement `Carrier`.
 
 | Crate | Depends on |
 |---|---|
-| `graphshell-protocol` | `sceno`, `scenotime`, `serde`, `serde_json`, `blake3`, `base64` |
-| `graphshell-client` | `graphshell-protocol`, `sceno`, `scenotime`, `serde`, `serde_json` |
-| `graphshell-endpoint` | `graphshell-protocol` |
-| `graphshell-stdio` | `graphshell-endpoint`, `graphshell-protocol`, `serde_json`, `std::process` |
-| `graphshell-local` | `graphshell-endpoint`, `graphshell-protocol`, `serde`, `serde_json` |
-| `graphshell-network` | `graphshell-protocol`, `serde_json`, Tokio (`io-util`, `rt`, `rt-multi-thread`) |
+| `chirograph` | `sceno`, `scenotime`, `serde`, `serde_json`, `blake3`, `base64` |
+| `graphshell-client` | `chirograph`, `sceno`, `scenotime`, `serde`, `serde_json` |
+| `graphshell-endpoint` | `chirograph` |
+| `graphshell-stdio` | `graphshell-endpoint`, `chirograph`, `serde_json`, `std::process` |
+| `graphshell-local` | `graphshell-endpoint`, `chirograph`, `serde`, `serde_json` |
+| `graphshell-network` | `chirograph`, `serde_json`, Tokio (`io-util`, `rt`, `rt-multi-thread`) |
 
-`graphshell-protocol`, `-client`, and `-endpoint` build for
+`chirograph`, `-client`, and `-endpoint` build for
 `wasm32-unknown-unknown`. `NetworkCarrier`'s `Carrier` methods block, so they
 must run off a runtime worker thread.
 

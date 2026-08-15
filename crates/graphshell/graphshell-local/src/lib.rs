@@ -21,7 +21,7 @@
 
 use std::fmt::Display;
 
-use graphshell_protocol::{
+use chirograph::{
     Carrier, CarrierError, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponseBody,
     ResumeReply, ResumeRequest,
 };
@@ -135,7 +135,7 @@ mod tests {
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
     };
-    use graphshell_protocol::{
+    use chirograph::{
         EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot,
         ResourceRequest, ResourceResponse,
     };
@@ -217,8 +217,8 @@ mod tests {
         let mut carrier = carrier();
         let error = carrier
             .request(CarrierRequestBody::Resource(ResourceRequest {
-                session: graphshell_protocol::ProjectionSession("absent".into()),
-                resource: graphshell_protocol::ContentHash::of(b"absent"),
+                session: chirograph::ProjectionSession("absent".into()),
+                resource: chirograph::ContentHash::of(b"absent"),
             }))
             .unwrap_err();
         assert!(error.message().contains("no resources"), "{error}");
@@ -237,9 +237,9 @@ mod tests {
         assert!(carrier.request(CarrierRequestBody::Discover).is_ok());
 
         let notice = CarrierNotice {
-            session: graphshell_protocol::ProjectionSession("counting".into()),
-            epoch: graphshell_protocol::SceneEpoch(7),
-            revision: graphshell_protocol::Revision(3),
+            session: chirograph::ProjectionSession("counting".into()),
+            epoch: chirograph::SceneEpoch(7),
+            revision: chirograph::Revision(3),
         };
         carrier.endpoint_mut().notice = Some(notice.clone());
         assert_eq!(carrier.take_notice(), Some(notice));

@@ -8,7 +8,7 @@ use graphshell_endpoint::{
     IntentSink, LiveViewReferenceGate, LiveViewReferenceRefusal, PresentationSource,
     ProjectionCatalog, ProjectionSource, resolve_live_view_reference,
 };
-use graphshell_protocol::{
+use chirograph::{
     ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, AdvertisedAction, BoundsRelationship,
     CachePolicy, CapabilityProfile, CardValueV1, ContentHash, EndpointDescriptor, IntentEffect,
     IntentInvocation, IntentReference, IntentResult, LIVE_VIEW_REFERENCE_SCHEMA,

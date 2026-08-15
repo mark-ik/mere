@@ -8,7 +8,7 @@ description = "In-process carrier for Graphshell endpoints hosted where their ho
 
 [dependencies]
 graphshell-endpoint = { path = "../graphshell-endpoint" }
-graphshell-protocol = { path = "../graphshell-protocol" }
+chirograph.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 [dev-dependencies]

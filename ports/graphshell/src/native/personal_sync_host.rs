@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use graphshell_protocol::{
+use chirograph::{
     ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, CardValueV1, PortableCardV1,
 };
 use muniment::RedbBackend;

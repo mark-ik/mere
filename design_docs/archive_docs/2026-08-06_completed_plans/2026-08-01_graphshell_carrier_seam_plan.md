@@ -12,7 +12,7 @@ Knot space), which is the reason to do this now.
 
 ## Why
 
-Graphshell's README states the design: `graphshell-protocol` carries
+Graphshell's README states the design: `chirograph` carries
 "versioned session messages over an **unspecified carrier**", and
 `graphshell-stdio` is "the **first** local newline-delimited JSON carrier".
 
@@ -49,9 +49,9 @@ Four methods. `spawn` is stdio-specific and stays out.
 
 ### C0. Extract the trait - DONE 2026-08-02
 
-`graphshell_protocol::Carrier`, implemented by `StdioCarrier`, with
+`chirograph::Carrier`, implemented by `StdioCarrier`, with
 `RetainedEndpointSession` holding `Option<Box<dyn Carrier>>`. No behaviour
-change, no new carrier, no moved code. graphshell-protocol 81, stdio 10,
+change, no new carrier, no moved code. chirograph 81, stdio 10,
 graphshell 5, and Turnstone builds unchanged.
 
 Three decisions the extraction forced, none of them free:
@@ -132,7 +132,7 @@ down rather than left as drift.
 
 **What C3 showed, 2026-08-06.** The line does not fall where the module
 boundary does. `NetworkCarrier` itself, the framing and the notice queue,
-needs `graphshell-protocol` and tokio and nothing else; it is generic over any
+needs `chirograph` and tokio and nothing else; it is generic over any
 `AsyncRead + AsyncWrite` and never learns who its peer is. Its two companions
 in the same file, `dial_projection_session` and `projection_binding`, need the
 ALPN and the admission vocabulary, which are the port's.
@@ -155,7 +155,7 @@ it:
 
 - **`graphshell-network`** is founded, beside `-stdio` and `-local`, holding
   `NetworkCarrier` and `CarrierRuntime`. Its whole dependency list is
-  `graphshell-protocol`, `serde_json`, and `tokio`; it never learns who dialled
+  `chirograph`, `serde_json`, and `tokio`; it never learns who dialled
   or which ALPN they asked for. The port keeps `dial_projection_session` and
   `projection_binding` and re-exports the carrier types, so a caller still gets
   a projection carrier from one place.

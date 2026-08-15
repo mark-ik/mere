@@ -13,7 +13,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use graphshell_protocol::{
+use chirograph::{
     AdvertisedAction, CapabilityProfile, Carrier, CarrierError, CarrierNotice, CarrierRequestBody,
     CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
     ProjectionSession, ResumeRequest,
@@ -196,7 +196,7 @@ impl RetainedEndpointSession {
 
     fn apply_snapshot(
         &mut self,
-        snapshot: graphshell_protocol::ProjectionSnapshot,
+        snapshot: chirograph::ProjectionSnapshot,
         request: ProjectionRequest,
     ) -> Result<ProjectionSession, String> {
         let session = snapshot.session.clone();

@@ -1,0 +1,20 @@
+[package]
+name = "chirograph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Chirograph: the projection contract, executed in duplicate. Versioned, carrier-neutral messages by which an endpoint offers a scene, a resource, or an action, and a host asks for one -- named for the medieval deed written twice on a sheet and cut through the writing, so the two halves prove each other by matching."
+
+[dependencies]
+# The card vocabulary, extracted 2026-08-14 and re-exported from here.
+titulus.workspace = true
+base64.workspace = true
+blake3.workspace = true
+sceno.workspace = true
+scenotime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]

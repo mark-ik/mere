@@ -18,7 +18,7 @@ mod native {
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
         ProjectionSource, ResumableProjectionSource,
     };
-    use graphshell_protocol::{
+    use chirograph::{
         CarrierError, CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest,
         CarrierRequestBody, CarrierResponse, CarrierResponseBody,
     };
@@ -150,8 +150,8 @@ mod native {
         W: Write,
         F: FnMut(
             &mut E,
-            graphshell_protocol::ResumeRequest,
-        ) -> Result<graphshell_protocol::ResumeReply, String>,
+            chirograph::ResumeRequest,
+        ) -> Result<chirograph::ResumeReply, String>,
     {
         let reader = BufReader::new(reader);
         let mut writer = BufWriter::new(writer);
@@ -205,8 +205,8 @@ mod native {
         <E as IntentSink>::Error: Display,
         F: FnMut(
             &mut E,
-            graphshell_protocol::ResumeRequest,
-        ) -> Result<graphshell_protocol::ResumeReply, String>,
+            chirograph::ResumeRequest,
+        ) -> Result<chirograph::ResumeReply, String>,
     {
         let session_plane = match graphshell_endpoint::dispatch_common(endpoint, request, resume) {
             Ok(response) => return (response, false),
@@ -379,7 +379,7 @@ mod native {
         }
     }
 
-    impl graphshell_protocol::Carrier for StdioCarrier {
+    impl chirograph::Carrier for StdioCarrier {
         fn request(
             &mut self,
             body: CarrierRequestBody,
@@ -431,7 +431,7 @@ mod native {
             IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
             ProjectionSource, ResumableProjectionSource,
         };
-        use graphshell_protocol::{
+        use chirograph::{
             CachePolicy, CapabilityProfile, CarrierNotice, CarrierOutput, CarrierRequest,
             CarrierRequestBody, CarrierResponse, CarrierResponseBody, EndpointDescriptor,
             IntentInvocation, IntentResult, ProjectionAck, ProjectionOffer, ProjectionRequest,
@@ -445,7 +445,7 @@ mod native {
 
         struct Fixture {
             session: ProjectionSession,
-            resources: BTreeMap<graphshell_protocol::ContentHash, Vec<u8>>,
+            resources: BTreeMap<chirograph::ContentHash, Vec<u8>>,
             notice: Option<CarrierNotice>,
         }
 

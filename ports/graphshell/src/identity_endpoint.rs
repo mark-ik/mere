@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
-use graphshell_protocol::{
+use chirograph::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CacheRetention, ContentHash,
     EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
     PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
@@ -674,7 +674,7 @@ impl<S: IdentityStorage + 'static> IntentSink for IdentityEndpoint<S> {
 #[cfg(test)]
 mod tests {
     use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
-    use graphshell_protocol::ResourceAssembly;
+    use chirograph::ResourceAssembly;
     use personae::{Ed25519Keypair, IdentityVault, InMemoryStorage, Profile, ProfileId};
     use ssh_key::{Algorithm, LineEnding};
 
@@ -824,7 +824,7 @@ mod tests {
                 client.resolve(
                     &session,
                     instance,
-                    &graphshell_protocol::CapabilityProfile::new([
+                    &chirograph::CapabilityProfile::new([
                         PresentationCapability::PortableCard,
                     ]),
                 ),
@@ -896,7 +896,7 @@ mod tests {
             source_id: "graph-1".into(),
             card: PortableCardV1 {
                 title: "Personal graph sync".into(),
-                values: vec![graphshell_protocol::CardValueV1 {
+                values: vec![chirograph::CardValueV1 {
                     label: "Nodes".into(),
                     value: "2".into(),
                 }],

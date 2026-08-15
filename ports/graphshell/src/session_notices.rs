@@ -24,7 +24,7 @@ use std::time::Duration;
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
 };
-use graphshell_protocol::{ResumeReply, ResumeRequest};
+use chirograph::{ResumeReply, ResumeRequest};
 use notochord::{AdmittedSession, RevocationLedger};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -80,7 +80,7 @@ mod tests {
     use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE};
     use crate::network_carrier::{CarrierRuntime, NetworkCarrier};
     use crate::session_loop::SessionEnd;
-    use graphshell_protocol::{
+    use chirograph::{
         CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
         EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSession,
         ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, Revision,

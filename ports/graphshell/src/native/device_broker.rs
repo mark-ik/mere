@@ -24,7 +24,7 @@ use crate::identity_endpoint::{SupplementalCard, TransferDecisions};
 use crate::native::browser_host::{BrowserHostError, serve_identity_native_messages_with_cards};
 use crate::native::identity_ui::NativeIdentityUi;
 use crate::native::personae_host::PersonaeHost;
-use graphshell_protocol::ContentHash;
+use chirograph::ContentHash;
 
 pub const DEVICE_ENDPOINT_ENV: &str = "GRAPHSHELL_DEVICE_ENDPOINT";
 const BROKER_HELLO_SCHEMA: &str = "mere.graphshell/device-broker-hello/v1";

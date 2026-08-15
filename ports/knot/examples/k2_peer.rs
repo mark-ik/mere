@@ -48,7 +48,7 @@ use graphshell::native::projection_host::ResidentProjectionHost;
 use graphshell::network_carrier::{
     CarrierRuntime, NetworkCarrier, dial_projection_session, projection_binding,
 };
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession, SaveTextV1,
     SessionStatus,
 };
@@ -404,7 +404,7 @@ type Document = (
     sceno::InstanceId,
     String,
     Vec<u8>,
-    graphshell_protocol::AdvertisedAction,
+    chirograph::AdvertisedAction,
 );
 
 /// The first editable document the holder discloses, with the token that makes

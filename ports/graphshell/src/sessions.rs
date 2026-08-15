@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use graphshell_client::{ClientState, ResolvedPresentation, RetainedEndpointSession, unexpected};
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, Carrier, CarrierRequestBody, CarrierResponseBody, IntentInvocation,
     IntentResult, PresentationCapability, ProjectionSession,
 };
@@ -248,7 +248,7 @@ fn escape(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use graphshell_client::resume_request_for_notice;
-    use graphshell_protocol::{
+    use chirograph::{
         CachePolicy, CarrierNotice, PresentationManifest, ProjectionSnapshot, ProtocolVersion,
     };
     use sceno::Scene;
@@ -286,7 +286,7 @@ mod tests {
         assert_eq!(request.revision, Revision(3));
         assert_eq!(
             client.mounted(&request.session).unwrap().status,
-            graphshell_protocol::SessionStatus::Stale
+            chirograph::SessionStatus::Stale
         );
     }
 

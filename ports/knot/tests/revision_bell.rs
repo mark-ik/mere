@@ -3,7 +3,7 @@ use std::fs;
 
 use graphshell::client::ResolvedContent;
 use graphshell::sessions::spawn_endpoint_session;
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, CarrierRequestBody, CarrierResponseBody, IntentResult,
     PresentationCapability, ResumeReply, ResumeRequest, SaveTextV1,
 };

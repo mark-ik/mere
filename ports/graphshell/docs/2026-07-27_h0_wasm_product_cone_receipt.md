@@ -28,7 +28,7 @@ Run with `CARGO_TARGET_DIR=target-plan-graphshell`, which is ignored by
 `/target-*/`:
 
 ```powershell
-cargo check -p graphshell-protocol -p graphshell-client --target wasm32-unknown-unknown
+cargo check -p chirograph -p graphshell-client --target wasm32-unknown-unknown
 cargo check -p mere-canvas --target wasm32-unknown-unknown
 cargo check -p graphshell --target wasm32-unknown-unknown --no-default-features --features web
 python scripts/check_port_boundaries.py

@@ -16,7 +16,7 @@ ordinary endpoint vocabulary:
 - advertised typed actions dispatched only from the card that disclosed them;
 - revision checks before every mutation.
 
-The adapter stays in native Graphshell. `graphshell-protocol` and
+The adapter stays in native Graphshell. `chirograph` and
 `graphshell-client` remain independent of Personae.
 
 ## Admission boundary

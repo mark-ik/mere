@@ -1,3 +1,5 @@
+//! **Chirograph** — the projection contract, executed in duplicate.
+//!
 //! Carrier-neutral Graphshell wire vocabulary.
 //!
 //! A message carries Scenograph's product-free score and scene types. Transport,
@@ -8,6 +10,16 @@ use std::fmt;
 
 use sceno::{InstanceId, Score};
 use serde::{Deserialize, Serialize};
+
+// The card vocabulary moved to `titulus` 2026-08-14 and comes back by
+// re-export: it is neutral (a label for a projected resource, not a wire
+// message), and the identity port wanted it without the protocol. Consumers
+// that only need cards should depend on titulus directly; the re-export exists
+// so the protocol's own surface stays whole.
+pub use titulus::{
+    ActionFormChoiceV1, ActionFormError, ActionFormFieldV1, ActionFormV1, CardValueV1, ContentHash,
+    PortableCardV1,
+};
 
 pub use scenotime::{Revision, SceneDiff, SceneEpoch, SceneSnapshot};
 
@@ -88,24 +100,6 @@ impl CapabilityProfile {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct PresentationKey(pub String);
 
-/// A content address for a separately transferred resource.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct ContentHash(pub [u8; 32]);
-
-impl ContentHash {
-    pub fn of(bytes: &[u8]) -> Self {
-        Self(*blake3::hash(bytes).as_bytes())
-    }
-}
-
-impl fmt::Display for ContentHash {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.0 {
-            write!(formatter, "{byte:02x}")?;
-        }
-        Ok(())
-    }
-}
 
 /// A stable session-scoped action reference advertised by an endpoint.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -153,271 +147,6 @@ impl AdvertisedAction {
     }
 }
 
-/// A bounded, endpoint-authored input form for one advertised action.
-///
-/// Version one deliberately composes only a JSON object with a mandatory
-/// `schema` string and named endpoint-supplied choices. It is enough for exact
-/// selections such as saved-record IDs or digests, without turning Graphshell
-/// into a generic JSON editor or asking a host to interpret application truth.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ActionFormV1 {
-    /// Must exactly equal the advertised action's `payload_schema`.
-    pub schema: String,
-    pub fields: Vec<ActionFormFieldV1>,
-}
-
-impl ActionFormV1 {
-    pub fn new(schema: impl Into<String>) -> Self {
-        Self {
-            schema: schema.into(),
-            fields: Vec::new(),
-        }
-    }
-
-    pub fn with_field(mut self, field: ActionFormFieldV1) -> Self {
-        self.fields.push(field);
-        self
-    }
-
-    /// Check static form facts before a host exposes the action.
-    pub fn validate(&self) -> Result<(), ActionFormError> {
-        if self.schema.trim().is_empty() {
-            return Err(ActionFormError::EmptyFormSchema);
-        }
-        let mut names = BTreeSet::new();
-        for field in &self.fields {
-            if field.name.trim().is_empty() {
-                return Err(ActionFormError::EmptyFieldName);
-            }
-            if field.name == "schema" {
-                return Err(ActionFormError::ReservedFieldName);
-            }
-            if !names.insert(field.name.clone()) {
-                return Err(ActionFormError::DuplicateField(field.name.clone()));
-            }
-            if field.label.trim().is_empty() {
-                return Err(ActionFormError::EmptyFieldLabel(field.name.clone()));
-            }
-            if field.choices.is_empty() {
-                return Err(ActionFormError::EmptyChoices(field.name.clone()));
-            }
-            let mut values = BTreeSet::new();
-            for choice in &field.choices {
-                if choice.value.trim().is_empty() {
-                    return Err(ActionFormError::EmptyChoiceValue(field.name.clone()));
-                }
-                if choice.label.trim().is_empty() {
-                    return Err(ActionFormError::EmptyChoiceLabel(field.name.clone()));
-                }
-                if !values.insert(choice.value.clone()) {
-                    return Err(ActionFormError::DuplicateChoiceValue {
-                        field: field.name.clone(),
-                        value: choice.value.clone(),
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Build the version-one JSON payload after checking the endpoint's form.
-    pub fn compose_payload(
-        &self,
-        expected_schema: &str,
-        values: &BTreeMap<String, String>,
-    ) -> Result<Vec<u8>, ActionFormError> {
-        self.validate()?;
-        if self.schema != expected_schema {
-            return Err(ActionFormError::SchemaMismatch {
-                expected: expected_schema.to_string(),
-                form: self.schema.clone(),
-            });
-        }
-
-        for name in values.keys() {
-            if !self.fields.iter().any(|field| field.name == *name) {
-                return Err(ActionFormError::UnknownField(name.clone()));
-            }
-        }
-        for field in &self.fields {
-            let value = values.get(&field.name);
-            if field.required && value.is_none_or(|value| value.is_empty()) {
-                return Err(ActionFormError::MissingField(field.name.clone()));
-            }
-            let Some(value) = value else {
-                continue;
-            };
-            if !field.choices.iter().any(|choice| choice.value == *value) {
-                return Err(ActionFormError::InvalidChoice {
-                    field: field.name.clone(),
-                    value: value.clone(),
-                });
-            }
-        }
-
-        #[derive(Serialize)]
-        struct Payload<'a> {
-            schema: &'a str,
-            #[serde(flatten)]
-            values: &'a BTreeMap<String, String>,
-        }
-
-        serde_json::to_vec(&Payload {
-            schema: &self.schema,
-            values,
-        })
-        .map_err(|error| ActionFormError::Encode(error.to_string()))
-    }
-}
-
-/// One named input in an [`ActionFormV1`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ActionFormFieldV1 {
-    /// JSON property name. `schema` is reserved for the form schema marker.
-    pub name: String,
-    pub label: String,
-    pub description: String,
-    #[serde(default = "required_action_form_field")]
-    pub required: bool,
-    pub choices: Vec<ActionFormChoiceV1>,
-}
-
-const fn required_action_form_field() -> bool {
-    true
-}
-
-impl ActionFormFieldV1 {
-    pub fn choice(
-        name: impl Into<String>,
-        label: impl Into<String>,
-        choices: impl IntoIterator<Item = ActionFormChoiceV1>,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            label: label.into(),
-            description: String::new(),
-            required: true,
-            choices: choices.into_iter().collect(),
-        }
-    }
-
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = description.into();
-        self
-    }
-
-    pub fn optional(mut self) -> Self {
-        self.required = false;
-        self
-    }
-}
-
-/// One exact selectable value supplied by the endpoint.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ActionFormChoiceV1 {
-    /// Opaque payload value. Hosts display the label and return this exact value.
-    pub value: String,
-    pub label: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-}
-
-impl ActionFormChoiceV1 {
-    pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
-        Self {
-            value: value.into(),
-            label: label.into(),
-            description: None,
-        }
-    }
-
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-}
-
-/// Reasons a host must not compose an action payload.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ActionFormError {
-    NoInputForm,
-    EmptyFormSchema,
-    SchemaMismatch { expected: String, form: String },
-    EmptyFieldName,
-    ReservedFieldName,
-    DuplicateField(String),
-    EmptyFieldLabel(String),
-    EmptyChoices(String),
-    EmptyChoiceValue(String),
-    EmptyChoiceLabel(String),
-    DuplicateChoiceValue { field: String, value: String },
-    MissingField(String),
-    UnknownField(String),
-    InvalidChoice { field: String, value: String },
-    Encode(String),
-}
-
-impl fmt::Display for ActionFormError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NoInputForm => write!(formatter, "action has no advertised input form"),
-            Self::EmptyFormSchema => write!(formatter, "action form schema is empty"),
-            Self::SchemaMismatch { expected, form } => {
-                write!(
-                    formatter,
-                    "action schema {expected} does not match form schema {form}"
-                )
-            }
-            Self::EmptyFieldName => write!(formatter, "action form field name is empty"),
-            Self::ReservedFieldName => {
-                write!(formatter, "action form field name schema is reserved")
-            }
-            Self::DuplicateField(field) => write!(formatter, "action form repeats field {field}"),
-            Self::EmptyFieldLabel(field) => {
-                write!(formatter, "action form field {field} has no label")
-            }
-            Self::EmptyChoices(field) => {
-                write!(formatter, "action form field {field} has no choices")
-            }
-            Self::EmptyChoiceValue(field) => {
-                write!(
-                    formatter,
-                    "action form field {field} has an empty choice value"
-                )
-            }
-            Self::EmptyChoiceLabel(field) => {
-                write!(
-                    formatter,
-                    "action form field {field} has an empty choice label"
-                )
-            }
-            Self::DuplicateChoiceValue { field, value } => {
-                write!(
-                    formatter,
-                    "action form field {field} repeats choice value {value}"
-                )
-            }
-            Self::MissingField(field) => write!(formatter, "action form requires field {field}"),
-            Self::UnknownField(field) => {
-                write!(formatter, "action form does not define field {field}")
-            }
-            Self::InvalidChoice { field, value } => {
-                write!(
-                    formatter,
-                    "action form field {field} does not offer choice {value}"
-                )
-            }
-            Self::Encode(error) => {
-                write!(formatter, "could not encode action form payload: {error}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for ActionFormError {}
 
 /// The semantic role available before any resource bytes arrive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1025,21 +754,6 @@ pub struct NativeGlyphV1 {
     pub color: Option<String>,
 }
 
-/// One labeled value in a portable card.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CardValueV1 {
-    pub label: String,
-    pub value: String,
-}
-
-/// A deliberately small semantic card, not a serialized widget tree.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PortableCardV1 {
-    pub title: String,
-    pub values: Vec<CardValueV1>,
-    pub badges: Vec<String>,
-    pub media: Vec<ContentHash>,
-}
 
 /// Text encodings accepted by the first editable-text resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

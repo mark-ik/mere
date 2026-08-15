@@ -14,7 +14,7 @@ use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
     ResumableProjectionSource,
 };
-use graphshell_protocol::{
+use chirograph::{
     CarrierNotice, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
     ProjectionSnapshot, ResourceChunkRequest, ResourceChunkResponse, ResourceRequest,
     ResourceResponse, ResumeReply, ResumeRequest,
@@ -499,7 +499,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
-    use graphshell_protocol::ProjectionSession;
+    use chirograph::ProjectionSession;
 
     #[derive(Default)]
     struct FixtureEndpoint {

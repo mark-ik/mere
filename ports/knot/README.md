@@ -38,7 +38,7 @@ Integration tests: `tests/place_projection.rs`, `tests/revision_bell.rs`,
 
 ## Dependencies
 
-- Disclosure: `graphshell-endpoint`, `graphshell-protocol`, `graphshell-stdio`,
+- Disclosure: `graphshell-endpoint`, `chirograph`, `graphshell-stdio`,
   `sceno`, `scenotime`.
 - Graph and schema: `chartulary`, `eidetic` (`json-schema`), `session-runtime`,
   `servitor`, `proofs`.

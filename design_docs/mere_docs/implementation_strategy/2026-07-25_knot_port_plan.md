@@ -101,7 +101,7 @@ vault inside the app rather than merely a cheaper one.
   `DjotKnotEngine` preview from one host-owned source buffer. Cambium and
   Genet/Parley now supply the shared edit, IME, selection, movement, and
   geometry primitives. K7 is integration, not a new editor core.
-- **Boundary.** graphshell-protocol, -client, -endpoint, and -stdio, with the
+- **Boundary.** chirograph, -client, -endpoint, and -stdio, with the
   stdio carrier giving a child-process JSON boundary. The G4 receipt mounted
   Turnstone and Isometry sessions into one host with neither product in
   Graphshell's dependency graph.
@@ -251,7 +251,7 @@ the same users.
   question in Genet's pelt/knot direction doc resolved (the schema is the
   shared basis; content classes unify, stores diverge, settings excepted).
 - **2026-07-25, review pass with Mark.** Carrier verified pull-only against
-  `graphshell-protocol` (K1 ships on resume polling; the revision bell is
+  `chirograph` (K1 ships on resume polling; the revision bell is
   proposed in the carrier note). K1 gains rename-preserves-identity, the
   disk-is-authoritative and write-through rules, the servitor identity for
   the watcher, and debounce over bulk churn. The multi-writer gate records

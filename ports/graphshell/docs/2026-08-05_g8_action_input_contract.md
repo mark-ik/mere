@@ -6,7 +6,7 @@ typed action without making Graphshell a domain-form engine.
 
 ## Boundary
 
-`graphshell-protocol::AdvertisedAction` may carry an optional `ActionFormV1`.
+`chirograph::AdvertisedAction` may carry an optional `ActionFormV1`.
 It declares an exact payload schema and named endpoint-supplied `choice`
 fields. A host validates the form and composes only this JSON shape:
 

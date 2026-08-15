@@ -31,7 +31,7 @@ use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, SessionPlaneVerb,
     dispatch_common,
 };
-use graphshell_protocol::{
+use chirograph::{
     CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest, CarrierResponse,
     CarrierResponseBody, ResumeReply, ResumeRequest, SessionOpened, SessionStatus,
 };
@@ -334,7 +334,7 @@ mod tests {
     use crate::identity_endpoint::IdentityEndpoint;
     use crate::identity_projection::{SIGNING_APPROVE_ONCE_INTENT, SigningDecisionIntentV1};
     use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
-    use graphshell_protocol::{
+    use chirograph::{
         CapabilityProfile, CarrierRequestBody, EndpointDescriptor, IntentInvocation, IntentResult,
         PresentationCapability, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
         ResourceRequest, ResourceResponse, Revision, SceneEpoch, SessionOpen,

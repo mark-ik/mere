@@ -38,7 +38,7 @@
 
 use std::collections::VecDeque;
 
-use graphshell_protocol::{
+use chirograph::{
     Carrier, CarrierError, CarrierNotice, CarrierOutput, CarrierRequest, CarrierRequestBody,
     CarrierResponse, CarrierResponseBody,
 };
@@ -249,7 +249,7 @@ fn match_response(response: CarrierResponse, id: u64) -> Result<CarrierResponseB
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphshell_protocol::{ProjectionSession, Revision, SceneEpoch};
+    use chirograph::{ProjectionSession, Revision, SceneEpoch};
     use tokio::io::AsyncWriteExt;
 
     fn notice() -> CarrierNotice {

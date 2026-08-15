@@ -13,7 +13,7 @@ use graphshell::transfer::{
     apply_transfer,
 };
 use graphshell::transfer_endpoint::{TRANSFER_BEGIN_INTENT, TransferBeginV1};
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
     ContentHash, IntentInvocation, IntentResult, PortableCardV1, ProtocolVersion, ResourceRequest,
     ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
@@ -384,7 +384,7 @@ fn ok(response: CarrierResponse) -> Result<CarrierResponseBody, String> {
     response.body.map_err(|failure| failure.message)
 }
 
-fn opened(body: CarrierResponseBody) -> Result<Box<graphshell_protocol::SessionOpened>, String> {
+fn opened(body: CarrierResponseBody) -> Result<Box<chirograph::SessionOpened>, String> {
     match body {
         CarrierResponseBody::Opened(opened) => Ok(opened),
         other => Err(format!("expected opened, found {other:?}")),
@@ -393,7 +393,7 @@ fn opened(body: CarrierResponseBody) -> Result<Box<graphshell_protocol::SessionO
 
 fn snapshot(
     body: CarrierResponseBody,
-) -> Result<Box<graphshell_protocol::ProjectionSnapshot>, String> {
+) -> Result<Box<chirograph::ProjectionSnapshot>, String> {
     match body {
         CarrierResponseBody::Snapshot(snapshot) => Ok(snapshot),
         other => Err(format!("expected snapshot, found {other:?}")),

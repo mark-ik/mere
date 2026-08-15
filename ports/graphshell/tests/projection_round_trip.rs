@@ -23,7 +23,7 @@ use graphshell::network_carrier::{
 use graphshell::session_notices::serve_admitted_session_notifying;
 use graphshell_endpoint::ProjectionNoticeSource;
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
     EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSession,
     ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, ResumeRequest,

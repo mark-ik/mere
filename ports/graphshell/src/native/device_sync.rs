@@ -383,7 +383,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     // stalling it.
     let reader_host = Arc::clone(&host);
     let blob_reader: Arc<crate::native::device_broker::BlobReader> =
-        Arc::new(move |resource: &graphshell_protocol::ContentHash| {
+        Arc::new(move |resource: &chirograph::ContentHash| {
             let host = Arc::clone(&reader_host);
             let hash = transport::BlobHash::from_bytes(resource.0);
             tokio::task::block_in_place(|| {
@@ -836,7 +836,7 @@ fn spawn_accept_watch(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle)
 async fn serve_accepted_transfer(
     host: &PersonalSyncHost,
     decision: &TransferDecision,
-) -> Result<Vec<(graphshell_protocol::ContentHash, Vec<u8>)>, DeviceSyncError> {
+) -> Result<Vec<(chirograph::ContentHash, Vec<u8>)>, DeviceSyncError> {
     let offers = host.offers().await.map_err(DeviceSyncError::Host)?;
     let offer = offers
         .into_iter()

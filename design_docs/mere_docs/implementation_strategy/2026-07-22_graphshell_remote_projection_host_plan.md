@@ -96,7 +96,7 @@ endpoint contract in the other direction.
 Create a fresh sibling repository at `Code/repos/graphshell`, MIT OR
 Apache-2.0, edition 2024. Start with four packages:
 
-1. **`graphshell-protocol`**: wasm-clean message envelopes, versions,
+1. **`chirograph`**: wasm-clean message envelopes, versions,
    capabilities, projection subscriptions, resource manifests, intent
    invocations, and status. Depends on `sceno` and the diff vocabulary from
    `scenotime`; it has no renderer, transport, identity backend, or product
@@ -362,7 +362,7 @@ donor remains recoverable in repository history without entering the active
 dependency graph.
 
 **Published 2026-07-22:** `repos/graphshell` is an independent Git
-workspace containing `graphshell-protocol`, `graphshell-client`,
+workspace containing `chirograph`, `graphshell-client`,
 `graphshell-endpoint`, and the `graphshell` facade. The protocol serializes
 only Scenograph scores/scenes plus session/status/intent envelopes; client
 state is endpoint-scoped scene curation; endpoint traits are injected beside
@@ -644,7 +644,7 @@ the low-power lane, landed the same week):
 
 1. **Graphshell has no principal.** `ProjectionSession` is a `String` label and
    `EndpointDescriptor` is `{label, projections}`. No subject, no grant
-   reference anywhere in `graphshell-protocol`, though §4.1 lists
+   reference anywhere in `chirograph`, though §4.1 lists
    "authenticated principal and grant reference" in the session plane's
    *minimum* vocabulary.
 2. **`graphshell-client` holds no identity at all** — a grep for
@@ -733,7 +733,7 @@ the low-power lane, landed the same week):
   (`GRAPHSHELL_PROFILE`, defaulting to `default` — the profile the Personae
   SSH agent serves, so Graphshell speaks as the user rather than as a second
   identity minted behind their back) from the shared vault. `graphshell-client`
-  and `graphshell-protocol` still declare **zero** personae dependencies, per
+  and `chirograph` still declare **zero** personae dependencies, per
   §3; the application composes identity, the protocol crates never see it.
   **It fails closed, deliberately unlike Turnstone.** Turnstone falls back to an
   unsealed seed because a browser refusing to start over a key store is worse
@@ -770,7 +770,7 @@ the low-power lane, landed the same week):
   stranger is refused; **a Murm grant does not open projections** for the same
   subject, which is the point of a per-service triple; and a captured hello
   replayed onto a different connection fails, so admission is per-connection
-  rather than per-credential. `graphshell-client` and `graphshell-protocol`
+  rather than per-credential. `graphshell-client` and `chirograph`
   still declare zero personae and zero notochord dependencies.
 - **G5d — carrier. LANDED 2026-07-27.** `ports/graphshell::carrier`:
   `accept_projection_session` runs the full accept path before a single

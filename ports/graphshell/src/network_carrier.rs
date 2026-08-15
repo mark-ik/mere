@@ -81,7 +81,7 @@ mod tests {
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
     };
-    use graphshell_protocol::{
+    use chirograph::{
         CapabilityProfile, Carrier, CarrierRequestBody, CarrierResponseBody, EndpointDescriptor,
         IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
         ResourceRequest, ResourceResponse, ResumeRequest, SessionOpen,

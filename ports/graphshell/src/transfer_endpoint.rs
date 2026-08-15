@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
 };
-use graphshell_protocol::{
+use chirograph::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CacheRetention, CardValueV1, ContentHash,
     EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
     PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,

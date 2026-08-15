@@ -71,14 +71,14 @@ compatibility surface.
 ## Resolved after the move
 
 **`identity_endpoint` stays in graphshell, and the line is not close.** It
-names ~23 `graphshell_protocol` types plus `graphshell_endpoint`'s serving
+names ~23 `chirograph` types plus `graphshell_endpoint`'s serving
 machinery (`ProjectionCatalog`, `ProjectionSource`, `IntentSink`) and the
 sceno/scenotime scene stack. Castellan's projection names three
 (`PortableCardV1`, `CardValueV1`, `ActionFormV1`). The endpoint is the adapter
 that *serves* castellan's cards over graphshell's protocol — composition, and
 the count is the evidence.
 
-**The `castellan → graphshell-protocol` direction is the one real wart, and
+**The `castellan → chirograph` direction is the one real wart, and
 it is cheap today.** The three types castellan needs are neutral by content —
 "a deliberately small semantic card, not a serialized widget tree" — and the
 crate is light (six dependencies: base64, blake3, sceno, scenotime, serde,
@@ -91,7 +91,7 @@ Two ways out, both **Mark's call because both are naming decisions**:
    `ActionFormV1`, `ContentHash`) into a neutral crate both depend on. It
    meets the crate bar — a portable subset with a real consumer that wants it
    without the protocol — but it needs a name.
-2. Rename `graphshell-protocol` to what it is. It is the family's projection
+2. Rename `chirograph` to what it is. It is the family's projection
    contract, not graphshell's; the crate is named after the portal that
    happened to define it. This is the same shape of correction the keeper
    founding just made, one layer down.
@@ -100,7 +100,7 @@ Doing neither is also defensible while castellan is the only outside consumer.
 
 ## Follow-ups, not this pass
 
-- Publishing castellan 0.0.2 with the keeper feature needs graphshell-protocol
+- Publishing castellan 0.0.2 with the keeper feature needs chirograph
   publishable first; not scheduled, and entangled with the question above.
 - The wire strings (`graphshell.identity.*`) are the third instance of the
   same naming question, at the protocol level rather than the crate level.

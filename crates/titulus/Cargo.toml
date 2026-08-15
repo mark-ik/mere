@@ -1,0 +1,19 @@
+[package]
+name = "titulus"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Titulus: the inscription that says what a thing is. Portable semantic cards and bounded action-input forms for projected resources -- a small label an endpoint hands a host, deliberately not a widget tree."
+readme = "README.md"
+keywords = ["projection", "card", "presentation", "contract", "mere"]
+categories = ["data-structures", "encoding"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Content addresses for separately transferred resources.
+blake3.workspace = true
+serde.workspace = true
+serde_json.workspace = true

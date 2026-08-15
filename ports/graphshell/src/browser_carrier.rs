@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use std::io::{Read, Write};
 
 use base64::Engine;
-use graphshell_protocol::{CarrierRequest, CarrierResponse};
+use chirograph::{CarrierRequest, CarrierResponse};
 use notochord::{
     AdmittedSession, CarrierKind, DenyReason, IoHandshakeError, LocalNetworkPolicy, NetworkId,
     ProfileRef, ProofBinding, RevocationLedger, SessionFacts, SessionReply, TrafficClass,

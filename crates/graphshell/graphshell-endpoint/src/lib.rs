@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use graphshell_protocol::{
+use chirograph::{
     CarrierFailure, CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponse,
     CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, LiveViewReferenceV1,
     ProjectionRequest, ProjectionSnapshot, ResourceChunkRequest, ResourceChunkResponse,
@@ -190,7 +190,7 @@ pub enum SessionPlaneVerb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphshell_protocol::{
+    use chirograph::{
         ContentHash, MAX_RESOURCE_CHUNK_BYTES, ProjectionSession, ResourceAssembly,
     };
 

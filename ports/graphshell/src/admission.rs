@@ -9,7 +9,7 @@
 //! a Graphshell host asks — and returns the conclusion as an
 //! [`AdmittedPrincipal`].
 //!
-//! Nothing here travels in `graphshell-protocol`. Admission happens *below*
+//! Nothing here travels in `chirograph`. Admission happens *below*
 //! the application protocol, which is why `SessionOpen` negotiates version and
 //! capabilities only and carries no principal of its own.
 //!

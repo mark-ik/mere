@@ -3,12 +3,12 @@
 //! Admission is a conclusion drawn once, at connect. Authority is not: a
 //! certificate expires, an owner revokes a grant, a viewer reconnects. This
 //! module is the join between the two, and it introduces no new vocabulary to
-//! do it. `graphshell-protocol` already models every state involved
+//! do it. `chirograph` already models every state involved
 //! ([`SessionStatus`], [`CachePolicy`], [`IntentResult::Stale`]); what was
 //! missing is anything that *drives* them from the authority the carrier
 //! proved.
 //!
-//! The dependency wall holds: `graphshell-client` and `graphshell-protocol`
+//! The dependency wall holds: `graphshell-client` and `chirograph`
 //! still declare no Personae and no `notochord`. The authority lives
 //! here, in the application, and reaches the client only through the mutators
 //! the client already exposed.
@@ -31,7 +31,7 @@
 //! revocation checks without decoding application bytes a second time.
 
 use graphshell_client::ClientState;
-use graphshell_protocol::{
+use chirograph::{
     CachePolicy, IntentInvocation, IntentResult, ProjectionSession, Revision, SceneEpoch,
     SessionStatus,
 };
@@ -309,7 +309,7 @@ fn purges_on(policy: &CachePolicy) -> bool {
 mod tests {
     use super::*;
     use crate::admission::GRAPHSHELL_DOMAIN;
-    use graphshell_protocol::{
+    use chirograph::{
         PresentationManifest, ProjectionSnapshot, ProtocolVersion, SceneSnapshot,
     };
     use notochord::{

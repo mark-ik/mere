@@ -4,7 +4,7 @@ use graphshell_client::{ClientState, DiffApplication, ResumeApplication, ResumeA
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
 };
-use graphshell_protocol::{
+use chirograph::{
     BoundsRelationship, CachePolicy, EndpointDescriptor, IntentInvocation, IntentResult,
     PresentationBinding, PresentationCapability, PresentationChange, PresentationCodec,
     PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck,
@@ -321,7 +321,7 @@ fn item(source: SourceIx, x: f32) -> ProjectedItem {
 fn offer(label: &str, bytes: &[u8]) -> PresentationOffer {
     PresentationOffer {
         codec: PresentationCodec::NativeGlyphV1,
-        resource: graphshell_protocol::ContentHash::of(bytes),
+        resource: chirograph::ContentHash::of(bytes),
         byte_size: bytes.len() as u64,
         requires: PresentationCapability::NativeGlyph,
         semantics: PresentationSemantics {

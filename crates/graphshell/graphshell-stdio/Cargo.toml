@@ -8,7 +8,7 @@ description = "Native newline-delimited stdio carrier for local Graphshell endpo
 
 [dependencies]
 graphshell-endpoint = { path = "../graphshell-endpoint" }
-graphshell-protocol = { path = "../graphshell-protocol" }
+chirograph.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

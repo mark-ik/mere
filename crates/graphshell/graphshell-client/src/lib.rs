@@ -10,7 +10,7 @@ pub use session::{
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use graphshell_protocol::{
+use chirograph::{
     AdvertisedAction, CachePolicy, CacheRetention, CapabilityProfile, ContentHash, EditableTextV1,
     NativeGlyphV1, PortableCardV1, PresentationCapability, PresentationChange, PresentationCodec,
     PresentationManifest, PresentationSemantics, ProjectionAck, ProjectionDiff, ProjectionSession,
@@ -207,7 +207,7 @@ impl ClientState {
         &mut self,
         diff: &ProjectionDiff,
     ) -> Result<DiffApplication, ClientDiffError> {
-        if diff.version.major != graphshell_protocol::ProtocolVersion::V1.major {
+        if diff.version.major != chirograph::ProtocolVersion::V1.major {
             return Err(ClientDiffError::UnsupportedVersion);
         }
         let current = self
@@ -664,7 +664,7 @@ fn check_persistence_policy<E>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphshell_protocol::{
+    use chirograph::{
         BoundsRelationship, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA, EditableTextV1,
         IntentEffect, IntentReference, PresentationBinding, PresentationCapability,
         PresentationKey, PresentationOffer, ProtocolVersion, TextEncoding,

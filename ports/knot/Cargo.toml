@@ -22,7 +22,7 @@ chartulary.workspace = true
 eidetic = { workspace = true, features = ["json-schema"] }
 fetch.workspace = true
 graphshell-endpoint.workspace = true
-graphshell-protocol.workspace = true
+chirograph.workspace = true
 graphshell-stdio.workspace = true
 inker.workspace = true
 illume.workspace = true

@@ -10,7 +10,7 @@ use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
     ResumableProjectionSource,
 };
-use graphshell_protocol::{
+use chirograph::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash,
     DerivedCacheInfoV1, DerivedTextV1, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA,
     EditableTextV1, EndpointDescriptor, InsertKnotClipV1, IntentEffect, IntentInvocation,
@@ -1823,7 +1823,7 @@ mod tests {
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
         ProjectionSource, ResumableProjectionSource,
     };
-    use graphshell_protocol::{
+    use chirograph::{
         AdvertisedAction, EditableTextV1, InsertKnotClipV1, PresentationCodec, ResourceRequest,
         ResumeReply, ResumeRequest, SaveTextV1,
     };
@@ -2018,7 +2018,7 @@ mod tests {
         assert_eq!(
             snapshot.cache_policy,
             CachePolicy {
-                retention: graphshell_protocol::CacheRetention::MemoryOnly,
+                retention: chirograph::CacheRetention::MemoryOnly,
                 expires_at_ms: None,
                 purge_on_revocation: true,
             }

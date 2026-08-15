@@ -61,4 +61,4 @@ pub mod view;
 
 pub use graphshell_client as client;
 pub use graphshell_endpoint as endpoint;
-pub use graphshell_protocol as protocol;
+pub use chirograph as protocol;

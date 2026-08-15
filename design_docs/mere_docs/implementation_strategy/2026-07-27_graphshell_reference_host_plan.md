@@ -299,7 +299,7 @@ The agent exposes projections and typed intents. Graphshell is its GUI.
 ports/graphshell (portable application and WASM reference host)
     -> mere portable graph/canvas profile
     -> cambium + Genet DOM/layout/host seams
-    -> graphshell-client + graphshell-protocol
+    -> graphshell-client + chirograph
     -> NetRender WebGPU for Graphshell's own surface
 
 ports/graphshell (native composition)
@@ -313,7 +313,7 @@ Turnstone
 
 Retinue agent
     -> retinue/tulle/sennet/tucket/outrider
-    -> graphshell-endpoint + graphshell-protocol
+    -> graphshell-endpoint + chirograph
 
 mere-transport --optional reticulum--> retinue
 ```
@@ -323,7 +323,7 @@ There is no Cargo cycle in the Retinue shape. Cargo cycles are package-level:
 - the core `retinue` crate has no Mere dependency;
 - `mere-transport` may depend on core `retinue`;
 - the composition-leaf Retinue agent may depend on the leaf
-  `graphshell-endpoint` and `graphshell-protocol` crates;
+  `graphshell-endpoint` and `chirograph` crates;
 - those Graphshell leaf crates do not depend on `mere-transport` or Retinue.
 
 Repository arrows may point both ways while the package DAG remains acyclic.
@@ -353,7 +353,7 @@ standalone product with coherent utility apart from both Retinue and Mere.
 
 Checked in the live workspaces on 2026-07-27:
 
-- `graphshell-protocol` and `graphshell-client` compile for
+- `chirograph` and `graphshell-client` compile for
   `wasm32-unknown-unknown`.
 - `cambium` compiles for `wasm32-unknown-unknown`, including its Genet DOM
   seam.
@@ -428,7 +428,7 @@ WASM profile.
 **Done when:**
 
 ```powershell
-cargo check -p graphshell-protocol -p graphshell-client --target wasm32-unknown-unknown
+cargo check -p chirograph -p graphshell-client --target wasm32-unknown-unknown
 cargo check -p mere-canvas --target wasm32-unknown-unknown
 cargo check -p graphshell --target wasm32-unknown-unknown --no-default-features --features web
 cargo tree -p graphshell --target wasm32-unknown-unknown --no-default-features --features web

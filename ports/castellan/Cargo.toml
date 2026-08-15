@@ -22,7 +22,7 @@ station-grants = ["dep:session-runtime"]
 # views without it.
 keeper = [
   "dep:blake3",
-  "dep:graphshell-protocol",
+  "dep:chirograph",
   "dep:rand_core",
   "dep:serde",
   "dep:serde_json",
@@ -46,7 +46,7 @@ session-runtime = { workspace = true, optional = true }
 zeroize = "1"
 # ── keeper surface ────────────────────────────────────────────────────────
 blake3 = { workspace = true, optional = true }
-graphshell-protocol = { workspace = true, optional = true }
+chirograph = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 # SSH key generation inside the authority mints with the OS RNG.

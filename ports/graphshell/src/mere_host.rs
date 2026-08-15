@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use chartulary::{FacetError, FacetId};
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
-use graphshell_protocol::{
+use chirograph::{
     BoundsRelationship, CachePolicy, CardValueV1, ContentHash, EndpointDescriptor,
     IntentInvocation, IntentResult, PortableCardV1, PresentationBinding, PresentationCapability,
     PresentationCodec, PresentationKey, PresentationManifest, PresentationOffer,

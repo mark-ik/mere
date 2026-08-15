@@ -15,7 +15,7 @@
 //! session reads it over the ordinary session protocol, so a turnstone lens
 //! needs `graphshell-client`, not a dependency on personal sync.
 
-use graphshell_protocol::{ContentHash, PortableCardV1};
+use chirograph::{ContentHash, PortableCardV1};
 use serde_json::Value;
 
 use super::manifest::{FACET_ARTIFACTS, FACET_RUN};
@@ -153,12 +153,12 @@ fn text(value: Option<&Value>) -> String {
         .to_string()
 }
 
-fn field(label: &str, value: Option<&Value>) -> graphshell_protocol::CardValueV1 {
+fn field(label: &str, value: Option<&Value>) -> chirograph::CardValueV1 {
     pair(label, text(value))
 }
 
-fn pair(label: &str, value: String) -> graphshell_protocol::CardValueV1 {
-    graphshell_protocol::CardValueV1 {
+fn pair(label: &str, value: String) -> chirograph::CardValueV1 {
+    chirograph::CardValueV1 {
         label: label.to_string(),
         value,
     }

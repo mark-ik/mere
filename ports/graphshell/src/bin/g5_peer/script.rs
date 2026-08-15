@@ -1,6 +1,6 @@
 //! The request script the rehearsal plays, and how answers are reported.
 
-use graphshell_protocol::{
+use chirograph::{
     CapabilityProfile, CarrierRequestBody, IntentInvocation, ProjectionSession, ProtocolVersion,
     Revision, SceneEpoch, SessionOpen,
 };
@@ -29,16 +29,16 @@ pub(crate) fn intent_body() -> CarrierRequestBody {
     })
 }
 
-pub(crate) fn projection_request() -> graphshell_protocol::ProjectionRequest {
-    graphshell_protocol::ProjectionRequest {
+pub(crate) fn projection_request() -> chirograph::ProjectionRequest {
+    chirograph::ProjectionRequest {
         version: ProtocolVersion::V1,
         session: ProjectionSession(RESUME_SESSION.into()),
         score: Score::new(Arrangement::Spiral(Default::default())),
     }
 }
 
-pub(crate) fn summarize(body: &graphshell_protocol::CarrierResponseBody) -> String {
-    use graphshell_protocol::CarrierResponseBody as B;
+pub(crate) fn summarize(body: &chirograph::CarrierResponseBody) -> String {
+    use chirograph::CarrierResponseBody as B;
     match body {
         B::Opened(opened) => format!(
             "opened, status {:?}, expires {:?}",
@@ -60,7 +60,7 @@ pub(crate) fn summarize(body: &graphshell_protocol::CarrierResponseBody) -> Stri
         // Which reply matters: replayed diffs are the thing that makes this a
         // resume rather than a reconnect that started over.
         B::Resume(reply) => match reply {
-            graphshell_protocol::ResumeReply::Diffs(diffs) => format!(
+            chirograph::ResumeReply::Diffs(diffs) => format!(
                 "resumed by replaying {} contiguous diff(s), revisions {}",
                 diffs.len(),
                 diffs
@@ -69,11 +69,11 @@ pub(crate) fn summarize(body: &graphshell_protocol::CarrierResponseBody) -> Stri
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            graphshell_protocol::ResumeReply::Snapshot(snapshot) => format!(
+            chirograph::ResumeReply::Snapshot(snapshot) => format!(
                 "resumed by full snapshot at revision {} (history could not bridge the gap)",
                 snapshot.scene.revision.0
             ),
-            graphshell_protocol::ResumeReply::Current(ack) => {
+            chirograph::ResumeReply::Current(ack) => {
                 format!("already current at revision {}", ack.revision.0)
             }
         },

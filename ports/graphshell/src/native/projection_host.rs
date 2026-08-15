@@ -30,7 +30,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use graphshell_protocol::{ProjectionSession, ResumeRequest};
+use chirograph::{ProjectionSession, ResumeRequest};
 use notochord::{LocalNetworkPolicy, RevocationLedger};
 use tokio::task::JoinHandle;
 use transport::Transport;
@@ -233,7 +233,7 @@ mod tests {
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
     };
-    use graphshell_protocol::{
+    use chirograph::{
         CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
         EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot,
         ProtocolVersion, ResourceRequest, ResourceResponse, SessionOpen,

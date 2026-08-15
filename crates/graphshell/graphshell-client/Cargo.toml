@@ -7,7 +7,7 @@ repository.workspace = true
 description = "Transport-independent local curation state for Graphshell."
 
 [dependencies]
-graphshell-protocol = { path = "../graphshell-protocol" }
+chirograph.workspace = true
 sceno.workspace = true
 scenotime.workspace = true
 serde.workspace = true

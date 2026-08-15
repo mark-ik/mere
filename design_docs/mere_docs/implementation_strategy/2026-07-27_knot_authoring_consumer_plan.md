@@ -55,7 +55,7 @@ continues to receive the existing card or glyph fallback.
 These were the live seams when this plan was cut. The current receipt below
 records their implementation.
 
-- `graphshell-protocol` 1.1 has native glyph, portable card, and image
+- `chirograph` 1.1 has native glyph, portable card, and image
   capabilities. It has no editable-text codec or typed save payload.
 - `KnotEndpoint` presents cards and glyphs, advertises no actions, and rejects
   every intent as read-only. Its vault disclosure test correctly proves that
@@ -205,7 +205,7 @@ text without the 1.3 cache metadata.
 
 Add `EditableTextV1`, `SaveTextV1`, the capability and codec tags, serde
 fixtures, resource validation, and capability fallback to
-`graphshell-protocol` and `graphshell-client`. Advance the protocol minor
+`chirograph` and `graphshell-client`. Advance the protocol minor
 version while keeping 1.1 card/glyph clients usable.
 
 Extract a retained local endpoint session from the G4 receipt helper:

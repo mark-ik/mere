@@ -472,7 +472,7 @@ Minimum command wall is selected per touched repo, plus `git diff --check`:
 ```text
 # mere
 cargo test -p mere-kernel -p mere-canvas -p session-runtime
-cargo test -p sceno -p scenotime -p graphshell-protocol -p graphshell-client
+cargo test -p sceno -p scenotime -p chirograph -p graphshell-client
 
 # genet / Cambium
 cargo test -p cambium

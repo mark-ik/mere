@@ -8,7 +8,7 @@
 
 use std::collections::BTreeMap;
 
-use graphshell_protocol::{
+use chirograph::{
     ActionFormChoiceV1, ActionFormError, AdvertisedAction, IntentInvocation, ProjectionSession,
     Revision, SceneEpoch,
 };
@@ -208,7 +208,7 @@ impl ActionDraft {
 mod tests {
     use std::collections::BTreeMap;
 
-    use graphshell_protocol::{
+    use chirograph::{
         ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, IntentEffect, IntentReference,
     };
 

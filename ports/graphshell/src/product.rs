@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use chartulary::AcceptAll;
-use graphshell_protocol::PortableCardV1;
+use chirograph::PortableCardV1;
 use mere::canvas::CartographyGeometry;
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
