@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 pub struct ContentHash(pub [u8; 32]);
 
 impl ContentHash {
+    /// The address of these bytes (BLAKE3).
     pub fn of(bytes: &[u8]) -> Self {
         Self(*blake3::hash(bytes).as_bytes())
     }
@@ -57,10 +58,12 @@ impl fmt::Display for ContentHash {
 pub struct ActionFormV1 {
     /// Must exactly equal the advertised action's `payload_schema`.
     pub schema: String,
+    /// The named inputs, in the order a host should present them.
     pub fields: Vec<ActionFormFieldV1>,
 }
 
 impl ActionFormV1 {
+    /// An empty form for `schema`, which must match the action it belongs to.
     pub fn new(schema: impl Into<String>) -> Self {
         Self {
             schema: schema.into(),
@@ -68,6 +71,7 @@ impl ActionFormV1 {
         }
     }
 
+    /// Append one input.
     pub fn with_field(mut self, field: ActionFormFieldV1) -> Self {
         self.fields.push(field);
         self
@@ -170,10 +174,16 @@ impl ActionFormV1 {
 pub struct ActionFormFieldV1 {
     /// JSON property name. `schema` is reserved for the form schema marker.
     pub name: String,
+    /// What a host shows beside the input.
     pub label: String,
+    /// Longer guidance, or empty.
     pub description: String,
+    /// Whether composing without this field is refused. Defaults to true, so
+    /// an older endpoint's form does not silently become optional.
     #[serde(default = "required_action_form_field")]
     pub required: bool,
+    /// The exact values the endpoint will accept. A host offers these and
+    /// nothing else.
     pub choices: Vec<ActionFormChoiceV1>,
 }
 
@@ -182,6 +192,7 @@ const fn required_action_form_field() -> bool {
 }
 
 impl ActionFormFieldV1 {
+    /// A required field offering exactly these choices.
     pub fn choice(
         name: impl Into<String>,
         label: impl Into<String>,
@@ -196,11 +207,13 @@ impl ActionFormFieldV1 {
         }
     }
 
+    /// Add the longer guidance.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
         self
     }
 
+    /// Let this field be omitted when the payload is composed.
     pub fn optional(mut self) -> Self {
         self.required = false;
         self
@@ -213,12 +226,15 @@ impl ActionFormFieldV1 {
 pub struct ActionFormChoiceV1 {
     /// Opaque payload value. Hosts display the label and return this exact value.
     pub value: String,
+    /// What the host shows in place of the value.
     pub label: String,
+    /// Longer guidance for this one choice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
 impl ActionFormChoiceV1 {
+    /// A choice carrying `value` behind `label`.
     pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
         Self {
             value: value.into(),
@@ -227,6 +243,7 @@ impl ActionFormChoiceV1 {
         }
     }
 
+    /// Add the longer guidance.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -236,20 +253,52 @@ impl ActionFormChoiceV1 {
 /// Reasons a host must not compose an action payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ActionFormError {
+    /// Values were supplied for an action that advertised no form. Refused
+    /// rather than guessing an encoding the endpoint never described.
     NoInputForm,
+    /// The form's own schema string is blank.
     EmptyFormSchema,
-    SchemaMismatch { expected: String, form: String },
+    /// The form belongs to a different action than the one being composed.
+    SchemaMismatch {
+        /// The schema the action advertised.
+        expected: String,
+        /// The schema the form carries.
+        form: String,
+    },
+    /// A field has no JSON property name.
     EmptyFieldName,
+    /// A field claimed the name `schema`, which the form writes itself.
     ReservedFieldName,
+    /// Two fields share one name.
     DuplicateField(String),
+    /// The named field has nothing to show beside its input.
     EmptyFieldLabel(String),
+    /// The named field offers nothing to choose, so it can never be satisfied.
     EmptyChoices(String),
+    /// A choice in the named field carries no value.
     EmptyChoiceValue(String),
+    /// A choice in the named field has nothing to show.
     EmptyChoiceLabel(String),
-    DuplicateChoiceValue { field: String, value: String },
+    /// Two choices in one field carry the same value.
+    DuplicateChoiceValue {
+        /// The field holding the repeat.
+        field: String,
+        /// The value offered twice.
+        value: String,
+    },
+    /// A required field had no value.
     MissingField(String),
+    /// A value was supplied under a name the form never advertised.
     UnknownField(String),
-    InvalidChoice { field: String, value: String },
+    /// A value was supplied that the endpoint did not offer. This is the
+    /// bound that keeps a host from inventing payloads.
+    InvalidChoice {
+        /// The field the value was offered for.
+        field: String,
+        /// The value that was not on offer.
+        value: String,
+    },
+    /// The composed object would not serialize.
     Encode(String),
 }
 
@@ -315,16 +364,23 @@ impl std::error::Error for ActionFormError {}
 /// One labeled value in a portable card.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CardValueV1 {
+    /// What the value is called.
     pub label: String,
+    /// The value itself, already rendered to text by the endpoint.
     pub value: String,
 }
 
 /// A deliberately small semantic card, not a serialized widget tree.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortableCardV1 {
+    /// What the card is about.
     pub title: String,
+    /// Labeled facts, in the order the endpoint wants them read.
     pub values: Vec<CardValueV1>,
+    /// Short status words a host may render as chips.
     pub badges: Vec<String>,
+    /// Addresses of separately transferred resources. The bytes are fetched
+    /// through the carrier; the card carries only where to ask.
     pub media: Vec<ContentHash>,
 }
 
