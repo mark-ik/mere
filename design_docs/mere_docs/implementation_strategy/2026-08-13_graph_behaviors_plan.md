@@ -289,8 +289,13 @@ Carried over or ruled here:
   `blake3(source)`, so changing what a pack wakes on changes its identity and
   re-reviews; and `install_caps` grants a READ scope over the watched region,
   so the containment law holds by construction rather than by hope.
-  **Remaining, and BLOCKED: the inbox rule cannot fire live today.** See
-  W2.5. The original text follows. The matched-delta digest handed to
+  **The inbox rule works (2026-08-13).** A node appearing under a watched
+  folder wakes its behavior with nobody asking, and the edit lands attributed
+  to the denizen rather than the user: containment derived at mint, ancestry
+  read as a scope, the watch matched, the cascade run at the drain, the body's
+  Action lowered through the ordinary spine. W2 is closed except for a headed
+  receipt, which the scenario lane can capture whenever it is wanted. The
+  original text follows. The matched-delta digest handed to
   the piccolo body (and the wasm envelope, same shape as an Action payload);
   bindings stay capability-derived. First product behavior: an **inbox
   rule** (a node appearing under a watched scope is filed/tagged by
@@ -298,7 +303,18 @@ Carried over or ruled here:
   the rings before anything is granted; the inbox rule runs headed; its
   edit is attributed in the inspector; and uninstalling the denizen removes
   the watch with it.
-- **W2.5: containment is only derived on load. NEEDS A RULING.** Found trying
+- **W2.5: containment is only derived on load. RULED (option 1) and LANDED
+  2026-08-13.** `Graph::derive_containment_for` asserts a new node's URL-path
+  parent at mint, called from both mint paths, so containment means the same
+  thing live and loaded (mere-kernel: 282 pass). The **Domain half stays with
+  the whole-graph rebuild**: a domain anchor is the shallowest node on a host,
+  so minting one node can re-anchor every other node sharing it, which is not
+  a local fact. Two consequences worth carrying: `containment_parent_url`
+  covers `http`/`https`/`file` only, so a `mere://` folder still derives
+  nothing; and it names a parent in **directory form**, so a folder addressed
+  `.../inbox` rather than `.../inbox/` contains nothing and its watch is
+  silently inert. The original ruling text follows.
+- **W2.5 (original):** Found trying
   to build the inbox rule. The ruled region vocabulary rests on
   `EdgeFamily::Containment` edges, and in mere those edges are *derived from
   URL structure* by `Graph::rebuild_derived_containment_relations`, which is
@@ -388,6 +404,12 @@ not automation).
 
 ## Progress
 
+- 2026-08-13 (W2 closed): the inbox rule passes. The failure was none of the
+  joins I suspected: instrumenting the drain showed the child's scope arriving
+  as a bare id, because the folder was addressed `.../inbox` while the kernel
+  names parents `.../inbox/`. An address mismatch, not a mechanism fault. The
+  trap is now in the behaviors module docs, since it costs a silent watch and
+  says nothing about why. **262 pass** with `--features piccolo`.
 - 2026-08-13 (W2, last piece): stopped before building the inbox rule. The
   containment edges the ruled vocabulary rests on are derived only on snapshot
   load, so the rule cannot fire in a live session and a test cannot even stage
