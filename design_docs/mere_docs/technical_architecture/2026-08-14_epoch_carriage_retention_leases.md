@@ -41,9 +41,10 @@ bounded window, without assuming every peer is reachable.**
 1. **Epoch carriage replicates as a leased slot, never as history.** The
    record is keyring state, not memory; it never enters the content-addressed
    engram lane.
-2. **Every replicated record carries a mandatory, issuer-signed expiry**, and
-   never outlives the grant it serves: `lease.expires_at_ms <=
-   grant.expires_at_ms`, asserted at issue and at install.
+2. **Every replicated record carries a mandatory, issuer-signed expiry**,
+   bounded by three separate ceilings (amended 2026-08-14, below): the
+   device's own carriage TTL, the grant it serves, and a stack-wide backstop.
+   Asserted at issue and at install.
 3. **Supersession is destructive.** A monotonic issue counter orders
    versions; installing version N+1 destroys N; a late-arriving N is refused.
    A late replacement cannot resurrect, same rule as signalman's live lease.
@@ -82,12 +83,69 @@ before the old deadline, a late replacement cannot resurrect, local
 revocation drops immediately. Carriage adopts the same contract rather than
 inventing a third retention idiom.
 
-TTL sizing follows the sited brief's rule for grant refresh: sized to the
-worst link among the devices meant to benefit, with the grant expiry as the
-hard ceiling. A carriage lease serving a LoRa-reachable radio is long; one
-serving two desktops on a LAN is short. The exposure window after a
-wrapping-key compromise is at most the TTL, so the same knob trades recovery
-convenience against harvest exposure, legibly.
+**Amended 2026-08-14 (Mark): the TTL is per device, and the grant is not the
+only ceiling.**
+
+This section first read "sized to the worst link among the devices meant to
+benefit, with the grant expiry as the hard ceiling". Both halves were wrong,
+and in the same direction: they loosen the bound exactly where exposure is
+worst.
+
+*Worst-link sizing is backwards as a global rule.* It takes the device with
+the most constrained link and imposes its window on everything else. The
+device that most needs a long lease is the sited radio, which is also the
+device the threat model expects to be stolen. A global TTL therefore lets the
+radio's recovery convenience set the harvest window for two desktops on a LAN
+that never needed it. The doc's own example already argues per-device ("a
+carriage lease serving a LoRa-reachable radio is long; one serving two desktops
+on a LAN is short"); the sizing rule contradicted it.
+
+Per-device is also the honest unit, because **the wrapping key is per-device**.
+A compromised key opens only that device's carriage, so that device's TTL is
+already the true exposure bound for it. Making the knob per-device just stops
+one device's constraint from bounding another's exposure.
+
+*The grant expiry is a correctness ceiling, not an exposure bound.* Grant
+windows are sized by re-issue cost, which for a sited radio is deliberately
+long (M3; sited brief). Carriage windows are sized by harvest exposure. Two
+different questions were sharing one bound, and the shared bound was the loose
+one.
+
+So the lease ceiling becomes a conjunction of three bounds answering three
+questions:
+
+```
+lease.expires_at_ms <= min(
+    now_ms + device.carriage.max_ttl_ms,  // this device's exposure budget
+    grant.expires_at_ms,                  // never outlive the authority
+    now_ms + CARRIAGE_ABSOLUTE_CEILING_MS // backstop against misconfiguration
+)
+```
+
+### Where the knob lives
+
+On the roster's `DeviceRecord`, beside `mode` and `exposure`, which are already
+the per-device posture decisions:
+
+```rust
+pub enum CarriagePolicy {
+    /// Never replicated. The default, so replication is opt-in per device
+    /// rather than a global switch someone can flip once.
+    None,
+    /// Replicated, with a lease of at most this long.
+    Leased { max_ttl_ms: u64 },
+}
+```
+
+Defaulting to `None` matters as much as the granularity. It makes an
+unconsidered device un-replicated by construction, and it makes the decision
+visible at commissioning, where the operator already knows the link and the
+siting. `#[serde(default)]` keeps existing roster records readable.
+
+**Not adopted: a per-persona axis.** The record is already scoped to one
+(device, persona-certificate) pair, so a per-device policy already selects at
+record granularity. A persona-level override can be added if a persona ever
+needs a tighter bound than its device, and nothing here forecloses it.
 
 ### Honest bounds, no placebo
 
@@ -126,7 +184,10 @@ exists (murm/moot shaped), the pieces are:
 - A revoked certificate's leases vanish from a cooperative peer at expiry
   with zero messages delivered, and immediately when a revocation statement
   arrives.
-- No lease exists whose expiry exceeds its grant's.
+- No lease exists whose expiry exceeds its grant's, its device's configured
+  TTL, or the absolute ceiling.
+- A device with no carriage policy set replicates nothing, and that is the
+  state a freshly commissioned device is in.
 
 ## What this does not decide
 
