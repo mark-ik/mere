@@ -1,6 +1,6 @@
 [package]
 name = "personae"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "The identity and carry layer for the Merely ecosystem: a master Ed25519 keypair, deterministic per-protocol key derivation (BLAKE3), a passphrase/OS-store-unlocked vault, and sealed-record storage. A person has personae, plural — work, research, burner — so the crate is the register of your faces and their root of trust. Promoted from mere's persona/identity."

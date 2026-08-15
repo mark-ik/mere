@@ -39,6 +39,10 @@ petgraph = { version = "0.8", features = ["serde-1"], optional = true }
 uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
-kernel = { workspace = true, features = ["fixtures"] }
+# Path-only, NOT the workspace entry, and deliberately: mere-kernel depends on
+# mere-forme, so a versioned dev-dep here is a publish cycle -- neither can go
+# to crates.io until the other is there. cargo strips path-only dev-deps when
+# packaging, which breaks the knot. Same shape as the outrider/postilion cycle.
+kernel = { package = "mere-kernel", path = "../../graph/graph-kernel", features = ["fixtures"] }
 serde_json = "1.0"
 proptest = "1.11"

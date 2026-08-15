@@ -159,14 +159,14 @@ scenomise = { path = "crates/scenograph/scenomise" }
 scenotime = { version = "0.0.3", path = "crates/scenograph/scenotime" }
 # The remaining families absorbed 2026-07-23. Consumers keep using
 # `<dep>.workspace = true`, so only this block knows where each one lives.
-personae = { version = "0.1.1", path = "crates/dramatis/personae" }
+personae = { version = "0.2.0", path = "crates/dramatis/personae" }
 notochord = { version = "0.1.0", path = "crates/system/notochord" }
 codicil = { version = "0.1.1", path = "crates/eidetic/codicil" }
 chartulary = { version = "0.2.0", path = "crates/eidetic/chartulary" }
 scholia = { path = "crates/eidetic/scholia" }
 # The legend/memorial view over a codicil log; reservation, no implementation.
 tulpa = { version = "0.0.2", path = "crates/eidetic/tulpa" }
-numen = { version = "0.1.1", path = "crates/conatus/numen" }
+numen = { version = "0.2.0", path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
 esp = { path = "crates/intel/esp" }
@@ -182,7 +182,7 @@ graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { path = "crates/graphshell/graphshell-network" }
 knot = { path = "ports/knot" }
 # The credential-keeper port; reservation, no implementation (dramatis plan D4).
-castellan = { version = "0.0.1", path = "ports/castellan" }
+castellan = { version = "0.0.2", path = "ports/castellan" }
 # The model-works port; first real consumer of the mesh host supervisor.
 distillery = { version = "0.0.1", path = "ports/distillery" }
 # Shared pins the graphshell crates inherit.
@@ -197,7 +197,7 @@ shell-state = { path = "crates/system/shell-state" }
 incipit = { version = "0.2.0", path = "crates/incipit" }
 chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
 comms = { package = "mere-comms", path = "crates/shell/comms" }
-pandect = { path = "crates/system/pandect" }
+pandect = { version = "0.1.0", path = "crates/system/pandect" }
 # Self-update over signed manifests (the cargo-packager-updater fork; ruled
 # 2026-07-24: name luggage, home mere). Apps consume it via git dep like the
 # rest of the family; mere itself will when its own packaging lands.
@@ -277,7 +277,10 @@ mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
 # `mere-mesh` deliberately refuses to have.
 mesh-host = { package = "mere-mesh-host", path = "crates/mesh/host" }
 
-identity = { package = "personae", version = "0.1.0", path = "crates/dramatis/personae" }
+# The same crate as `personae` above, under mere's historical alias. Both
+# entries must carry the SAME version: they resolve to one package, and a
+# stale pin here is invisible from the personae line.
+identity = { package = "personae", version = "0.2.0", path = "crates/dramatis/personae" }
 # The denizen authority gate (participant gate B1/B3): document-host derives
 # its import-level Grant from a servitor authority — one grant, two faces.
 servitor = { path = "crates/servitor" }

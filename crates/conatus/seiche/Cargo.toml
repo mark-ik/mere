@@ -26,7 +26,7 @@ petgraph = "0.8"
 # no rhai/burn) is the portable field source, seiche the integrator. numen supplies
 # the field-definition types the CouplingForce carries.
 quint = { path = "../quint", version = "0.0.3" }
-numen = { path = "../numen", version = "0.1" }
+numen = { path = "../numen", version = "0.2" }
 euclid = "0.22"
 tracing = "0.1"
 # No mere `kernel` dep: seiche is the kernel-free physics core. The graph glue that
