@@ -5,7 +5,7 @@
 //! [`crate::authority::PersonaeHost`]. Hosts (graphshell first) compose and
 //! serve these cards; they do not own them.
 //!
-//! The intent and schema constants keep their `graphshell.identity.*` values:
+//! The intent and schema constants keep their `castellan.*` values:
 //! they cross the projection protocol to admitted browsers, and renaming is a
 //! wire vocabulary change with its own blast radius. See the keeper founding
 //! plan.
@@ -21,22 +21,22 @@ use crate::view::{
     AgentListenerView, IdentitySurfaceSnapshot, VaultLockView, VaultProtectionView,
 };
 
-pub const SIGNING_APPROVE_ONCE_INTENT: &str = "graphshell.identity.signing.approve-once";
-pub const SIGNING_APPROVE_IDLE_INTENT: &str = "graphshell.identity.signing.approve-until-idle";
-pub const SIGNING_DENY_INTENT: &str = "graphshell.identity.signing.deny";
-pub const SIGNING_DECISION_SCHEMA: &str = "graphshell.identity.signing-decision/v1";
-pub const SSH_GENERATE_INTENT: &str = "graphshell.identity.ssh.generate";
-pub const SSH_GENERATE_SCHEMA: &str = "graphshell.identity.ssh.generate/v1";
-pub const SSH_IMPORT_NATIVE_INTENT: &str = "graphshell.identity.ssh.import-native";
-pub const SSH_IMPORT_NATIVE_SCHEMA: &str = "graphshell.identity.ssh.import-native/v1";
-pub const SSH_REMOVE_INTENT: &str = "graphshell.identity.ssh.remove";
-pub const SSH_REMOVE_SCHEMA: &str = "graphshell.identity.ssh.remove/v1";
-pub const DEVICE_REVOKE_INTENT: &str = "graphshell.identity.device.revoke";
-pub const DEVICE_REVOKE_SCHEMA: &str = "graphshell.identity.device.revoke/v1";
-pub const PROFILE_SWITCH_INTENT: &str = "graphshell.identity.profile.switch";
-pub const PROFILE_SWITCH_SCHEMA: &str = "graphshell.identity.profile.switch/v1";
-pub const PROFILE_CREATE_INTENT: &str = "graphshell.identity.profile.create";
-pub const PROFILE_CREATE_SCHEMA: &str = "graphshell.identity.profile.create/v1";
+pub const SIGNING_APPROVE_ONCE_INTENT: &str = "castellan.signing.approve-once";
+pub const SIGNING_APPROVE_IDLE_INTENT: &str = "castellan.signing.approve-until-idle";
+pub const SIGNING_DENY_INTENT: &str = "castellan.signing.deny";
+pub const SIGNING_DECISION_SCHEMA: &str = "castellan.signing-decision/v1";
+pub const SSH_GENERATE_INTENT: &str = "castellan.ssh.generate";
+pub const SSH_GENERATE_SCHEMA: &str = "castellan.ssh.generate/v1";
+pub const SSH_IMPORT_NATIVE_INTENT: &str = "castellan.ssh.import-native";
+pub const SSH_IMPORT_NATIVE_SCHEMA: &str = "castellan.ssh.import-native/v1";
+pub const SSH_REMOVE_INTENT: &str = "castellan.ssh.remove";
+pub const SSH_REMOVE_SCHEMA: &str = "castellan.ssh.remove/v1";
+pub const DEVICE_REVOKE_INTENT: &str = "castellan.device.revoke";
+pub const DEVICE_REVOKE_SCHEMA: &str = "castellan.device.revoke/v1";
+pub const PROFILE_SWITCH_INTENT: &str = "castellan.profile.switch";
+pub const PROFILE_SWITCH_SCHEMA: &str = "castellan.profile.switch/v1";
+pub const PROFILE_CREATE_INTENT: &str = "castellan.profile.create";
+pub const PROFILE_CREATE_SCHEMA: &str = "castellan.profile.create/v1";
 
 /// Typed, secret-free signing decision payload.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

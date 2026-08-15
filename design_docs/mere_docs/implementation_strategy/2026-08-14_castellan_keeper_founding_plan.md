@@ -40,12 +40,31 @@ keeps what is genuinely composition rather than capability:
 
 ## Decisions
 
-- **Wire strings keep their values.** The intent/schema constants
-  (`graphshell.identity.*`) move but do not rename. They cross the projection
-  protocol to admitted browsers and appear in receipts; renaming is a wire
-  vocabulary change with its own blast radius and nothing forcing it today.
-  Open item: whether the namespace should become `castellan.*` in a
-  deliberate wire revision.
+- **Wire strings renamed the same day** (2026-08-14, Mark: "the wire strings
+  too"). `graphshell.identity.*` became `castellan.*`, following the convention
+  `knot.*` had already set: the port names its own intents. The identity family
+  was in graphshell's namespace only because graphshell is where it first grew.
+
+  The other `graphshell.*` intents stay exactly where they are, because they
+  genuinely are the portal's: `address.open`, `editable-text.save`, the
+  transfer lane.
+
+  Cheaper than this plan first feared: no sibling repo names these strings, so
+  the blast radius was sixteen constants, the browser extension bridge, and the
+  docs. The bridge held the one place the namespace *shape* was load-bearing
+  rather than incidental — a `startsWith("graphshell.identity.signing.")` guard
+  routing every signing approval — which would have failed silently rather than
+  loudly had the sweep missed it.
+
+  **Receipts under `docs/receipts/` were deliberately not rewritten.** They
+  record what a run produced on its date, and editing evidence to match today's
+  vocabulary is how a receipt stops being one. The persona-switch receipt was
+  regenerated instead, because it is current rather than historical.
+
+  The built bundles under `web/extension/dist/` are gitignored output of
+  `prepare-extension`, so the repo was never wrong — but a locally loaded
+  extension would have gone on sending intents the host no longer answered.
+  Rebuilt.
 - **`keeper` is one feature, not two.** The brief's embeddable/authority split
   suggests two, but the projection already renders pending signing requests
   (`personae::signing`, agent-gated), so the halves share the heavy
@@ -102,6 +121,6 @@ Doing neither is also defensible while castellan is the only outside consumer.
 
 - Publishing castellan 0.0.2 with the keeper feature needs chirograph
   publishable first; not scheduled, and entangled with the question above.
-- The wire strings (`graphshell.identity.*`) are the third instance of the
+- The wire strings (`castellan.*`) are the third instance of the
   same naming question, at the protocol level rather than the crate level.
   Worth deciding all three together rather than piecemeal.

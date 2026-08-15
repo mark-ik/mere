@@ -368,12 +368,12 @@ function renderNativeImportAction(action, actionsNode) {
 
 function renderConfirmedIdentityAction(action, card, item, actionsNode) {
   const specs = {
-    "graphshell.identity.ssh.remove": {
+    "castellan.ssh.remove": {
       field: "Fingerprint",
       key: "fingerprint",
       prompt: "Remove this SSH key from the Personae vault?",
     },
-    "graphshell.identity.device.revoke": {
+    "castellan.device.revoke": {
       field: "Device",
       key: "device_id",
       prompt: "Revoke this delegated device and rotate its future access?",
@@ -417,7 +417,7 @@ function renderCard(card, item) {
   node.querySelector(".badges").textContent = card.badges.join(" · ");
   const actionsNode = node.querySelector(".actions");
   for (const action of item.offer.semantics.actions) {
-    if (action.intent === "graphshell.identity.ssh.import-native") {
+    if (action.intent === "castellan.ssh.import-native") {
       renderNativeImportAction(action, actionsNode);
       continue;
     }
@@ -427,7 +427,7 @@ function renderCard(card, item) {
     if (renderBoundedActionForm(action, item, actionsNode)) {
       continue;
     }
-    if (!action.intent.startsWith("graphshell.identity.signing.")) {
+    if (!action.intent.startsWith("castellan.signing.")) {
       continue;
     }
     const button = document.createElement("button");

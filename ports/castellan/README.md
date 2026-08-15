@@ -43,7 +43,7 @@ Implemented:
 
 Graphshell composes all three and re-exports them at its pre-founding paths,
 so it is the first host rather than the owner. The intent wire strings keep
-their `graphshell.identity.*` values for now; renaming the wire vocabulary is
+their `castellan.*` values for now; renaming the wire vocabulary is
 a separate decision. Storage of foreign secrets, CXF import, and
 gate-mediated release are later slices — see the keeper founding plan and the
 credential port brief in mere's `design_docs`.

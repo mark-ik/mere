@@ -1,8 +1,9 @@
 //! Castellan's identity cards and intents, at their pre-founding path.
 //!
 //! Moved home to [`castellan::projection`] with the keeper founding
-//! (2026-08-14). The intent and schema constants keep their
-//! `graphshell.identity.*` wire values, so nothing an admitted browser or a
-//! receipt recorded changes meaning.
+//! (2026-08-14), and the intents took the port's own namespace the same day:
+//! `graphshell.identity.*` became `castellan.*`, matching how `knot.*` already
+//! names knot's. Receipts written before that carry the old strings, which is
+//! correct — they record what ran.
 
 pub use castellan::projection::*;
