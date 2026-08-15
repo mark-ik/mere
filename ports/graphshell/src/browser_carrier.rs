@@ -269,6 +269,75 @@ pub enum BrowserHostMessage {
     },
 }
 
+/// A checked connect answer and its transcript link, for any local client.
+///
+/// The label is bound into the transcript, so a link minted for one client
+/// cannot be replayed as another even on the same challenge. What the label
+/// says is the caller's business: an extension origin for a browser, an
+/// application name for a first-party app.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalLink {
+    pub label: String,
+    pub host_nonce: [u8; 32],
+    pub client_nonce: [u8; 32],
+    pub shared_link: [u8; 16],
+}
+
+impl LocalLink {
+    /// Check a connect answer against this host process and bind `label`.
+    pub fn accept(
+        label: String,
+        challenge: &BrowserChallenge,
+        message: BrowserMessage,
+    ) -> Result<Self, BrowserCarrierError> {
+        let BrowserMessage::Connect {
+            schema,
+            host_nonce,
+            client_nonce,
+        } = message
+        else {
+            return Err(BrowserCarrierError::ConnectRequired);
+        };
+        if schema != CONNECT_SCHEMA {
+            return Err(BrowserCarrierError::WrongSchema);
+        }
+        Self::bind(label, challenge, &host_nonce, &client_nonce)
+    }
+
+    /// Bind a client label and its answered nonces into a transcript link.
+    ///
+    /// Separate from [`LocalLink::accept`] so a door with its own message
+    /// vocabulary can bind the same way without having to speak the browser
+    /// connect frame.
+    pub fn bind(
+        label: String,
+        challenge: &BrowserChallenge,
+        host_nonce: &str,
+        client_nonce: &str,
+    ) -> Result<Self, BrowserCarrierError> {
+        let expected = challenge.nonce()?;
+        let echoed = decode_nonce(host_nonce)?;
+        if echoed != expected {
+            return Err(BrowserCarrierError::ChallengeMismatch);
+        }
+        let client_nonce = decode_nonce(client_nonce)?;
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(LINK_DOMAIN);
+        hasher.update(&(label.len() as u64).to_le_bytes());
+        hasher.update(label.as_bytes());
+        hasher.update(&expected);
+        hasher.update(&client_nonce);
+        let mut shared_link = [0u8; 16];
+        shared_link.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
+        Ok(Self {
+            label,
+            host_nonce: expected,
+            client_nonce,
+            shared_link,
+        })
+    }
+}
+
 /// A checked connection request and its transcript link.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BrowserLink {
@@ -284,37 +353,23 @@ impl BrowserLink {
         challenge: &BrowserChallenge,
         message: BrowserMessage,
     ) -> Result<Self, BrowserCarrierError> {
-        let BrowserMessage::Connect {
-            schema,
-            host_nonce,
-            client_nonce,
-        } = message
-        else {
-            return Err(BrowserCarrierError::ConnectRequired);
-        };
-        if schema != CONNECT_SCHEMA {
-            return Err(BrowserCarrierError::WrongSchema);
-        }
-        let expected = challenge.nonce()?;
-        let echoed = decode_nonce(&host_nonce)?;
-        if echoed != expected {
-            return Err(BrowserCarrierError::ChallengeMismatch);
-        }
-        let client_nonce = decode_nonce(&client_nonce)?;
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(LINK_DOMAIN);
-        hasher.update(&(launcher.label().len() as u64).to_le_bytes());
-        hasher.update(launcher.label().as_bytes());
-        hasher.update(&expected);
-        hasher.update(&client_nonce);
-        let mut shared_link = [0u8; 16];
-        shared_link.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
+        let link = LocalLink::accept(launcher.label(), challenge, message)?;
         Ok(Self {
             launcher,
-            host_nonce: expected,
-            client_nonce,
-            shared_link,
+            host_nonce: link.host_nonce,
+            client_nonce: link.client_nonce,
+            shared_link: link.shared_link,
         })
+    }
+
+    /// This link as the client-agnostic form admission takes.
+    pub fn as_local(&self) -> LocalLink {
+        LocalLink {
+            label: self.launcher.label(),
+            host_nonce: self.host_nonce,
+            client_nonce: self.client_nonce,
+            shared_link: self.shared_link,
+        }
     }
 }
 
@@ -488,6 +543,35 @@ pub async fn admit_browser_session<P: IdentityProvider>(
     profile: ProfileRef,
     delegations: Vec<SignedDelegationCertificate>,
     link: &BrowserLink,
+    policy: &LocalNetworkPolicy,
+    ledger: &RevocationLedger,
+    now_ms: u64,
+) -> Result<(BrowserSessionClient, AdmittedSession<DuplexStream>), BrowserCarrierError> {
+    admit_local_session(
+        identity,
+        network,
+        profile,
+        delegations,
+        &link.as_local(),
+        policy,
+        ledger,
+        now_ms,
+    )
+    .await
+}
+
+/// Admit one local client over an in-process duplex.
+///
+/// The browser path and the first-party path differ in who is on the far end
+/// and what the transcript binds, not in how a session is admitted, so both
+/// arrive here.
+#[allow(clippy::too_many_arguments)]
+pub async fn admit_local_session<P: IdentityProvider>(
+    identity: &P,
+    network: NetworkId,
+    profile: ProfileRef,
+    delegations: Vec<SignedDelegationCertificate>,
+    link: &LocalLink,
     policy: &LocalNetworkPolicy,
     ledger: &RevocationLedger,
     now_ms: u64,

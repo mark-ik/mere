@@ -6,7 +6,7 @@
 //! process owns the one vault, approval broker, and SSH agent endpoint.
 
 #[cfg(not(windows))]
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use personae::IdentityStorage;
@@ -23,6 +23,7 @@ use crate::browser_carrier::{
 use crate::identity_endpoint::{SupplementalCard, TransferDecisions};
 use crate::native::browser_host::{BrowserHostError, serve_identity_native_messages_with_cards};
 use crate::native::identity_ui::NativeIdentityUi;
+use crate::native::local_endpoint::{LocalStream, connect_local, serve_local};
 use crate::native::personae_host::PersonaeHost;
 use chirograph::ContentHash;
 
@@ -144,7 +145,7 @@ pub async fn relay_browser_native_messages(
     endpoint: &str,
     launcher: BrowserLauncher,
 ) -> Result<(), DeviceBrokerError> {
-    let mut stream = connect(endpoint).await?;
+    let mut stream = connect_local(endpoint).await?;
     write_native_message_async(&mut stream, &DeviceBrokerHello::new(launcher)).await?;
     let (mut device_reader, mut device_writer) = tokio::io::split(stream);
     let mut browser_reader = tokio::io::stdin();
@@ -257,14 +258,10 @@ where
     Ok(())
 }
 
-#[cfg(windows)]
-async fn connect(
-    endpoint: &str,
-) -> Result<tokio::net::windows::named_pipe::NamedPipeClient, std::io::Error> {
-    tokio::net::windows::named_pipe::ClientOptions::new().open(endpoint)
-}
-
-#[cfg(windows)]
+/// Accept browser relays on the owner-only endpoint.
+///
+/// One function for both platforms now: the listener and the same-user check
+/// moved to `local_endpoint`, where the first-party door reuses them.
 async fn serve<S, U>(
     endpoint: &str,
     personae: Arc<PersonaeHost<S>>,
@@ -277,26 +274,13 @@ where
     S: IdentityStorage + 'static,
     U: NativeIdentityUi + 'static,
 {
-    use tokio::net::windows::named_pipe::ServerOptions;
-
-    let mut server = ServerOptions::new()
-        .first_pipe_instance(true)
-        .create(endpoint)?;
-    tracing::info!(endpoint, "browser device broker listening");
-    loop {
-        server.connect().await?;
-        let connection = server;
-        server = ServerOptions::new().create(endpoint)?;
+    serve_local(endpoint, "browser", move |stream: Box<dyn LocalStream>| {
         let personae = Arc::clone(&personae);
         let native_ui = Arc::clone(&native_ui);
         let allowlist = allowlist.clone();
         let surface = surface.clone();
-        tokio::spawn(async move {
-            if let Err(error) = verify_same_user(&connection) {
-                tracing::warn!(%error, "browser device broker rejected a different user");
-                return;
-            }
-            let (mut reader, mut writer) = tokio::io::split(connection);
+        async move {
+            let (mut reader, mut writer) = tokio::io::split(stream);
             if let Err(error) = serve_connection(
                 &mut reader,
                 &mut writer,
@@ -310,185 +294,8 @@ where
             {
                 tracing::warn!(%error, "browser device session failed");
             }
-        });
-    }
-}
-
-#[cfg(windows)]
-fn verify_same_user(
-    connection: &tokio::net::windows::named_pipe::NamedPipeServer,
-) -> Result<(), std::io::Error> {
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Foundation::HANDLE;
-    use windows_sys::Win32::Security::{EqualSid, TOKEN_USER};
-    use windows_sys::Win32::System::Pipes::GetNamedPipeClientProcessId;
-    use windows_sys::Win32::System::Threading::{
-        GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
-    };
-
-    let mut client_pid = 0u32;
-    if unsafe { GetNamedPipeClientProcessId(connection.as_raw_handle() as HANDLE, &mut client_pid) }
-        == 0
-    {
-        return Err(std::io::Error::last_os_error());
-    }
-    let client_process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, client_pid) };
-    if client_process.is_null() {
-        return Err(std::io::Error::last_os_error());
-    }
-    let client_process = OwnedHandle(client_process);
-    let current_user = token_user(unsafe { GetCurrentProcess() })?;
-    let client_user = token_user(client_process.0)?;
-    let current = unsafe { &*(current_user.as_ptr().cast::<TOKEN_USER>()) };
-    let client = unsafe { &*(client_user.as_ptr().cast::<TOKEN_USER>()) };
-    if unsafe { EqualSid(current.User.Sid, client.User.Sid) } == 0 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "browser broker client belongs to another Windows user",
-        ));
-    }
+        }
+    })
+    .await?;
     Ok(())
-}
-
-#[cfg(windows)]
-fn token_user(
-    process: windows_sys::Win32::Foundation::HANDLE,
-) -> Result<Vec<usize>, std::io::Error> {
-    use windows_sys::Win32::Foundation::HANDLE;
-    use windows_sys::Win32::Security::{GetTokenInformation, TOKEN_QUERY, TokenUser};
-    use windows_sys::Win32::System::Threading::OpenProcessToken;
-
-    let mut token: HANDLE = std::ptr::null_mut();
-    if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let token = OwnedHandle(token);
-    let mut byte_len = 0u32;
-    unsafe {
-        GetTokenInformation(token.0, TokenUser, std::ptr::null_mut(), 0, &mut byte_len);
-    }
-    if byte_len == 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let word_len = (byte_len as usize).div_ceil(std::mem::size_of::<usize>());
-    let mut buffer = vec![0usize; word_len];
-    if unsafe {
-        GetTokenInformation(
-            token.0,
-            TokenUser,
-            buffer.as_mut_ptr().cast(),
-            byte_len,
-            &mut byte_len,
-        )
-    } == 0
-    {
-        return Err(std::io::Error::last_os_error());
-    }
-    Ok(buffer)
-}
-
-#[cfg(windows)]
-struct OwnedHandle(windows_sys::Win32::Foundation::HANDLE);
-
-#[cfg(windows)]
-impl Drop for OwnedHandle {
-    fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe {
-                windows_sys::Win32::Foundation::CloseHandle(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(all(test, windows))]
-mod windows_tests {
-    use super::*;
-    use tokio::net::windows::named_pipe::{ClientOptions, ServerOptions};
-
-    #[tokio::test]
-    async fn browser_broker_accepts_the_current_windows_user() {
-        let endpoint = format!(
-            r"\\.\pipe\graphshell-device-user-check-{}",
-            uuid::Uuid::new_v4()
-        );
-        let server = ServerOptions::new()
-            .first_pipe_instance(true)
-            .create(&endpoint)
-            .unwrap();
-        let _client = ClientOptions::new().open(&endpoint).unwrap();
-        server.connect().await.unwrap();
-        verify_same_user(&server).unwrap();
-    }
-}
-
-#[cfg(not(windows))]
-async fn connect(endpoint: &str) -> Result<tokio::net::UnixStream, std::io::Error> {
-    tokio::net::UnixStream::connect(endpoint).await
-}
-
-#[cfg(not(windows))]
-async fn serve<S, U>(
-    endpoint: &str,
-    personae: Arc<PersonaeHost<S>>,
-    native_ui: Arc<U>,
-    allowlist: AllowedExtensions,
-    session_duration_ms: u64,
-    surface: Option<DeviceSurfaceHandle>,
-) -> Result<(), DeviceBrokerError>
-where
-    S: IdentityStorage + 'static,
-    U: NativeIdentityUi + 'static,
-{
-    prepare_unix_endpoint(Path::new(endpoint)).await?;
-    let listener = tokio::net::UnixListener::bind(endpoint)?;
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(endpoint, std::fs::Permissions::from_mode(0o600))?;
-    tracing::info!(endpoint, "browser device broker listening");
-    loop {
-        let (connection, _) = listener.accept().await?;
-        let personae = Arc::clone(&personae);
-        let native_ui = Arc::clone(&native_ui);
-        let allowlist = allowlist.clone();
-        let surface = surface.clone();
-        tokio::spawn(async move {
-            let (mut reader, mut writer) = tokio::io::split(connection);
-            if let Err(error) = serve_connection(
-                &mut reader,
-                &mut writer,
-                personae,
-                native_ui,
-                &allowlist,
-                session_duration_ms,
-                surface,
-            )
-            .await
-            {
-                tracing::warn!(%error, "browser device session failed");
-            }
-        });
-    }
-}
-
-#[cfg(not(windows))]
-async fn prepare_unix_endpoint(endpoint: &Path) -> Result<(), std::io::Error> {
-    match tokio::net::UnixStream::connect(endpoint).await {
-        Ok(_) => Err(std::io::Error::new(
-            std::io::ErrorKind::AddrInUse,
-            "another Graphshell device host owns the browser socket",
-        )),
-        Err(error)
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
-            ) =>
-        {
-            match std::fs::remove_file(endpoint) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(error),
-            }
-        }
-        Err(error) => Err(error),
-    }
 }

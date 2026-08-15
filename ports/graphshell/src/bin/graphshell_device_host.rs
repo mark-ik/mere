@@ -11,6 +11,8 @@ use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
 #[cfg(feature = "personal-sync")]
 use graphshell::native::device_broker::serve_browser_broker_with_cards;
+use graphshell::native::app_admission::{AllowedApps, configured_app_endpoint};
+use graphshell::native::app_broker::serve_app_broker;
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
 #[cfg(feature = "personal-sync")]
 use graphshell::native::device_sync;
@@ -44,6 +46,9 @@ struct Args {
     profile: Option<ProfileId>,
     agent: AgentEndpoint,
     browser_endpoint: String,
+    /// Where first-party applications connect. A separate door from the
+    /// browser one, on purpose: see `native::app_admission`.
+    app_endpoint: String,
     data_root: Option<PathBuf>,
     log_file: Option<PathBuf>,
     /// Command-line overrides folded over the profile's stored settings.
@@ -137,6 +142,7 @@ fn parse_args() -> Result<Args, String> {
     let mut agent_endpoint = None;
     let mut receipt_agent_endpoint = None;
     let mut browser_endpoint = configured_device_endpoint();
+    let mut app_endpoint = configured_app_endpoint();
     let mut data_root = std::env::var_os(DATA_ROOT_ENV).map(PathBuf::from);
     let mut log_file = None;
     #[cfg(feature = "personal-sync")]
@@ -198,6 +204,9 @@ fn parse_args() -> Result<Args, String> {
             }
             "--browser-endpoint" => {
                 browser_endpoint = argv.next().ok_or("--browser-endpoint needs a value")?;
+            }
+            "--app-endpoint" => {
+                app_endpoint = argv.next().ok_or("--app-endpoint needs a value")?;
             }
             "--data-root" => {
                 data_root = Some(PathBuf::from(
@@ -332,6 +341,7 @@ fn parse_args() -> Result<Args, String> {
         profile,
         agent,
         browser_endpoint,
+        app_endpoint,
         data_root,
         log_file,
         #[cfg(feature = "personal-sync")]
@@ -614,6 +624,19 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         args.blob_actions,
     )
     .await?;
+    // Both doors are served from the same surface handle, so an application
+    // and a browser on this device see one set of cards rather than two.
+    #[cfg(feature = "personal-sync")]
+    let app_surface = supplemental_cards.clone();
+    #[cfg(not(feature = "personal-sync"))]
+    let app_surface: Option<graphshell::native::device_broker::DeviceSurfaceHandle> = None;
+    let apps = serve_app_broker(
+        &args.app_endpoint,
+        Arc::clone(&personae),
+        AllowedApps::default(),
+        session_duration_ms(),
+        app_surface,
+    );
     #[cfg(feature = "personal-sync")]
     let browser = async {
         match supplemental_cards {
@@ -650,6 +673,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     );
     tokio::pin!(agent);
     tokio::pin!(browser);
+    tokio::pin!(apps);
     tokio::select! {
         result = &mut agent => {
             result?;
@@ -658,6 +682,10 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         result = &mut browser => {
             result?;
             Err("browser device broker ended unexpectedly".into())
+        }
+        result = &mut apps => {
+            result?;
+            Err("first-party application broker ended unexpectedly".into())
         }
     }
 }

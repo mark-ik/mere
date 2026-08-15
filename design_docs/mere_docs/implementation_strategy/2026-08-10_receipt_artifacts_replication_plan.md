@@ -386,17 +386,62 @@ not treated as a credential, and this gate is deliberately only the first of
 two, the same shape the browser path has: the ordinary session admission
 behind it still decides what the app may see.
 
-**Landed:** the admission module with eight tests, including that a browser
+**Landed:** the admission module with seven tests, including that a browser
 hello is refused by schema with a message naming the right endpoint, that an
 unknown app is refused, that a device may admit none, and that the default
 endpoint is never the browser one.
 
-**Next:** serve it. `device_broker`'s `serve`/`connect` already do the
-transport for the browser door and the shape carries over unchanged; the
-resident host then composes the same `IdentityEndpoint` it composes for a
-browser, with the receipts reader already wired. Then turnstone opens the
-session and renders the cards.
+### 6.2 Served (2026-08-15)
 
-**Not yet verified.** Written against a workspace that would not build:
-`mere-canvas` is mid-move against a `kernel::graph::Graph` method. Retry with
-`cargo test -p graphshell --features personal-sync --lib app_admission`.
+The door is open and end-to-end verified. Serving it turned out to be mostly a
+deduplication job, because the browser door held two things worth sharing and
+one thing worth keeping apart.
+
+**Shared, extracted:**
+
+- `native::local_endpoint` — the owner-only listener and connector. This is the
+  piece it would have been worst to copy: it carries the Windows same-user SID
+  check, which named pipes need because, unlike a `0600` socket in the runtime
+  directory, they are reachable by other users on the machine by default. A
+  second hand-rolled listener would have been a second copy of a security
+  check, and copies drift. `device_broker` fell from 494 to 301 lines and now
+  has one `serve` rather than one per platform.
+- `native::local_session` — what a local session *is*: the minted local grant,
+  the closed policy admitting exactly the projection service, and the endpoint
+  composed over the resident surface (cards, decisions, read-through reader,
+  released blobs). Both doors call it, so they cannot drift into two answers
+  about what an admitted local client holds. `browser_host` fell from 807 to
+  691 lines.
+
+**Kept apart, in `native::app_broker`:**
+
+- *Its own wire.* `AppMessage` / `AppHostMessage` carry the identical carrier
+  payload in a separate envelope, so this door versions independently of a
+  shipped browser extension.
+- *No identity actions.* The browser door carries SSH import because a browser
+  has no other route to the resident identity UI. A first-party application
+  runs on this device and can open that UI itself, so the wire has no such
+  variant at all — nothing to forward, rather than something forwarded and then
+  refused by a session check.
+
+**A fact worth recording.** Admission never touched the browser launcher; it
+used only the nonces and the transcript binding. The machinery was already
+client-agnostic and only the *label* was browser-shaped. That is now `LocalLink`
+(`browser_carrier`), which binds whatever label it is given — an extension
+origin for a browser, an application name for an app. So a link minted for one
+client is not replayable as another, and there is a test pinning exactly that.
+
+**Wired:** `graphshell_device_host` serves both doors, off one surface handle,
+so a browser and an application on the same device see one set of cards rather
+than two. `--app-endpoint` overrides, mirroring `--browser-endpoint`.
+
+**Verified.** 208 graphshell lib tests pass, 13 of them on this lane. The one
+that matters is `turnstone_opens_a_session_and_reads_a_capture`: a full session
+over a duplex — hello, challenge, connect, open, snapshot, then reading a
+capture's bytes back byte-for-byte through the store read-through the receipts
+lane depends on. Also pinned: a refused application never sees a challenge, and
+a browser connect frame does not open this door.
+
+**Next:** turnstone opens the outbound session and renders the receipt cards.
+It needs a client-side handshake helper; `connect_as_app` writes the hello but
+leaves the challenge answer to the caller.
