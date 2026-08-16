@@ -1,8 +1,11 @@
 # Graph Behaviors Plan: watches, cascades, and the reactive denizen
 
 **Date:** 2026-08-13
-**Status:** W0 through W5 all landed 2026-08-13; what remains is the headed
-scenario receipts. Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
+**Status:** W0 through W5 landed 2026-08-13, with a green headed receipt
+(`turnstone scenarios/behaviors_wake.scn`, captures under
+`Code/testing/turnstone/behaviors_wake`). Two follow-ups are named in Progress
+rather than done: the review row clips in the palette, and the clock, app-tier
+and budget slices have no headed receipt of their own. Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
 conversation: one node triggering others nearby to refresh, summaries from
 connected nodes captured into a knot note, and the family of automations
 behind them).
@@ -453,6 +456,21 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-13 (headed receipt): `behaviors_wake.scn` is green. It caught two
+  things the unit tests could not. **A real fetch rewrites a node's URL out
+  from under the watch that resolved to it**, so the first version, using
+  `https://example.com/notes/`, never woke; the scenario uses `file:///`,
+  which `containment_parent_url` covers equally and which does not depend on
+  the network. That is the second time an *address* rather than a mechanism
+  has broken a watch. And **the review row is clipped in the palette**: the
+  capture reads "wakes on: fi...". It passes the `<96`-char guard in
+  `denizen.rs`, which was itself added the last time a headed run clipped the
+  ask, so that guard measures characters where the real limit is rendered
+  width. Worth fixing, since the point of naming the watch in the review is
+  that a reviewer can read it. **Still without headed receipts of their own:**
+  the clock tier (needs a scenario clock verb), app-tier watches, and the
+  budget setting.
 
 - 2026-08-13 (W5, and the plan's slices complete): the summarizer runs. The
   ring decision is the one to remember: a new capability that would ride an
