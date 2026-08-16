@@ -1,8 +1,9 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status**: A0 landed; **A6 first slice landed 2026-08-16** (contract half:
-holds in the score, honored by the solver and by relaxation). Mer3ly ruled
+**Status**: A0 landed; **A6 contract half landed 2026-08-16** (holds in the
+score, honored by the solver and by relaxation). A6's mer3ly half is written
+and verified but **not landed**: it needs mere pushed and mer3ly's rev bumped. Mer3ly ruled
 an authority-grade consumer 2026-08-16, which re-gates A1-A4, B1, and C3. Turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
@@ -505,3 +506,36 @@ not settled without it.
   plan's "0.0.4+ material behind forcing consumers" is the sanctioned path
   when he wants it. Mer3ly's own seam (its live path still never builds a
   score) is the next slice.
+- 2026-08-16: **A6 mer3ly half written and verified, parked on a push.** The
+  seam now exists in code: `PlacementDelta` deserializes the sandbox's own
+  scene state (extra fields ignored, so a caller hands over the whole shared
+  record), and its `holds()` maps that placement onto `Score.holds`. A manual
+  pin is hard in the live path, so it records as `Hold::Pinned`; under
+  `anchored` motion the visitor has already said best-effort, so it records as
+  `Hold::Anchored`. The class is recorded rather than left to be re-inferred
+  from a spring stiffness, which was the point. `portable_projection_holding`
+  and `portable_projection_with_placement_json` carry it, with a
+  `portable_projection_with_placement` wasm export for the sandbox, and a pin
+  naming a node the authority lacks is refused as a broken citation rather
+  than solved into a scene that quietly omits it.
+  The receipt half matters as much: `consume_portable_projection` now checks
+  every hold against the scene **as solved** (not after the trace, which
+  deliberately moves Turnstone) and reports `honored_holds`. A forged artifact
+  claiming a pin the scene does not satisfy is rejected. That makes a cited
+  pin checkable, which is the shelfmark's `expects` property arriving one
+  layer down.
+  Receipts: mer3ly-repo-graph 14 -> 19 tests, site workspace 49 green,
+  including a round trip that pins a node under `Spiral`, the exact family
+  that used to discard an authored coordinate in silence.
+  The version bump proved itself immediately: `tests/m7_showcase.rs` asserted
+  `score.version == 1` and failed loudly the moment the contract moved, which
+  is a consumer noticing rather than silently dropping a field.
+  **Blocker, and it is only this.** Mer3ly resolves mere by git rev, pinned at
+  `8a7ede70`, and the contract half sits in unpushed `3716c601`. A local
+  `[patch]` does not substitute for a rev-pinned git dep (it resolved the old
+  rev with no warning), so verification ran against temporarily repointed path
+  deps, now reverted; no local path is left in a manifest. Landing sequence:
+  push mere, bump mer3ly's rev, reapply the parked diff, rebuild the committed
+  wasm, then wire the sandbox's share control to the new export. The last two
+  are deliberately not done, because a wasm rebuilt against a local path is
+  not a thing to commit.
