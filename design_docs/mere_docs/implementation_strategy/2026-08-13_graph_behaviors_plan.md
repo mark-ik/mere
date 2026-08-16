@@ -341,7 +341,20 @@ Carried over or ruled here:
      it does not work.
   Whichever is chosen, an end-to-end inbox-rule test and its headed receipt
   follow immediately: every other link in the chain is already proven.
-- **W3: app-tier watches.** `AppEvent` watches at the observe drain, ring
+- **W3: app-tier watches. LANDED 2026-08-13** (turnstone `4fbd17c`; 271
+  pass). A pack declares `-- @watch app/<event-name>` and wakes on it with no
+  polling. The `app/` prefix is the whole distinction between an event scope
+  and an address, and cannot collide with a graph scope because those are UUID
+  paths. The name comes from `AppEvent::describe`'s first token rather than a
+  second 52-arm match that could disagree with what the transcript shows.
+  **The app tier has its own `WatchTable`**: a watch cursor is a position in
+  one journal, and a `GraphJournal` sequence and an app-event ordinal are
+  different counters. **The ordinal must be monotonic**: numbering events by
+  their index in the queue the shell empties each frame made every event after
+  the first drain look older than the watch had seen, so nothing woke again.
+  Self-waking is refused here too, by attributing a body's own events to it.
+  The original text follows.
+- **W3 (original):** `AppEvent` watches at the observe drain, ring
   vocabulary unchanged. Done when: a behavior wakes on `SessionSwitched`
   without polling, and the scenario log shows the wake attributed.
 - **W4: time watches.** The injected time source of 3.4 plus a test clock.
@@ -405,6 +418,13 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-13 (W3): app-tier watches landed. The design fork worth keeping is
+  the second table: sharing one with the graph tier would have let two seq
+  spaces advance each other's cursors past unread work. The bug worth keeping
+  is the ordinal, which a test caught: a queue index resets when the shell
+  drains, a watch cursor does not, and the mismatch silently stops every wake
+  after the first.
 
 - 2026-08-13 (W1b closed): the cascade budget is persisted, exposed, and live
   (turnstone `8685ff0`, mere `e87ea99e`; 269 and 272 pass). One thing worth
