@@ -133,8 +133,18 @@ as the thing to revisit if a consumer grows the set.
 
 - The `sqlite` feature remains in the fork's `default` (D2), so an outside
   consumer of `mark-ik/p2panda` is unaffected. Only mere opts out.
-- The vendored `cubecl-wgpu` patch is now retire-able on the sqlite axis. Not
-  attempted here; it belongs to
+- The vendored `cubecl-wgpu` patch is retire-able, and this was **verified by
+  probe on 2026-08-16**: with `burn = "0.22.0-pre.2"` and the patch disabled the
+  workspace resolves, and with the burn wgpu features actually enabled the graph
+  carries exactly one `wgpu` (30.0.0) and one `libsqlite3-sys` (0.38.2, from
+  rusqlite via CubeCL's autotune cache). `cubecl-wgpu` then comes from the
+  registry at 0.11.0-pre.2. The patch must retire *with* the burn migration, not
+  before: dropping it on burn 0.21 puts wgpu 29 back. The migration itself is
+  real API work (`burn::backend` and `burn::tensor::backend` moved, `Tensor`'s
+  rank parameter changed) and was not attempted. Probe reverted. Recorded in
   [burn 0.22 migration](2026-08-09_burn_0_22_migration_plan.md).
+- Adopting burn 0.22 reintroduces an embedded SQLite as `rusqlite`, behind
+  CubeCL's autotune cache. It does not cross mere's storage boundary, but the
+  workspace should not be called sqlite-free after that point.
 - A wasm address book needs `MunimentAddressBook` over `IndexedDbBackend` and a
   p2panda-net runtime assessment. Not in scope.

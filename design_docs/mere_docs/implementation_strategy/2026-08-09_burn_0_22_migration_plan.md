@@ -2,7 +2,11 @@
 
 **Date**: 2026-08-09
 
-**Status**: Release-gated, and the gate now has a second reason. [`burn`](https://crates.io/crates/burn)
+**Status**: Release-gated on stable 0.22 only. The second reason (the sqlite
+conflict) cleared on 2026-08-16, verified by probe; see below. Original note
+follows.
+
+**Original status**: Release-gated, and the gate now has a second reason. [`burn`](https://crates.io/crates/burn)
 and [`burn-remote`](https://crates.io/crates/burn-remote) are still only
 `0.22.0-pre.2` as of 2026-08-16; production migration waits for stable 0.22
 unless Mark explicitly reopens that gate. An isolated prerelease compatibility
@@ -34,6 +38,41 @@ This plan's B2/B3 work is therefore still pending and still release-gated. When
 stable 0.22 lands, the sqlite conflict above must be re-checked before B0
 starts: it is an independent blocker that will not clear just because the
 release does.
+
+**2026-08-16 (later the same day): the sqlite blocker is CLEARED, and it did
+not take a release to clear it.** The re-check this paragraph asks for was run
+as an isolated prerelease probe, and the conflict is gone from our side. The
+[address book muniment port](2026-08-16_address_book_muniment_port_plan.md)
+took sqlx out of the workspace entirely, so `libsqlite3-sys` has no second
+claimant. Note also that the diagnosis above was partly wrong: `p2panda-store`'s
+`groups`/`encryption` features were never enabled here at all. The real enablers
+were `p2panda-net/address_book` and `p2panda-store/default` via p2panda-sync and
+p2panda-stream.
+
+Probe result, with `burn = "0.22.0-pre.2"` on both roots and the vendored
+`cubecl-wgpu` patch disabled:
+
+- the workspace resolves (exit 0);
+- with `esp/index-burn-wgpu` and `quint/field-burn-wgpu` actually enabled, the
+  graph carries **exactly one `wgpu`, 30.0.0**, and **exactly one
+  `libsqlite3-sys`, 0.38.2** (from `rusqlite`, via `cubecl-environment`'s
+  still-non-optional `cache` feature);
+- `cubecl-wgpu` comes from the registry at `0.11.0-pre.2`, so **the vendored
+  backport at `support/patches/cubecl-wgpu` is no longer needed on this row**.
+
+So the backport retires *with* this migration, not before it: dropping the patch
+while staying on burn 0.21 would put wgpu 29 back in the graph. And the
+migration is real code work, not a manifest bump. `cargo check -p quint
+--features field-burn-wgpu` against 0.22.0-pre.2 fails on API churn:
+`burn::backend` and `burn::tensor::backend` have moved, and `Tensor`'s rank
+parameter changed (`type provided when a constant was expected`). That is B2/B3.
+
+One thing the probe changes about the sqlite story: adopting 0.22 **reintroduces
+an embedded SQLite** to the graph, as `rusqlite` behind CubeCL's autotune cache.
+That is CubeCL's own persistence and does not cross mere's storage boundary, but
+the workspace should not be described as sqlite-free afterwards.
+
+The probe was reverted; the tree is back on burn 0.21 with the patch in place.
 
 **Related**:
 [`../research/2026-07-04_burn_utilization_brief.md`](../research/2026-07-04_burn_utilization_brief.md),
