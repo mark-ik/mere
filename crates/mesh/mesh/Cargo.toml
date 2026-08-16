@@ -36,7 +36,18 @@ muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 # `p2panda-sync`'s event types belong to the drain now, so mesh stopped
 # referencing them and the dependency was dropped 2026-07-26. `rt` runs the
 # session, `time` bounds the manual `resync`.
-p2panda-net = "0.7.0"
+# Every p2panda-net feature except `sqlite`. The address book runs on
+# stickleback's muniment-backed store, so p2panda-store's bundled SQLite
+# backend (and sqlx with it) stays out of the graph entirely. Feature
+# unification means EVERY consumer has to opt out, not just one.
+p2panda-net = { version = "0.7.0", default-features = false, features = [
+  "address_book",
+  "iroh_endpoint",
+  "iroh_mdns",
+  "discovery",
+  "gossip",
+  "sync",
+] }
 tokio = { version = "1", features = ["rt", "time"] }
 # The embedding behaviour behind `esp.embed.lexical/v1`. Default features: the
 # lexical provider is pure Rust, so the mesh pulls in no Burn, GPU, weights, or

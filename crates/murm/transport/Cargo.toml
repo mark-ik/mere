@@ -57,7 +57,20 @@ iroh-tickets = "1.0"
 bytes = "1"
 # p2panda-net is the production endpoint authority (P2pandaTransport); it
 # pins iroh 1.0, unifying with the iroh/iroh-blobs deps above.
-p2panda-net = "0.7.0"
+muniment.workspace = true
+stickleback.workspace = true
+# Every p2panda-net feature except `sqlite`. The address book runs on
+# stickleback's muniment-backed store, so p2panda-store's bundled SQLite
+# backend (and sqlx with it) stays out of the graph entirely. Feature
+# unification means EVERY consumer has to opt out, not just one.
+p2panda-net = { version = "0.7.0", default-features = false, features = [
+  "address_book",
+  "iroh_endpoint",
+  "iroh_mdns",
+  "discovery",
+  "gossip",
+  "sync",
+] }
 p2panda-core = "0.7.0"
 # Reticulum mesh-networking backend (optional, see [features]). `retinue` is
 # Mark's from-scratch RNS stack; `hkdf`/`sha2` derive its identity from the seed.

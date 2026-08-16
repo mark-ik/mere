@@ -12,6 +12,7 @@
 
 #![doc(html_root_url = "https://docs.rs/stickleback/0.1.0")]
 
+pub mod address_book;
 mod authority;
 mod causal;
 pub mod drop;
@@ -28,6 +29,7 @@ mod store;
 mod synced_space;
 mod writer;
 
+pub use address_book::MunimentAddressBook;
 pub use authority::CheckpointAuthority;
 pub use causal::{
     CausalEntry, CausalError, CausalLimits, CausalProjection, PendingCausalOperation, author_head,

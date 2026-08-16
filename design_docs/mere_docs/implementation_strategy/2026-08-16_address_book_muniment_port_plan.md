@@ -1,113 +1,140 @@
 # Address Book Muniment Port Plan
 
-**Status: scoped 2026-08-16, awaiting go.** Scoping only; nothing here is
-implemented.
+**Status: complete 2026-08-16.** All four phases landed and are verified.
+Decisions taken by Mark before execution: the muniment impl lives in
+stickleback (D1), and `sqlite` stays as an optional non-default feature of the
+fork rather than being deleted (D2).
 
 ## Why
 
-The p2panda-net address book is the single place p2panda's bundled SQLite
-backend leaks into mere's graph. Mere's own crates already draw the storage
-boundary deliberately: `crates/mesh/mesh` and `crates/moot/gemot` both declare
-`p2panda-store` with `default-features = false`, every `p2panda_store` import
-in mere is the `LogStore` or `TopicStore` trait, and storage goes through
-muniment via `stickleback::MunimentStore`. But the fork's `address_book`
-feature enables `p2panda-store/sqlite`, and every other p2panda-net feature
-(`iroh_endpoint`, `discovery`, `gossip`, `sync`) requires `address_book`, so
-any networking at all pulls sqlx and the SQLite row back in. That row is also
-what pins the CubeCL/Burn upgrade path (dependency check, session of
-2026-08-16). Porting the address book to muniment settles the architectural
-inconsistency and unblocks the prerelease row in one move.
+The p2panda-net address book was the place p2panda's bundled SQLite backend
+leaked into mere's graph. Mere's own crates already drew the storage boundary
+deliberately: every `p2panda_store` import in mere is a trait, and storage goes
+through muniment via `stickleback::MunimentStore`. But `p2panda-net`'s
+`address_book` feature enabled `p2panda-store/sqlite`, and every other
+p2panda-net feature requires `address_book`, so any networking pulled sqlx in.
+That row also pinned the CubeCL/Burn upgrade path through a `libsqlite3-sys`
+`links` collision.
 
-Naming note: this is the transport-layer node-info store (addresses, topics,
-bootstrap/stale flags). It is unrelated to gazette, mere's handle-resolution
-index, despite the everyday sense of "address book".
+Naming note: this is the transport-layer node-information store (addresses,
+topics, bootstrap/stale flags). It is unrelated to gazette, mere's
+handle-resolution index, despite the everyday sense of "address book".
 
-## Plan
+## Phases
 
-- **P1, fork: erase the store type in p2panda-net's address book.**
-  Introduce an internal dyn-compatible wrapper trait over
-  `AddressBookStore<NodeId, NodeInfo>` (boxed futures; the published trait
-  uses RPIT methods and is not dyn-compatible as written), with a blanket
-  impl. `AddressBookActor` state, `AddressBookActorArgs`, the
-  `Store(RpcReplyPort<...>)` message, the `store()` accessor, and the builder
-  hold the erased handle instead of `SqliteStore`. `AddressBookError::Store`
-  carries an erased error instead of `SqliteError`. Discovery's manager hands
-  the erased store to walker/session, which are already generic over
-  `S: AddressBookStore`. Done when: `address_book` feature no longer lists
-  `p2panda-store/sqlite`; SQLite becomes an optional convenience feature
-  (default store in the builder when enabled, as today).
-- **P2, mere: implement `AddressBookStore` over muniment.** Home is
-  stickleback, beside `MunimentStore`'s existing `OperationStore` /
-  `LogStore` / `TopicStore` impls over a muniment `Backend`. Same pattern:
-  generic over `B: Backend`, so redb serves desktop and IndexedDB serves the
-  browser with one impl. Done when: stickleback's impl passes p2panda-store's
-  `address_book` test suite (test_utils exist upstream).
-- **P3, mere: switch the hosts.** Whoever builds the `AddressBook` today
-  (mesh host, murm transport) passes the muniment-backed store explicitly.
-  Done when: `p2panda-store/sqlite` is absent from mere's lockfile and the
-  CubeCL/Burn row check passes.
-- **P4, browser posture (observation, not work in this plan).** With SQLite
-  out, the storage blocker on a browser mesh is gone; what remains is
-  p2panda-net's runtime shape (tokio, ractor actors, iroh's browser lane),
-  which this plan does not assess.
+- **P0 — second enabler closed (fork).** `p2panda-sync` and `p2panda-stream`
+  both declared `p2panda-store` with `default-features = true`, which turned on
+  `p2panda-store/default` -> `sqlite` independently of the address book. Neither
+  uses anything gated behind it outside its own tests. Both now declare
+  `default-features = false`; their dev-dependencies already enabled
+  `test_utils` separately. **Done, both compile clean.**
+- **P1 — store erased (fork).** `AddressBookStoreHandle` holds some
+  `AddressBookStore` behind a trait object and implements `AddressBookStore`
+  itself. `address_book` no longer enables `p2panda-store/sqlite`; `sqlite` is
+  its own feature, still in `default`, so nothing changes for other consumers
+  unless they opt out. **Done, 38 lib + 1 api + 1 e2e + 7 doc tests pass.**
+- **P2 — muniment address book (mere).** `stickleback::MunimentAddressBook`,
+  generic over a muniment `Backend` and `Codec`. **Done, 11 unit tests.**
+- **P3 — consumers switched (mere).** The transport supplies the muniment store;
+  all six mere crates naming p2panda-net opt out of `sqlite`. **Done: sqlx and
+  libsqlite3-sys are absent from the workspace graph.**
 
 ## Findings
 
-**Fork surface (crates/p2panda).** The store side already publishes the
-traits: `AddressBookStore<ID, N>` and `NodeInfo<ID>` in
-`p2panda-store/src/address_book/traits.rs` (125 lines, RPIT async methods).
-The net side binds concrete in three files: `actor.rs` (533 lines: state
-field, actor args tuple, `Store` reply port, `SqliteError` in helper
-signatures), `api.rs` (307: `store()` accessor, `SqliteError` in the public
-error enum), `builder.rs` (39: `SqliteStoreBuilder` default). Two discovery
-actors name `SqliteStore` only to instantiate protocols that are already
-generic (`RandomWalker`, `PsiHashDiscoveryProtocol`). The `AddressBook` api
-handle is held across ~29 files (gossip, discovery, iroh_endpoint,
-supervisor); erasure keeps it non-generic so none of those files change.
-The rejected alternative, a generic `AddressBook<S>`, ripples a type
-parameter through all of them for no capability gain.
+**The plan's headline claim was wrong, and cargo caught it.** The scoping doc
+said the address book was "the single place" sqlite leaked in. `cargo tree -e
+features -i p2panda-store` showed two enabler edges, not one: the address book,
+and `p2panda-store/default` arriving through p2panda-sync and p2panda-stream.
+Porting the address book alone would not have dropped sqlx. Both had to go.
 
-**Transactions are lighter than they look.** Every `tx!` use in the actor
-wraps a single logical store op, and the one read-modify-write
-(`InsertTransportInfo`) performs its read outside the transaction. The permit
-is sqlx concurrency control, not multi-op atomicity. The erased trait
-therefore needs per-op atomicity only, which muniment's `Backend` contract
-already guarantees (`apply` groups multi-key writes in one transaction if a
-compound op ever appears).
+**The patch table's rationale was also wrong.** mere's `[patch.crates-io]`
+comment justified the vendored cubecl-wgpu backport partly by "p2panda-store's
+`groups`/`encryption` features (which gemot needs) force its `sqlite` feature".
+Neither feature was ever enabled in this graph. Corrected in place; the entry
+now records that our half of the `libsqlite3-sys` conflict is gone and that
+whether burn 0.22-pre now resolves is the burn migration's question.
 
-**Muniment browser story (the indexeddb/opfs question).**
-`IndexedDbBackend` exists today in `muniment/src/indexeddb_backend.rs`:
-durable, transactional, origin-scoped; writes await the browser's commit;
-`apply` is one transaction, so a tab closed mid-batch leaves the previous
-state. It sits beside `RedbBackend` (desktop) and `ZipBackend` (portable
-archive) as the third host realization. OPFS is designed for but not
-implemented: the `Backend` trait relaxes to `?Send` on wasm specifically so a
-browser main thread can await OPFS promises, and the redb/zip docs both name
-"an OPFS-backed store" as the browser counterpart. So: a muniment-backed
-address book runs in the browser today over IndexedDB, and an OPFS backend
-slots in later with zero change to the address book, because P2 is generic
-over `Backend`. By contrast the current SQLite address book can never reach
-wasm32 (sqlx's SQLite lane does not build there), so today's binding
-forecloses a browser mesh outright.
+**Upstream was mid-rewrite, and it did not collide.** `upstream/development` is
+161 commits ahead of `main` (tip 2026-08-15) and two of them rewrite the address
+book. They touch only `p2panda-store/src/address_book/sqlite.rs`: `traits.rs` and
+the whole of `p2panda-net/src/address_book/` are byte-identical between the two
+branches. Upstream is rewriting the SQLite *implementation*, not the trait and
+not the net-side binding, so this work sits above their churn. Our fork's `main`
+is current with `upstream/main` plus three own commits.
 
-**Scope held.** p2panda-store's SQLite backend keeps its other trait impls
-(`LogStore` etc.) untouched; only the address book leaks into mere, so only
-it is ported. Upstream p2panda-net 0.7.0 (2026-07-07) is current and has no
-newer release doing this.
+**Erasure beat genericization.** A generic `AddressBook<S>` would have rippled a
+type parameter through the ~29 files holding an `AddressBook`. The handle keeps
+every one of them non-generic. The discovery strategies needed nothing at all:
+`RandomWalker` and `PsiHashDiscoveryProtocol` were already generic over
+`S: AddressBookStore`, and p2panda-discovery has zero references to
+`Transaction`.
 
-## Open questions for Mark
+**Transactions fold into the writes.** Every `tx!` site in the actor wrapped
+exactly one store operation, and the one read-modify-write
+(`InsertTransportInfo`) already performed its read outside the transaction. So
+no permit ever spanned more than one operation. `with_transactions` reproduces
+the old behaviour for a `Transaction` backend; `new` suits one whose operations
+are already atomic. Muniment takes the second path, using `apply` where a write
+genuinely spans keys (removing a node also removes its topics).
 
-- **D1: where the muniment impl lives.** Stickleback is recommended (the
-  muniment-to-p2panda adapter layer already lives there); the alternative is
-  a small module in the mesh crate if address-book policy turns out to be
-  mesh-specific.
-- **D2: fork posture on the sqlite feature.** Keep it as an optional
-  non-default feature for fork hygiene against upstream, or delete the
-  binding outright since mere is the only consumer.
+**The erased futures are `!Send`, and that is load-bearing.**
+`AddressBookStore` does not declare its futures `Send`, so it cannot be required
+of an arbitrary backend. Nothing needs it: the address book actor, the discovery
+manager, its walker and its sessions are all `ThreadLocalActor`s. The handle
+itself stays `Send + Sync`, because ractor moves actor arguments and messages to
+the actor's thread even for thread-local actors. This is also what leaves room
+for a browser backend awaiting JS promises.
 
-## Progress
+**Behaviour is preserved, not merely compiled.** p2panda's default address book
+was `SqliteStoreBuilder` at `:memory:`, so the transport's new
+`MunimentAddressBook<MemoryBackend, JsonCodec>` has the same lifetime. A caller
+wanting persistence hands in a durable backend instead. One semantic was checked
+against the SQL rather than assumed: `remove_older_than` compares strictly
+(`updated_at < UNIXEPOCH() - ?`), so an entry written in the same second
+survives a zero-length window. The first muniment test asserted the opposite and
+failed; the implementation was right and the test was wrong.
 
-- 2026-08-16: scoped. Verified the trait already exists upstream, mapped all
-  concrete bindings, confirmed discovery protocols are already generic,
-  confirmed tx! wraps single ops, confirmed IndexedDbBackend is shipped and
-  OPFS is a designed-for gap. No code changed.
+**Browser posture (the indexeddb/opfs question).** `IndexedDbBackend` ships in
+muniment today: durable, transactional, origin-scoped, with `apply` as one
+transaction. OPFS is designed for but not implemented, and the `Backend` trait
+already relaxes to `?Send` on wasm for it. Because `MunimentAddressBook` is
+generic over `Backend`, the address book gets IndexedDB now and OPFS later with
+no change here. The SQLite binding could never reach wasm32 at all, so this
+removes the storage-side block on a browser mesh. The remaining block is
+p2panda-net's runtime shape (tokio, ractor, iroh), which this work did not
+assess and does not claim.
+
+**Queries are scans, deliberately.** The muniment impl has no secondary index:
+topic lookup, the counts and both random pickers walk the `node/` key set. An
+address book holds the nodes one peer has heard of, so the set is small and a
+scan costs less than index writes on every insert. Recorded in the module docs
+as the thing to revisit if a consumer grows the set.
+
+## Verification
+
+- p2panda-net with every feature except `sqlite`: compiles, and `cargo tree`
+  reports zero sqlx / libsqlite3-sys nodes.
+- p2panda-net suite: 38 lib, 1 api, 1 e2e (`gossip_and_sync_with_same_topic`),
+  7 doc tests, all passing.
+- stickleback: 11 new address book tests plus the existing 39, all passing.
+- mere workspace graph: zero sqlx / libsqlite3-sys occurrences;
+  `p2panda-store` remains, with no features enabled.
+- Live two-peer networking over the muniment address book:
+  `paired_p2panda_transports_round_trip_bytes` and
+  `gossip_propagates_ops_between_subscribed_peers` pass.
+- One caveat: `the_peer_directory_separates_a_known_address_from_a_live_path`
+  failed once, on the first run after a cold compile, then passed on four
+  consecutive runs including the identical parallel configuration and
+  single-threaded. It carries 20s wall-clock timeouts over real discovery, so it
+  is load-sensitive. No pre-change control was run, so this is inference from
+  the isolation behaviour rather than a proof of no regression.
+
+## Residue
+
+- The `sqlite` feature remains in the fork's `default` (D2), so an outside
+  consumer of `mark-ik/p2panda` is unaffected. Only mere opts out.
+- The vendored `cubecl-wgpu` patch is now retire-able on the sqlite axis. Not
+  attempted here; it belongs to
+  [burn 0.22 migration](2026-08-09_burn_0_22_migration_plan.md).
+- A wasm address book needs `MunimentAddressBook` over `IndexedDbBackend` and a
+  p2panda-net runtime assessment. Not in scope.

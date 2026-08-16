@@ -382,18 +382,26 @@ vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-3
 # one vendored crate carries the whole resident lane across the major.
 #
 # The alternative was burn 0.22.0-pre.2 with cubecl 0.11.0-pre.2, which already
-# require wgpu ^30. That is not resolvable here, and not because of the release
-# gate: on Windows, Linux, macOS and Android, cubecl-runtime 0.11 depends on
-# cubecl-environment with the `cache` feature NON-optionally, which pulls
-# rusqlite 0.40 -> libsqlite3-sys ^0.38. p2panda-store's `groups`/`encryption`
-# features (which gemot needs) force its `sqlite` feature -> sqlx ->
-# libsqlite3-sys <0.38, and no sqlx release reaches 0.38. libsqlite3-sys sets
-# `links = "sqlite3"`, so exactly one may exist in a graph. Version selection
-# cannot resolve it.
+# require wgpu ^30. When this was written that was not resolvable, because
+# cubecl-runtime 0.11 depends on cubecl-environment with the `cache` feature
+# NON-optionally, pulling rusqlite 0.40 -> libsqlite3-sys ^0.38, while this
+# graph also carried sqlx -> libsqlite3-sys <0.38. libsqlite3-sys sets
+# `links = "sqlite3"`, so exactly one may exist in a graph.
 #
-# Retire this when that conflict clears upstream (cubecl making the autotune
-# cache optional, or sqlx reaching libsqlite3-sys 0.38) and stable burn 0.22
-# ships. See docs: 2026-08-09_burn_0_22_migration_plan.md.
+# 2026-08-16: OUR HALF OF THAT CONFLICT IS GONE. sqlx and libsqlite3-sys are no
+# longer in this workspace's graph at all. The note above misattributed the
+# cause to p2panda-store's `groups`/`encryption` features; `cargo tree -e
+# features` showed neither was ever enabled here. The real enablers were
+# `p2panda-net/address_book`, which forced `p2panda-store/sqlite` outright, and
+# `p2panda-store/default` arriving through p2panda-sync and p2panda-stream. The
+# address book now runs on stickleback's muniment-backed store and every
+# consumer opts out of the `sqlite` feature. See docs:
+# 2026-08-16_address_book_muniment_port_plan.md.
+#
+# So this vendored crate is now retire-ABLE on the sqlite axis, but that has not
+# been attempted: whether burn 0.22.0-pre.2 / cubecl 0.11.0-pre.2 resolve and
+# behave here is the burn migration's question, not this patch entry's. See
+# docs: 2026-08-09_burn_0_22_migration_plan.md.
 cubecl-wgpu = { path = "support/patches/cubecl-wgpu" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }

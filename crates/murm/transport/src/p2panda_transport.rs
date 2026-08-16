@@ -61,7 +61,10 @@ pub use p2panda_net::iroh_mdns::MdnsDiscoveryMode;
 // Re-exported so a consumer can configure a relay without taking a direct iroh
 // dependency of its own.
 pub use iroh::RelayUrl;
+use muniment::{JsonCodec, MemoryBackend};
+use p2panda_net::address_book::AddressBookStoreHandle;
 use p2panda_net::{AddressBook, Discovery, Endpoint, MdnsDiscovery};
+use stickleback::MunimentAddressBook;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
@@ -419,7 +422,15 @@ impl P2pandaTransport {
         let signing_key = SigningKey::from_bytes(&signing_seed);
         let peer_id = PeerID::from_bytes(signing_key.verifying_key().as_bytes())
             .map_err(|error| TransportError::Backend(format!("transport key: {error}")))?;
+        // p2panda's own default here was an in-memory SQLite store; this is the
+        // same lifetime over muniment instead, which keeps sqlx out of the graph.
+        // A caller wanting the address book to survive a restart hands a durable
+        // muniment backend in place of `MemoryBackend`.
+        let store = AddressBookStoreHandle::new(MunimentAddressBook::<_, JsonCodec>::new(
+            MemoryBackend::new(),
+        ));
         let address_book = AddressBook::builder()
+            .store(store)
             .spawn()
             .await
             .map_err(|e| TransportError::Backend(format!("address book: {e}")))?;
