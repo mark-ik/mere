@@ -118,6 +118,9 @@ Tasks: let a live arrangement's placement reach the score.
 configuration; the solver's proposal and the recorded outcome stay
 distinguishable, per the solver-proposes discipline. Decide with mer3ly whether
 the seam is a write-back into the score or a sidecar the score references.
+Ruling 2026-08-16 constrains the decision: whatever A6 produces is also the
+shelfmark's `placement` delta section, one serialization, never a parallel
+one (the shelfmark format note owns the envelope; A6 owns this record).
 Forcing consumer: mer3ly, authority-grade.
 Validation: a pinned arrangement in the sandbox survives a round trip as a
 portable artifact; the reconstructed scene places pinned items where the
@@ -396,13 +399,14 @@ deterministically rather than shipped, which is why the wire is small. If the
 framing holds, the five fields it carries beyond the contract do not all need
 to enter the score, and the index becomes its own layer above the contract with
 its own promotion question.
-Thought through 2026-08-16 in the
-[scene citation index brief](../research/2026-08-16_scene_citation_index_brief.md):
-the wire reads as a scene citation, the index layer above the contract, checkable
-because generation derives from the authority hash. The brief leans format-note-now
-and Mere-level format at the second shipping consumer, finds that A6 changes a
-citation's fidelity rather than its schema, and asks whether A6's sidecar and the
-citation delta should be decided as one record. Five questions await Mark's ruling.
+Ruled 2026-08-16, all five questions, recorded in the
+[shelfmark format note](../technical_architecture/2026-08-16_shelfmark_format_note.md):
+the citation is **shelfmark**, a Mere-level format held as a note until the second
+shipping consumer; the citation delta and A6's sidecar are one record (A6's
+`placement` section is the first standardized member); home is incipit, scoped,
+with chirograph the fallback; checkability (`expects.generation`) is required in
+v1. The [scene citation index brief](../research/2026-08-16_scene_citation_index_brief.md)
+holds the reasoning.
 
 **Apps embedded in the site.** Mark, 2026-08-16: if he could embed full
 versions of all his apps in the site, he would. That is a larger scope question
@@ -457,3 +461,12 @@ not settled without it.
   minimum). Two open rulings recorded: whether the site's wire is better
   understood as an index than a promotion candidate, and the app-embedding
   ambition that bears on it.
+- 2026-08-16: **index ruled; shelfmark founded as a format note.** Mark ruled
+  the brief's five questions: note now scoped Mere-level; one record shared
+  between A6's sidecar and the citation delta, grounded in the stack; incipit
+  as home (scoped: 127 lines, serde + uuid only, register pairs with the
+  shelfmark; chirograph fallback if the opaque-sections indirection fights
+  the one-record rule); checkability in v1; the name is shelfmark. The
+  format note (`../technical_architecture/2026-08-16_shelfmark_format_note.md`)
+  is the authority; the founding in code waits for the second shipping
+  consumer. A6's task text now carries the one-record constraint.

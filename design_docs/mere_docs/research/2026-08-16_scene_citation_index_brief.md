@@ -1,8 +1,9 @@
 # Scene citations: the index above the projection contract
 
-Status: thinking brief, commissioned by Mark ("the site's wire has its own
-utility as an index... maybe that's a better way to think about it"); ends in
-questions, rules nothing
+Status: thinking brief, commissioned by Mark; **all five questions ruled
+2026-08-16**, recorded in the
+[shelfmark format note](../technical_architecture/2026-08-16_shelfmark_format_note.md),
+which is now the authority. This brief stays as the reasoning record.
 Date: 2026-08-16
 Scope: what mer3ly's scene-state wire is when read as an index, whether that
 reading deserves a Mere-level format, and what it changes about A6

@@ -23,6 +23,10 @@
 //! - [`cascade`] — how far a wake travels: a bounded, deterministic rounds
 //!   loop over [`watch`]'s wake decisions, ending either settled or naming
 //!   the behaviors still answering each other.
+//! - [`tick`] — when a denizen runs *on the clock*: a schedule rather than a
+//!   subscription, because time is not a journal and has no cursor to hold.
+//!   The clock is the host's, as it is for grant expiry, so a replay fires the
+//!   same behaviors at the same points.
 //! - [`watch`] — when a denizen runs: a standing subscription to a scope,
 //!   contained by what its subject may read, matched against a journal's
 //!   committed entries. The gate says whether a body may write; a watch says
@@ -49,6 +53,7 @@ pub mod cascade;
 pub mod delegation;
 pub mod gate;
 pub mod grant;
+pub mod tick;
 pub mod watch;
 
 pub use cap::{Cap, CapError, Capability, ScopePath, assert_capability_laws};
@@ -58,6 +63,7 @@ pub use gate::{
     GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG, read_projection,
 };
 pub use grant::{AuthorityProvider, Grant, GrantTable, Mode};
+pub use tick::{Period, TimeWatch, TimeWatchTable};
 pub use watch::{Wake, Watch, WatchError, WatchEvent, WatchTable};
 
 /// A keyholder identity: the 32-byte public key of whoever acts. A device, a
