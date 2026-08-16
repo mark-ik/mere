@@ -1298,13 +1298,16 @@ fn node_material_overrides_default_and_round_trips_through_cartography() {
     // A node takes the default material until overridden.
     assert_eq!(canvas.node_material(key), NodeMaterial::default());
 
-    // An override sets the body's physics (restitution / friction / density).
+    // An override sets the body's physics (restitution / friction / density). Gravity scale
+    // stays at the default 0 — the canvas is a layout surface, and it is not part of the
+    // sidecar tuple below.
     canvas.set_node_material(
         id,
         NodeMaterial {
             restitution: 0.6,
             friction: 0.3,
             density: 0.002,
+            ..NodeMaterial::default()
         },
     );
     assert_eq!(canvas.node_material(key).restitution, 0.6);

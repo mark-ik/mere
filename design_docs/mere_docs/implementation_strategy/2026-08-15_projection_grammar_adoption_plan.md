@@ -1,7 +1,7 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status**: design; no target started. Turns the projection grammar report's
+**Status**: design; A0 landed, no code target started. Turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
 genet, and cambium. Sequenced against the
@@ -75,14 +75,15 @@ consumer yet states its entrance gate and waits.
 
 ### Track A: mere (contract and compiler)
 
-**A0. Catalog second shelf (docs only, open now).**
+**A0. Catalog second shelf (docs only) — landed 2026-08-15.**
 Context: the catalog's external-systems section reads as one shelf of
 renderers and toolkits; the report's central structural finding is that
 specification languages and design solvers are a different kind of prior art.
 Tasks: split "What the external systems teach us" into two shelves; add the
 eleven report systems with one-line transfers; add the Penrose name-collision
-note (CMU's Penrose diagram language is unrelated to the
-`graph_layout:penrose` tiling arrangement); link the report artifact.
+note (CMU's Penrose diagram language is unrelated to Mere's `Penrose`
+aperiodic tiling layout in `crates/canvas/arrangements`); cite the report
+in-repo rather than by artifact URL, since mere is a public repo.
 Validation: catalog cites all eleven; DOC_README updated.
 Done when: a reader of the catalog can find every system the report verified
 without leaving the repo.
@@ -332,3 +333,18 @@ to build).
   open LOD half from the proofs plan, genet component inventory
   (cambium family, genet-probe, livery) from `repos/genet/components/`. No
   code target started.
+- 2026-08-15: **A0 landed.** Catalog's external-systems section split into
+  two shelves (renderers/toolkits/foundations, then specification languages and
+  design solvers) with all eleven report systems cited and one-line transfers.
+  Source URLs checked before writing: two guesses were 404s (`uwdata.github.io/draco2`,
+  `uwdata.github.io/gemini`) and were replaced with the live repos; GoTree, ATOM, and
+  GoFish resolved to an ACM DOI, the MSR publication page, and the MIT VIS page.
+  The report artifact is cited by name and date, not linked: mere is a public repo and
+  a claude.ai artifact URL is private, so A0's done-condition (findable without leaving
+  the repo) is met by pointing at this plan instead.
+  Two tree corrections against the plan as written: the arrangement is `Penrose` /
+  `PenroseAdapter` (projection id `penrose.default`) in `crates/canvas/arrangements`,
+  not `graph_layout:penrose`; and the collision note covers **Mosaic** too, which the
+  catalog's own tiling row names as a packing variant with no implementation in the tree.
+  DOC_README: founded the missing catalog entry (the catalog had no index line at all)
+  and recorded A0 on this plan's entry.

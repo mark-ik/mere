@@ -328,6 +328,10 @@ Do not add a primitive until one of these proofs fails without it. A catalog is 
 
 ## What the external systems teach us
 
+External prior art divides into two shelves, and the division is the point. Renderers and toolkits are prior art for drawing a scene. Specification languages and design solvers are prior art for the compiler: what a projection spec *means*, how it is checked, what is left underdetermined, and who is allowed to decide the rest. Mere's realization layer has no shortage of the first kind to learn from. The unresolved questions in the projection stack are almost all on the second shelf.
+
+### Renderers, toolkits, and foundations
+
 - [Vega](https://vega.github.io/vega/docs/specification/) demonstrates a declarative grammar spanning data, transforms, scales, projections, axes, legends, marks, and signals. Mere needs the same separation of concerns, while retaining graph identity and host authority.
 - [Observable Plot](https://observablehq.com/plot/) shows the value of composing layered marks rather than treating every visual form as a separate chart type.
 - [Graphviz DOT](https://graphviz.org/doc/info/lang.html) and the [Graphviz layout catalog](https://graphviz.org/docs/layouts/) show that graph structure, subgraphs, clusters, constraints, and layout algorithms can remain distinct.
@@ -342,6 +346,24 @@ Do not add a primitive until one of these proofs fails without it. A catalog is 
 - [Cleveland and McGill](https://www.tandfonline.com/doi/abs/10.1080/01621459.1984.10478080) ground channel choice in graphical perception rather than novelty.
 - [WAI guidance for complex images](https://www.w3.org/WAI/tutorials/images/complex/) and [Graphics ARIA](https://www.w3.org/TR/graphics-aria-1.0/) show that charts, maps, and diagrams require structured descriptions and navigable semantics, including nested graphics. [SVG 2 structure](https://www.w3.org/TR/SVG/struct.html) supplies grouping, titles, and descriptions for one realization target.
 
+### Specification languages and design solvers
+
+Eleven systems reviewed against this catalog in the projection grammar report (2026-08-15). Each line states what transfers; the [projection grammar adoption plan](../implementation_strategy/2026-08-15_projection_grammar_adoption_plan.md) is the in-repo record of which gated target carries it and what forcing consumer it waits on. The report's own conclusion is that these are prior art for the compiler, not for the scene: none of them replaces a Mere realization, and none of them has the authority layer this catalog is built around.
+
+- [Vega-Lite](https://vega.github.io/vega-lite/docs/) makes selections first-class spec citizens, fills in scales and guides by rule rather than by hand, and gives `resolve` for per-channel shared or independent scales across composed views. Transfers: the scales-and-guides gap, the facet gap, and the vocabulary for declaring how coordinated views share a scale.
+- [Draco](https://github.com/uwdata/draco) encodes visualization effectiveness as weighted constraints held separately from the grammar, and searches for completions of an underspecified design. [Draco 2](https://github.com/cmudig/draco2) replaced the knowledge base without changing what a spec means. Transfers: effectiveness and default-choosing knowledge is versioned *beside* the score, never inside it; a solver proposes, the score records what was chosen.
+- [SetCoLa](https://uwdata.github.io/setcola/) scopes layout constraints to predicate-defined sets of nodes and defers instance generation to the runtime, so one authored layout reapplies to a second graph. Transfers: the schematic gap's constraint form, and the catalog's second-dataset receipt.
+- [Gemini](https://github.com/uwdata/gemini) treats the transition between two chart states as an authored specification rather than an implicit tween. Transfers: change-over-time gets a spec, not just a pair of epochs, under the expansion brief's animation lane.
+- [GoTree](https://dl.acm.org/doi/10.1145/3313831.3376297) factors tree visualizations into visual elements, layout, and coordinate system, making node-link and space-filling settings of one family rather than separate types. Transfers: factor `score::Arrangement` at the hierarchy proof instead of adding monolithic variants. The same paper is the caution: a grammar that factors too eagerly gets a complexity cliff.
+- [ATOM](https://www.microsoft.com/en-us/research/publication/atom-a-grammar-for-unit-visualizations/) builds unit visualizations by recursively partitioning data through layout operators until every item has a size and position, and distinguishes unit marks from aggregate marks. Transfers: the recursive-partition operator shape for arrangement factoring, and the unit/aggregate distinction the derived-marks gap needs.
+- [Mosaic](https://idl.uw.edu/mosaic/) makes coordination itself data: a selection is a set of clauses carrying source, clients, predicate, and value, with a declared resolution strategy (single, union, intersect, or crossfilter, where crossfilter means a view is filtered by every brush but its own). Transfers: brush, filter, and focus become named serializable citizens instead of host-only state; the resolution declaration is the part usually left implicit.
+- [Gosling](https://gosling-lang.org/) declares level-of-detail as visibility conditions with an explicit target, measure, operation, threshold, and hysteresis padding. Transfers: the conditions that select a representation rung become part of the spec, so a remote client can re-select on its own zoom and a frozen realization can state why a rung was chosen.
+- [Penrose](https://penrose.cs.cmu.edu/) separates `ensure` from `encourage`: a hard constraint that must hold and reports when it cannot, against a soft one that is best-effort by design. Transfers: the vocabulary for placement satisfaction, where a pin is ensure-class and an anchored home is encourage-class, and the answer to WebCoLa's silent-soft failure.
+- [Bluefish](https://bluefishjs.org/) composes diagrams from declarative relations over a scenegraph that carries hierarchy and adjacency together rather than forcing a single tree. Transfers: confirmation that this catalog's compound scene shape is right, and a reason to hold it deliberately. Nothing to add today.
+- [GoFish](https://vis.csail.mit.edu/pubs/gofish/) formalizes Gestalt relations such as uniform spacing, containment, and connection inside one grammar that covers charts and diagrams alike. Transfers: the chart-side evidence for this catalog's central bet, that a chart, a diagram, and a spatial graph can be projections of one system.
+
+**Name collisions.** Two systems on this shelf share a name with a variant in [Arrangement families](#6-arrangement-families) and mean something unrelated. CMU's Penrose is a diagram specification language; Mere's Penrose is the aperiodic tiling layout in `crates/canvas/arrangements` (`PenroseAdapter`, projection id `penrose.default`). UW IDL's Mosaic is a view-coordination architecture; "Mosaic" in the tiling row is a packing variant with no implementation in the tree. Both names stay, because both are established in their own domain. Cite the shelf when the specification language is meant.
+
 ## Related Mere research
 
 - [`2026-08-13_scenograph_content_catalog.md`](2026-08-13_scenograph_content_catalog.md): prior named-scene and representation inventory; retained as historical research.
@@ -351,6 +373,7 @@ Do not add a primitive until one of these proofs fails without it. A catalog is 
 - [`2026-06-18_node_representation_arrangement_plan.md`](../implementation_strategy/2026-06-18_node_representation_arrangement_plan.md): representation and arrangement implementation seams.
 - [`2026-06-13_scriptable_field_regions_plan.md`](../implementation_strategy/2026-06-13_scriptable_field_regions_plan.md): field and region model.
 - [`2026-07-21_projection_proofs_plan.md`](../implementation_strategy/2026-07-21_projection_proofs_plan.md): proof sequence and portable projection discipline.
+- [`2026-08-15_projection_grammar_adoption_plan.md`](../implementation_strategy/2026-08-15_projection_grammar_adoption_plan.md): gated targets carrying the projection grammar report's transfers into mere, genet, and cambium.
 - [`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md): scene ownership contract.
 - [`2026-07-24_scenograph_freeze_plan.md`](../implementation_strategy/2026-07-24_scenograph_freeze_plan.md): frozen contract and verification boundary.
 
