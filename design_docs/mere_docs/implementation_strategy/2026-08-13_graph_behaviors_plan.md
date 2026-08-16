@@ -1,7 +1,8 @@
 # Graph Behaviors Plan: watches, cascades, and the reactive denizen
 
 **Date:** 2026-08-13
-**Status:** open. Designed with Mark 2026-08-13 (the "neat lil ideas"
+**Status:** W0 through W5 all landed 2026-08-13; what remains is the headed
+scenario receipts. Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
 conversation: one node triggering others nearby to refresh, summaries from
 connected nodes captured into a knot note, and the family of automations
 behind them).
@@ -376,7 +377,26 @@ Carried over or ruled here:
   Done when: a "stale scope" behavior fires under a test clock stepped past
   the threshold, fires identically on replay, and never fires from a body
   reading wall time (no such binding exists).
-- **W5: the flagship: neighborhood summary into a knot note.** Read scope
+- **W5: the flagship. LANDED 2026-08-13** (turnstone `ae4fa4a`, canvas setter
+  in mere `1d2cf96c`; 278 pass). A behavior watching a container writes a note
+  when its members change, attributed to itself, and stops on revocation with
+  the standing note intact. The digest is plain text; the intel seam replaces
+  the prose without changing the shape.
+  **It needed an authoring lane that did not exist**: a body could open,
+  dispatch and summon but could not write content. `Action::WriteNote` plus
+  `mere.write(url, text)` fills it, through the kernel's body delta so the
+  write journals attributed. **Authoring earns its own ring** by the test
+  `Place` already states in `ring.rs`: folding it into `Dispatch` would have
+  widened every already-installed pack's grant, because `default_rings`
+  preselects Dispatch. `Author` is not preselected either. Two things found
+  here: `update` became dispatch-plus-drain in W1b and
+  `lower_denizen_actions` lowers through `update`, so **running a body
+  re-enters the drain** (the graph tier survived by accident, the clock and
+  app tiers would have fired mid-cascade; a `draining` flag makes it
+  structural); and a **constant digest journals nothing after the first
+  write**, because an unchanged body is not a change. The original text
+  follows.
+- **W5 (original):** Read scope
   over a container's members, write scope over one note node, waking on
   member changes; summarization via a host-provided capability (the intel
   seam: esp is the stated successor to vates/sibylla, so the capability
@@ -433,6 +453,12 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-13 (W5, and the plan's slices complete): the summarizer runs. The
+  ring decision is the one to remember: a new capability that would ride an
+  existing preselected grant is not a new capability, it is a silent widening
+  of every pack already installed. And the reentrancy the drain introduced in
+  W1b was found only because W5 put a second tier under a running body.
 
 - 2026-08-13 (W4): schedules landed. The shape worth keeping is that time got
   its own structure rather than being bent into the watch matcher, and that
