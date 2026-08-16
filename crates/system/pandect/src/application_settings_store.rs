@@ -67,6 +67,22 @@ pub struct ApplicationSettings {
     pub snapshot_idle_refresh: bool,
     /// scope=application; movement=local-only; mutability=live; security=ordinary.
     pub snapshot_byte_cap_mb: Option<u32>,
+    /// How many rounds one graph-behavior cascade may run before it is stopped
+    /// and the behaviors still waking each other are named.
+    ///
+    /// scope=application; movement=local-only; mutability=live; security=ordinary.
+    ///
+    /// There is deliberately no "unlimited": an unbounded cascade is the
+    /// condition the budget exists to report, so a way to switch the reporting
+    /// off would be a way to hang the application quietly. The consumer floors
+    /// this at 1 (`servitor::CascadeBudget::new`), so a drifted zero leaves
+    /// behaviors working rather than silently disabling them.
+    #[serde(default = "default_cascade_budget")]
+    pub cascade_budget: u32,
+}
+
+fn default_cascade_budget() -> u32 {
+    4
 }
 
 impl Default for ApplicationSettings {
@@ -82,6 +98,7 @@ impl Default for ApplicationSettings {
             ui_zoom: default_ui_zoom(),
             snapshot_idle_refresh: default_snapshot_idle_refresh(),
             snapshot_byte_cap_mb: None,
+            cascade_budget: default_cascade_budget(),
         }
     }
 }
@@ -160,6 +177,7 @@ mod tests {
             ui_zoom: 1.2,
             snapshot_idle_refresh: false,
             snapshot_byte_cap_mb: Some(32),
+            cascade_budget: 2,
         };
         save_application_settings(&root, &original).unwrap();
         assert_eq!(load_application_settings(&root).unwrap(), Some(original));

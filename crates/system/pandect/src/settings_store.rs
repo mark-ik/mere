@@ -141,6 +141,9 @@ impl LegacySettingsFields {
                     .snapshot_idle_refresh
                     .unwrap_or(defaults.snapshot_idle_refresh),
                 snapshot_byte_cap_mb: self.snapshot_byte_cap_mb,
+                // Not a legacy key: this migration reads pre-split files, and
+                // nothing wrote a cascade budget before it existed.
+                cascade_budget: defaults.cascade_budget,
             }
         });
         let device = self
