@@ -442,6 +442,29 @@ capture's bytes back byte-for-byte through the store read-through the receipts
 lane depends on. Also pinned: a refused application never sees a challenge, and
 a browser connect frame does not open this door.
 
-**Next:** turnstone opens the outbound session and renders the receipt cards.
-It needs a client-side handshake helper; `connect_as_app` writes the hello but
-leaves the challenge answer to the caller.
+### 6.3 The turnstone client (2026-08-15)
+
+`native::app_client::AppBrokerClient` is the client half: the whole handshake
+(hello, challenge, connect, connected) plus typed calls for the three things a
+card reader does — open, snapshot, resource — and `read_cards()` composing
+them. Deliberately sequential against `&mut self`: the wire is strict
+request/response and a card reader is human-paced, so a demultiplexer would be
+machinery without a customer.
+
+Verified over the real transport: `the_client_reads_cards_over_the_served_endpoint`
+starts `serve_app_broker` on a uniquely named pipe and connects with the exact
+code turnstone runs — finds the receipt card among the Personae cards the
+endpoint also offers, reads the capture byte-for-byte, closes. 14 lane tests.
+
+Turnstone's side landed in the turnstone repo: `DeviceReceiptsService` (worker
+thread + runtime on the `KnotShareReaderService` pattern; a refresh opens a
+fresh session, which is also how new receipts become visible, since the host
+reads its surface at session start) and a `DeviceReceiptsPane` registered as
+`turnstone.device-receipts` with a palette entry. The pane shows each card's
+title, badges, value rows, and per-capture byte sizes — a size is shown only
+after the bytes were actually read through the resident store, so the pane
+reports reachability, never an advertisement.
+
+**Next (headed):** run the resident host and turnstone together on this
+machine and take the receipt: the pane showing a real remote-receipt card with
+its capture sizes.

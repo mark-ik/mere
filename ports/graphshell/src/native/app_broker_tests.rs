@@ -19,8 +19,10 @@ use crate::browser_carrier::{read_native_message_async, write_native_message_asy
 use crate::identity_endpoint::SupplementalCard;
 use crate::native::app_admission::{AllowedApps, AppHello, AppId};
 use crate::native::app_broker::{
-    APP_CONNECT_SCHEMA, AppHostMessage, AppMessage, serve_app_connection_for_tests,
+    APP_CONNECT_SCHEMA, AppHostMessage, AppMessage, serve_app_broker,
+    serve_app_connection_for_tests,
 };
+use crate::native::app_client::AppBrokerClient;
 use crate::native::device_broker::DeviceSurface;
 use crate::native::personae_host::PersonaeHost;
 
@@ -310,3 +312,71 @@ async fn response<R: tokio::io::AsyncRead + Unpin>(reader: &mut R) -> CarrierRes
 }
 
 use base64::Engine as _;
+
+/// The client against the served endpoint, over the real transport: a named
+/// pipe here, the socket path on Unix. This is the exact code turnstone runs.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_client_reads_cards_over_the_served_endpoint() {
+    let capture = b"capture bytes for the client test".to_vec();
+    let (surface, hash) = receipt_surface(&capture);
+    let personae = resident_host();
+    #[cfg(windows)]
+    let endpoint = format!(r"\\.\pipe\graphshell-app-client-{}", uuid::Uuid::new_v4());
+    #[cfg(not(windows))]
+    let endpoint = std::env::temp_dir()
+        .join(format!("graphshell-app-client-{}.sock", uuid::Uuid::new_v4()))
+        .display()
+        .to_string();
+
+    let server_endpoint = endpoint.clone();
+    let server = tokio::spawn(async move {
+        let _ = serve_app_broker(
+            &server_endpoint,
+            personae,
+            AllowedApps::default(),
+            60_000,
+            Some(Arc::new(RwLock::new(surface))),
+        )
+        .await;
+    });
+
+    // The server binds asynchronously; retry the connect briefly rather than
+    // sleeping a guessed amount.
+    let mut client = None;
+    let mut last_error = String::new();
+    for _ in 0..50 {
+        match AppBrokerClient::open_at(&endpoint, AppId::new("turnstone")).await {
+            Ok(open) => {
+                client = Some(open);
+                break;
+            }
+            Err(error) => {
+                last_error = error.to_string();
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        }
+    }
+    let mut client =
+        client.unwrap_or_else(|| panic!("the client never connected, last: {last_error}"));
+
+    // The endpoint offers the Personae cards beside the supplemental one;
+    // the receipt card is found by title, the way a renderer groups them by
+    // adapter rather than assuming it is served alone.
+    let cards = client.read_cards().await.unwrap();
+    let receipt = cards
+        .iter()
+        .find(|card| card.card.title == "Headed receipt")
+        .expect("the receipt card is among the offers");
+    assert_eq!(receipt.card.media, vec![hash], "the card names its capture");
+
+    // Read the capture the card names, exactly as a renderer would.
+    let opened = client.open_session().await.unwrap();
+    let session = chirograph::ProjectionSession(
+        opened.descriptor.projections[0].request.session.0.clone(),
+    );
+    let bytes = client.resource(session, hash).await.unwrap();
+    assert_eq!(bytes, capture, "the capture arrives byte for byte");
+
+    client.close().await.unwrap();
+    server.abort();
+}

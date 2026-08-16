@@ -1,7 +1,8 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status**: design; A0 landed, no code target started. Turns the projection grammar report's
+**Status**: design; A0 landed, A6 added, no code target started. Mer3ly ruled
+an authority-grade consumer 2026-08-16, which re-gates A1-A4, B1, and C3. Turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
 genet, and cambium. Sequenced against the
@@ -39,6 +40,17 @@ Two disciplines from the report govern every target here:
    speculatively; the catalog's promotion rules are the defense. Nothing in
    this plan unfreezes 0.0.3; contract additions are 0.0.4+ material behind
    forcing consumers. (Report caution 2.)
+
+### Consumer ruling (2026-08-16)
+
+Mer3ly is authority-grade: its asks open gates, and it is not a donor in the
+way graphshell is. It is live, public, pinned to a real rev, and consumes six
+Mere crates plus published cambium and genet-scripted-dom. The
+[mer3ly stack consumer survey](../research/2026-08-16_mer3ly_stack_consumer_survey.md)
+is the evidence. The practical effect is that "the first consumer that asks"
+has a real answer today, so the targets below name mer3ly where they used to
+name a hypothetical host, and expansion lane L3's entrance gate is already met
+in production.
 
 ## Findings
 
@@ -81,12 +93,37 @@ renderers and toolkits; the report's central structural finding is that
 specification languages and design solvers are a different kind of prior art.
 Tasks: split "What the external systems teach us" into two shelves; add the
 eleven report systems with one-line transfers; add the Penrose name-collision
-note (CMU's Penrose diagram language is unrelated to Mere's `Penrose`
-aperiodic tiling layout in `crates/canvas/arrangements`); cite the report
-in-repo rather than by artifact URL, since mere is a public repo.
+note (CMU's Penrose diagram language is unrelated to the
+`graph_layout:penrose` tiling arrangement); cite the report in-repo rather
+than by artifact URL, since mere is a public repo.
 Validation: catalog cites all eleven; DOC_README updated.
 Done when: a reader of the catalog can find every system the report verified
 without leaving the repo.
+
+**A6. The placement seam (numbered late, sequenced first).**
+Context: mer3ly consumes the stack along two disjoint paths. The portable path
+builds a `Score` with `Placement::Ordinal` and solves it; the live path runs a
+seiche simulation with `pin_node`, three-way mobility, and backdrops. `Score`
+and `Placement` appear only in the first, pins and mobility only in the second,
+and nothing joins them. A visitor who pins three repositories and shares the
+result is sharing state the portable contract cannot express, which is why the
+site invented its own wire.
+The seam is the precondition for three targets that otherwise each wait on a
+consumer that does not exist: A1 has no satisfaction to record while pins never
+reach a score, A2 has no coordinated view to serialize, and C3 has no portable
+backdrop.
+Tasks: let a live arrangement's placement reach the score.
+`Placement::Coordinate` carries a visitor-placed position; the mobility class
+(free, anchored, frozen) is recorded rather than inferred from force
+configuration; the solver's proposal and the recorded outcome stay
+distinguishable, per the solver-proposes discipline. Decide with mer3ly whether
+the seam is a write-back into the score or a sidecar the score references.
+Forcing consumer: mer3ly, authority-grade.
+Validation: a pinned arrangement in the sandbox survives a round trip as a
+portable artifact; the reconstructed scene places pinned items where the
+visitor put them; the determinism receipt still holds for the unpinned case.
+Done when: the two paths meet, and a shared scene is a portable artifact rather
+than a site-local JSON blob.
 
 **A1. Placement satisfaction state (investigation first).**
 Context: the catalog's free/anchored/pinned policies currently have no
@@ -102,8 +139,12 @@ and whether anything records it. Then, with the forcing consumer, give the
 realized scene a satisfaction record for ensure-class placements (shape
 decided by the consumer: a typed field or a recognized channel). An unmet pin
 is reported, never silently repositioned.
-Forcing consumer: the first host that surfaces pinned placement to a user
-(isometry's VTT pins or the canvas pin/unpin intent, whichever ships).
+Forcing consumer: mer3ly, once A6 lands. Its sandbox already ships the
+ensure/encourage split (an `anchored` mobility installs a soft `AnchorSpring`,
+a `frozen` one hard-pins) with no satisfaction record anywhere, and it already
+shares pins to a second device. Until A6, those pins never reach a score, so
+there is nothing for a satisfaction field to attach to. Isometry's VTT pins and
+the canvas pin/unpin intent remain alternates.
 Validation: a score with an unsatisfiable pin produces a scene that carries
 the violation; a test asserts the violation is present rather than the pin
 silently best-efforted; the record crosses the graphshell wire.
@@ -123,10 +164,13 @@ Tasks: with the forcing consumer, define the clause record and resolution
 declaration; decide its home with evidence (chirograph beside the intent
 triple, or mere host state that graphshell serializes); wire two views over
 one authority through it.
-Forcing consumer: the first two-view coordination ask: two windows brushing
-one graph, a canvas and a swatch cross-filtering, or a graphshell remote
-filter (entrance gate per L3: the first consumer that asks for the same
-arrangement or filter from a second window, device, or peer).
+Forcing consumer: L3's entrance gate is met. Mer3ly shares a scene by URL
+hash, and a second person opening that link asks for the same arrangement,
+reading, and selection on a second device. What is still unforced is the clause
+shape: the site carries one selected id with no resolution strategy, so union,
+intersect, and crossfilter have no consumer yet. Treat the serialization
+question as open now and the resolution question as still gated on a genuine
+two-view ask.
 Validation: brush in view one filters view two; crossfilter resolution
 honored (the brushing view is unfiltered by its own clause); serialized round
 trip is deterministic; clause removal restores the unfiltered reading.
@@ -148,7 +192,11 @@ consumer). Stage two, portable only when a remote consumer needs client-side
 re-selection: rung conditions travel beside the score, and a frozen
 realization evaluates them at freeze zoom deterministically.
 Forcing consumer: P3b (the recorded remaining half of P3: representation
-degrades card to glyph with recency and zoom, focus stays live).
+degrades card to glyph with recency and zoom, focus stays live). Mer3ly does
+not force this one: it exports `representation_registry()` to JavaScript for
+the live path's own UI, while its portable path hardcodes
+`Representation::Glyph`, and its fold/expand is a manual toggle over `visible`
+plus an untyped fold channel rather than a measure and threshold.
 Validation: same score, two freeze zooms, different rungs, deterministic; a
 hysteresis test shows a rung boundary does not flicker under small zoom
 oscillation.
@@ -169,7 +217,11 @@ default staging so consumers get respectable motion for free; playback in the
 first continuous consumer.
 Forcing consumer: L5's entrance gate verbatim: the first continuous
 re-projection a consumer ships (woodshed's rehearsal filmstrip or a canvas
-projection switch, whichever lands first). C2 is the cambium half.
+projection switch, whichever lands first). C2 is the cambium half. Mer3ly
+already ships most of the record this needs, a labeled revision-chained diff
+sequence it steps through with a source-time control, so it is the cheapest
+place to prove a spec once one exists; what it lacks is the authored half,
+duration, easing, and staging.
 Validation: identical scene pair plus identical spec yields an identical
 schedule; a frozen realization is unaffected by transition specs; motion
 stays out of arrangement types (the catalog's motion taxonomy holds).
@@ -223,8 +275,12 @@ DOM lane; verify with the AccessKit lane precedent
 (accesskit_screen_reader_verification, 2026-06-09) and a genet-probe scenario
 asserting the semantic tree (apps self-drive via genet-probe; never synthetic
 OS input).
-Forcing consumer: the promotion suite itself; every proof's receipt cites
-this shape.
+Forcing consumer: the promotion suite itself; every proof's receipt cites this
+shape. Mer3ly is the standing argument for it: its sandbox is JavaScript-only,
+shipping `data-graph-interface` hidden with a runtime-built node list and a
+no-script status reading "Graphshell sandbox not initialized", so the site
+serves accessibility by rendering an entirely separate authority-derived static
+index instead. That workaround is what B1 retires.
 Validation: a screen-reader traversal of the frozen projection enumerates
 instances and relations with names; a probe scenario asserts structure
 deterministically; the same scene still produces its interactive realization.
@@ -292,7 +348,11 @@ production answers, so "a backdrop may be visible, collidable, both, or
 neither" is declared data rather than host convention.
 Tasks: prototype against both consumers per L2's entrance gate; carry the
 property classing into whatever shape both force; a remote graphshell viewer
-renders the backdrop from scene data alone.
+renders the backdrop from scene data alone. Mer3ly supplies a third,
+already-shipping data point for the minimum property set: `set_backdrop(kind,
+tangible)` in the live path, and a backdrop carrying kind and collidable on its
+shared wire. Identity plus collidable is what a real consumer reached for
+first, ahead of visible, hit-transparent, and provenance.
 Validation: L2's own gate, plus: the same backdrop crosses the wire and
 renders identically remote; a hit-transparent backdrop never picks; a
 collidable one participates in placement.
@@ -301,14 +361,17 @@ consumers.
 
 ### Sequence
 
-Open now, in order of unlock-per-effort: **A0** (one docs edit), **B1** (the
-report's single act-now recommendation; additive, uses existing scenes),
-**A1's audit half** (isometry pins are live today; the question is whether
-displacement is currently recorded), **B3** (a read of livery's DB).
+**A0** is landed. Open now, in order of unlock-per-effort: **A6** (the seam;
+it is the precondition for A1, A2, and C3, and it has the only authority-grade
+consumer in the plan), **B1** (the report's single act-now recommendation;
+additive, uses existing scenes, and mer3ly is the standing argument for it),
+**B3** (a read of livery's DB).
 
-Opens with existing lanes, no new gates invented: **A2** with L3's entrance
-gate, **A3** with P3b, **A4 + C2** with L5's gate, **C3** with L2's gate.
-**C1** follows A1's consumer.
+Opens with existing lanes, no new gates invented: **A2's serialization half**
+now that L3's gate is met, with its resolution half still waiting on a two-view
+ask; **A3** with P3b; **A4 + C2** with L5's gate; **C3** with L2's gate,
+informed by mer3ly's shipped property pair. **A1** follows A6 rather than
+preceding it, and **C1** follows A1.
 
 Gated on the promotion suite: **A5** entire.
 
@@ -319,6 +382,35 @@ adoption of the report's six-layer spec stack (each layer arrives only with
 its proof); no new grammar DSL (the score is the spec; the report's
 what-a-spec-means table describes meanings the score may adopt, not syntaxes
 to build).
+
+## Open rulings
+
+**The site's wire as an index.** Mark's framing, 2026-08-16: the wire has its
+own utility as an index, and that may be a better way to think about it than
+promotion. The argument in its favor is already in the code. `score.generation`
+is derived from the authority's SHA-256, so a score is a pure function of its
+authority. That makes the site's scene state a citation rather than a
+transport: dataset, revision cursor, reading, arrangement, and a small delta of
+pins, selection, motion, and backdrop. The scene is reconstituted
+deterministically rather than shipped, which is why the wire is small. If the
+framing holds, the five fields it carries beyond the contract do not all need
+to enter the score, and the index becomes its own layer above the contract with
+its own promotion question.
+Thought through 2026-08-16 in the
+[scene citation index brief](../research/2026-08-16_scene_citation_index_brief.md):
+the wire reads as a scene citation, the index layer above the contract, checkable
+because generation derives from the authority hash. The brief leans format-note-now
+and Mere-level format at the second shipping consumer, finds that A6 changes a
+citation's fidelity rather than its schema, and asks whether A6's sidecar and the
+citation delta should be decided as one record. Five questions await Mark's ruling.
+
+**Apps embedded in the site.** Mark, 2026-08-16: if he could embed full
+versions of all his apps in the site, he would. That is a larger scope question
+than this plan carries, but it bears on the index ruling directly. An index is
+exactly the addressing an embedded app needs for a deep link, and under that
+reading authority-grade consumption stops being one site consuming one stack
+and becomes the site hosting the family. Recorded here so the index question is
+not settled without it.
 
 ## Progress
 
@@ -342,9 +434,26 @@ to build).
   The report artifact is cited by name and date, not linked: mere is a public repo and
   a claude.ai artifact URL is private, so A0's done-condition (findable without leaving
   the repo) is met by pointing at this plan instead.
-  Two tree corrections against the plan as written: the arrangement is `Penrose` /
-  `PenroseAdapter` (projection id `penrose.default`) in `crates/canvas/arrangements`,
-  not `graph_layout:penrose`; and the collision note covers **Mosaic** too, which the
-  catalog's own tiling row names as a packing variant with no implementation in the tree.
+  The collision note covers **Mosaic** as well as Penrose: the catalog's own tiling row
+  names Mosaic as a packing variant, and it has no implementation in the tree.
   DOC_README: founded the missing catalog entry (the catalog had no index line at all)
   and recorded A0 on this plan's entry.
+- 2026-08-16: correction. A0's first pass claimed `graph_layout:penrose` was absent
+  from the tree and rewrote the note around `PenroseAdapter` / `penrose.default`. That
+  was wrong: the claim came from a grep truncated by `head -20`. Both ids are real and
+  distinct, `graph_layout:penrose` being the `LayoutCapability` registry id
+  (`crates/canvas/arrangements/src/registry.rs:358`) and `penrose.default` the cartography
+  adapter's projection id. Plan text and catalog note restored to the registry id.
+- 2026-08-16: **mer3ly ruled authority-grade; A6 founded.** Survey first
+  (`../research/2026-08-16_mer3ly_stack_consumer_survey.md`), then Mark's
+  ruling: mer3ly's asks open gates. A6, the placement seam, is the new target
+  and the new opener, because the site's two paths never meet and that single
+  fact is what leaves A1, A2, and C3 each waiting on a consumer that does not
+  exist. Re-gated A1 (follows A6; mer3ly ships ensure/encourage with no
+  satisfaction record), A2 (L3's gate met by URL-hash scene sharing; resolution
+  strategies still unforced), A3 (mer3ly does not force it; the plan's premise
+  stands), A4 (mer3ly has the record, not the spec), B1 (mer3ly is the standing
+  argument, not a counterexample), C3 (identity plus collidable is the shipped
+  minimum). Two open rulings recorded: whether the site's wire is better
+  understood as an index than a promotion candidate, and the app-embedding
+  ambition that bears on it.

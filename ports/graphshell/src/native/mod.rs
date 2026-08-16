@@ -3,6 +3,7 @@
 pub mod browser_host;
 pub mod app_admission;
 pub mod app_broker;
+pub mod app_client;
 #[cfg(test)]
 mod app_broker_tests;
 pub mod device_broker;
