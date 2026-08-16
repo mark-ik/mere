@@ -457,6 +457,20 @@ not automation).
 
 ## Progress
 
+- 2026-08-13 (watch persistence): watches did not survive a session reload.
+  Every registration site was inside install, and rebuild-on-adopt put the
+  residents back without their subscriptions, so a behavior installed today
+  silently stopped waking after a restart. **Persisted rather than re-derived
+  from the pack source**, which would also have worked: what re-deriving loses
+  is that a rebuilt graph watch restarts its cursor at zero and re-wakes on
+  history it already considered, and a rebuilt schedule restarts its period,
+  so a daily behavior never fires for anyone who reopens their session each
+  morning. Cursors and phase are state, not declaration. One tagged file
+  beside the bindings and certificates (a table is read and written whole, so
+  per-subject files would mean a directory scan); saved at install, uninstall,
+  and any drain that produced effects; restored at all three adopt sites.
+  turnstone `bedd396`, 280 pass.
+
 - 2026-08-13 (headed receipt): `behaviors_wake.scn` is green. It caught two
   things the unit tests could not. **A real fetch rewrites a node's URL out
   from under the watch that resolved to it**, so the first version, using
