@@ -21,7 +21,7 @@
 
 use rapier2d::prelude::*;
 
-use crate::{Force, ForceContext};
+use crate::{Force, ForceContext, RepulsionRequest};
 
 /// Pairwise repulsion that spreads nodes apart (the force-directed charge).
 ///
@@ -65,22 +65,34 @@ impl Force for NodeExclusion {
             .filter_map(|&handle| ctx.bodies.get(handle).map(|b| (handle, b.translation())))
             .collect();
 
-        // Above the threshold, route the all-pairs repulsion to the host's GPU
-        // solver (quint's burn N-body pass); seiche stays burn-free. The solver
-        // computes a softened inverse-square repulsion over all pairs — the same
-        // shape as the naive scan below, minus the `cutoff` optimisation (the GPU
-        // sums every pair anyway; far pairs contribute negligibly at this scale).
+        // Above the threshold, a host may stage this exact layout law through a
+        // different evaluator. This remains a CPU-integrator seam: positions and
+        // forces cross it as slices, unlike quint's resident-buffer lane.
         if let Some(solver) = ctx.repulsion_solver {
             if nodes.len() >= ctx.gpu_repulsion_threshold {
                 let xs: Vec<f32> = nodes.iter().map(|(_, p)| p.x).collect();
                 let ys: Vec<f32> = nodes.iter().map(|(_, p)| p.y).collect();
-                let (fx, fy) = solver(&xs, &ys, self.strength, self.min_distance);
-                for (idx, (handle, _)) in nodes.iter().enumerate() {
-                    if let Some(body) = ctx.bodies.get_mut(*handle) {
-                        body.add_force(Vector::new(fx[idx], fy[idx]), true);
+                let request = RepulsionRequest {
+                    strength: self.strength,
+                    cutoff: self.cutoff,
+                    min_distance: self.min_distance,
+                };
+                match solver(&xs, &ys, request) {
+                    Ok(forces) => {
+                        let (fx, fy) = forces.components();
+                        for (idx, (handle, _)) in nodes.iter().enumerate() {
+                            if let Some(body) = ctx.bodies.get_mut(*handle) {
+                                body.add_force(Vector::new(fx[idx], fy[idx]), true);
+                            }
+                        }
+                        return;
                     }
+                    Err(error) => tracing::warn!(
+                        ?error,
+                        nodes = nodes.len(),
+                        "staged repulsion failed; falling back to NodeExclusion's CPU law"
+                    ),
                 }
-                return;
             }
         }
 

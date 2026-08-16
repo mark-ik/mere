@@ -2,11 +2,38 @@
 
 **Date**: 2026-08-09
 
-**Status**: Release-gated. [`burn`](https://crates.io/crates/burn) and
-[`burn-remote`](https://crates.io/crates/burn-remote) are available only as
-`0.22.0-pre.2` as of 2026-08-12; production migration waits for stable 0.22
+**Status**: Release-gated, and the gate now has a second reason. [`burn`](https://crates.io/crates/burn)
+and [`burn-remote`](https://crates.io/crates/burn-remote) are still only
+`0.22.0-pre.2` as of 2026-08-16; production migration waits for stable 0.22
 unless Mark explicitly reopens that gate. An isolated prerelease compatibility
 probe is allowed.
+
+**2026-08-16: Mark reopened the gate, and the prerelease turned out to be
+unreachable anyway.** During the stack-wide wgpu 30 unification the gate was
+put to him explicitly and he chose the prerelease row. Attempting it produced a
+hard resolution failure that is nothing to do with release stability:
+
+- on `cfg(any(windows, linux, macos, android))`, `cubecl-runtime 0.11.0-pre.2`
+  depends on `cubecl-environment` with the `cache` feature **non-optionally**
+  (a persistent autotune cache), which pulls `rusqlite ^0.40` and thus
+  `libsqlite3-sys ^0.38`;
+- `p2panda-store`'s `groups` and `encryption` features, which `gemot` needs,
+  force its `sqlite` feature, which pulls `sqlx` and thus
+  `libsqlite3-sys >=0.30.1, <0.38` — and no released sqlx, including 0.9.0,
+  reaches 0.38;
+- `libsqlite3-sys` declares `links = "sqlite3"`, so exactly one may exist in a
+  graph.
+
+Version selection cannot resolve that. The workspace took **the narrow CubeCL
+backport instead**: `cubecl-wgpu` is the only crate in the whole burn 0.21 /
+cubecl 0.10 stack that names wgpu, so it is vendored at
+`support/patches/cubecl-wgpu` and moved to wgpu 30 (three call sites). Burn
+stays at stable 0.21, which is also what this plan's own stop rule wanted.
+
+This plan's B2/B3 work is therefore still pending and still release-gated. When
+stable 0.22 lands, the sqlite conflict above must be re-checked before B0
+starts: it is an independent blocker that will not clear just because the
+release does.
 
 **Related**:
 [`../research/2026-07-04_burn_utilization_brief.md`](../research/2026-07-04_burn_utilization_brief.md),

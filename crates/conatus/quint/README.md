@@ -16,7 +16,7 @@ host's graph.
 | `registry` | `FieldRegistry`, `FieldId`, `FieldDef` | Per-canvas store of named scalar and vector fields. `insert_scalar` / `insert_vector` / `insert_with_id` / `get` / `lookup` / `name_of` / `remove` / `iter`. |
 | `projection` | `FieldProjection`, `FieldProjectionBuilder` | Per-canvas bundle: a `FieldRegistry`, `Vec<Coupling>`, `Vec<EdgePathRule>`, and an optional `z_field` driving per-node z in 2.5D. |
 | `lower_burn` (`field-burn`) | `lower_scalar`, `lower_vector`, `LowerError` | Lowers an AST to a Burn tensor program over rank-1 `xs` / `ys` batches, generic over `B: Backend`. |
-| `forces` (`field-burn`) | `repulsion`, `RepulsionParams` | Tensorized N-body softened inverse-square repulsion, a dedicated kernel rather than an AST node. |
+| `forces` (`field-burn`) | `repulsion`, `node_exclusion`, parameter types | Tensorized N-body laws: smooth field repulsion and the exact hard-floor/cutoff layout law. `*_wgpu_roundtrip` helpers are explicit CPU-GPU-CPU staging paths, not resident simulation. |
 | `rhai_bindings` (`field-rhai`) | `build_engine`, `build_from_script`, `BuildError` | Rhai authoring surface; a script's final expression must be a `FieldProjection`. |
 
 `FieldId`s minted by `FieldRegistry` are registry-local, assigned from a counter

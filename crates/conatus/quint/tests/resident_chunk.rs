@@ -23,6 +23,8 @@ fn setup() -> Option<burn::backend::wgpu::WgpuSetup> {
         power_preference: wgpu::PowerPreference::HighPerformance,
         compatible_surface: None,
         force_fallback_adapter: false,
+        // wgpu 30 limit bucketing, off so the test sees real limits.
+        apply_limit_buckets: false,
     }))
     .ok()?;
     let backend = adapter.get_info().backend;

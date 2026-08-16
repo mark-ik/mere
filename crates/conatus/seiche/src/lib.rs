@@ -218,19 +218,117 @@ pub trait Force: Send {
     fn apply(&self, ctx: &mut ForceContext<'_>, dt: f32);
 }
 
-/// A host-injected pairwise-repulsion solver: node positions in, per-node forces
-/// out, computed however the host likes. seiche stays **burn-free** — it only holds
-/// and calls this closure; the burn/wgpu N-body pass lives in `quint`. Args are
-/// `(xs, ys, strength, min_distance) -> (fx, fy)`, all rank-1 in node order.
+/// The complete law a [`RepulsionSolver`] must preserve.
+///
+/// A solver receives this rather than loose constants so it cannot quietly omit
+/// `NodeExclusion`'s cutoff or substitute smooth softening for its hard floor.
+#[derive(Clone, Copy, Debug)]
+pub struct RepulsionRequest {
+    pub strength: f32,
+    pub cutoff: f32,
+    pub min_distance: f32,
+}
+
+/// A validated force vector returned by a [`RepulsionSolver`].
+#[derive(Clone, Debug)]
+pub struct RepulsionForces {
+    x: Vec<f32>,
+    y: Vec<f32>,
+}
+
+impl RepulsionForces {
+    /// Construct output for exactly `expected` bodies, rejecting a bad or
+    /// non-finite result before it can enter Rapier.
+    pub fn new(expected: usize, x: Vec<f32>, y: Vec<f32>) -> Result<Self, RepulsionSolverError> {
+        if x.len() != expected || y.len() != expected {
+            return Err(RepulsionSolverError::OutputLength {
+                expected,
+                x: x.len(),
+                y: y.len(),
+            });
+        }
+        for (index, value) in x.iter().enumerate() {
+            if !value.is_finite() {
+                return Err(RepulsionSolverError::NonFinite {
+                    index,
+                    component: RepulsionComponent::X,
+                });
+            }
+        }
+        for (index, value) in y.iter().enumerate() {
+            if !value.is_finite() {
+                return Err(RepulsionSolverError::NonFinite {
+                    index,
+                    component: RepulsionComponent::Y,
+                });
+            }
+        }
+        Ok(Self { x, y })
+    }
+
+    pub fn components(&self) -> (&[f32], &[f32]) {
+        (&self.x, &self.y)
+    }
+}
+
+/// One component of an invalid solver result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RepulsionComponent {
+    X,
+    Y,
+}
+
+/// A solver result that was unsafe to apply to the Rapier world.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RepulsionSolverError {
+    OutputLength {
+        expected: usize,
+        x: usize,
+        y: usize,
+    },
+    NonFinite {
+        index: usize,
+        component: RepulsionComponent,
+    },
+    Backend(String),
+}
+
+impl std::fmt::Display for RepulsionSolverError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OutputLength { expected, x, y } => write!(
+                formatter,
+                "repulsion solver returned {x} x-forces and {y} y-forces for {expected} bodies"
+            ),
+            Self::NonFinite { index, component } => {
+                write!(
+                    formatter,
+                    "repulsion solver returned non-finite {component:?} force at {index}"
+                )
+            }
+            Self::Backend(error) => write!(formatter, "repulsion solver failed: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for RepulsionSolverError {}
+
+/// A host-injected, CPU-integrator pairwise-repulsion solver.
+///
+/// This is a staging seam: positions are supplied as host slices and validated
+/// forces return to Rapier. It is not the GPU-resident simulation interface;
+/// resident hosts keep buffers and scheduling at `quint::resident` instead.
 /// [`NodeExclusion`] routes to it above [`Simulation::set_repulsion_solver`]'s
-/// threshold, falling back to its naive O(n²) scan below. (burn brief Lane 5.)
-pub type RepulsionSolver =
-    std::sync::Arc<dyn Fn(&[f32], &[f32], f32, f32) -> (Vec<f32>, Vec<f32>) + Send + Sync>;
+/// threshold, falling back to its CPU law if it fails.
+pub type RepulsionSolver = std::sync::Arc<
+    dyn Fn(&[f32], &[f32], RepulsionRequest) -> Result<RepulsionForces, RepulsionSolverError>
+        + Send
+        + Sync,
+>;
 
 /// Default node count above which [`NodeExclusion`] uses an installed
-/// [`RepulsionSolver`]. Chosen from the quint force-pass timing (GPU beats the
-/// naive CPU scan from ~500-1000 nodes); the host can override per
-/// [`Simulation::set_repulsion_solver`].
+/// [`RepulsionSolver`]. This is only a host-configurable staging guard, not a
+/// residency or Barnes–Hut crossover claim; hosts set it from their own receipt.
 pub const DEFAULT_GPU_REPULSION_THRESHOLD: usize = 1_000;
 
 /// Per-tick view a [`Force`] sees: mutable access to the rapier body
@@ -245,9 +343,9 @@ pub struct ForceContext<'a> {
     /// pairs, set via [`Simulation::sync_edges`]; seiche stays relation-taxonomy
     /// agnostic, so the caller decides which edge families feed the layout.
     pub edges: &'a [(NodeKey, NodeKey)],
-    /// Host-injected GPU repulsion solver + the threshold above which
+    /// Host-injected staging solver + the threshold above which
     /// [`NodeExclusion`] routes to it, threaded from the [`Simulation`]. `None`
-    /// = always the naive scan. (burn brief Lane 5 — P3.)
+    /// = always the native CPU scan.
     pub repulsion_solver: Option<&'a RepulsionSolver>,
     pub gpu_repulsion_threshold: usize,
 }
@@ -286,10 +384,9 @@ pub struct Simulation {
     /// participant in the simulation rather than an override of it. Rebuilt
     /// wholesale via [`set_anchor_force`](Self::set_anchor_force).
     anchor_force: Option<AnchorSpring>,
-    /// Optional host-injected GPU repulsion solver + the node count above which
-    /// [`NodeExclusion`] routes to it instead of its naive O(n²) scan. `None` =
-    /// always naive (the default). The host builds this from quint's burn pass;
-    /// seiche stays burn-free. (burn brief Lane 5 — P3.)
+    /// Optional host-injected staging solver + the node count above which
+    /// [`NodeExclusion`] routes to it instead of its native CPU scan. `None` =
+    /// always native (the default). This does not give Rapier resident ownership.
     repulsion_solver: Option<RepulsionSolver>,
     gpu_repulsion_threshold: usize,
     /// Linear damping applied to every node body — runtime-tunable (the "inertia"
@@ -423,11 +520,11 @@ impl Simulation {
         self.coupling_forces.len()
     }
 
-    /// Install (or clear, with `None`) the host's GPU repulsion solver, and the
-    /// node count above which [`NodeExclusion`] routes to it instead of its naive
-    /// O(n²) scan. seiche stays burn-free — the solver is a plain closure the host
-    /// builds from `quint`'s burn pass. Position-preserving. See
-    /// [`RepulsionSolver`]. (burn brief Lane 5 — P3.)
+    /// Install (or clear, with `None`) the host's staging repulsion solver and its
+    /// routing threshold. The closure receives the complete [`RepulsionRequest`]
+    /// and must return validated output; failure falls back to the native CPU law.
+    /// This does not make this Rapier simulation GPU-resident. See
+    /// [`RepulsionSolver`].
     pub fn set_repulsion_solver(&mut self, solver: Option<RepulsionSolver>, threshold: usize) {
         self.repulsion_solver = solver;
         self.gpu_repulsion_threshold = threshold.max(1);

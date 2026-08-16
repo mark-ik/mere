@@ -148,12 +148,15 @@ wire to a viewer with no source access.
    are the short chords). Candidate forcing consumer: knot, as a
    creative-writing analysis scene over a document's interior; derived
    analysis edges arrive as revealed cells and crystallize only when the
-   writer keeps them. The sound half's engine is named (Mark, 2026-08-15):
+   writer keeps them. The sound half's engine is decided (Mark, 2026-08-15):
    **mora** (meter, weight, timing; the moraic unit generalizes across
-   stress-, syllable-, and mora-timed languages) with **sonance** inside it
-   (rhyme, assonance, alliteration); esp keeps the semantic chords.
-   Unfounded; names verified free on crates.io 2026-08-15. Here a node is a
-   station on the cycle.
+   stress-, syllable-, and mora-timed typology, and only grapheme-to-phoneme
+   is per-language work, a lexicon plus rules, with weight, stress, meter,
+   and sonance all general above it) carrying **sonance** as its
+   sound-kinship module (rhyme, assonance, alliteration); esp keeps the
+   semantic chords. English v1 rides CMUdict. Unfounded; both names verified
+   free on crates.io 2026-08-15, claim with real code at founding. Here a
+   node is a station on the cycle.
 9. **Fog**: the known against the unknown. Visited members lit and placed;
    unvisited ghosts at the fog line; the traveled path is the one privileged
    polyline; the backdrop darkens away from the visited. Grammar: step,

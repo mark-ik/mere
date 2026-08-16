@@ -309,9 +309,11 @@ persona-picker = { package = "mere-persona-picker", path = "crates/dramatis/pers
 script-rhai = { path = "crates/script/rhai" }
 
 # ─── External pins ───────────────────────────────────────────────────────────
-# Linebender visual stack — one row, one wgpu, vello upstream-current.
-vello = "0.9"
-wgpu = "29"
+# Linebender visual stack — one row, one wgpu. Vello is NOT upstream-current
+# any more: 0.10 still requires wgpu 29, so it comes from the owned fork via
+# the [patch.crates-io] entry below.
+vello = "0.10"
+wgpu = "30"
 kurbo = "0.13"
 peniko = "0.6"
 parley = "0.10"
@@ -367,6 +369,32 @@ all = "warn"
 # and genet's vendored stylo_taffy adapter consumes those registry packages
 # directly. The only remaining root redirect in this cone is the Taffy fork.
 [patch.crates-io]
+# Vello on wgpu 30, from the owned fork. Upstream vello 0.10 still requires
+# wgpu 29 and their own migration PR is stalled, so netrender (and through it
+# this workspace's render path) takes vello from the v0.10.0 tag plus the API
+# changes in linebender/vello#1754. `[patch]` is not inherited from genet or
+# netrender, so this workspace restates it. Retires by deletion when upstream
+# ships a wgpu-30 vello.
+vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-30" }
+# cubecl-wgpu 0.10.0, vendored from the registry and moved to wgpu 30. This is
+# the "narrow CubeCL backport" of the 2026-08-15 wgpu 30 unification: it is the
+# ONLY crate in the burn 0.21 / cubecl 0.10 stack that names wgpu at all, so
+# one vendored crate carries the whole resident lane across the major.
+#
+# The alternative was burn 0.22.0-pre.2 with cubecl 0.11.0-pre.2, which already
+# require wgpu ^30. That is not resolvable here, and not because of the release
+# gate: on Windows, Linux, macOS and Android, cubecl-runtime 0.11 depends on
+# cubecl-environment with the `cache` feature NON-optionally, which pulls
+# rusqlite 0.40 -> libsqlite3-sys ^0.38. p2panda-store's `groups`/`encryption`
+# features (which gemot needs) force its `sqlite` feature -> sqlx ->
+# libsqlite3-sys <0.38, and no sqlx release reaches 0.38. libsqlite3-sys sets
+# `links = "sqlite3"`, so exactly one may exist in a graph. Version selection
+# cannot resolve it.
+#
+# Retire this when that conflict clears upstream (cubecl making the autotune
+# cache optional, or sqlx reaching libsqlite3-sys 0.38) and stable burn 0.22
+# ships. See docs: 2026-08-09_burn_0_22_migration_plan.md.
+cubecl-wgpu = { path = "support/patches/cubecl-wgpu" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored

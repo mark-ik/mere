@@ -8,14 +8,42 @@
 //! burn kernel living beside [`lower_burn`](crate::lower_burn), backend-generic
 //! the same way (ndarray CPU, or wgpu GPU under `field-burn-wgpu`).
 //!
-//! seiche stays burn-free: this is the *field source*, computing forces that
-//! seiche's integrator applies. seiche already has an O(N log N) Barnes-Hut CPU
-//! path; this naive O(N²) GPU pass is meant to win only above a crossover N
-//! (measured in the timing test), where the GPU's throughput beats the better
-//! asymptotics on CPU.
+//! This module has two separate consumers:
+//!
+//! - a resident host can pass tensors backed by its own [`crate::resident`] planes
+//!   and keep the result on that device;
+//! - [`repulsion_wgpu_roundtrip`] and
+//!   [`node_exclusion_wgpu_roundtrip`] are explicit staging helpers for experiments
+//!   with a CPU-owned integrator. They upload positions and read force vectors back;
+//!   they are not a resident simulation path and do not accept a host device.
+//!
+//! Both tensor laws materialize pairwise `[N, N]` working sets. They are suitable
+//! for small and mid-sized semantic batches; the explicit resident kernel remains
+//! the large-body simulation lane.
 
-#[cfg(feature = "field-burn")]
+#[cfg(any(feature = "field-burn", feature = "field-gpu"))]
 use burn::tensor::{Tensor, backend::Backend};
+
+/// Input rejected before a staging helper creates a tensor program.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RepulsionInputError {
+    PositionLengthMismatch { xs: usize, ys: usize },
+}
+
+impl std::fmt::Display for RepulsionInputError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PositionLengthMismatch { xs, ys } => {
+                write!(
+                    formatter,
+                    "repulsion needs equally-sized x/y positions, got {xs} and {ys}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for RepulsionInputError {}
 
 /// Parameters for the repulsion pass.
 #[derive(Debug, Clone, Copy)]
@@ -38,13 +66,35 @@ impl Default for RepulsionParams {
     }
 }
 
+/// The hard-floor, finite-cutoff law used by a CPU graph layout.
+///
+/// This deliberately remains distinct from [`RepulsionParams`]. Softened
+/// all-pairs fields are useful on their own, but substituting them for a layout
+/// law changes its equilibrium at the routing threshold.
+#[derive(Debug, Clone, Copy)]
+pub struct NodeExclusionParams {
+    pub strength: f32,
+    pub cutoff: f32,
+    pub min_distance: f32,
+}
+
+impl Default for NodeExclusionParams {
+    fn default() -> Self {
+        Self {
+            strength: 220_000.0,
+            cutoff: 1_000.0,
+            min_distance: 8.0,
+        }
+    }
+}
+
 /// Softened inverse-square repulsion forces for a batch of 2-D positions.
 ///
 /// `xs` / `ys` are rank-1 `[N]` position components; the result is the rank-1
 /// `[N]` force components `(fx, fy)`. Force on body i:
 /// `strength · Σ_{j} (p_i − p_j) / (|p_i − p_j|² + ε²)^{3/2}`. The `j = i` term
 /// vanishes (numerator zero), so it is summed over all j including self.
-#[cfg(feature = "field-burn")]
+#[cfg(any(feature = "field-burn", feature = "field-gpu"))]
 pub fn repulsion<B: Backend>(
     xs: Tensor<B, 1>,
     ys: Tensor<B, 1>,
@@ -73,11 +123,57 @@ pub fn repulsion<B: Backend>(
     (fx, fy)
 }
 
-/// Repulsion on the wgpu backend — the host-facing entry point (hosts never
-/// name `burn`). Takes/returns plain `f32` slices, so it drops straight into a
-/// seiche `RepulsionSolver` closure. Positions in, `(fx, fy)` out.
+/// The exact hard-floor and cutoff law represented by [`NodeExclusionParams`].
+///
+/// The returned tensors stay on their backend. In particular, a host may pass
+/// [`crate::resident::ResidentTensor`] inputs and publish the output buffer to its
+/// next resident consumer without bringing force bytes to the CPU.
+#[cfg(any(feature = "field-burn", feature = "field-gpu"))]
+pub fn node_exclusion<B: Backend>(
+    xs: Tensor<B, 1>,
+    ys: Tensor<B, 1>,
+    params: NodeExclusionParams,
+) -> (Tensor<B, 1>, Tensor<B, 1>) {
+    let n = xs.dims()[0];
+    let dx = xs.clone().reshape([n, 1]) - xs.reshape([1, n]);
+    let dy = ys.clone().reshape([n, 1]) - ys.reshape([1, n]);
+    let distance_sq = dx.clone() * dx.clone() + dy.clone() * dy.clone();
+    let outside_cutoff = distance_sq
+        .clone()
+        .greater_elem(params.cutoff * params.cutoff);
+    let distance = distance_sq.sqrt().clamp_min(params.min_distance);
+    let inv_distance_cubed = (distance.clone() * distance.clone() * distance).recip();
+
+    let fx = (dx * inv_distance_cubed.clone())
+        .mask_fill(outside_cutoff.clone(), 0.0)
+        .sum_dim(1)
+        .reshape([n])
+        .mul_scalar(params.strength);
+    let fy = (dy * inv_distance_cubed)
+        .mask_fill(outside_cutoff, 0.0)
+        .sum_dim(1)
+        .reshape([n])
+        .mul_scalar(params.strength);
+    (fx, fy)
+}
+
+/// Runs softened repulsion on Burn's default WGPU device and returns host vectors.
+///
+/// This is intentionally named for the CPU→GPU→CPU round trip it performs. It is
+/// useful for a benchmark or a downlevel experiment, but a renderer cannot share
+/// the default device or these returned vectors as resident state.
 #[cfg(feature = "field-burn-wgpu")]
-pub fn repulsion_wgpu(xs: &[f32], ys: &[f32], params: RepulsionParams) -> (Vec<f32>, Vec<f32>) {
+pub fn repulsion_wgpu_roundtrip(
+    xs: &[f32],
+    ys: &[f32],
+    params: RepulsionParams,
+) -> Result<(Vec<f32>, Vec<f32>), RepulsionInputError> {
+    if xs.len() != ys.len() {
+        return Err(RepulsionInputError::PositionLengthMismatch {
+            xs: xs.len(),
+            ys: ys.len(),
+        });
+    }
     use burn::backend::Wgpu;
     use burn::tensor::backend::BackendTypes;
     type B = Wgpu<f32, i32>;
@@ -87,10 +183,43 @@ pub fn repulsion_wgpu(xs: &[f32], ys: &[f32], params: RepulsionParams) -> (Vec<f
         Tensor::<B, 1>::from_floats(ys, &dev),
         params,
     );
-    (
+    Ok((
         fx.into_data().to_vec::<f32>().expect("fx readback"),
         fy.into_data().to_vec::<f32>().expect("fy readback"),
-    )
+    ))
+}
+
+/// Runs the [`NodeExclusionParams`] law on Burn's default WGPU device and reads
+/// the force vectors back for a CPU-owned integrator.
+///
+/// Prefer [`node_exclusion`] with resident tensors when the simulation itself is
+/// GPU-owned. This function exists so a staging adapter cannot accidentally swap
+/// the layout law for smooth all-pairs repulsion.
+#[cfg(feature = "field-burn-wgpu")]
+pub fn node_exclusion_wgpu_roundtrip(
+    xs: &[f32],
+    ys: &[f32],
+    params: NodeExclusionParams,
+) -> Result<(Vec<f32>, Vec<f32>), RepulsionInputError> {
+    if xs.len() != ys.len() {
+        return Err(RepulsionInputError::PositionLengthMismatch {
+            xs: xs.len(),
+            ys: ys.len(),
+        });
+    }
+    use burn::backend::Wgpu;
+    use burn::tensor::backend::BackendTypes;
+    type B = Wgpu<f32, i32>;
+    let dev = <B as BackendTypes>::Device::default();
+    let (fx, fy) = node_exclusion::<B>(
+        Tensor::<B, 1>::from_floats(xs, &dev),
+        Tensor::<B, 1>::from_floats(ys, &dev),
+        params,
+    );
+    Ok((
+        fx.into_data().to_vec::<f32>().expect("fx readback"),
+        fy.into_data().to_vec::<f32>().expect("fy readback"),
+    ))
 }
 
 /// Naive O(N²) host reference, no burn — the correctness anchor. Two burn
@@ -120,6 +249,41 @@ pub fn repulsion_reference(
     (fx, fy)
 }
 
+/// Naive host anchor for [`node_exclusion`].
+pub fn node_exclusion_reference(
+    xs: &[f32],
+    ys: &[f32],
+    params: NodeExclusionParams,
+) -> Result<(Vec<f32>, Vec<f32>), RepulsionInputError> {
+    if xs.len() != ys.len() {
+        return Err(RepulsionInputError::PositionLengthMismatch {
+            xs: xs.len(),
+            ys: ys.len(),
+        });
+    }
+    let mut fx = vec![0.0f32; xs.len()];
+    let mut fy = vec![0.0f32; xs.len()];
+    let cutoff_sq = params.cutoff * params.cutoff;
+    for i in 0..xs.len() {
+        for j in 0..xs.len() {
+            if i == j {
+                continue;
+            }
+            let dx = xs[i] - xs[j];
+            let dy = ys[i] - ys[j];
+            let distance_sq = dx * dx + dy * dy;
+            if distance_sq > cutoff_sq {
+                continue;
+            }
+            let distance = distance_sq.sqrt().max(params.min_distance);
+            let scale = params.strength / (distance * distance * distance);
+            fx[i] += dx * scale;
+            fy[i] += dy * scale;
+        }
+    }
+    Ok((fx, fy))
+}
+
 // Every test in here drives the burn lane; the burn-free anchor they
 // compare against is exercised by the resident lane's receipt in
 // `tests/resident.rs`, which needs no burn at all.
@@ -134,6 +298,23 @@ mod tests {
     fn run<Bk: Backend>(xs: &[f32], ys: &[f32], p: RepulsionParams) -> (Vec<f32>, Vec<f32>) {
         let dev = <Bk as BackendTypes>::Device::default();
         let (fx, fy) = repulsion::<Bk>(
+            Tensor::<Bk, 1>::from_floats(xs, &dev),
+            Tensor::<Bk, 1>::from_floats(ys, &dev),
+            p,
+        );
+        (
+            fx.into_data().to_vec::<f32>().unwrap(),
+            fy.into_data().to_vec::<f32>().unwrap(),
+        )
+    }
+
+    fn run_node_exclusion<Bk: Backend>(
+        xs: &[f32],
+        ys: &[f32],
+        p: NodeExclusionParams,
+    ) -> (Vec<f32>, Vec<f32>) {
+        let dev = <Bk as BackendTypes>::Device::default();
+        let (fx, fy) = node_exclusion::<Bk>(
             Tensor::<Bk, 1>::from_floats(xs, &dev),
             Tensor::<Bk, 1>::from_floats(ys, &dev),
             p,
@@ -176,6 +357,41 @@ mod tests {
         let (fx, fy) = run::<B>(&[2.0], &[3.0], RepulsionParams::default());
         assert!(fx[0].abs() < 1.0e-6 && fy[0].abs() < 1.0e-6);
     }
+
+    #[test]
+    fn node_exclusion_matches_its_hard_floor_and_cutoff_anchor() {
+        // Includes a sub-floor pair and a pair beyond the cutoff. These are
+        // exactly the cases smooth all-pairs repulsion cannot stand in for.
+        let xs = [0.0f32, 2.0, 9.0, 30.0];
+        let ys = [0.0f32, 0.0, 0.0, 0.0];
+        let params = NodeExclusionParams {
+            strength: 64.0,
+            cutoff: 10.0,
+            min_distance: 4.0,
+        };
+        let (bx, by) = run_node_exclusion::<B>(&xs, &ys, params);
+        let (rx, ry) = node_exclusion_reference(&xs, &ys, params).unwrap();
+        for (actual, expected) in bx.iter().zip(&rx) {
+            assert!(
+                (actual - expected).abs() < 1.0e-4,
+                "fx {actual} vs {expected}"
+            );
+        }
+        for (actual, expected) in by.iter().zip(&ry) {
+            assert!(
+                (actual - expected).abs() < 1.0e-4,
+                "fy {actual} vs {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn node_exclusion_rejects_mismatched_position_components() {
+        assert!(matches!(
+            node_exclusion_reference(&[0.0], &[0.0, 1.0], NodeExclusionParams::default()),
+            Err(RepulsionInputError::PositionLengthMismatch { xs: 1, ys: 2 })
+        ));
+    }
 }
 
 #[cfg(all(test, feature = "field-burn-wgpu"))]
@@ -210,6 +426,23 @@ mod tests_wgpu {
         )
     }
 
+    fn run_node_exclusion<B: Backend>(
+        xs: &[f32],
+        ys: &[f32],
+        params: NodeExclusionParams,
+    ) -> (Vec<f32>, Vec<f32>) {
+        let dev = <B as BackendTypes>::Device::default();
+        let (fx, fy) = node_exclusion::<B>(
+            Tensor::<B, 1>::from_floats(xs, &dev),
+            Tensor::<B, 1>::from_floats(ys, &dev),
+            params,
+        );
+        (
+            fx.into_data().to_vec::<f32>().unwrap(),
+            fy.into_data().to_vec::<f32>().unwrap(),
+        )
+    }
+
     #[test]
     fn parity_ndarray_wgpu() {
         let (xs, ys) = positions(257);
@@ -225,14 +458,40 @@ mod tests_wgpu {
         assert!(max(&cy, &gy) < 1.0e-3, "fy diverged");
     }
 
-    /// CPU-vs-GPU across N, readback included, GPU warmed. Finds the crossover
-    /// N where the O(N²) GPU pass beats the O(N²) CPU pass (the seiche Barnes-Hut
-    /// comparison is P3). Run:
+    #[test]
+    fn node_exclusion_parity_ndarray_wgpu() {
+        let (xs, ys) = positions(257);
+        let params = NodeExclusionParams {
+            strength: 220_000.0,
+            cutoff: 100.0,
+            min_distance: 8.0,
+        };
+        let (cx, cy) = run_node_exclusion::<Cpu>(&xs, &ys, params);
+        let (gx, gy) = run_node_exclusion::<Gpu>(&xs, &ys, params);
+        let max_relative = |a: &[f32], b: &[f32]| {
+            a.iter()
+                .zip(b)
+                .map(|(x, y)| (x - y).abs() / x.abs().max(y.abs()).max(1.0))
+                .fold(0.0f32, f32::max)
+        };
+        let x_error = max_relative(&cx, &gx);
+        let y_error = max_relative(&cy, &gy);
+        // Pairwise reductions use a different order on the GPU. At this force
+        // scale, the observed drift is below 0.1 percent while the cutoff and
+        // hard-floor branches agree exactly.
+        assert!(x_error < 1.0e-3, "fx relative error too large: {x_error:e}");
+        assert!(y_error < 1.0e-3, "fy relative error too large: {y_error:e}");
+    }
+
+    /// CPU-vs-GPU staging across bounded N, readback included and GPU warmed.
+    /// This measures only the smooth all-pairs helper, not a resident or
+    /// Barnes–Hut crossover. The cap prevents an ignored receipt from allocating
+    /// multi-gibibyte pairwise intermediates. Run:
     /// `cargo test -p quint --features field-burn-wgpu --release -- --ignored timing --nocapture`
     #[test]
     #[ignore]
     fn timing_repulsion_cpu_vs_gpu() {
-        for n in [256usize, 1_000, 4_000, 16_000] {
+        for n in [256usize, 1_000, 4_000] {
             let (xs, ys) = positions(n);
             let _warm = run::<Gpu>(&xs, &ys);
 

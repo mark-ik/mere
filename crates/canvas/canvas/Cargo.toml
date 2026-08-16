@@ -87,7 +87,7 @@ euclid = "0.22"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main", optional = true }
 winit = { workspace = true, optional = true }
-wgpu = { version = "29", default-features = false, features = ["std", "wgsl"], optional = true }
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl"], optional = true }
 png = "0.18"
 
 [lints]

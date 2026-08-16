@@ -28,7 +28,7 @@ rhai = { version = "1.20", default-features = false, features = ["std"], optiona
 # The resident lane's device types. The device itself is always the
 # host's: quint never boots one, because a second device on the same
 # adapter cannot share a buffer with the renderer.
-wgpu = { version = "29", default-features = false, features = ["wgsl"], optional = true }
+wgpu = { version = "30", default-features = false, features = ["wgsl"], optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 # Resident planes are allocated by CubeCL, then viewed by Burn and raw
 # wgpu consumers. This is the direction CubeCL supports without a copy:
@@ -70,7 +70,7 @@ serde_json = "1.0"
 # backend choice to whichever host boots the device, and a dev-only
 # feature set does not reach consumers.
 pollster = "0.4"
-wgpu = { version = "29", default-features = false, features = [
+wgpu = { version = "30", default-features = false, features = [
     "dx12",
     "vulkan",
     "metal",

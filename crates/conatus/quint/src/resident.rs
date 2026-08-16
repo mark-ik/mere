@@ -131,6 +131,25 @@ impl Resident {
             .contains(wgpu::Features::PASSTHROUGH_SHADERS)
         {
             let words = wgpu::util::make_spirv_raw(include_bytes!("../shaders/quint_shaders.spv"));
+            // wgpu 30 added `entry_points` to the passthrough descriptor and
+            // its Default is EMPTY, because passthrough skips naga and so
+            // cannot reflect them. Leaving it defaulted compiles fine and then
+            // fails at pipeline creation with "Unable to find entry point".
+            // These three, at threads(256), are `quint-shaders`' own kernels.
+            let entry_points = [
+                wgpu::PassthroughShaderEntryPoint {
+                    name: "repulse".into(),
+                    workgroup_size: (256, 1, 1),
+                },
+                wgpu::PassthroughShaderEntryPoint {
+                    name: "springs".into(),
+                    workgroup_size: (256, 1, 1),
+                },
+                wgpu::PassthroughShaderEntryPoint {
+                    name: "integrate".into(),
+                    workgroup_size: (256, 1, 1),
+                },
+            ];
             // SAFETY: the module is this crate's own committed artifact,
             // built by rust-gpu from `quint-shaders` and validated by
             // spirv-val at build time. Passthrough skips naga entirely,
@@ -138,6 +157,7 @@ impl Resident {
             let module = unsafe {
                 device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
                     label: Some("quint resident kernels (spir-v)"),
+                    entry_points: entry_points.as_slice().into(),
                     spirv: Some(words),
                     ..Default::default()
                 })
@@ -388,8 +408,10 @@ impl Resident {
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("device poll");
         rx.recv().expect("map channel").expect("settle map");
+        // wgpu 30 made `get_mapped_range` fallible; the map_async above
+        // already succeeded, so a failure here is a broken invariant.
         let bits = u32::from_le_bytes(
-            slice.get_mapped_range()[..4]
+            slice.get_mapped_range().expect("settle map range")[..4]
                 .try_into()
                 .expect("four bytes"),
         );
@@ -433,7 +455,7 @@ impl Resident {
             .poll(wgpu::PollType::wait_indefinitely())
             .expect("device poll");
         rx.recv().expect("map channel").expect("readback map");
-        let data = slice.get_mapped_range();
+        let data = slice.get_mapped_range().expect("readback map range");
         let out = bytemuck::cast_slice(&data).to_vec();
         drop(data);
         staging.unmap();

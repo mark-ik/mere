@@ -36,9 +36,9 @@ tracing = "0.1"
 
 [features]
 default = []
-# Benchmark-only: pulls quint's wgpu N-body pass so the ignored settle bench can
-# inject it as a `RepulsionSolver`. Off by default; the shipped seiche lib never
-# compiles burn (it stays the burn-free integrator). (burn brief Lane 5 — P3.)
+# Benchmark-only: pulls quint's WGPU round-trip helper so the ignored bench can
+# stage the exact NodeExclusion law through a `RepulsionSolver`. Off by default;
+# the shipped seiche lib never compiles Burn and remains the burn-free integrator.
 gpu-bench = ["quint/field-burn-wgpu"]
 
 [dev-dependencies]

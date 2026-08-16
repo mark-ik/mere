@@ -42,6 +42,8 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
         power_preference: wgpu::PowerPreference::HighPerformance,
         compatible_surface: None,
         force_fallback_adapter: false,
+        // wgpu 30 limit bucketing, off so the test sees real limits.
+        apply_limit_buckets: false,
     }))
     .ok()?;
     // Ask for passthrough where the adapter has it, so the receipts

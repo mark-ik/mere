@@ -4,9 +4,10 @@
 //! (Gaussian, Linear, Disk, analytic gradient where available); arbitrary
 //! compositions fall through to a finite-difference gradient.
 //!
-//! This is the default backend. The future Burn-wgpu backend (gated by the
-//! `field-burn` feature) will lower an entire expression to a fused tensor
-//! program for vectorised evaluation across many points; see `lower_burn`.
+//! This is the default backend. The optional Burn backend lowers an entire
+//! expression to a fused tensor program for vectorised evaluation across many
+//! points: `field-burn` selects portable ndarray, and `field-burn-wgpu` selects
+//! WGPU. See `lower_burn`.
 
 use crate::ast::{Falloff, ScalarField, VectorField};
 use crate::registry::{FieldDef, FieldRegistry};

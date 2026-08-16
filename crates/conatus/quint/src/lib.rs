@@ -20,9 +20,10 @@
 //! The default evaluator in [`eval`] is a pure-Rust analytic + finite-difference
 //! pass: closed forms are used for known kernels (Gaussian, Linear, Disk,
 //! analytic gradient where available), with a finite-difference fallback for
-//! arbitrary compositions. A future Burn-wgpu backend (gated by the
-//! `field-burn` feature) will lower an entire field expression to a fused
-//! tensor program for vectorised evaluation; see `lower_burn`.
+//! arbitrary compositions. The optional Burn backend lowers an entire field
+//! expression to a fused tensor program for vectorised evaluation; use
+//! `field-burn` for portable ndarray evaluation and `field-burn-wgpu` for a
+//! WGPU backend. See `lower_burn`.
 
 // The scalar/vector field AST is a portable `numen` primitive (`numen::field_ast`).
 // quint re-exports it as `ast` so internal `crate::ast::` paths and external

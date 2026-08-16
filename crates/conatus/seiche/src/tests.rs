@@ -62,9 +62,9 @@ fn radius_from_origin(sim: &Simulation, a: NodeKey) -> f32 {
 /// fixed amount in +x — a force the symmetric naive scan can never produce, so
 /// its footprint proves the solver's output reached the bodies.
 fn recording_push_solver(calls: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> RepulsionSolver {
-    std::sync::Arc::new(move |xs: &[f32], _ys: &[f32], _s: f32, _m: f32| {
+    std::sync::Arc::new(move |xs: &[f32], _ys: &[f32], _request: RepulsionRequest| {
         calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        (vec![1_000_000.0; xs.len()], vec![0.0; xs.len()])
+        RepulsionForces::new(xs.len(), vec![1_000_000.0; xs.len()], vec![0.0; xs.len()])
     })
 }
 
@@ -116,10 +116,29 @@ fn repulsion_solver_routes_only_above_threshold() {
     );
 }
 
-/// End-to-end settle timing: naive CPU repulsion vs the quint wgpu solver,
-/// at a large node count. Times whole ticks — rapier's step is identical both
-/// ways, so the delta is the repulsion step moving off the CPU. Ignored + behind
-/// `gpu-bench` (the only path that compiles burn into seiche's build). Run:
+#[test]
+fn repulsion_solver_output_is_checked_before_rapier_sees_it() {
+    assert!(matches!(
+        RepulsionForces::new(2, vec![1.0], vec![0.0, 0.0]),
+        Err(RepulsionSolverError::OutputLength {
+            expected: 2,
+            x: 1,
+            y: 2,
+        })
+    ));
+    assert!(matches!(
+        RepulsionForces::new(1, vec![f32::NAN], vec![0.0]),
+        Err(RepulsionSolverError::NonFinite {
+            component: RepulsionComponent::X,
+            index: 0,
+        })
+    ));
+}
+
+/// End-to-end staging timing: CPU `NodeExclusion` vs the identical Burn WGPU
+/// round trip. This is deliberately not a resident-GPU benchmark: full position
+/// uploads and force readbacks remain in the timed work. Ignored + behind
+/// `gpu-bench` (the only path that compiles Burn into seiche's build). Run:
 /// `cargo test -p seiche --features gpu-bench --release -- --ignored settle_timing --nocapture`
 #[cfg(feature = "gpu-bench")]
 #[test]
@@ -128,18 +147,23 @@ fn settle_timing_naive_vs_gpu_solver() {
     use std::sync::Arc;
 
     const TICKS: usize = 20;
-    let solver: RepulsionSolver = Arc::new(|xs: &[f32], ys: &[f32], strength: f32, min_d: f32| {
-        quint::forces::repulsion_wgpu(
+    let solver: RepulsionSolver = Arc::new(|xs: &[f32], ys: &[f32], request: RepulsionRequest| {
+        quint::forces::node_exclusion_wgpu_roundtrip(
             xs,
             ys,
-            quint::forces::RepulsionParams {
-                strength,
-                softening: min_d,
+            quint::forces::NodeExclusionParams {
+                strength: request.strength,
+                cutoff: request.cutoff,
+                min_distance: request.min_distance,
             },
         )
+        .map_err(|error| RepulsionSolverError::Backend(error.to_string()))
+        .and_then(|(fx, fy)| RepulsionForces::new(xs.len(), fx, fy))
     });
 
-    for n in [2_000usize, 4_000, 8_000, 16_000] {
+    // This staging helper materializes O(N²) tensor intermediates. Stop at the
+    // bounded receipt size rather than making an ignored test allocate GiBs.
+    for n in [1_000usize, 2_000, 4_000] {
         let nodes = n_nodes(n);
         let build = || {
             let mut sim = Simulation::new();
@@ -167,7 +191,7 @@ fn settle_timing_naive_vs_gpu_solver() {
         let gpu_ms = t.elapsed().as_millis() as f64 / TICKS as f64;
 
         println!(
-            "N={n}: naive-cpu={cpu_ms:.2}ms/tick gpu-solver={gpu_ms:.2}ms/tick ({:.2}x)",
+            "N={n}: cpu={cpu_ms:.2}ms/tick burn-roundtrip={gpu_ms:.2}ms/tick ({:.2}x)",
             cpu_ms / gpu_ms
         );
     }

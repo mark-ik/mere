@@ -15,9 +15,9 @@ from any graph or mints them directly. seiche never inspects them.
 | `Simulation` | The rapier world, the `NodeKey` to `RigidBodyHandle` map, the registered forces, and the scene / fluid / emitter tiers. `Send`, so it can run on its own thread. |
 | `Force` | `fn apply(&self, ctx: &mut ForceContext<'_>, dt: f32)`. Registered forces are applied in registration order each tick, before the step. |
 | `ForceContext<'a>` | Per-tick view a force sees: `bodies`, `colliders`, `joints`, `bodies_by_node`, `edges`, `repulsion_solver`, `gpu_repulsion_threshold`. |
-| `RepulsionSolver` | `Arc<dyn Fn(&[f32], &[f32], f32, f32) -> (Vec<f32>, Vec<f32>)>`. A host-injected pairwise-repulsion closure `NodeExclusion` routes to above a node-count threshold. |
+| `RepulsionSolver` | `Arc<dyn Fn(&[f32], &[f32], RepulsionRequest) -> Result<RepulsionForces, RepulsionSolverError>>`. A validated host staging closure; `NodeExclusion` routes to it above a host-selected threshold and falls back if it fails. |
 | `NODE_BODY_RADIUS` / `NODE_BODY_DENSITY` | `18.0` and `0.001`, chosen so a node's mass is about 1.0. |
-| `DEFAULT_GPU_REPULSION_THRESHOLD` | `1_000` nodes. |
+| `DEFAULT_GPU_REPULSION_THRESHOLD` | `1_000` nodes, a host-configurable staging guard rather than a residency crossover. |
 
 ## Modules
 
@@ -64,9 +64,10 @@ Writing settled positions back into the host's own graph is the host's job.
 
 ## Features
 
-`gpu-bench` pulls `quint/field-burn-wgpu` so an ignored settle benchmark can
-inject the wgpu N-body pass as a `RepulsionSolver`. Off by default; the shipped
-library does not compile burn.
+`gpu-bench` pulls `quint/field-burn-wgpu` so an ignored benchmark can stage the
+exact `NodeExclusion` law through a WGPU CPU-GPU-CPU round trip. It is not the
+resident simulation path. Off by default; the shipped library does not compile
+Burn.
 
 ## Dependencies
 

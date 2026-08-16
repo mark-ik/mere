@@ -1,0 +1,361 @@
+# Mere projection grammar catalog
+
+Status: research catalog and boundary map  
+Date: 2026-08-15  
+Scope: portable graph readings, visual encodings, arrangements, realization, and interaction  
+Supersedes as a catalog: `2026-08-13_scenograph_content_catalog.md`  
+Incorporates: the projection-engine, graph-projections, Scenograph expansion, node-representation, and field-region research listed under [Related Mere research](#related-mere-research)
+
+## Ruling
+
+Mere should not define a graph as a node-link picture.
+
+A graph is an addressable set of entities, relations, fields, and nested spaces. A projection chooses what to read from that authority and how to make it legible. A node can become a card, bar, matrix cell, map symbol, text row, image, nested canvas, or invisible grouping boundary. A relation can become a stroke, ribbon, matrix cell, adjacency, containment, alignment, order, or shared visual channel. Derived marks such as axes and aggregate bars can exist in the projection without pretending to be authoritative graph entities.
+
+This is why an Excel-style chart, a Mermaid-style diagram, and Mere's current spatial graph can belong to the same system. They do not need a common appearance. They need a common account of:
+
+1. what source facts they read;
+2. what projected objects they derive;
+3. which encodings and arrangements they apply;
+4. how a projected object maps back to source authority;
+5. which interactions are permitted;
+6. how the result is realized, including a static or frozen realization.
+
+The catalog is therefore a grammar of projection capabilities. Named scenes remain useful as product recipes composed from that grammar.
+
+## The projection stack
+
+```text
+authority -> reading -> encoding -> arrangement -> scene -> realization
+                |                                      |
+                +---------- intents and provenance ----+
+```
+
+| Layer | Owns | Does not own |
+| --- | --- | --- |
+| Authority | Stable source identity, entities, relations, fields, values, mutations | Screen geometry |
+| Reading | Selection, traversal, grouping, aggregation, derivation, ordering, faceting | Persistent source meaning |
+| Encoding | Marks, visual channels, guides, relation forms, representation choices | Layout solving |
+| Arrangement | Positions, sizes, paths, routing constraints, nesting geometry | Product commands |
+| Scene | Portable projected instances, spaces, transforms, footprints, routes, regions, provenance | Renderer resources or source mutation |
+| Realization | DOM, SVG, canvas, GPU, terminal, image, print, accessibility tree | Graph authority |
+| Intent | Select, navigate, filter, edit, annotate, reproject, direct manipulation | Silent scene mutation presented as source truth |
+
+Interaction is orthogonal to realization. The same scene may be interactive in Mere, read-only in a remote viewer, or frozen into SVG, PNG, PDF, or an accessible table. `frozen` is a realization policy, not an arrangement mode.
+
+For movable spatial projections, the useful placement policies are:
+
+- **Free:** the solver supplies a stable initial arrangement; direct manipulation may establish a new position.
+- **Anchored:** the solver supplies a home position; displacement is temporary and the item returns toward home.
+- **Pinned:** an explicit constraint fixes an item until the pin is removed. Pinning is independent of free versus anchored behavior.
+
+## Portable graph vocabulary
+
+The following concepts are broad enough to support spatial graphs, charts, diagrams, maps, and documents without importing product meaning into Scenograph.
+
+### Authority elements
+
+- **Entity:** an addressable source object. Mere commonly presents it as a node.
+- **Relation:** an addressable or derived association among source objects. Multiple reasons remain multiple relations even when a renderer visually bundles them.
+- **Field:** a value or influence defined globally, over a region, on a polygon, or relative to an entity. Numen already establishes fields as a graph element beside nodes and edges.
+- **Space:** a nested coordinate or containment domain.
+- **Value:** quantitative, ordinal, nominal, temporal, geographic, textual, media, structural, uncertain, or missing data read from authority.
+
+### Projected elements
+
+- **Instance:** a source-backed appearance. One source object may have multiple projected instances.
+- **Derived mark:** a projected object computed from one or more source facts, such as a histogram bin, aggregate bar, regression line, hull, axis, or legend entry.
+- **Guide:** an explanation of an encoding, including axes, ticks, grids, legends, labels, titles, reference lines, and annotations.
+- **Region:** a projected area used for grouping, navigation, hit testing, or explanation.
+- **Backdrop:** non-authoritative scene context such as a basemap, page, board, image, grid, zone, or field raster.
+- **Intent target:** the source identity, reading parameter, or projection control affected by interaction.
+
+The distinction between instances and derived marks matters. A bar representing the count of twenty nodes is real and selectable in the scene, but it is not automatically a twenty-first source node.
+
+## Capability grammar
+
+### 1. Readings and operators
+
+A reading determines which graph facts are exposed to a projection and which values are derived.
+
+| Family | Operators | Typical proofs |
+| --- | --- | --- |
+| Selection | select, filter, search, sample, top-k | Spotlight, query results, focus plus context |
+| Ordering | sort, rank, stable order, domain order | Table, bar chart, lanes, timeline |
+| Grouping | group, partition, nest, cluster, facet | Small multiples, swimlanes, treemap |
+| Quantitative derivation | aggregate, count, sum, average, extent, normalize, stack | Bar, histogram, stacked area, Sankey |
+| Binning and windows | bin, rolling window, cumulative value, lag, lead | Histogram, sparkline, activity trail |
+| Relational traversal | neighborhood, path, component, reachability, degree | Orrery, ego graph, route view |
+| Hierarchy | parent, descendants, depth, leaves, aggregate subtree | Tree, treemap, sunburst, pack |
+| Temporal | snapshot, diff, interval, duration, trail, freshness | Chronicle, Gantt, provenance trail |
+| Geographic | coordinates, projection, bounds, distance, region membership | Atlas, route map, choropleth |
+| Set and membership | intersection, overlap, inclusion, exclusion | Venn-like views, UpSet-style matrix |
+| Statistical | distribution, quantile, correlation, regression, uncertainty | Box plot, scatterplot, error bands |
+| Provenance | source, derivation, confidence, freshness, author | Audit view, evidence trail |
+| Repetition | facet, repeat, layer, concatenate | Dashboard, comparison grid, small multiples |
+
+These are reading operations, not necessarily persistent graph mutations. A host may materialize a result when product semantics require it.
+
+### 2. Marks
+
+Marks are the drawable forms used by an encoding. Mere's current `sceno::Representation` covers glyphs, cards, sprites, snapshots, live panes, and an open representation. A general chart and diagram grammar also needs derived marks that are not forced into node representations.
+
+| Mark | Common uses | Source mapping |
+| --- | --- | --- |
+| Symbol or glyph | Network node, map point, scatter point | One entity or derived sample |
+| Text | Label, row, annotation, document fragment | Entity, value, or derived explanation |
+| Rectangle or cell | Bar, heatmap cell, matrix cell, treemap tile | Entity, relation, bin, or aggregate |
+| Line, rule, or path | Trend, reference, route, connector | Relation, series, guide, or derived path |
+| Area | Distribution, interval, stacked quantity, region | Series, field, uncertainty, or group |
+| Arc or sector | Polar chart, sunburst, gauge, chord endpoint | Entity, group, or quantitative value |
+| Ribbon | Flow, bundled relation, chord | Relation set or aggregate flow |
+| Image or media | Thumbnail, sprite, geographic raster | Entity, backdrop, or field |
+| Snapshot | Frozen web surface or document preview | Source-backed instance |
+| Live pane | Interactive web surface or nested application | Source-backed instance |
+| Group or nested canvas | Compound node, facet, diagram frame | Space, group, or derived partition |
+| Custom/open mark | Domain-specific renderer contribution | Explicit source or derivation provenance |
+
+### 3. Visual channels
+
+An encoding maps values to channels. Effectiveness depends on the task and data type, so channels should remain explicit rather than buried inside named scene code.
+
+- Position: x, y, z, polar angle, radius, geographic coordinate.
+- Size: width, height, area, length, radius, stroke width.
+- Color: hue, luminance, saturation, opacity.
+- Form: shape, icon, texture, line style, corner treatment.
+- Order: rank, sequence, layer, depth, draw order.
+- Motion: velocity, direction, pulse, transition, trail.
+- Repetition: facet, panel, small multiple, repeated glyph.
+- Spatial relation: containment, adjacency, overlap, alignment, distance.
+- Media state: still image, live surface, waveform, playback state.
+
+Channels need declared domains, ranges, missing-value behavior, and legends or descriptions when their meaning is not self-evident.
+
+### 4. Guides and backdrops
+
+Charts expose a gap in the older catalog: scales and guides are first-class projection material.
+
+- **Scale:** maps a data domain to a visual range. Scale types include continuous, logarithmic, temporal, ordinal, band, threshold, geographic, and custom mappings.
+- **Axis:** explains a positional scale through ticks, values, labels, and title.
+- **Legend:** explains color, size, shape, texture, or line encodings.
+- **Grid or reference:** supports comparison against values, thresholds, baselines, or regions.
+- **Annotation:** relates explanatory text or geometry to projected objects.
+- **Basemap or raster:** supplies geographic or field context without becoming graph authority.
+- **Page, board, lane, or zone:** supplies a tangible frame and may participate in collision or placement constraints.
+
+A backdrop may be visible, collidable, both, or neither. Those properties belong to the scene or realization contract. Product significance remains in the host.
+
+### 5. Relation forms
+
+A relation is not synonymous with a line.
+
+| Form | Best fit |
+| --- | --- |
+| Straight, curved, stepped, or polyline stroke | Ordinary node-link relations |
+| Directed or labeled connector | Dependency, transition, causality |
+| Port-anchored and orthogonal route | Circuit, architecture, flowchart |
+| Parallel or fanned routes | Multiple distinct relations between endpoints |
+| Bundled route | Dense overview where individual provenance remains recoverable |
+| Arc | Ordered or genomic relationships |
+| Ribbon | Aggregate flow or chord relation |
+| Matrix cell | Dense pairwise relations |
+| Adjacency | Tiling, sequence, topology |
+| Containment | Hierarchy, membership, compound nodes |
+| Alignment or shared channel | Correlation, common category, synchronized event |
+| Order | Sequence, priority, dependency without an explicit stroke |
+
+The portable contract should preserve relation identity and endpoints even when the realization replaces a stroke with another form.
+
+### 6. Arrangement families
+
+An arrangement computes geometry under constraints. A reading may support several arrangements, and an arrangement may support several marks.
+
+| Family | Variants | Current Mere position |
+| --- | --- | --- |
+| Authored spatial | Free placement, pinned board, tabletop | Expressible through positions and constraints; product recipes remain host-owned |
+| Force and constraint | Spring, collision, gravity, clusters | Landed in Seiche; portable score promotion requires a forcing consumer |
+| Grid and stack | Rows, columns, masonry, ordered stack | Landed in the local arrangement registry |
+| Axial and lanes | Timeline, Gantt, swimlane, Kanban | Timeline and Kanban are local registry entries; generalized axes and guides are a gap |
+| Radial and spiral | Radial, phyllotaxis, polar, concentric | Radial and spiral are landed locally; spiral is portable in `score::Arrangement` |
+| Tree and DAG | Tidy tree, cluster, layered DAG, radial tree | Contract gap pending hierarchy and schematic proofs |
+| Space-filling hierarchy | Treemap, partition, sunburst, pack | Contract gap pending a hierarchy proof |
+| Matrix | Adjacency matrix, heatmap, table matrix | Expressible as a reading; general cell marks and guides remain a gap |
+| Flow | Sankey, alluvial, river | Contract gap pending aggregate-flow proof |
+| Circular relation | Chord, arc diagram | Expressible in scene geometry; reusable recipe not landed |
+| Geographic | Map projection, region, route, hull | Geographic and hull arrangements are portable; basemap/backdrop remains a gap |
+| Cartesian statistical | Bar, line, area, scatter, distribution | Contract gap in derived marks, scales, and guides |
+| Tiling and packing | Mosaic, bin pack, Voronoi, Penrose | Penrose is landed locally; generic tiling remains recipe-level |
+| Generative | L-system, procedural field, semantic embedding | L-system and semantic embedding are local registry entries |
+| Nested and faceted | Small multiples, compound nodes, nested canvases | Nested spaces are portable; facet composition needs a forcing proof |
+| Three-dimensional | Spatial volume, layered depth, immersive graph | Deferred until a real second consumer forces portable depth semantics |
+
+Portable `score::Arrangement` currently names Spiral, Board, Geographic, and Hulls. Mere's local arrangement registry is intentionally broader. The difference is evidence: a local implementation may be useful before it has earned a portable wire contract.
+
+### 7. Interaction and change over time
+
+Interaction acts on source authority, reading parameters, projection constraints, or view state. Each command should say which.
+
+| Intent | Likely target |
+| --- | --- |
+| Select, inspect, compare | View state plus source identity |
+| Navigate, open, focus | Host command against source identity |
+| Filter, sort, group, facet | Reading parameters |
+| Brush, zoom, pan | View or reading parameters |
+| Drill down, roll up | Reading plus nested space |
+| Annotate, connect, edit value | Source authority through host policy |
+| Drag free item | Placement constraint or product-owned position |
+| Displace anchored item | Temporary scene state, then return to solved home |
+| Pin or unpin | Explicit placement constraint |
+| Change mark, encoding, or arrangement | Projection specification |
+| Play, scrub, compare epochs | Temporal reading and scene epoch |
+
+Motion has several meanings and should not collapse into one physics switch:
+
+- solver motion toward an arrangement;
+- direct manipulation;
+- transition between projections or epochs;
+- data-encoded motion;
+- ambient product behavior.
+
+Scenotime can carry portable epochs, diffs, and picking state. Hosts and renderers decide the interpolation and product meaning.
+
+## Projection family catalog
+
+These families are capability tests. They are not mutually exclusive chart types and they do not require one adapter per family.
+
+| Family | Makes legible | Reading and encoding | Mere status | Forcing proof |
+| --- | --- | --- | --- | --- |
+| Orrery or node-link | Local topology, paths, clusters | Entities as glyphs/cards; relations as routes | Landed core case | Keep as baseline, not universal form |
+| Dense relation matrix | Pairwise presence, strength, symmetry | Ordered endpoints on two axes; relations as cells | Expressible, contract gap in marks/guides | Same relation set as node-link, with selectable cells and source provenance |
+| Table or facet matrix | Exact values across heterogeneous entities | Rows or panels by entity; fields as columns/channels | Expressible | Mixed node types projected without flattening authority |
+| Cartesian chart | Comparison, trend, correlation | Quantitative/temporal scales; bars, points, lines, areas | Contract gap | One heterogeneous fixture as bar, scatter, and line readings |
+| Distribution | Shape, spread, outliers, uncertainty | Binning, quantiles, density; bars, boxes, areas | Contract gap | Derived marks retain input provenance and accessible values |
+| Timeline or schedule | Order, interval, concurrency, change | Time axis; points, intervals, lanes, trails | Partly landed | Entities and relations survive scrubbing across epochs |
+| Hierarchy node-link | Parentage, depth, branching | Hierarchy reading; tree or layered arrangement | Contract gap | Same hierarchy as tree and radial tree |
+| Hierarchy space-filling | Part-to-whole and subtree weight | Aggregate hierarchy; rectangles, sectors, circles | Contract gap | Same hierarchy as treemap and sunburst without source rewrite |
+| Flow | Quantity moving through stages | Aggregate paths; widths and ribbons encode quantity | Contract gap | Sankey-style projection with traceable constituent relations |
+| Circular or chord | Pairwise exchange among ordered groups | Polar positions; arcs or ribbons | Expressible recipe | Chord and arc views from the same grouped relation reading |
+| Set membership | Overlap and combinations | Set derivation; regions or membership matrix | Contract gap | Venn-like and matrix realization from one membership reading |
+| Geographic | Location, route, region, spatial field | Geographic transform; symbols, regions, paths, raster | Partly landed | Basemap plus selectable graph entities and source-safe routes |
+| Schematic or flowchart | Ports, direction, stages, constraints | Typed entities; port-anchored orthogonal connectors | Contract gap | Flowchart and architecture diagram with stable ports and labels |
+| Sequence or state | Ordered interaction and transitions | Participants/states plus messages or transitions | Contract gap | Sequence and state views preserve transition identity |
+| Authored board or tabletop | Deliberate composition and tangible grouping | Authored positions, zones, props, collision | Expressible product recipe | Cleromancy-style layout stays authored without a generic spread DSL |
+| Document or text | Narrative order, quotation, reference | Text blocks, media, links, annotations | Expressible | Source-backed document fragments coexist with graph navigation |
+| Faceted small multiples | Comparison across groups or readings | Repeated subscenes with shared or independent scales | Contract gap | One score carries nested spaces and stable shared scales |
+| Semantic embedding | Similarity and neighborhoods | Vector reading; positions or contours | Landed locally | Second dataset proves the arrangement is not domain-bound |
+| Provenance or trail | Origin, derivation, confidence, freshness | Temporal/provenance reading; paths, layers, annotations | Expressible | Derived scene objects expose their sources and transformations |
+| Three-dimensional or immersive | Occlusion, volume, spatial depth | 3D transform, depth, spatial interaction | Defer | A real non-demo consumer and accessible alternate realization |
+
+## Prior named scenes, reclassified
+
+The earlier Scenograph catalog's names remain useful for product design. They should not become peer-level portable primitives.
+
+| Prior scene | Grammar composition | Classification |
+| --- | --- | --- |
+| Mosaic | Tiling arrangement + image/snapshot marks + optional groups | Product recipe |
+| Atlas | Geographic reading + map projection + basemap + symbols/routes/regions | Product recipe; backdrop contract gap |
+| Tabletop | Authored board + zones/props + collision + free/pinned items | Product recipe |
+| Chronicle | Temporal reading + axis/lanes + epochs/trails | Product recipe; guide gap |
+| Circuit | Layered or authored arrangement + ports + orthogonal routes | Product recipe; port/routing gap |
+| Loom | Ordered lanes + flow quantities + ribbons/routes | Product recipe; flow gap |
+| Spotlight | Neighborhood reading + radial arrangement + focus/context channels | Product recipe |
+| Rosette | Polar arrangement + arcs/ribbons + grouped relation reading | Product recipe |
+| Fog | Exploration state + field/backdrop + progressive disclosure | Product-owned semantics |
+| Grove | Temporal/freshness reading + spiral or organic arrangement + media marks | Product-owned semantics |
+
+This reclassification keeps the evocative scene names available to Merecat while Scenograph stays usable by unrelated hosts.
+
+## Current boundary map
+
+### Already present
+
+- `sceno::Scene` carries separate source and instance identity, nested spaces, projected items, transforms, footprints, representation requests, layers, visibility, hit policy, scalar channels, routed relations, and regions.
+- `sceno::Score` supplies a portable arrangement vocabulary and data needed for deterministic solving.
+- Scenomise owns placement; Scenotime owns portable epochs, diffs, and picking.
+- Mere's local arrangement registry includes Grid, Radial, Stack, Phyllotaxis/Spiral, Timeline, Kanban, Penrose, L-system, and Semantic Embedding. Force physics lives in Seiche.
+- Cartography provides a representation registry and host-selectable profiles rather than hardwiring one face for every graph class.
+- Canvas separates face, body, collider, placement, and behavior concerns.
+- Numen defines fields with global, regional, node-attached, and polygon extents plus lifecycle.
+- Platen is the projection compiler in Mere's composition spine. It is not graph authority.
+
+### Contract gaps exposed by the catalog
+
+1. **Derived marks, scales, and guides.** Bar, line, scatter, histogram, and accessible chart proofs need scene objects that can cite their derivation without masquerading as graph nodes.
+2. **Relation endpoints and routing constraints.** Schematics need ports, endpoint anchors, labels, and orthogonal routing while preserving relation identity.
+3. **Backdrop and underlay data.** Atlas, Tabletop, field rasters, and remote viewing need portable scene context with explicit visibility, collision, hit, and provenance policies.
+4. **Facet and shared-scale composition.** Small multiples need nested scenes with declared shared or independent domains.
+5. **Accessible semantic realization.** A frozen scene needs structure, names, descriptions, values, relations, and a long-form or tabular alternate where the visual alone is insufficient.
+
+These are research findings, not an instruction to enlarge the frozen Scenograph contract immediately. Each addition needs a projection proof that fails cleanly without it.
+
+## Promotion rules
+
+A capability enters a portable contract only when a named consumer forces it.
+
+For every proposed addition, record:
+
+- task or inference it serves;
+- required source facts;
+- reading and derivation rules;
+- marks, channels, guides, and arrangement;
+- source and derivation provenance;
+- interaction and writeback policy;
+- static and accessible realization;
+- first forcing consumer;
+- second heterogeneous consumer;
+- receipt proving deterministic portable behavior.
+
+The first promotion suite should use one heterogeneous fixture and project it as:
+
+1. a node-link orrery;
+2. a dense relation matrix;
+3. a Cartesian chart with aggregate derived marks;
+4. a hierarchy view such as a tree or treemap;
+5. a schematic with ports and orthogonal routes.
+
+The source authority must remain unchanged across these projections. Each proof is complete when:
+
+- projected instances and derived marks retain source or derivation provenance;
+- a Graphshell carrier round-trips score and scene data deterministically;
+- a second dataset uses the same recipe without product-specific fields;
+- interactive intents route through host authority rather than mutating portable scene facts silently;
+- the same scene can produce an interactive realization and a frozen realization;
+- the frozen result has a navigable semantic structure and sufficient text or tabular description;
+- no product term or renderer resource leaks into portable types;
+- the old duplicated implementation is removed when a portable primitive is promoted.
+
+Do not add a primitive until one of these proofs fails without it. A catalog is a boundary map, not a cleanup queue or implementation schedule.
+
+## What the external systems teach us
+
+- [Vega](https://vega.github.io/vega/docs/specification/) demonstrates a declarative grammar spanning data, transforms, scales, projections, axes, legends, marks, and signals. Mere needs the same separation of concerns, while retaining graph identity and host authority.
+- [Observable Plot](https://observablehq.com/plot/) shows the value of composing layered marks rather than treating every visual form as a separate chart type.
+- [Graphviz DOT](https://graphviz.org/doc/info/lang.html) and the [Graphviz layout catalog](https://graphviz.org/docs/layouts/) show that graph structure, subgraphs, clusters, constraints, and layout algorithms can remain distinct.
+- [Eclipse Layout Kernel](https://eclipse.dev/elk/reference.html) shows the depth required by serious diagram layout: hierarchy, ports, labels, edge routing, fixed positions, and algorithm-specific options.
+- [Mermaid](https://mermaid.js.org/intro/) is evidence that one textual authoring surface can cover flowcharts, sequence, class, state, entity-relationship, schedules, Sankey, architecture, radar, treemap, and other families. The transferable lesson is a shared semantic pipeline, not a universal diagram syntax for Mere.
+- [D3 hierarchy](https://d3js.org/d3-hierarchy), [D3 shape](https://d3js.org/d3-shape), and [D3 chord](https://d3js.org/d3-chord) show that hierarchy transforms, shape generators, and arrangements remain reusable when marks are not fused to data authority.
+- [deck.gl](https://deck.gl/docs) demonstrates the utility of a data-to-layer-to-view pipeline for maps and large GPU scenes.
+- [Cytoscape.js](https://js.cytoscape.org/) demonstrates graph styling, selector-driven presentation, compound nodes, and replaceable layout extensions.
+- [Munzner's nested model](https://www.cs.ubc.ca/labs/imager/tr/2009/NestedModel/) separates domain problems, abstract tasks and data, visual encoding and interaction, and algorithms. That separation closely matches the projection stack in this document.
+- [Brehmer and Munzner's task typology](https://www.cs.ubc.ca/labs/imager/tr/2013/MultiLevelTaskTypology/) supplies a useful why, how, and what account for catalog entries.
+- [Mackinlay's APT paper](https://courses.ischool.berkeley.edu/i247/f05/readings/Mackinlay_APT_TOG86.pdf) distinguishes expressive from effective graphical presentations. Mere should be able to express a projection without claiming every encoding is equally effective.
+- [Cleveland and McGill](https://www.tandfonline.com/doi/abs/10.1080/01621459.1984.10478080) ground channel choice in graphical perception rather than novelty.
+- [WAI guidance for complex images](https://www.w3.org/WAI/tutorials/images/complex/) and [Graphics ARIA](https://www.w3.org/TR/graphics-aria-1.0/) show that charts, maps, and diagrams require structured descriptions and navigable semantics, including nested graphics. [SVG 2 structure](https://www.w3.org/TR/SVG/struct.html) supplies grouping, titles, and descriptions for one realization target.
+
+## Related Mere research
+
+- [`2026-08-13_scenograph_content_catalog.md`](2026-08-13_scenograph_content_catalog.md): prior named-scene and representation inventory; retained as historical research.
+- [`2026-08-10_scenograph_expansion_brief.md`](2026-08-10_scenograph_expansion_brief.md): expansion candidates and ownership questions.
+- [`2026-07-21_projection_engine_prior_art_brief.md`](2026-07-21_projection_engine_prior_art_brief.md): prior-art comparison for the projection engine.
+- [`2026-06-22_graph_projections_research.md`](2026-06-22_graph_projections_research.md): graph projection families and early taxonomy.
+- [`2026-06-18_node_representation_arrangement_plan.md`](../implementation_strategy/2026-06-18_node_representation_arrangement_plan.md): representation and arrangement implementation seams.
+- [`2026-06-13_scriptable_field_regions_plan.md`](../implementation_strategy/2026-06-13_scriptable_field_regions_plan.md): field and region model.
+- [`2026-07-21_projection_proofs_plan.md`](../implementation_strategy/2026-07-21_projection_proofs_plan.md): proof sequence and portable projection discipline.
+- [`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md): scene ownership contract.
+- [`2026-07-24_scenograph_freeze_plan.md`](../implementation_strategy/2026-07-24_scenograph_freeze_plan.md): frozen contract and verification boundary.
+
+## Closing thesis
+
+Mere does not need to predict every future diagram. It needs a small projection grammar that preserves identity, derivation, relation, field, space, interaction authority, and semantic accessibility while allowing radically different visual realizations.
+
+That makes charts and diagrams ordinary projections of graph authority. It also leaves room for Merecat's scenes to stay particular, vivid, and product-shaped.
