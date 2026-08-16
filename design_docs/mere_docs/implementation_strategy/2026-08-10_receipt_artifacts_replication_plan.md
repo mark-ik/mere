@@ -495,6 +495,45 @@ receipt directory with manifest and `graph-events.json` is
 
 Found and fixed along the way: the pane's capture rows sat below the fold
 behind the card's value rows; they now come first, because reachability is
-the fact the pane exists to show. Remaining, cross-machine: the same loop
-with `remote-receipt.ps1` fetching from the ThinkPad or iMac — the lane is
-identical from the manifest onward.
+the fact the pane exists to show.
+
+### 6.5 Cross-machine (2026-08-16)
+
+**Fedora ThinkPad — done.** `handoff_circle.scn` ran on `192.168.4.28`'s own
+Wayland screen, its PNG came home, and the local pane now shows
+`hocket · handoff_circle on 192.168.4.28 · ok · Receipt · Passed` with
+`capture 1: 125077 bytes, readable`. That byte count is the whole point: it
+was read back out through the first-party door from the replicating store,
+so it is evidence rather than a claim copied from the manifest.
+
+**Intel iMac — blocked, not on this lane.** Everything up to the app works:
+preflight, attach, PATH, and the build all succeed, and the smoke example
+runs on the iMac's own screen with Metal drawing. The scenario then never
+reaches Done — the process spins in the winit event loop indefinitely. It is
+not the paint-count trap; the example already pumps a redraw per step. A
+genet-side investigation, tracked there rather than here.
+
+**Four defects in `remote-receipt.ps1`, each found by running it rather than
+reading it** (its first real cross-machine use):
+
+1. `systemd-run --user` starts a transient unit that does **not** inherit the
+   ssh shell's cwd, so cargo ran in `$HOME`. Fixed with `--working-directory`.
+2. `launchctl asuser` is root-only and fails over ssh as an ordinary user. It
+   is also unnecessary: the preflight already refuses unless the ssh user IS
+   the console user, and that user's ssh session can open a window on their
+   own screen. The app's blank-frame checks remain the backstop.
+3. A non-interactive ssh shell sources no login profile, so `cargo` was not on
+   PATH on macOS even though installed.
+4. **The lane stopped one step short of its own purpose.** `-IngestStore`
+   stored the blobs but nothing filed the authored events, so a fetched
+   receipt never became a fact in the graph and no card ever appeared — while
+   the run reported success. `-IngestDataRoot` completes the hand-off.
+
+A `-CargoProfile` parameter was added so a warm debug target can be used, with
+the profile recorded in the manifest — a receipt that does not say which
+profile it ran under invites the reader to assume the shipping one.
+
+Also exposed: the Device Receipts pane has **no scroll container**. With a real
+graph the host offers 35 cards and only the first few are reachable at all.
+Receipts now sort first (by the badge the endpoint sends), which makes the pane
+usable, but the missing scroll is a real gap.
