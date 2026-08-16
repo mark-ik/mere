@@ -10,8 +10,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Footprint, Rect, Representation, Size2, SourceRef, Vec2};
 
-/// The first persisted-score wire version.
-pub const SCORE_VERSION: u16 = 1;
+/// The persisted-score wire version.
+///
+/// Version 2 adds [`Score::holds`]. It differs from version 1 in nothing else,
+/// but an adapter that only understands version 1 must reject a version 2
+/// score rather than accept it, because the one thing it would drop is an
+/// authored placement someone asked to be honored. A silently dropped pin is
+/// the failure this field exists to prevent.
+pub const SCORE_VERSION: u16 = 2;
 
 /// A complete, serializable projection request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,6 +29,15 @@ pub struct Score {
     /// Ordered, measured source instances. A source may appear more than
     /// once, which remains distinct from source truth by design.
     pub items: Vec<ScoreItem>,
+    /// Authored placements that outrank the arrangement, keyed by source.
+    ///
+    /// Sparse by construction: an unheld source has no entry, and the common
+    /// case costs one empty vec. Keyed by [`SourceRef`] rather than by item
+    /// index so a hold survives re-ordering, re-solving, and a changed
+    /// authority, which is what lets a citation name a hold without shipping
+    /// the score that contains it.
+    #[serde(default)]
+    pub holds: Vec<HeldPlacement>,
     /// Adapter-stamped input generation, copied into the realized scene.
     pub generation: u64,
 }
@@ -33,7 +48,61 @@ impl Score {
             version: SCORE_VERSION,
             arrangement,
             items: Vec::new(),
+            holds: Vec::new(),
             generation: 0,
+        }
+    }
+
+    /// The hold authored for `source`, if any. First entry wins; a score with
+    /// two holds on one source is malformed and the later one is ignored.
+    pub fn hold_for(&self, source: &SourceRef) -> Option<&HeldPlacement> {
+        self.holds.iter().find(|held| &held.source == source)
+    }
+}
+
+/// How firmly an authored placement must be honored.
+///
+/// The two classes are deliberately unequal, and naming them is the point: a
+/// solver that treats both as suggestions produces the silent-soft failure
+/// where a person pins something, the layout quietly moves it, and nothing
+/// anywhere says so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Hold {
+    /// Best effort. The arrangement seeds from here and relaxation may carry
+    /// it away; moving an anchored item is correct behaviour, not a failure.
+    Anchored,
+    /// Must be honored. The arrangement does not get a vote, and a solver that
+    /// cannot honor it reports rather than repositions.
+    Pinned,
+}
+
+/// One authored placement, outranking whatever the arrangement would choose.
+///
+/// This record is also the unit a scene citation carries as its placement
+/// delta: one serialization of a pin, not two.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeldPlacement {
+    /// Which source this holds. Not an item index: indices move.
+    pub source: SourceRef,
+    /// Where, in the same coordinate space the arrangement places into.
+    pub at: Vec2,
+    pub hold: Hold,
+}
+
+impl HeldPlacement {
+    pub fn pinned(source: SourceRef, at: Vec2) -> Self {
+        Self {
+            source,
+            at,
+            hold: Hold::Pinned,
+        }
+    }
+
+    pub fn anchored(source: SourceRef, at: Vec2) -> Self {
+        Self {
+            source,
+            at,
+            hold: Hold::Anchored,
         }
     }
 }
@@ -209,5 +278,45 @@ mod tests {
         });
         let json = serde_json::to_string(&score).unwrap();
         assert_eq!(serde_json::from_str::<Score>(&json).unwrap(), score);
+    }
+
+    #[test]
+    fn holds_round_trip_and_resolve_by_source() {
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        let pinned = SourceRef::new("fixture", "north");
+        score
+            .holds
+            .push(HeldPlacement::pinned(pinned.clone(), Vec2::new(12.0, -4.0)));
+        score.holds.push(HeldPlacement::anchored(
+            SourceRef::new("fixture", "south"),
+            Vec2::new(0.0, 9.0),
+        ));
+
+        let json = serde_json::to_string(&score).unwrap();
+        assert_eq!(serde_json::from_str::<Score>(&json).unwrap(), score);
+
+        let held = score.hold_for(&pinned).expect("north is held");
+        assert_eq!(held.hold, Hold::Pinned);
+        assert_eq!(held.at, Vec2::new(12.0, -4.0));
+        assert!(score.hold_for(&SourceRef::new("fixture", "east")).is_none());
+        // Same id, different adapter, is a different source.
+        assert!(score.hold_for(&SourceRef::new("other", "north")).is_none());
+    }
+
+    #[test]
+    fn a_version_1_score_still_reads_with_no_holds() {
+        // The wire before holds existed. It must load, and it must load as
+        // "nothing was held", never as "holds unknown".
+        let json = r#"{
+            "version": 1,
+            "arrangement": {"Spiral": {"center": {"x": 0.0, "y": 0.0},
+                "spacing": 40.0, "angle_radians": 2.399963, "curve": "SquareRoot"}},
+            "items": [],
+            "generation": 3
+        }"#;
+        let score: Score = serde_json::from_str(json).unwrap();
+        assert_eq!(score.version, 1);
+        assert_eq!(score.generation, 3);
+        assert!(score.holds.is_empty());
     }
 }

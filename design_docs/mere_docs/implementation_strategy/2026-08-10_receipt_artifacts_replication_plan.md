@@ -465,6 +465,36 @@ title, badges, value rows, and per-capture byte sizes — a size is shown only
 after the bytes were actually read through the resident store, so the pane
 reports reachability, never an advertisement.
 
-**Next (headed):** run the resident host and turnstone together on this
-machine and take the receipt: the pane showing a real remote-receipt card with
-its capture sizes.
+### 6.4 Headed receipt (2026-08-16)
+
+Taken, on this machine, with the whole pipeline live:
+
+1. The installed resident host (scheduled task `graphshell-device-host`) was
+   rebuilt with the app door and swapped in place; its log shows both doors:
+   `door="browser"` and `door="first-party"` on their own pipes.
+2. Turnstone ran `scenarios/device_receipts.scn` (self-drive, no OS input),
+   opening the Device Receipts pane over the live pipe: "Connected. 9
+   card(s) on this device." with the sync card and synced nodes.
+3. That run's own captures became the receipt: a truthful `manifest.json`
+   (real commit, real dirty count, `target: localhost`), `receipt_ingest
+   --data-root` filed it in the host's inbox, and the host's log shows
+   `staged receipt captures into the replicating store staged=2` then
+   `authored a receipt into the personal graph events=9`.
+4. A second scenario run then showed the receipt card itself:
+   `turnstone · device_receipts on localhost · ok · Receipt · Passed ·
+   Dirty checkout`, with `capture 1: 105058 bytes, readable` and
+   `capture 2: 105058 bytes, readable` — sizes read through the resident
+   store over the first-party door on that refresh, plus the blob
+   availability cards naming `laptop`.
+
+The receipt is self-referential on purpose: the card turnstone renders is the
+receipt of its own first run. Captures live in
+`testing/turnstone/images/device-receipts/` (run4 is the finished one); the
+receipt directory with manifest and `graph-events.json` is
+`testing/turnstone/device-receipts-local-2026-08-16/`.
+
+Found and fixed along the way: the pane's capture rows sat below the fold
+behind the card's value rows; they now come first, because reachability is
+the fact the pane exists to show. Remaining, cross-machine: the same loop
+with `remote-receipt.ps1` fetching from the ThinkPad or iMac — the lane is
+identical from the manifest onward.

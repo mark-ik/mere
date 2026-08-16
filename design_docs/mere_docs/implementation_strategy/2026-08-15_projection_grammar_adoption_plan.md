@@ -1,7 +1,8 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status**: design; A0 landed, A6 added, no code target started. Mer3ly ruled
+**Status**: A0 landed; **A6 first slice landed 2026-08-16** (contract half:
+holds in the score, honored by the solver and by relaxation). Mer3ly ruled
 an authority-grade consumer 2026-08-16, which re-gates A1-A4, B1, and C3. Turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
@@ -470,3 +471,37 @@ not settled without it.
   format note (`../technical_architecture/2026-08-16_shelfmark_format_note.md`)
   is the authority; the founding in code waits for the second shipping
   consumer. A6's task text now carries the one-record constraint.
+- 2026-08-16: **A6 first slice landed: the score can hold a placement, and
+  every solver honors it.** The audit found three silent displacement paths,
+  not one. `Placement::Coordinate` was honored by `Geographic` and `Hulls` and
+  silently discarded by `Spiral` (ordinal wins) and `Board` (rank wins), and
+  `relax` moved every item with no notion of a pin at all. All three were the
+  same bug wearing different clothes: the person said where, the layout
+  answered somewhere else, and nothing said so.
+  Decision, write-back versus sidecar: **sidecar, keyed by `SourceRef`**. The
+  stack argued it, per the one-record ruling. A shelfmark cites by source
+  identity, so a per-item field would mean shipping a whole score to cite one
+  pin, defeating the index; item indices move when the authority changes and
+  source ids do not; and pins are sparse, so absence is the free common case.
+  `Score.holds: Vec<HeldPlacement>` is therefore the shelfmark's `placement`
+  delta section verbatim, one serialization of a pin.
+  Landed: `sceno` gains `Hold` (`Anchored` = encourage, `Pinned` = ensure),
+  `HeldPlacement { source, at, hold }`, `Score.holds` (serde-default) and
+  `Score::hold_for`; `SCORE_VERSION` 1 -> 2, because an adapter that only knows
+  v1 must reject rather than silently drop the one field that carries what
+  someone asked for. `scenomise::solve` consults `hold_for` ahead of all four
+  arrangement families; `relax_holding` leaves held instances where they stand
+  while they still push their neighbours (the asymmetry is the meaning of a
+  hard hold), with `relax` preserved as the nothing-held wrapper;
+  `pinned_instances` resolves holds to instances through interned sources, so
+  a source appearing twice pins both.
+  Receipts: 8 new tests, `sceno` 19 -> 21 and `scenomise` 15 -> 21, all green,
+  plus `chirograph` (21) and `mere-cartography` (25) unaffected. A v1 score
+  still loads and loads as "nothing held"; an unheld score places exactly as
+  before, so no existing determinism receipt moves.
+  Not done, and deliberately: satisfaction reporting is A1, so today an
+  unsatisfiable pin is honored rather than reported. Crate versions stay at
+  0.0.3; the bump to 0.0.4 and any republish is Mark's call, and the freeze
+  plan's "0.0.4+ material behind forcing consumers" is the sanctioned path
+  when he wants it. Mer3ly's own seam (its live path still never builds a
+  score) is the next slice.

@@ -16,7 +16,7 @@
 //! scale (tens of nodes) and the wrong one at canvas scale (thousands). A
 //! surface with a real sim should keep using it.
 
-use sceno::{Footprint, Scene, Vec2};
+use sceno::{Footprint, InstanceId, Scene, Vec2};
 
 /// How a scene loosens up. All terms are optional: zero any of them out and it
 /// simply stops contributing.
@@ -76,8 +76,27 @@ fn item_clearance(footprint: &Footprint) -> f32 {
 /// Deterministic — no randomness, so the same scene and settings always relax
 /// the same way and a receipt can be compared frame to frame.
 pub fn relax(scene: &mut Scene, settings: &Relaxation) {
+    relax_holding(scene, settings, &[]);
+}
+
+/// Loosen `scene`, leaving `immovable` where it stands.
+///
+/// An immovable item still pushes and pulls its neighbours; it simply does not
+/// integrate. That asymmetry is the whole meaning of a hard hold: the pin
+/// wins, and the rest of the scene accommodates it, rather than the pin being
+/// averaged away into a position nobody asked for.
+///
+/// Anchored holds are deliberately absent here. Anchored means best effort, so
+/// it relaxes like anything else and the arrangement pull carries it home.
+pub fn relax_holding(scene: &mut Scene, settings: &Relaxation, immovable: &[InstanceId]) {
     if settings.steps == 0 || scene.items.is_empty() {
         return;
+    }
+    let mut held = vec![false; scene.items.len()];
+    for instance in immovable {
+        if let Some(slot) = held.get_mut(instance.0 as usize) {
+            *slot = true;
+        }
     }
     let anchors: Vec<Vec2> = scene
         .items
@@ -162,6 +181,9 @@ pub fn relax(scene: &mut Scene, settings: &Relaxation) {
         }
 
         for (index, item) in scene.items.iter_mut().enumerate() {
+            if held[index] {
+                continue;
+            }
             velocities[index].x =
                 (velocities[index].x + forces[index].x * settings.dt) * settings.damping;
             velocities[index].y =
@@ -230,6 +252,44 @@ mod tests {
             },
         );
         assert_eq!(scene, before);
+    }
+
+    #[test]
+    fn a_held_item_does_not_move_however_crowded() {
+        // Three items on top of each other: maximum pressure to displace.
+        let mut scene = scene_with(&[(0.0, 0.0), (1.0, 0.0), (-1.0, 0.5)]);
+        let anchored = scene.items[0].transform.translate;
+        relax_holding(
+            &mut scene,
+            &Relaxation::default(),
+            &[InstanceId(0)],
+        );
+        assert_eq!(
+            scene.items[0].transform.translate, anchored,
+            "a hold was relaxed away, which is the silent-soft failure"
+        );
+    }
+
+    #[test]
+    fn a_held_item_still_pushes_its_neighbours() {
+        // The asymmetry that makes a hold useful: the scene accommodates the
+        // pin rather than the pin being averaged into the crowd.
+        let mut scene = scene_with(&[(0.0, 0.0), (1.0, 0.0)]);
+        let before = separation(&scene, 0, 1);
+        relax_holding(&mut scene, &Relaxation::default(), &[InstanceId(0)]);
+        assert!(
+            separation(&scene, 0, 1) > before,
+            "the free neighbour should have been pushed clear"
+        );
+    }
+
+    #[test]
+    fn relax_is_relax_holding_with_nothing_held() {
+        let mut plain = scene_with(&[(0.0, 0.0), (1.0, 0.0), (-1.0, 0.5)]);
+        let mut empty_holds = plain.clone();
+        relax(&mut plain, &Relaxation::default());
+        relax_holding(&mut empty_holds, &Relaxation::default(), &[]);
+        assert_eq!(plain, empty_holds);
     }
 
     #[test]

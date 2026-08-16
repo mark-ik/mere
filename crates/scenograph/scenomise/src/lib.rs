@@ -15,5 +15,5 @@
 mod relax;
 mod solve;
 
-pub use relax::{Relaxation, relax};
-pub use solve::solve;
+pub use relax::{Relaxation, relax, relax_holding};
+pub use solve::{pinned_instances, solve};

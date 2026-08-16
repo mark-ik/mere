@@ -1,8 +1,8 @@
 //! Product-free analytic score realization.
 
 use sceno::{
-    Arrangement, Board, Footprint, Geographic, Hulls, Placement, ProjectedItem, Rect, Region,
-    Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
+    Arrangement, Board, Footprint, Geographic, Hold, Hulls, InstanceId, Placement, ProjectedItem,
+    Rect, Region, Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
 };
 
 /// The golden-angle spiral's nearest neighbours are roughly 0.9 of the scale
@@ -33,11 +33,19 @@ pub fn solve(score: &Score) -> Scene {
 
     let mut bounds: Option<Rect> = None;
     for (rank, (_, item)) in order.into_iter().enumerate() {
-        let position = match &score.arrangement {
-            Arrangement::Spiral(spiral) => spiral_position(spiral, effective_spacing, rank),
-            Arrangement::Board(board) => board_position(board, item, rank),
-            Arrangement::Geographic(geographic) => geographic_position(geographic, item),
-            Arrangement::Hulls(hulls) => hulls_position(hulls, item),
+        // An authored hold outranks the arrangement, in every family. Without
+        // this, a Coordinate placement was honored by Geographic and Hulls and
+        // silently discarded by Spiral and Board, which is the same bug as
+        // moving a pin: the person said where, and the layout answered
+        // somewhere else without saying so.
+        let position = match score.hold_for(&item.source) {
+            Some(held) => held.at,
+            None => match &score.arrangement {
+                Arrangement::Spiral(spiral) => spiral_position(spiral, effective_spacing, rank),
+                Arrangement::Board(board) => board_position(board, item, rank),
+                Arrangement::Geographic(geographic) => geographic_position(geographic, item),
+                Arrangement::Hulls(hulls) => hulls_position(hulls, item),
+            },
         };
         let source = scene.intern_source(item.source.clone());
         let instance = ProjectedItem {
@@ -73,6 +81,23 @@ pub fn solve(score: &Score) -> Scene {
 
     scene.bounds = bounds.unwrap_or_default();
     scene
+}
+
+/// The instances a score pins, ready to hand to [`crate::relax_holding`].
+///
+/// Resolves through the scene's interned sources, so it stays correct when a
+/// source appears more than once: every instance of a pinned source is pinned.
+pub fn pinned_instances(score: &Score, scene: &Scene) -> Vec<InstanceId> {
+    scene
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            let source = scene.sources.get(item.source.0 as usize)?;
+            matches!(score.hold_for(source)?.hold, Hold::Pinned)
+                .then_some(InstanceId(index as u32))
+        })
+        .collect()
 }
 
 /// One scene [`Region`] per placed site: the bounds clipped by the
@@ -230,7 +255,7 @@ fn placed_bounds(position: Vec2, footprint: &Footprint) -> Option<Rect> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sceno::{Representation, Size2, SourceRef};
+    use sceno::{HeldPlacement, Representation, Size2, SourceRef};
 
     fn card(id: u32, ordinal: u32) -> ScoreItem {
         ScoreItem {
@@ -243,6 +268,79 @@ mod tests {
             placement: Placement::Ordinal,
             layer: 0,
             visible: true,
+        }
+    }
+
+    #[test]
+    fn a_hold_outranks_the_arrangement_in_every_family() {
+        // The audit that opened A6: Coordinate was honored by Geographic and
+        // Hulls and silently dropped by Spiral and Board. A hold is honored by
+        // all four or it is not a hold.
+        let at = Vec2::new(140.0, -60.0);
+        for arrangement in [
+            Arrangement::Spiral(Spiral::default()),
+            Arrangement::Board(Board::default()),
+            Arrangement::Geographic(Geographic::default()),
+            Arrangement::Hulls(Hulls::default()),
+        ] {
+            let mut score = Score::new(arrangement.clone());
+            score.items.push(card(0, 0));
+            score.items.push(card(1, 1));
+            score
+                .holds
+                .push(HeldPlacement::pinned(SourceRef::new("fixture", "1"), at));
+
+            let scene = solve(&score);
+            let held = scene
+                .items
+                .iter()
+                .find(|item| scene.sources[item.source.0 as usize].id == "1")
+                .expect("the held item is placed");
+            assert_eq!(
+                held.transform.translate, at,
+                "{arrangement:?} ignored an authored hold"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unheld_score_places_exactly_as_before() {
+        // Holds are additive: the empty case must not perturb any receipt.
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        for id in 0..5 {
+            score.items.push(card(id, id));
+        }
+        let before = solve(&score);
+        score.holds.clear();
+        let after = solve(&score);
+        assert_eq!(before.items.len(), after.items.len());
+        for (a, b) in before.items.iter().zip(&after.items) {
+            assert_eq!(a.transform.translate, b.transform.translate);
+        }
+    }
+
+    #[test]
+    fn pinned_instances_finds_every_instance_of_a_pinned_source() {
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        // One source, twice: legal by design, and both instances are pinned.
+        score.items.push(card(0, 0));
+        score.items.push(card(0, 1));
+        score.items.push(card(1, 2));
+        score.holds.push(HeldPlacement::pinned(
+            SourceRef::new("fixture", "0"),
+            Vec2::new(5.0, 5.0),
+        ));
+        score.holds.push(HeldPlacement::anchored(
+            SourceRef::new("fixture", "1"),
+            Vec2::new(9.0, 9.0),
+        ));
+
+        let scene = solve(&score);
+        let pinned = pinned_instances(&score, &scene);
+        assert_eq!(pinned.len(), 2, "both instances of source 0 are pinned");
+        // Anchored is best effort, so it is not immovable.
+        for instance in &pinned {
+            assert_eq!(scene.sources[scene.items[instance.0 as usize].source.0 as usize].id, "0");
         }
     }
 
