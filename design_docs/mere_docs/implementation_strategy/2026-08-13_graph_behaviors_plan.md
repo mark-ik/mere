@@ -357,7 +357,22 @@ Carried over or ruled here:
 - **W3 (original):** `AppEvent` watches at the observe drain, ring
   vocabulary unchanged. Done when: a behavior wakes on `SessionSwitched`
   without polling, and the scenario log shows the wake attributed.
-- **W4: time watches.** The injected time source of 3.4 plus a test clock.
+- **W4: time watches. LANDED 2026-08-13** (servitor `tick.rs` in mere
+  `afc11b07`, host half in turnstone `c408c81`; 59 and 275 pass). A pack
+  declares `-- @watch every/hour`. **Schedules are not `Watch`es**: a watch is
+  a cursor into a journal and time has no entries to point one at, so forcing
+  ticks through the matcher would mean minting synthetic entries to match.
+  The clock is the host's and is fed in, never sampled, and a body has no
+  binding that reads one (pinned by probing `os.time`, `os.clock`,
+  `mere.now`), which is what makes replay fire identically. A host with no
+  clock fires nothing rather than reading "no time" as time zero. **A tick
+  needs no capability**, deliberately: being woken by a region reveals that
+  the region changed, being woken by the clock reveals nothing; what a
+  schedule costs is resource, gated by the review naming the period. Install
+  is not a tick, a missed period is not made up, and a backwards clock fires
+  nothing. A scheduled body gets an empty trigger context, which is truer than
+  handing it the last unrelated change. The original text follows.
+- **W4 (original):** The injected time source of 3.4 plus a test clock.
   Done when: a "stale scope" behavior fires under a test clock stepped past
   the threshold, fires identically on replay, and never fires from a body
   reading wall time (no such binding exists).
@@ -418,6 +433,11 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-13 (W4): schedules landed. The shape worth keeping is that time got
+  its own structure rather than being bent into the watch matcher, and that
+  the capability asymmetry is stated rather than silently assumed: a scope
+  watch is gated because it discloses, a schedule is gated because it costs.
 
 - 2026-08-13 (W3): app-tier watches landed. The design fork worth keeping is
   the second table: sharing one with the graph tier would have let two seq
