@@ -50,6 +50,8 @@ This path is deterministic, authority-hashed, and portable. It has no pins, no c
 
 This is Penrose's `encourage` and `ensure` distinction, implemented, shipping, and with no satisfaction record anywhere. It touches `Score` nowhere.
 
+**Changed 2026-08-16, after this survey.** The one-control-surface rework (mer3ly `145eb41`) removed the `frozen` class outright: the interactive simulation now carries `anchored` and `free` only, `is_pinned` is manual pins alone, and frozen output is ruled a non-interactive renderer's concern. The reading above holds for the surveyed commit and the ensure/encourage finding survives, since a manual pin is still the hard class. The shared wire also dropped `physics`, the one field this survey found had no owning target on either side.
+
 ### The seam that does not exist
 
 `Score`, `Placement`, `scenomise::solve`, and `SceneSnapshot` appear only in the portable path. `Simulation`, pins, and mobility appear only in the live path. A visitor who pins three repositories and shares the result is sharing state the portable contract cannot express, so the site does not try.

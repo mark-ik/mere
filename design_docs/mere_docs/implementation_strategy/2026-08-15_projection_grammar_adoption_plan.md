@@ -116,8 +116,8 @@ reach a score, A2 has no coordinated view to serialize, and C3 has no portable
 backdrop.
 Tasks: let a live arrangement's placement reach the score.
 `Placement::Coordinate` carries a visitor-placed position; the mobility class
-(free, anchored, frozen) is recorded rather than inferred from force
-configuration; the solver's proposal and the recorded outcome stay
+(`anchored` and `free` since mer3ly `145eb41` retired `frozen` from the
+interactive path) is recorded rather than inferred from force configuration; the solver's proposal and the recorded outcome stay
 distinguishable, per the solver-proposes discipline. Decide with mer3ly whether
 the seam is a write-back into the score or a sidecar the score references.
 Ruling 2026-08-16 constrains the decision: whatever A6 produces is also the
@@ -146,7 +146,7 @@ decided by the consumer: a typed field or a recognized channel). An unmet pin
 is reported, never silently repositioned.
 Forcing consumer: mer3ly, once A6 lands. Its sandbox already ships the
 ensure/encourage split (an `anchored` mobility installs a soft `AnchorSpring`,
-a `frozen` one hard-pins) with no satisfaction record anywhere, and it already
+a manual pin hard-pins) with no satisfaction record anywhere, and it already
 shares pins to a second device. Until A6, those pins never reach a score, so
 there is nothing for a satisfaction field to attach to. Isometry's VTT pins and
 the canvas pin/unpin intent remain alternates.
