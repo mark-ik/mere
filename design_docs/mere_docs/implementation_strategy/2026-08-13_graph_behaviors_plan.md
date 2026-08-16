@@ -256,11 +256,13 @@ Carried over or ruled here:
   another name: a behavior is a denizen whose run was triggered, and a second
   path would mean a second set of rules. Exhaustion reports as
   `AppEvent::CascadeExhausted`, naming the residents by label.
-  **Remaining:** the budget is a live `App` field read per cascade but is not
-  yet persisted in `ApplicationSettings` or exposed as a settings row (that
-  reaches the app only through the settings pane's provider, so it is real
-  threading, and adding the field before the wiring would be dead config);
-  and the headed scenario receipt is not captured.
+  **The budget is a settings row (2026-08-13).** `ApplicationSettings`
+  (in `pandect`, renamed from session-runtime) carries `cascade_budget`,
+  serde-defaulted to 4; a number row exposes it with a floor of 1 and no
+  unlimited value; and it rides the live snapshot the shell already polls, so
+  a change reaches the next cascade with no restart. It is assigned outside
+  the chrome comparison that decides whether to relayout, since a budget
+  change needs none. **Remaining:** the headed scenario receipt.
   Done when: a two-behavior mutual-wake fixture terminates at the budget
   with the loud event on screen; a linear A-wakes-B chain settles in one
   cascade; every behavior-authored entry in the journal reads back with the
@@ -403,6 +405,12 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-13 (W1b closed): the cascade budget is persisted, exposed, and live
+  (turnstone `8685ff0`, mere `e87ea99e`; 269 and 272 pass). One thing worth
+  remembering: the new spec row went LAST in the list, because two existing
+  tests assert specs by index and inserting in the middle renumbered them
+  silently. The provider test now names the row rather than only counting it.
 
 - 2026-08-13 (W2 closed): the inbox rule passes. The failure was none of the
   joins I suspected: instrumenting the drain showed the child's scope arriving
