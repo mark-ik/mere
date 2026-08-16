@@ -97,12 +97,23 @@ about the toolchain. So the explicit lane has two carriages:
   greedy tenant, compiles at first launch.
 - **rust-gpu-AOT**: committed `.spv`, minimal tenant, no runtime
   compiler. Renderling's world, and right where a consumer must not
-  carry a JIT. quint's kernels stay here; migrating them to CubeCL is
-  an option purchased only by a measured need for Burn-handle interop
-  on layout state.
+  carry a JIT.
 
 Render shaders on either carriage create no boundary, provided they
 read the same allocation through a stable buffer contract.
+
+**Refined by the engine composition ruling (Mark, 2026-08-16; wing
+composition plan is the authority): the line between the carriages is
+authored versus consumed, not ours versus theirs.** We *author* in
+CubeCL, where Burn synergy pays; rust-gpu remains as *consumed
+artifacts* from upstreams that maintain them (renderling's shaders;
+nexus's khal kernels at its adoption gate). The local rust-gpu fork and
+rebuilt cargo-gpu are maintenance tooling for consumed artifacts, no
+longer an authoring lane; quint's kernels migrate to CubeCL as part of
+that ruling (C's control rerun still gates the perf claim). Renderling
+is a hands-on fork by the same ruling: the 0.9-to-0.10 shader-source
+migration is sanctioned work, priced by the first shader edit the
+engine needs.
 
 **The allocator direction is a one-way street.** Burn/CubeCL can hand
 its allocations outward (`client.get_resource` yields the wgpu buffer),
