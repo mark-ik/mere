@@ -262,13 +262,16 @@ proof that forced it.
 
 ### Track B: genet (realization receipts)
 
-Genet is the realization layer of the projection stack: the accessible
-frozen form and the drivable interactive form both land on its surfaces.
-Pointer docs in `genet/docs/` are founded when the first slice opens, not
-before.
+Genet is the realization layer of the projection stack: the accessible frozen
+form and the drivable interactive form both *target* its surfaces. They do not
+live in it. **Corrected 2026-08-16 while opening B1**: genet has no dependency
+on scenograph and mere depends on genet, so a converter from `Scene` to a
+semantic form cannot sit in genet without inverting the stack. The frozen
+realization lands in mere and renders into genet's lane, which is the same
+direction mer3ly already proves by serializing cambium views to static HTML.
+Pointer docs in `genet/docs/` are founded when a slice genuinely lands there.
 
-**B1. Accessible frozen realization (open now; report's one immediate
-recommendation).**
+**B1. Accessible frozen realization - FIRST SLICE LANDED 2026-08-16.**
 Context: no surveyed grammar treats the accessible form as a first-class
 realization target; the catalog's W3C citations (WAI complex images, Graphics
 ARIA, SVG structure) are the anatomy. Retrofitting accessibility contracts is
@@ -602,3 +605,36 @@ not settled without it.
   plan's authority rather than the report's, which is exactly the bar this
   target set. Mapbox's layout/paint split is named there as the shape to
   borrow when it is built.
+- 2026-08-16: **B1's first slice landed: the receipt shape exists, with two
+  corrections it forced.** `graphshell_client::frozen` turns a `Scene` into
+  navigable semantics: a document name, a generated summary, one entry per
+  visible instance with a coarse role (symbol / object / live content, mapped
+  down from `Representation` because a reader cares about kind, not rung),
+  relations resolved to names at both ends, and a `rows()` tabular alternate.
+  It produces a *structure*, not markup, so a host renders it into a genet DOM
+  tree, an AccessKit node tree, or an HTML table, and the receipt is assertable
+  in a test with no browser. That also keeps a DOM engine out of the client.
+  **Correction one: B1's home is mere, not genet.** Genet has no dependency on
+  scenograph and mere depends on genet, so a `Scene`-to-semantics converter
+  cannot live in genet without inverting the stack. Track B's preamble is
+  corrected: the realizations *target* genet's surfaces rather than living
+  there, which is the direction mer3ly already proves.
+  **Correction two: a scene carries no names.** `ProjectedItem` identifies
+  itself with a `SourceRef`, an address rather than a label, so an accessible
+  form cannot be derived from a scene alone. The names already exist one layer
+  out, on `chirograph::PresentationSemantics.label`, so `freeze` takes a
+  supplied lookup and falls back to the source id, and `unnamed` counts the
+  fallbacks so a receipt can state how legible the scene actually was. This is
+  the report's claim landing concretely: no surveyed grammar treats the
+  accessible form as first-class, and the contract shows it.
+  A1's violations are carried into the frozen form deliberately. A sighted
+  reader can see a pin sitting in the wrong place; without this the frozen
+  realization would be the one form that cannot say so.
+  Receipts: six tests, run against the real P5 `coastal_map.json` fixture
+  solved through `scenomise` (added test-only) rather than a hand-built
+  stand-in, covering enumeration, fallback naming, summary-matches-listing,
+  invisible-item omission, relation naming, unmet placements reaching the
+  tabular alternate, and determinism. graphshell-client 13 -> 19.
+  Still open in B1: rendering the structure into an actual DOM tree, the
+  AccessKit screen-reader traversal, and the genet-probe scenario asserting the
+  semantic tree. The shape they all need now exists and is stable.

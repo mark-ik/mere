@@ -28,6 +28,10 @@
 //! [`crate::resident::Resident::new`] takes handles rather than booting.
 
 use bytemuck::{Pod, Zeroable};
+use cubecl::client::ComputeClient;
+use cubecl::prelude::*;
+use cubecl::server::Handle;
+use cubecl::wgpu::WgpuRuntime;
 
 mod chunk;
 pub mod kernels;
@@ -82,101 +86,36 @@ pub struct Adjacency<'a> {
 /// A resident simulation: buffers on the host's device, and the three
 /// dispatches that advance them.
 pub struct Resident {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    client: ComputeClient<WgpuRuntime>,
     params: Params,
-    params_buffer: wgpu::Buffer,
-    /// Padded 3D positions. Public because publishing them is the whole
-    /// point: a consumer binds this, or copies from it, on the same
-    /// device.
-    pub positions: wgpu::Buffer,
-    /// Held so the binding stays valid; the kernels own its contents.
-    _velocities: wgpu::Buffer,
-    forces: wgpu::Buffer,
-    settle: wgpu::Buffer,
-    settle_staging: wgpu::Buffer,
-    bind: wgpu::BindGroup,
-    repulse: wgpu::ComputePipeline,
-    springs: wgpu::ComputePipeline,
-    integrate: wgpu::ComputePipeline,
-    spirv: bool,
-}
-
-fn buffer(
-    device: &wgpu::Device,
-    label: &str,
-    contents: &[u8],
-    extra: wgpu::BufferUsages,
-) -> wgpu::Buffer {
-    use wgpu::util::DeviceExt;
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents,
-        usage: wgpu::BufferUsages::STORAGE | extra,
-    })
+    /// Padded 3D positions, allocated on the shared CubeCL client and
+    /// published to consumers as a lease rather than a raw buffer, so a
+    /// renderer reads the exact range and its stamp together.
+    positions: Handle,
+    velocities: Handle,
+    forces: Handle,
+    offsets: Handle,
+    targets: Handle,
+    settle: Handle,
+    revision: u64,
+    /// The resolved wgpu ranges behind `positions` and `forces`.
+    /// Resolved once at construction rather than per call, because a
+    /// lease borrows the buffer and a freshly resolved resource is a
+    /// temporary. A handle's range does not move for its lifetime.
+    positions_alloc: (wgpu::Buffer, u64, u64),
+    forces_alloc: (wgpu::Buffer, u64, u64),
 }
 
 impl Resident {
-    /// The kernel module: SPIR-V compiled from `quint-shaders`' Rust
-    /// source when the adapter can take it, WGSL otherwise.
-    ///
-    /// The Rust source is the source of truth and the `.spv` travels
-    /// with the crate, so a consumer needs no rust-gpu toolchain. The
-    /// WGSL is the same three kernels, kept as the downlevel path:
-    /// browsers have no SPIR-V ingestion, and `SPIRV_SHADER_PASSTHROUGH`
-    /// is a Vulkan-side feature an adapter may not offer. Both are
-    /// checked against the same CPU anchor by this crate's receipts.
-    fn kernels(device: &wgpu::Device) -> (wgpu::ShaderModule, bool) {
-        if device
-            .features()
-            .contains(wgpu::Features::PASSTHROUGH_SHADERS)
-        {
-            let words = wgpu::util::make_spirv_raw(include_bytes!("../shaders/quint_shaders.spv"));
-            // wgpu 30 added `entry_points` to the passthrough descriptor and
-            // its Default is EMPTY, because passthrough skips naga and so
-            // cannot reflect them. Leaving it defaulted compiles fine and then
-            // fails at pipeline creation with "Unable to find entry point".
-            // These three, at threads(256), are `quint-shaders`' own kernels.
-            let entry_points = [
-                wgpu::PassthroughShaderEntryPoint {
-                    name: "repulse".into(),
-                    workgroup_size: (256, 1, 1),
-                },
-                wgpu::PassthroughShaderEntryPoint {
-                    name: "springs".into(),
-                    workgroup_size: (256, 1, 1),
-                },
-                wgpu::PassthroughShaderEntryPoint {
-                    name: "integrate".into(),
-                    workgroup_size: (256, 1, 1),
-                },
-            ];
-            // SAFETY: the module is this crate's own committed artifact,
-            // built by rust-gpu from `quint-shaders` and validated by
-            // spirv-val at build time. Passthrough skips naga entirely,
-            // so that provenance is the whole guarantee.
-            let module = unsafe {
-                device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
-                    label: Some("quint resident kernels (spir-v)"),
-                    entry_points: entry_points.as_slice().into(),
-                    spirv: Some(words),
-                    ..Default::default()
-                })
-            };
-            return (module, true);
-        }
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("quint resident kernels (wgsl)"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/resident.wgsl").into()),
-        });
-        (module, false)
-    }
-
-    /// Build the lane on the host's device. `positions` is the initial
+    /// Build the lane on the host's client. `positions` is the initial
     /// padded-3D scatter; `adjacency` the springs' CSR.
+    ///
+    /// Every allocation is made through the caller's
+    /// [`ResidentClient`], which is what lets Burn address these same
+    /// buffers with no bridge: the tensor lane and this one share an
+    /// allocator, not merely a device.
     pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        client: &ResidentClient,
         positions: &[[f32; 4]],
         adjacency: Adjacency<'_>,
         params: Params,
@@ -188,151 +127,46 @@ impl Resident {
             "CSR offsets must be one longer than the node count"
         );
         let params = Params { n, ..params };
+        let compute = client.compute_client().clone();
 
-        let params_buffer = buffer(
-            device,
-            "quint resident params",
-            bytemuck::bytes_of(&params),
-            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        );
-        let positions_buffer = buffer(
-            device,
-            "quint resident positions",
-            bytemuck::cast_slice(positions),
-            wgpu::BufferUsages::COPY_SRC,
-        );
         let zero = vec![[0.0f32; 4]; positions.len()];
-        let velocities = buffer(
-            device,
-            "quint resident velocities",
-            bytemuck::cast_slice(&zero),
-            wgpu::BufferUsages::empty(),
-        );
-        // COPY_DST so an external force pass (the Burn lane, or a
-        // consumer's own kernel) can fill it; COPY_SRC so a test can
-        // read it back and compare against the CPU anchor.
-        let forces = buffer(
-            device,
-            "quint resident forces",
-            bytemuck::cast_slice(&zero),
-            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
-        );
-        let offsets = buffer(
-            device,
-            "quint resident adjacency offsets",
-            bytemuck::cast_slice(adjacency.offsets),
-            wgpu::BufferUsages::empty(),
-        );
-        // An empty CSR is legal (a graph with no edges), and a
-        // zero-sized buffer is not, so pad it.
-        let targets_data: &[u32] = if adjacency.targets.is_empty() {
-            &[0]
+        let positions_handle = compute.create_from_slice(bytemuck::cast_slice(positions));
+        let velocities = compute.create_from_slice(bytemuck::cast_slice(&zero));
+        let forces = compute.create_from_slice(bytemuck::cast_slice(&zero));
+        let offsets = compute.create_from_slice(bytemuck::cast_slice(adjacency.offsets));
+        // An empty CSR still needs a bound allocation. One zero keeps
+        // the binding valid without implying an edge, since every
+        // offset pair is then empty.
+        let targets = if adjacency.targets.is_empty() {
+            compute.create_from_slice(bytemuck::cast_slice(&[0u32]))
         } else {
-            adjacency.targets
+            compute.create_from_slice(bytemuck::cast_slice(adjacency.targets))
         };
-        let targets = buffer(
-            device,
-            "quint resident adjacency targets",
-            bytemuck::cast_slice(targets_data),
-            wgpu::BufferUsages::empty(),
-        );
-        let settle = buffer(
-            device,
-            "quint resident settle",
-            bytemuck::bytes_of(&0u32),
-            wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
-        );
-        let settle_staging = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("quint resident settle staging"),
-            size: 4,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let settle = compute.create_from_slice(bytemuck::bytes_of(&0u32));
 
-        let (shader, spirv) = Self::kernels(device);
-
-        let entries: Vec<wgpu::BindGroupLayoutEntry> = (0..7u32)
-            .map(|binding| wgpu::BindGroupLayoutEntry {
-                binding,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: match binding {
-                        0 => wgpu::BufferBindingType::Uniform,
-                        4 | 5 => wgpu::BufferBindingType::Storage { read_only: true },
-                        _ => wgpu::BufferBindingType::Storage { read_only: false },
-                    },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            })
-            .collect();
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("quint resident layout"),
-            entries: &entries,
-        });
-        let bound = [
-            &params_buffer,
-            &positions_buffer,
-            &velocities,
-            &forces,
-            &offsets,
-            &targets,
-            &settle,
-        ];
-        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("quint resident bind"),
-            layout: &layout,
-            entries: &bound
-                .iter()
-                .enumerate()
-                .map(|(i, buffer)| wgpu::BindGroupEntry {
-                    binding: i as u32,
-                    resource: buffer.as_entire_binding(),
-                })
-                .collect::<Vec<_>>(),
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("quint resident pipelines"),
-            bind_group_layouts: &[Some(&layout)],
-            immediate_size: 0,
-        });
-        let pipeline = |entry: &str| {
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(entry),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some(entry),
-                compilation_options: Default::default(),
-                cache: None,
-            })
+        let resolve = |handle: &Handle| {
+            let managed = compute
+                .get_resource(handle.clone())
+                .expect("resident allocation");
+            let resource = managed.resource();
+            (resource.buffer.clone(), resource.offset, resource.size)
         };
+        let positions_alloc = resolve(&positions_handle);
+        let forces_alloc = resolve(&forces);
 
         Self {
-            device: device.clone(),
-            queue: queue.clone(),
+            client: compute,
             params,
-            params_buffer,
-            positions: positions_buffer,
-            _velocities: velocities,
+            positions: positions_handle,
+            velocities,
             forces,
+            offsets,
+            targets,
             settle,
-            settle_staging,
-            bind,
-            repulse: pipeline("repulse"),
-            springs: pipeline("springs"),
-            integrate: pipeline("integrate"),
-            spirv,
+            revision: 0,
+            positions_alloc,
+            forces_alloc,
         }
-    }
-
-    /// Whether the lane is running the SPIR-V built from
-    /// `quint-shaders`' Rust source, rather than the WGSL fallback. A
-    /// receipt that does not check this can pass while the committed
-    /// artifact never executes.
-    pub fn using_spirv(&self) -> bool {
-        self.spirv
     }
 
     pub fn params(&self) -> Params {
@@ -341,145 +175,158 @@ impl Resident {
 
     /// Change the step's constants. The physics is configurable at
     /// runtime because a mere's physics profile is data.
+    ///
+    /// Constants ride as kernel arguments rather than in a uniform
+    /// buffer, so this is a plain field write with nothing to upload.
     pub fn set_params(&mut self, params: Params) {
         self.params = Params {
             n: self.params.n,
             ..params
         };
-        self.queue
-            .write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&self.params));
     }
 
-    /// One frame: repulsion, springs, integration, and the settle word
-    /// staged for its four-byte read.
-    pub fn step(&self) {
+    /// How many times this lane has advanced. A consumer stamps its
+    /// lease with this, so a reader on another cadence can tell a
+    /// refreshed field from a stale one.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// One frame: the settle word cleared, then repulsion, springs, and
+    /// integration.
+    pub fn step(&mut self) {
         self.dispatch(true);
     }
 
-    /// A frame whose repulsion came from elsewhere (the Burn lane, or a
-    /// consumer's own pass, having filled [`Self::forces_buffer`]).
-    pub fn step_with_external_forces(&self) {
+    /// A frame whose repulsion came from elsewhere (the tensor lane, or
+    /// a consumer's own pass, having filled the forces allocation).
+    pub fn step_with_external_forces(&mut self) {
         self.dispatch(false);
-    }
-
-    /// The forces buffer, for a producer that computes the field some
-    /// other way. Writing it before [`Self::step_with_external_forces`]
-    /// is how the tensor lane hands off.
-    pub fn forces_buffer(&self) -> &wgpu::Buffer {
-        &self.forces
-    }
-
-    fn dispatch(&self, own_repulsion: bool) {
-        self.queue
-            .write_buffer(&self.settle, 0, bytemuck::bytes_of(&0u32));
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("quint resident frame"),
-            });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("quint resident"),
-                timestamp_writes: None,
-            });
-            let groups = self.params.n.div_ceil(256);
-            pass.set_bind_group(0, &self.bind, &[]);
-            if own_repulsion {
-                pass.set_pipeline(&self.repulse);
-                pass.dispatch_workgroups(groups, 1, 1);
-            }
-            pass.set_pipeline(&self.springs);
-            pass.dispatch_workgroups(groups, 1, 1);
-            pass.set_pipeline(&self.integrate);
-            pass.dispatch_workgroups(groups, 1, 1);
-        }
-        encoder.copy_buffer_to_buffer(&self.settle, 0, &self.settle_staging, 0, 4);
-        self.queue.submit([encoder.finish()]);
-    }
-
-    /// The frame's only readback: the fastest body's speed, four bytes.
-    /// A host polls this to know when a layout has settled.
-    pub fn max_speed(&self) -> f32 {
-        let slice = self.settle_staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result);
-        });
-        self.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .expect("device poll");
-        rx.recv().expect("map channel").expect("settle map");
-        // wgpu 30 made `get_mapped_range` fallible; the map_async above
-        // already succeeded, so a failure here is a broken invariant.
-        let bits = u32::from_le_bytes(
-            slice.get_mapped_range().expect("settle map range")[..4]
-                .try_into()
-                .expect("four bytes"),
-        );
-        self.settle_staging.unmap();
-        f32::from_bits(bits)
-    }
-
-    /// Read the whole force buffer back. A diagnostic, deliberately not
-    /// part of any frame: the lane's discipline is that nothing but the
-    /// settle word crosses the bus per step.
-    pub fn read_forces(&self) -> Vec<[f32; 4]> {
-        self.read_all(&self.forces)
-    }
-
-    /// Read the whole position buffer back. Same diagnostic status.
-    pub fn read_positions(&self) -> Vec<[f32; 4]> {
-        self.read_all(&self.positions)
-    }
-
-    fn read_all(&self, source: &wgpu::Buffer) -> Vec<[f32; 4]> {
-        let size = (self.params.n as u64) * 16;
-        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("quint resident staging"),
-            size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("quint resident readback"),
-            });
-        encoder.copy_buffer_to_buffer(source, 0, &staging, 0, size);
-        self.queue.submit([encoder.finish()]);
-        let slice = staging.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result);
-        });
-        self.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .expect("device poll");
-        rx.recv().expect("map channel").expect("readback map");
-        let data = slice.get_mapped_range().expect("readback map range");
-        let out = bytemuck::cast_slice(&data).to_vec();
-        drop(data);
-        staging.unmap();
-        out
     }
 
     /// The repulsion dispatch alone, so a test can compare one pass
     /// against the CPU anchor without integrating.
     pub fn repulse_only(&self) {
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("quint resident repulse"),
-            });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("quint resident repulse"),
-                timestamp_writes: None,
-            });
-            pass.set_bind_group(0, &self.bind, &[]);
-            pass.set_pipeline(&self.repulse);
-            pass.dispatch_workgroups(self.params.n.div_ceil(256), 1, 1);
+        let cubes = self.params.n.div_ceil(kernels::CUBE_DIM).max(1);
+        let count = self.params.n as usize;
+        unsafe {
+            kernels::repulse::launch_unchecked::<WgpuRuntime>(
+                &self.client,
+                CubeCount::Static(cubes, 1, 1),
+                CubeDim::new_1d(kernels::CUBE_DIM),
+                ArrayArg::from_raw_parts(self.positions.clone(), count * 4),
+                ArrayArg::from_raw_parts(self.forces.clone(), count * 4),
+                self.params.n,
+                self.params.repulsion,
+                self.params.min_distance,
+                (kernels::CUBE_DIM * kernels::STRIDE) as usize,
+            );
         }
-        self.queue.submit([encoder.finish()]);
+    }
+
+    fn dispatch(&mut self, own_repulsion: bool) {
+        let cubes = self.params.n.div_ceil(kernels::CUBE_DIM).max(1);
+        let count = self.params.n as usize;
+        let dim = CubeDim::new_1d(kernels::CUBE_DIM);
+        unsafe {
+            kernels::clear_settle::launch_unchecked::<WgpuRuntime>(
+                &self.client,
+                CubeCount::Static(1, 1, 1),
+                CubeDim::new_1d(1),
+                ArrayArg::from_raw_parts(self.settle.clone(), 1),
+            );
+        }
+        if own_repulsion {
+            self.repulse_only();
+        }
+        unsafe {
+            kernels::springs::launch_unchecked::<WgpuRuntime>(
+                &self.client,
+                CubeCount::Static(cubes, 1, 1),
+                dim,
+                ArrayArg::from_raw_parts(self.positions.clone(), count * 4),
+                ArrayArg::from_raw_parts(self.forces.clone(), count * 4),
+                ArrayArg::from_raw_parts(self.offsets.clone(), count + 1),
+                ArrayArg::from_raw_parts(self.targets.clone(), 1),
+                self.params.n,
+                self.params.spring_k,
+                self.params.rest_length,
+            );
+            kernels::integrate::launch_unchecked::<WgpuRuntime>(
+                &self.client,
+                CubeCount::Static(cubes, 1, 1),
+                dim,
+                ArrayArg::from_raw_parts(self.positions.clone(), count * 4),
+                ArrayArg::from_raw_parts(self.velocities.clone(), count * 4),
+                ArrayArg::from_raw_parts(self.forces.clone(), count * 4),
+                ArrayArg::from_raw_parts(self.settle.clone(), 1),
+                self.params.n,
+                self.params.dt,
+                self.params.damping,
+                self.params.centering,
+            );
+        }
+        self.revision += 1;
+    }
+
+    /// The frame's only readback: the fastest body's speed, four bytes.
+    /// A host polls this to know when a layout has settled.
+    pub fn max_speed(&self) -> f32 {
+        let bytes = self
+            .client
+            .read_one(self.settle.clone())
+            .expect("settle readback");
+        f32::from_bits(u32::from_le_bytes(
+            bytes[..4].try_into().expect("four bytes"),
+        ))
+    }
+
+    /// Diagnostic reads of the whole field. Not the per-frame path: the
+    /// steady loop reads four bytes, and these exist so a test can
+    /// compare against the CPU anchor.
+    pub fn read_positions(&self) -> Vec<[f32; 4]> {
+        self.read_all(&self.positions)
+    }
+
+    pub fn read_forces(&self) -> Vec<[f32; 4]> {
+        self.read_all(&self.forces)
+    }
+
+    fn read_all(&self, handle: &Handle) -> Vec<[f32; 4]> {
+        let bytes = self.client.read_one(handle.clone()).expect("field readback");
+        bytemuck::cast_slice(&bytes[..(self.params.n as usize) * 16]).to_vec()
+    }
+
+    /// The positions, published for a consumer to draw from.
+    ///
+    /// A lease rather than a raw buffer: the range, the shape it holds,
+    /// and the revision it was advanced to travel together, so a reader
+    /// on another cadence cannot bind a stale or ill-fitting view. The
+    /// chunk bundles publish the same contract, which is the point: the
+    /// field tier and the voxel tier say one thing to their consumers.
+    pub fn positions_lease(&self) -> SpatialLease<'_> {
+        self.lease_of(&self.positions_alloc)
+    }
+
+    /// The forces, for a producer that computes the field some other
+    /// way. Filling this before [`Self::step_with_external_forces`] is
+    /// how the tensor lane hands off, and that handoff is now a shared
+    /// allocation rather than a copy.
+    pub fn forces_lease(&self) -> SpatialLease<'_> {
+        self.lease_of(&self.forces_alloc)
+    }
+
+    fn lease_of<'a>(&'a self, alloc: &'a (wgpu::Buffer, u64, u64)) -> SpatialLease<'a> {
+        SpatialLease {
+            buffer: &alloc.0,
+            offset: alloc.1,
+            size: alloc.2,
+            shape: [self.params.n as usize, 4, 1],
+            element_type: PlaneElementType::F32,
+            stamp: ChunkStamp {
+                revision: self.revision,
+                valid_read_epoch: ReadEpoch::new(self.revision),
+            },
+        }
     }
 }

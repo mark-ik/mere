@@ -12,3 +12,9 @@ sceno.workspace = true
 scenotime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# Test-only: lets the frozen-realization tests solve the real coastal-map
+# fixture rather than assert against a hand-built stand-in.
+scenomise.workspace = true
+serde_json = "1"

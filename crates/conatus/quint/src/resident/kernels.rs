@@ -44,16 +44,22 @@ pub fn repulse(
     n: u32,
     repulsion: f32,
     min_distance: f32,
+    #[comptime] tile_floats: usize,
 ) {
-    let mut tile = SharedMemory::<f32>::new(CUBE_DIM * STRIDE);
-    let i = ABSOLUTE_POS as u32;
-    let unit = UNIT_POS;
-    let last = n - 1u32;
+    // Shared-memory extent is comptime, as is the stride: both are
+    // shapes the compiler needs before it can lay the cube out.
+    let mut tile = SharedMemory::<f32>::new(tile_floats);
+    let stride = STRIDE as usize;
+    let width = CUBE_DIM as usize;
+    let count_n = n as usize;
+    let i = ABSOLUTE_POS;
+    let unit = UNIT_POS as usize;
+    let last = count_n - 1;
     let mut mine = i;
     if mine > last {
         mine = last;
     }
-    let base_i = (mine * STRIDE) as usize;
+    let base_i = mine * stride;
     let px = positions[base_i];
     let py = positions[base_i + 1];
     let pz = positions[base_i + 2];
@@ -62,28 +68,28 @@ pub fn repulse(
     let mut fx = 0.0f32;
     let mut fy = 0.0f32;
     let mut fz = 0.0f32;
-    let tiles = n.div_ceil(CUBE_DIM);
-    let mut t = 0u32;
+    let tiles = count_n.div_ceil(width);
+    let mut t = 0usize;
     while t < tiles {
-        let mut j = t * CUBE_DIM + unit;
+        let mut j = t * width + unit;
         if j > last {
             j = last;
         }
-        let src = (j * STRIDE) as usize;
-        let dst = (unit * STRIDE) as usize;
+        let src = j * stride;
+        let dst = unit * stride;
         tile[dst] = positions[src];
         tile[dst + 1] = positions[src + 1];
         tile[dst + 2] = positions[src + 2];
         sync_cube();
 
-        let start = t * CUBE_DIM;
-        let mut count = CUBE_DIM;
-        if n - start < CUBE_DIM {
-            count = n - start;
+        let start = t * width;
+        let mut count = width;
+        if count_n - start < width {
+            count = count_n - start;
         }
-        let mut k = 0u32;
+        let mut k = 0usize;
         while k < count {
-            let other = (k * STRIDE) as usize;
+            let other = k * stride;
             let dx = px - tile[other];
             let dy = py - tile[other + 1];
             let dz = pz - tile[other + 2];
@@ -92,14 +98,14 @@ pub fn repulse(
             fx += dx * inv;
             fy += dy * inv;
             fz += dz * inv;
-            k += 1u32;
+            k += 1;
         }
         sync_cube();
-        t += 1u32;
+        t += 1;
     }
 
-    if i < n {
-        let out = (i * STRIDE) as usize;
+    if i < count_n {
+        let out = i * stride;
         forces[out] = fx;
         forces[out + 1] = fy;
         forces[out + 2] = fz;
@@ -121,9 +127,10 @@ pub fn springs(
     spring_k: f32,
     rest_length: f32,
 ) {
-    let i = ABSOLUTE_POS as u32;
-    if i < n {
-        let base = (i * STRIDE) as usize;
+    let stride = STRIDE as usize;
+    let i = ABSOLUTE_POS;
+    if i < n as usize {
+        let base = i * stride;
         let px = positions[base];
         let py = positions[base + 1];
         let pz = positions[base + 2];
@@ -131,10 +138,10 @@ pub fn springs(
         let mut fy = forces[base + 1];
         let mut fz = forces[base + 2];
 
-        let mut e = offsets[i as usize];
-        let end = offsets[(i + 1u32) as usize];
+        let mut e = offsets[i] as usize;
+        let end = offsets[i + 1] as usize;
         while e < end {
-            let target = (targets[e as usize] * STRIDE) as usize;
+            let target = targets[e] as usize * stride;
             let dx = positions[target] - px;
             let dy = positions[target + 1] - py;
             let dz = positions[target + 2] - pz;
@@ -146,7 +153,7 @@ pub fn springs(
             fx += dx * scale;
             fy += dy * scale;
             fz += dz * scale;
-            e += 1u32;
+            e += 1;
         }
         forces[base] = fx;
         forces[base + 1] = fy;
@@ -171,9 +178,10 @@ pub fn integrate(
     damping: f32,
     centering: f32,
 ) {
-    let i = ABSOLUTE_POS as u32;
-    if i < n {
-        let base = (i * STRIDE) as usize;
+    let stride = STRIDE as usize;
+    let i = ABSOLUTE_POS;
+    if i < n as usize {
+        let base = i * stride;
         let px = positions[base];
         let py = positions[base + 1];
         let pz = positions[base + 2];

@@ -102,7 +102,7 @@ impl GpuPresenter {
             height,
             ExternalTexturePlacement::new([0.0, 0.0, width as f32, height as f32]),
         );
-        frame.present();
+        self.core.queue().present(frame);
         Ok(())
     }
 }

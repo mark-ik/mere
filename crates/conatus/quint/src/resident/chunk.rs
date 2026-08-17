@@ -389,6 +389,15 @@ impl ResidentClient {
         Self { compute, device }
     }
 
+    /// The CubeCL client every resident allocation is made through.
+    ///
+    /// Public because the field lane allocates its own buffers on the
+    /// same client the chunk bundles use: one allocator is what lets a
+    /// kernel pass and a tensor pass meet without a bridge.
+    pub fn compute_client(&self) -> &ComputeClient<WgpuRuntime> {
+        &self.compute
+    }
+
     pub fn device(&self) -> &WgpuDevice {
         &self.device
     }

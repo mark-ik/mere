@@ -1,6 +1,7 @@
 //! Transport-independent, endpoint-scoped projection state.
 
 pub mod action_draft;
+pub mod frozen;
 pub mod session;
 
 pub use action_draft::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};

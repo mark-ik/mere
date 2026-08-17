@@ -128,7 +128,7 @@ impl App {
             h,
             ExternalTexturePlacement::new([0.0, 0.0, w as f32, h as f32]),
         );
-        frame.present();
+        host.queue().present(frame);
 
         if needs_redraw {
             self.request_redraw();

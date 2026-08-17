@@ -13,7 +13,7 @@
 #![cfg(feature = "field-gpu")]
 
 use quint::forces::{RepulsionParams, repulsion_reference};
-use quint::resident::{Adjacency, Params, Resident};
+use quint::resident::{Adjacency, Params, Resident, ResidentClient};
 
 /// A deterministic scatter, seeded: the same cloud every run.
 fn scatter(n: usize, extent: f32) -> Vec<[f32; 4]> {
@@ -29,8 +29,13 @@ fn scatter(n: usize, extent: f32) -> Vec<[f32; 4]> {
         .collect()
 }
 
-/// Boot a device for the test, or `None` where no adapter exists.
-fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
+/// Boot a client for the test, or `None` where no adapter exists.
+///
+/// The lane allocates through CubeCL now, so a test needs the client
+/// rather than a device pair. Booting it from an explicit setup keeps
+/// the "device is the host's, never this crate's" rule visible: quint
+/// adopts what it is handed.
+fn client() -> Option<ResidentClient> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
         flags: wgpu::InstanceFlags::default(),
@@ -46,16 +51,19 @@ fn device() -> Option<(wgpu::Device, wgpu::Queue)> {
         apply_limit_buckets: false,
     }))
     .ok()?;
-    // Ask for passthrough where the adapter has it, so the receipts
-    // exercise the committed SPIR-V rather than only the WGSL fallback.
-    let passthrough = adapter.features() & wgpu::Features::PASSTHROUGH_SHADERS;
+    let backend = adapter.get_info().backend;
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("quint resident test"),
-        required_features: passthrough,
+        label: Some("quint resident lane receipt"),
         ..Default::default()
     }))
     .ok()?;
-    Some((device, queue))
+    Some(ResidentClient::init(burn::backend::wgpu::WgpuSetup {
+        instance,
+        adapter,
+        device,
+        queue,
+        backend,
+    }))
 }
 
 fn no_edges(n: usize) -> Vec<u32> {
@@ -64,7 +72,7 @@ fn no_edges(n: usize) -> Vec<u32> {
 
 #[test]
 fn the_kernel_computes_quints_own_force_law() {
-    let Some((device, queue)) = device() else {
+    let Some(client) = client() else {
         eprintln!("no wgpu adapter: skipping the resident lane receipt");
         return;
     };
@@ -78,9 +86,8 @@ fn the_kernel_computes_quints_own_force_law() {
         ..Default::default()
     };
 
-    let resident = Resident::new(
-        &device,
-        &queue,
+    let mut resident = Resident::new(
+        &client,
         &positions,
         Adjacency {
             offsets: &offsets,
@@ -88,14 +95,7 @@ fn the_kernel_computes_quints_own_force_law() {
         },
         params,
     );
-    println!(
-        "kernel source: {}",
-        if resident.using_spirv() {
-            "SPIR-V from quint-shaders"
-        } else {
-            "WGSL fallback"
-        }
-    );
+    println!("kernel source: CubeCL, authored in quint::resident::kernels");
     resident.repulse_only();
     let theirs = resident.read_forces();
 
@@ -140,7 +140,7 @@ fn the_kernel_computes_quints_own_force_law() {
 
 #[test]
 fn the_lane_settles_and_reports_it() {
-    let Some((device, queue)) = device() else {
+    let Some(client) = client() else {
         eprintln!("no wgpu adapter: skipping the settle receipt");
         return;
     };
@@ -148,9 +148,8 @@ fn the_lane_settles_and_reports_it() {
     let n = 256;
     let positions = scatter(n, 150.0);
     let offsets = no_edges(n);
-    let resident = Resident::new(
-        &device,
-        &queue,
+    let mut resident = Resident::new(
+        &client,
         &positions,
         Adjacency {
             offsets: &offsets,
@@ -187,7 +186,7 @@ fn the_lane_settles_and_reports_it() {
 
 #[test]
 fn springs_pull_two_bodies_to_their_rest_length() {
-    let Some((device, queue)) = device() else {
+    let Some(client) = client() else {
         eprintln!("no wgpu adapter: skipping the spring receipt");
         return;
     };
@@ -195,9 +194,8 @@ fn springs_pull_two_bodies_to_their_rest_length() {
     // Two bodies, one edge, far apart. With repulsion off, the spring
     // is the only force and its rest length is where they should end.
     let positions = vec![[-200.0, 0.0, 0.0, 0.0], [200.0, 0.0, 0.0, 0.0]];
-    let resident = Resident::new(
-        &device,
-        &queue,
+    let mut resident = Resident::new(
+        &client,
         &positions,
         Adjacency {
             offsets: &[0, 1, 2],
@@ -234,71 +232,60 @@ fn springs_pull_two_bodies_to_their_rest_length() {
     );
 }
 
+/// The migration's own receipt: the lane's positions are a CubeCL
+/// allocation, published as a lease whose stamp advances with the step.
+///
+/// This replaces the receipt that asserted a committed `.spv` was what
+/// ran. There is no `.spv` any more: the kernels are CubeCL and compile
+/// at first launch, so the question "did the artifact execute or did a
+/// fallback" no longer exists. What is worth asserting instead is that
+/// the field tier publishes the same contract the voxel tier does.
 #[test]
-fn the_committed_spirv_is_what_runs_where_the_adapter_allows_it() {
-    // The artifact receipt. `quint-shaders` compiles to a `.spv` that
-    // travels with the crate; without this, every other test here could
-    // pass on the WGSL fallback while the committed SPIR-V never
-    // executed once.
-    let Some((device, queue)) = device() else {
-        eprintln!("no wgpu adapter: skipping the SPIR-V receipt");
+fn the_lane_publishes_its_positions_as_a_stamped_lease() {
+    let Some(client) = client() else {
+        eprintln!("no wgpu adapter: skipping the resident lease receipt");
         return;
     };
-    if !device
-        .features()
-        .contains(wgpu::Features::PASSTHROUGH_SHADERS)
-    {
-        eprintln!("adapter has no passthrough: the WGSL fallback is the only path here");
-        return;
-    }
 
     let n = 256;
-    let positions = scatter(n, 180.0);
+    let positions = scatter(n, 120.0);
     let offsets = no_edges(n);
-    let params = Params {
-        repulsion: 4_000.0,
-        min_distance: 4.0,
-        ..Default::default()
-    };
-    let resident = Resident::new(
-        &device,
-        &queue,
+    let mut resident = Resident::new(
+        &client,
         &positions,
         Adjacency {
             offsets: &offsets,
             targets: &[],
         },
-        params,
-    );
-    assert!(
-        resident.using_spirv(),
-        "the adapter allows passthrough but the lane took the WGSL path"
+        Params::default(),
     );
 
-    // And the Rust-authored kernel computes the same law as the anchor,
-    // which is the point of writing it in Rust at all.
-    resident.repulse_only();
-    let theirs = resident.read_forces();
-    let xs: Vec<f32> = positions.iter().map(|p| p[0]).collect();
-    let ys: Vec<f32> = positions.iter().map(|p| p[1]).collect();
-    let (fx, fy) = repulsion_reference(
-        &xs,
-        &ys,
-        RepulsionParams {
-            strength: params.repulsion,
-            softening: params.min_distance,
-        },
+    // Read the lease's facts and let the borrow end: a lease borrows
+    // the lane, and stepping it is a mutation.
+    let (shape, byte_len, fits, revision) = {
+        let lease = resident.positions_lease();
+        (
+            lease.shape,
+            lease.byte_len(),
+            lease.fits(),
+            lease.stamp.revision,
+        )
+    };
+    assert_eq!(shape, [n, 4, 1]);
+    assert_eq!(byte_len, (n * 4 * 4) as u64);
+    assert!(fits, "the lane published a lease it overruns");
+    assert_eq!(revision, 0);
+
+    resident.step();
+    assert_eq!(
+        resident.positions_lease().stamp.revision,
+        1,
+        "a step must advance the published revision, or a reader on          another cadence cannot tell fresh from stale"
     );
-    let mut mean = 0.0f64;
-    for (i, force) in theirs.iter().enumerate() {
-        let magnitude = (fx[i] * fx[i] + fy[i] * fy[i]).sqrt().max(1e-6);
-        let dx = force[0] - fx[i];
-        let dy = force[1] - fy[i];
-        mean += ((dx * dx + dy * dy).sqrt() / magnitude) as f64;
-    }
-    mean /= n as f64;
-    assert!(
-        mean < 1e-3,
-        "the SPIR-V kernel disagrees with quint's law: mean relative error {mean:.2e}"
-    );
+
+    // The forces allocation is published the same way, which is what
+    // the tensor lane fills before an external-force step.
+    let forces = resident.forces_lease();
+    assert!(forces.fits());
+    assert_eq!(forces.shape, shape);
 }
