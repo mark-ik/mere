@@ -745,6 +745,142 @@ mod tests {
         assert_eq!(once.nodes.last().expect("a root").0, once.root);
     }
 
+    /// Build the probe's view of the frozen realization.
+    ///
+    /// A `ProbeSurface` needs only a parsed DOM, so selector resolution is
+    /// testable without a frame pump. What this cannot cover is a driven
+    /// scenario against a live app, which needs a host that renders this
+    /// realization and owns a winit loop. None exists yet.
+    fn probe_dom(frozen: &FrozenScene) -> genet_scripted_dom::ScriptedDom {
+        genet_scripted_dom::ScriptedDom::from_serialized_document(&format!(
+            "<!doctype html><html><body>{}</body></html>",
+            frozen.to_html("coastal")
+        ))
+    }
+
+    #[test]
+    fn a_probe_can_reach_every_instance_by_carried_identity() {
+        use genet_probe::{ProbeSurface, Selector, resolve};
+
+        let names = named(&[
+            ("fixture.map", "harbor", "Harbor"),
+            ("fixture.map", "beacon", "Beacon"),
+        ]);
+        let frozen = FrozenScene::freeze(&coastal(), "Coastal map", &names);
+        let dom = probe_dom(&frozen);
+        let surfaces = [ProbeSurface {
+            name: "frozen",
+            dom: &dom,
+            rect: [0.0, 0.0, 800.0, 600.0],
+            sheet: "",
+        }];
+
+        // Identity the DOM carries, which is the only way a probe drives
+        // anything: the source id in a data attribute, not a coordinate.
+        for instance in &frozen.instances {
+            let selector = Selector::role("graphics-symbol")
+                .with_attr("data-source-id", instance.source.id.clone());
+            let by_symbol = resolve(&surfaces, &selector);
+            let by_object = resolve(
+                &surfaces,
+                &Selector::role("graphics-object")
+                    .with_attr("data-source-id", instance.source.id.clone()),
+            );
+            assert!(
+                by_symbol.is_some() || by_object.is_some(),
+                "no selector reaches {} by its carried id",
+                instance.source.id
+            );
+        }
+    }
+
+    #[test]
+    fn a_probe_resolves_an_instance_by_its_announced_name() {
+        use genet_probe::{ProbeSurface, Selector, resolve, text_present};
+
+        let names = named(&[("fixture.map", "harbor", "Harbor")]);
+        let frozen = FrozenScene::freeze(&coastal(), "Coastal map", &names);
+        let dom = probe_dom(&frozen);
+        let surfaces = [ProbeSurface {
+            name: "frozen",
+            dom: &dom,
+            rect: [0.0, 0.0, 800.0, 600.0],
+            sheet: "",
+        }];
+
+        // The aria-label path: a scenario written against what a person hears
+        // resolves the same element as one written against the id.
+        assert!(
+            resolve(&surfaces, &Selector::role("graphics-object").containing("Harbor")).is_some()
+                || resolve(&surfaces, &Selector::role("graphics-symbol").containing("Harbor"))
+                    .is_some(),
+            "the announced name is not selectable"
+        );
+        assert!(text_present(&surfaces, "Harbor"));
+        assert!(
+            text_present(&surfaces, &frozen.summary),
+            "the long-form alternate is present for a scenario to assert"
+        );
+    }
+
+    #[test]
+    fn two_instances_sharing_a_name_stay_distinguishable() {
+        use genet_probe::{ProbeSurface, Selector, resolve};
+
+        // The documented reason data attributes exist: a visible label that is
+        // not unique. Two sources, one name.
+        let mut scene = Scene::new();
+        for id in ["first", "second"] {
+            let source = scene.intern_source(SourceRef::new("fixture", id));
+            scene.items.push(ProjectedItem {
+                source,
+                space: Scene::WORLD,
+                transform: Transform2::translation(0.0, 0.0),
+                footprint: Footprint::Point,
+                representation: Representation::Glyph,
+                layer: 0,
+                visible: true,
+                hit: None,
+                channels: Vec::new(),
+            });
+        }
+        let frozen = FrozenScene::freeze(
+            &scene,
+            "Twins",
+            &named(&[("fixture", "first", "Example"), ("fixture", "second", "Example")]),
+        );
+        let dom = probe_dom(&frozen);
+        let surfaces = [ProbeSurface {
+            name: "frozen",
+            dom: &dom,
+            rect: [0.0, 0.0, 800.0, 600.0],
+            sheet: "",
+        }];
+
+        let first = resolve(
+            &surfaces,
+            &Selector::role("graphics-symbol").with_attr("data-source-id", "first"),
+        );
+        let second = resolve(
+            &surfaces,
+            &Selector::role("graphics-symbol").with_attr("data-source-id", "second"),
+        );
+        // A Hit is a window-space point, because probe drives pointer input
+        // rather than node handles. So what proves distinguishability is that
+        // each id-filtered selector resolves at all: a name-only selector
+        // could not tell these two apart, and the carried attribute can.
+        assert!(first.is_some(), "the first twin is unreachable by its id");
+        assert!(second.is_some(), "the second twin is unreachable by its id");
+        assert!(
+            resolve(
+                &surfaces,
+                &Selector::role("graphics-symbol").with_attr("data-source-id", "third"),
+            )
+            .is_none(),
+            "a selector for an absent id must miss rather than match a sibling"
+        );
+    }
+
     #[test]
     fn freezing_is_deterministic() {
         let scene = coastal();

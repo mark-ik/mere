@@ -29,3 +29,6 @@ serde_json = "1"
 # realization is proven to be a DOM a host can traverse, not a hopeful string.
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 layout_dom_api = { package = "layout-dom-api", git = "https://github.com/merely-made/genet.git", branch = "main" }
+# Test-only: proves the frozen realization is resolvable through the identity
+# the DOM carries, which is the only way genet-probe can drive anything.
+genet-probe = { git = "https://github.com/merely-made/genet.git", branch = "main" }
