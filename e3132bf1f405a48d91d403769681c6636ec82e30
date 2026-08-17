@@ -1,0 +1,4 @@
+The message says the review landed "with a banner on the proposal pointing at
+the review". It did not: this commit touched no file under
+technical_architecture/, and the leases proposal was left unchanged. The banner,
+and the fold it announces, landed later in 2932064e.
