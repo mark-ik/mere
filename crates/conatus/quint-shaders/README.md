@@ -1,5 +1,31 @@
 # quint-shaders
 
+**Retired for compute, 2026-08-16.** The resident lane's kernels are
+CubeCL now, authored in `quint::resident::kernels` and compiled at
+first launch, per the engine composition ruling (author in CubeCL,
+consume rust-gpu artifacts). Nothing loads this crate's `.spv` any
+more, and `quint/shaders/` (the artifact, its manifest, and the WGSL
+fallback) is dead with it.
+
+This crate is kept rather than deleted because the carriage it
+documents is still live for its *other* job: consuming rust-gpu
+artifacts we do not author, starting with renderling's shaders. The
+fork, the version-gate bug, the three false trails, and the build
+command below are the reference for that work. Delete this crate only
+when nothing in the stack consumes a rust-gpu artifact at all.
+
+What the migration removed, for the record: the `.spv`, the WGSL
+fallback, the `PASSTHROUGH_SHADERS` feature request, `using_spirv()`,
+and the receipt that asserted the committed artifact was what ran. That
+last one existed because "the `.spv` exists" and "the `.spv` runs" were
+different claims; with a single compiled-at-launch source there is no
+fallback to silently pass on, so the question retires with the
+mechanism.
+
+---
+
+The historical description follows.
+
 The resident lane's kernels in Rust, compiled to SPIR-V by rust-gpu.
 `src/lib.rs` is the source of truth for what the GPU runs: repulsion,
 springs, and integration, written so the force law reads the same way
