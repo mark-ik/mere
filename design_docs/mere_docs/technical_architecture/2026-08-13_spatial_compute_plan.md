@@ -109,11 +109,36 @@ CubeCL, where Burn synergy pays; rust-gpu remains as *consumed
 artifacts* from upstreams that maintain them (renderling's shaders;
 nexus's khal kernels at its adoption gate). The local rust-gpu fork and
 rebuilt cargo-gpu are maintenance tooling for consumed artifacts, no
-longer an authoring lane; quint's kernels migrate to CubeCL as part of
-that ruling; the perf gate cleared 2026-08-16 (same-process control:
-CubeCL repulsion 11.39 ms vs the incumbent's committed-SPIR-V
+longer an authoring lane; quint's kernels migrated to CubeCL on
+2026-08-16, the perf gate having cleared the same day (same-process
+control: CubeCL repulsion 11.39 ms vs the incumbent's committed-SPIR-V
 15.84 ms at n=50k, equal scope, both warmed; JIT first launch
-12.61 ms). Renderling
+12.61 ms).
+
+**The migration, landed.** `quint::resident::kernels` now holds
+repulsion, springs, integration, and the settle reduction as `#[cube]`
+source, and `Resident` allocates through the caller's `ResidentClient`
+rather than raw wgpu buffers, so the tensor lane and the explicit lane
+share an allocator and not merely a device. The four receipts stand
+unchanged in substance: the kernel still matches
+`forces::repulsion_reference`, the lane still settles, springs still
+pull to rest length.
+
+Three things retired with it, and the third is the interesting one:
+the committed `.spv`, the WGSL fallback, and the receipt asserting the
+artifact was what ran. That receipt existed because ".spv exists" and
+".spv runs" were different claims; with one compiled-at-launch source
+there is no fallback to pass on silently, so the question retires with
+the mechanism rather than needing an answer. `quint-shaders` is kept,
+retired for compute, because the carriage it documents is still how we
+*consume* rust-gpu artifacts we do not author.
+
+**The field tier now publishes the lease.** `Resident::positions_lease`
+and `forces_lease` hand out the same `SpatialLease` the chunk bundles
+do, stamped with a revision that advances on every step. The field tier
+and the voxel tier say one thing to their consumers, which is what
+makes a renderer's binding code indifferent to which produced its
+buffer. Renderling
 is a hands-on fork by the same ruling: the 0.9-to-0.10 shader-source
 migration is sanctioned work, priced by the first shader edit the
 engine needs.
