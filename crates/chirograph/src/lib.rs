@@ -148,6 +148,85 @@ impl AdvertisedAction {
 }
 
 
+/// What a view has selected, as data rather than host state.
+///
+/// Selection was host-only state until a scene could be shared: mer3ly puts a
+/// selected id on its shared wire, so opening someone else's link restores what
+/// they had selected on a second device. That is the forcing consumer, and it
+/// forces exactly this much.
+///
+/// `source` names the view that produced the selection. It is required even
+/// with one view, because the entire point of the record is that a second view
+/// can tell whose selection it is reading, and a field added later would be
+/// absent on every link already in circulation.
+///
+/// **Deliberately absent: a resolution strategy.** Mosaic's clause vocabulary
+/// declares how selections from several views combine — single, union,
+/// intersect, or crossfilter, where a view is filtered by every brush but its
+/// own. Nothing ships two coordinated views yet, so adopting that here would be
+/// speculation, and the shape is easier to get right against a real second
+/// consumer than against an imagined one. The record is designed so it can
+/// arrive without breaking links already written: a reader that finds no
+/// strategy treats the selection as `single`, which is what one view means.
+///
+/// This is a noun, not an intent. Freeze ruling D1 stands: the protocol owns
+/// the intent triple, and selecting something is not invoking anything.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Selection {
+    /// The view that produced this selection.
+    pub source: String,
+    /// What is selected. Empty means a cleared selection, which is a fact worth
+    /// carrying rather than an absence to infer.
+    pub targets: Vec<SelectionTarget>,
+}
+
+/// One selected thing, in the shape a shipped consumer already uses.
+///
+/// Kind and id are opaque strings on purpose. The protocol does not learn a
+/// product's taxonomy, the same way a score carries opaque [`sceno::SourceRef`]s
+/// rather than source truth.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectionTarget {
+    /// The product's word for what this is: `node`, `edge`, a region name.
+    pub kind: String,
+    pub id: String,
+}
+
+impl Selection {
+    /// A selection of one thing, the case every shipping consumer has today.
+    pub fn one(source: impl Into<String>, kind: impl Into<String>, id: impl Into<String>) -> Self {
+        Self {
+            source: source.into(),
+            targets: vec![SelectionTarget {
+                kind: kind.into(),
+                id: id.into(),
+            }],
+        }
+    }
+
+    /// A cleared selection, distinct from never having selected anything.
+    pub fn cleared(source: impl Into<String>) -> Self {
+        Self {
+            source: source.into(),
+            targets: Vec::new(),
+        }
+    }
+
+    pub fn is_cleared(&self) -> bool {
+        self.targets.is_empty()
+    }
+
+    /// True when `other` came from a different view.
+    ///
+    /// The one question a resolution strategy will need answered when it
+    /// arrives, and the reason `source` is mandatory now: crossfilter is
+    /// defined as "every brush but this view's own", which is unanswerable
+    /// without it.
+    pub fn is_foreign_to(&self, other: &Selection) -> bool {
+        self.source != other.source
+    }
+}
+
 /// The semantic role available before any resource bytes arrive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SemanticRole {
@@ -1186,6 +1265,37 @@ mod tests {
             LiveViewReferenceV1::new("file:C:/private/graph.json").validate(),
             Err(LiveViewReferenceError::InvalidOpaqueReference)
         ));
+    }
+
+    #[test]
+    fn a_selection_round_trips_and_keeps_its_source() {
+        let selection = Selection::one("sandbox", "node", "mere");
+        let wire = serde_json::to_string(&selection).expect("serialize");
+        let far_side: Selection = serde_json::from_str(&wire).expect("deserialize");
+        assert_eq!(far_side, selection);
+        assert_eq!(far_side.source, "sandbox");
+        assert_eq!(far_side.targets[0].kind, "node");
+    }
+
+    #[test]
+    fn a_cleared_selection_is_not_an_absent_one() {
+        let cleared = Selection::cleared("sandbox");
+        assert!(cleared.is_cleared());
+        // It survives the wire as a cleared selection rather than vanishing,
+        // so a second view learns "they deselected" instead of "no news".
+        let wire = serde_json::to_string(&cleared).expect("serialize");
+        let far_side: Selection = serde_json::from_str(&wire).expect("deserialize");
+        assert!(far_side.is_cleared());
+        assert_eq!(far_side.source, "sandbox");
+    }
+
+    #[test]
+    fn foreignness_is_answerable_which_is_why_source_is_mandatory() {
+        let mine = Selection::one("canvas", "node", "a");
+        let theirs = Selection::one("swatch", "node", "b");
+        let also_mine = Selection::one("canvas", "node", "c");
+        assert!(mine.is_foreign_to(&theirs));
+        assert!(!mine.is_foreign_to(&also_mine));
     }
 
     #[test]

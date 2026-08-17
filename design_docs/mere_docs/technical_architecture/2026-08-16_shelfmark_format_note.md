@@ -52,7 +52,7 @@ Rust shapes land with the founding, gated on the second shipping consumer.
   },
   "delta": {
     "placement": { /* A6's record, by reference; see the delta rule */ },
-    "selection": { /* reserved; defined by A2 when it lands */ },
+    "selection": { /* chirograph::Selection, A2, 2026-08-16 */ },
     "backdrop":  { /* reserved; defined by C3 when it lands */ }
   }
 }
@@ -72,9 +72,15 @@ serialization**. Concretely:
   or sidecar, there is one serialization of a pin. If A6 chooses write-back,
   the section is a score patch; if sidecar, the section embeds the sidecar
   record. Deciding A6 decides this section.
-- `selection` and `backdrop` are reserved names. A2 and C3 define them when
-  their gates open. Until then a shelfmark may carry them only as host-local
-  content under the unhonored-section rule below.
+- The `selection` section is defined as of 2026-08-16: `chirograph::Selection`,
+  carrying the producing view and its targets. A2 owns it, so the section is
+  that record and not a second serialization of it. It deliberately carries no
+  resolution strategy, because nothing ships two coordinated views yet; a
+  reader that finds none treats the selection as `single`, so the strategy can
+  arrive later without breaking links already written.
+- `backdrop` remains a reserved name. C3 defines it when L2 opens. Until then a
+  shelfmark may carry it only as host-local content under the unhonored-section
+  rule below.
 
 Sections mirror the stack's own extension valve: the scene extends through
 named channels, the shelfmark extends through named sections. Mer3ly's
@@ -129,7 +135,7 @@ Two caveats, recorded so the fallback trigger is legible:
 | `reading` | `projection.reading` |
 | `arrangement` | `projection.arrangement` |
 | `pins`, `motion` | `delta.placement`, once A6 defines the record |
-| `selection` | `delta.selection`, reserved until A2 |
+| `selection` | `delta.selection`, now `chirograph::Selection` (A2) |
 | `backdrop { kind, collidable }` | `delta.backdrop`, reserved until C3 |
 | `physics` | host-local section under the unhonored rule; no target owns it |
 | (absent) | `expects.generation`, new and required |

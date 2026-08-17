@@ -638,3 +638,32 @@ not settled without it.
   Still open in B1: rendering the structure into an actual DOM tree, the
   AccessKit screen-reader traversal, and the genet-probe scenario asserting the
   semantic tree. The shape they all need now exists and is stable.
+- 2026-08-16: **B1 carried to its buildable edge; A1 closed; A2 half-open.**
+  B1 gained a renderer: `FrozenScene::to_html` emits the graphics-document
+  anatomy with WAI's long-form alternate as a real table, and the tests parse it
+  back through genet-scripted-dom rather than string-matching, so a malformed
+  tag fails as a missing tree node. One of them is a hostile name, because a
+  projection whose accessible form can be broken by a source called `<script>`
+  is not accessible and is a hole besides. It also gained an AccessKit
+  projection into uxtree, behind an off-by-default feature so a client that only
+  reads scenes carries no tree builder, and probe-resolution proof that every
+  instance is reachable by carried id and by announced name.
+  What B1 still lacks needs a host, not effort: no OS screen reader has been
+  driven, and no probe scenario can run until something renders this realization
+  inside a frame pump. The precedent this target named is a manual checklist
+  written for meerkat, an app that no longer exists, so it could not be followed
+  literally.
+  A1 closed by merging its two remaining questions into one field.
+  `Scene.honored_holds` records the positive half bound to instances, which both
+  promotes the receipt mer3ly was recomputing and closes a real footgun: plain
+  `relax` used to drag an ensure-class placement away in silence and now cannot,
+  whatever entry point a caller reaches for. Anchored holds stay out, because
+  recording a suggestion as honored would invite a later pass to treat it as
+  binding.
+  A2's serialization half landed as `chirograph::Selection`, carrying the
+  producing view and its targets, with the resolution strategy deliberately
+  absent until two coordinated views exist. The `source` field is mandatory now
+  rather than later because crossfilter is defined as "every brush but this
+  view's own", which is unanswerable without it, and a field added later would
+  be missing from every link already in circulation. The shelfmark note's
+  reserved `selection` section is now defined against that record.
