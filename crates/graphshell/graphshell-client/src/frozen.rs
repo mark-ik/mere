@@ -220,6 +220,119 @@ fn summarize(instances: usize, relations: usize, unmet: usize) -> String {
     summary
 }
 
+/// Escape the five characters that would otherwise change the tree's shape.
+///
+/// Names arrive from an adapter and may contain anything; a projection whose
+/// accessible form can be broken by a node called `<b>` is not accessible.
+fn escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(character),
+        }
+    }
+    out
+}
+
+impl FrozenRole {
+    /// The Graphics ARIA role a host should carry into its accessibility tree.
+    pub fn aria_role(self) -> &'static str {
+        match self {
+            // A mark standing for a thing, with no internal structure to explore.
+            Self::Symbol => "graphics-symbol",
+            // Content with substance. Live content freezes into a description
+            // of something that was moving, which is still an object, so the
+            // distinction is carried in the text rather than by inventing a
+            // role the specification does not define.
+            Self::Object | Self::LiveContent => "graphics-object",
+        }
+    }
+}
+
+impl FrozenScene {
+    /// Render the frozen realization as semantic markup.
+    ///
+    /// The anatomy is the catalog's own W3C citations rather than anything
+    /// invented here: a `graphics-document` root, SVG's title/desc pairing
+    /// expressed as `aria-labelledby` and `aria-describedby`, Graphics ARIA
+    /// roles per instance, and WAI's long-form alternate as a real table for
+    /// the case where the visual alone is insufficient.
+    ///
+    /// A string rather than a live tree on purpose: this crate stays free of a
+    /// DOM engine, and every host that has one can parse it. Relations are
+    /// listed as text at both ends because a reader following a relation needs
+    /// names, not indices.
+    pub fn to_html(&self, id_prefix: &str) -> String {
+        let name_id = format!("{id_prefix}-name");
+        let summary_id = format!("{id_prefix}-summary");
+        let mut html = String::new();
+
+        html.push_str(&format!(
+            "<figure role=\"graphics-document\" aria-labelledby=\"{}\" aria-describedby=\"{}\">",
+            escape(&name_id),
+            escape(&summary_id)
+        ));
+        html.push_str(&format!(
+            "<figcaption id=\"{}\">{}</figcaption>",
+            escape(&name_id),
+            escape(&self.name)
+        ));
+        html.push_str(&format!(
+            "<p id=\"{}\">{}</p>",
+            escape(&summary_id),
+            escape(&self.summary)
+        ));
+
+        html.push_str("<ul class=\"frozen-instances\">");
+        for instance in &self.instances {
+            html.push_str(&format!(
+                "<li role=\"{}\" aria-label=\"{}\" data-source-id=\"{}\">{}</li>",
+                instance.role.aria_role(),
+                escape(&instance.name),
+                escape(&instance.source.id),
+                escape(&instance.name)
+            ));
+        }
+        html.push_str("</ul>");
+
+        if !self.relations.is_empty() {
+            html.push_str("<ul class=\"frozen-relations\">");
+            for relation in &self.relations {
+                let kind = relation.kind.clone().unwrap_or_else(|| "related to".to_owned());
+                html.push_str(&format!(
+                    "<li>{} {} {}</li>",
+                    escape(&relation.from),
+                    escape(&kind),
+                    escape(&relation.to)
+                ));
+            }
+            html.push_str("</ul>");
+        }
+
+        // The long-form alternate. Rendered unconditionally: it is the form a
+        // reader falls back to, so making it conditional on complexity would
+        // mean guessing when someone needs it.
+        html.push_str("<table class=\"frozen-alternate\">");
+        html.push_str("<caption>Every item and relationship in this projection</caption>");
+        html.push_str("<thead><tr><th scope=\"col\">Kind</th><th scope=\"col\">Name</th><th scope=\"col\">Detail</th></tr></thead><tbody>");
+        for (kind, name, detail) in self.rows() {
+            html.push_str(&format!(
+                "<tr><td>{}</td><th scope=\"row\">{}</th><td>{}</td></tr>",
+                escape(&kind),
+                escape(&name),
+                escape(&detail)
+            ));
+        }
+        html.push_str("</tbody></table></figure>");
+        html
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,6 +454,99 @@ mod tests {
             .expect("the violation is in the tabular alternate");
         assert_eq!(row.1, "ghost");
         assert!(row.2.contains("(3, 4)"));
+    }
+
+    #[test]
+    fn the_frozen_form_is_a_real_tree_a_host_can_traverse() {
+        use genet_scripted_dom::ScriptedDom;
+        use layout_dom_api::LayoutDom;
+
+        let scene = coastal();
+        let names = named(&[("fixture.map", "harbor", "Harbor")]);
+        let frozen = FrozenScene::freeze(&scene, "Coastal map", &names);
+        let html = frozen.to_html("coastal");
+
+        // Parsed, not string-matched: a markup bug that a regex would miss
+        // becomes a tree that does not contain what it should.
+        let dom = ScriptedDom::from_serialized_document(&format!(
+            "<!doctype html><html><body>{html}</body></html>"
+        ));
+        let serialized = dom.inner_html(dom.document());
+
+        assert!(serialized.contains("graphics-document"), "document role survives parsing");
+        assert!(serialized.contains("graphics-symbol") || serialized.contains("graphics-object"));
+        assert!(serialized.contains("Harbor"));
+        assert!(serialized.contains("Every item and relationship in this projection"));
+        // One row per instance plus the header row.
+        assert_eq!(
+            serialized.matches("<tr").count(),
+            frozen.rows().len() + 1,
+            "every row reached the tree"
+        );
+    }
+
+    #[test]
+    fn the_document_names_and_describes_itself() {
+        let frozen = FrozenScene::freeze(&coastal(), "Coastal map", &HashMap::new());
+        let html = frozen.to_html("coastal");
+        // SVG's title/desc pairing, expressed the way ARIA carries it.
+        assert!(html.contains("aria-labelledby=\"coastal-name\""));
+        assert!(html.contains("aria-describedby=\"coastal-summary\""));
+        assert!(html.contains("id=\"coastal-name\">Coastal map<"));
+        assert!(html.contains(&frozen.summary));
+    }
+
+    #[test]
+    fn every_instance_carries_a_role_and_a_label() {
+        let frozen = FrozenScene::freeze(&coastal(), "Coastal map", &HashMap::new());
+        let html = frozen.to_html("coastal");
+        assert_eq!(
+            html.matches("aria-label=").count(),
+            frozen.instances.len(),
+            "no instance reaches a reader unlabelled"
+        );
+        assert_eq!(html.matches("role=\"graphics-").count(), frozen.instances.len() + 1);
+    }
+
+    #[test]
+    fn a_hostile_name_cannot_reshape_the_tree() {
+        use genet_scripted_dom::ScriptedDom;
+        use layout_dom_api::LayoutDom;
+
+        // Names come from an adapter and may contain anything. A projection
+        // whose accessible form can be broken by a node called `<script>` is
+        // not accessible, and is a hole besides.
+        let mut scene = Scene::new();
+        let source = scene.intern_source(SourceRef::new("fixture", "x"));
+        scene.items.push(ProjectedItem {
+            source,
+            space: Scene::WORLD,
+            transform: Transform2::translation(0.0, 0.0),
+            footprint: Footprint::Point,
+            representation: Representation::Glyph,
+            layer: 0,
+            visible: true,
+            hit: None,
+            channels: Vec::new(),
+        });
+        let hostile = "</li></ul><script>alert(1)</script>";
+        let frozen = FrozenScene::freeze(
+            &scene,
+            "Hostile",
+            &named(&[("fixture", "x", hostile)]),
+        );
+        let html = frozen.to_html("h");
+        assert!(!html.contains("<script>"), "the tag never survives as markup");
+        assert!(html.contains("&lt;script&gt;"), "it survives as text");
+
+        let dom = ScriptedDom::from_serialized_document(&format!(
+            "<!doctype html><html><body>{html}</body></html>"
+        ));
+        let serialized = dom.inner_html(dom.document());
+        assert!(
+            !serialized.contains("<script>"),
+            "and the parser agrees, which is the check that matters"
+        );
     }
 
     #[test]

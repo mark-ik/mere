@@ -2,10 +2,19 @@
 
 **Ratified 2026-08-14, by Mark.** Scopes ruling 4 of
 [epoch carriage and replication](2026-08-14_epoch_carriage_replication.md),
-which gated shipping on an unanswered retention question. Related: the
+which gated shipping on an unanswered retention question.
+
+**Amended 2026-08-16**, folding in the four amendments from
+[carriage against stickleback's epoch retention](../research/2026-08-16_carriage_against_stickleback_epochs.md),
+a review of this doc against machinery that already exists. The central choice
+survives the review unchanged; three surrounding claims did not.
+
+Related: the
 [listener-executive lease doctrine](../../../../retinue/design_docs/2026-08-10_listener_executive_and_protocol_leases.md),
 the [sited device identity brief](../research/2026-08-10_sited_device_identity_brief.md),
-`session_runtime::wallet_grant`, `muniment::SlotStore`.
+`pandect::wallet_grant` (named `session_runtime` when this was written),
+`muniment::SlotStore`, `stickleback::epoch_retention`,
+`graphshell::personal_sync`, `graphshell::native::graph_keys`.
 
 ## The threat, sharpened
 
@@ -36,7 +45,7 @@ So retention's whole job is: **make cooperative replicas converge to the same
 current-version-only state the local wallet already maintains, within a
 bounded window, without assuming every peer is reachable.**
 
-## Ruling (proposed)
+## Ruling
 
 1. **Epoch carriage replicates as a leased slot, never as history.** The
    record is keyring state, not memory; it never enters the content-addressed
@@ -92,13 +101,10 @@ and in the same direction: they loosen the bound exactly where exposure is
 worst.
 
 *Worst-link sizing is backwards as a global rule.* It takes the device with
-the most constrained link and imposes its window on everything else. The
-device that most needs a long lease is the sited radio, which is also the
-device the threat model expects to be stolen. A global TTL therefore lets the
-radio's recovery convenience set the harvest window for two desktops on a LAN
-that never needed it. The doc's own example already argues per-device ("a
-carriage lease serving a LoRa-reachable radio is long; one serving two desktops
-on a LAN is short"); the sizing rule contradicted it.
+the most constrained link and imposes its window on everything else, so the
+device that most needs a long lease sets the harvest window for devices that
+never needed one. The doc's own example already argued per-device; the sizing
+rule contradicted it.
 
 Per-device is also the honest unit, because **the wrapping key is per-device**.
 A compromised key opens only that device's carriage, so that device's TTL is
@@ -106,10 +112,31 @@ already the true exposure bound for it. Making the knob per-device just stops
 one device's constraint from bounding another's exposure.
 
 *The grant expiry is a correctness ceiling, not an exposure bound.* Grant
-windows are sized by re-issue cost, which for a sited radio is deliberately
-long (M3; sited brief). Carriage windows are sized by harvest exposure. Two
-different questions were sharing one bound, and the shared bound was the loose
-one.
+windows are sized by re-issue cost. Carriage windows are sized by harvest
+exposure. Two different questions were sharing one bound, and the shared bound
+was the loose one.
+
+**Corrected 2026-08-16 after review: the worked example was of a case that
+cannot arise.** This amendment and the sizing rule it replaced both argued from
+the sited radio — "a carriage lease serving a LoRa-reachable radio is long; one
+serving two desktops on a LAN is short". **A sited radio has no carriage to
+lease.** Verified along the whole chain rather than assumed:
+`store_wrapped_epochs` iterates `set.personas` only, so no device-scoped
+certificate ever gets a record; `requires_epoch_material` keys on
+`ACTION_PRIVATE_READ`; `is_persona_scoped_action` puts `private.read` on the
+persona side of the partition, so it can only land on a persona certificate;
+and castellan's station policy refuses a set containing persona certificates
+outright (`SitedStationGrantError::PersonaAuthority`). A transport-only station
+holds no wrapped-epoch record at all.
+
+The conclusion survives on its own terms, because the wrapping key really is
+per-device and that really is the honest unit for an exposure budget. What
+changes is the sizing argument. The devices that hold carriage are the ones
+that act for a persona: ordinary personal devices on ordinary links, broadly
+the same population that could hold a graph key-group seat. The "worst link"
+framing was reaching for constrained radios that are out of scope, and TTLs
+should be argued from persona-holding devices, where the recovery benefit is
+real and the links are unremarkable.
 
 So the lease ceiling becomes a conjunction of three bounds answering three
 questions:
@@ -121,6 +148,90 @@ lease.expires_at_ms <= min(
     now_ms + CARRIAGE_ABSOLUTE_CEILING_MS // backstop against misconfiguration
 )
 ```
+
+### The overlap with the graph key group
+
+**Added 2026-08-16 after review.** `graphshell::native::graph_keys` is already
+"this device's membership in one personal graph's key group": pre-key
+publication, an explicit create-then-add ceremony, and `GroupSession` state
+held through Personae's `SealedRecordStorage`. It distributes key material to a
+person's own devices, over the same lane carriage would use. This doc proposed
+a second mechanism for that shape without mentioning the first.
+
+The dividing line is real, and `graph_keys` states it exactly.
+`recipient_for_root` returns `None` for "a device that was paired but never
+joined the key group", which it calls the ordinary state of such a device.
+Pairing and group membership are separate acts, deliberately: creating a group
+"is an explicit act, not something a device does because it noticed it could".
+So a device can hold a persona certificate, and therefore carriage, while
+holding no seat in any key group.
+
+Where both exist, the group session is the better channel. It is
+authenticated, live, and it carries its own membership ceremony, including
+`remove_and_rotate` for withdrawal. The leased slot earns its keep for the
+paired-but-unseated device, which has no session to ride.
+
+**Open, and deliberately not settled here:** whether carriage for a
+group-member device should be retired entirely in favour of the group session.
+That is a real simplification rather than a tidy-up, and it turns on how the
+membership and pairing-key lifecycles line up: whether losing a seat should
+lose carriage, and whether a device may need carriage before it can be seated.
+Settling it needs those two lifecycles compared properly, which neither this
+doc nor the review that prompted this section has done. Until it is settled
+both mechanisms stand, and this section is the boundary between them.
+
+### Why not stickleback's epoch-retention engine
+
+**Added 2026-08-16 after review.** `stickleback::epoch_retention` is a live
+engine for a problem that reads like this one, in production in
+`moot::commons::chat` and `knot::sync`, each with a propose/execute pair.
+Carriage does not adopt it, and the reason is principled rather than
+incidental.
+
+**The two models pull opposite directions on the same fact.**
+`EpochHoldReason::OfflineMember`, "the governed offline-member policy still
+promises recovery to this member", makes an unreachable member a reason to
+**keep** an epoch. A carriage lease makes an unreachable holder a reason to
+**drop** one. Both are right in their domain, and the difference follows from
+what the material is for: group epochs decrypt durable shared documents, so
+premature forgetting destroys data, while carriage epochs are delivery copies
+of material the local wallet already holds current, so late forgetting is the
+entire risk.
+
+**The engine's central gate is one carriage neither has nor needs.**
+`propose_epoch_pruning` blocks on `MissingCheckpoint` unless the domain
+supplies an `EpochCheckpointBasis` proving it can rebuild its projection
+without the epochs it would forget. That gate exists because forgetting a
+group epoch makes every operation sealed under it permanently unreadable.
+Nothing is lost that way by forgetting a carriage copy, because the local
+wallet is the authority and holds current material by construction. Carriage
+would supply no checkpoint and be blocked forever.
+
+That is not hypothetical. `graph_keys` carries a `retention_probe` test that
+runs the engine against a personal-graph keyring and asserts the proposal is
+blocked on exactly `MissingCheckpoint`, calling it "the correct answer rather
+than a limitation to work around". The same probe measures the pressure and
+finds it slight: 103 bytes per epoch, one epoch per revocation, so "a mesh that
+retired a device every week for a decade would spend 54 KB". For the group
+lane, retention is a shape worth naming and not a pressure worth acting on.
+Carriage acts where that lane does not because its motive is exposure, not
+size.
+
+**Also not adopted: `retained_data_epochs`,** count-based retention. It needs a
+prune authorization to arrive, which is the dependency ruling 5 refuses.
+Time-based expiry converges with zero messages delivered, which is the whole
+point against a peer that may never be reachable again.
+
+**Adopted, in shape.** A propose/execute split, matching what both production
+consumers do: `execute_epoch_pruning` revalidates a reviewed proposal before
+anything is destroyed. The purge below becomes a pure pass returning a
+reviewable artifact, a reason per retained lease and `blockers` when it
+refuses, with execution separate, so a blocked purge is legible rather than
+silent. And the fail-closed posture: `IncompleteEpochOrder` blocks the entire
+proposal rather than pruning on partial information, and carriage refuses in
+the same situation. `epochs_oldest_first` is guarded that way because "lexical
+secret-id order is not a safe substitute for chronology", which is the same
+insight as ruling 3's monotonic issue counter, reached independently.
 
 ### Where the knob lives
 
@@ -159,10 +270,28 @@ the guarantees are cryptographic only (per-device wrap, blinded-index
 unlinkability), and they hold with or without retention. The doc states this
 plainly so the feature is never described as remote erasure.
 
-## Implementation shape (illustrative, gated on a transport existing)
+## Implementation shape (illustrative, gated on a carriage lane)
 
-No code moves now; there is no replication transport to gate. When one
-exists (murm/moot shaped), the pieces are:
+**Amended 2026-08-16 after review.** This first read "gated on a transport
+existing", with the transport called "murm/moot shaped and undesigned". The
+transport exists. `graphshell::personal_sync` is H7 personal-device
+synchronization: running (`h7_sync_peer`), built on stickleback and p2panda
+with causal ordering and policy-before-insert storage, peers authenticated
+through `personae::DerivedKeyAttestation`, and already enforcing `PrivacyClass`
+in that `AppendAccess` refuses `LocalOnly | MootScoped`. Its peer set is
+device-to-device across one person's own devices, which is exactly the
+trusted-peer set carriage wants.
+
+What does not exist is a **lane**, and the separation is load-bearing rather
+than tidy. `PersonalGraphEvent` is a graph grammar, of nodes, tags, relations,
+facets and scenes, and its payloads are engram truth. A `LeasedEpochRecord`
+variant on it would put key material into graph history, contradicting ruling 1
+in the one lane that is append-only by contract. Ruling 1 is not a preference
+about where records live; it is the reason carriage may be destructive at all.
+
+So carriage rides a **sibling topic on the same transport**, with its own
+payload grammar and slot semantics. `TopicStore` and `Topic` are already
+imported there. What remains is a topic and a grammar, not a transport:
 
 - A `LeasedEpochRecord` wrapper over `WrappedEpochRecord`: `issued_at_ms`,
   `expires_at_ms`, `issue: u64` (monotonic per certificate), issuer signature
@@ -173,8 +302,10 @@ exists (murm/moot shaped), the pieces are:
   version, assert the grant-expiry ceiling, destructive-replace.
 - Read path: refuse expired (`now >= expires_at_ms` refuses, matching the
   station grant check).
-- Scheduled purge: the steady-heat shape Athanor already has for tombstone
-  age-out, applied to expired leases.
+- Purge as propose then execute: a pure pass returning retained leases with a
+  reason each, expired leases as candidates, and `blockers` when it refuses;
+  execution separate, on the steady-heat schedule Athanor already runs for
+  tombstone age-out.
 
 ## Done conditions
 
@@ -188,11 +319,17 @@ exists (murm/moot shaped), the pieces are:
   TTL, or the absolute ceiling.
 - A device with no carriage policy set replicates nothing, and that is the
   state a freshly commissioned device is in.
+- No carriage record is representable as a `PersonalGraphEvent`, so the two
+  grammars cannot be crossed by accident.
 
 ## What this does not decide
 
-- **The transport.** Which lane physically moves carriage slots between
-  trusted peers is murm/moot shaped and undesigned.
+- **The carriage lane's payload grammar.** The transport is H7
+  `personal_sync`; what a carriage topic's records look like on it, and how
+  that topic is provisioned beside the graph topic, is unwritten.
+- **Whether group-member devices need carriage at all.** See the key-group
+  section: a real simplification, blocked on a lifecycle comparison nobody has
+  done.
 - **The trusted-peer roster.** Who the peers are and how membership is
   governed; shared with the participant gate's admission machinery.
 - **Mesh-wide revocation flooding.** Sited brief question 3 stays open; this
