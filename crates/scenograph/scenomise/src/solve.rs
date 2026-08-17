@@ -1,8 +1,8 @@
 //! Product-free analytic score realization.
 
 use sceno::{
-    Arrangement, Board, Footprint, Geographic, Hold, Hulls, InstanceId, Placement, ProjectedItem,
-    Rect, Region, Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
+    Arrangement, Board, Footprint, Geographic, Hold, HonoredHold, Hulls, InstanceId, Placement,
+    ProjectedItem, Rect, Region, Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
 };
 
 /// The golden-angle spiral's nearest neighbours are roughly 0.9 of the scale
@@ -83,6 +83,23 @@ pub fn solve(score: &Score) -> Scene {
     // this it was dropped in silence, which is the same failure as moving a pin
     // and saying nothing. Encourage-class holds are excluded on purpose: an
     // anchored home that goes unplaced is best effort behaving as designed.
+    // The positive half, bound to instances. Recorded for every instance a
+    // held source reached, because a source may be placed more than once and
+    // each placement is equally held.
+    scene.honored_holds = scene
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            let source = scene.sources.get(item.source.0 as usize)?;
+            let held = score.hold_for(source)?;
+            matches!(held.hold, Hold::Pinned).then(|| HonoredHold {
+                instance: InstanceId(index as u32),
+                placement: held.clone(),
+            })
+        })
+        .collect();
+
     scene.unmet_holds = score
         .holds
         .iter()
@@ -354,6 +371,52 @@ mod tests {
         for instance in &pinned {
             assert_eq!(scene.sources[scene.items[instance.0 as usize].source.0 as usize].id, "0");
         }
+    }
+
+    #[test]
+    fn a_satisfied_pin_is_recorded_against_its_instance() {
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        score.items.push(card(0, 0));
+        score.items.push(card(1, 1));
+        score.holds.push(HeldPlacement::pinned(
+            SourceRef::new("fixture", "1"),
+            Vec2::new(9.0, -3.0),
+        ));
+        let scene = solve(&score);
+
+        assert_eq!(scene.honored_holds.len(), 1);
+        let honored = &scene.honored_holds[0];
+        assert_eq!(honored.placement.source.id, "1");
+        // Bound to the instance, so a consumer never re-derives the mapping.
+        let placed = scene.items[honored.instance.0 as usize].transform.translate;
+        assert_eq!(placed, Vec2::new(9.0, -3.0));
+        assert!(scene.unmet_holds.is_empty());
+    }
+
+    #[test]
+    fn an_anchored_hold_is_not_recorded_as_honored() {
+        // Encourage-class is a suggestion. Recording it as honored would invite
+        // a later pass to treat it as binding, which is the opposite of what
+        // anchored means.
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        score.items.push(card(0, 0));
+        score.holds.push(HeldPlacement::anchored(
+            SourceRef::new("fixture", "0"),
+            Vec2::new(1.0, 1.0),
+        ));
+        assert!(solve(&score).honored_holds.is_empty());
+    }
+
+    #[test]
+    fn every_instance_of_a_held_source_is_recorded() {
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        score.items.push(card(0, 0));
+        score.items.push(card(0, 1));
+        score.holds.push(HeldPlacement::pinned(
+            SourceRef::new("fixture", "0"),
+            Vec2::new(2.0, 2.0),
+        ));
+        assert_eq!(solve(&score).honored_holds.len(), 2);
     }
 
     #[test]

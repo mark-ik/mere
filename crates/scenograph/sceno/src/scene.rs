@@ -178,6 +178,16 @@ pub struct Scene {
     /// working as designed.
     #[serde(default)]
     pub unmet_holds: Vec<crate::HeldPlacement>,
+    /// Ensure-class placements the solver honored, bound to the instances that
+    /// received them.
+    ///
+    /// Carried so a consumer can report satisfaction without re-deriving it
+    /// against the score, and so a later pass over this scene knows which items
+    /// are not its to move. Encourage-class holds are absent by design: an
+    /// anchored home is a suggestion, and recording it here would invite a
+    /// solver to treat it as binding.
+    #[serde(default)]
+    pub honored_holds: Vec<crate::HonoredHold>,
 }
 
 impl Scene {

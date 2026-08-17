@@ -89,6 +89,21 @@ pub struct HeldPlacement {
     pub hold: Hold,
 }
 
+/// An authored placement the solver *did* honor, bound to the instance that
+/// received it.
+///
+/// The negative half of this record lives on [`crate::Scene::unmet_holds`]. The
+/// positive half is here for two reasons that arrived together: a consumer that
+/// wants to state "3 pins honored" should read it rather than recompute it, and
+/// a scene that knows which of its instances are ensure-class can stop a
+/// relaxation pass from quietly dragging one away.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HonoredHold {
+    /// Which placed instance received the hold.
+    pub instance: crate::InstanceId,
+    pub placement: HeldPlacement,
+}
+
 impl HeldPlacement {
     pub fn pinned(source: SourceRef, at: Vec2) -> Self {
         Self {

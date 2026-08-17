@@ -93,6 +93,16 @@ pub fn relax_holding(scene: &mut Scene, settings: &Relaxation, immovable: &[Inst
         return;
     }
     let mut held = vec![false; scene.items.len()];
+    // A scene that records its own honored pins does not need a caller to
+    // remember them. This is the difference between an invariant and a
+    // convention: before it, calling `relax` instead of `relax_holding` dragged
+    // an ensure-class placement away in silence, and nothing in the types said
+    // so. The explicit list still adds to this; it never subtracts.
+    for honored in &scene.honored_holds {
+        if let Some(slot) = held.get_mut(honored.instance.0 as usize) {
+            *slot = true;
+        }
+    }
     for instance in immovable {
         if let Some(slot) = held.get_mut(instance.0 as usize) {
             *slot = true;
@@ -252,6 +262,45 @@ mod tests {
             },
         );
         assert_eq!(scene, before);
+    }
+
+    #[test]
+    fn plain_relax_no_longer_drags_a_recorded_pin() {
+        // The footgun this closes: a caller who reaches for `relax` rather than
+        // `relax_holding` used to move an ensure-class placement in silence,
+        // and nothing in the types objected.
+        let mut scene = scene_with(&[(0.0, 0.0), (1.0, 0.0), (-1.0, 0.5)]);
+        scene.honored_holds.push(sceno::HonoredHold {
+            instance: InstanceId(0),
+            placement: sceno::HeldPlacement::pinned(
+                SourceRef::new("test", "0"),
+                Vec2::new(0.0, 0.0),
+            ),
+        });
+        let pinned_at = scene.items[0].transform.translate;
+
+        relax(&mut scene, &Relaxation::default());
+
+        assert_eq!(
+            scene.items[0].transform.translate, pinned_at,
+            "a recorded pin moved under plain relax"
+        );
+        assert_ne!(
+            scene.items[1].transform.translate,
+            Vec2::new(1.0, 0.0),
+            "and its neighbours still relaxed around it"
+        );
+    }
+
+    #[test]
+    fn an_anchored_hold_still_relaxes() {
+        // Anchored is best effort by design, so it is not in honored_holds and
+        // must keep moving. A scene where anchoring silently pinned would be
+        // the same silent-soft failure wearing the other face.
+        let mut scene = scene_with(&[(0.0, 0.0), (1.0, 0.0)]);
+        let before = scene.items[0].transform.translate;
+        relax(&mut scene, &Relaxation::default());
+        assert_ne!(scene.items[0].transform.translate, before);
     }
 
     #[test]
