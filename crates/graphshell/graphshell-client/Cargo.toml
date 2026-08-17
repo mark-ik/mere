@@ -9,9 +9,16 @@ description = "Transport-independent local curation state for Graphshell."
 [dependencies]
 chirograph.workspace = true
 sceno.workspace = true
+uxtree = { workspace = true, optional = true }
+accesskit = { workspace = true, optional = true }
 scenotime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[features]
+# Off by default: a client that only reads scenes should not carry an
+# accessibility tree builder. Hosts that drive a screen reader turn it on.
+accesskit = ["dep:uxtree", "dep:accesskit"]
 
 [dev-dependencies]
 # Test-only: lets the frozen-realization tests solve the real coastal-map

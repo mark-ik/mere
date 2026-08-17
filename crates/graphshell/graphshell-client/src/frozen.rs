@@ -333,6 +333,100 @@ impl FrozenScene {
     }
 }
 
+/// Projection into mere's AccessKit lane.
+///
+/// The frozen realization already answers what a reader needs; this hands the
+/// same answer to the platform assistive stack instead of to markup. Roles come
+/// from AccessKit's own vocabulary rather than Graphics ARIA's, because that is
+/// what the OS layer speaks: the document is a `Document`, instances and
+/// relations are `ListItem`s under `List` groups, and every node carries a
+/// label, since an unlabelled node is exactly the failure this target exists to
+/// catch.
+#[cfg(feature = "accesskit")]
+mod tree {
+    use super::{FrozenRole, FrozenScene};
+    use accesskit::{Node, NodeId, Role};
+    use uxtree::{UxTree, node_id_for_path};
+
+    impl FrozenScene {
+        /// Build the AccessKit tree a screen reader traverses.
+        ///
+        /// `path` namespaces the ids so several projections can be stitched
+        /// under one application root without colliding. Node order is
+        /// descendants-then-root, matching [`UxTree`]'s stated contract so a
+        /// consumer can zip straight into a `TreeUpdate`.
+        pub fn to_ux_tree(&self, path: &str) -> UxTree {
+            let mut nodes: Vec<(NodeId, Node)> = Vec::new();
+
+            let mut instance_ids = Vec::new();
+            for instance in &self.instances {
+                let id = node_id_for_path(&format!("{path}/instance/{}", instance.source.id));
+                let mut node = Node::new(match instance.role {
+                    FrozenRole::Symbol => Role::Image,
+                    FrozenRole::Object => Role::ListItem,
+                    FrozenRole::LiveContent => Role::ListItem,
+                });
+                node.set_label(instance.name.clone());
+                nodes.push((id, node));
+                instance_ids.push(id);
+            }
+            let instances_id = node_id_for_path(&format!("{path}/instances"));
+            let mut instances_group = Node::new(Role::List);
+            instances_group.set_label(format!("{} items", self.instances.len()));
+            instances_group.set_children(instance_ids);
+            nodes.push((instances_id, instances_group));
+
+            let mut relation_ids = Vec::new();
+            for (index, relation) in self.relations.iter().enumerate() {
+                let id = node_id_for_path(&format!("{path}/relation/{index}"));
+                let mut node = Node::new(Role::ListItem);
+                let kind = relation.kind.clone().unwrap_or_else(|| "related to".to_owned());
+                node.set_label(format!("{} {} {}", relation.from, kind, relation.to));
+                nodes.push((id, node));
+                relation_ids.push(id);
+            }
+            let relations_id = node_id_for_path(&format!("{path}/relations"));
+            let mut relations_group = Node::new(Role::List);
+            relations_group.set_label(format!("{} relationships", self.relations.len()));
+            relations_group.set_children(relation_ids);
+            nodes.push((relations_id, relations_group));
+
+            let mut unmet_ids = Vec::new();
+            for held in &self.unmet_holds {
+                let id = node_id_for_path(&format!("{path}/unmet/{}", held.source.id));
+                let mut node = Node::new(Role::ListItem);
+                node.set_label(format!(
+                    "{} could not be placed at ({}, {})",
+                    held.source.id, held.at.x, held.at.y
+                ));
+                nodes.push((id, node));
+                unmet_ids.push(id);
+            }
+            let mut children = vec![instances_id, relations_id];
+            if !unmet_ids.is_empty() {
+                let unmet_id = node_id_for_path(&format!("{path}/unmet"));
+                let mut unmet_group = Node::new(Role::List);
+                unmet_group.set_label("Placements that could not be honored".to_owned());
+                unmet_group.set_children(unmet_ids);
+                nodes.push((unmet_id, unmet_group));
+                children.push(unmet_id);
+            }
+
+            let root_id = node_id_for_path(path);
+            let mut root = Node::new(Role::Document);
+            root.set_label(self.name.clone());
+            root.set_description(self.summary.clone());
+            root.set_children(children);
+            nodes.push((root_id, root));
+
+            UxTree {
+                root: root_id,
+                nodes,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -547,6 +641,108 @@ mod tests {
             !serialized.contains("<script>"),
             "and the parser agrees, which is the check that matters"
         );
+    }
+
+    /// Walk the tree the way an assistive stack does: from the root, through
+    /// children, collecting labels. If a node is unreachable or unlabelled it
+    /// simply does not appear, which is the failure this is here to catch.
+    #[cfg(feature = "accesskit")]
+    fn traverse(tree: &uxtree::UxTree) -> Vec<String> {
+        use std::collections::HashMap;
+        let by_id: HashMap<_, _> = tree.nodes.iter().map(|(id, node)| (*id, node)).collect();
+        let mut labels = Vec::new();
+        let mut stack = vec![tree.root];
+        while let Some(id) = stack.pop() {
+            let Some(node) = by_id.get(&id) else { continue };
+            if let Some(label) = node.label() {
+                labels.push(label.to_string());
+            }
+            let mut children = node.children().to_vec();
+            children.reverse();
+            stack.extend(children);
+        }
+        labels
+    }
+
+    #[cfg(feature = "accesskit")]
+    #[test]
+    fn a_screen_reader_traversal_reaches_every_instance_and_relation_by_name() {
+        let mut scene = coastal();
+        // Give the scene a relation so the traversal has one to find.
+        scene.relations.push(sceno::RoutedRelation {
+            from: InstanceId(1),
+            to: InstanceId(2),
+            space: Scene::WORLD,
+            points: vec![Vec2::ZERO, Vec2::ZERO],
+            kind: Some("sights".to_owned()),
+            weight: None,
+        });
+        let names = named(&[
+            ("fixture.map", "harbor", "Harbor"),
+            ("fixture.map", "beacon", "Beacon"),
+        ]);
+        let frozen = FrozenScene::freeze(&scene, "Coastal map", &names);
+        let tree = frozen.to_ux_tree("coastal");
+        let labels = traverse(&tree);
+
+        // B1's validation, literally: the traversal enumerates instances and
+        // relations with names.
+        for instance in &frozen.instances {
+            assert!(
+                labels.contains(&instance.name),
+                "traversal never reached {}",
+                instance.name
+            );
+        }
+        assert!(
+            labels.iter().any(|l| l.contains("Harbor") && l.contains("sights")),
+            "the relation is announced with both ends named"
+        );
+        assert_eq!(labels[0], "Coastal map", "the document announces itself first");
+    }
+
+    #[cfg(feature = "accesskit")]
+    #[test]
+    fn no_node_reaches_a_reader_unlabelled() {
+        let frozen = FrozenScene::freeze(&coastal(), "Coastal map", &HashMap::new());
+        let tree = frozen.to_ux_tree("coastal");
+        for (id, node) in &tree.nodes {
+            assert!(
+                node.label().is_some(),
+                "node {id:?} would be announced as nothing"
+            );
+        }
+    }
+
+    #[cfg(feature = "accesskit")]
+    #[test]
+    fn an_unmet_placement_is_announced_too() {
+        let mut scene = coastal();
+        scene.unmet_holds.push(sceno::HeldPlacement::pinned(
+            SourceRef::new("fixture.map", "ghost"),
+            Vec2::new(3.0, 4.0),
+        ));
+        let frozen = FrozenScene::freeze(&scene, "Coastal map", &HashMap::new());
+        let labels = traverse(&frozen.to_ux_tree("coastal"));
+        assert!(
+            labels.iter().any(|l| l.contains("ghost") && l.contains("could not be placed")),
+            "the violation a sighted reader sees is spoken too"
+        );
+    }
+
+    #[cfg(feature = "accesskit")]
+    #[test]
+    fn the_tree_is_deterministic_and_root_last() {
+        let frozen = FrozenScene::freeze(&coastal(), "Coastal map", &HashMap::new());
+        let once = frozen.to_ux_tree("coastal");
+        let twice = frozen.to_ux_tree("coastal");
+        assert_eq!(
+            once.nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            twice.nodes.iter().map(|(id, _)| *id).collect::<Vec<_>>()
+        );
+        // UxTree documents that the root is pushed last so a consumer can zip
+        // straight into a TreeUpdate; honour that contract.
+        assert_eq!(once.nodes.last().expect("a root").0, once.root);
     }
 
     #[test]

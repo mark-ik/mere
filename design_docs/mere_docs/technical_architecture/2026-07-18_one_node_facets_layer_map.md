@@ -142,9 +142,24 @@ the end-state side of every line drawn here.
 4. **Facet grants.** Which facets a denizen may read or write is a gate
    scope question (the structural cap's path vocabulary may want a facet
    dimension); connects to the participant plan's ability-axis note.
+   **Shaped 2026-08-16** by the
+   [facet signaling round](2026-08-16_facet_signaling_and_control_loops.md):
+   the missing dimension is a facet-namespace `Cap` kind with prefix coverage,
+   sitting beside Power (equality) and Scope (segment prefix). The gate already
+   scope-checks `SetFacet` and `RemoveFacet` by node id, so it governs which
+   nodes may be touched but not which facet namespaces may be written.
 
 ## Progress
 
+- **2026-08-16 (facets as a medium):** a design round extended the facet system
+  from metadata to signaling, recorded in
+  [facet signaling and control loops](2026-08-16_facet_signaling_and_control_loops.md).
+  Facets are participant-to-participant communication through nodes rather than
+  node-to-node awareness; interior signaling inside a subgraph is separated from
+  exterior marks across graphs by the single-serialization-point argument; a
+  decaying signal is ruled onto facets rather than tags; and open question 4
+  gains a definite shape. One verified gap named against the servitor reactive
+  substrate: cascade depth is bounded, cascade frequency is not.
 - **2026-07-27 (OQ 5.1 CLOSED):** the dissolution ladder completed. Kernel
   `Node` is now `{ container, images }`: `container` is
   `chartulary::Container<Uuid, Address>` and `images` is the explicitly retained
