@@ -118,8 +118,8 @@ was the loose one.
 
 **Corrected 2026-08-16 after review: the worked example was of a case that
 cannot arise.** This amendment and the sizing rule it replaced both argued from
-the sited radio — "a carriage lease serving a LoRa-reachable radio is long; one
-serving two desktops on a LAN is short". **A sited radio has no carriage to
+the sited radio ("a carriage lease serving a LoRa-reachable radio is long; one
+serving two desktops on a LAN is short"). **A sited radio has no carriage to
 lease.** Verified along the whole chain rather than assumed:
 `store_wrapped_epochs` iterates `set.personas` only, so no device-scoped
 certificate ever gets a record; `requires_epoch_material` keys on
@@ -275,12 +275,14 @@ plainly so the feature is never described as remote erasure.
 **Amended 2026-08-16 after review.** This first read "gated on a transport
 existing", with the transport called "murm/moot shaped and undesigned". The
 transport exists. `graphshell::personal_sync` is H7 personal-device
-synchronization: running (`h7_sync_peer`), built on stickleback and p2panda
-with causal ordering and policy-before-insert storage, peers authenticated
-through `personae::DerivedKeyAttestation`, and already enforcing `PrivacyClass`
-in that `AppendAccess` refuses `LocalOnly | MootScoped`. Its peer set is
+synchronization, built on stickleback and p2panda with causal ordering and
+policy-before-insert storage, peers authenticated through
+`personae::DerivedKeyAttestation`, and already enforcing `PrivacyClass` in that
+`AppendAccess` refuses `LocalOnly | MootScoped`. Its peer set is
 device-to-device across one person's own devices, which is exactly the
-trusted-peer set carriage wants.
+trusted-peer set carriage wants, and `src/bin/h7_sync_peer.rs` is a 411-line
+serve/connect binary the tree calls a "Physical H7 offline-edit and convergence
+receipt".
 
 What does not exist is a **lane**, and the separation is load-bearing rather
 than tidy. `PersonalGraphEvent` is a graph grammar, of nodes, tags, relations,

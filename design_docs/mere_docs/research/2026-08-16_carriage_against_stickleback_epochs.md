@@ -2,10 +2,16 @@
 
 **Review, 2026-08-16, at Mark's request.** Checks the
 [leased slots proposal](../technical_architecture/2026-08-14_epoch_carriage_retention_leases.md)
-against machinery that already exists, before it is ratified. Reads
-`stickleback::epoch_retention`, `stickleback::group_crypto`,
-`graphshell::personal_sync`, `graphshell::native::graph_keys`,
+against machinery that already exists. Reads `stickleback::epoch_retention`,
+`stickleback::group_crypto`, `graphshell::personal_sync`,
+`graphshell::native::graph_keys`, `knot::sync`, `moot::commons::chat`,
 `pandect::wallet_grant`.
+
+**Framing corrected 2026-08-16.** This first said "before it is ratified". The
+proposal was ratified 2026-08-14 (`8633bf5c`); this is a check after the fact,
+so its findings are amendments to a ratified design rather than conditions on
+ratifying it. **All four were folded in on 2026-08-16**, along with the
+consumer correction in section 3 below.
 
 The proposal says implementation is "gated on a transport existing" and calls
 the transport "murm/moot shaped and undesigned". Both halves turned out to be
@@ -15,10 +21,12 @@ wrong, and a third thing turned out to be wrong underneath them.
 
 `graphshell::personal_sync` is **"H7 personal-device synchronization"**:
 device-to-device sync across one person's own devices, which is exactly the
-trusted-peer set carriage wants. It runs (`h7_sync_peer`), it is built on
-stickleback and p2panda with causal ordering and policy-before-insert storage,
-peers authenticate through `personae::DerivedKeyAttestation`, and it already
-enforces `PrivacyClass`: `AppendAccess` refuses `LocalOnly | MootScoped`.
+trusted-peer set carriage wants. It is built on stickleback and p2panda with
+causal ordering and policy-before-insert storage, peers authenticate through
+`personae::DerivedKeyAttestation`, and it already enforces `PrivacyClass`:
+`AppendAccess` refuses `LocalOnly | MootScoped`. `src/bin/h7_sync_peer.rs` is a
+411-line serve/connect binary the tree calls a "Physical H7 offline-edit and
+convergence receipt".
 
 What does not exist is a *lane* for carriage. `PersonalGraphEvent` is a graph
 grammar (nodes, tags, relations, facets, scenes), and the proposal's own ruling
@@ -65,8 +73,36 @@ slot, and it comes with the retention engine in §3 for free.
   chronology is unknown returns `None`, "because lexical secret-id order is not
   a safe substitute for chronology".
 
-Live, not shelved: consumed by `moot::commons::chat` and by
-`graphshell::native::graph_keys` — that is, by the personal-device lane itself.
+Live, not shelved: `moot::commons::chat` and `knot::sync` both run it in
+production, each pairing `propose_epoch_pruning` with an `execute_*` that
+"revalidate[s] and explicitly execute[s] a reviewed proposal". That pair is the
+shape section 3's recommendation borrows.
+
+**Corrected 2026-08-16.** This first read "consumed by `moot::commons::chat`
+and by `graphshell::native::graph_keys`, that is, by the personal-device lane
+itself", and missed `knot::sync` entirely. The graphshell half is wrong in a
+way that matters, because it was doing work in the argument: graphshell's only
+use is a `#[cfg(test)] mod retention_probe`, and what that probe found is that
+pruning is **blocked**, on `EpochProposalBlocker::MissingCheckpoint`, which it
+calls "the correct answer rather than a limitation to work around". The
+personal-device lane did not adopt the engine. It measured it and declined.
+
+That correction sharpens finding 3 rather than weakening it. The probe also
+measured the pressure: 103 bytes per epoch, one epoch per revocation, so "a
+mesh that retired a device every week for a decade would spend 54 KB". Group
+retention is a shape worth naming and not a pressure worth acting on, which is
+the opposite of carriage's motive.
+
+### And carriage could not use the engine even if it wanted to
+
+`propose_epoch_pruning` blocks on `MissingCheckpoint` unless the domain supplies
+an `EpochCheckpointBasis` proving it can rebuild its projection without the
+epochs it would forget. The gate exists because forgetting a group epoch makes
+every operation sealed under it permanently unreadable. Carriage loses nothing
+that way, because the local wallet is the authority and holds current material
+by construction, so it has no checkpoint to supply and needs none. Handed the
+engine, carriage would be blocked forever, exactly as graphshell is. The
+borrowing in this section is therefore of shape, not of the function.
 
 ### It does not supersede the lease design, and the reason is principled
 
@@ -143,7 +179,9 @@ recovery benefit is real and the links are ordinary.
 
 ## Recommendation
 
-Ratifiable, with four amendments:
+Sound, with four amendments. **All four folded in 2026-08-16**, into the
+proposal's own sections rather than as an appendix, so the doc argues correctly
+on its own:
 
 1. Replace "gated on a transport existing" with "gated on a carriage lane
    beside H7, kept out of the graph grammar", and state why the separation is
@@ -156,6 +194,14 @@ Ratifiable, with four amendments:
    ordering gate.
 4. Replace the sited-radio TTL example, and correct the 2026-08-14 amendment
    that repeated it.
+
+**One was narrowed in the folding.** Amendment 2 as written above also said to
+"confine leased slots to devices that hold persona authority without group
+membership". That confinement is the same ruling this review says it does not
+settle, one section below, so folding it in as written would have decided by
+side effect what the review declined to decide on evidence. The folded section
+states the boundary and the overlap, names the group session as the better
+channel where a seat exists, and records the retirement question as open.
 
 ## What this review does not settle
 
