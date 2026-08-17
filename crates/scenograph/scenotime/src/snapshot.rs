@@ -1,5 +1,6 @@
 use sceno::{
-    InstanceId, ProjectedItem, Rect, Region, RoutedRelation, Scene, SourceRef, Space, SpaceId,
+    HeldPlacement, InstanceId, ProjectedItem, Rect, Region, RoutedRelation, Scene, SourceRef,
+    Space, SpaceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,11 @@ pub struct SceneTables {
     pub regions: Vec<Option<Region>>,
     pub bounds: Rect,
     pub generation: u64,
+    /// Ensure-class placements the solver could not honor, carried through from
+    /// [`Scene::unmet_holds`] so a remote viewer can tell "placed as pinned"
+    /// from "pin unmet" without access to the score that asked.
+    #[serde(default)]
+    pub unmet_holds: Vec<HeldPlacement>,
 }
 
 /// A complete resynchronization snapshot. Tombstones remain serialized so a
@@ -54,6 +60,7 @@ impl SceneSnapshot {
                 regions: scene.regions.into_iter().map(Some).collect(),
                 bounds: scene.bounds,
                 generation: scene.generation,
+                unmet_holds: scene.unmet_holds,
             },
         };
         snapshot.validate()?;

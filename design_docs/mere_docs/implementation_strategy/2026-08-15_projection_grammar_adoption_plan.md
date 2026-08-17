@@ -1,9 +1,11 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status**: A0 landed; **A6 contract half landed 2026-08-16** (holds in the
-score, honored by the solver and by relaxation). A6's mer3ly half is written
-and verified but **not landed**: it needs mere pushed and mer3ly's rev bumped. Mer3ly ruled
+**Status**: A0 landed. **A6 closed 2026-08-16** on both sides: holds in the
+score honored by the solver and by relaxation, and mer3ly exporting a portable
+projection that keeps a visitor's pins, live on the public site. **A1's first
+slice landed the same day**: an unmet ensure-class hold is reported on the
+scene and crosses the wire. Mer3ly ruled
 an authority-grade consumer 2026-08-16, which re-gates A1-A4, B1, and C3. Turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
@@ -539,3 +541,32 @@ not settled without it.
   wasm, then wire the sandbox's share control to the new export. The last two
   are deliberately not done, because a wasm rebuilt against a local path is
   not a thing to commit.
+- 2026-08-16: **A6 closed; A1's first slice landed.** A6's mer3ly half shipped
+  after the rev bump: `PlacementDelta` maps the sandbox's pins onto
+  `Score.holds`, `consume_portable_projection` checks each hold against the
+  scene as solved and reports `honored_holds`, and an `export projection`
+  control sits beside `share scene` rather than replacing it, because a share
+  is a citation and a score plus snapshot has no business in a URL. Verified in
+  a browser, not only in tests: pin a node, press export, "1 pin honored"; and
+  driving the export directly returns score version 2, a hold recording
+  `Pinned` at (-137.5, 88.25), and that node placed at exactly (-137.5, 88.25)
+  under `Spiral`. The Wasm ceiling was raised deliberately, with all three
+  measurements recorded beside it (858,444 baseline / 932,204 stripped /
+  958,016 full) and the finding that no variant fit the old bound.
+  A1 then opened on a gap A6 itself created. A hold naming a source the score
+  never placed was dropped in silence, which is the same failure as moving a
+  pin and saying nothing; a probe test confirmed it before anything was built.
+  `Scene.unmet_holds` now carries those violations as full `HeldPlacement`
+  records, so a viewer without the score can say what was asked and where, and
+  `SceneTables.unmet_holds` carries them through `from_dense` onto the wire.
+  Encourage-class holds are excluded on purpose: an anchored home that goes
+  unplaced is best effort working as designed.
+  Receipts: sceno 21, scenomise 24, scenotime 19, with chirograph (21) and
+  mere-cartography (25) unaffected. Two of the new tests serialize the snapshot
+  and read it back, because A1's done-condition names a *remote* viewer, and
+  one strips the field to prove an older wire still loads.
+  Still open in A1: the only unsatisfiable case today is a hold on an absent
+  source. Displacement by a consumer's own physics or a viewport fit is not yet
+  reported, and mer3ly's `honored_holds` remains a site-local receipt rather
+  than a promoted one. C1 (satisfaction in host chrome) now has something real
+  to render.

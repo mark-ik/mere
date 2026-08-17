@@ -269,6 +269,36 @@ mod tests {
     use super::*;
     use sceno::{Footprint, Representation, Scene, Size2, Transform2};
 
+    #[test]
+    fn a_violation_survives_the_wire_a_remote_viewer_reads() {
+        let mut scene = Scene::new();
+        scene.unmet_holds.push(sceno::HeldPlacement::pinned(
+            SourceRef::new("fixture", "ghost"),
+            sceno::Vec2::new(7.0, 7.0),
+        ));
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), scene).expect("snapshot");
+        assert_eq!(snapshot.tables.unmet_holds.len(), 1);
+
+        // The done-condition names a remote viewer, so serialize it: the
+        // distinction has to survive the hop, not merely exist in memory.
+        let wire = serde_json::to_string(&snapshot).expect("serialize");
+        let far_side: SceneSnapshot = serde_json::from_str(&wire).expect("deserialize");
+        assert_eq!(far_side.tables.unmet_holds[0].source.id, "ghost");
+        assert_eq!(far_side.tables.unmet_holds[0].at, sceno::Vec2::new(7.0, 7.0));
+    }
+
+    #[test]
+    fn a_snapshot_written_before_violations_existed_still_reads() {
+        let snapshot = SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), Scene::new())
+            .expect("snapshot");
+        let wire = serde_json::to_string(&snapshot).expect("serialize");
+        let older = wire.replace(",\"unmet_holds\":[]", "");
+        assert!(!older.contains("unmet_holds"), "older wire shape");
+        let far_side: SceneSnapshot = serde_json::from_str(&older).expect("older wire loads");
+        assert!(far_side.tables.unmet_holds.is_empty());
+    }
+
     fn item(source: SourceIx, x: f32) -> ProjectedItem {
         ProjectedItem {
             source,

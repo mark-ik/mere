@@ -165,6 +165,19 @@ pub struct Scene {
     /// The generation of inputs this scene was computed from (score +
     /// signal generations; stamped by the runtime).
     pub generation: u64,
+    /// Ensure-class placements the solver could not honor, carried with the
+    /// coordinate that was asked for.
+    ///
+    /// Empty is the common and correct case. A non-empty entry is the scene
+    /// saying so out loud instead of quietly placing the item somewhere else,
+    /// which is the silent-soft failure this record exists to prevent. It
+    /// carries [`HeldPlacement`] rather than a bare reference so a viewer with
+    /// no access to the score can still report what was requested and where.
+    ///
+    /// Encourage-class holds never appear here: an anchored home that drifts is
+    /// working as designed.
+    #[serde(default)]
+    pub unmet_holds: Vec<crate::HeldPlacement>,
 }
 
 impl Scene {

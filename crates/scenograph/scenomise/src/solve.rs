@@ -79,6 +79,18 @@ pub fn solve(score: &Score) -> Scene {
         });
     }
 
+    // A hold naming a source this score never placed is an unmet pin. Before
+    // this it was dropped in silence, which is the same failure as moving a pin
+    // and saying nothing. Encourage-class holds are excluded on purpose: an
+    // anchored home that goes unplaced is best effort behaving as designed.
+    scene.unmet_holds = score
+        .holds
+        .iter()
+        .filter(|held| matches!(held.hold, Hold::Pinned))
+        .filter(|held| !score.items.iter().any(|item| item.source == held.source))
+        .cloned()
+        .collect();
+
     scene.bounds = bounds.unwrap_or_default();
     scene
 }
@@ -342,6 +354,50 @@ mod tests {
         for instance in &pinned {
             assert_eq!(scene.sources[scene.items[instance.0 as usize].source.0 as usize].id, "0");
         }
+    }
+
+    #[test]
+    fn an_unsatisfiable_pin_is_reported_on_the_scene() {
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        score.items.push(card(0, 0));
+        score.holds.push(HeldPlacement::pinned(
+            SourceRef::new("fixture", "ghost"),
+            Vec2::new(7.0, 7.0),
+        ));
+
+        let scene = solve(&score);
+        assert_eq!(scene.items.len(), 1, "the ghost is not invented as an item");
+        assert_eq!(scene.unmet_holds.len(), 1, "the violation is carried");
+        assert_eq!(scene.unmet_holds[0].source.id, "ghost");
+        // The coordinate travels too, so a viewer without the score can say
+        // what was asked for, not merely that something failed.
+        assert_eq!(scene.unmet_holds[0].at, Vec2::new(7.0, 7.0));
+    }
+
+    #[test]
+    fn a_satisfied_pin_reports_nothing() {
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        score.items.push(card(0, 0));
+        score.holds.push(HeldPlacement::pinned(
+            SourceRef::new("fixture", "0"),
+            Vec2::new(4.0, 4.0),
+        ));
+        let scene = solve(&score);
+        assert!(scene.unmet_holds.is_empty());
+        assert_eq!(scene.items[0].transform.translate, Vec2::new(4.0, 4.0));
+    }
+
+    #[test]
+    fn an_unplaced_anchor_is_not_a_violation() {
+        // Encourage-class is best effort by definition, so its absence is not
+        // reported; only ensure-class earns a violation.
+        let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
+        score.items.push(card(0, 0));
+        score.holds.push(HeldPlacement::anchored(
+            SourceRef::new("fixture", "ghost"),
+            Vec2::new(7.0, 7.0),
+        ));
+        assert!(solve(&score).unmet_holds.is_empty());
     }
 
     fn overlaps(a: &Rect, b: &Rect) -> bool {

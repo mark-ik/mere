@@ -105,6 +105,16 @@ Turnstone, Genet host packages, and Servo runtime packages.
 Canvas, Cambium over Genet's DOM and layout seam, and NetRender over a WebGPU
 canvas. Its browser dependencies stay out of the `graphshell` package.
 
+Its lib root is `#![cfg(target_arch = "wasm32")]`, so it compiles to nothing on
+a native host and `cargo check --workspace` does not cover its code. Check it
+for the target it is for:
+
+```
+cargo check -p graphshell-web --target wasm32-unknown-unknown
+```
+
+`scripts/cross-repo-smoke.ps1` runs this alongside the workspace gate.
+
 [`web/extension`](web/extension) holds the Chromium and Firefox extension and
 the `org.mere.graphshell` native-messaging registration.
 

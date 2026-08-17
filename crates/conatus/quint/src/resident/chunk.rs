@@ -257,6 +257,26 @@ impl RawKernelView {
         self.stamp
     }
 
+    /// Everything a consumer outside this crate needs to read the plane,
+    /// and nothing it does not.
+    ///
+    /// Consumers that must not depend on a compute stack (a renderer, a
+    /// tracer) spell the lease in their own plain-wgpu terms; this is the
+    /// producing side's single definition of what those terms mean, so a
+    /// host assembling one cannot invent a field or drop the stamp. The
+    /// byte length is derived here rather than restated, which is the
+    /// error the consumer-side spellings cannot make on their own.
+    pub fn lease(&self) -> SpatialLease<'_> {
+        SpatialLease {
+            buffer: self.allocation.buffer(),
+            offset: self.allocation.offset(),
+            size: self.allocation.size(),
+            shape: self.layout.shape,
+            element_type: self.layout.element_type,
+            stamp: self.stamp,
+        }
+    }
+
     /// A storage-buffer binding for the exact CubeCL allocation range.
     pub fn binding(&self) -> wgpu::BufferBinding<'_> {
         wgpu::BufferBinding {
@@ -264,6 +284,41 @@ impl RawKernelView {
             offset: self.allocation.offset(),
             size: NonZeroU64::new(self.allocation.size().next_multiple_of(4)),
         }
+    }
+}
+
+/// The producing side's definition of a resident plane handed outward.
+///
+/// Deliberately plain: a buffer range, the shape and element type that
+/// range holds, and the stamp it was materialized at. A consumer needs
+/// exactly this much to copy or bind the plane, and needs no part of
+/// CubeCL or Burn to understand it.
+///
+/// `byte_len` is the load-bearing method. Consumers size their copies
+/// from `shape`, and a shape that disagrees with the allocation would
+/// walk off the end of the lease into whatever the pool put next to it,
+/// which is silent corruption rather than a fault. Checking it is the
+/// consumer's obligation and this makes it one line.
+#[derive(Clone, Copy, Debug)]
+pub struct SpatialLease<'a> {
+    pub buffer: &'a wgpu::Buffer,
+    pub offset: u64,
+    pub size: u64,
+    pub shape: [usize; 3],
+    pub element_type: PlaneElementType,
+    pub stamp: ChunkStamp,
+}
+
+impl SpatialLease<'_> {
+    /// The bytes `shape` and `element_type` actually describe.
+    pub fn byte_len(&self) -> u64 {
+        (self.shape[0] * self.shape[1] * self.shape[2] * self.element_type.byte_width()) as u64
+    }
+
+    /// Whether the described shape fits the leased range. A consumer that
+    /// copies without asking this can read a neighbouring allocation.
+    pub fn fits(&self) -> bool {
+        self.byte_len() <= self.size
     }
 }
 

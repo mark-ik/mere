@@ -116,7 +116,21 @@ Step "genet pelt (default member)" $genet @("check", "-p", "pelt")
 Step "mere graphshell (resident host, full sync cone)" $mere @(
     "check", "-p", "graphshell", "--features", "personal-sync")
 Step "mere knot" $mere @("check", "-p", "knot")
-# The wasm presenter is its own workspace root, so nothing above reaches it.
+# The whole-workspace gate (green since 2026-08-12). `--all-targets` on purpose:
+# the lib-only form is what hid a broken bin until that commit found it.
+#
+# It does NOT cover everything. A target cargo never builds cannot fail here:
+# crates cfg'd out for this host (graphshell-web) and bins behind an off-by-
+# default `required-features` (mere-canvas's `native-present`) are both
+# invisible to it. Those need their own steps.
+Step "mere workspace (the green gate)" $mere @("check", "--workspace", "--all-targets")
+Step "mere-canvas bin (required-features)" $mere @(
+    "check", "-p", "mere-canvas", "--features", "native-present", "--all-targets")
+# The wasm presenter IS a member of mere's workspace, but nothing above reaches
+# it: the steps above are targeted `-p` checks that never name it, and none of
+# them target wasm32. Its lib root is `#![cfg(target_arch = "wasm32")]`, so a
+# native `--workspace` check compiles it to nothing. This step is the ONLY gate
+# that sees its code at all.
 Step "graphshell-web (wasm32)" $web @("check", "--target", "wasm32-unknown-unknown")
 Step "turnstone (the app; consumes genet + mere)" $turnstone @("check")
 

@@ -130,3 +130,52 @@ fn exact_plane_keeps_its_integer_type_in_the_raw_view() {
         })
     ));
 }
+
+/// The lease export is the producing side's single definition of what
+/// crosses to a consumer, so its derived length must match the
+/// allocation it describes. A consumer sizing a copy from `shape`
+/// against a mismatched allocation would read whatever the pool placed
+/// next to this plane.
+#[test]
+fn a_lease_reports_the_bytes_its_shape_describes() {
+    let Some(setup) = setup() else {
+        eprintln!("no wgpu adapter: skipping the lease receipt");
+        return;
+    };
+    let mut chunk = ResidentChunk::new(
+        ResidentClient::init(setup),
+        "lease",
+        ChunkBounds {
+            origin: [0, 0, 0],
+            extent: [2, 3, 4],
+        },
+        7,
+        ReadEpoch::new(9),
+        Vec::new(),
+    );
+    let id = PlaneId::new("occupancy").unwrap();
+    chunk
+        .insert_plane(id.clone(), PlaneClass::Exact, [2, 3, 4], &[1u8; 24])
+        .unwrap();
+
+    let view = chunk.raw_kernel_view(&id).unwrap();
+    let lease = view.lease();
+    assert_eq!(lease.byte_len(), 24);
+    assert_eq!(lease.size, 24);
+    assert!(lease.fits());
+    assert_eq!(lease.shape, [2, 3, 4]);
+    assert_eq!(lease.element_type, PlaneElementType::U8);
+    assert_eq!(lease.stamp.revision, 7);
+    assert_eq!(lease.stamp.valid_read_epoch, ReadEpoch::new(9));
+    assert_eq!(lease.buffer, view.allocation().buffer());
+    assert_eq!(lease.offset, view.allocation().offset());
+
+    // The guard's negative case: a shape larger than the leased range
+    // must report that it does not fit, rather than being copied.
+    let overshot = quint::resident::SpatialLease {
+        shape: [4, 3, 4],
+        ..lease
+    };
+    assert_eq!(overshot.byte_len(), 48);
+    assert!(!overshot.fits());
+}
