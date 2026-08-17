@@ -30,6 +30,7 @@
 use bytemuck::{Pod, Zeroable};
 
 mod chunk;
+pub mod kernels;
 
 pub use chunk::*;
 

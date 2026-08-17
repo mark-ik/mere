@@ -310,7 +310,7 @@ and asserts the `IntentResult`; renaming or moving the instance on screen
 does not break the scenario.
 Done when: projection receipts are driven by identity end to end.
 
-**B3. Livery property-classing check (verify first, then close or record).**
+**B3. Livery property-classing check - CLOSED 2026-08-16, recorded.**
 Context: Mapbox's layout/paint split is prior art for classing every visual
 property by what it invalidates. Livery's TOML property DB likely already
 carries an invalidation class per property for its own engine needs.
@@ -319,6 +319,17 @@ rhyme in livery's docs and close this item; if it does not, weigh adding the
 class with livery's own consumers, not on the report's authority.
 Validation: one paragraph of recorded evidence either way.
 Done when: the question is answered from the tree, not the report.
+**Answered.** Livery's DB carries no invalidation class: 123 property entries
+with name, value type, inheritance, initial, grammar, seed values, animation
+behaviour, and source, and nothing saying what a change invalidates. But the
+rhyme is not missing from genet, it is *borrowed*: `LayoutDamageClass` resolves
+None / PaintOnly / Relayout and a color swap is asserted repaint-only, with the
+damage computed inside Stylo's `compute_style_difference` from the incumbent's
+own property metadata. The adapter's `compute_layout_damage` hook is a stub.
+So the classing leaves with the fork at retirement unless Livery's DB grows
+somewhere to put it. Recorded in the cutover plan's deferral register as a
+compounding item, on that plan's authority and with its retirement stage as the
+forcing consumer, which is what this target asked for.
 
 ### Track C: cambium (host consumption)
 
@@ -372,7 +383,7 @@ consumers.
 it is the precondition for A1, A2, and C3, and it has the only authority-grade
 consumer in the plan), **B1** (the report's single act-now recommendation;
 additive, uses existing scenes, and mer3ly is the standing argument for it),
-**B3** (a read of livery's DB).
+**B3** (a read of livery's DB; closed 2026-08-16).
 
 Opens with existing lanes, no new gates invented: **A2's serialization half**
 now that L3's gate is met, with its resolution half still waiting on a two-view
@@ -570,3 +581,24 @@ not settled without it.
   reported, and mer3ly's `honored_holds` remains a site-local receipt rather
   than a promoted one. C1 (satisfaction in host chrome) now has something real
   to render.
+- 2026-08-16: **B3 closed, and the answer was better than either branch the
+  target anticipated.** The question was whether Livery's property DB classes
+  properties by what they invalidate. It does not: 123 entries, eight keys,
+  none of them an invalidation class, and Livery's own invalidation machinery
+  is selector-scoped, a different axis. The target then expected either "close
+  it" or "weigh adding it". Neither fit, because genet already has the
+  layout/paint rhyme working: `LayoutDamageClass` resolves None / PaintOnly /
+  Relayout, `RestyleOutcome::needs_relayout` reads `RestyleDamage::RELAYOUT`,
+  and a test asserts a color swap is repaint-only. It is borrowed, not owned.
+  Stylo computes the damage in `compute_style_difference` from its own
+  per-property metadata, and genet's `compute_layout_damage` hook is a stub
+  returning default. A first read of that stub suggested the classing was
+  unimplemented; checking where damage actually comes from corrected it.
+  So the finding is a dependency, not a gap: every incremental-layout receipt
+  that skips layout for a paint-only change is currently a receipt for Stylo's
+  property table, and the classing leaves with the fork unless the DB grows a
+  home for it. Recorded in genet's cutover-plan deferral register as a
+  compounding item with the retirement stage as its forcing consumer, on that
+  plan's authority rather than the report's, which is exactly the bar this
+  target set. Mapbox's layout/paint split is named there as the shape to
+  borrow when it is built.
