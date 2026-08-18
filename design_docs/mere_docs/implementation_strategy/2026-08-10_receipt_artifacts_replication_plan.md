@@ -506,12 +506,21 @@ Wayland screen, its PNG came home, and the local pane now shows
 was read back out through the first-party door from the replicating store,
 so it is evidence rather than a claim copied from the manifest.
 
-**Intel iMac — blocked, not on this lane.** Everything up to the app works:
-preflight, attach, PATH, and the build all succeed, and the smoke example
-runs on the iMac's own screen with Metal drawing. The scenario then never
-reaches Done — the process spins in the winit event loop indefinitely. It is
-not the paint-count trap; the example already pumps a redraw per step. A
-genet-side investigation, tracked there rather than here.
+**Intel iMac — done.** `cambium-genet-winit-host`'s `smoke.scn` ran on the
+iMac's own Aqua session and its receipt came home and was authored:
+`RESULT ok`, `frames: 3 captured, 0 blank, 3 distinct digests, 2 distinct
+sizes`. The example's own guard is what makes that worth something — it
+refuses to report ok unless a frame had real pixels *and* the frames around
+a state change differ.
+
+The first attempt appeared to hang in the winit event loop and was recorded
+here as a genet-side defect. It was not one: the run was waiting on a macOS
+permission prompt on the machine's own screen, which nothing on this side
+could see. Accepting it and re-running the identical command passed. Worth
+keeping as a lane property rather than an anecdote — **a headed run on a
+macOS machine can block on a prompt that is invisible to the driver**, so a
+first run there wants someone at the screen, and a "hang" is a prompt until
+ruled out.
 
 **Four defects in `remote-receipt.ps1`, each found by running it rather than
 reading it** (its first real cross-machine use):
