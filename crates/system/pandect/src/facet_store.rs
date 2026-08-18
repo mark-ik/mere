@@ -38,9 +38,10 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
-pub use chartulary::{AcceptAll, FacetError, FacetId, FacetValidator, NodeFacets};
+pub use chartulary::{AcceptAll, ExpiringFacet, FacetError, FacetId, FacetValidator, NodeFacets};
 
 /// The mere node-facet store: a [`chartulary::FacetStore`] keyed by the node's
 /// stable `Uuid`.
@@ -48,6 +49,28 @@ pub type NodeFacetStore = chartulary::FacetStore<Uuid>;
 
 /// Filename of the sidecar document, sibling to `graph.json`.
 pub const NODE_FACETS_FILE: &str = "facets.json";
+
+/// Read one revision-expiring facet at an explicit graph revision.
+///
+/// The stored value remains untouched on both sides of the boundary. An
+/// expired or malformed envelope reads as absent, matching the fail-closed
+/// convention of Mere's other typed facet readers. The caller supplies the
+/// revision so replay can use the journal prefix's revision rather than a
+/// process clock.
+pub fn read_expiring_facet<Id, T>(
+    store: &chartulary::FacetStore<Id>,
+    node: &Id,
+    facet: &FacetId,
+    revision: u64,
+) -> Option<T>
+where
+    Id: Ord + Clone,
+    T: DeserializeOwned,
+{
+    let stored = store.get(node, facet)?.clone();
+    let envelope: ExpiringFacet<serde_json::Value> = serde_json::from_value(stored).ok()?;
+    serde_json::from_value(envelope.into_value_at(revision)?).ok()
+}
 
 /// Path of the sidecar document under the per-session root. Pure — callers can
 /// use it for existence checks.
@@ -105,7 +128,12 @@ pub fn load_node_facets(session_dir: &Path) -> io::Result<Option<NodeFacetStore>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chartulary::{Author, Container, GraphLog, Relation};
     use serde_json::json;
+    use servitor::{
+        Cap, CascadeBudget, CascadeOutcome, CommittedEntry, Grant, GrantTable, Mode, ScopePath,
+        Subject, WatchTable, run_cascade,
+    };
 
     fn temp_session_dir(label: &str) -> PathBuf {
         let pid = std::process::id();
@@ -139,6 +167,138 @@ mod tests {
             )
             .unwrap();
         store
+    }
+
+    fn scope(raw: &str) -> ScopePath {
+        ScopePath::parse(raw).expect("valid test scope")
+    }
+
+    #[test]
+    fn the_reader_filters_at_the_revision_boundary_without_mutating_storage() {
+        let node = Uuid::from_u128(0xa);
+        let facet = FacetId::new("example.level");
+        let stored = serde_json::to_value(ExpiringFacet::new(json!(7), 4)).unwrap();
+        let mut store = NodeFacetStore::new();
+        store
+            .set(node, facet.clone(), stored.clone(), &AcceptAll)
+            .unwrap();
+
+        assert_eq!(
+            read_expiring_facet::<_, u64>(&store, &node, &facet, 3),
+            Some(7)
+        );
+        assert_eq!(
+            read_expiring_facet::<_, u64>(&store, &node, &facet, 4),
+            None
+        );
+        assert_eq!(
+            store.get(&node, &facet),
+            Some(&stored),
+            "expiry is a read predicate, not an implicit removal"
+        );
+
+        let malformed = FacetId::new("example.malformed");
+        store
+            .set(node, malformed.clone(), json!(7), &AcceptAll)
+            .unwrap();
+        assert_eq!(
+            read_expiring_facet::<_, u64>(&store, &node, &malformed, 0),
+            None,
+            "a non-envelope value fails closed"
+        );
+    }
+
+    #[test]
+    fn a_recorded_cascade_replays_identically_across_expiry() {
+        let node = "trail/signal".to_string();
+        let signal = FacetId::new("example.pulse");
+        let answer = FacetId::new("example.answer");
+        let user = Author::new("user");
+        let mut graph = GraphLog::<Container, Relation>::new();
+        graph.insert_node(&user, Container::new(node.clone()));
+        graph.set_facet(
+            &user,
+            &node,
+            signal.clone(),
+            serde_json::to_value(ExpiringFacet::new("pulse", 3)).unwrap(),
+        );
+        assert_eq!(graph.revision(), 2);
+        let before_expiry = graph.log().clone();
+
+        let subject = Subject::new([7; 32]);
+        let authority = GrantTable::new().with_grant(Grant::new(
+            subject,
+            Cap::scope("trail").unwrap(),
+            Mode::Read,
+        ));
+        let self_author = subject.to_author().as_str().to_string();
+        let mut watches = WatchTable::new();
+        watches
+            .register(&authority, subject, scope("trail"), self_author.clone())
+            .unwrap();
+
+        let mut live_reads = vec![read_expiring_facet::<_, String>(
+            graph.facets(),
+            &node,
+            &signal,
+            graph.revision(),
+        )];
+        let cascade = run_cascade(
+            &mut watches,
+            CascadeBudget::DEFAULT,
+            vec![CommittedEntry::new(
+                graph.revision() - 1,
+                "user",
+                vec![scope("trail/signal")],
+            )],
+            |wakes| {
+                assert_eq!(wakes.len(), 1);
+                assert!(graph.set_facet(&subject.to_author(), &node, answer.clone(), json!(true),));
+                live_reads.push(read_expiring_facet::<_, String>(
+                    graph.facets(),
+                    &node,
+                    &signal,
+                    graph.revision(),
+                ));
+                vec![CommittedEntry::new(
+                    graph.revision() - 1,
+                    self_author.clone(),
+                    vec![scope("trail/signal")],
+                )]
+            },
+        );
+        assert_eq!(cascade.rounds.len(), 1);
+        assert_eq!(cascade.outcome, CascadeOutcome::Settled);
+        assert_eq!(
+            graph.revision(),
+            3,
+            "the answer crosses the expiry boundary"
+        );
+        let after_expiry = graph.log().clone();
+
+        let replay_before = GraphLog::replay(before_expiry);
+        let replay_after = GraphLog::replay(after_expiry);
+        let replay_reads = vec![
+            read_expiring_facet::<_, String>(
+                replay_before.facets(),
+                &node,
+                &signal,
+                replay_before.revision(),
+            ),
+            read_expiring_facet::<_, String>(
+                replay_after.facets(),
+                &node,
+                &signal,
+                replay_after.revision(),
+            ),
+        ];
+
+        assert_eq!(live_reads, vec![Some("pulse".into()), None]);
+        assert_eq!(replay_reads, live_reads);
+        assert!(
+            replay_after.facets().get(&node, &signal).is_some(),
+            "replay retains the expired envelope as historical state"
+        );
     }
 
     #[test]

@@ -30,10 +30,14 @@ woodshed's stage/set/tools plan
 - **Consumers**: mere by path; isometry and turnstone by git (branch `main`);
   `ports/graphshell` including the remote client, which is the standing proof
   that scenes cross a wire to a viewer with no source access.
-- **Loose ends the freeze recorded and nobody picked up**: isometry and
-  turnstone still need re-resolving against 0.0.3, and woodshed was never
-  told the contract froze; its stage-set plan gates on exactly that ("what
-  remains is the freeze, not the proof"). This brief is that notification.
+- **Loose ends the freeze recorded** (**re-checked 2026-08-15**): the
+  isometry and turnstone re-resolves are **closed, and were never actually
+  outstanding** — both lock `sceno` 0.0.3, `cargo update -p sceno` moves zero
+  packages, and both compile green, because a git dep on branch `main`
+  followed the freeze without anyone acting. Woodshed did get the
+  notification (its stage-set plan carries a 2026-08-10 gate-is-open banner)
+  but **depends on no scenograph crate at all**, so L1 is a founding rather
+  than a re-resolve, and it is the whole of the remaining gate.
 - **The leverage reading.** The family proved contract discipline: unused
   surface was deleted, additions were forced through consumers. What it has
   not yet proven is breadth of use. One projection style is consumed (graph
@@ -75,11 +79,13 @@ The stage-set plan's model is ready-made for the frozen contract: the Set
 projected as a graph (each staged Card occurrence a numbered node, Set order
 a typed `Next` edge), one `RoutedRelation` per reason (diatonic, shared-tone,
 voice-leading, practiced-after) per the cells-as-edges ruling, expansion
-state on the projection, Card edits landing on the one Set. First acts:
-re-resolve isometry and turnstone to 0.0.3, then build Stage's projection
-through the `scene_out` shape. **Done when** Stage renders a Set graph
-through the frozen contract with fanned relations, before woodshed's
-release.
+state on the projection, Card edits landing on the one Set. The re-resolve
+half is closed (§1); what remains is the founding: woodshed takes its first
+`sceno` dependency and builds Stage's projection through the `scene_out`
+shape, sourced from `woodshed-graph` (the theory catalog already projected
+into the chartulary graph, which is the Set's graph form). **Done when**
+Stage renders a Set graph through the frozen contract with fanned relations,
+before woodshed's release.
 
 ### L2. Backdrops (two consumers already waiting)
 

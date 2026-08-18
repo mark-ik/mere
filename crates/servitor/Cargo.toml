@@ -8,6 +8,7 @@ keywords = ["extension", "plugin", "capability", "agent"]
 repository = "https://github.com/merely-made/mere"
 
 [dependencies]
+capability.workspace = true
 # The nested-graph substrate: a denizen's inner world is a chartulary GraphLog,
 # and petitions commit through its attributed, revision-checked batch seam.
 chartulary = { path = "../eidetic/chartulary" }

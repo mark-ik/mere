@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 
 use super::super::free_fns::{
     NativeModRuntime, WasmModRuntime, discover_mod_manifests, read_wasm_mod_from_path,
@@ -326,7 +325,7 @@ impl ModRegistry {
         let Some(manifest) = self.manifests.get(&normalized).cloned() else {
             return Err(ModUnloadError::UnknownMod(normalized));
         };
-        for dependent in self.active_dependents_of(&manifest.mod_id) {
+        if let Some(dependent) = self.active_dependent_of(&manifest.mod_id) {
             return Err(ModUnloadError::DependencyActive {
                 mod_id: manifest.mod_id,
                 dependent_id: dependent,
@@ -386,10 +385,8 @@ impl ModRegistry {
         }
     }
 
-    fn active_dependents_of(&self, mod_id: &str) -> Vec<String> {
-        let Some(manifest) = self.manifests.get(mod_id) else {
-            return Vec::new();
-        };
+    fn active_dependent_of(&self, mod_id: &str) -> Option<String> {
+        let manifest = self.manifests.get(mod_id)?;
         self.manifests
             .values()
             .filter(|candidate| candidate.mod_id != mod_id)
@@ -408,7 +405,7 @@ impl ModRegistry {
                 })
             })
             .map(|candidate| candidate.mod_id.clone())
-            .collect()
+            .min()
     }
 
     /// Get the status of a mod
@@ -443,7 +440,7 @@ impl ModRegistry {
             let mod_active = self
                 .status
                 .get(&m.mod_id)
-                .map_or(false, |s| *s == ModStatus::Active);
+                .is_some_and(|s| *s == ModStatus::Active);
             mod_active && m.provides.iter().any(|p| p == capability_id)
         })
     }

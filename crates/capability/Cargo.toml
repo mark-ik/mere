@@ -1,0 +1,13 @@
+[package]
+name = "mere-capability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared capability algebra for Mere authority providers."
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

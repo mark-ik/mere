@@ -12,7 +12,9 @@
 //!    path at [`Mode::Write`];
 //! 3. checks **scope**: every node a spec touches must fall under the claimed
 //!    path;
-//! 4. **commits** the batch attributed to the denizen, revision-checked, atomic
+//! 4. checks **facet authority**: every facet write needs a covering
+//!    [`Cap::Facet`] at [`Mode::Write`] as well as node scope;
+//! 5. **commits** the batch attributed to the denizen, revision-checked, atomic
 //!    (chartulary's `commit_batch`).
 //!
 //! Authority is materialized elsewhere and *projected* here read-only:
@@ -131,6 +133,12 @@ pub enum GateError {
         /// The scope the petition claimed.
         path: String,
     },
+    /// A facet write is inside the node scope but the subject holds no
+    /// capability covering that facet namespace.
+    UnauthorizedFacet {
+        /// The facet id the petition tried to set or remove.
+        facet: String,
+    },
     /// A spec would touch a grant projection (the reserved namespace).
     TouchesProjection {
         /// The offending node id.
@@ -154,6 +162,17 @@ fn touched_nodes(spec: &EditSpec<Container, Relation>) -> Vec<&str> {
         EditSpec::SetFacet { node, .. } | EditSpec::RemoveFacet { node, .. } => {
             vec![node.as_str()]
         }
+    }
+}
+
+/// The facet id a spec writes, if any. Facet authority is an independent axis
+/// from the node scope returned by [`touched_nodes`].
+fn touched_facet(spec: &EditSpec<Container, Relation>) -> Option<&str> {
+    match spec {
+        EditSpec::SetFacet { facet, .. } | EditSpec::RemoveFacet { facet, .. } => {
+            Some(facet.as_str())
+        }
+        _ => None,
     }
 }
 
@@ -278,7 +297,23 @@ impl Gate {
                 }
             }
         }
-        // 4. Commit, attributed to the denizen, revision-checked and atomic.
+        // 4. Facet namespace: touching a permitted node does not imply
+        //    permission to write every facet family on it. Parse at the gate
+        //    boundary; malformed ids fail closed because no typed capability
+        //    can cover them.
+        for spec in &specs {
+            let Some(facet) = touched_facet(spec) else {
+                continue;
+            };
+            let covered = Cap::facet(facet)
+                .is_ok_and(|needed| provider.covers(subject, &needed, Mode::Write));
+            if !covered {
+                return Err(GateError::UnauthorizedFacet {
+                    facet: facet.to_string(),
+                });
+            }
+        }
+        // 5. Commit, attributed to the denizen, revision-checked and atomic.
         nested
             .commit_batch(subject.to_author(), expected, specs)
             .map_err(GateError::Commit)
@@ -289,7 +324,7 @@ impl Gate {
 mod tests {
     use super::*;
     use crate::grant::GrantTable;
-    use chartulary::Container;
+    use chartulary::{Container, FacetId};
 
     fn subject(tag: u8) -> Subject {
         Subject::new([tag; 32])
@@ -297,6 +332,14 @@ mod tests {
 
     fn authority(subject: Subject) -> GrantTable {
         GrantTable::new().with_grant(Grant::new(subject, trail(), Mode::Write))
+    }
+
+    fn authority_with_facet(subject: Subject, namespace: &str) -> GrantTable {
+        authority(subject).with_grant(Grant::new(
+            subject,
+            Cap::facet(namespace).unwrap(),
+            Mode::Write,
+        ))
     }
 
     /// The capability every test petitions under.
@@ -344,6 +387,7 @@ mod tests {
             (trail(), Mode::Read),
             (trail(), Mode::Write),
             (Cap::power("navigate").unwrap(), Mode::Delegate),
+            (Cap::facet("web.").unwrap(), Mode::Write),
             (Cap::root_scope(), Mode::Write),
         ] {
             let mut nested = GraphLog::<Container, Relation>::new();
@@ -455,6 +499,128 @@ mod tests {
             }
         );
         assert_eq!(nested.graph().node_count(), 0);
+    }
+
+    #[test]
+    fn a_facet_write_needs_authority_on_both_node_scope_and_facet_namespace() {
+        let gate = Gate::new();
+        let sub = subject(1);
+        let auth = authority(sub);
+        let mut nested = GraphLog::<Container, Relation>::new();
+        gate.petition(
+            &auth,
+            &mut nested,
+            sub,
+            &trail_scope(),
+            0,
+            vec![insert("trail/step1")],
+        )
+        .unwrap();
+
+        let rev = nested.revision();
+        let err = gate
+            .petition(
+                &auth,
+                &mut nested,
+                sub,
+                &trail_scope(),
+                rev,
+                vec![EditSpec::SetFacet {
+                    node: "trail/step1".into(),
+                    facet: FacetId::new("web.viewer"),
+                    value: "genet".into(),
+                }],
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            GateError::UnauthorizedFacet {
+                facet: "web.viewer".into()
+            }
+        );
+        assert!(
+            nested
+                .facets()
+                .get(&"trail/step1".to_string(), &FacetId::new("web.viewer"))
+                .is_none(),
+            "node scope alone never confers a facet namespace"
+        );
+    }
+
+    #[test]
+    fn a_web_namespace_grant_permits_web_and_refuses_denizen_on_the_same_node() {
+        let gate = Gate::new();
+        let sub = subject(1);
+        let auth = authority_with_facet(sub, "web.");
+        let mut nested = GraphLog::<Container, Relation>::new();
+        gate.petition(
+            &auth,
+            &mut nested,
+            sub,
+            &trail_scope(),
+            0,
+            vec![insert("trail/step1")],
+        )
+        .unwrap();
+
+        let rev = nested.revision();
+        gate.petition(
+            &auth,
+            &mut nested,
+            sub,
+            &trail_scope(),
+            rev,
+            vec![EditSpec::SetFacet {
+                node: "trail/step1".into(),
+                facet: FacetId::new("web.viewer"),
+                value: "genet".into(),
+            }],
+        )
+        .unwrap();
+
+        let rev = nested.revision();
+        let err = gate
+            .petition(
+                &auth,
+                &mut nested,
+                sub,
+                &trail_scope(),
+                rev,
+                vec![EditSpec::SetFacet {
+                    node: "trail/step1".into(),
+                    facet: FacetId::new("denizen.binding"),
+                    value: "forged".into(),
+                }],
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            GateError::UnauthorizedFacet {
+                facet: "denizen.binding".into()
+            }
+        );
+
+        let rev = nested.revision();
+        let err = gate
+            .petition(
+                &auth,
+                &mut nested,
+                sub,
+                &trail_scope(),
+                rev,
+                vec![EditSpec::RemoveFacet {
+                    node: "trail/step1".into(),
+                    facet: FacetId::new("denizen.binding"),
+                }],
+            )
+            .unwrap_err();
+        assert_eq!(
+            err,
+            GateError::UnauthorizedFacet {
+                facet: "denizen.binding".into()
+            },
+            "removal is a facet write too"
+        );
     }
 
     #[test]

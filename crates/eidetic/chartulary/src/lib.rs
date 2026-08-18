@@ -66,7 +66,9 @@ pub use content_class::{
     CLASS_FACET, ClassError, ClassId, ClassMembership, ClassRegistry, ContentClass,
 };
 pub use edit::{DerivationKind, DerivationRecord, EdgeId, GraphEdit, WriterId};
-pub use facet::{AcceptAll, FacetError, FacetId, FacetStore, FacetValidator, NodeFacets};
+pub use facet::{
+    AcceptAll, ExpiringFacet, FacetError, FacetId, FacetStore, FacetValidator, NodeFacets,
+};
 pub use graph::{EdgeKey, Graph, NodeKey};
 pub use spine::GraphLog;
 pub use taxonomy::{REL_NS, Recognized, RelationClass, Semantic};

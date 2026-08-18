@@ -12,9 +12,9 @@
 //!
 //! - [`Subject`] — a keyholder identity (a 32-byte public key), the same shape
 //!   the moot authorization seam uses (`gemot::MootAuthorizationRequest.subject`).
-//! - [`cap`] — what a capability IS: [`Cap`], a type with a coverage order
-//!   (a closed set of named powers, or a hierarchical scope), never a string
-//!   with a prefix test.
+//! - [`cap`] — compatibility re-exports from the dependency-free
+//!   `mere-capability` leaf crate: [`Cap`] carries closed powers, node scopes,
+//!   and facet namespaces under one coverage order.
 //! - [`grant`] — a scoped structural capability ([`Grant`]) and the replaceable
 //!   [`AuthorityProvider`] seam that answers "does this subject's capability
 //!   cover this one?", mirroring `gemot::MootAuthorizationProvider`.
@@ -38,10 +38,10 @@
 //! nested graph; wiring a denizen node in a host graph to bear it is the host's
 //! job (mere's `Node` implementing `chartulary::GraphBearing`).
 //!
-//! The capability model is typed but still small: [`Cap`] carries the two shapes
-//! real consumers hold at once (an app's closed ring set, and a graph's
-//! unbounded node-id namespace), and coverage is the partial order that same
-//! type owns. The full model (meadowcap-shaped structural caps over
+//! The capability model is typed but still small: [`Cap`] carries the three
+//! shapes real consumers hold (an app's closed ring set, a graph's unbounded
+//! node-id namespace, and a facet namespace), and coverage is the partial
+//! order that same type owns. The full model (meadowcap-shaped structural caps over
 //! graph-cluster-derived namespaces, binding to leaf node ids) lands when
 //! mere's namespace layer is built; this crate consumes an
 //! [`AuthorityProvider`], so that richer provider drops in without changing
@@ -56,7 +56,7 @@ pub mod grant;
 pub mod tick;
 pub mod watch;
 
-pub use cap::{Cap, CapError, Capability, ScopePath, assert_capability_laws};
+pub use cap::{Cap, CapError, Capability, FacetNamespace, ScopePath, assert_capability_laws};
 pub use cascade::{Cascade, CascadeBudget, CascadeOutcome, CommittedEntry, Round, run_cascade};
 pub use delegation::{ChainError, DelegationTable, cap_path, mode_action, mode_actions, scope_for};
 pub use gate::{

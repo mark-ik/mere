@@ -87,12 +87,34 @@ one pipeline. Miscibility follows: because every scene is a point in the same
 lever space, levers pour between them (Atlas ground under Chronicle's axis
 reads as a travel chronicle; Mosaic tiles inside Fog read as an exploration
 gallery). Mechanically a scene lands as the template mechanism at graph
-scope, parametric, persona-persisted, carrying product intent. Naming: scenes
-are a third register beside surfaces and arrangements; where a scene grew
-from a brand projection (Mosaic, Atlas) the scene carries the brand name and
-its placement lever keeps the same plain word in the arrangement register.
-Graphshell remote stays the standing discipline: every scene must survive the
-wire to a viewer with no source access.
+scope, parametric, persona-persisted, carrying product intent. Graphshell
+remote stays the standing discipline: every scene must survive the wire to a
+viewer with no source access.
+
+**Levers co-vary; that is why the scene is the unit (Mark, 2026-08-14).**
+The catalog originally reserved *Mosaic* and *Atlas* as arrangement names, on
+the assumption that a scene is its placement lever plus decoration. It is not.
+There is no Atlas without a map: geographic placement with nothing beneath it
+is a scatter of dots, because the backdrop is what makes a position mean a
+place. And Mosaic's adjacency-as-edge does not arrive from putting nodes next
+to each other; the tiles must also size themselves to close the gaps, so the
+representation lever is doing half the work of the edge lever. In both cases
+the intent is carried by a *combination* no single lever holds, which is
+exactly why a scene is the reusable unit and a lever is not.
+
+Two consequences. **Naming**: the brand words belong to the scene register,
+not the arrangement register, so the reservations recorded in the
+[projection proofs plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md)
+are released to it and the placement levers keep plain mechanism names.
+Mark's own reading of the two levers: Mosaic's placement is **Grid** (already
+in the arrangement register, in its packing variant, which needs no new name),
+and Atlas's is *relative persistent spacing* — positions given by the data and
+preserved against each other, never force-settled. That mechanic has no
+arrangement entry yet; **Plotted** is proposed for it, and it generalizes the
+existing Semantic entry, since an embedding and a latitude are the same lever
+with different coordinate sources. **Composition**: a scene template must
+carry every lever it depends on, not a placement id plus defaults, or it
+arrives at a second dataset as a scatter of dots.
 
 1. **Mosaic**: the collection, browsed whole. Adjacency-tiled placement where
    nearness carries kinship; nodes are edge-to-edge tiles with snapshot or

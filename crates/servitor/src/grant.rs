@@ -11,25 +11,7 @@
 
 use crate::Subject;
 use crate::cap::{Cap, Capability};
-
-/// Access mode, in the meadowcap sense. Ordered by power: a `Write` grant
-/// covers a `Read` need, and `Delegate` covers both.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Mode {
-    /// May observe the covered area.
-    Read,
-    /// May mutate the covered area (implies [`Read`](Mode::Read)).
-    Write,
-    /// May grant covered capabilities to others (implies [`Write`](Mode::Write)).
-    Delegate,
-}
-
-impl Mode {
-    /// Whether a grant of `self` satisfies a `needed` mode.
-    pub fn covers(self, needed: Mode) -> bool {
-        self >= needed
-    }
-}
+pub use capability::Mode;
 
 /// A structural capability: `subject` may act under `cap` with `mode`.
 /// Coverage delegates to the capability's own order, so what "covers" means

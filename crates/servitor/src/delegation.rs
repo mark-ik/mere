@@ -27,6 +27,7 @@
 //! | --- | --- | --- |
 //! | `Cap::Power("navigate")` at `Write` | `power/navigate` | `{read, write}` |
 //! | `Cap::Scope("scenario/a")` at `Read` | `scope/scenario/a` | `{read}` |
+//! | `Cap::Facet("web")` at `Write` | `facet/web` | `{read, write}` |
 //!
 //! Both halves of the capability order survive the encoding:
 //!
@@ -57,6 +58,14 @@ pub const DENIZEN_DOMAIN: &str = "mere.denizen";
 
 const POWER_PATH: &str = "power";
 const SCOPE_PATH: &str = "scope";
+const FACET_PATH: &str = "facet";
+
+/// Escape one logical capability segment before placing it in personae's
+/// slash-separated path. This keeps a slash inside a power or facet segment
+/// from manufacturing hierarchy that the typed capability does not have.
+fn encode_segment(segment: &str) -> String {
+    segment.replace('%', "%25").replace('/', "%2F")
+}
 
 /// The `path_prefix` a capability encodes to.
 ///
@@ -66,7 +75,7 @@ const SCOPE_PATH: &str = "scope";
 /// `scope/<path>`, keeping its hierarchy.
 pub fn cap_path(cap: &Cap) -> String {
     match cap {
-        Cap::Power(name) => format!("{POWER_PATH}/{name}"),
+        Cap::Power(name) => format!("{POWER_PATH}/{}", encode_segment(name)),
         Cap::Scope(path) => {
             let path = path.to_string();
             if path.is_empty() {
@@ -75,6 +84,19 @@ pub fn cap_path(cap: &Cap) -> String {
                 SCOPE_PATH.to_string()
             } else {
                 format!("{SCOPE_PATH}/{path}")
+            }
+        }
+        Cap::Facet(namespace) => {
+            if namespace.segments().is_empty() {
+                FACET_PATH.to_string()
+            } else {
+                let path = namespace
+                    .segments()
+                    .iter()
+                    .map(|segment| encode_segment(segment))
+                    .collect::<Vec<_>>()
+                    .join("/");
+                format!("{FACET_PATH}/{path}")
             }
         }
     }
@@ -421,6 +443,49 @@ mod tests {
         assert!(
             !table.covers(subject, &scope("nav"), Mode::Write),
             "a scope spelled like the power is not the power"
+        );
+        assert_eq!(
+            cap_path(&Cap::power("nav/admin").unwrap()),
+            "power/nav%2Fadmin",
+            "a slash inside a power name cannot manufacture hierarchy"
+        );
+    }
+
+    #[test]
+    fn facet_namespaces_keep_their_dot_hierarchy_through_personae_encoding() {
+        let user = provider(0);
+        let helper = provider(1);
+        let mut table = DelegationTable::new(root_key(&user));
+        let cert = root_certificate(
+            root_key(&user),
+            subject_of(&helper),
+            &Cap::facet("web.").unwrap(),
+            Mode::Write,
+            b"app".to_vec(),
+            1_000,
+            None,
+            0,
+            [10; 32],
+        );
+        table.adopt(SignedDelegationCertificate::issue(&user, cert).unwrap());
+        table.set_now(2_000);
+
+        let subject = subject_of(&helper);
+        assert!(table.covers(subject, &Cap::facet("web.viewer").unwrap(), Mode::Write));
+        assert!(!table.covers(subject, &Cap::facet("website.viewer").unwrap(), Mode::Write));
+        assert!(!table.covers(
+            subject,
+            &Cap::facet("denizen.binding").unwrap(),
+            Mode::Write
+        ));
+        assert!(
+            !table.covers(subject, &scope("web/viewer"), Mode::Write),
+            "a facet namespace never crosses into the node-scope hierarchy"
+        );
+        assert_eq!(
+            cap_path(&Cap::facet("example.portable/v1").unwrap()),
+            "facet/example/portable%2Fv1",
+            "a slash inside one dot segment stays inside that segment"
         );
     }
 

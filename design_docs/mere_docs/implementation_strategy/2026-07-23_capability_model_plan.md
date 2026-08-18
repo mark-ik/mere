@@ -10,10 +10,10 @@ complete. That plan's open question 3 (revocation design, "own round before
 B5") was never taken and B5 landed without it; this is that round, widened by
 what the B3 implementation pass exposed.
 
-Servitor still lives at `repos/servitor`; it becomes a mere workspace member
-at phase C3c of the [repo consolidation
-plan](2026-07-23_repo_consolidation_plan.md). This work lands in the standalone
-repo and travels with that move.
+Servitor now lives at `crates/servitor` as a mere workspace member: the phase-C3c
+move of the [repo consolidation plan](2026-07-23_repo_consolidation_plan.md) has
+landed and `repos/servitor` is gone. (Corrected 2026-08-16; the founding text
+here said it was still standalone and that this work would travel with the move.)
 
 ## The decision in one line
 
@@ -593,3 +593,49 @@ are not lost, ordered by how much they matter.
     commits attributed to the peer, an out-of-scope one hits the gate's own
     scope check, an undelegated identity is refused, revoking the moot
     certificate stops the peer AT THE GATE, and delegate-mode fails closed.
+
+### 2026-08-16
+
+- **An incoming capability kind, against a closed round.** The
+  [facet signaling round](../technical_architecture/2026-08-16_facet_signaling_and_control_loops.md)
+  asks for a **facet-namespace kind** with prefix coverage, beside Power
+  (equality) and Scope (segment prefix). The gate already scope-checks
+  `SetFacet` and `RemoveFacet` by node id, so today it governs which nodes a
+  denizen may touch but not which facet namespaces it may write: a write grant
+  on `trail/` also permits writing `denizen.binding` and `web.*` on those
+  nodes. This closes the one-node layer map's open question 4, which had asked
+  only whether the path vocabulary "may want a facet dimension".
+- **Sequencing, and the reason it is not obvious.** D3b's ruling extracts the
+  algebra (`Capability`, `Cap`, `ScopePath`, `Mode`) into a leaf crate that
+  gemot and servitor both depend on. That extraction has NOT happened:
+  `ScopePath` is still defined only in `servitor/src/cap.rs`, and gemot carries
+  its own `MootAuthorizationProvider`. So a facet kind added now is added to a
+  crate scheduled to move, and adding it after the move means the move happens
+  without a consumer that would have exercised the third kind. Which order
+  wants a ruling rather than a default.
+
+### 2026-08-18
+
+- **The D3b extraction and facet-namespace kind landed together, in that
+  order.** Mark's `proceed` accepted leaf-first: the dependency-free
+  `mere-capability` crate now owns `Capability`, `Cap`, `ScopePath`, `Mode`, the
+  law harness, and the new `FacetNamespace`. `servitor::cap` and
+  `servitor::grant::Mode` are compatibility re-exports, so existing consumers
+  keep their API while gemot now depends on the leaf directly. Gemot's
+  `MootAuthorizationProvider` remains its L2 membership/policy input seam; it
+  no longer implies a second capability algebra.
+- **`Cap::Facet` is the third structural kind.** Its wire form is
+  `facet:<dot.namespace>`; coverage is dot-segment prefix, so `web.` covers
+  `web.viewer` but not `website.viewer` or `denizen.binding`, and cross-kind
+  coverage remains false. The personae adapter encodes logical facet segments
+  as `facet/<segment>/...`, escaping slashes inside a segment so the signed
+  certificate grammar preserves exactly the leaf order.
+- **The gate now checks both axes.** `SetFacet` and `RemoveFacet` still have to
+  touch nodes inside the petition's claimed `ScopePath`, and now also require a
+  covering facet capability at `Mode::Write`; an unparseable facet id fails
+  closed as `UnauthorizedFacet`. Existing installs are not widened or broken:
+  no current denizen petition writes facets, and a future facet writer must ask
+  for an explicit reviewed grant. Receipts: `mere-capability` 8/8, servitor
+  54/54, gemot 112/112 (including typed authorization 9/9), Turnstone's focused
+  signed-install / uninstall-revocation test 1/1, and touched-package Clippy
+  with warnings denied.

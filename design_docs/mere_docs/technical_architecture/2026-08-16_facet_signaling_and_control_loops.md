@@ -4,12 +4,20 @@
 **Status:** design round (Mark, 2026-08-16). Gives open question 4 of the
 [one node, atomic facets layer map](2026-07-18_one_node_facets_layer_map.md)
 ("facet grants") a definite shape, and names one verified gap in the servitor
-reactive substrate. No code changed by this doc.
+reactive substrate. Targets 1 and 2 landed 2026-08-18; targets 3 and 4 remain
+open.
 
 Companion to the one-node ruling (which established facets as the metadata
 mechanism) and to the participant gate work (which owns the authority half).
 Where the one-node doc asked what a node *carries*, this doc asks what
 participants *say to each other* through what nodes carry.
+
+**Related:** the
+[graph behaviors plan](../implementation_strategy/2026-08-13_graph_behaviors_plan.md)
+owns the watch and cascade substrate section 6 reasons over (its slices W0
+through W5 landed 2026-08-13, so that lane is built, not pending); the
+[capability model plan](../implementation_strategy/2026-07-23_capability_model_plan.md)
+owns the capability algebra section 7 proposes extending.
 
 ## 1. The question, and its correction
 
@@ -50,7 +58,7 @@ Verified against code during the round:
 - **The membrane.** `FacetStore` is a field of `GraphLog` and part of the
   compacted snapshot (`spine.rs`), not a sidecar beside it. A nested graph
   therefore carries its own facets *inside its own log*, so interior signaling
-  forks, archives, and replays as one body with the subgraph. This was checked
+  forks, archives, and replays as one body with the nested graph. This was checked
   by looking for the opposite: `archive_nested` moves only the log and snapshot
   slots, which would orphan a facet sidecar if one existed. There is none to
   orphan.
@@ -79,7 +87,7 @@ preservation is precisely that guarantee.
 
 Interior can afford conversation; exterior can only afford deposits. The
 endocrine and pheromone metaphors land on opposite sides of a real boundary,
-which is why the intuition that a subgraph affords more structure than the open
+which is why the intuition that a nested graph affords more structure than the open
 graph is correct.
 
 ## 4. Signals are not tags
@@ -155,6 +163,11 @@ argues for deadband as first-class machinery a behavior declares (a minimum
 change, a minimum interval) rather than discipline every modder must reinvent
 correctly.
 
+The owning plan is equally silent. The graph behaviors plan carries no rate,
+thrash, frequency, or oscillation language either, so this is a hole in the
+design rather than a known deferral someone parked. It is now named in that
+plan's status header and Progress, where its fix belongs.
+
 The metaphor prescribes the same engineering. Endocrine control loops are slow,
 graded, decaying, and setpoint-seeking, and every one of those adjectives is a
 stability property; fast, undamped, non-decaying feedback in a body is a seizure.
@@ -184,14 +197,25 @@ natural third member: a grant on `web.` covers `web.viewer` and never covers
 
 ## 8. Targets
 
-1. **Facet-namespace capability kind**, with the gate checking it alongside
-   scope. Done when a grant can permit `web.*` while refusing `denizen.*` on the
-   same nodes.
-2. **Expiring facets in read-time-predicate form.** Done when a recorded cascade
-   replays identically across an expiry boundary.
+Homes, since none of this work lands here: target 1 belongs to the
+capability model plan, targets 3 and 4 to the graph behaviors plan, and target 2
+to chartulary with a mere-side reader.
+
+1. **DONE 2026-08-18: facet-namespace capability kind**, with the gate checking
+   it alongside scope. A `web.` grant permits `web.viewer` while refusing
+   `denizen.binding` on the same node. **Sequencing ruling:** leaf first, then
+   the kind in the same pass. `mere-capability` now owns `Capability`, `Cap`,
+   `ScopePath`, `Mode`, and `FacetNamespace`; servitor and gemot depend on it
+   directly, while Servitor keeps compatibility re-exports.
+2. **DONE 2026-08-18: expiring facets in read-time-predicate form.** Chartulary's
+   generic `ExpiringFacet<T>` envelope names the first stale graph revision;
+   Pandect's `read_expiring_facet` takes the revision explicitly, returns no
+   value at or beyond the boundary, and never mutates the stored envelope. A
+   recorded cascade crosses the boundary and its before/after reads replay
+   identically from the two journal prefixes.
 3. **Deadband declaration** on a behavior (minimum change, minimum interval).
    Done when a slow limit cycle is refused or named rather than silently writing
-   journal history.
+   journal history. Recorded in the behaviors plan's Progress on 2026-08-16.
 4. **Watch predicate dimension** (threshold crossing), after target 3 and gated
    on a real consumer.
 
@@ -201,9 +225,11 @@ natural third member: a grant on `web.` covers `web.viewer` and never covers
    the wake; on the gate it suppresses the write. The actuation side also bounds
    journal growth from writers that were never woken, which is the failure this
    is meant to prevent.
-2. **Revision-indexed or wall-clock expiry.** Revision indexing replays
-   perfectly, but a graph with no writes never expires anything. Wall clock needs
-   read-time evaluation to stay replay-safe.
+2. **CLOSED 2026-08-18: revision-indexed expiry.** The target's replay
+   done-condition rules here: `expires_at_revision` is deterministic at every
+   journal prefix. A quiet graph deliberately does not advance the shelf life.
+   Wall-clock expiry remains a different, unbuilt policy and must not be smuggled
+   into this reader later.
 3. **Does a signal want a reserved namespace**, so a reader can distinguish
    signal from state without a schema lookup?
 4. **Scripts as participants.** Scripts have no graph surface today (the rhai
@@ -212,6 +238,44 @@ natural third member: a grant on `web.` covers `web.viewer` and never covers
    hold a graph handle, exactly as denizens do.
 
 ## Progress
+
+- **2026-08-18 (target 2 complete):** added chartulary's generic
+  `ExpiringFacet<T>` envelope and Pandect's fail-closed `read_expiring_facet`.
+  The expiry boundary is the first stale graph revision, so the read is live
+  only while `revision < expires_at_revision`; neither the live path nor replay
+  removes the stored bytes. The receipt records a one-round Servitor cascade:
+  its answer advances a chartulary `GraphLog` from revision 2 to 3, expiring a
+  signal at revision 3, then replays the prefix on each side and obtains the
+  same `[Some("pulse"), None]` reads. Focused sets are Chartulary 10/10 and
+  Pandect facet-store 7/7; their full library suites are 54/54 and 274/274.
+  Chartulary passes Clippy with warnings denied, and Pandect Clippy reports no
+  diagnostic in the changed module; crate-wide warning denial is already
+  blocked by 43 existing diagnostics elsewhere. The signal-namespace question
+  remains open, and targets 3 and 4 remain open.
+
+- **2026-08-18 (target 1 complete):** extracted the dependency-free
+  `mere-capability` leaf, added dot-segment `Cap::Facet`, carried its order
+  losslessly through personae's signed delegation path, and made the gate
+  require facet authority for both set and remove. The done-condition receipt
+  grants `web.` and writes `web.viewer`, then refuses `denizen.binding` on the
+  same node; the Gemot receipt asks the same three questions through its typed
+  authorization adapter. `mere-capability` 8/8, servitor 54/54, gemot 112/112
+  (including typed authorization 9/9), Turnstone's focused signed-install /
+  uninstall-revocation test 1/1, and touched-package Clippy with warnings
+  denied. At that checkpoint, targets 2 through 4 remained open.
+
+- **2026-08-16 (open-work sweep, same day):** checked this round's findings
+  against the plans that own them. Three results. **The frequency gap is
+  unclaimed** by the graph behaviors plan as well as by the code, so it is now
+  named in that plan's status header and Progress. **One claim made and
+  withdrawn:** the capability model plan's C3 and C4 read as deferred, but that
+  bullet sits inside its historical 2026-07-23 entry, and the 2026-07-24 entry
+  records C3, C3' and C4 all landing. What *is* still pending there is D3b's
+  algebra extraction, which is why target 1 carries a sequencing note; the
+  facet-namespace request is filed in that plan under 2026-08-16. **And this
+  doc's own first draft** used the bare word "subgraph" three times, which
+  TERMINOLOGY.md and the gate plan both reserve for "nested graph"; corrected
+  here and in the one-node Progress entry.
 
 - **2026-08-16:** Design round with Mark, recorded here. Every claim above was
   checked against the tree rather than against prior docs. One correction earned

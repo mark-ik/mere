@@ -85,11 +85,32 @@ neither portable crate nor serialized scene type mentions either product.
 - **The scenario lane absorbed the new action for free.** `act <palette
   label>` + self-capture ran unchanged; automation reach cost two mapping
   lines. Receipt of the one-tool-vocabulary doctrine paying rent.
-- **Owed follow-ups**: persist the active strategy as view-intent (the canvas
-  doc expects the host to; not wired), a checkmarked layout picker surface
-  (palette-only today), and the remaining catalog ids as palette entries
-  (grid / penrose / lsystem / timeline / kanban / radial / spectral all
-  dispatch already).
+- **Owed follow-ups** (**two closed 2026-08-15, ratified by Mark**):
+  - ~~persist the active strategy as view-intent~~ **done**: turnstone writes
+    a `view-intent.json` sidecar beside the projection score and restores it
+    on session open. Kept a separate sidecar deliberately, because a score is
+    recomputable from graph truth while *which arrangement was chosen* is
+    not recoverable from the positions it produced, so without it a reopened
+    session silently reverted to the surface default. Restored through the
+    runtimes directly rather than the app arm, since that arm clears the
+    score for a non-Spiral strategy — right for a fresh choice, wrong when
+    restoring the pair. The sidecar stores the id, never the display name,
+    pinned by a test.
+  - ~~the layout picker derives its labels from the registry~~ **done**:
+    `turnstone::action::palette_actions` now builds its `Layout:` rows from
+    `CANVAS_LAYOUT_STRATEGIES` instead of hardcoding, which also lands the
+    third item below for free. It returns `Vec<(String, Action)>` now; both
+    call sites were already stringifying, so they got simpler.
+  - **Finding, and a live hazard**: display names live in **two** tables —
+    `arrangements::registry` (the arrangement register proper) and the
+    canvas's `CANVAS_LAYOUT_STRATEGIES` (the picker catalog, whose ids
+    distinguish dispatchable variants like `kanban.default` from
+    `kanban.community`, which the registry does not). The Board/Fractal
+    rename had to be applied in both, and nothing enforces agreement. The
+    picker correctly reads the canvas table; unifying them, or deriving one
+    from the other, is the next cleanup and belongs before a third table
+    appears.
+  - Still open: a checkmarked layout picker surface (palette-only today).
 
 ## Arrangement naming (plain vocabulary, stack-consistent)
 
@@ -114,15 +135,31 @@ not collide.**
 | `graph_layout:grid` | Grid | plain already | |
 | `graph_layout:radial` | Radial | plain already | volvelle = a *moot* radial, different concept |
 | `graph_layout:timeline` | Timeline | plain already | |
-| `graph_layout:kanban` | Kanban | proposed → Board? | jargon; ratify |
+| `graph_layout:kanban` | **Board** | **RATIFIED 2026-08-15** | was Kanban (jargon); Mark accepted the standing proposal |
 | `graph_layout:penrose` | Penrose | keep | aperiodic tiling; **not** Mosaic (proper noun ok) |
-| `graph_layout:lsystem` | L-System | proposed → Fractal? | ratify |
-| `graph_layout:semantic_embedding` | Semantic | keep | |
+| `graph_layout:lsystem` | **Fractal** | **RATIFIED 2026-08-15** | was L-System (jargon); Mark accepted the standing proposal |
+| `graph_layout:semantic_embedding` | Semantic | keep | a coordinate source for **Plotted**, below |
 | (spectral) | Spectral | keep | jargon; no clean plain word |
-| *(future, P4)* adjacency tiling | **Mosaic** | reserved (free) | brand "mosaic"; data-driven tiles, distinct from Penrose |
-| *(future, P5)* geographic | **Atlas** | reserved (free) | brand "atlas"; distinct from isometry's *overmap* surface |
+| ~~*(future, P4)* adjacency tiling~~ | ~~Mosaic~~ | **RELEASED to the scene register 2026-08-14** | Mosaic's placement lever is **Grid** (packing variant); see the ruling below |
+| *(future, P5)* data-given coordinates | **Plotted** | proposed → ratify | positions supplied by the data and preserved relative to each other, never force-settled. Generalizes Semantic (embedding coordinates) and carries Atlas's geographic case |
+| ~~*(future, P5)* geographic~~ | ~~Atlas~~ | **RELEASED to the scene register 2026-08-14** | Atlas's placement lever is **Plotted**, above; see the ruling below |
 | *(future)* burn-kinship regions | **Hulls** | reserved | brand "hulls"; ties to the fields/hulls primitive |
 | *(future)* joint-constrained bodies | **Armature** | **ratified 2026-07-31, DISPLAY NAME ONLY** | positions fixed by attachment frames, never force-settled — the nested-graph-scale sibling of orrery. First consumer: the games wing's live body swatch (a critter's body is a nested graph; see `mesocosm/design_docs/2026-07-30_body_pipeline_and_host_probe_plan.md` §3). **Never a crate name**: `armature` is taken on crates.io (an event-driven stateful actor framework, 0.1.1, 2021, dormant), and its domain is adjacent to **armillary**, so publishing under it would collide twice over. The `graph_layout:*` id stays the persistence key, as for every arrangement |
+
+**Three registers, not two (ruled with Mark 2026-08-14).** A **scene** is a
+reusable total projection regime: every lever flexed toward one product
+intent, portable to a second dataset. Mosaic and Atlas are scenes, and their
+reservations above are released from the arrangement register to it, because
+neither name describes a placement rule. There is no Atlas without a map,
+since geographic placement over nothing is a scatter of dots and the backdrop
+is what makes a position mean a place; and Mosaic's adjacency-as-edge needs
+tiles that *size themselves* to close the gaps, so its representation lever
+does half the work of its edge lever. The intent lives in a combination no
+single lever holds, which is why the scene is the reusable unit. Arrangement
+names stay plain mechanism words, and a scene template must carry every lever
+it depends on rather than a placement id plus defaults. The scene deck is in
+the [content catalog](../research/2026-08-13_scenograph_content_catalog.md);
+surface names remain off-limits to both other registers.
 
 Collision checks (2026-07-22): `mosaic` zero hits stack-wide; `atlas` only a
 "font/SVG atlas" texture ref in graph-kernel; `spiral` only an internal grid

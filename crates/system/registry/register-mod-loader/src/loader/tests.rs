@@ -581,3 +581,36 @@ fn unload_mod_quarantines_and_preserves_records_on_removal_failure() {
             if *channel_id == CHANNEL_MOD_QUARANTINED
     )));
 }
+
+#[test]
+fn unload_mod_refuses_while_any_dependent_is_active() {
+    let provider = test_manifest("mod:provider", &["capability:test"], &[]);
+    let zeta = test_manifest("mod:zeta", &[], &["capability:test"]);
+    let alpha = test_manifest("mod:alpha", &[], &["capability:test"]);
+    let mut registry = ModRegistry::from_manifests_for_tests(vec![provider, zeta, alpha]);
+
+    registry
+        .resolve_dependencies()
+        .expect("dependencies should resolve");
+    registry.load_all();
+
+    let error = registry
+        .unload_mod_with("mod:provider", |_| {
+            panic!("a blocked unload removes nothing")
+        })
+        .expect_err("an active dependent must block its provider's unload");
+
+    assert_eq!(
+        error,
+        ModUnloadError::DependencyActive {
+            mod_id: "mod:provider".to_string(),
+            dependent_id: "mod:alpha".to_string(),
+        },
+        "the singular error names one deterministic blocker",
+    );
+    assert_eq!(
+        registry.get_status("mod:provider"),
+        Some(ModStatus::Active),
+        "the refused unload leaves the provider active",
+    );
+}

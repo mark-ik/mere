@@ -40,7 +40,7 @@ an app that needs more implements the traits on its own types.
 | `edit` | `GraphEdit`, `EdgeId`, `WriterId`, `DerivationKind`, `DerivationRecord` |
 | `spine` | `GraphLog`: graph edits as a codicil log, with muniment snapshots for checkpoint-plus-tail loading |
 | `commit` | `Batch`, `BatchId`, `Author`, `EditSpec`, `Committed`, `CommitError` |
-| `facet` | `NodeFacets`, `FacetStore`, `FacetId`, `FacetValidator`, `AcceptAll`, `FacetError`. Runtime typed node metadata, validated through an injected seam |
+| `facet` | `NodeFacets`, `FacetStore`, `FacetId`, `FacetValidator`, `AcceptAll`, `FacetError`, `ExpiringFacet`. Runtime typed node metadata, validated through an injected seam; revision-indexed shelf life stays a read predicate and never mutates stored state |
 | `content_class` | `ContentClass`, `ClassId`, `ClassRegistry`, `ClassMembership`, `CLASS_FACET`, `ClassError` |
 | `stemma` | `Stemma`, `StemmaSnapshot`, `EntryRecord`, `VisitRecord`, `OwnerRecord`, `TransitionKind`, `EntryPrivacy`, `OwnerBranchProjection`, `GcReport`. Owner-scoped descent of content through branching visits |
 | `nested` | Slot-name helpers: `log_slot`, `snap_slot`, `archived_log_slot`, `archived_snap_slot` |

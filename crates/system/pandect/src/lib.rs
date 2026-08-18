@@ -166,8 +166,9 @@ pub use engine_profile_store::{
 };
 pub use engram_seal::WalletEpochSealer;
 pub use facet_store::{
-    AcceptAll, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE, NodeFacetStore, NodeFacets,
-    copy_node_facets, load_node_facets, node_facets_path, save_node_facets,
+    AcceptAll, ExpiringFacet, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE,
+    NodeFacetStore, NodeFacets, copy_node_facets, load_node_facets, node_facets_path,
+    read_expiring_facet, save_node_facets,
 };
 pub use identity::{StartupUnlockMode, auto_unlock_backend_available};
 pub use live_view::{

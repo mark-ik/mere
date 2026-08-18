@@ -3,9 +3,10 @@
 **Date:** 2026-08-13
 **Status:** W0 through W5 landed 2026-08-13, with a green headed receipt
 (`turnstone scenarios/behaviors_wake.scn`, captures under
-`Code/testing/turnstone/behaviors_wake`). Two follow-ups are named in Progress
-rather than done: the review row clips in the palette, and the clock, app-tier
-and budget slices have no headed receipt of their own. Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
+`Code/testing/turnstone/behaviors_wake`). Three follow-ups are named in Progress
+rather than done: the review row clips in the palette; the clock, app-tier
+and budget slices have no headed receipt of their own; and cascade *frequency*
+is unbounded where its depth is not (named 2026-08-16). Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
 conversation: one node triggering others nearby to refresh, summaries from
 connected nodes captured into a knot note, and the family of automations
 behind them).
@@ -20,7 +21,11 @@ plan extends it: a behavior IS a denizen, plus a trigger),
 (the wavelet read; its "no site today" for the Trigger/Observe split is the
 site this plan builds),
 [data-oriented doctrine brief](../../2026-07-02_data_oriented_doctrine_brief.md)
-(change is a recorded delta stream, which is what triggers ride).
+(change is a recorded delta stream, which is what triggers ride),
+[facet signaling and control loops](../technical_architecture/2026-08-16_facet_signaling_and_control_loops.md)
+(the signaling round built over this substrate: names the frequency gap in
+Progress below, and rules how a decaying signal must behave to keep a recorded
+cascade replayable).
 
 ---
 
@@ -456,6 +461,27 @@ not automation).
    without a restart.
 
 ## Progress
+
+- 2026-08-16 (the frequency gap, from the facet signaling round): this plan
+  bounds cascade **depth** and nothing bounds cascade **frequency**. A search
+  across servitor for rate, throttle, debounce, hysteresis, deadband, cooldown
+  and period returns only `CascadeBudget`, and this plan carries no such
+  language either, so the hole is in the design rather than merely unbuilt. The
+  failure it admits is a slow limit cycle: a behavior that settles and then
+  re-triggers a second later, forever, never exhausts a budget that counts
+  rounds *within* one cascade, because each individual cascade is short. It
+  costs more here than in an ordinary reactive system, because the graph is the
+  replay of the journal: an oscillating behavior writes history, so load and
+  replay stay inflated after the behavior is fixed or deleted, and deleting the
+  denizen does not shrink the journal it wrote. Suggested shape is a **declared
+  deadband** (a minimum change, a minimum interval) on the behavior rather than
+  discipline each modder reinvents correctly, which also fits the existing
+  posture that the budget is a setting with no unlimited value. Open: whether
+  deadband belongs to sensing (suppress the wake) or actuation (suppress the
+  write), noting that the actuation side also bounds writers that were never
+  woken. Recorded with its reasoning in
+  [facet signaling and control loops](../technical_architecture/2026-08-16_facet_signaling_and_control_loops.md)
+  §6; no code changed.
 
 - 2026-08-13 (watch persistence): watches did not survive a session reload.
   Every registration site was inside install, and rebuild-on-adopt put the

@@ -139,7 +139,7 @@ the end-state side of every line drawn here.
 3. **Migration mechanics** for existing graphs (rkyv snapshots + journal
    history through the dissolution ladder); the prod-journal window and the
    B0.5 envelope migration are prior art.
-4. **Facet grants.** Which facets a denizen may read or write is a gate
+4. **CLOSED 2026-08-18: facet grants.** Which facets a denizen may read or write is a gate
    scope question (the structural cap's path vocabulary may want a facet
    dimension); connects to the participant plan's ability-axis note.
    **Shaped 2026-08-16** by the
@@ -147,15 +147,21 @@ the end-state side of every line drawn here.
    the missing dimension is a facet-namespace `Cap` kind with prefix coverage,
    sitting beside Power (equality) and Scope (segment prefix). The gate already
    scope-checks `SetFacet` and `RemoveFacet` by node id, so it governs which
-   nodes may be touched but not which facet namespaces may be written.
+   nodes may be touched but not which facet namespaces may be written. The
+   `mere-capability` leaf and `Cap::Facet` now implement that shape, and the
+   gate checks it for both `SetFacet` and `RemoveFacet`.
 
 ## Progress
 
+- **2026-08-18 (OQ 4 CLOSED):** the capability algebra moved into the shared
+  `mere-capability` leaf before gaining `Cap::Facet`; a `web.` grant now covers
+  `web.viewer` by dot segment while refusing `denizen.binding`, and the gate
+  requires that facet grant independently of node scope.
 - **2026-08-16 (facets as a medium):** a design round extended the facet system
   from metadata to signaling, recorded in
   [facet signaling and control loops](2026-08-16_facet_signaling_and_control_loops.md).
   Facets are participant-to-participant communication through nodes rather than
-  node-to-node awareness; interior signaling inside a subgraph is separated from
+  node-to-node awareness; interior signaling inside a nested graph is separated from
   exterior marks across graphs by the single-serialization-point argument; a
   decaying signal is ruled onto facets rather than tags; and open question 4
   gains a definite shape. One verified gap named against the servitor reactive

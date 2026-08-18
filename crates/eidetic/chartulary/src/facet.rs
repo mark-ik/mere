@@ -58,6 +58,49 @@ impl fmt::Display for FacetError {
 
 impl std::error::Error for FacetError {}
 
+/// A facet value with a deterministic shelf life.
+///
+/// Expiry is indexed by graph revision rather than wall time: the value is
+/// live while `revision < expires_at_revision` and stale at the named revision
+/// itself. Reading never removes or rewrites the stored envelope, so replaying
+/// the same journal prefix asks the same question of the same bytes.
+///
+/// This is deliberately generic and does not designate a signal namespace.
+/// Durable state and transient signals can both opt into the envelope without
+/// chartulary interpreting the facet id or payload.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExpiringFacet<T> {
+    /// The facet payload.
+    pub value: T,
+    /// The first graph revision at which the payload is stale.
+    pub expires_at_revision: u64,
+}
+
+impl<T> ExpiringFacet<T> {
+    /// Wrap `value` with a revision-indexed expiry boundary.
+    pub fn new(value: T, expires_at_revision: u64) -> Self {
+        Self {
+            value,
+            expires_at_revision,
+        }
+    }
+
+    /// Whether the payload is live at `revision`.
+    pub fn is_live_at(&self, revision: u64) -> bool {
+        revision < self.expires_at_revision
+    }
+
+    /// Borrow the payload when it is live at `revision`.
+    pub fn value_at(&self, revision: u64) -> Option<&T> {
+        self.is_live_at(revision).then_some(&self.value)
+    }
+
+    /// Take the payload when it is live at `revision`.
+    pub fn into_value_at(self, revision: u64) -> Option<T> {
+        self.is_live_at(revision).then_some(self.value)
+    }
+}
+
 /// The validation seam. chartulary stays schema-agnostic; a host injects a
 /// validator that checks a facet's value against the facet's schema. The
 /// gate/host validates on write; the store never validates on load (stored data
@@ -267,6 +310,18 @@ mod tests {
 
     fn viewer() -> FacetId {
         FacetId::new("web.viewer")
+    }
+
+    #[test]
+    fn expiring_facets_are_live_before_the_revision_boundary_only() {
+        let envelope = ExpiringFacet::new(json!({ "level": 7 }), 12);
+        assert_eq!(envelope.value_at(11), Some(&json!({ "level": 7 })));
+        assert_eq!(envelope.value_at(12), None);
+        assert_eq!(envelope.value_at(13), None);
+
+        let wire = serde_json::to_value(&envelope).unwrap();
+        let restored: ExpiringFacet<Value> = serde_json::from_value(wire).unwrap();
+        assert_eq!(restored, envelope);
     }
 
     #[test]

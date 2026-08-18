@@ -148,10 +148,10 @@ pub fn discover_wasm_mods_in_dir(dir: &Path) -> Vec<(ModManifest, WasmModSource)
     let mut found = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) == Some("wasm") {
-            if let Ok(pair) = read_wasm_mod_from_path(&path) {
-                found.push(pair);
-            }
+        if path.extension().and_then(|ext| ext.to_str()) == Some("wasm")
+            && let Ok(pair) = read_wasm_mod_from_path(&path)
+        {
+            found.push(pair);
         }
     }
     found

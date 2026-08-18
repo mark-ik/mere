@@ -341,7 +341,7 @@ fn timeline_capability() -> LayoutCapability {
 fn kanban_capability() -> LayoutCapability {
     LayoutCapability {
         id: "graph_layout:kanban".into(),
-        display_name: "Kanban".into(),
+        display_name: "Board".into(),
         description: Some("Categorical column bucketing by host-provided tag.".into()),
         category: LayoutCategory::Positional,
         is_deterministic: true,
@@ -373,7 +373,7 @@ fn penrose_capability() -> LayoutCapability {
 fn l_system_capability() -> LayoutCapability {
     LayoutCapability {
         id: "graph_layout:lsystem".into(),
-        display_name: "L-System Fractal Path".into(),
+        display_name: "Fractal".into(),
         description: Some("Turtle-walked Lindenmayer grammar (Hilbert, Koch, or Dragon).".into()),
         category: LayoutCategory::Positional,
         is_deterministic: true,
