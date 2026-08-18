@@ -87,6 +87,19 @@ into the chartulary graph, which is the Set's graph form). **Done when**
 Stage renders a Set graph through the frozen contract with fanned relations,
 before woodshed's release.
 
+**Founded 2026-08-18.** woodshed took its first `sceno` dependency;
+`StageGraphSnapshot` lives at `crates/woodshed-core/src/stage_scene.rs` and
+emits the Set as items plus fanned relations (10 module tests, 68 core tests,
+workspace green). It was adapter-only work, because the finding on arrival
+was that woodshed's own plan understated its state: `CardId`, `Set::graph()`,
+and a 16-kind relation engine whose `relations_between` already returns
+*every* reason for a pair were all landed, so no relation had to be derived.
+The **data** half of the gate is met; the *rendering* half remains, a host
+that draws and hit-tests fanned cells instead of one line per pair. One
+boundary recorded for later: the relations lifted are formula-level and so
+key-agnostic, which makes keyed relations (diatonic in, dominant of, resolves
+to) a further slice, and the Stage projection is where they belong.
+
 ### L2. Backdrops (two consumers already waiting)
 
 Isometry's map *is* a backdrop: a pixel-art VTT scene is mostly environment.

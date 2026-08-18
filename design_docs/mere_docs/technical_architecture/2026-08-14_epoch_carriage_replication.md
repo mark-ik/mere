@@ -3,7 +3,7 @@
 **Decided 2026-08-14, with Mark.** Follows the
 [device grants and delegation certificates](2026-08-11_device_grant_delegation_reconciliation.md)
 ruling, whose open question this replaces. Related: the
-[migration plan](../implementation_strategy/2026-08-12_device_grant_certificate_migration_plan.md)
+[migration plan](../../archive_docs/2026-08-18_completed_plans/2026-08-12_device_grant_certificate_migration_plan.md)
 (M2 part two founded the record), `eidetic::seal`, `session_runtime::engram_seal`.
 
 ## The question, restated correctly

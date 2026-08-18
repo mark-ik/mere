@@ -51,8 +51,21 @@ Listed once here so each lane can point at them rather than re-deriving.
 
 ## Lane A — Woodshed Stage founding (the release gate)
 
-**Repo**: woodshed. **Brief lane**: L1. **Gate**: open, and it is the whole
-of the remaining release gate.
+**Repo**: woodshed. **Brief lane**: L1. **Gate**: the data half is
+**founded 2026-08-18**; the rendering half remains.
+
+> **Taken 2026-08-18.** `StageGraphSnapshot` exists at
+> `crates/woodshed-core/src/stage_scene.rs`. The lane was adapter-only,
+> because the entry state below was wrong in woodshed's favour: `CardId`,
+> `Set::graph()`, and a 16-kind relation engine (`relations_between` returns
+> *every* reason for a pair) were already landed, so no relation had to be
+> derived. What remains of this lane is the **rendering** half — a host that
+> draws and hit-tests fanned cells rather than one line per pair — plus
+> retiring `related_swatch` onto `scenomise::relax` and the fretboard `Space`
+> so picking resolves through `scenotime`. A new boundary was recorded: the
+> relations lifted are formula-level and key-agnostic, so keyed relations
+> (diatonic in, dominant of, resolves to) are their own slice, and the Stage
+> projection is the layer that owns them.
 
 Woodshed takes its first `sceno` dependency and projects the Set as a graph
 through the `scene_out` shape: each staged Card occurrence a numbered node,

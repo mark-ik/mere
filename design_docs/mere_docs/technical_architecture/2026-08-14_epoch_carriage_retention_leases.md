@@ -166,19 +166,51 @@ Pairing and group membership are separate acts, deliberately: creating a group
 So a device can hold a persona certificate, and therefore carriage, while
 holding no seat in any key group.
 
-Where both exist, the group session is the better channel. It is
-authenticated, live, and it carries its own membership ceremony, including
-`remove_and_rotate` for withdrawal. The leased slot earns its keep for the
-paired-but-unseated device, which has no session to ride.
+~~Where both exist, the group session is the better channel.~~ **Wrong, and
+corrected below.** The group session is authenticated, live, and carries its own
+membership ceremony including `remove_and_rotate` for withdrawal, all of which
+is true and none of which makes it a channel for what carriage carries.
 
-**Open, and deliberately not settled here:** whether carriage for a
-group-member device should be retired entirely in favour of the group session.
-That is a real simplification rather than a tidy-up, and it turns on how the
-membership and pairing-key lifecycles line up: whether losing a seat should
-lose carriage, and whether a device may need carriage before it can be seated.
-Settling it needs those two lifecycles compared properly, which neither this
-doc nor the review that prompted this section has done. Until it is settled
-both mechanisms stand, and this section is the boundary between them.
+**Settled 2026-08-18: carriage cannot be retired for seated devices, because
+the two mechanisms never carried the same thing.** The lifecycle comparison
+turned out to be unnecessary, because the question dissolves one level down, at
+what each key actually seals.
+
+- The group session distributes one **graph's** `DataKeyring`, which seals
+  `PersonalGraphEvent` operation bodies as `GroupCiphertext` on the sync lane.
+  A device without it holds a sealed operation it cannot even admit, because
+  admission reads the body.
+- Carriage distributes one **persona's** private epoch secret, which
+  `WalletEpochSealer` turns, under `mere.pandect.engram_seal.key.v1`, into the
+  key sealing that persona's eidetic engram payloads at rest, with content
+  hash, persona and epoch bound as associated data.
+
+Different granularity, graph against persona. Different thing sealed, lane
+operations against stored payloads. Different derivation, with no shared root:
+the session's storage key comes from `derive_keypair(SESSION_IDENTITY_CONTEXT
+|| graph)`, the persona epoch from the wallet's `PersonaEpochBridge`. And
+neither path references the other, checked rather than assumed:
+`personal_sync` and `graph_keys` never mention `WalletEpochSealer`.
+
+So a device seated in a graph's key group can read that graph's lane traffic
+and still cannot open the persona's sealed store. Retiring carriage for seated
+devices would withdraw the only delivery of the material that does that. The
+paragraph above about the group session being "the better channel" compared two
+things that are not alternatives; it is corrected there.
+
+**What the overlap actually is.** Both mechanisms deliver key material to one
+person's own devices over one transport, so they want a shared lane discipline
+and a shared retention idiom. They do not want a shared payload, and neither
+subsumes the other. That makes the carriage lane's grammar the whole of the
+remaining work, and it makes the population it serves the full one: every
+device holding a persona certificate with `private.read`, seated or not.
+
+**Noted while checking.** `WalletEpochSealer` is constructed nowhere outside
+its own tests, and `eidetic::seal` says so deliberately: the seam "changes no
+runtime behavior" until a host wires a sealer in. Carriage therefore delivers
+material for a seal path that is defined but not yet live. That does not change
+the design, and it does mean the recovery done-condition below has no runtime
+consumer to demonstrate against until the host wiring lands.
 
 ### Why not stickleback's epoch-retention engine
 
@@ -329,9 +361,9 @@ imported there. What remains is a topic and a grammar, not a transport:
 - **The carriage lane's payload grammar.** The transport is H7
   `personal_sync`; what a carriage topic's records look like on it, and how
   that topic is provisioned beside the graph topic, is unwritten.
-- **Whether group-member devices need carriage at all.** See the key-group
-  section: a real simplification, blocked on a lifecycle comparison nobody has
-  done.
+- ~~Whether group-member devices need carriage at all.~~ **Settled
+  2026-08-18**: they do. See the key-group section; the two mechanisms deliver
+  different key material and neither substitutes for the other.
 - **The trusted-peer roster.** Who the peers are and how membership is
   governed; shared with the participant gate's admission machinery.
 - **Mesh-wide revocation flooding.** Sited brief question 3 stays open; this

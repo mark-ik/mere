@@ -1,9 +1,13 @@
 # Device grant certificate migration plan
 
+**Complete 2026-08-12. Archived 2026-08-18**, with the residue re-checked
+against the tree on the way out; nothing was carried forward, because nothing
+was left open. See "Closing check" at the foot.
+
 Executes the
-[device grants and delegation certificates](../technical_architecture/2026-08-11_device_grant_delegation_reconciliation.md)
-ruling. Consumers: `session_runtime::wallet_grant`, `ports/castellan`,
-`ports/signalman`, graphshell's identity projection.
+[device grants and delegation certificates](../../mere_docs/technical_architecture/2026-08-11_device_grant_delegation_reconciliation.md)
+ruling. Consumers: `pandect::wallet_grant` (named `session_runtime` while this
+ran), `ports/castellan`, `ports/signalman`, graphshell's identity projection.
 
 ## Posture, decided by Mark 2026-08-12
 
@@ -25,14 +29,14 @@ shrank because the pieces already exist; see the findings below.
 
 - **M1** — the device scope convention in `personae::carry`, additive. DONE.
 - **M2** — RemoteAuth device grants issued as certificates, plus the
-  separated epoch record. Verification delegates to `notochord`.
+  separated epoch record. Verification delegates to `notochord`. DONE.
 - **M3** — retiring legacy grants. DONE, but not as "re-issue on unlock":
   see the finding below, which the posture forces.
 - **M4** — the roster's `revoked` list demoted to a projection of
   `notochord::RevocationLedger`. Smaller than planned: the ledger, the fold,
-  and the signed statement all exist already.
+  and the signed statement all exist already. DONE.
 - **M5** — consumers re-based; castellan reaches verification through
-  personae and notochord rather than session-runtime.
+  personae and notochord rather than session-runtime. DONE.
 
 ## Findings
 
@@ -344,13 +348,16 @@ It now consults both.
 Green across every consumer: session-runtime 269, personae 100, knot 81,
 castellan 31, signalman 16.
 
-#### Noted, not fixed
+#### Noted, not fixed at the time, and since fixed
 
-`ports/graphshell/src/bin/persona_switch_receipt.rs` does not compile, from a
+`ports/graphshell/src/bin/persona_switch_receipt.rs` did not compile, from a
 borrow of a temporary. Pre-existing and not this work: the commit that added
 it says so in its subject, "Add the persona-switch receipt, not yet compiled".
-The `gemot` / `p2panda_auth` trait errors in the workspace check are likewise
+The `gemot` / `p2panda_auth` trait errors in the workspace check were likewise
 someone else's in-flight work.
+
+**Both are gone as of 2026-08-18**, verified rather than assumed; see the
+closing check.
 
 The remaining surface is smaller than it looked. Counting references to
 `DeviceGrantPayload` and `sample_payload` across `wallet_grant`: eight are in
@@ -422,3 +429,31 @@ noting as a pattern rather than a one-off: the `ssh` feature is not default,
 so the whole module and its 7 tests are invisible to a plain `cargo test -p
 personae`, which is why the edit had to be verified with `--features ssh`
 before it could be believed.
+
+## Closing check, 2026-08-18
+
+Re-run before archiving, because a plan's residue is the part most likely to
+have gone stale while nobody looked.
+
+- `cargo check --workspace --all-targets` is green, warnings only. That clears
+  both items under "Noted, not fixed": `persona_switch_receipt` compiles (it
+  sits behind graphshell's `native` feature, which is default, so
+  `--all-targets` did build it), and the `gemot` / `p2panda_auth` errors are
+  gone.
+- `cargo check -p personae --features agent` is green on Windows, so the `ssh`
+  guard added during M2 still holds. Checked separately on purpose: `ssh` is
+  not default, which is the whole point of that finding.
+- The other three off-default gates this work touched are also green:
+  `personal-sync`, `native-present`, `notochord`.
+
+**Nothing spun out.** No unchecked item remained, and the two deferred items
+were the ones above. The successor work is not a continuation of this plan but
+the carriage design it exposed, which lives in
+[epoch carriage and replication](../../mere_docs/technical_architecture/2026-08-14_epoch_carriage_replication.md)
+and
+[epoch carriage retention: leased slots](../../mere_docs/technical_architecture/2026-08-14_epoch_carriage_retention_leases.md).
+
+**Still true and worth carrying in the reader's head**, since it outlived the
+plan: a verifier of device grants needs one trusted root per persona, not one
+master key. That is the architectural consequence M5 built, and anything new
+that evaluates a grant inherits it.

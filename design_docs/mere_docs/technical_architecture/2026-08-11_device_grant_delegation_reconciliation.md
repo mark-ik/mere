@@ -162,7 +162,7 @@ earns its keep if a dual-read window has to span it, so the old envelope is
 replaced once rather than twice.
 
 **The `domain` question is also decided**, in the
-[migration plan](../implementation_strategy/2026-08-12_device_grant_certificate_migration_plan.md):
+[migration plan](../../archive_docs/2026-08-18_completed_plans/2026-08-12_device_grant_certificate_migration_plan.md):
 the device authority family, on mechanics rather than taste, because
 `attenuates` compares domain first.
 

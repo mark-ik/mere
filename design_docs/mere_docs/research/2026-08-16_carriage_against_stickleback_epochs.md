@@ -52,9 +52,23 @@ mention the first.
 
 They are not simply redundant, and the dividing line is real: the group session
 requires membership, and membership is an explicit act. A device can hold a
-persona certificate without being in a graph key group. But for any device that
-*is* a member, the group session is already a better channel than a replicated
-slot, and it comes with the retention engine in §3 for free.
+persona certificate without being in a graph key group.
+
+**Corrected 2026-08-18.** This finding then said that "for any device that *is*
+a member, the group session is already a better channel than a replicated
+slot". That is wrong, and it was the load-bearing half. The two mechanisms
+carry different key material: the group session distributes one graph's
+`DataKeyring`, which seals `PersonalGraphEvent` bodies on the lane, while
+carriage distributes one persona's private epoch secret, which
+`WalletEpochSealer` turns into the key sealing that persona's eidetic payloads
+at rest. Different granularity, different thing sealed, no shared root, and
+neither module references the other. A seated device can read the lane and
+still not open the persona's store, so the group session is not a better
+channel for this, it is a channel for something else.
+
+What survives is the weaker and still useful observation: both deliver key
+material to one person's devices over one transport, so they should share a
+lane discipline and a retention idiom, and the proposal should say so.
 
 ## 3. stickleback already has an epoch-retention engine, and it is live
 
@@ -205,7 +219,16 @@ channel where a seat exists, and records the retirement question as open.
 
 ## What this review does not settle
 
-Whether carriage for a group-member device should be retired entirely in favour
-of the group session. That is a real simplification and it needs the membership
-and pairing-key lifecycles compared properly, which is more than this review
-read.
+~~Whether carriage for a group-member device should be retired entirely in
+favour of the group session.~~ **Settled 2026-08-18, and not by the comparison
+this section called for.** The membership and pairing-key lifecycles never
+needed comparing: the question dissolves one level down, at what each key
+seals. They seal different things, so retirement was never available. The
+finding is written up in the proposal's key-group section, and finding 2 above
+is corrected accordingly.
+
+That this review posed the question as a lifecycle comparison is itself the
+lesson. It had already read both modules and still framed two unrelated key
+materials as competing channels, because both are "key material for a person's
+own devices over one transport". The distinguishing fact was one level below
+the one the review stopped at.
