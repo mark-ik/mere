@@ -341,7 +341,7 @@ single-root host, woodshed then signalman its consumers, and swatches are the
 agreed cross-product graph-view contract. Cambium doc updates land in
 `genet/components/cambium/docs/` when a slice opens.
 
-**C1. Satisfaction state in host chrome (consumer half of A1).**
+**C1. Satisfaction state in host chrome - BLOCKED 2026-08-16, not by effort.**
 Context: A1's scene-side record is only honest if a user can see it.
 Tasks: with A1's consumer, surface pin state in the host's widget chrome
 (a pinned badge; an unmet-pin state visibly distinct); keep the vocabulary
@@ -667,3 +667,24 @@ not settled without it.
   view's own", which is unanswerable without it, and a field added later would
   be missing from every link already in circulation. The shelfmark note's
   reserved `selection` section is now defined against that record.
+- 2026-08-16: **C1 investigated and blocked, on the same wall B1 hit.** A1 has
+  landed, so there is finally something real to render: `Scene.unmet_holds`
+  crosses the wire, `Scene.honored_holds` names the satisfied pins, and the
+  frozen realization already lists violations in its tabular alternate and
+  announces them in its AccessKit tree. The target says surface the same
+  distinction in cambium host chrome. Cambium cannot: it has no `sceno`
+  dependency, so it cannot see a `Scene` at all, and nothing in mere consumes
+  cambium either. Verified from the tree in both directions, not assumed.
+  This is Track C meeting the correction Track B already took. A host renders
+  *into* cambium's surfaces; the code that knows what a hold is lives mere-side.
+  So C1's home is a mere-side host built on cambium, and no such host exists
+  today, which is the same missing piece that blocks the driven probe scenario.
+  One consumer could take it now without a new host: mer3ly already reports
+  "1 pin honored" on its export control, and could report the unmet count
+  beside it rather than only failing the whole artifact, since the snapshot now
+  carries the violations. That is C1's substance in a web page rather than
+  native chrome, and it costs another rev bump, wasm rebuild, and public deploy,
+  so it is Mark's call rather than a quiet extension of this target.
+  Not built: a speculative cambium surface with no consumer. That is exactly
+  the work the five gated targets are being held back from, and C1 does not get
+  an exemption for being adjacent to something that just landed.
