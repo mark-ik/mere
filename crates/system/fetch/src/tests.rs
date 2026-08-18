@@ -123,6 +123,27 @@ fn gemini_identity_is_scoped_to_one_capsule_origin() {
 }
 
 #[test]
+fn certificate_change_keeps_the_target_and_both_fingerprints_typed() {
+    let current = url::Url::parse("gemini://capsule.example:1966/private").unwrap();
+    assert_eq!(
+        smolweb_transport_failure(
+            &current,
+            errand::Error::CertificateChanged {
+                host: "capsule.example:1966".into(),
+                pinned: "11".repeat(32),
+                seen: "22".repeat(32),
+            },
+        ),
+        FetchFailure::CertificateChanged {
+            url: current.to_string(),
+            target: "capsule.example:1966".into(),
+            pinned: "11".repeat(32),
+            seen: "22".repeat(32),
+        }
+    );
+}
+
+#[test]
 fn state_tag_distinguishes_transitions() {
     let ready = ContentState::Ready(Fetched {
         content_type: None,

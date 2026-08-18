@@ -36,6 +36,9 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Builder;
 use zeroize::Zeroizing;
 
+/// Host-supplied durable trust storage for Gemini-style TLS.
+pub use errand::TofuStore as SmolwebTofuStore;
+
 /// The most redirects a smolweb fetch will follow before giving up.
 const MAX_REDIRECTS: usize = 5;
 
@@ -80,6 +83,15 @@ pub enum FetchFailure {
         prompt: String,
         code: Option<u8>,
     },
+    /// A Gemini capsule presented a certificate that differs from its durable
+    /// pin. The request was not sent; the host must ask a human before replacing
+    /// `pinned` with `seen` and retrying `url`.
+    CertificateChanged {
+        url: String,
+        target: String,
+        pinned: String,
+        seen: String,
+    },
     /// A terminal transport, protocol, HTTP, or size-limit failure.
     Failed(String),
 }
@@ -89,6 +101,9 @@ impl std::fmt::Display for FetchFailure {
         match self {
             Self::InputRequired { prompt, .. } => write!(f, "input required: {prompt}"),
             Self::ClientCertificateRequired { .. } => f.write_str("client certificate required"),
+            Self::CertificateChanged { target, .. } => {
+                write!(f, "certificate for {target} changed")
+            }
             Self::Failed(error) => f.write_str(error),
         }
     }
@@ -413,7 +428,14 @@ pub async fn fetch_page_anonymous_capped(url: &str, max_bytes: usize) -> Result<
 /// durability claim; a host with durable trust state should install its own
 /// [`errand::TofuStore`] instead.
 pub fn install_in_memory_smolweb_tofu() {
-    errand::set_trust_store(Arc::new(errand::InMemoryTofu::new()));
+    install_smolweb_tofu(Arc::new(errand::InMemoryTofu::new()));
+}
+
+/// Install a host-owned Gemini trust store for every smolweb request in this
+/// process. The host keeps the concrete store so certificate-change approval
+/// can replace one pin before retrying the refused request.
+pub fn install_smolweb_tofu(store: Arc<dyn SmolwebTofuStore>) {
+    errand::set_trust_store(store);
 }
 
 /// Fetch a page as the **crawler**, identifying with [`CRAWLER_USER_AGENT`]. http(s)
@@ -449,7 +471,7 @@ async fn smolweb_fetch(
             }
             None => errand::fetch_url_timeout(&current, SMOLWEB_TIMEOUT).await,
         }
-        .map_err(|error| FetchFailure::Failed(error.to_string()))?;
+        .map_err(|error| smolweb_transport_failure(&current, error))?;
         match response.status {
             errand::Status::Success => {
                 let content_type = smolweb_content_type(&current, &response);
@@ -484,6 +506,20 @@ async fn smolweb_fetch(
         }
     }
     Err(FetchFailure::Failed("too many redirects".to_string()))
+}
+
+fn smolweb_transport_failure(current: &url::Url, error: errand::Error) -> FetchFailure {
+    match error {
+        errand::Error::CertificateChanged { host, pinned, seen } => {
+            FetchFailure::CertificateChanged {
+                url: current.to_string(),
+                target: host,
+                pinned,
+                seen,
+            }
+        }
+        error => FetchFailure::Failed(error.to_string()),
+    }
 }
 
 fn smolweb_input_failure(current: &url::Url, response: &errand::Response) -> FetchFailure {
