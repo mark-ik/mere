@@ -31,9 +31,10 @@ use std::time::Duration;
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use eidetic::Store;
 use netfetcher::{CookieRecord, CookieStore, InMemoryCookieJar, SameSite, SameSiteContext};
-use serde::{Deserialize, Serialize};
 use pandect::PersonaId;
+use serde::{Deserialize, Serialize};
 use tokio::runtime::Builder;
+use zeroize::Zeroizing;
 
 /// The most redirects a smolweb fetch will follow before giving up.
 const MAX_REDIRECTS: usize = 5;
@@ -53,17 +54,51 @@ const SUBRESOURCE_BODY_CAP: usize = 32 * 1024 * 1024;
 
 /// Successfully fetched content: the response content-type (if any) and the
 /// decoded body as text.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fetched {
     pub content_type: Option<String>,
     pub body: String,
+}
+
+/// A page request that needs host participation rather than being reducible
+/// to a terminal error string. The fetch actor preserves these arms so a UI
+/// host can continue the protocol conversation without parsing prose.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FetchFailure {
+    /// A Gemini-style input response. `url` is the final request address after
+    /// redirects and is therefore the address the submitted query belongs to.
+    InputRequired {
+        url: String,
+        prompt: String,
+        sensitive: bool,
+    },
+    /// The server requires a client certificate. Identity selection remains
+    /// a host decision; carrying the target keeps that later conversation
+    /// typed instead of collapsing it into an ordinary transport failure.
+    ClientCertificateRequired {
+        url: String,
+        prompt: String,
+        code: Option<u8>,
+    },
+    /// A terminal transport, protocol, HTTP, or size-limit failure.
+    Failed(String),
+}
+
+impl std::fmt::Display for FetchFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InputRequired { prompt, .. } => write!(f, "input required: {prompt}"),
+            Self::ClientCertificateRequired { .. } => f.write_str("client certificate required"),
+            Self::Failed(error) => f.write_str(error),
+        }
+    }
 }
 
 /// The result of one fetch, tagged with the requested URL so the host routes it
 /// back to the right node's content slot.
 pub struct FetchOutcome {
     pub url: String,
-    pub result: Result<Fetched, String>,
+    pub result: Result<Fetched, FetchFailure>,
 }
 
 /// A fetched subresource: raw bytes for an absolute URL (page CSS via
@@ -73,6 +108,101 @@ pub struct FetchOutcome {
 pub struct SubresourceOutcome {
     pub url: String,
     pub bytes: Vec<u8>,
+}
+
+/// One Gemini client certificate, assigned to exactly one capsule origin.
+///
+/// The host mints the material from its identity layer. The actor enforces the
+/// host+effective-port scope on every redirect, so a certificate selected for
+/// one capsule is never presented to another. Private bytes are shared rather
+/// than copied between effects and commands, and zeroized when the last owner
+/// drops.
+#[derive(Clone)]
+pub struct GeminiClientIdentity {
+    host: String,
+    port: u16,
+    certificate_der: Arc<[u8]>,
+    private_key_pkcs8_der: Arc<Zeroizing<Vec<u8>>>,
+}
+
+impl std::fmt::Debug for GeminiClientIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GeminiClientIdentity")
+            .field("origin", &self.origin())
+            .field("certificate", &"[redacted]")
+            .field("private_key", &"[redacted]")
+            .finish()
+    }
+}
+
+impl PartialEq for GeminiClientIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.host == other.host
+            && self.port == other.port
+            && self.certificate_der.as_ref() == other.certificate_der.as_ref()
+            && self.private_key_pkcs8_der.as_slice() == other.private_key_pkcs8_der.as_slice()
+    }
+}
+
+impl Eq for GeminiClientIdentity {}
+
+impl GeminiClientIdentity {
+    pub fn new(
+        capsule_url: &str,
+        certificate_der: Vec<u8>,
+        private_key_pkcs8_der: Vec<u8>,
+    ) -> Result<Self, String> {
+        let url = url::Url::parse(capsule_url).map_err(|error| error.to_string())?;
+        if url.scheme() != "gemini" {
+            return Err("Gemini client identity requires a gemini:// capsule".to_string());
+        }
+        let host = url
+            .host_str()
+            .ok_or_else(|| "Gemini capsule has no host".to_string())?
+            .to_ascii_lowercase();
+        if certificate_der.is_empty() || private_key_pkcs8_der.is_empty() {
+            return Err("Gemini client identity material is empty".to_string());
+        }
+        Ok(Self {
+            host,
+            port: url.port().unwrap_or(1965),
+            certificate_der: Arc::from(certificate_der),
+            private_key_pkcs8_der: Arc::new(Zeroizing::new(private_key_pkcs8_der)),
+        })
+    }
+
+    pub fn origin(&self) -> String {
+        let host = if self.host.contains(':') && !self.host.starts_with('[') {
+            format!("[{}]", self.host)
+        } else {
+            self.host.clone()
+        };
+        if self.port == 1965 {
+            format!("gemini://{host}")
+        } else {
+            format!("gemini://{host}:{}", self.port)
+        }
+    }
+
+    pub fn certificate_der(&self) -> &[u8] {
+        self.certificate_der.as_ref()
+    }
+
+    fn applies_to(&self, url: &url::Url) -> bool {
+        url.scheme() == "gemini"
+            && url
+                .host_str()
+                .is_some_and(|host| host.eq_ignore_ascii_case(&self.host))
+            && url.port().unwrap_or(1965) == self.port
+    }
+
+    fn errand_view(&self) -> errand::GeminiClientIdentity<'_> {
+        errand::GeminiClientIdentity {
+            certificate_der: self.certificate_der.as_ref(),
+            private_key_pkcs8_der: self.private_key_pkcs8_der.as_slice(),
+        }
+    }
 }
 
 /// Per-URL content state behind the focused-node card.
@@ -121,7 +251,10 @@ fn scheme_of(url: &str) -> Option<&str> {
 /// A command to the fetch actor.
 pub enum FetchCommand {
     /// Fetch `url` as a page document (decoded body as text).
-    Page(String),
+    Page {
+        url: String,
+        identity: Option<GeminiClientIdentity>,
+    },
     /// Fetch the subresource at the (already absolute) `url` as raw bytes.
     Subresource(String),
     /// Fetch the favicon at `url` (already absolute) as raw bytes, remembering it
@@ -160,10 +293,12 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
             .expect("build the fetch runtime");
         while let Ok(command) = commands.recv() {
             match command {
-                FetchCommand::Page(url) => {
+                FetchCommand::Page { url, identity } => {
                     let out = out.clone();
                     runtime.spawn(async move {
-                        let result = fetch_page(&url).await;
+                        let result =
+                            fetch_page_interactive_capped(&url, PAGE_BODY_CAP, identity.as_ref())
+                                .await;
                         out.emit(FetchUpdate::Page(FetchOutcome { url, result }));
                     });
                 }
@@ -205,29 +340,55 @@ pub async fn fetch_page(url: &str) -> Result<Fetched, String> {
 /// body (§A5): the http path enforces it *while streaming* (no OOM); smolweb is
 /// already buffered by errand, so it is checked post-hoc (errand bounds its own read).
 pub async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fetched, String> {
+    fetch_page_interactive_capped(url, max_bytes, None)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// Fetch one page while preserving protocol responses that require host
+/// participation. This is actor-facing: ordinary utility callers retain the
+/// terminal `Result<Fetched, String>` contract above.
+async fn fetch_page_interactive_capped(
+    url: &str,
+    max_bytes: usize,
+    identity: Option<&GeminiClientIdentity>,
+) -> Result<Fetched, FetchFailure> {
     match scheme_of(url).and_then(errand::Scheme::parse) {
         Some(scheme) => {
-            tracing::info!(%url, ?scheme, "smolweb fetch");
-            let result = smolweb_fetch(url).await.and_then(|fetched| {
+            let log_url = url_without_query(url);
+            tracing::info!(url = %log_url, ?scheme, "smolweb fetch");
+            let result = smolweb_fetch(url, identity).await.and_then(|fetched| {
                 if fetched.body.len() > max_bytes {
-                    Err(format!("response exceeds the {max_bytes}-byte cap"))
+                    Err(FetchFailure::Failed(format!(
+                        "response exceeds the {max_bytes}-byte cap"
+                    )))
                 } else {
                     Ok(fetched)
                 }
             });
             match &result {
                 Ok(fetched) => tracing::info!(
-                    %url,
+                    url = %log_url,
                     content_type = ?fetched.content_type,
                     bytes = fetched.body.len(),
                     "smolweb ok",
                 ),
-                Err(error) => tracing::warn!(%url, %error, "smolweb failed"),
+                Err(error) => tracing::warn!(url = %log_url, %error, "smolweb failed"),
             }
             result
         }
-        None => do_fetch(url, max_bytes).await,
+        None => do_fetch(url, max_bytes).await.map_err(FetchFailure::Failed),
     }
+}
+
+fn url_without_query(raw: &str) -> String {
+    url::Url::parse(raw)
+        .map(|mut parsed| {
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            parsed.to_string()
+        })
+        .unwrap_or_else(|_| "<invalid-url>".to_string())
 }
 
 /// Fetch a page without the browser session's cookie jar or other installed
@@ -268,14 +429,27 @@ pub async fn fetch_page_crawler(url: &str) -> Result<Fetched, String> {
 
 /// Fetch a smolweb URL through [`errand`], following redirects up to
 /// [`MAX_REDIRECTS`], and fold the response into a [`Fetched`] the nematic engines
-/// render. Non-success statuses (input wanted, cert required, failure) surface as
-/// an error string the card shows.
-async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
-    let mut current = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
+/// render. Input and certificate statuses stay typed so the host can continue
+/// the protocol conversation; terminal failures remain displayable prose.
+async fn smolweb_fetch(
+    url: &str,
+    identity: Option<&GeminiClientIdentity>,
+) -> Result<Fetched, FetchFailure> {
+    let mut current =
+        url::Url::parse(url).map_err(|error| FetchFailure::Failed(format!("bad URL: {error}")))?;
     for _ in 0..MAX_REDIRECTS {
-        let response = errand::fetch_url_timeout(&current, SMOLWEB_TIMEOUT)
-            .await
-            .map_err(|e| e.to_string())?;
+        let response = match identity.filter(|identity| identity.applies_to(&current)) {
+            Some(identity) => {
+                errand::fetch_url_timeout_with_identity(
+                    &current,
+                    identity.errand_view(),
+                    SMOLWEB_TIMEOUT,
+                )
+                .await
+            }
+            None => errand::fetch_url_timeout(&current, SMOLWEB_TIMEOUT).await,
+        }
+        .map_err(|error| FetchFailure::Failed(error.to_string()))?;
         match response.status {
             errand::Status::Success => {
                 let content_type = smolweb_content_type(&current, &response);
@@ -286,22 +460,40 @@ async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
                 });
             }
             errand::Status::Redirect => {
-                current = current
-                    .join(&response.meta)
-                    .map_err(|e| format!("bad redirect target: {e}"))?;
+                current = current.join(&response.meta).map_err(|error| {
+                    FetchFailure::Failed(format!("bad redirect target: {error}"))
+                })?;
             }
-            errand::Status::Input => return Err(format!("input required: {}", response.meta)),
-            errand::Status::CertRequired => return Err("client certificate required".to_string()),
+            errand::Status::Input => {
+                return Err(smolweb_input_failure(&current, &response));
+            }
+            errand::Status::CertRequired => {
+                return Err(FetchFailure::ClientCertificateRequired {
+                    url: current.to_string(),
+                    prompt: response.meta,
+                    code: response.raw_status,
+                });
+            }
             errand::Status::Failure => {
-                return Err(if response.meta.is_empty() {
+                return Err(FetchFailure::Failed(if response.meta.is_empty() {
                     "request failed".to_string()
                 } else {
                     response.meta
-                });
+                }));
             }
         }
     }
-    Err("too many redirects".to_string())
+    Err(FetchFailure::Failed("too many redirects".to_string()))
+}
+
+fn smolweb_input_failure(current: &url::Url, response: &errand::Response) -> FetchFailure {
+    FetchFailure::InputRequired {
+        url: current.to_string(),
+        prompt: response.meta.clone(),
+        // Gemini status 11 is the sensitive-input form. Other protocols
+        // currently expose only an ordinary input code.
+        sensitive: response.raw_status == Some(11),
+    }
 }
 
 /// The content-type to render a smolweb response under, in nematic's vocabulary.

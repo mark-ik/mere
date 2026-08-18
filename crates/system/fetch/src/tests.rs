@@ -68,6 +68,61 @@ fn smolweb_content_type_tags_fixed_schemes_and_passes_others_through() {
 }
 
 #[test]
+fn smolweb_input_preserves_prompt_target_and_sensitivity() {
+    let target = url::Url::parse("gemini://capsule.example/search").unwrap();
+    let response = |code| errand::Response {
+        url: target.clone(),
+        status: errand::Status::Input,
+        raw_status: Some(code),
+        meta: "Search the capsule".into(),
+        body: Vec::new(),
+    };
+
+    assert_eq!(
+        smolweb_input_failure(&target, &response(10)),
+        FetchFailure::InputRequired {
+            url: target.to_string(),
+            prompt: "Search the capsule".into(),
+            sensitive: false,
+        }
+    );
+    assert_eq!(
+        smolweb_input_failure(&target, &response(11)),
+        FetchFailure::InputRequired {
+            url: target.to_string(),
+            prompt: "Search the capsule".into(),
+            sensitive: true,
+        }
+    );
+}
+
+#[test]
+fn smolweb_trace_address_omits_query_and_fragment() {
+    assert_eq!(
+        url_without_query("gemini://capsule.example/search?secret%20answer#part"),
+        "gemini://capsule.example/search"
+    );
+}
+
+#[test]
+fn gemini_identity_is_scoped_to_one_capsule_origin() {
+    let identity = GeminiClientIdentity::new(
+        "gemini://Capsule.Example/account",
+        vec![1, 2, 3],
+        vec![4, 5, 6],
+    )
+    .unwrap();
+    assert!(identity.applies_to(&url::Url::parse("gemini://capsule.example/private").unwrap()));
+    assert!(identity.applies_to(&url::Url::parse("gemini://capsule.example:1965/other").unwrap()));
+    assert!(!identity.applies_to(&url::Url::parse("gemini://other.example/private").unwrap()));
+    assert!(
+        !identity.applies_to(&url::Url::parse("gemini://capsule.example:1966/private").unwrap())
+    );
+    assert!(!identity.applies_to(&url::Url::parse("https://capsule.example/private").unwrap()));
+    assert_eq!(identity.origin(), "gemini://capsule.example");
+}
+
+#[test]
 fn state_tag_distinguishes_transitions() {
     let ready = ContentState::Ready(Fetched {
         content_type: None,
