@@ -25,6 +25,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync
 tracing.workspace = true
 url = "2"
 verso-tile = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+zeroize = "1"
 
 [lints]
 workspace = true
