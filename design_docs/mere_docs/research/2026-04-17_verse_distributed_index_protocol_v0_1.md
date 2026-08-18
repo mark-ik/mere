@@ -14,7 +14,7 @@
 > donor docs that no longer exist locally. Read the text below for the ideas,
 > not the direction.
 >
-> The filename was normalised from `..._v0.1.md` to `..._v0_1.md` to match its
+> The filename was normalized from `..._v0.1.md` to `..._v0_1.md` to match its
 > successor. It was already archived in the donor: VGCP replaced it as protocol
 > authority the same day, and VGCP is recovered beside it as
 > `2026-04-17_verse_graph_contribution_protocol_v0_1.md`.
