@@ -85,7 +85,7 @@ neither portable crate nor serialized scene type mentions either product.
 - **The scenario lane absorbed the new action for free.** `act <palette
   label>` + self-capture ran unchanged; automation reach cost two mapping
   lines. Receipt of the one-tool-vocabulary doctrine paying rent.
-- **Owed follow-ups** (**two closed 2026-08-15, ratified by Mark**):
+- **Owed follow-ups** (**two closed 2026-08-18, ratified by Mark**):
   - ~~persist the active strategy as view-intent~~ **done**: turnstone writes
     a `view-intent.json` sidecar beside the projection score and restores it
     on session open. Kept a separate sidecar deliberately, because a score is
@@ -135,18 +135,18 @@ not collide.**
 | `graph_layout:grid` | Grid | plain already | |
 | `graph_layout:radial` | Radial | plain already | volvelle = a *moot* radial, different concept |
 | `graph_layout:timeline` | Timeline | plain already | |
-| `graph_layout:kanban` | **Board** | **RATIFIED 2026-08-15** | was Kanban (jargon); Mark accepted the standing proposal |
+| `graph_layout:kanban` | **Board** | **RATIFIED 2026-08-18** | was Kanban (jargon); Mark accepted the standing proposal |
 | `graph_layout:penrose` | Penrose | keep | aperiodic tiling; **not** Mosaic (proper noun ok) |
-| `graph_layout:lsystem` | **Fractal** | **RATIFIED 2026-08-15** | was L-System (jargon); Mark accepted the standing proposal |
+| `graph_layout:lsystem` | **Fractal** | **RATIFIED 2026-08-18** | was L-System (jargon); Mark accepted the standing proposal |
 | `graph_layout:semantic_embedding` | Semantic | keep | a coordinate source for **Plotted**, below |
 | (spectral) | Spectral | keep | jargon; no clean plain word |
-| ~~*(future, P4)* adjacency tiling~~ | ~~Mosaic~~ | **RELEASED to the scene register 2026-08-14** | Mosaic's placement lever is **Grid** (packing variant); see the ruling below |
+| ~~*(future, P4)* adjacency tiling~~ | ~~Mosaic~~ | **RELEASED to the scene register 2026-08-18** | Mosaic's placement lever is **Grid** (packing variant); see the ruling below |
 | *(future, P5)* data-given coordinates | **Plotted** | proposed → ratify | positions supplied by the data and preserved relative to each other, never force-settled. Generalizes Semantic (embedding coordinates) and carries Atlas's geographic case |
-| ~~*(future, P5)* geographic~~ | ~~Atlas~~ | **RELEASED to the scene register 2026-08-14** | Atlas's placement lever is **Plotted**, above; see the ruling below |
+| ~~*(future, P5)* geographic~~ | ~~Atlas~~ | **RELEASED to the scene register 2026-08-18** | Atlas's placement lever is **Plotted**, above; see the ruling below |
 | *(future)* burn-kinship regions | **Hulls** | reserved | brand "hulls"; ties to the fields/hulls primitive |
 | *(future)* joint-constrained bodies | **Armature** | **ratified 2026-07-31, DISPLAY NAME ONLY** | positions fixed by attachment frames, never force-settled — the nested-graph-scale sibling of orrery. First consumer: the games wing's live body swatch (a critter's body is a nested graph; see `mesocosm/design_docs/2026-07-30_body_pipeline_and_host_probe_plan.md` §3). **Never a crate name**: `armature` is taken on crates.io (an event-driven stateful actor framework, 0.1.1, 2021, dormant), and its domain is adjacent to **armillary**, so publishing under it would collide twice over. The `graph_layout:*` id stays the persistence key, as for every arrangement |
 
-**Three registers, not two (ruled with Mark 2026-08-14).** A **scene** is a
+**Three registers, not two (ruled with Mark 2026-08-18).** A **scene** is a
 reusable total projection regime: every lever flexed toward one product
 intent, portable to a second dataset. Mosaic and Atlas are scenes, and their
 reservations above are released from the arrangement register to it, because
@@ -158,7 +158,7 @@ does half the work of its edge lever. The intent lives in a combination no
 single lever holds, which is why the scene is the reusable unit. Arrangement
 names stay plain mechanism words, and a scene template must carry every lever
 it depends on rather than a placement id plus defaults. The scene deck is in
-the [content catalog](../research/2026-08-13_scenograph_content_catalog.md);
+the [content catalog](../research/2026-08-18_scenograph_content_catalog.md);
 surface names remain off-limits to both other registers.
 
 Collision checks (2026-07-22): `mosaic` zero hits stack-wide; `atlas` only a

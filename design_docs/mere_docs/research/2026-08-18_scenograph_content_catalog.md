@@ -1,6 +1,6 @@
 # Scenograph Content Catalog
 
-**Date**: 2026-08-13
+**Date**: 2026-08-18
 **Status**: brainstorm catalog, commissioned by Mark. This is the content pass
 the [expansion brief](2026-08-10_scenograph_expansion_brief.md) prepared for:
 ten candidates in each of five decks (arrangements, scenes, backdrops, node
@@ -9,7 +9,7 @@ are tracked design space, not commitments. The family standard holds: a
 candidate ships only when a consumer forces it. Each entry names its likeliest
 forcing consumer where one is visible today; consumers named here are
 candidates for that role, not work already ordered.
-**Revised 2026-08-14 (Mark)**: deck 2 rebuilt from consumer archetypes to
+**Revised 2026-08-18 (Mark)**: deck 2 rebuilt from consumer archetypes to
 scenes proper, reusable total projection regimes; the archetypes survive
 inside the entries as founding and transfer datasets.
 
@@ -70,7 +70,7 @@ the richer local end. This deck names candidates for the portable tier.
 
 ## 2. Scenes
 
-Definition (Mark, 2026-08-14): a scene is a cohesive projection of a dataset
+Definition (Mark, 2026-08-18): a scene is a cohesive projection of a dataset
 built from graph primitive representations, tailored to a situation yet
 reusable, so it applies beyond its founding dataset. A scene flexes every
 lever toward one intent; the other decks name the levers, this deck names the
@@ -91,7 +91,7 @@ scope, parametric, persona-persisted, carrying product intent. Graphshell
 remote stays the standing discipline: every scene must survive the wire to a
 viewer with no source access.
 
-**Levers co-vary; that is why the scene is the unit (Mark, 2026-08-14).**
+**Levers co-vary; that is why the scene is the unit (Mark, 2026-08-18).**
 The catalog originally reserved *Mosaic* and *Atlas* as arrangement names, on
 the assumption that a scene is its placement lever plus decoration. It is not.
 There is no Atlas without a map: geographic placement with nothing beneath it
@@ -163,21 +163,21 @@ arrives at a second dataset as a scatter of dots.
    cycle; angular position carries the data; edges as chords across the disc
    (aspects); a sky chart or plain wheel behind; time rotates the wheel.
    Founding: cleromancy's ephemeris chart. Transfer: the circle of fifths,
-   the year wheel, and text (Mark, 2026-08-14): lines and stanzas as
+   the year wheel, and text (Mark, 2026-08-18): lines and stanzas as
    stations on the meter's own cycle, chords as recurrence, rhyme,
    assonance, repeated lemmas, semantic kinship, with chord span carrying
    meaning (an end-rhyme spans a stanza; internal rhyme and alliteration
    are the short chords). Candidate forcing consumer: knot, as a
    creative-writing analysis scene over a document's interior; derived
    analysis edges arrive as revealed cells and crystallize only when the
-   writer keeps them. The sound half's engine is decided (Mark, 2026-08-15):
+   writer keeps them. The sound half's engine is decided (Mark, 2026-08-18):
    **mora** (meter, weight, timing; the moraic unit generalizes across
    stress-, syllable-, and mora-timed typology, and only grapheme-to-phoneme
    is per-language work, a lexicon plus rules, with weight, stress, meter,
    and sonance all general above it) carrying **sonance** as its
    sound-kinship module (rhyme, assonance, alliteration); esp keeps the
    semantic chords. English v1 rides CMUdict. Unfounded; both names verified
-   free on crates.io 2026-08-15, claim with real code at founding. Here a
+   free on crates.io 2026-08-18, claim with real code at founding. Here a
    node is a station on the cycle.
 9. **Fog**: the known against the unknown. Visited members lit and placed;
    unvisited ghosts at the fog line; the traveled path is the one privileged

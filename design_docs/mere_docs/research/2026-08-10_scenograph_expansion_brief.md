@@ -10,8 +10,8 @@ standard: a question is answered by the consumer that forces it, and unforced
 surface does not ship.
 
 **Related**:
-[scenograph_content_catalog](2026-08-13_scenograph_content_catalog.md)
-(the content pass this brief prepared for, 2026-08-13),
+[scenograph_content_catalog](2026-08-18_scenograph_content_catalog.md)
+(the content pass this brief prepared for, 2026-08-18),
 [scenograph_freeze_plan](../implementation_strategy/2026-07-24_scenograph_freeze_plan.md)
 (0.0.3 frozen and published 2026-07-24), the scene contract note
 (`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),
@@ -30,7 +30,7 @@ woodshed's stage/set/tools plan
 - **Consumers**: mere by path; isometry and turnstone by git (branch `main`);
   `ports/graphshell` including the remote client, which is the standing proof
   that scenes cross a wire to a viewer with no source access.
-- **Loose ends the freeze recorded** (**re-checked 2026-08-15**): the
+- **Loose ends the freeze recorded** (**re-checked 2026-08-18**): the
   isometry and turnstone re-resolves are **closed, and were never actually
   outstanding** — both lock `sceno` 0.0.3, `cargo update -p sceno` moves zero
   packages, and both compile green, because a git dep on branch `main`
@@ -62,12 +62,12 @@ tiers make the gaps addressable:
   ad hoc, and nothing behind content can cross the wire, because the
   contract has no place for it.
 
-**Product register (recorded 2026-08-14, Mark)**: above these contract
+**Product register (recorded 2026-08-18, Mark)**: above these contract
 tiers, *scene* in product speech means a reusable total projection regime:
 every lever (arrangement, backdrop, representations, motion, grammar) flexed
 toward one intent, portable across datasets, obeying the orrery's laws. That
 is the brand mark's "the projection decides what a node *is*" made a design
-unit. The [content catalog](2026-08-13_scenograph_content_catalog.md) deck 2
+unit. The [content catalog](2026-08-18_scenograph_content_catalog.md) deck 2
 holds that register; the contract's Scene type is what a regime emits when
 applied to a dataset.
 
