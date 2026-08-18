@@ -229,11 +229,12 @@ impl Canvas {
         tagged
     }
 
-    /// Insert `tag` on the node addressed by `url`, if present — a by-url tagging gesture (the
-    /// Alembic "keep" one-click promote, distinct from the selection-based [`tag_selected`]).
-    /// Returns whether the node newly gained the tag. Tags are node truth the host persists.
-    pub fn tag_node_by_url(&mut self, url: &str, tag: &str) -> bool {
-        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+    /// Insert `tag` on one stable graph member, if present. Returns whether the
+    /// node newly gained it. Member addressing matters for background
+    /// projections, where duplicate URL nodes must not make a first-match
+    /// choice on the host's behalf.
+    pub fn tag_node(&mut self, member: uuid::Uuid, tag: &str) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
             return false;
         };
         matches!(
@@ -248,11 +249,20 @@ impl Canvas {
         )
     }
 
-    /// Remove `tag` from the node addressed by `url`, if present (the Alembic "release"
-    /// one-click demote). Returns whether it was removed. A node still tagged otherwise stays
-    /// long-term (Saved) — only this tag is touched.
-    pub fn untag_node_by_url(&mut self, url: &str, tag: &str) -> bool {
-        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+    /// Insert `tag` on the node addressed by `url`, if present — a by-url tagging gesture (the
+    /// Alembic "keep" one-click promote, distinct from the selection-based [`tag_selected`]).
+    /// Returns whether the node newly gained the tag. Tags are node truth the host persists.
+    pub fn tag_node_by_url(&mut self, url: &str, tag: &str) -> bool {
+        let Some(member) = self.graph.get_node_by_url(url).map(|(_, node)| node.id) else {
+            return false;
+        };
+        self.tag_node(member, tag)
+    }
+
+    /// Remove `tag` from one stable graph member, if present. Returns whether
+    /// it was removed.
+    pub fn untag_node(&mut self, member: uuid::Uuid, tag: &str) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
             return false;
         };
         matches!(
@@ -265,6 +275,16 @@ impl Canvas {
             ),
             GraphDeltaResult::NodeMetadataUpdated(true)
         )
+    }
+
+    /// Remove `tag` from the node addressed by `url`, if present (the Alembic "release"
+    /// one-click demote). Returns whether it was removed. A node still tagged otherwise stays
+    /// long-term (Saved) — only this tag is touched.
+    pub fn untag_node_by_url(&mut self, url: &str, tag: &str) -> bool {
+        let Some(member) = self.graph.get_node_by_url(url).map(|(_, node)| node.id) else {
+            return false;
+        };
+        self.untag_node(member, tag)
     }
 
     /// Retract the user-asserted semantic relation(s) on the selected edge(s) —

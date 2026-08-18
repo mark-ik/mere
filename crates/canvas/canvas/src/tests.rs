@@ -712,6 +712,40 @@ fn tag_selected_inserts_the_trimmed_tag_on_every_selected_node() {
 }
 
 #[test]
+fn member_tagging_does_not_guess_between_duplicate_urls() {
+    let mut canvas = Canvas::new();
+    let first = canvas.open_member_as_new_node(None, "https://same.test");
+    let second = canvas.open_member_as_new_node(None, "https://same.test");
+
+    assert!(canvas.tag_node(second, "unread"));
+    let first_key = canvas.graph().get_node_by_id(first).unwrap().0;
+    let second_key = canvas.graph().get_node_by_id(second).unwrap().0;
+    assert!(
+        !canvas
+            .graph()
+            .node_tags(first_key)
+            .unwrap()
+            .contains("unread")
+    );
+    assert!(
+        canvas
+            .graph()
+            .node_tags(second_key)
+            .unwrap()
+            .contains("unread")
+    );
+
+    assert!(canvas.untag_node(second, "unread"));
+    assert!(
+        !canvas
+            .graph()
+            .node_tags(second_key)
+            .unwrap()
+            .contains("unread")
+    );
+}
+
+#[test]
 fn recover_node_restores_the_original_identity() {
     let mut canvas = Canvas::new();
     // A real node lives, dies, and its bin record carries its identity.
