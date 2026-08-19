@@ -82,6 +82,21 @@ slot in a named, narrow **carriage lane** (destructive-replace, never
 history) keeps both contracts clean: the engram lane never carries carriage
 records, the carriage lane never accumulates versions.
 
+**Corrected 2026-08-18: `muniment::SlotStore` is the wrong seam for the
+replicated half.** It is local only, `save`/`load`/`delete` over a backend,
+with no replication in it, so it is right for the wallet file and cannot be
+what a peer holds. What replicates is a p2panda log, append-only by
+construction. The replicated slot already exists one layer down, in
+stickleback: `HistoryAction::PruneBeforeCurrent` deletes every operation before
+the admitted one, `Admission::prune_before_current` admits an operation "as the
+surviving head of a pruned prefix", `erasing_payloads` clears named payloads in
+the same backend batch, and `prune_proof.rs` proves the composition. `drop_io`
+runs the pair live. So this section's conclusion holds and its mechanism does
+not: **the lease is the authorization for a prune the protocol already
+performs**, and ruling 1 becomes a `PruneFlag` the policy requires rather than a
+convention it states. See the
+[lane grammar](2026-08-18_epoch_carriage_lane_grammar.md).
+
 ### Lease, not durable state
 
 The contract is already ruled twice in this ecosystem. Retinue's doctrine:
@@ -358,9 +373,11 @@ imported there. What remains is a topic and a grammar, not a transport:
 
 ## What this does not decide
 
-- **The carriage lane's payload grammar.** The transport is H7
-  `personal_sync`; what a carriage topic's records look like on it, and how
-  that topic is provisioned beside the graph topic, is unwritten.
+- ~~The carriage lane's payload grammar.~~ **Decided 2026-08-18** in the
+  [lane grammar](2026-08-18_epoch_carriage_lane_grammar.md): a sibling topic
+  derived from the graph topic, an extension carrying everything checkable
+  without the body, a blinded slot id in place of the certificate id, and
+  admission ordered fail-closed onto the protocol's own prune.
 - ~~Whether group-member devices need carriage at all.~~ **Settled
   2026-08-18**: they do. See the key-group section; the two mechanisms deliver
   different key material and neither substitutes for the other.
