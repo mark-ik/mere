@@ -1,6 +1,6 @@
 use sceno::{
-    HeldPlacement, HonoredHold, InstanceId, ProjectedItem, Rect, Region, RoutedRelation, Scene,
-    SourceRef, Space, SpaceId,
+    HeldPlacement, Hold, HonoredHold, InstanceId, ProjectedItem, Rect, Region, RoutedRelation,
+    Scene, SourceRef, Space, SpaceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -163,6 +163,48 @@ impl SceneSnapshot {
             require_active(&tables.spaces, region.space.0, "region space")?;
             for member in &region.members {
                 require_active(&tables.items, member.0, "region member")?;
+            }
+        }
+        for unmet in &tables.unmet_holds {
+            if !matches!(unmet.hold, Hold::Pinned) {
+                return invalid("an unmet hold must be ensure-class");
+            }
+        }
+        for honored in &tables.honored_holds {
+            if !matches!(honored.placement.hold, Hold::Pinned) {
+                return invalid("an honored hold must be ensure-class");
+            }
+            let item = tables
+                .items
+                .get(honored.instance.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| {
+                    SnapshotError::Invalid(format!(
+                        "honored hold instance {} is absent or tombstoned",
+                        honored.instance.0
+                    ))
+                })?;
+            let source = tables
+                .sources
+                .get(item.source.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| {
+                    SnapshotError::Invalid(format!(
+                        "honored hold instance {} has no live source",
+                        honored.instance.0
+                    ))
+                })?;
+            if source != &honored.placement.source {
+                return invalid(format!(
+                    "honored hold instance {} names a different source",
+                    honored.instance.0
+                ));
+            }
+            if item.transform.translate != honored.placement.at {
+                return invalid(format!(
+                    "honored hold instance {} is not at its held position",
+                    honored.instance.0
+                ));
             }
         }
         Ok(())

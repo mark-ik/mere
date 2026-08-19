@@ -45,8 +45,9 @@ Method notes:
 ## 1. Arrangements
 
 The portable tier is `score::Arrangement` (Spiral, Grid, Geographic, and Hulls);
-the mere-side layout enum (minimap, body, radial, timeline, grid, force) is
-the richer local end. This deck names candidates for the portable tier.
+the Mere-side registry (Grid, Radial, Stack, Spiral, Timeline, Columns,
+Penrose, Fractal, Semantic Embedding, and Spectral) is the richer local end.
+This deck names candidates for the portable tier.
 `scenomise::relax` is a post-pass over any of them, not a rival entry.
 
 1. **Spiral** (shipped): growth placement from a seed, footprint-aware

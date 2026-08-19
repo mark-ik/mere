@@ -331,6 +331,47 @@ mod tests {
     }
 
     #[test]
+    fn an_honored_pin_claim_must_match_the_live_instance() {
+        let mut scene = Scene::new();
+        let source = scene.intern_source(SourceRef::new("fixture", "kept"));
+        scene.items.push(ProjectedItem {
+            source,
+            space: Scene::WORLD,
+            transform: Transform2::translation(4.0, 4.0),
+            footprint: Footprint::Point,
+            representation: Representation::Glyph,
+            layer: 0,
+            visible: true,
+            hit: None,
+            channels: Vec::new(),
+        });
+        scene.honored_holds.push(sceno::HonoredHold {
+            instance: InstanceId(0),
+            placement: sceno::HeldPlacement::pinned(
+                SourceRef::new("fixture", "kept"),
+                sceno::Vec2::new(4.0, 4.0),
+            ),
+        });
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), scene).expect("valid claim");
+
+        let mut moved = snapshot.clone();
+        moved.tables.items[0].as_mut().unwrap().transform.translate = sceno::Vec2::ZERO;
+        assert!(matches!(moved.validate(), Err(SnapshotError::Invalid(_))));
+
+        let mut wrong_source = snapshot.clone();
+        wrong_source.tables.honored_holds[0].placement.source = SourceRef::new("fixture", "other");
+        assert!(matches!(
+            wrong_source.validate(),
+            Err(SnapshotError::Invalid(_))
+        ));
+
+        let mut missing = snapshot;
+        missing.tables.honored_holds[0].instance = InstanceId(9);
+        assert!(matches!(missing.validate(), Err(SnapshotError::Invalid(_))));
+    }
+
+    #[test]
     fn a_snapshot_written_before_violations_existed_still_reads() {
         let snapshot = SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), Scene::new())
             .expect("snapshot");

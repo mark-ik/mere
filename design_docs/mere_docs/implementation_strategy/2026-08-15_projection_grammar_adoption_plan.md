@@ -712,3 +712,12 @@ not settled without it.
   Receipts: three native tests on the summary, one wire test on the pair, and
   `cargo check -p graphshell-web --target wasm32-unknown-unknown` for the host,
   which is the only check that covers a cfg-gated file at all.
+- 2026-08-19: **protocol and catalogs reconciled.** The Scenograph family
+  moves to the unpublished 0.0.4 development line; Score v3 renames portable
+  regular-cell Board to Grid, while the local categorical layout is Columns.
+  Chirograph 0.0.2 renames the retained wire artifact to
+  `ProjectionCaptureV1`. Snapshot validation now rejects an honored-pin claim
+  whose instance is absent, names another source, is not ensure-class, or is
+  not at the claimed position. The projection grammar governs primitives;
+  the content catalog depends on it and collects complete scene recipes.
+  Rosette is recorded as landed through Knot over poem and lyric datasets.
