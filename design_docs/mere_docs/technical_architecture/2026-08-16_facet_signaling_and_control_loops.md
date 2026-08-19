@@ -4,8 +4,8 @@
 **Status:** design round (Mark, 2026-08-16). Gives open question 4 of the
 [one node, atomic facets layer map](2026-07-18_one_node_facets_layer_map.md)
 ("facet grants") a definite shape, and names one verified gap in the servitor
-reactive substrate. Targets 1 and 2 landed 2026-08-18; targets 3 and 4 remain
-open.
+reactive substrate. Targets 1 through 3 landed 2026-08-18; target 4 remains
+open behind a real-consumer gate.
 
 Companion to the one-node ruling (which established facets as the metadata
 mechanism) and to the participant gate work (which owns the authority half).
@@ -15,7 +15,7 @@ participants *say to each other* through what nodes carry.
 **Related:** the
 [graph behaviors plan](../implementation_strategy/2026-08-13_graph_behaviors_plan.md)
 owns the watch and cascade substrate section 6 reasons over (its slices W0
-through W5 landed 2026-08-13, so that lane is built, not pending); the
+through W5 landed 2026-08-13 and its actuation deadband landed 2026-08-18); the
 [capability model plan](../implementation_strategy/2026-07-23_capability_model_plan.md)
 owns the capability algebra section 7 proposes extending.
 
@@ -147,8 +147,8 @@ means a controller's entire history is reproducible, which is unusual and worth
 protecting: every actuation is an attributed journal entry, so a control loop
 here can be replayed to see why it acted.
 
-**The gap, verified by search: depth is bounded, frequency is not.**
-`CascadeBudget` counts rounds within one cascade, and servitor contains no rate,
+**The gap verified 2026-08-16: depth was bounded, frequency was not.**
+`CascadeBudget` counted rounds within one cascade, and servitor contained no rate,
 throttle, debounce, hysteresis, cooldown, or period anywhere. A behavior that
 settles and re-triggers a second later, forever, never exhausts the budget,
 because each individual cascade is short. It is a slow limit cycle and the budget
@@ -163,10 +163,12 @@ argues for deadband as first-class machinery a behavior declares (a minimum
 change, a minimum interval) rather than discipline every modder must reinvent
 correctly.
 
-The owning plan is equally silent. The graph behaviors plan carries no rate,
-thrash, frequency, or oscillation language either, so this is a hole in the
-design rather than a known deferral someone parked. It is now named in that
-plan's status header and Progress, where its fix belongs.
+The owning plan was equally silent. The graph behaviors plan carried no rate,
+thrash, frequency, or oscillation language either, so it was a hole in the
+design rather than a known deferral someone parked. Target 3 closed that hole on
+2026-08-18 at actuation: a behavior declares minimum change and interval,
+supplies one signed output in its own stable units, and moves its persisted
+baseline only after an attributed graph commit lands.
 
 The metaphor prescribes the same engineering. Endocrine control loops are slow,
 graded, decaying, and setpoint-seeking, and every one of those adjectives is a
@@ -213,18 +215,20 @@ to chartulary with a mere-side reader.
    value at or beyond the boundary, and never mutates the stored envelope. A
    recorded cascade crosses the boundary and its before/after reads replay
    identically from the two journal prefixes.
-3. **Deadband declaration** on a behavior (minimum change, minimum interval).
-   Done when a slow limit cycle is refused or named rather than silently writing
-   journal history. Recorded in the behaviors plan's Progress on 2026-08-16.
+3. **DONE 2026-08-18: deadband declaration** on a behavior (minimum change,
+   minimum interval). It is enforced at actuation against one behavior-defined
+   signed scalar and a host-fed instant. A slow limit cycle is named before it
+   writes journal history, and accepted state survives restart.
 4. **Watch predicate dimension** (threshold crossing), after target 3 and gated
    on a real consumer.
 
 ## 9. Open questions
 
-1. **Does deadband belong to sensing or actuation?** On the watch it suppresses
-   the wake; on the gate it suppresses the write. The actuation side also bounds
-   journal growth from writers that were never woken, which is the failure this
-   is meant to prevent.
+1. **CLOSED 2026-08-18: actuation.** Suppressing a watch cannot bound scheduled
+   or hand-run writers. The gate checks the behavior's declared output and the
+   host-fed instant before commit, then records the accepted baseline only after
+   that subject's graph entry lands. A refused or stale petition therefore
+   cannot move either baseline.
 2. **CLOSED 2026-08-18: revision-indexed expiry.** The target's replay
    done-condition rules here: `expires_at_revision` is deterministic at every
    journal prefix. A quiet graph deliberately does not advance the shelf life.
@@ -239,6 +243,23 @@ to chartulary with a mere-side reader.
 
 ## Progress
 
+- **2026-08-18 (target 3 complete):** added Servitor's persisted behavior
+  deadband and the two-phase `Gate::petition_behavior` path. Each declaration
+  has a positive minimum change and minimum interval; each run supplies one
+  signed scalar in behavior-defined units plus a host-fed instant. Refusal names
+  the subject and every failing dimension. Turnstone accepts `-- @deadband
+  <minimum-change> <minimum-interval-ms>`, exposes `mere.output(value)`, shows
+  the declaration during install review, and applies one actuation check to
+  manual, watch and scheduled resident runs before graph-action lowering. The
+  accepted baseline persists beside watches and is removed on uninstall. The
+  slow-cycle receipt uses long-separated `0/1` outputs and leaves graph revision
+  unchanged; a separate receipt proves a stale commit does not consume the
+  interval. The Turnstone receipt writes once, reloads, then refuses the next
+  actuation without another journal entry. Servitor is 65/65 and passes Clippy
+  with warnings denied; Turnstone is 316 passed with 4 explicit endpoint
+  ignores. No headed target-3 scenario was added. Target 4 remains gated on a
+  real threshold-crossing consumer.
+
 - **2026-08-18 (target 2 complete):** added chartulary's generic
   `ExpiringFacet<T>` envelope and Pandect's fail-closed `read_expiring_facet`.
   The expiry boundary is the first stale graph revision, so the read is live
@@ -251,7 +272,7 @@ to chartulary with a mere-side reader.
   Chartulary passes Clippy with warnings denied, and Pandect Clippy reports no
   diagnostic in the changed module; crate-wide warning denial is already
   blocked by 43 existing diagnostics elsewhere. The signal-namespace question
-  remains open, and targets 3 and 4 remain open.
+  remains open. At that checkpoint, targets 3 and 4 remained open.
 
 - **2026-08-18 (target 1 complete):** extracted the dependency-free
   `mere-capability` leaf, added dot-segment `Cap::Facet`, carried its order

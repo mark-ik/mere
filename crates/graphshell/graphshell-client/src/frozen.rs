@@ -427,6 +427,65 @@ mod tree {
     }
 }
 
+/// What a viewer can say about placement satisfaction, from the snapshot alone.
+///
+/// The host that renders a remote scene has a [`SceneSnapshot`] and no score,
+/// which is the whole point of A1 putting both halves on the wire: without the
+/// honored half every unremarked item is ambiguous between unpinned and
+/// pinned-and-honored, and a chrome line could only ever report failures.
+///
+/// Lives here rather than in the host because the host file is
+/// `#![cfg(target_arch = "wasm32")]` and cannot be reached by a native test. A
+/// summary nobody can test is a summary that quietly goes wrong.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct Satisfaction {
+    pub honored: usize,
+    pub unmet: usize,
+}
+
+impl Satisfaction {
+    pub fn of(tables: &scenotime::SceneTables) -> Self {
+        Self {
+            honored: tables.honored_holds.len(),
+            unmet: tables.unmet_holds.len(),
+        }
+    }
+
+    /// True when nothing was pinned at all, which is the ordinary case and
+    /// deserves silence rather than a line saying zero of zero.
+    pub fn is_quiet(&self) -> bool {
+        self.honored == 0 && self.unmet == 0
+    }
+
+    /// Whether the instance at `index` is holding an authored position.
+    ///
+    /// Hosts use this to draw the distinction rather than infer it: an item
+    /// sitting where someone put it should not look identical to one the
+    /// arrangement happened to place there.
+    pub fn is_pinned(tables: &scenotime::SceneTables, instance: sceno::InstanceId) -> bool {
+        tables
+            .honored_holds
+            .iter()
+            .any(|honored| honored.instance == instance)
+    }
+
+    /// A chrome line, or `None` when there is nothing to say.
+    ///
+    /// Unmet placements lead when present, because a failure a person cannot
+    /// see is the one worth putting first.
+    pub fn line(&self) -> Option<String> {
+        if self.is_quiet() {
+            return None;
+        }
+        let pins = |n: usize| if n == 1 { "pin".to_owned() } else { "pins".to_owned() };
+        Some(match (self.honored, self.unmet) {
+            (h, 0) => format!("{h} {} held", pins(h)),
+            (0, u) => format!("{u} {} unmet", pins(u)),
+            (h, u) => format!("{u} {} unmet, {h} {} held", pins(u), pins(h)),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -878,6 +937,61 @@ mod tests {
             )
             .is_none(),
             "a selector for an absent id must miss rather than match a sibling"
+        );
+    }
+
+    #[test]
+    fn satisfaction_reads_both_halves_off_the_wire() {
+        use scenotime::{Revision, SceneEpoch, SceneSnapshot};
+
+        let mut scene = coastal();
+        scene.honored_holds.push(sceno::HonoredHold {
+            instance: InstanceId(1),
+            placement: sceno::HeldPlacement::pinned(
+                SourceRef::new("fixture.map", "harbor"),
+                Vec2::new(1.0, 1.0),
+            ),
+        });
+        scene.unmet_holds.push(sceno::HeldPlacement::pinned(
+            SourceRef::new("fixture.map", "ghost"),
+            Vec2::new(9.0, 9.0),
+        ));
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), scene).expect("snapshot");
+
+        let satisfaction = Satisfaction::of(&snapshot.tables);
+        assert_eq!(satisfaction.honored, 1);
+        assert_eq!(satisfaction.unmet, 1);
+        assert_eq!(satisfaction.line().as_deref(), Some("1 pin unmet, 1 pin held"));
+        // The distinction a host draws with, rather than infers.
+        assert!(Satisfaction::is_pinned(&snapshot.tables, InstanceId(1)));
+        assert!(!Satisfaction::is_pinned(&snapshot.tables, InstanceId(0)));
+    }
+
+    #[test]
+    fn an_unpinned_scene_says_nothing_at_all() {
+        use scenotime::{Revision, SceneEpoch, SceneSnapshot};
+
+        let snapshot = SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), coastal())
+            .expect("snapshot");
+        let satisfaction = Satisfaction::of(&snapshot.tables);
+        assert!(satisfaction.is_quiet());
+        // Zero of zero is noise, not information.
+        assert_eq!(satisfaction.line(), None);
+    }
+
+    #[test]
+    fn the_line_leads_with_the_failure() {
+        let both = Satisfaction { honored: 3, unmet: 2 };
+        let line = both.line().expect("a line");
+        assert!(line.starts_with("2 pins unmet"), "{line}");
+        assert_eq!(
+            Satisfaction { honored: 2, unmet: 0 }.line().as_deref(),
+            Some("2 pins held")
+        );
+        assert_eq!(
+            Satisfaction { honored: 0, unmet: 1 }.line().as_deref(),
+            Some("1 pin unmet")
         );
     }
 

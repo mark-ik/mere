@@ -23,6 +23,9 @@
 //! - [`cascade`] — how far a wake travels: a bounded, deterministic rounds
 //!   loop over [`watch`]'s wake decisions, ending either settled or naming
 //!   the behaviors still answering each other.
+//! - [`deadband`] — how often a behavior may actuate: a declared minimum
+//!   output change and minimum interval, enforced before another journal
+//!   commit and driven by host-supplied time.
 //! - [`tick`] — when a denizen runs *on the clock*: a schedule rather than a
 //!   subscription, because time is not a journal and has no cursor to hold.
 //!   The clock is the host's, as it is for grant expiry, so a replay fires the
@@ -50,6 +53,7 @@
 
 pub mod cap;
 pub mod cascade;
+pub mod deadband;
 pub mod delegation;
 pub mod gate;
 pub mod grant;
@@ -58,9 +62,14 @@ pub mod watch;
 
 pub use cap::{Cap, CapError, Capability, FacetNamespace, ScopePath, assert_capability_laws};
 pub use cascade::{Cascade, CascadeBudget, CascadeOutcome, CommittedEntry, Round, run_cascade};
+pub use deadband::{
+    Actuation, ChangeRefusal, Deadband, DeadbandAdmission, DeadbandError, DeadbandRefusal,
+    DeadbandTable, IntervalRefusal,
+};
 pub use delegation::{ChainError, DelegationTable, cap_path, mode_action, mode_actions, scope_for};
 pub use gate::{
-    GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG, read_projection,
+    BehaviorPetition, GRANT_PREFIX, Gate, GateError, PROJECTION_MEDIA_TYPE, PROJECTION_TAG,
+    read_projection,
 };
 pub use grant::{AuthorityProvider, Grant, GrantTable, Mode};
 pub use tick::{Period, TimeWatch, TimeWatchTable};

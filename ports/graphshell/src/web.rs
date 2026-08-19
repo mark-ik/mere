@@ -52,6 +52,7 @@ use uuid::Uuid;
 use web_events::{install_events, schedule_frames};
 use web_gpu::GpuPresenter;
 use web_product::update_product_semantics;
+use graphshell_client::frozen::Satisfaction;
 use web_view::{ChromeModel, build_chrome_scene};
 
 const REMOTE_LABEL: &str = "Remote projection · 2 objects";
@@ -177,6 +178,14 @@ impl BrowserHost {
             ),
         };
         let (product_status, arrangement, physics_paused) = self.product_chrome();
+        // Satisfaction belongs to the remote scene, so it is only spoken when
+        // one is mounted. A local canvas has no holds to report on.
+        let satisfaction = self
+            .app
+            .client
+            .mounted(&self.remote_session)
+            .and_then(|mounted| Satisfaction::of(&mounted.scene.tables).line())
+            .unwrap_or_default();
         ChromeModel {
             active_session: match self.active {
                 ActiveSession::Local => format!(
@@ -197,6 +206,7 @@ impl BrowserHost {
                 if self.width < 720 { "narrow" } else { "wide" }
             ),
             product_status,
+            satisfaction,
             arrangement,
             physics_paused,
             action_draft: self.action_draft.as_ref().map(ActionDraft::semantics),
@@ -257,11 +267,27 @@ impl BrowserHost {
                 sceno::Footprint::Rect { size } => (size.w * scale, size.h * scale),
                 _ => (120.0, 80.0),
             };
+            // An item sitting where a person put it should not look identical
+            // to one the arrangement happened to place there. Read from the
+            // snapshot rather than inferred, which is why A1 puts the honored
+            // half on the wire beside the unmet half.
+            let pinned = Satisfaction::is_pinned(&mounted.scene.tables, instance);
             let color = if instance.0 == 0 {
                 [0.16, 0.31, 0.35, 1.0]
             } else {
                 [0.23, 0.28, 0.38, 1.0]
             };
+            if pinned {
+                // A held edge, drawn outside the card so it reads as something
+                // done to the item rather than part of it.
+                scene.push_rect(
+                    center_x - card_w * 0.5 - 3.0,
+                    center_y - card_h * 0.5 - 3.0,
+                    center_x + card_w * 0.5 + 3.0,
+                    center_y + card_h * 0.5 + 3.0,
+                    [0.85, 0.72, 0.35, 1.0],
+                );
+            }
             scene.push_rect(
                 center_x - card_w * 0.5 - 5.0,
                 center_y - card_h * 0.5 + 6.0,
@@ -1169,6 +1195,8 @@ async fn run() -> Result<(), String> {
         action_status: "Ready".to_string(),
         viewport_label: format!("{width} × {height}"),
         product_status: product_status.clone(),
+        // Nothing is mounted at construction, so there is nothing to report.
+        satisfaction: String::new(),
         arrangement: "phyllotaxis.default".to_string(),
         physics_paused: false,
         action_draft: None,

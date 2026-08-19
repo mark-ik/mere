@@ -46,6 +46,7 @@ members = [
     "crates/import",
     "crates/crawl",
     "crates/intel/esp",
+    "crates/intel/mora-cmudict",
     "crates/intel/signals",
     "crates/stickleback",
     "crates/murm/murm",
@@ -171,6 +172,8 @@ numen = { version = "0.2.0", path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
 esp = { path = "crates/intel/esp" }
+mora = "0.1.0"
+mora-cmudict = { path = "crates/intel/mora-cmudict" }
 # The projection contract, executed in duplicate (was graphshell-protocol;
 # renamed 2026-08-14 because the contract is the family's, not the portal's).
 chirograph = { version = "0.0.1", path = "crates/chirograph" }

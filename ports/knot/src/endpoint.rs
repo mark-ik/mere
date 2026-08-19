@@ -37,14 +37,33 @@ use stickleback::{DataKeyring, GroupCiphertext, GroupSecretId};
 use zeroize::Zeroizing;
 
 use crate::{
-    DirectorySource, DirectoryWatcher, DiskDocument, DocumentFormat, KnotDocumentProjection,
-    KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument,
+    CmudictPronunciations, DirectorySource, DirectoryWatcher, DiskDocument, DocumentFormat,
+    KnotDocumentProjection, KnotSyncEvent, KnotSyncFileStore, KnotVault, RosetteConfig,
+    RosetteInteriorKind, VaultDocument, project_rosette,
 };
 
 const FIXTURE_SESSION: &str = "loopback:knot:k0";
 const SOURCE_KIND: &str = "knot.file";
 const FILE_TOKEN_CONTEXT: &str = "mere.knot.file-base-token.v1";
 const VAULT_TOKEN_CONTEXT: &str = "mere.knot.vault-base-token.v1";
+
+/// Host-selected limits and geometry for Knot's Rosette projections.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct KnotRosetteConfig {
+    /// Scene geometry used by every document-scoped Rosette from this endpoint.
+    pub geometry: RosetteConfig,
+    /// Largest authored UTF-8 document the endpoint will disclose as a Rosette.
+    pub max_source_bytes: u64,
+}
+
+impl Default for KnotRosetteConfig {
+    fn default() -> Self {
+        Self {
+            geometry: RosetteConfig::default(),
+            max_source_bytes: 2 * 1024 * 1024,
+        }
+    }
+}
 
 /// Authority injected into one endpoint session after its caller has been
 /// admitted. Keeping this separate from `IntentInvocation` prevents payloads
@@ -213,6 +232,11 @@ pub struct KnotEndpoint {
     scene_revision: Revision,
     effects: Option<KnotEffectAuthority>,
     derived: BTreeMap<String, DerivedDocument>,
+    rosette_config: KnotRosetteConfig,
+    rosette_snapshots: BTreeMap<ProjectionSession, ProjectionSnapshot>,
+    rosette_resources: BTreeMap<ProjectionSession, BTreeMap<ContentHash, Vec<u8>>>,
+    rosette_last_announced: BTreeMap<ProjectionSession, Revision>,
+    rosette_document_ids: BTreeMap<ProjectionSession, String>,
 }
 
 impl KnotEndpoint {
@@ -266,6 +290,11 @@ impl KnotEndpoint {
             scene_revision: Revision(0),
             effects: None,
             derived: BTreeMap::new(),
+            rosette_config: KnotRosetteConfig::default(),
+            rosette_snapshots: BTreeMap::new(),
+            rosette_resources: BTreeMap::new(),
+            rosette_last_announced: BTreeMap::new(),
+            rosette_document_ids: BTreeMap::new(),
         })
     }
 
@@ -323,6 +352,11 @@ impl KnotEndpoint {
             scene_revision: Revision(0),
             effects: None,
             derived: BTreeMap::new(),
+            rosette_config: KnotRosetteConfig::default(),
+            rosette_snapshots: BTreeMap::new(),
+            rosette_resources: BTreeMap::new(),
+            rosette_last_announced: BTreeMap::new(),
+            rosette_document_ids: BTreeMap::new(),
         }
     }
 
@@ -348,6 +382,11 @@ impl KnotEndpoint {
             scene_revision: Revision(0),
             effects: None,
             derived: BTreeMap::new(),
+            rosette_config: KnotRosetteConfig::default(),
+            rosette_snapshots: BTreeMap::new(),
+            rosette_resources: BTreeMap::new(),
+            rosette_last_announced: BTreeMap::new(),
+            rosette_document_ids: BTreeMap::new(),
         }
     }
 
@@ -401,6 +440,17 @@ impl KnotEndpoint {
     /// The opaque Graphshell session.
     pub fn session(&self) -> &ProjectionSession {
         &self.session
+    }
+
+    /// Configure the Rosette scene before serving projection requests.
+    pub fn with_rosette_config(mut self, config: KnotRosetteConfig) -> Self {
+        self.rosette_config = config;
+        self
+    }
+
+    /// The host-selected Rosette configuration.
+    pub fn rosette_config(&self) -> KnotRosetteConfig {
+        self.rosette_config
     }
 
     /// Access the directory source when this endpoint owns one.
@@ -497,6 +547,7 @@ impl KnotEndpoint {
         self.snapshot = None;
         self.resources.clear();
         self.bindings.clear();
+        self.clear_rosette_projections();
         true
     }
 
@@ -535,6 +586,7 @@ impl KnotEndpoint {
             self.snapshot = None;
             self.resources.clear();
             self.bindings.clear();
+            self.clear_rosette_projections();
             self.refresh_vault_projection()?;
             self.sync_source_revision();
         }
@@ -612,6 +664,87 @@ impl KnotEndpoint {
                 documents
             }
         }
+    }
+
+    fn rosette_documents(&self) -> Vec<PresentedDocument> {
+        if matches!(&self.source, Source::Fixture(_)) {
+            return Vec::new();
+        }
+        self.documents()
+            .into_iter()
+            .filter(|document| {
+                document.byte_size <= self.rosette_config.max_source_bytes
+                    && document
+                        .container
+                        .media_type
+                        .as_deref()
+                        .is_some_and(is_rosette_media_type)
+                    && match &self.source {
+                        Source::Vault(source) => {
+                            let id = document
+                                .id
+                                .strip_prefix("knot:vault:")
+                                .unwrap_or(&document.id);
+                            source.vault.body(id).is_some()
+                        }
+                        Source::Directory { .. } => true,
+                        Source::Fixture(_) => false,
+                    }
+            })
+            .collect()
+    }
+
+    fn rosette_session(&self, document_id: &str) -> ProjectionSession {
+        ProjectionSession(format!(
+            "{}:rosette:{}",
+            self.session.0,
+            blake3::hash(document_id.as_bytes()).to_hex()
+        ))
+    }
+
+    fn current_rosette_document(&self, session: &ProjectionSession) -> Option<PresentedDocument> {
+        self.rosette_documents()
+            .into_iter()
+            .find(|document| self.rosette_session(&document.id) == *session)
+    }
+
+    fn rosette_text(&self, document: &PresentedDocument) -> Result<String, String> {
+        let bytes = match &self.source {
+            Source::Directory { source, .. } => {
+                let path = source
+                    .readable_document_path(&document.id)
+                    .map_err(|error| format!("could not open Rosette source: {error}"))?;
+                fs::read(path).map_err(|error| format!("could not read Rosette source: {error}"))?
+            }
+            Source::Vault(source) => {
+                let id = document
+                    .id
+                    .strip_prefix("knot:vault:")
+                    .unwrap_or(&document.id);
+                source
+                    .vault
+                    .body(id)
+                    .ok_or_else(|| {
+                        "Rosette source is unavailable while the vault is locked".to_string()
+                    })?
+                    .to_vec()
+            }
+            Source::Fixture(_) => return Err("fixture documents have no Rosette source".into()),
+        };
+        if bytes.len() as u64 > self.rosette_config.max_source_bytes {
+            return Err(format!(
+                "Rosette source exceeds the configured {} byte limit",
+                self.rosette_config.max_source_bytes
+            ));
+        }
+        String::from_utf8(bytes).map_err(|_| "Rosette source is not UTF-8".to_string())
+    }
+
+    fn clear_rosette_projections(&mut self) {
+        self.rosette_snapshots.clear();
+        self.rosette_resources.clear();
+        self.rosette_last_announced.clear();
+        self.rosette_document_ids.clear();
     }
 
     fn raw_source_revision(&self) -> u64 {
@@ -1084,6 +1217,168 @@ impl KnotEndpoint {
         Ok(snapshot)
     }
 
+    fn build_rosette_snapshot(
+        &mut self,
+        session: ProjectionSession,
+        document: PresentedDocument,
+        version: ProtocolVersion,
+    ) -> Result<ProjectionSnapshot, String> {
+        let text = self.rosette_text(&document)?;
+        let projection = project_rosette(
+            SourceRef::new(SOURCE_KIND, document.id.clone()),
+            &text,
+            &CmudictPronunciations,
+            self.rosette_config.geometry,
+        );
+        let document_title = document.container.title().unwrap_or("Untitled").to_string();
+        let mut presentation = PresentationManifest::default();
+        let mut resources = BTreeMap::new();
+
+        for interior in &projection.interiors {
+            let source = text
+                .get(interior.byte_start..interior.byte_end)
+                .ok_or_else(|| "Rosette interior does not address its source".to_string())?;
+            let (kind, glyph) = match interior.kind {
+                RosetteInteriorKind::Line => ("Line", "♪"),
+                RosetteInteriorKind::Stanza => ("Stanza", "✦"),
+            };
+            let unresolved = projection
+                .coverage
+                .unresolved
+                .iter()
+                .filter(|token| {
+                    token.byte_start >= interior.byte_start && token.byte_end <= interior.byte_end
+                })
+                .count();
+            let label = match interior.kind {
+                RosetteInteriorKind::Line => presentation_excerpt(source),
+                RosetteInteriorKind::Stanza => format!("Stanza {}", interior.ordinal + 1),
+            };
+            let mut badges = vec!["Rosette".into(), kind.to_ascii_lowercase()];
+            if unresolved > 0 {
+                badges.push(format!("{unresolved} unknown"));
+            }
+            let card = PortableCardV1 {
+                title: label.clone(),
+                values: vec![
+                    CardValueV1 {
+                        label: "Document".into(),
+                        value: document_title.clone(),
+                    },
+                    CardValueV1 {
+                        label: "Interior".into(),
+                        value: format!(
+                            "{kind} {} · bytes {}..{}",
+                            interior.ordinal + 1,
+                            interior.byte_start,
+                            interior.byte_end
+                        ),
+                    },
+                    CardValueV1 {
+                        label: "Text".into(),
+                        value: presentation_excerpt(source),
+                    },
+                    CardValueV1 {
+                        label: "Lexicon".into(),
+                        value: format!(
+                            "{} of {} tokens resolved",
+                            projection.coverage.resolved_tokens, projection.coverage.total_tokens
+                        ),
+                    },
+                ],
+                badges,
+                media: Vec::new(),
+            };
+            let glyph = NativeGlyphV1 {
+                label: label.clone(),
+                icon: Some(glyph.into()),
+                color: Some("#d8a657".into()),
+            };
+            let card_bytes = serde_json::to_vec(&card)
+                .map_err(|error| format!("could not encode Rosette card: {error}"))?;
+            let glyph_bytes = serde_json::to_vec(&glyph)
+                .map_err(|error| format!("could not encode Rosette glyph: {error}"))?;
+            let card_hash = ContentHash::of(&card_bytes);
+            let glyph_hash = ContentHash::of(&glyph_bytes);
+            resources.insert(card_hash, card_bytes.clone());
+            resources.insert(glyph_hash, glyph_bytes.clone());
+            let key = PresentationKey(format!(
+                "{}:rosette:{}:{}",
+                document.id, kind, interior.ordinal
+            ));
+            let semantics = PresentationSemantics {
+                label,
+                role: SemanticRole::Article,
+                bounds: BoundsRelationship::FillFootprint,
+                actions: Vec::new(),
+            };
+            presentation.bindings.push(PresentationBinding {
+                instance: interior.instance,
+                key: key.clone(),
+            });
+            presentation.offers.insert(
+                key,
+                vec![
+                    PresentationOffer {
+                        codec: PresentationCodec::PortableCardV1,
+                        resource: card_hash,
+                        byte_size: card_bytes.len() as u64,
+                        requires: PresentationCapability::PortableCard,
+                        semantics: semantics.clone(),
+                    },
+                    PresentationOffer {
+                        codec: PresentationCodec::NativeGlyphV1,
+                        resource: glyph_hash,
+                        byte_size: glyph_bytes.len() as u64,
+                        requires: PresentationCapability::NativeGlyph,
+                        semantics,
+                    },
+                ],
+            );
+        }
+
+        let scene = SceneSnapshot::from_dense(SceneEpoch(1), self.revision(), projection.scene)
+            .map_err(|error| format!("invalid Knot Rosette scene: {error:?}"))?;
+        let snapshot = ProjectionSnapshot {
+            version,
+            session: session.clone(),
+            scene,
+            presentation,
+            cache_policy: CachePolicy::default(),
+        };
+        self.rosette_resources.insert(session.clone(), resources);
+        self.rosette_last_announced
+            .insert(session.clone(), snapshot.scene.revision);
+        self.rosette_document_ids
+            .insert(session.clone(), document.id.clone());
+        self.rosette_snapshots.insert(session, snapshot.clone());
+        Ok(snapshot)
+    }
+
+    fn build_empty_rosette_snapshot(
+        &mut self,
+        session: ProjectionSession,
+        version: ProtocolVersion,
+    ) -> Result<ProjectionSnapshot, String> {
+        let mut scene = Scene::new();
+        scene.generation = self.revision().0;
+        let scene = SceneSnapshot::from_dense(SceneEpoch(1), self.revision(), scene)
+            .map_err(|error| format!("invalid empty Knot Rosette scene: {error:?}"))?;
+        let snapshot = ProjectionSnapshot {
+            version,
+            session: session.clone(),
+            scene,
+            presentation: PresentationManifest::default(),
+            cache_policy: CachePolicy::default(),
+        };
+        self.rosette_resources
+            .insert(session.clone(), BTreeMap::new());
+        self.rosette_last_announced
+            .insert(session.clone(), snapshot.scene.revision);
+        self.rosette_snapshots.insert(session, snapshot.clone());
+        Ok(snapshot)
+    }
+
     fn save_text(&mut self, id: &str, payload: SaveTextV1) -> Result<IntentResult, String> {
         let grant = self
             .write_grant
@@ -1518,6 +1813,10 @@ impl KnotEndpoint {
         if request.session != self.session {
             return Err("projection request names the wrong Knot session".into());
         }
+        self.validate_projection_contract(request)
+    }
+
+    fn validate_projection_contract(&self, request: &ProjectionRequest) -> Result<(), String> {
         if request.version.major != ProtocolVersion::V1.major {
             return Err("projection request uses an unsupported protocol".into());
         }
@@ -1609,22 +1908,51 @@ fn has_absolute_uri_scheme(address: &str) -> bool {
         && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '+' | '-' | '.'))
 }
 
+fn is_rosette_media_type(media_type: &str) -> bool {
+    matches!(
+        media_type,
+        "text/plain" | "text/markdown" | "text/djot" | "text/vnd.knot"
+    )
+}
+
+fn presentation_excerpt(source: &str) -> String {
+    let mut excerpt = source.split_whitespace().collect::<Vec<_>>().join(" ");
+    const MAX_CHARS: usize = 160;
+    if let Some((byte, _)) = excerpt.char_indices().nth(MAX_CHARS) {
+        excerpt.truncate(byte);
+        excerpt.push('…');
+    }
+    excerpt
+}
+
 impl ProjectionCatalog for KnotEndpoint {
     fn describe(&self) -> EndpointDescriptor {
-        EndpointDescriptor {
-            label: "Knot".into(),
-            projections: vec![ProjectionOffer {
-                label: match &self.source {
-                    Source::Directory { .. } => "Files in place".into(),
-                    Source::Fixture(_) => "Authoring fixture".into(),
-                    Source::Vault(_) => "Sealed vault".into(),
-                },
+        let mut projections = vec![ProjectionOffer {
+            label: match &self.source {
+                Source::Directory { .. } => "Files in place".into(),
+                Source::Fixture(_) => "Authoring fixture".into(),
+                Source::Vault(_) => "Sealed vault".into(),
+            },
+            request: ProjectionRequest {
+                version: ProtocolVersion::V1,
+                session: self.session.clone(),
+                score: Score::new(Arrangement::Spiral(Default::default())),
+            },
+        }];
+        projections.extend(self.rosette_documents().into_iter().map(|document| {
+            let title = document.container.title().unwrap_or("Untitled");
+            ProjectionOffer {
+                label: format!("Rosette · {title}"),
                 request: ProjectionRequest {
                     version: ProtocolVersion::V1,
-                    session: self.session.clone(),
+                    session: self.rosette_session(&document.id),
                     score: Score::new(Arrangement::Spiral(Default::default())),
                 },
-            }],
+            }
+        }));
+        EndpointDescriptor {
+            label: "Knot".into(),
+            projections,
         }
     }
 }
@@ -1633,10 +1961,18 @@ impl ProjectionSource for KnotEndpoint {
     type Error = String;
 
     fn snapshot(&mut self, request: ProjectionRequest) -> Result<ProjectionSnapshot, Self::Error> {
-        self.validate_request(&request)?;
-        self.protocol_version = request.version;
+        if request.session == self.session {
+            self.validate_request(&request)?;
+            self.protocol_version = request.version;
+            self.refresh()?;
+            return self.build_snapshot();
+        }
+        self.validate_projection_contract(&request)?;
         self.refresh()?;
-        self.build_snapshot()
+        let document = self
+            .current_rosette_document(&request.session)
+            .ok_or_else(|| "projection request names an unavailable Knot Rosette".to_string())?;
+        self.build_rosette_snapshot(request.session, document, request.version)
     }
 }
 
@@ -1644,20 +1980,42 @@ impl ResumableProjectionSource for KnotEndpoint {
     type Error = String;
 
     fn resume(&mut self, request: ResumeRequest) -> Result<ResumeReply, Self::Error> {
-        if request.session != self.session {
-            return Err("resume request names the wrong Knot session".into());
-        }
         self.refresh()?;
         let current = self.revision();
+        if request.session == self.session {
+            if request.epoch == SceneEpoch(1) && request.revision == current {
+                self.last_announced = Some(current);
+                return Ok(ResumeReply::Current(ProjectionAck {
+                    session: self.session.clone(),
+                    epoch: SceneEpoch(1),
+                    revision: current,
+                }));
+            }
+            return Ok(ResumeReply::Snapshot(Box::new(self.build_snapshot()?)));
+        }
+
+        let document = self.current_rosette_document(&request.session);
+        if document.is_none() && !self.rosette_document_ids.contains_key(&request.session) {
+            return Err("resume request names an unavailable Knot Rosette".into());
+        }
         if request.epoch == SceneEpoch(1) && request.revision == current {
-            self.last_announced = Some(current);
+            self.rosette_last_announced
+                .insert(request.session.clone(), current);
             return Ok(ResumeReply::Current(ProjectionAck {
-                session: self.session.clone(),
+                session: request.session,
                 epoch: SceneEpoch(1),
                 revision: current,
             }));
         }
-        Ok(ResumeReply::Snapshot(Box::new(self.build_snapshot()?)))
+        let version = self
+            .rosette_snapshots
+            .get(&request.session)
+            .map_or(ProtocolVersion::V1, |snapshot| snapshot.version);
+        let snapshot = match document {
+            Some(document) => self.build_rosette_snapshot(request.session, document, version)?,
+            None => self.build_empty_rosette_snapshot(request.session, version)?,
+        };
+        Ok(ResumeReply::Snapshot(Box::new(snapshot)))
     }
 }
 
@@ -1666,19 +2024,31 @@ impl ProjectionNoticeSource for KnotEndpoint {
 
     fn poll_notice(&mut self) -> Result<Option<CarrierNotice>, Self::Error> {
         self.refresh()?;
-        if self.snapshot.is_none() {
-            return Ok(None);
-        }
         let revision = self.revision();
-        if self
-            .last_announced
-            .is_some_and(|announced| revision <= announced)
+        if self.snapshot.is_some()
+            && self
+                .last_announced
+                .is_none_or(|announced| revision > announced)
         {
-            return Ok(None);
+            self.last_announced = Some(revision);
+            return Ok(Some(CarrierNotice {
+                session: self.session.clone(),
+                epoch: SceneEpoch(1),
+                revision,
+            }));
         }
-        self.last_announced = Some(revision);
+        let pending = self.rosette_snapshots.keys().find(|session| {
+            self.rosette_last_announced
+                .get(*session)
+                .is_none_or(|announced| revision > *announced)
+        });
+        let Some(session) = pending.cloned() else {
+            return Ok(None);
+        };
+        self.rosette_last_announced
+            .insert(session.clone(), revision);
         Ok(Some(CarrierNotice {
-            session: self.session.clone(),
+            session,
             epoch: SceneEpoch(1),
             revision,
         }))
@@ -1689,14 +2059,15 @@ impl PresentationSource for KnotEndpoint {
     type Error = String;
 
     fn resource(&mut self, request: ResourceRequest) -> Result<ResourceResponse, Self::Error> {
-        if request.session != self.session {
-            return Err("resource request names the wrong Knot session".into());
+        let bytes = if request.session == self.session {
+            self.resources.get(&request.resource)
+        } else {
+            self.rosette_resources
+                .get(&request.session)
+                .and_then(|resources| resources.get(&request.resource))
         }
-        let bytes = self
-            .resources
-            .get(&request.resource)
-            .cloned()
-            .ok_or_else(|| "resource was not disclosed by this Knot session".to_string())?;
+        .cloned()
+        .ok_or_else(|| "resource was not disclosed by this Knot session".to_string())?;
         Ok(ResourceResponse {
             session: request.session,
             resource: request.resource,
@@ -1710,6 +2081,13 @@ impl IntentSink for KnotEndpoint {
 
     fn invoke(&mut self, intent: IntentInvocation) -> Result<IntentResult, Self::Error> {
         if intent.session != self.session {
+            if self.rosette_snapshots.contains_key(&intent.session)
+                || self.current_rosette_document(&intent.session).is_some()
+            {
+                return Ok(IntentResult::Rejected {
+                    reason: "Knot Rosette projections are read-only".into(),
+                });
+            }
             return Err("intent names the wrong Knot session".into());
         }
         self.refresh()?;
@@ -2537,6 +2915,73 @@ Fallback.
         assert_eq!(notice.epoch, snapshot.scene.epoch);
         assert!(notice.revision > snapshot.scene.revision);
         assert_eq!(endpoint.poll_notice().unwrap(), None);
+    }
+
+    #[test]
+    fn rosette_sessions_ring_independently_and_drop_deleted_source() {
+        let temp = tempdir().unwrap();
+        let poem = temp.path().join("poem.knot");
+        fs::write(
+            &poem,
+            "Morning gathers light\nBranches answer night\n\nFootsteps cross the hill\nEvening settles still\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("lyric.knot"),
+            "Raise your open hand\nWe will take a stand\n\nCarry home the song\nLet the road run long\n",
+        )
+        .unwrap();
+        let mut endpoint = KnotEndpoint::open(temp.path()).unwrap();
+        let descriptor = endpoint.describe();
+        assert_eq!(descriptor.projections.len(), 3);
+        let sessions = descriptor
+            .projections
+            .into_iter()
+            .map(|offer| {
+                let session = offer.request.session.clone();
+                endpoint.snapshot(offer.request).unwrap();
+                session
+            })
+            .collect::<BTreeSet<_>>();
+
+        fs::write(&poem, "The final bell\nAnswers well\n").unwrap();
+        let notices = (0..sessions.len())
+            .map(|_| endpoint.poll_notice().unwrap().unwrap().session)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(notices, sessions);
+        assert_eq!(endpoint.poll_notice().unwrap(), None);
+
+        let poem_request = endpoint
+            .describe()
+            .projections
+            .into_iter()
+            .find(|offer| offer.label.contains("poem"))
+            .unwrap()
+            .request;
+        let snapshot = endpoint.snapshot(poem_request.clone()).unwrap();
+        let old_resource = snapshot.presentation.offers.values().next().unwrap()[0].resource;
+        fs::remove_file(poem).unwrap();
+        let reply = endpoint
+            .resume(ResumeRequest {
+                session: poem_request.session.clone(),
+                epoch: snapshot.scene.epoch,
+                revision: snapshot.scene.revision,
+            })
+            .unwrap();
+        let ResumeReply::Snapshot(removed) = reply else {
+            panic!("a removed Rosette source must replace the stale scene");
+        };
+        assert_eq!(removed.scene.active_item_count(), 0);
+        assert!(removed.presentation.bindings.is_empty());
+        assert!(
+            endpoint
+                .resource(ResourceRequest {
+                    session: poem_request.session,
+                    resource: old_resource,
+                })
+                .is_err(),
+            "removed source resources must leave the session"
+        );
     }
 
     #[test]

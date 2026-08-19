@@ -1,6 +1,6 @@
 use sceno::{
-    HeldPlacement, InstanceId, ProjectedItem, Rect, Region, RoutedRelation, Scene, SourceRef,
-    Space, SpaceId,
+    HeldPlacement, HonoredHold, InstanceId, ProjectedItem, Rect, Region, RoutedRelation, Scene,
+    SourceRef, Space, SpaceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +24,15 @@ pub struct SceneTables {
     /// from "pin unmet" without access to the score that asked.
     #[serde(default)]
     pub unmet_holds: Vec<HeldPlacement>,
+    /// Ensure-class placements the solver honored, carried through from
+    /// [`Scene::honored_holds`].
+    ///
+    /// Both halves are needed for the distinction to survive the hop. Without
+    /// this one a remote viewer could see that a pin failed but not that a pin
+    /// succeeded, so every unremarked item would be ambiguous: unpinned, or
+    /// pinned-and-honored, with no way to tell.
+    #[serde(default)]
+    pub honored_holds: Vec<HonoredHold>,
 }
 
 /// A complete resynchronization snapshot. Tombstones remain serialized so a
@@ -61,6 +70,7 @@ impl SceneSnapshot {
                 bounds: scene.bounds,
                 generation: scene.generation,
                 unmet_holds: scene.unmet_holds,
+                honored_holds: scene.honored_holds,
             },
         };
         snapshot.validate()?;

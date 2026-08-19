@@ -16,6 +16,7 @@ mod publish_client;
 mod publish_host;
 mod publish_wire;
 mod resident;
+mod rosette;
 mod search;
 mod settings;
 mod startup;
@@ -31,7 +32,7 @@ pub use directory::{DirectorySource, DiskDocument, IgnorePolicy};
 pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::{
     KnotEffectAuthority, KnotEffectFetcher, KnotEffectMode, KnotEffectPolicy, KnotEndpoint,
-    KnotWriteGrant,
+    KnotRosetteConfig, KnotWriteGrant,
 };
 pub use mark::{
     MARK_ALPN, MARK_DEFAULT_PORT, MARK_MAX_DOCUMENT_BYTES, MARK_MAX_METADATA_BYTES,
@@ -68,6 +69,10 @@ pub use publish_wire::{
     encode_request, encode_response,
 };
 pub use resident::{KnotSyncHost, KnotSyncHostConfig, KnotSyncHostError};
+pub use rosette::{
+    CmudictPronunciations, LexiconCoverage, PronunciationLexicon, RosetteConfig, RosetteInterior,
+    RosetteInteriorKind, RosetteProjection, UnresolvedToken, project_rosette,
+};
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
 pub use settings::{
     KnotSettings, KnotSettingsError, KnotSyncSettings, hex32, knot_settings_path, parse_hex32,

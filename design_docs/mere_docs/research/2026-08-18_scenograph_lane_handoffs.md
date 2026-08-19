@@ -32,20 +32,32 @@ woodshed's `design_docs/2026-07-11_stage_set_tools_plan.md`.
 - Display names live in **two** tables, `arrangements::registry` and the
   canvas's `CANVAS_LAYOUT_STRATEGIES`, and nothing enforces agreement.
 
-## Decisions waiting on Mark
+## Rulings (Mark, 2026-08-18)
 
 Listed once here so each lane can point at them rather than re-deriving.
 
-1. **Plotted** — proposed plain name for Atlas's placement lever (positions
-   given by the data, preserved relative to each other, never force-settled).
-   It generalizes the existing Semantic entry, since an embedding and a
-   latitude are the same lever with different coordinate sources. Blocks
-   nothing; the arrangement table carries it as *proposed*.
-2. **Where the scene register lives.** Deck 2 names ten scenes; nothing says
-   whether they become a registry beside `arrangements`, a persona-persisted
-   template library, or stay catalog-only until a second one ships. Lane D.
-3. **Whether mora gets a lexicon story from us** (a CMUdict-derived data
-   crate) or stays bring-your-own. Lane C's first act depends on it.
+1. **Plotted is ratified**, with the mechanism stated narrowly: each item
+   supplies an already-projected planar coordinate through its adapter, and
+   one shared frame transform maps those coordinates into scene space while
+   preserving their relative geometry. Raw latitude/longitude still require
+   adapter-owned map projection. Physics is orthogonal to arrangement, so
+   "never force-settled" belongs to Atlas's scene template rather than the
+   Plotted definition. The eventual portable implementation replaces or
+   generalizes Geographic and Semantic placement; it does not join them as a
+   third duplicate, and waits for the forcing consumer before changing the
+   frozen enum.
+2. **The scene register is a sequence, not one of three rival homes.** It
+   stays catalog-only until the second real scene ships. At that point a
+   Mere-side complete-template surface absorbs the dormant `register-lens`
+   preset role rather than creating another authority beside it. Built-in
+   templates live there, persona settings own saved variants, and active
+   per-view state stays in `ViewIntent`. Scene recipes do not live in
+   `arrangements`.
+3. **Mora gets a first-party English default outside its core.** `mora`
+   continues to accept pronunciations and stays language-neutral, `no_std`,
+   and zero-dependency. A companion CMUdict data/provider boundary supplies
+   Knot's offline default while keeping custom dictionaries and writer
+   overrides possible. Unknown words are reported rather than guessed.
 
 ---
 
@@ -145,17 +157,40 @@ sonance) and needs pronunciations supplied to it; `esp` owns the semantic
 half already; the scene contract needs nothing new, because `SourceRef` is
 opaque, so a knot adapter can emit document interiors as projected items.
 
-**First acts**: settle decision 3 above (the lexicon story), then write the
-knot adapter that emits stanzas and lines as items. Analysis edges must
-arrive through the existing reveal-then-crystallize path — the analyzer
-*reveals*, the writer keeps the rhyme scheme and discards the coincidence —
-so the truth/curation law stays intact and kept chords become real
-annotation.
+**First acts**: the lexicon ruling above opens a read-only C0 proof. Write a
+pure knot adapter with an injected pronunciation lookup, emit stanzas and
+lines as items, and derive one live sound relation family before endpoint
+selection or semantic chords. Exercise the same adapter against a poem and a
+song lyric or speech. The existing reveal-then-crystallize path only reveals
+relations already present in graph truth and crystallizes a graphlet; it does
+not promote analyzer suggestions into annotation. C0 therefore writes no
+truth. A later writer-kept-rhyme slice must design that annotation intent
+explicitly rather than claiming the graphlet path already supplies it.
 
-**Done when** a poem in knot renders as a Rosette with at least one chord
-family derived live, and the same scene applied to a second dataset (a song
-lyric, a speech) still reads true. That second application is the receipt
-that Rosette is a scene rather than a one-off view.
+**C0 receipt:** both datasets produce deterministic serializable scenes,
+each has line items, at least one perfect-rhyme chord is derived live through
+Mora, unknown-token coverage is explicit, and no scenograph contract changes.
+The full lane is done when Knot can select and render that Rosette and the
+second dataset still reads true. That second application is the receipt that
+Rosette is a scene rather than a one-off view.
+
+**C0 landed 2026-08-18.** `mora-cmudict` is the first-party offline provider;
+Knot's pure `rosette` adapter emits line and stanza items, derives
+`mora.perfect-rhyme` chords, reports unresolved tokens with source byte spans,
+and serializes deterministically for poem and lyric fixtures. The adapter does
+not write graph truth and no scenograph crate changed. Knot scene selection
+and headed rendering were the remaining full-lane boundary.
+
+**Lane C completed 2026-08-18.** Every eligible UTF-8 Knot text document now
+advertises a stable document-scoped Rosette session beside Knot's ordinary
+projection. Graphshell mounts poem and lyric sessions simultaneously through
+the serializing local carrier, resolves their line/stanza presentations, and
+renders both through its headed HTML scene path with live rhyme chords. Source
+size and geometry are host-configurable; source removal replaces the mounted
+Rosette with an empty current snapshot and drops its resources rather than
+leaving stale text visible. Scenograph remains unchanged. Writer-kept analysis
+still waits on an explicit annotation intent and is not smuggled into this
+read-only scene lane.
 
 **Adjacent, deliberately out of scope**: a morpheme and etymology analyzer is
 a *different unit* (morpheme, not mora) and a sibling lane, not scope creep
@@ -174,9 +209,11 @@ themselves to close their gaps, and Atlas needs a map beneath it, so the
 intent lives in a combination no single lever holds. Mosaic and Atlas were
 released from the arrangement register to this one.
 
-**Open**: whether scenes become a registry beside `arrangements`, a
-persona-persisted template library (the swatch design's template mechanism at
-graph scope is the natural landing), or stay catalog-only. Plus Plotted.
+**Ruled**: catalog-only now; when the second scene ships, a Mere-side complete
+template surface absorbs `register-lens`'s dormant preset role, persona
+settings own saved variants, and `ViewIntent` owns the active instance.
+Plotted is the common direct-coordinate mechanism, with physics left to the
+scene template.
 
 **First acts**: none in code. The next *scene* someone builds decides the
 shape, and building two by hand before generalizing is the family's own

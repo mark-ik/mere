@@ -289,6 +289,48 @@ mod tests {
     }
 
     #[test]
+    fn a_remote_viewer_can_tell_placed_as_pinned_from_pin_unmet() {
+        // A1's done-condition, stated whole. Carrying only the failures would
+        // leave every unremarked item ambiguous: unpinned, or pinned and
+        // honored, with nothing on the wire to separate them.
+        let mut scene = Scene::new();
+        let source = scene.intern_source(SourceRef::new("fixture", "kept"));
+        scene.items.push(ProjectedItem {
+            source,
+            space: Scene::WORLD,
+            transform: Transform2::translation(4.0, 4.0),
+            footprint: Footprint::Point,
+            representation: Representation::Glyph,
+            layer: 0,
+            visible: true,
+            hit: None,
+            channels: Vec::new(),
+        });
+        scene.honored_holds.push(sceno::HonoredHold {
+            instance: InstanceId(0),
+            placement: sceno::HeldPlacement::pinned(
+                SourceRef::new("fixture", "kept"),
+                sceno::Vec2::new(4.0, 4.0),
+            ),
+        });
+        scene.unmet_holds.push(sceno::HeldPlacement::pinned(
+            SourceRef::new("fixture", "lost"),
+            sceno::Vec2::new(9.0, 9.0),
+        ));
+
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), scene).expect("snapshot");
+        let wire = serde_json::to_string(&snapshot).expect("serialize");
+        let far_side: SceneSnapshot = serde_json::from_str(&wire).expect("deserialize");
+
+        assert_eq!(far_side.tables.honored_holds.len(), 1);
+        assert_eq!(far_side.tables.honored_holds[0].placement.source.id, "kept");
+        assert_eq!(far_side.tables.honored_holds[0].instance, InstanceId(0));
+        assert_eq!(far_side.tables.unmet_holds.len(), 1);
+        assert_eq!(far_side.tables.unmet_holds[0].source.id, "lost");
+    }
+
+    #[test]
     fn a_snapshot_written_before_violations_existed_still_reads() {
         let snapshot = SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), Scene::new())
             .expect("snapshot");

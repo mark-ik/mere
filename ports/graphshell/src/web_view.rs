@@ -23,6 +23,10 @@ pub(crate) struct ChromeModel {
     pub action_status: String,
     pub viewport_label: String,
     pub product_status: String,
+    /// Placement satisfaction for the mounted remote scene, empty when there is
+    /// nothing to say. A viewer holding only a snapshot can still report it,
+    /// which is the point of carrying both halves on the wire.
+    pub satisfaction: String,
     pub arrangement: String,
     pub physics_paused: bool,
     pub action_draft: Option<ActionDraftSemantics>,
@@ -176,6 +180,7 @@ fn chrome_view(model: ChromeModel) -> impl View<(), (), GenetCtx, Element = Gene
                 (
                     el("div", text("LOCAL GRAPH PRODUCT")).attr("class", "eyebrow"),
                     el("div", text(model.product_status)).attr("class", "product-status"),
+                    el("div", text(model.satisfaction)).attr("class", "satisfaction-status"),
                 ),
             )
             .attr("class", "product-proof"),

@@ -12,14 +12,15 @@ accretes while it is alive.
 - The persona wallet carry lane: the device roster, signed device grants,
   epoch history, and the family-shared identity root.
 
-Renamed from `session-runtime` on 2026-08-14 when it was published: the crate
+Renamed from `session-runtime` on 2026-08-15 when it was published: the crate
 was named for what it did in one host, and the family names published crates
 for what they are.
 
-Note for anyone building on the wallet half: it is scheduled to fold into
-[personae](https://crates.io/crates/personae), which is the prerequisite the
-credential port ([castellan](https://crates.io/crates/castellan)) is waiting
-on. Depend on it here knowing it is a way-station.
+Note for anyone building on the wallet half: the carry *model* lives in
+[personae](https://crates.io/crates/personae) as `personae::carry`. What stays
+here is the adapter: the on-disk layout under the data root, the unlock ladder,
+sealed-record wiring, grant envelopes, and the epoch seal. That split was ruled
+deliberate on 2026-08-10, so this is a home rather than a way-station.
 
 Part of the [mere](https://github.com/merely-made/mere) workspace.
 

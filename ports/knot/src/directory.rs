@@ -204,8 +204,8 @@ impl DirectorySource {
     }
 
     /// Resolve one indexed document back under the configured authority root
-    /// and prove the current target can be opened for writing.
-    pub(crate) fn writable_document_path(&self, id: &str) -> io::Result<PathBuf> {
+    /// and prove the current target is still a readable regular file.
+    pub(crate) fn readable_document_path(&self, id: &str) -> io::Result<PathBuf> {
         let document = self
             .document(id)
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "document is not indexed"))?;
@@ -223,6 +223,14 @@ impl DirectorySource {
                 "document target is not a regular file",
             ));
         }
+        fs::File::open(&path)?;
+        Ok(path)
+    }
+
+    /// Resolve one indexed document back under the configured authority root
+    /// and prove the current target can be opened for writing.
+    pub(crate) fn writable_document_path(&self, id: &str) -> io::Result<PathBuf> {
+        let path = self.readable_document_path(id)?;
         fs::OpenOptions::new().write(true).open(&path)?;
         Ok(path)
     }

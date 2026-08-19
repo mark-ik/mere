@@ -16,6 +16,7 @@ mere = { path = "../../../crates/mere", default-features = false, features = ["g
 # which this crate hands to `GraphshellApp` as its backend. It lived here until
 # the duplicate showed up; muniment owns the backend family, so it owns this.
 muniment = { path = "../../../crates/eidetic/muniment", features = ["indexeddb"] }
+graphshell-client = { path = "../../../crates/graphshell/graphshell-client" }
 sceno = { path = "../../../crates/scenograph/sceno" }
 serde.workspace = true
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }

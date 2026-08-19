@@ -60,10 +60,28 @@ on package name and are unaffected.
 
 ### D4: deferred, explicitly not this session
 
-- [ ] Wallet fold-in: `session-runtime::{wallet_store, wallet_grant}` +
+- [x] Wallet fold-in: `session-runtime::{wallet_store, wallet_grant}` +
       `WalletEpochSealer` into personae per the 2026-07-08 ruling. Touches the
       live seal seam; own plan when taken up.
-- [ ] The credential-manager port (see direction below).
+      **Done 2026-08-10** in the [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md),
+      with the scope revised by what W0 discovered: only the *model* moved, as
+      `personae::carry` + `CarryRef`. The adapter (`wallet_store`, `wallet_grant`)
+      and `WalletEpochSealer` deliberately stay in the store crate, since the
+      sealer is the seal seam itself and the store logic is sequenced filesystem
+      effects rather than a model. That crate is now
+      [pandect](https://crates.io/crates/pandect). One question spun out and was
+      answered 2026-08-11 in [device grants and delegation certificates](../technical_architecture/2026-08-11_device_grant_delegation_reconciliation.md).
+      Mark settled the migration posture 2026-08-12 (re-issue now, no legacy
+      decoder, the window being open only while every grant holder is a machine
+      he can reach) and the work ran to completion the same day; its
+      [migration plan](../../archive_docs/2026-08-18_completed_plans/2026-08-12_device_grant_certificate_migration_plan.md)
+      was archived 2026-08-18 with nothing carried forward.
+- [x] The credential-manager port (see direction below).
+      **Founded 2026-08-14** as [castellan](https://crates.io/crates/castellan);
+      see the [keeper founding plan](2026-08-14_castellan_keeper_founding_plan.md).
+      0.0.2 published 2026-08-15, the `keeper` feature carrying the authority
+      half. The credential runway is [its own plan](2026-08-10_castellan_otp_plan.md):
+      C1 (the OTP core, RFC-vector-verified) done; C2 open.
 - [ ] Any facade content in the `dramatis` crate. The reservation stays empty
       until something imports it.
 

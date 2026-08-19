@@ -139,6 +139,10 @@ verbatim move wrong:
       its own record, and revocation gains a portable signed statement while
       the roster demotes to a local fold. Execution is gated on the migration
       posture, which is Mark's call.
+      **Settled 2026-08-12**: re-issue now, no legacy decoder. Executed the
+      same day; the
+      [migration plan](../../archive_docs/2026-08-18_completed_plans/2026-08-12_device_grant_certificate_migration_plan.md)
+      was archived 2026-08-18, complete, nothing carried forward.
 - [x] `wallet_grant.rs` (2803 lines) split in place into fourteen modules,
       largest 432: `errors` + `types` (pure shapes), `envelope` (the CBOR grant
       and its on-disk read/write), `pairing`, `epochs`, `records`, `wrapping`,

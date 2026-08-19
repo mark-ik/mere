@@ -90,14 +90,14 @@ compatibility surface.
 ## Resolved after the move
 
 **`identity_endpoint` stays in graphshell, and the line is not close.** It
-names ~23 `chirograph` types plus `graphshell_endpoint`'s serving
+names ~23 `graphshell_protocol` types plus `graphshell_endpoint`'s serving
 machinery (`ProjectionCatalog`, `ProjectionSource`, `IntentSink`) and the
 sceno/scenotime scene stack. Castellan's projection names three
 (`PortableCardV1`, `CardValueV1`, `ActionFormV1`). The endpoint is the adapter
 that *serves* castellan's cards over graphshell's protocol — composition, and
 the count is the evidence.
 
-**The `castellan → chirograph` direction is the one real wart, and
+**The `castellan → graphshell-protocol` direction is the one real wart, and
 it is cheap today.** The three types castellan needs are neutral by content —
 "a deliberately small semantic card, not a serialized widget tree" — and the
 crate is light (six dependencies: base64, blake3, sceno, scenotime, serde,
@@ -110,17 +110,30 @@ Two ways out, both **Mark's call because both are naming decisions**:
    `ActionFormV1`, `ContentHash`) into a neutral crate both depend on. It
    meets the crate bar — a portable subset with a real consumer that wants it
    without the protocol — but it needs a name.
-2. Rename `chirograph` to what it is. It is the family's projection
+2. Rename `graphshell-protocol` to what it is. It is the family's projection
    contract, not graphshell's; the crate is named after the portal that
    happened to define it. This is the same shape of correction the keeper
    founding just made, one layer down.
 
 Doing neither is also defensible while castellan is the only outside consumer.
 
+**Ruled 2026-08-15: both.** Mark took 1 and 2 together. The card vocabulary
+became [titulus](https://crates.io/crates/titulus) and `graphshell-protocol`
+became [chirograph](https://crates.io/crates/chirograph), both published 0.0.1.
+The crate names in this section are left as they were written, per the receipt
+rule; read them as the pre-rename vocabulary.
+
 ## Follow-ups, not this pass
 
-- Publishing castellan 0.0.2 with the keeper feature needs chirograph
+- Publishing castellan 0.0.2 with the keeper feature needs graphshell-protocol
   publishable first; not scheduled, and entangled with the question above.
-- The wire strings (`castellan.*`) are the third instance of the
+  **Done 2026-08-15:** titulus 0.0.1 and chirograph 0.0.1 shipped first, then
+  castellan 0.0.2 with `keeper`. A registry-only probe outside the workspace
+  (no path deps, no patch table) confirmed the feature resolves from crates.io
+  alone, which `cargo publish` does not check: it verifies default features only.
+- The wire strings (`graphshell.identity.*`) are the third instance of the
   same naming question, at the protocol level rather than the crate level.
   Worth deciding all three together rather than piecemeal.
+  **Done 2026-08-15** (`617ea210`): decided with the other two.
+  `graphshell.identity.*` became `castellan.*`; the resolution is recorded
+  in the wire-strings section above.

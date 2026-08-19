@@ -28,6 +28,8 @@ inker.workspace = true
 illume.workspace = true
 knot-editor-host.workspace = true
 muniment = { workspace = true, features = ["redb"] }
+mora.workspace = true
+mora-cmudict.workspace = true
 nematic.workspace = true
 notify = "8"
 notochord = { workspace = true, features = ["tokio"] }
@@ -73,6 +75,7 @@ zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 graphshell = { path = "../graphshell" }
+graphshell-local.workspace = true
 rcgen = "0.14"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

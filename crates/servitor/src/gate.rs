@@ -26,6 +26,7 @@ use chartulary::{Author, CommitError, Committed, Container, EditSpec, GraphLog, 
 
 use crate::Subject;
 use crate::cap::{Cap, ScopePath};
+use crate::deadband::{Actuation, DeadbandRefusal, DeadbandTable};
 use crate::grant::{AuthorityProvider, Grant, Mode};
 
 /// The reserved node-id prefix for grant projections. The gate writes these and
@@ -120,6 +121,8 @@ pub fn read_projection(node: &Container) -> Option<Grant> {
 /// Why the gate refused a petition. Nothing was applied.
 #[derive(Clone, Debug, PartialEq)]
 pub enum GateError {
+    /// A declared behavior deadband refused this actuation before commit.
+    Deadband(DeadbandRefusal),
     /// The subject holds no capability covering the claimed path at write mode.
     Unauthorized {
         /// The scope the petition claimed.
@@ -173,6 +176,36 @@ fn touched_facet(spec: &EditSpec<Container, Relation>) -> Option<&str> {
             Some(facet.as_str())
         }
         _ => None,
+    }
+}
+
+/// The behavior-specific half of a petition: its ordinary graph batch plus
+/// the scalar actuation sample that a declared deadband evaluates.
+pub struct BehaviorPetition<'a> {
+    /// The node scope this batch claims.
+    pub claimed: &'a ScopePath,
+    /// The graph revision the batch expects.
+    pub expected: u64,
+    /// The behavior output and host-supplied instant.
+    pub actuation: Actuation,
+    /// The proposed atomic graph edits.
+    pub specs: Vec<EditSpec<Container, Relation>>,
+}
+
+impl<'a> BehaviorPetition<'a> {
+    /// Assemble one behavior petition.
+    pub fn new(
+        claimed: &'a ScopePath,
+        expected: u64,
+        actuation: Actuation,
+        specs: Vec<EditSpec<Container, Relation>>,
+    ) -> Self {
+        Self {
+            claimed,
+            expected,
+            actuation,
+            specs,
+        }
     }
 }
 
@@ -264,8 +297,43 @@ impl Gate {
         expected: u64,
         specs: Vec<EditSpec<Container, Relation>>,
     ) -> Result<Committed, GateError> {
+        self.validate_petition(provider, subject, claimed, &specs)?;
+        nested
+            .commit_batch(subject.to_author(), expected, specs)
+            .map_err(GateError::Commit)
+    }
+
+    /// Run a behavior petition through the ordinary authority checks and its
+    /// declared actuation deadband, then commit. The accepted output and time
+    /// are recorded only after the revision-checked commit lands.
+    pub fn petition_behavior(
+        &self,
+        provider: &impl AuthorityProvider,
+        deadbands: &mut DeadbandTable,
+        nested: &mut GraphLog<Container, Relation>,
+        subject: Subject,
+        petition: BehaviorPetition<'_>,
+    ) -> Result<Committed, GateError> {
+        self.validate_petition(provider, subject, petition.claimed, &petition.specs)?;
+        let admission = deadbands
+            .check(subject, petition.actuation)
+            .map_err(GateError::Deadband)?;
+        let committed = nested
+            .commit_batch(subject.to_author(), petition.expected, petition.specs)
+            .map_err(GateError::Commit)?;
+        deadbands.record(admission);
+        Ok(committed)
+    }
+
+    fn validate_petition(
+        &self,
+        provider: &impl AuthorityProvider,
+        subject: Subject,
+        claimed: &ScopePath,
+        specs: &[EditSpec<Container, Relation>],
+    ) -> Result<(), GateError> {
         // 1. Projection guard: a denizen may never touch its own grants.
-        for spec in &specs {
+        for spec in specs {
             for node in touched_nodes(spec) {
                 if node.starts_with(GRANT_PREFIX) {
                     return Err(GateError::TouchesProjection {
@@ -285,7 +353,7 @@ impl Gate {
         //    SEGMENT (`trail` does not contain `trailer/x`). A node id that is
         //    not a well-formed scope fails closed rather than being compared as
         //    a raw string.
-        for spec in &specs {
+        for spec in specs {
             for node in touched_nodes(spec) {
                 let inside = ScopePath::parse(node)
                     .is_ok_and(|node_scope| claimed.covers_scope(&node_scope));
@@ -301,7 +369,7 @@ impl Gate {
         //    permission to write every facet family on it. Parse at the gate
         //    boundary; malformed ids fail closed because no typed capability
         //    can cover them.
-        for spec in &specs {
+        for spec in specs {
             let Some(facet) = touched_facet(spec) else {
                 continue;
             };
@@ -313,10 +381,7 @@ impl Gate {
                 });
             }
         }
-        // 5. Commit, attributed to the denizen, revision-checked and atomic.
-        nested
-            .commit_batch(subject.to_author(), expected, specs)
-            .map_err(GateError::Commit)
+        Ok(())
     }
 }
 
@@ -702,5 +767,124 @@ mod tests {
             }
             other => panic!("expected a revision conflict, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_slow_limit_cycle_is_named_before_it_adds_history() {
+        let gate = Gate::new();
+        let sub = subject(1);
+        let auth = authority(sub);
+        let mut nested = GraphLog::<Container, Relation>::new();
+        let mut deadbands = DeadbandTable::new();
+        deadbands.register(sub, crate::Deadband::new(2, 1_000).unwrap());
+
+        gate.petition_behavior(
+            &auth,
+            &mut deadbands,
+            &mut nested,
+            sub,
+            BehaviorPetition::new(
+                &trail_scope(),
+                0,
+                Actuation::new(0, 0),
+                vec![insert("trail/first")],
+            ),
+        )
+        .unwrap();
+        let landed = nested.revision();
+
+        // Each pass is a separate, short cascade and arrives long after the
+        // interval. A depth budget cannot see the 0/1 oscillation; the output
+        // deadband can.
+        for (at_ms, output) in [(2_000, 1), (4_000, 0), (6_000, 1)] {
+            let error = gate
+                .petition_behavior(
+                    &auth,
+                    &mut deadbands,
+                    &mut nested,
+                    sub,
+                    BehaviorPetition::new(
+                        &trail_scope(),
+                        landed,
+                        Actuation::new(output, at_ms),
+                        vec![insert(&format!("trail/{at_ms}"))],
+                    ),
+                )
+                .unwrap_err();
+            let GateError::Deadband(refusal) = error else {
+                panic!("expected a named deadband refusal, got {error:?}");
+            };
+            assert_eq!(refusal.subject, sub);
+            assert_eq!(refusal.change.unwrap().actual, output.unsigned_abs());
+            assert_eq!(refusal.interval, None, "this is the slow-loop case");
+            assert_eq!(nested.revision(), landed, "no refusal wrote history");
+        }
+    }
+
+    #[test]
+    fn a_failed_commit_does_not_consume_the_deadband_interval() {
+        let gate = Gate::new();
+        let sub = subject(1);
+        let auth = authority(sub);
+        let mut nested = GraphLog::<Container, Relation>::new();
+        let mut deadbands = DeadbandTable::new();
+        deadbands.register(sub, crate::Deadband::new(5, 1_000).unwrap());
+        gate.petition_behavior(
+            &auth,
+            &mut deadbands,
+            &mut nested,
+            sub,
+            BehaviorPetition::new(
+                &trail_scope(),
+                0,
+                Actuation::new(0, 0),
+                vec![insert("trail/first")],
+            ),
+        )
+        .unwrap();
+
+        let stale = nested.revision();
+        gate.petition(
+            &auth,
+            &mut nested,
+            sub,
+            &trail_scope(),
+            stale,
+            vec![insert("trail/concurrent")],
+        )
+        .unwrap();
+        let error = gate
+            .petition_behavior(
+                &auth,
+                &mut deadbands,
+                &mut nested,
+                sub,
+                BehaviorPetition::new(
+                    &trail_scope(),
+                    stale,
+                    Actuation::new(10, 1_000),
+                    vec![insert("trail/retry")],
+                ),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            GateError::Commit(CommitError::RevisionConflict { .. })
+        ));
+
+        let current = nested.revision();
+        gate.petition_behavior(
+            &auth,
+            &mut deadbands,
+            &mut nested,
+            sub,
+            BehaviorPetition::new(
+                &trail_scope(),
+                current,
+                Actuation::new(10, 1_000),
+                vec![insert("trail/retry")],
+            ),
+        )
+        .unwrap();
     }
 }

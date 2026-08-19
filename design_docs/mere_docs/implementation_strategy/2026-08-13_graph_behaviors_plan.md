@@ -3,10 +3,10 @@
 **Date:** 2026-08-13
 **Status:** W0 through W5 landed 2026-08-13, with a green headed receipt
 (`turnstone scenarios/behaviors_wake.scn`, captures under
-`Code/testing/turnstone/behaviors_wake`). Three follow-ups are named in Progress
-rather than done: the review row clips in the palette; the clock, app-tier
-and budget slices have no headed receipt of their own; and cascade *frequency*
-is unbounded where its depth is not (named 2026-08-16). Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
+`Code/testing/turnstone/behaviors_wake`). Two follow-ups remain: the review row
+clips in the palette, and the clock, app-tier and budget slices have no headed
+receipt of their own. The cascade-frequency gap named 2026-08-16 closed at the
+actuation boundary on 2026-08-18. Originally open. Designed with Mark 2026-08-13 (the "neat lil ideas"
 conversation: one node triggering others nearby to refresh, summaries from
 connected nodes captured into a knot note, and the family of automations
 behind them).
@@ -462,6 +462,25 @@ not automation).
 
 ## Progress
 
+- 2026-08-18 (frequency bound / signaling target 3 complete): deadband belongs
+  to **actuation**. Suppressing a watch cannot protect the journal from a
+  scheduled or hand-run writer. A behavior may now declare `-- @deadband
+  <minimum-change> <minimum-interval-ms>` and report exactly one signed scalar
+  in its own stable units through `mere.output(value)`. Servitor owns the
+  positive-dimension declaration, persisted last-accepted output and host-fed
+  instant, named refusal, and two-phase `Gate::petition_behavior`: check before
+  commit, move the baseline only after the subject's graph entry lands. This
+  preserves replay and means a stale revision conflict does not consume the
+  interval. Turnstone shows the declaration in install review, routes manual,
+  watch and scheduled resident runs through the same check before action
+  lowering, persists the state beside watches, and removes it on uninstall.
+  The named slow-cycle receipt runs long-separated `0/1` outputs and leaves the
+  graph revision unchanged; the host receipt writes once, reloads the session,
+  then names the deadband refusal without growing the journal. Servitor is
+  65/65 with warning-denied Clippy; Turnstone is 316 passed and 4 explicitly
+  ignored endpoint receipts. These are automated library receipts, not a new
+  headed scenario.
+
 - 2026-08-16 (the frequency gap, from the facet signaling round): this plan
   bounds cascade **depth** and nothing bounds cascade **frequency**. A search
   across servitor for rate, throttle, debounce, hysteresis, deadband, cooldown
@@ -476,10 +495,9 @@ not automation).
   denizen does not shrink the journal it wrote. Suggested shape is a **declared
   deadband** (a minimum change, a minimum interval) on the behavior rather than
   discipline each modder reinvents correctly, which also fits the existing
-  posture that the budget is a setting with no unlimited value. Open: whether
-  deadband belongs to sensing (suppress the wake) or actuation (suppress the
-  write), noting that the actuation side also bounds writers that were never
-  woken. Recorded with its reasoning in
+  posture that the budget is a setting with no unlimited value. Closed
+  2026-08-18 at actuation: that side also bounds writers that were never woken.
+  Recorded with its reasoning in
   [facet signaling and control loops](../technical_architecture/2026-08-16_facet_signaling_and_control_loops.md)
   §6; no code changed.
 

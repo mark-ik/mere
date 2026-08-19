@@ -341,7 +341,7 @@ single-root host, woodshed then signalman its consumers, and swatches are the
 agreed cross-product graph-view contract. Cambium doc updates land in
 `genet/components/cambium/docs/` when a slice opens.
 
-**C1. Satisfaction state in host chrome - BLOCKED 2026-08-16, not by effort.**
+**C1. Satisfaction state in host chrome - LANDED 2026-08-16.**
 Context: A1's scene-side record is only honest if a user can see it.
 Tasks: with A1's consumer, surface pin state in the host's widget chrome
 (a pinned badge; an unmet-pin state visibly distinct); keep the vocabulary
@@ -688,3 +688,33 @@ not settled without it.
   Not built: a speculative cambium surface with no consumer. That is exactly
   the work the five gated targets are being held back from, and C1 does not get
   an exemption for being adjacent to something that just landed.
+- 2026-08-16: **C1 landed, after a wrong "blocked" call that Mark caught.**
+  The earlier entry claimed C1 could not be built because nothing in mere
+  consumes cambium. That was false. `ports/graphshell/web` depends on cambium,
+  sceno, and graphshell together, and `ports/graphshell/src/web.rs` already
+  renders a mounted `SceneSnapshot` in `remote_scene`. The claim came from a
+  grep with relative paths run after the shell cwd had been reset, so it
+  searched a directory with no `ports/` in it and returned nothing; an empty
+  result was read as an answer. That is the wrong-cwd trap, hit one turn after
+  citing it about a Cargo patch table.
+  Chasing the real host then exposed a second, worse gap: `SceneTables` carried
+  `unmet_holds` but not `honored_holds`, because the honored half was added to
+  `Scene` after the unmet half had already been wired through `from_dense`. So
+  A1's done-condition was only half met on the wire. A remote viewer could see
+  that a pin failed but not that a pin succeeded, leaving every unremarked item
+  ambiguous between unpinned and pinned-and-honored. Both halves now cross, with
+  one test asserting them together rather than separately, since testing each
+  alone is what let the gap open.
+  C1 itself: `graphshell_client::frozen::Satisfaction` reads both halves off a
+  snapshot and answers the two questions a host has, whether a given instance is
+  holding an authored position and what the chrome line should say. It lives in
+  the client rather than the host because `web.rs` is
+  `#![cfg(target_arch = "wasm32")]` and no native test can reach it; a summary
+  nobody can test is one that quietly goes wrong. The host draws a held edge
+  outside a pinned card, so an item sitting where a person put it no longer
+  looks identical to one the arrangement happened to place there, and the chrome
+  carries the line. An unpinned scene says nothing at all, because zero of zero
+  is noise.
+  Receipts: three native tests on the summary, one wire test on the pair, and
+  `cargo check -p graphshell-web --target wasm32-unknown-unknown` for the host,
+  which is the only check that covers a cfg-gated file at all.
