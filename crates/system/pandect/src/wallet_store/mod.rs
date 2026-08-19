@@ -95,7 +95,8 @@ pub const PERSONA_EPOCH_BRIDGE_FILENAME: &str = "private-epoch-bridge.json";
 // bootstrap. The re-exports keep every existing consumer path
 // (`pandect::wallet_store::*`) compiling unchanged.
 pub use identity::carry::{
-    CapabilitySlotRef, CarryHashFn, CarryRef, CarryRefParseError, DeviceExposure, DeviceGrantRef,
+    CapabilitySlotRef, CarriagePolicy, CarryHashFn, CarryRef, CarryRefParseError, DeviceExposure,
+    DeviceGrantRef,
     DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, IdentityWalletManifest,
     KeyEpochId, LocalDeviceIdentity, PersonaChainRoot, PersonaEpochBridge, PersonaWalletManifest,
     PersonaWalletRef, PrivateEpochRecord, PrivateRoots, PublicRoots, RecoveryPolicy,

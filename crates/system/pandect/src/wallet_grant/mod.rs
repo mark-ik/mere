@@ -144,7 +144,8 @@ pub use enroll::{
     install_remote_auth_enrollment_bundle_with_wrapping_key,
 };
 pub use epochs::{
-    BlindedEpochIndex, blinded_epoch_index, unwrap_private_epoch_material,
+    BlindedEpochIndex, BlindedSlotId, blinded_epoch_index, blinded_slot_id,
+    unwrap_private_epoch_material,
     wrap_private_epoch_material,
 };
 pub use errors::{

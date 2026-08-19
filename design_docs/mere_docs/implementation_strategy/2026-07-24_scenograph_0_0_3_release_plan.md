@@ -1,13 +1,14 @@
-# Scenograph Freeze Plan
+# Scenograph 0.0.3 Release Plan
 
-**Status (2026-07-24): planned; implementation has not started.**
+**Status (reconciled 2026-08-19): completed historical release plan.** The
+published 0.0.3 artifacts remain a release baseline. Development on `main`
+continues through explicit score and crate versions.
 
 The [scene contract note](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md)
-ends with four items standing between the family and a frozen 0.0.3, and the
+ended with four items standing between the family and its 0.0.3 release, and the
 [projection proofs plan](2026-07-21_projection_proofs_plan.md) has finished
-the proving half. Woodshed gates its own scene-contract work on this freeze
-(`woodshed/design_docs/2026-07-11_stage_set_tools_plan.md`: "what remains is
-the freeze, not the proof"), so this is the cheapest unblock available.
+the proving half. Woodshed gated its own scene-contract work on a published
+baseline, so this was the cheapest unblock available.
 
 This plan answers the four with code evidence rather than deliberation, per
 the note's own standard: a question is answered by the consumer that forces
@@ -15,7 +16,7 @@ it, and unforced surface does not ship.
 
 ```text
 F1 intents (delete question)  F2 measure (delete module)
-F3 channels (add, forced)     F4 pick (add, forced)   -> 0.0.3 freeze
+F3 channels (add, forced)     F4 pick (add, forced)   -> 0.0.3 release
 ```
 
 ## Findings (verified against the code 2026-07-24)
@@ -26,7 +27,7 @@ path), isometry and turnstone (git, `merely-made/mere` branch `main`), and mere'
 own `ports/graphshell`. The archived `repos/graphshell` still pins
 `scenograph.git`, a repository the 2026-07-23 consolidation absorbed; that
 copy is dead (its last commit is "Archived: moved in the 2026-07-23 repo
-consolidation") and is not a freeze blocker, but no live work should be done
+consolidation") and was not a release blocker, but no live work should be done
 against it.
 
 **F1 evidence.** `chirograph` carries a complete intent vocabulary:
@@ -186,7 +187,7 @@ miss returns `None` rather than a nearest match.
 **Done when:** a client with only a snapshot can resolve a point to the same
 `InstanceId` a source-owning host would.
 
-### S4. Freeze and cut 0.0.3
+### S4. Release 0.0.3
 
 Confirm the family's crates.io publish state before cutting (at `0.0.x`
 every version is semver-incompatible in Cargo, so a removed module needs no
@@ -200,7 +201,7 @@ Re-resolve isometry and turnstone against the new commit, since both track
 `merely-made/mere` branch `main`.
 
 **Done when:** the note has no open questions, `woodshed` can adopt against a
-stated contract, and the freeze list in its stage-set plan is answered rather
+stated release baseline, and the dependency list in its stage-set plan is answered rather
 than deferred.
 
 ## Non-goals
@@ -280,15 +281,15 @@ before this work, verified by stashing.
    site is inside mere.
 
 **Remaining:** ~~publish the four crates~~ **published 2026-07-24 23:45 UTC**
-(all four 0.0.3s went up in dependency order four minutes after the freeze
+(all four 0.0.3s went up in dependency order four minutes after the release
 commit; verified 2026-07-25 against the registry — the published sceno has no
 `measure.rs` and the published scenotime carries `pick.rs`, so the artifacts
 are this cut. A second publish attempt on 2026-07-25 correctly errored
 "already exists"; nothing was missing). ~~Still remaining: re-resolve isometry
-and turnstone against 0.0.3, and tell woodshed the contract is frozen.~~
+and turnstone against 0.0.3, and tell woodshed the baseline is published.~~
 **Closed 2026-08-10**: both locks verified at 0.0.3 for sceno, scenomise,
 and scenotime (each tracks `merely-made/mere` main and had re-resolved along
-the way), and the freeze notification is delivered as a banner on woodshed's
+the way), and the release notification is delivered as a banner on woodshed's
 stage-set plan plus the
 [scenograph expansion brief](../research/2026-08-10_scenograph_expansion_brief.md),
 whose L1 lane owns woodshed adoption.

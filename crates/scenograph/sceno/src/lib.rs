@@ -59,6 +59,6 @@ pub use scene::{
     Space, SpaceId,
 };
 pub use score::{
-    Arrangement, Board, Geographic, HeldPlacement, Hold, HonoredHold, Hulls, Placement,
+    Arrangement, Geographic, Grid, HeldPlacement, Hold, HonoredHold, Hulls, Placement,
     SCORE_VERSION, Score, ScoreItem, Spiral, SpiralCurve,
 };

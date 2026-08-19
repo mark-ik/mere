@@ -105,7 +105,7 @@ neither portable crate nor serialized scene type mentions either product.
     `arrangements::registry` (the arrangement register proper) and the
     canvas's `CANVAS_LAYOUT_STRATEGIES` (the picker catalog, whose ids
     distinguish dispatchable variants like `kanban.default` from
-    `kanban.community`, which the registry does not). The Board/Fractal
+    `kanban.community`, which the registry does not). The Columns/Fractal
     rename had to be applied in both, and nothing enforces agreement. The
     picker correctly reads the canvas table; unifying them, or deriving one
     from the other, is the next cleanup and belongs before a third table
@@ -135,13 +135,13 @@ not collide.**
 | `graph_layout:grid` | Grid | plain already | |
 | `graph_layout:radial` | Radial | plain already | volvelle = a *moot* radial, different concept |
 | `graph_layout:timeline` | Timeline | plain already | |
-| `graph_layout:kanban` | **Board** | **RATIFIED 2026-08-18** | was Kanban (jargon); Mark accepted the standing proposal |
+| `graph_layout:kanban` | **Columns** | **RATIFIED 2026-08-19** | categorical column placement; distinct from portable regular-cell Grid |
 | `graph_layout:penrose` | Penrose | keep | aperiodic tiling; **not** Mosaic (proper noun ok) |
 | `graph_layout:lsystem` | **Fractal** | **RATIFIED 2026-08-18** | was L-System (jargon); Mark accepted the standing proposal |
 | `graph_layout:semantic_embedding` | Semantic | keep | a coordinate source for **Plotted**, below |
 | (spectral) | Spectral | keep | jargon; no clean plain word |
 | ~~*(future, P4)* adjacency tiling~~ | ~~Mosaic~~ | **RELEASED to the scene register 2026-08-18** | Mosaic's placement lever is **Grid** (packing variant); see the ruling below |
-| *(future, P5)* data-given coordinates | **Plotted** | proposed → ratify | positions supplied by the data and preserved relative to each other, never force-settled. Generalizes Semantic (embedding coordinates) and carries Atlas's geographic case |
+| *(future, P5)* data-given coordinates | **Plotted** | **RATIFIED 2026-08-18** | positions supplied by the data and preserved relative to each other. Generalizes Semantic and may converge with Geographic when a consumer forces it; physics is orthogonal |
 | ~~*(future, P5)* geographic~~ | ~~Atlas~~ | **RELEASED to the scene register 2026-08-18** | Atlas's placement lever is **Plotted**, above; see the ruling below |
 | *(future)* burn-kinship regions | **Hulls** | reserved | brand "hulls"; ties to the fields/hulls primitive |
 | *(future)* joint-constrained bodies | **Armature** | **ratified 2026-07-31, DISPLAY NAME ONLY** | positions fixed by attachment frames, never force-settled — the nested-graph-scale sibling of orrery. First consumer: the games wing's live body swatch (a critter's body is a nested graph; see `mesocosm/design_docs/2026-07-30_body_pipeline_and_host_probe_plan.md` §3). **Never a crate name**: `armature` is taken on crates.io (an event-driven stateful actor framework, 0.1.1, 2021, dormant), and its domain is adjacent to **armillary**, so publishing under it would collide twice over. The `graph_layout:*` id stays the persistence key, as for every arrangement |
@@ -167,8 +167,9 @@ traversal + phyllotaxis config word (Spiral-the-display-name is unambiguous at
 the picker level). Isometry's `overmap` is a *surface* (its travel map), the
 same surface-vs-arrangement split as orrery-vs-force-directed; when isometry
 consumes scenograph (P4) it keeps "overmap" and may render via the Atlas
-arrangement. Only Phyllotaxis→Spiral is renamed now (wired + greenlit); the
-`Board`/`Fractal` proposals await Mark's ratification, not applied unilaterally.
+scene. Phyllotaxis→Spiral and L-System→Fractal are landed. The former Board
+display name is now Columns so it cannot collide with portable Grid or the
+Tabletop scene.
 The proper consistency end-state is the checkmarked layout picker deriving its
 labels from the registry `display_name` (owed follow-up), so turnstone stops
 hardcoding labels; today the hardcoded palette label is kept *matching* the
@@ -274,7 +275,7 @@ registry.
   representation degrades card→glyph with recency, focus stays live) is the
   remaining half of P3.
 - 2026-07-22: **P3/P4/P5 boundary proof implementation.** `sceno::Score`
-  now serializes the neutral `Spiral`, `Board`, and `Geographic` arrangements,
+  now serializes the neutral `Spiral`, `Grid`, `Geographic`, and `Hulls` arrangements,
   measured footprints, selected representation slots, opaque source refs, and
   generation. `scenomise::solve` realizes it footprint-aware. Mere's graph
   adapter maps durable visit recency to score order, selects
@@ -357,7 +358,7 @@ registry.
   positions only while paused, so playing does not pin the nodes. The full 2×2
   is now reachable and receipted (`proof3_physics_capability`): Spiral paused
   (crisp analytic placement) → Spiral played (sim relaxes from the seed, the
-  arrangement still selected) → free graph frozen (the cell that was
+  arrangement still selected) → free graph paused (the cell that was
   unreachable while physics was welded to the mode). "Force-directed" is
   demoted to what it always was: *no* analytic arrangement with physics
   running. Host: `Action::TogglePhysics` + palette "Play/pause physics" +

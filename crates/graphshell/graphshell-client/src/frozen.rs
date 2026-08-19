@@ -9,6 +9,10 @@
 //! anatomy instead: WAI's guidance for complex images, Graphics ARIA's roles,
 //! and SVG's structural title/desc pairing.
 //!
+//! "Frozen" here means noninteractive. The same scene may replace this with
+//! an interactive realization; the term does not describe protocol stability
+//! or a transport artifact.
+//!
 //! This module produces a *structure*, not markup. A host renders it into its
 //! own accessibility surface, whether that is a genet DOM tree, an AccessKit
 //! node tree, or an HTML table, and the same receipt can be asserted in a test

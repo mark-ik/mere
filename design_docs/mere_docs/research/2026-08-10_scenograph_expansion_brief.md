@@ -12,8 +12,8 @@ surface does not ship.
 **Related**:
 [scenograph_content_catalog](2026-08-18_scenograph_content_catalog.md)
 (the content pass this brief prepared for, 2026-08-18),
-[scenograph_freeze_plan](../implementation_strategy/2026-07-24_scenograph_freeze_plan.md)
-(0.0.3 frozen and published 2026-07-24), the scene contract note
+[scenograph_0_0_3_release_plan](../implementation_strategy/2026-07-24_scenograph_0_0_3_release_plan.md)
+(0.0.3 published 2026-07-24), the scene contract note
 (`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),
 [projection_proofs_plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md),
 woodshed's stage/set/tools plan
@@ -23,18 +23,18 @@ woodshed's stage/set/tools plan
 
 ## 1. Where the family stands
 
-- **0.0.3 is frozen and published**: sceno (instance identity, footprints,
+- **0.0.3 is published; 0.0.4 is the current development line**: sceno (instance identity, footprints,
   transforms, `contains`, open emphasis channels), scenomise (solve/relax),
   scenotime (epoch/revision identity, diff, snapshot, default pick),
   scenograph facade. 45 family tests.
 - **Consumers**: mere by path; isometry and turnstone by git (branch `main`);
   `ports/graphshell` including the remote client, which is the standing proof
   that scenes cross a wire to a viewer with no source access.
-- **Loose ends the freeze recorded** (**re-checked 2026-08-18**): the
+- **Loose ends the 0.0.3 release recorded** (**re-checked 2026-08-18**): the
   isometry and turnstone re-resolves are **closed, and were never actually
   outstanding** — both lock `sceno` 0.0.3, `cargo update -p sceno` moves zero
   packages, and both compile green, because a git dep on branch `main`
-  followed the freeze without anyone acting. Woodshed did get the
+  followed the release without anyone acting. Woodshed did get the
   notification (its stage-set plan carries a 2026-08-10 gate-is-open banner)
   but **depends on no scenograph crate at all**, so L1 is a founding rather
   than a re-resolve, and it is the whole of the remaining gate.
@@ -49,13 +49,12 @@ woodshed's stage/set/tools plan
 The family name promises a scenery workshop; today it ships placement. Three
 tiers make the gaps addressable:
 
-- **Scene** (frozen): placed instances, footprints, channels, routed
+- **Scene** (portable result): placed instances, footprints, channels, routed
   relations, pick. sceno and scenotime own it.
-- **Arrangement** (exists, mere-side only): the composition spine's state:
-  which members, projected how. `canvas/arrangements` holds it; workbench
-  (tree) and orrery (cartography) are its two projections. It is not yet a
-  portable concept: it lives as mere library state, invisible to remote or
-  embedded consumers.
+- **Arrangement** (portable analytic core plus a larger local registry):
+  `score::Arrangement` names Spiral, Grid, Geographic, and Hulls. Mere's local
+  registry also carries Radial, Stack, Timeline, Columns, Penrose, Fractal,
+  Semantic Embedding, and Spectral.
 - **Backdrop** (missing): the environment behind and beneath placed content.
   The word appears exactly once in the corpus (the orrery's background
   palette in the apparatus theme plan); every host paints its own background
@@ -73,9 +72,9 @@ applied to a dataset.
 
 ## 3. Lanes, each with its forcing consumer
 
-### L1. Woodshed adoption (open now; the release gate)
+### L1. Woodshed adoption (data founded; rendering open)
 
-The stage-set plan's model is ready-made for the frozen contract: the Set
+The stage-set plan's model is ready-made for the portable contract: the Set
 projected as a graph (each staged Card occurrence a numbered node, Set order
 a typed `Next` edge), one `RoutedRelation` per reason (diatonic, shared-tone,
 voice-leading, practiced-after) per the cells-as-edges ruling, expansion
@@ -84,7 +83,7 @@ half is closed (§1); what remains is the founding: woodshed takes its first
 `sceno` dependency and builds Stage's projection through the `scene_out`
 shape, sourced from `woodshed-graph` (the theory catalog already projected
 into the chartulary graph, which is the Set's graph form). **Done when**
-Stage renders a Set graph through the frozen contract with fanned relations,
+Stage renders a Set graph through the portable contract with fanned relations,
 before woodshed's release.
 
 **Founded 2026-08-18.** woodshed took its first `sceno` dependency;
@@ -113,19 +112,19 @@ what `hit` overrides are for). **Entrance gate**: prototype against
 isometry's map and woodshed's stage; ship whichever shape both force,
 nothing either fails to force.
 
-### L3. Portable arrangements
+### L3. Portable arrangement choice and citation
 
-The tear-out trichotomy and one-app-state-N-windows already treat a window
-as a lens over an arrangement. Missing is arrangement identity that
-*travels*: persist one (muniment), share it across windows (proven), then
-across devices and peers (graphshell remote, commons). This is the lane
-where "a graph-shaped session" becomes a durable, addressable object.
-**Entrance gate**: the first consumer that asks for the same arrangement by
-name from a second window, device, or peer.
+The portable arrangement enum now exists, and mer3ly met the first-device gate
+by sharing an arrangement choice in its URL-hash scene index. The remaining
+question is the common citation format: a durable record that names the
+reading, arrangement, and small authored delta across windows, devices, and
+peers. Shelfmark records the proposed form but does not become a common format
+until a second shipping consumer forces it.
 
-### L4. Scenes as documents
+### L4. Projection captures as documents
 
-scenotime snapshots already cross a wire; nothing stores one. A snapshot as
+Scenotime snapshots already cross a wire; nothing stores one. A projection
+capture as
 an eidetic artifact yields projection save/restore, VTT session records
 (isometry), shareable set lists (woodshed), and replay for the games wing.
 Cheap because the encoding exists; the work is identity and retention, which
@@ -150,13 +149,12 @@ Mark's framing is the method: the unexpected generalizations will come from
 the content, so this brief's job is preparation, not invention. Each lane
 names its forcing consumer up front; content-driven surprises get placed
 against §2's tiers (is this scene, arrangement, or backdrop?) before any new
-module ships. The freeze plan's standard stands.
+module ships. The 0.0.3 release plan's evidence standard stands.
 
 ## 5. Sequence
 
-L1 now; it is woodshed's release gate and costs mostly wiring. L2 opens the
-moment isometry or woodshed touches environment work. L4 may leapfrog L3 if
-a save-my-projection ask arrives first. L5 rides the first continuous
-re-projection. None of this unfreezes 0.0.3: L2, L4, and L5 are additive
-(0.0.4 material), and L3 stays mere-side until portability forces contract
-surface.
+L1's data half is founded and its headed rendering half remains. L2 opens with
+the two backdrop prototypes. L3's first-device proof is met, while the shared
+shelfmark format waits for a second consumer. L4 opens on a
+save-my-projection ask. L5 rides the first continuous reprojection. Published
+0.0.3 remains historical; current work advances the versioned 0.0.4 line.

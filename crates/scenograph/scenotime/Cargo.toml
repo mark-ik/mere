@@ -1,6 +1,6 @@
 [package]
 name = "scenotime"
-version = "0.0.3"
+version = "0.0.4"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,7 +11,7 @@ keywords = ["projection", "scene", "incremental", "runtime"]
 categories = ["visualization", "caching"]
 
 [dependencies]
-sceno = { version = "0.0.3", path = "../sceno" }
+sceno = { version = "0.0.4", path = "../sceno" }
 serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]

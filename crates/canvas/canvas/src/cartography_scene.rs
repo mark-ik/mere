@@ -148,12 +148,12 @@ pub const CANVAS_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
     ("spectral.default", "Spectral"),
     ("penrose.default", "Penrose"),
     ("lsystem.default", "Fractal"),
-    // Axis-driven, now dispatched: the host axes are graph-derived. Board groups by URL host
+    // Axis-driven, now dispatched: the host axes are graph-derived. Columns groups by URL host
     // (`by site`) or by graph-structural **community** (`by cluster`, the Louvain partition from
     // intel/signals); timeline orders by node-creation order. (Arrangements — kanban/timeline;
     // graph signals — community to columns.)
-    ("kanban.default", "Board (by site)"),
-    ("kanban.community", "Board (by cluster)"),
+    ("kanban.default", "Columns (by site)"),
+    ("kanban.community", "Columns (by cluster)"),
     ("timeline.default", "Timeline (by order)"),
 ];
 

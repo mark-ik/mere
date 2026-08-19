@@ -3,7 +3,8 @@
 Status: research catalog and boundary map  
 Date: 2026-08-15  
 Scope: portable graph readings, visual encodings, arrangements, realization, and interaction  
-Supersedes as a catalog: `2026-08-13_scenograph_content_catalog.md`  
+Governs: the primitive vocabulary and promotion rules used to construct scenes  
+Consumed by: [`2026-08-18_scenograph_content_catalog.md`](2026-08-18_scenograph_content_catalog.md), the collection of complete scene recipes  
 Incorporates: the projection-engine, graph-projections, Scenograph expansion, node-representation, and field-region research listed under [Related Mere research](#related-mere-research)
 
 ## Ruling
@@ -19,9 +20,15 @@ This is why an Excel-style chart, a Mermaid-style diagram, and Mere's current sp
 3. which encodings and arrangements they apply;
 4. how a projected object maps back to source authority;
 5. which interactions are permitted;
-6. how the result is realized, including a static or frozen realization.
+6. how the result is realized, including a static realization.
 
-The catalog is therefore a grammar of projection capabilities. Named scenes remain useful as product recipes composed from that grammar.
+The catalog is therefore a grammar of projection capabilities. Scenograph scenes are compositions of this grammar; the content catalog collects and names those complete recipes. A scene that needs a missing primitive must first supply the forcing proof for that primitive. The dependency runs one way:
+
+```text
+projection grammar -> scene recipe -> product adapter and authority
+```
+
+`sceno` carries the grammar and scene result. It does not import the scene catalog or know product scene names.
 
 ## The projection stack
 
@@ -41,7 +48,7 @@ authority -> reading -> encoding -> arrangement -> scene -> realization
 | Realization | DOM, SVG, canvas, GPU, terminal, image, print, accessibility tree | Graph authority |
 | Intent | Select, navigate, filter, edit, annotate, reproject, direct manipulation | Silent scene mutation presented as source truth |
 
-Interaction is orthogonal to realization. The same scene may be interactive in Mere, read-only in a remote viewer, or frozen into SVG, PNG, PDF, or an accessible table. `frozen` is a realization policy, not an arrangement mode.
+Interaction is orthogonal to realization. The same scene may be interactive in Mere or rendered as a static SVG, PNG, PDF, or accessible table. In Graphshell, `FrozenScene` specifically names a noninteractive realization which can be replaced by an interactive realization from the same scene. It does not describe protocol stability or transport.
 
 For movable spatial projections, the useful placement policies are:
 
@@ -172,16 +179,16 @@ An arrangement computes geometry under constraints. A reading may support severa
 
 | Family | Variants | Current Mere position |
 | --- | --- | --- |
-| Authored spatial | Free placement, pinned board, tabletop | Expressible through positions and constraints; product recipes remain host-owned |
+| Authored spatial | Free placement, pinned ground, tabletop | Expressible through positions and constraints; product recipes remain host-owned |
 | Force and constraint | Spring, collision, gravity, clusters | Landed in Seiche; portable score promotion requires a forcing consumer |
 | Grid and stack | Rows, columns, masonry, ordered stack | Landed in the local arrangement registry |
-| Axial and lanes | Timeline, Gantt, swimlane, Kanban | Timeline and Kanban are local registry entries; generalized axes and guides are a gap |
+| Axial and lanes | Timeline, Gantt, swimlane, categorical columns | Timeline and Columns are local registry entries; generalized axes and guides are a gap |
 | Radial and spiral | Radial, phyllotaxis, polar, concentric | Radial and spiral are landed locally; spiral is portable in `score::Arrangement` |
 | Tree and DAG | Tidy tree, cluster, layered DAG, radial tree | Contract gap pending hierarchy and schematic proofs |
 | Space-filling hierarchy | Treemap, partition, sunburst, pack | Contract gap pending a hierarchy proof |
 | Matrix | Adjacency matrix, heatmap, table matrix | Expressible as a reading; general cell marks and guides remain a gap |
 | Flow | Sankey, alluvial, river | Contract gap pending aggregate-flow proof |
-| Circular relation | Chord, arc diagram | Expressible in scene geometry; reusable recipe not landed |
+| Circular relation | Chord, arc diagram, Rosette | Rosette is landed through Knot over two text datasets |
 | Geographic | Map projection, region, route, hull | Geographic and hull arrangements are portable; basemap/backdrop remains a gap |
 | Cartesian statistical | Bar, line, area, scatter, distribution | Contract gap in derived marks, scales, and guides |
 | Tiling and packing | Mosaic, bin pack, Voronoi, Penrose | Penrose is landed locally; generic tiling remains recipe-level |
@@ -189,7 +196,7 @@ An arrangement computes geometry under constraints. A reading may support severa
 | Nested and faceted | Small multiples, compound nodes, nested canvases | Nested spaces are portable; facet composition needs a forcing proof |
 | Three-dimensional | Spatial volume, layered depth, immersive graph | Deferred until a real second consumer forces portable depth semantics |
 
-Portable `score::Arrangement` currently names Spiral, Board, Geographic, and Hulls. Mere's local arrangement registry is intentionally broader. The difference is evidence: a local implementation may be useful before it has earned a portable wire contract.
+Portable `score::Arrangement` version 3 names Spiral, Grid, Geographic, and Hulls. `Grid` means regular cells. The local `Columns` arrangement means categorical column placement. `Plotted` is the ratified future name for direct supplied-coordinate placement when a forcing proof converges the current coordinate families. `Tabletop` remains a complete authored-ground scene, not an arrangement synonym. Mere's local arrangement registry is intentionally broader: Grid, Radial, Stack, Spiral, Timeline, Columns, Penrose, Fractal, Semantic Embedding, and Spectral. A local implementation may be useful before it earns a portable wire contract.
 
 ### 7. Interaction and change over time
 
@@ -254,7 +261,7 @@ The earlier Scenograph catalog's names remain useful for product design. They sh
 | --- | --- | --- |
 | Mosaic | Tiling arrangement + image/snapshot marks + optional groups | Product recipe |
 | Atlas | Geographic reading + map projection + basemap + symbols/routes/regions | Product recipe; backdrop contract gap |
-| Tabletop | Authored board + zones/props + collision + free/pinned items | Product recipe |
+| Tabletop | Authored ground + zones/props + collision + free/pinned items | Product recipe |
 | Chronicle | Temporal reading + axis/lanes + epochs/trails | Product recipe; guide gap |
 | Circuit | Layered or authored arrangement + ports + orthogonal routes | Product recipe; port/routing gap |
 | Loom | Ordered lanes + flow quantities + ribbons/routes | Product recipe; flow gap |
@@ -263,16 +270,16 @@ The earlier Scenograph catalog's names remain useful for product design. They sh
 | Fog | Exploration state + field/backdrop + progressive disclosure | Product-owned semantics |
 | Grove | Temporal/freshness reading + spiral or organic arrangement + media marks | Product-owned semantics |
 
-This reclassification keeps the evocative scene names available to Merecat while Scenograph stays usable by unrelated hosts.
+This reclassification keeps the evocative scene names available to Turnstone and the Merely application family while Scenograph stays usable by unrelated hosts.
 
 ## Current boundary map
 
 ### Already present
 
 - `sceno::Scene` carries separate source and instance identity, nested spaces, projected items, transforms, footprints, representation requests, layers, visibility, hit policy, scalar channels, routed relations, and regions.
-- `sceno::Score` supplies a portable arrangement vocabulary and data needed for deterministic solving.
+- `sceno::Score` version 3 supplies a portable arrangement vocabulary, authored holds, and data needed for deterministic solving. `Scene` reports both honored and unmet pins.
 - Scenomise owns placement; Scenotime owns portable epochs, diffs, and picking.
-- Mere's local arrangement registry includes Grid, Radial, Stack, Phyllotaxis/Spiral, Timeline, Kanban, Penrose, L-system, and Semantic Embedding. Force physics lives in Seiche.
+- Mere's local arrangement registry includes Grid, Radial, Stack, Spiral, Timeline, Columns, Penrose, Fractal, Semantic Embedding, and Spectral. Force physics lives in Seiche.
 - Cartography provides a representation registry and host-selectable profiles rather than hardwiring one face for every graph class.
 - Canvas separates face, body, collider, placement, and behavior concerns.
 - Numen defines fields with global, regional, node-attached, and polygon extents plus lifecycle.
@@ -284,9 +291,9 @@ This reclassification keeps the evocative scene names available to Merecat while
 2. **Relation endpoints and routing constraints.** Schematics need ports, endpoint anchors, labels, and orthogonal routing while preserving relation identity.
 3. **Backdrop and underlay data.** Atlas, Tabletop, field rasters, and remote viewing need portable scene context with explicit visibility, collision, hit, and provenance policies.
 4. **Facet and shared-scale composition.** Small multiples need nested scenes with declared shared or independent domains.
-5. **Accessible semantic realization.** A frozen scene needs structure, names, descriptions, values, relations, and a long-form or tabular alternate where the visual alone is insufficient.
+5. **Headed accessibility receipt.** Graphshell now produces semantic structure, HTML, an AccessKit tree, a long-form table, and honored/unmet placement reporting. A headed Genet host and real OS screen-reader traversal remain.
 
-These are research findings, not an instruction to enlarge the frozen Scenograph contract immediately. Each addition needs a projection proof that fails cleanly without it.
+These are research findings, not an instruction to enlarge Scenograph immediately. Each addition needs a projection proof that fails cleanly without it.
 
 ## Promotion rules
 
@@ -319,8 +326,8 @@ The source authority must remain unchanged across these projections. Each proof 
 - a Graphshell carrier round-trips score and scene data deterministically;
 - a second dataset uses the same recipe without product-specific fields;
 - interactive intents route through host authority rather than mutating portable scene facts silently;
-- the same scene can produce an interactive realization and a frozen realization;
-- the frozen result has a navigable semantic structure and sufficient text or tabular description;
+- the same scene can produce an interactive and a static realization;
+- the static result has a navigable semantic structure and sufficient text or tabular description;
 - no product term or renderer resource leaks into portable types;
 - the old duplicated implementation is removed when a portable primitive is promoted.
 
@@ -357,7 +364,7 @@ Eleven systems reviewed against this catalog in the projection grammar report (2
 - [GoTree](https://dl.acm.org/doi/10.1145/3313831.3376297) factors tree visualizations into visual elements, layout, and coordinate system, making node-link and space-filling settings of one family rather than separate types. Transfers: factor `score::Arrangement` at the hierarchy proof instead of adding monolithic variants. The same paper is the caution: a grammar that factors too eagerly gets a complexity cliff.
 - [ATOM](https://www.microsoft.com/en-us/research/publication/atom-a-grammar-for-unit-visualizations/) builds unit visualizations by recursively partitioning data through layout operators until every item has a size and position, and distinguishes unit marks from aggregate marks. Transfers: the recursive-partition operator shape for arrangement factoring, and the unit/aggregate distinction the derived-marks gap needs.
 - [Mosaic](https://idl.uw.edu/mosaic/) makes coordination itself data: a selection is a set of clauses carrying source, clients, predicate, and value, with a declared resolution strategy (single, union, intersect, or crossfilter, where crossfilter means a view is filtered by every brush but its own). Transfers: brush, filter, and focus become named serializable citizens instead of host-only state; the resolution declaration is the part usually left implicit.
-- [Gosling](https://gosling-lang.org/) declares level-of-detail as visibility conditions with an explicit target, measure, operation, threshold, and hysteresis padding. Transfers: the conditions that select a representation rung become part of the spec, so a remote client can re-select on its own zoom and a frozen realization can state why a rung was chosen.
+- [Gosling](https://gosling-lang.org/) declares level-of-detail as visibility conditions with an explicit target, measure, operation, threshold, and hysteresis padding. Transfers: the conditions that select a representation rung become part of the spec, so a remote client can re-select on its own zoom and a static realization can state why a rung was chosen.
 - [Penrose](https://penrose.cs.cmu.edu/) separates `ensure` from `encourage`: a hard constraint that must hold and reports when it cannot, against a soft one that is best-effort by design. Transfers: the vocabulary for placement satisfaction, where a pin is ensure-class and an anchored home is encourage-class, and the answer to WebCoLa's silent-soft failure.
 - [Bluefish](https://bluefishjs.org/) composes diagrams from declarative relations over a scenegraph that carries hierarchy and adjacency together rather than forcing a single tree. Transfers: confirmation that this catalog's compound scene shape is right, and a reason to hold it deliberately. Nothing to add today.
 - [GoFish](https://vis.csail.mit.edu/pubs/gofish/) formalizes Gestalt relations such as uniform spacing, containment, and connection inside one grammar that covers charts and diagrams alike. Transfers: the chart-side evidence for this catalog's central bet, that a chart, a diagram, and a spatial graph can be projections of one system.
@@ -366,7 +373,7 @@ Eleven systems reviewed against this catalog in the projection grammar report (2
 
 ## Related Mere research
 
-- [`2026-08-13_scenograph_content_catalog.md`](2026-08-13_scenograph_content_catalog.md): prior named-scene and representation inventory; retained as historical research.
+- [`2026-08-18_scenograph_content_catalog.md`](2026-08-18_scenograph_content_catalog.md): the dependent catalog of complete scenes composed from this grammar.
 - [`2026-08-10_scenograph_expansion_brief.md`](2026-08-10_scenograph_expansion_brief.md): expansion candidates and ownership questions.
 - [`2026-07-21_projection_engine_prior_art_brief.md`](2026-07-21_projection_engine_prior_art_brief.md): prior-art comparison for the projection engine.
 - [`2026-06-22_graph_projections_research.md`](2026-06-22_graph_projections_research.md): graph projection families and early taxonomy.
@@ -375,10 +382,10 @@ Eleven systems reviewed against this catalog in the projection grammar report (2
 - [`2026-07-21_projection_proofs_plan.md`](../implementation_strategy/2026-07-21_projection_proofs_plan.md): proof sequence and portable projection discipline.
 - [`2026-08-15_projection_grammar_adoption_plan.md`](../implementation_strategy/2026-08-15_projection_grammar_adoption_plan.md): gated targets carrying the projection grammar report's transfers into mere, genet, and cambium.
 - [`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md): scene ownership contract.
-- [`2026-07-24_scenograph_freeze_plan.md`](../implementation_strategy/2026-07-24_scenograph_freeze_plan.md): frozen contract and verification boundary.
+- [`2026-07-24_scenograph_0_0_3_release_plan.md`](../implementation_strategy/2026-07-24_scenograph_0_0_3_release_plan.md): historical 0.0.3 release boundary.
 
 ## Closing thesis
 
 Mere does not need to predict every future diagram. It needs a small projection grammar that preserves identity, derivation, relation, field, space, interaction authority, and semantic accessibility while allowing radically different visual realizations.
 
-That makes charts and diagrams ordinary projections of graph authority. It also leaves room for Merecat's scenes to stay particular, vivid, and product-shaped.
+That makes charts and diagrams ordinary projections of graph authority. It also leaves room for Merely's scenes to stay particular, vivid, and product-shaped.

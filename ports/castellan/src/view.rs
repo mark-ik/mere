@@ -282,6 +282,7 @@ mod tests {
                 label: "Travel laptop".to_string(),
                 mode: DeviceMode::RemoteAuth,
                 exposure: DeviceExposure::HiddenClient,
+                carriage: pandect::CarriagePolicy::default(),
                 grant_ref: None,
             }],
             revoked: vec![device_id],

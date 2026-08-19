@@ -50,6 +50,38 @@ pub fn blinded_epoch_index(
     )
 }
 
+/// Derivation context turning a device's wrapping key into its slot-blinding
+/// key. Its own context, so a slot id can never collide with, or be mistaken
+/// for, an epoch index derived from the same secret.
+const BLIND_SLOT_CONTEXT: &str = "mere.wallet.carriage.blind-slot.v1";
+
+/// The carriage lane's addressing handle for one device-persona certificate,
+/// computable only with the device's wrapping key.
+///
+/// A [`WrappedEpochRecord`] is keyed by its certificate's `DelegationId`, and
+/// publishing that id on an announced topic would be a stable identifier for
+/// one (device, persona) pair, reintroducing at the lane what
+/// [`blinded_epoch_index`] closed at the record (lane grammar, 2026-08-18).
+/// So the slot takes the same construction under its own context. Holder and
+/// issuer can compute it; a replica cannot, and does not need to.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct BlindedSlotId(pub [u8; 32]);
+
+impl std::fmt::Debug for BlindedSlotId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "BlindedSlotId({})", hex::encode(&self.0[..8]))
+    }
+}
+
+/// The carriage slot addressing one certificate's leased record.
+pub fn blinded_slot_id(
+    certificate: identity::delegation::DelegationId,
+    wrapping_key: [u8; 32],
+) -> BlindedSlotId {
+    let blinding_key = blake3::derive_key(BLIND_SLOT_CONTEXT, &wrapping_key);
+    BlindedSlotId(*blake3::keyed_hash(&blinding_key, &certificate.0).as_bytes())
+}
+
 pub(crate) fn wrapped_epoch_aad(persona_id: PersonaId, epoch_id: KeyEpochId) -> Vec<u8> {
     let mut aad = Vec::with_capacity(16 + 16 + 30);
     aad.extend_from_slice(b"mere.wallet.private-epoch.v1");
@@ -131,6 +163,28 @@ mod tests {
     use super::super::test_support::*;
     use super::super::*;
     use super::*;
+
+    #[test]
+    fn blinded_slots_do_not_link_devices_and_stay_stable_per_device() {
+        let certificate = identity::delegation::DelegationId([0x42; 32]);
+        // Two devices holding the same certificate's material produce
+        // different slots, because each has its own pairing-derived key.
+        // That is the unlinkability the lane inherits from the record.
+        assert_ne!(
+            blinded_slot_id(certificate, [1; 32]),
+            blinded_slot_id(certificate, [2; 32])
+        );
+        // One device recomputes the same slot every time, which is what lets
+        // the holder and the issuer address it without publishing anything.
+        assert_eq!(
+            blinded_slot_id(certificate, [1; 32]),
+            blinded_slot_id(certificate, [1; 32])
+        );
+        // The slot and the epoch index derive from the same secret under
+        // different contexts, so one can never be presented as the other.
+        let index = blinded_epoch_index(fixture_persona(), fixture_epoch(), [1; 32]);
+        assert_ne!(blinded_slot_id(certificate, [1; 32]).0, index.0);
+    }
 
     #[test]
     fn wrap_private_epoch_material_round_trips() {

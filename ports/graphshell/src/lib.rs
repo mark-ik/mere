@@ -35,6 +35,8 @@ pub mod native;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod network_carrier;
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+pub mod carriage;
+#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod personal_sync;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod policy_projection;

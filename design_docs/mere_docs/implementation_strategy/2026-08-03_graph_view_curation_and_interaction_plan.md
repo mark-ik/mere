@@ -24,7 +24,7 @@ source, arrangement, and selection on desktop and mobile without private
 references; Mere persists a versioned, content-addressed local live-view recipe
 and lets its source owner explicitly refuse missing, stale, denied, or
 unsupported requests; Graphshell carries an opaque record reference through its
-participant gate; and a frozen scene serializes validated Scenotime tables plus
+participant gate; and a projection capture serializes validated Scenotime tables plus
 each presentation-resource address, so a replay verifies identical tables and
 visual bounds before rendering.
 
@@ -37,7 +37,7 @@ remote Graphshell projection:
 - select, highlight, hide, isolate, and inspect individual relation cells;
 - fold a selection or an explicit hierarchy into one summary object;
 - scrub any arrangement through a source's available history;
-- share the curated live view or freeze the exact projected scene.
+- share the curated live view or capture the exact projected scene.
 
 The first public temporal proof is the repository graph on mer3ly.net. Its
 current graph already morphs among arrangements and refreshes GitHub
@@ -128,7 +128,7 @@ which historical graph is drawn. Every arrangement can be scrubbed.
 | Projected-scene revisions | Scenotime | Stable table ids, snapshots, diffs, picking |
 | Remote actions and authority | Graphshell protocol and participant gate | Advertise, invoke, validate, accept/reject/stale |
 | Live-view sharing | producer/host | Versioned source reference plus proven view-state fields |
-| Exact frozen sharing | Scenotime snapshot carrier | Content-addressed serialized snapshot plus presentation resources |
+| Exact capture sharing | Chirograph projection capture | Content-addressed serialized snapshot plus presentation resources |
 
 Sceno stays an output contract. A share recipe, history provider, gesture state
 machine, or product command does not move into it. A Scenograph contract bump
@@ -234,7 +234,7 @@ There are two user verbs:
 
 - **Share live view** references a source and a historical/live cursor, then
   reprojects against graph content the recipient is allowed to read.
-- **Freeze this scene** publishes the exact Scenotime snapshot and the
+- **Capture this projection** publishes the exact Scenotime snapshot and the
   separately addressed presentation resources needed to reproduce it.
 
 The live record is producer-owned and versioned. It grows only from fields
@@ -423,12 +423,12 @@ Then prove a Mere local-session content-addressed record. Finally carry the
 same source-owned record or opaque reference through Graphshell, subject to
 its participant gate.
 
-Freeze this scene serializes a validated Scenotime snapshot and addresses its
+Capture this projection serializes a validated Scenotime snapshot and addresses its
 presentation resources. Loading either form reports missing source access,
 stale cursor, unsupported arrangement, or unavailable resource explicitly.
 
 **Done when:** a live link reprojects at the same historical cursor and
-curation state; a frozen scene reproduces the same stable tables and visual
+curation state; a projection capture reproduces the same stable tables and visual
 bounds; a recipient without source authority receives a refusal rather than
 redacted data disguised as an empty graph; private references never appear in
 the URL fixture.
@@ -527,7 +527,7 @@ It extends rather than rewrites:
 - [swatch_primitive_plan](2026-06-27_swatch_primitive_plan.md), whose P6
   generic component was deliberately not extracted from two bespoke consumers;
   Cambium plus Isometry now provide a new, real second-consumer seam;
-- [scenograph_freeze_plan](2026-07-24_scenograph_freeze_plan.md), especially
+- [scenograph_0_0_3_release_plan](2026-07-24_scenograph_0_0_3_release_plan.md), especially
   the settled ownership of output identity, scene revision, protocol intent,
   and authority;
 - [graph_write_path_migration_plan](2026-07-01_graph_write_path_migration_plan.md),

@@ -1,6 +1,10 @@
 # The epoch carriage lane grammar
 
-**Decided 2026-08-18, with Mark.** Closes the last gate on
+**Decided 2026-08-18, with Mark. First implementation landed 2026-08-19**:
+`graphshell::carriage` (extension, lease signing and verification, fail-closed
+admission, propose/execute purge), `pandect::blinded_slot_id`, and
+`CarriagePolicy` on the roster's `DeviceRecord`. Divergences from this text are
+noted inline where they occur. Closes the last gate on
 [epoch carriage retention: leased slots](2026-08-14_epoch_carriage_retention_leases.md),
 whose implementation section was left "gated on a carriage lane". Follows
 [epoch carriage and replication](2026-08-14_epoch_carriage_replication.md)
@@ -60,10 +64,14 @@ persona at the transport layer would be self-defeating.
 **Ruling: a sibling topic derived from the graph topic.**
 
 ```
-carriage_topic(graph) = BLAKE3(graph ++ CARRIAGE_TOPIC_MIX)
+carriage_topic(graph) = blake3::derive_key("mere.graphshell.carriage.topic.v1", graph)
 ```
 
-The same idiom `sync_overlay_topic` uses, with its own mix value. What an
+(As built 2026-08-19. This doc first wrote the formula as `BLAKE3(graph ++
+CARRIAGE_TOPIC_MIX)`, mirroring `sync_overlay_topic`'s concat-a-mix-value
+idiom; the implementation uses BLAKE3's own derive-key mode instead, which is
+the same separation property without a loose constant to manage. Upstream's mix
+value exists because their sync topic predates the derivation; ours does not.) What an
 observer learns is that a device on this graph also carries key material, and
 graph peers already know it is on this graph. No new principal is named.
 
@@ -116,6 +124,16 @@ pub struct CarriageExt {
 }
 ```
 
+As built, the signature covers a domain-separated message over `(graph, slot,
+issue, expires_at_ms, payload_hash)` rather than literal header bytes, since
+the signature rides inside the header it would otherwise have to sign. Binding
+the payload hash means a lease vouches for one exact record: swapping the body
+under a kept lease fails verification, and the test asserts it. Verification
+**tries each trusted root** instead of reading an issuer key off the wire,
+because a published issuer key would be a stable per-persona value on an
+announced topic, exactly the grouping the blinding prevents. The root set is
+one per persona of the owner, so the trial loop is nothing.
+
 The body is the existing `WrappedEpochRecord`, unchanged, whose entries are
 already blinded by precondition one.
 
@@ -150,7 +168,12 @@ policy checks, refusing at the first failure:
    Ruling 4's read-side refusal, applied at intake so an expired lease is never
    stored in the first place.
 3. **Three ceilings** hold: the device's carriage TTL, the grant's own expiry,
-   and `CARRIAGE_ABSOLUTE_CEILING_MS`.
+   and `CARRIAGE_ABSOLUTE_CEILING_MS`. (Refined in implementation: only the
+   issuing wallet knows a device's TTL and only a certificate holder knows the
+   grant's expiry, so a bare replica can assert neither. `CarriageCeilings`
+   makes the two knowable bounds optional and the backstop unconditional; each
+   host enforces what its position lets it know, and issue-side code passes
+   both. The backstop is thirty days.)
 4. **Issuer signature** verifies against a trusted root. Note the M5
    consequence inherited here: that is one root per persona, not one master
    key.

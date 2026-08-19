@@ -116,6 +116,7 @@ mod tests {
                 label: "home-server".to_string(),
                 mode: DeviceMode::RemoteAuth,
                 exposure: DeviceExposure::ExposedEgress,
+                carriage: CarriagePolicy::default(),
                 grant_ref: Some(CarryRef::of(b"grant")),
             }],
             revoked: vec![DeviceId::from_uuid(Uuid::from_u128(0x4444))],

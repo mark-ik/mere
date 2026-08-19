@@ -12,12 +12,13 @@ use crate::{Footprint, Rect, Representation, Size2, SourceRef, Vec2};
 
 /// The persisted-score wire version.
 ///
-/// Version 2 adds [`Score::holds`]. It differs from version 1 in nothing else,
+/// Version 3 renames the regular-cell arrangement from `Board` to [`Grid`].
+/// Version 2 added [`Score::holds`]. It differed from version 1 in nothing else,
 /// but an adapter that only understands version 1 must reject a version 2
 /// score rather than accept it, because the one thing it would drop is an
 /// authored placement someone asked to be honored. A silently dropped pin is
 /// the failure this field exists to prevent.
-pub const SCORE_VERSION: u16 = 2;
+pub const SCORE_VERSION: u16 = 3;
 
 /// A complete, serializable projection request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,7 +127,7 @@ impl HeldPlacement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Arrangement {
     Spiral(Spiral),
-    Board(Board),
+    Grid(Grid),
     Geographic(Geographic),
     Hulls(Hulls),
 }
@@ -162,17 +163,17 @@ pub enum SpiralCurve {
     Logarithmic,
 }
 
-/// A regular tile board. Explicit cells preserve authored board coordinates;
+/// A regular cell grid. Explicit cells preserve authored grid coordinates;
 /// items without one flow left-to-right from their ordinal.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Board {
+pub struct Grid {
     pub origin: Vec2,
     pub cell: Vec2,
     pub columns: u32,
     pub gap: f32,
 }
 
-impl Default for Board {
+impl Default for Grid {
     fn default() -> Self {
         Self {
             origin: Vec2::ZERO,
@@ -248,7 +249,7 @@ pub enum Placement {
     /// Use the item's ordinal in the arrangement's deterministic order.
     #[default]
     Ordinal,
-    /// An authored cell for [`Board`].
+    /// An authored cell for [`Grid`].
     Cell { column: i32, row: i32 },
     /// A disclosed geographic or local coordinate for [`Geographic`].
     Coordinate(Vec2),
@@ -293,6 +294,15 @@ mod tests {
         });
         let json = serde_json::to_string(&score).unwrap();
         assert_eq!(serde_json::from_str::<Score>(&json).unwrap(), score);
+    }
+
+    #[test]
+    fn score_v3_names_regular_cells_grid_on_the_wire() {
+        let score = Score::new(Arrangement::Grid(Grid::default()));
+        let json = serde_json::to_string(&score).unwrap();
+        assert_eq!(score.version, 3);
+        assert!(json.contains("\"Grid\""));
+        assert!(!json.contains("\"Board\""));
     }
 
     #[test]

@@ -365,6 +365,7 @@ mod tests {
             label: "Laptop clone".into(),
             mode: DeviceMode::Copy,
             exposure: DeviceExposure::ExposedEgress,
+            carriage: CarriagePolicy::default(),
             grant_ref: None,
         });
         crate::wallet_store::save_device_roster(&root, &roster).unwrap();

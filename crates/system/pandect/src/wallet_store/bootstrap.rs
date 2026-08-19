@@ -9,6 +9,8 @@ use std::path::Path;
 
 use identity::{IdentityProvider, InMemoryProvider, PersonaId};
 
+use identity::carry::CarriagePolicy;
+
 use super::devices::load_local_device_identity;
 use super::devices::local_device_identity_locked_at_startup;
 use super::epochs::ensure_persona_epoch_bridge;
@@ -111,6 +113,7 @@ pub fn ensure_wallet_state(
                     label: device_label.to_string(),
                     mode: DeviceMode::Copy,
                     exposure: DeviceExposure::HiddenClient,
+                    carriage: CarriagePolicy::default(),
                     grant_ref: None,
                 }],
                 revoked: Vec::new(),

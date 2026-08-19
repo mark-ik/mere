@@ -236,10 +236,12 @@ pub use wallet_grant::{
     issue_remote_auth_device_grant,
     issue_remote_auth_device_grant_from_pairing, issue_remote_auth_device_grant_from_ticket,
     mint_remote_auth_pairing_ticket, parse_remote_auth_pairing_code,
-    revoke_remote_auth_device, unwrap_private_epoch_material, wrap_private_epoch_material,
+    BlindedSlotId, blinded_slot_id, revoke_remote_auth_device, unwrap_private_epoch_material,
+    wrap_private_epoch_material,
 };
 pub use wallet_store::{
-    CapabilitySlotRef, DEVICE_ROSTER_FILENAME, DeviceExposure, DeviceGrantRef, DeviceId,
+    CapabilitySlotRef, CarriagePolicy, DEVICE_ROSTER_FILENAME, DeviceExposure, DeviceGrantRef,
+    DeviceId,
     DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, IDENTITY_DIR, IDENTITY_GRANTS_DIR,
     IDENTITY_SEED_FILENAME, IDENTITY_WALLET_FILENAME, IdentityWalletManifest, KeyEpochId,
     LOCAL_DEVICE_IDENTITY_FILENAME, LocalDeviceIdentity, PERSONA_EPOCH_BRIDGE_FILENAME,

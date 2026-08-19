@@ -36,6 +36,7 @@ pub(crate) fn upsert_remote_auth_device_record(
         label: spec.label.clone(),
         mode: DeviceMode::RemoteAuth,
         exposure: spec.exposure,
+        carriage: CarriagePolicy::default(),
         grant_ref: Some(grant_ref),
     });
 }
@@ -82,6 +83,7 @@ pub(crate) fn upsert_local_remote_auth_record(
         label: local.label.clone(),
         mode: DeviceMode::RemoteAuth,
         exposure: DeviceExposure::HiddenClient,
+        carriage: CarriagePolicy::default(),
         grant_ref: Some(grant_ref),
     });
 }

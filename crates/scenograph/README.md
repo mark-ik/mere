@@ -16,7 +16,7 @@ Sources keep their native truth behind adapters; what is shared is the scene
 contract, not a data model. The representation measures content; the projection
 places it.
 
-Four crates, all at 0.0.3, sharing the `sceno-` stem with one function morpheme
+Four crates on the unpublished 0.0.4 development line, sharing the `sceno-` stem with one function morpheme
 each.
 
 | Crate | Contents |
@@ -28,7 +28,7 @@ each.
 
 ## Vocabulary
 
-- `Arrangement`: `Spiral` (with `SpiralCurve`), `Board`, `Geographic`, `Hulls`.
+- `Arrangement`: `Spiral` (with `SpiralCurve`), `Grid`, `Geographic`, `Hulls`.
 - `Placement`: `Ordinal`, `Cell { column, row }`, `Coordinate(Vec2)`.
 - `Footprint`: `Point`, `Circle`, `Rect`, `Polygon`, `Path`.
 - `Representation`: `Glyph`, `Card`, `Sprite`, `Snapshot`, `LivePane`,

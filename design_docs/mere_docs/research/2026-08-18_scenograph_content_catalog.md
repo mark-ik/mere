@@ -14,6 +14,8 @@ scenes proper, reusable total projection regimes; the archetypes survive
 inside the entries as founding and transfer datasets.
 
 **Related**:
+[projection_grammar_catalog](2026-08-15_projection_grammar_catalog.md)
+(the governing primitive grammar; every scene below is composed from it),
 [scenograph_expansion_brief](2026-08-10_scenograph_expansion_brief.md)
 (the stagecraft tiers and lanes this catalog fills), the scene contract note
 (`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`) (the
@@ -33,7 +35,7 @@ Method notes:
 - Every node representation carries node identity: node color and selection
   state read the same in all of them.
 - Decks run utility first, novelty last. **shipped** means it exists today;
-  **core** means it is in the frozen contract's recognized vocabulary;
+  **core** means it is in the portable contract's recognized vocabulary;
   unmarked entries are open-tail candidates.
 - The decks divide labor: decks 1, 3, 4, and 5 name single levers; deck 2
   names scenes, regimes that fix every lever toward one intent. All of it is
@@ -42,19 +44,19 @@ Method notes:
 
 ## 1. Arrangements
 
-The portable tier is `score::Arrangement` (Spiral, Board, Geographic today);
+The portable tier is `score::Arrangement` (Spiral, Grid, Geographic, and Hulls);
 the mere-side layout enum (minimap, body, radial, timeline, grid, force) is
 the richer local end. This deck names candidates for the portable tier.
 `scenomise::relax` is a post-pass over any of them, not a rival entry.
 
 1. **Spiral** (shipped): growth placement from a seed, footprint-aware
    spacing. The default for arriving members.
-2. **Board** (shipped): freeform pinned placement, position is user truth.
-   The VTT and pinboard workhorse.
+2. **Grid** (shipped, portable): regular cells, including explicit authored
+   cells and deterministic ordinal fallback.
 3. **Geographic** (shipped kind): placement anchored to ground coordinates.
    Forcing consumer: Atlas, the sited-radio map.
-4. **Grid**: sort-keyed uniform cells; a masonry variant packs mixed
-   footprints. Forcing: compendium tables, asset pickers.
+4. **Columns** (shipped locally): categorical columns, currently reached by
+   the `graph_layout:kanban` id. Forcing: site and community grouping.
 5. **Ring**: concentric orbits by rank from a focus member. Forcing: the
    connections swatch, focus-and-context views.
 6. **Tree**: tidy layered hierarchy; the workbench projection already walks
@@ -65,8 +67,11 @@ the richer local end. This deck names candidates for the portable tier.
    practice state in woodshed; channel traffic in signalman.
 9. **Path**: members ordered along a routed polyline. Forcing: replay and
    itinerary views, a set walked in order.
-10. **Spread**: stacks and fans with named positions, the deck-of-cards
-    family. Forcing: cleromancy's spread layouts; a VTT hand of tokens.
+10. **Plotted** (ratified direction, not shipped): supplied coordinates with
+    explicit provenance. It is the likely convergence point for direct
+    coordinate placement once a proof shows that Geographic and other plotted
+    readings can share it. Authored fans and stacks stay scene-local until a
+    second consumer forces reusable named slots.
 
 ## 2. Scenes
 
@@ -79,6 +84,13 @@ one. The brand mark's law is the bar for entry: **the projection decides what
 a node is**. A recipe that leaves a node being what the orrery already showed
 is a variant. And the receipt that a recipe is a scene: it re-applies to a
 second dataset and still reads true.
+
+The dependency is deliberate: projection grammar, then scene recipe, then
+product adapter and authority. A recipe may only use grammar vocabulary that
+already exists. If it needs a missing primitive, that primitive gets a
+promotion proof first. A future Mere-side scene register may depend on the
+grammar and compiler types; `sceno` must never import the register or know
+these names.
 
 The orrery is scene zero, the reference regime, and every scene obeys its
 laws: curation over truth (a scene never writes truth), node identity carried
@@ -129,7 +141,7 @@ arrives at a second dataset as a scatter of dots.
    host supplies placement facts; nodes never persist coordinates. Founding:
    sited radios. Transfer: contacts by locale, photos by place, isometry's
    overmap rendering through it. Here a node is a marker.
-3. **Tabletop**: tangible play on a ground that means something. Board
+3. **Tabletop**: tangible play on a ground that means something. Authored
    placement (position is user truth) over the one backdrop that picks;
    nodes as sprites with authored hulls and material character; regions as
    zones; edges withdrawn except measurement ghosts. Grammar: grab, drop,
@@ -170,15 +182,16 @@ arrives at a second dataset as a scatter of dots.
    are the short chords). Candidate forcing consumer: knot, as a
    creative-writing analysis scene over a document's interior; derived
    analysis edges arrive as revealed cells and crystallize only when the
-   writer keeps them. The sound half's engine is decided (Mark, 2026-08-18):
+    writer keeps them. The sound half's engine is decided (Mark, 2026-08-18):
    **mora** (meter, weight, timing; the moraic unit generalizes across
    stress-, syllable-, and mora-timed typology, and only grapheme-to-phoneme
    is per-language work, a lexicon plus rules, with weight, stress, meter,
    and sonance all general above it) carrying **sonance** as its
    sound-kinship module (rhyme, assonance, alliteration); esp keeps the
-   semantic chords. English v1 rides CMUdict. Unfounded; both names verified
-   free on crates.io 2026-08-18, claim with real code at founding. Here a
-   node is a station on the cycle.
+    semantic chords. English v1 rides CMUdict. Landed through Knot with poem
+    and lyric datasets, using `mora-cmudict`, `mora.perfect-rhyme`, a
+    `ProjectionSession`, and a local carrier. Here a node is a station on the
+    cycle.
 9. **Fog**: the known against the unknown. Visited members lit and placed;
    unvisited ghosts at the fog line; the traveled path is the one privileged
    polyline; the backdrop darkens away from the visited. Grammar: step,
@@ -203,20 +216,21 @@ ones that must.
 3. **Geographic basemap**: tiles or vector ground under Atlas placement. The
    host supplies placement facts; nodes still never persist their own
    coordinates.
-4. **Graph paper**: grid, guides, and snap hints; the board arrangement's
+4. **Graph paper**: grid, guides, and snap hints; the Grid arrangement's
    natural underlay.
 5. **Imported underlay**: a user image or SVG to arrange over, floor plan,
    sketch, schematic. Cheap and broadly useful.
 6. **Field heatmap**: a continuous signal layer rendered beneath content, the
    graph signals work given a home in the contract.
-7. **Sky chart**: an ephemeris-driven backdrop that knows the time; the
-   analytic ephemeris work already computes it. Cleromancy.
+7. **Sky chart**: a product-derived backdrop recipe driven by ephemeris facts.
+    It becomes portable data only when a remote scene must receive those facts.
 8. **Page surface**: a document page with margins and fold lines behind
    content, for print-shaped and knot-embedded scenes.
 9. **Sited-region surface**: a surface carrying named drop zones as regions,
    the felt table, the battle zone, the sorting tray.
-10. **Depth ambient**: parallax layers behind the canvas, coupled to the
-    camera. Pure atmosphere until the games wing forces it.
+10. **Depth ambient**: a renderer or realization recipe for parallax layers
+     coupled to the camera. It is not portable scene data until a scene must
+     carry authored depth facts.
 
 ## 4. Node representations
 
@@ -235,8 +249,8 @@ face, and a sprite seeds a body without owning it.
    LOD ladder.
 6. **Badge glyph**: a glyph carrying one live scalar, unread count, signal
    strength, due state. Forcing: signalman liveness, inbox-shaped graphs.
-7. **Portrait**: identity-first, the emblem or avatar as the body. Forcing:
-   contact nodes, personae surfaces.
+7. **Portrait**: identity-first emblem or avatar as the Face. It can sit on
+   any Body; contact nodes and personae surfaces are likely consumers.
 8. **Meter**: a sparkline or gauge as the face, the node as its own recent
    history. Forcing: telemetry, practice stats.
 9. **Shape**: the authored hull with material character, the Body axis made
@@ -247,8 +261,9 @@ face, and a sprite seeds a body without owning it.
 ## 5. Edge representations
 
 `RoutedRelation` is a polyline with an open kind and a weight; cells-as-edges
-rules that each relation between a pair is its own addressable cell. The deck
-runs the LOD ladder from collapsed to expressive.
+rules that each relation between a pair is its own addressable cell. This deck
+contains structural relation forms only. Motion overlays and interaction
+previews are separate lever classes.
 
 1. **Line**: one collapsed stroke per pair; the LOD floor and the dense-view
    default.
@@ -263,20 +278,26 @@ runs the LOD ladder from collapsed to expressive.
 6. **Labeled edge**: the kind name riding the polyline at readable zoom.
 7. **Bundle**: cells gathered into shared trunks above fan density; the
    collapse rung above fanning.
-8. **Flow**: marching pulses along the polyline; traffic, replay, and the
-   motion lane's cheapest visible win. Forcing: signalman links, replay
-   stage.
-9. **Ribbon**: a routed corridor whose width is capacity or volume, the
+8. **Ribbon**: a routed corridor whose width is capacity or volume, the
    Sankey reading of a relation.
-10. **Ghost**: the interaction states, elastic preview while relating,
-    revealed-edge suggestions before crystallizing; drawn like truth, styled
-    as proposal.
+9. **Port-anchored route**: an endpoint-specific path for circuits,
+   architecture, and flowcharts.
+10. **Orthogonal or stepped route**: a schematic connector whose geometry is
+    constrained without changing relation identity.
+
+**Motion overlay, separate class**: marching pulses along a relation can carry
+traffic or replay state. This is Flow motion over a structural edge form, not
+an edge representation itself.
+
+**Interaction preview, separate class**: an elastic connector while relating,
+or a revealed-edge suggestion before crystallization. This is a Ghost preview,
+not graph truth and not a structural edge form.
 
 ## Where this feeds
 
 Placement against the tiers happens per the brief's method. Scenes need no
-contract surface of their own: they land as graph-scope templates over the
-shared pipeline, and it is their levers that force contract work. The likely
+parallel primitive contract: they land as graph-scope recipes over the shared
+grammar, and it is their missing levers that force grammar work. The likely
 first pulls: Tabletop and Atlas force L2's backdrop prototypes, Loom rides
 L1's set graph, Chronicle's scrub transport is the natural first L5 consumer
 and deck 5's Flow its cheapest receipt. Everything else waits for its

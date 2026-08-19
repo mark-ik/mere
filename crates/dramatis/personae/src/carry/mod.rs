@@ -131,6 +131,36 @@ pub enum DeviceMode {
     RemoteAuth,
 }
 
+/// Whether this device's epoch carriage may replicate, and on what lease.
+///
+/// The per-device knob from the retention ruling (leased slots, 2026-08-14,
+/// amended 2026-08-18): carriage replicates only as a leased slot, and the
+/// lease ceiling is per device because the wrapping key is per device.
+/// `None` is the default so an unconsidered device is un-replicated by
+/// construction; opting in is a commissioning-time decision, made where
+/// `mode` and `exposure` already are.
+///
+/// The graph lives inside the leased variant rather than beside it because
+/// nothing in a certificate implies a graph: the carriage topic is derived
+/// from a graph the issuing wallet must *choose* (lane grammar, 2026-08-18),
+/// and a leased policy with no chosen lane would be unpublishable. Making the
+/// pair one variant keeps that state unrepresentable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CarriagePolicy {
+    /// Never replicated. The default.
+    #[default]
+    None,
+    /// Replicated on the named graph's carriage topic, with a lease of at
+    /// most `max_ttl_ms`.
+    Leased {
+        /// This device's exposure budget: no lease it holds may last longer.
+        max_ttl_ms: u64,
+        /// The personal graph whose carriage topic carries this device's
+        /// slots. Chosen at commissioning, not derived.
+        graph: [u8; 32],
+    },
+}
+
 /// Whether a device is hidden behind another egress or intentionally exposed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DeviceExposure {
@@ -352,6 +382,11 @@ pub struct DeviceRecord {
     pub mode: DeviceMode,
     /// The device's exposure posture.
     pub exposure: DeviceExposure,
+    /// Whether this device's epoch carriage replicates. Defaults to
+    /// [`CarriagePolicy::None`], so existing roster records read unchanged
+    /// and a fresh device replicates nothing.
+    #[serde(default)]
+    pub carriage: CarriagePolicy,
     /// Content ref of the device's stored grant, when one exists.
     #[serde(default)]
     pub grant_ref: Option<CarryRef>,

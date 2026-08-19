@@ -1,7 +1,7 @@
 //! Product-free analytic score realization.
 
 use sceno::{
-    Arrangement, Board, Footprint, Geographic, Hold, HonoredHold, Hulls, InstanceId, Placement,
+    Arrangement, Footprint, Geographic, Grid, Hold, HonoredHold, Hulls, InstanceId, Placement,
     ProjectedItem, Rect, Region, Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
 };
 
@@ -35,14 +35,14 @@ pub fn solve(score: &Score) -> Scene {
     for (rank, (_, item)) in order.into_iter().enumerate() {
         // An authored hold outranks the arrangement, in every family. Without
         // this, a Coordinate placement was honored by Geographic and Hulls and
-        // silently discarded by Spiral and Board, which is the same bug as
+        // silently discarded by Spiral and Grid, which is the same bug as
         // moving a pin: the person said where, and the layout answered
         // somewhere else without saying so.
         let position = match score.hold_for(&item.source) {
             Some(held) => held.at,
             None => match &score.arrangement {
                 Arrangement::Spiral(spiral) => spiral_position(spiral, effective_spacing, rank),
-                Arrangement::Board(board) => board_position(board, item, rank),
+                Arrangement::Grid(grid) => grid_position(grid, item, rank),
                 Arrangement::Geographic(geographic) => geographic_position(geographic, item),
                 Arrangement::Hulls(hulls) => hulls_position(hulls, item),
             },
@@ -241,15 +241,15 @@ fn spiral_position(spiral: &Spiral, spacing: f32, ordinal: usize) -> Vec2 {
     )
 }
 
-fn board_position(board: &Board, item: &ScoreItem, rank: usize) -> Vec2 {
-    let columns = board.columns.max(1) as usize;
+fn grid_position(grid: &Grid, item: &ScoreItem, rank: usize) -> Vec2 {
+    let columns = grid.columns.max(1) as usize;
     let (column, row) = match item.placement {
         Placement::Cell { column, row } => (column as f32, row as f32),
         _ => ((rank % columns) as f32, (rank / columns) as f32),
     };
     Vec2::new(
-        board.origin.x + column * (board.cell.x + board.gap),
-        board.origin.y + row * (board.cell.y + board.gap),
+        grid.origin.x + column * (grid.cell.x + grid.gap),
+        grid.origin.y + row * (grid.cell.y + grid.gap),
     )
 }
 
@@ -303,12 +303,12 @@ mod tests {
     #[test]
     fn a_hold_outranks_the_arrangement_in_every_family() {
         // The audit that opened A6: Coordinate was honored by Geographic and
-        // Hulls and silently dropped by Spiral and Board. A hold is honored by
+        // Hulls and silently dropped by Spiral and Grid. A hold is honored by
         // all four or it is not a hold.
         let at = Vec2::new(140.0, -60.0);
         for arrangement in [
             Arrangement::Spiral(Spiral::default()),
-            Arrangement::Board(Board::default()),
+            Arrangement::Grid(Grid::default()),
             Arrangement::Geographic(Geographic::default()),
             Arrangement::Hulls(Hulls::default()),
         ] {
@@ -635,13 +635,13 @@ mod tests {
     }
 
     #[test]
-    fn board_keeps_authored_cells_and_geographic_keeps_coordinates() {
-        let mut board_score = Score::new(Arrangement::Board(Board::default()));
+    fn grid_keeps_authored_cells_and_geographic_keeps_coordinates() {
+        let mut grid_score = Score::new(Arrangement::Grid(Grid::default()));
         let mut placed = card(1, 0);
         placed.placement = Placement::Cell { column: 3, row: 2 };
-        board_score.items.push(placed);
-        let board = solve(&board_score);
-        assert_eq!(board.items[0].transform.translate, Vec2::new(204.0, 136.0));
+        grid_score.items.push(placed);
+        let grid = solve(&grid_score);
+        assert_eq!(grid.items[0].transform.translate, Vec2::new(204.0, 136.0));
 
         let mut geo_score = Score::new(Arrangement::Geographic(Geographic::default()));
         let mut point = card(2, 0);

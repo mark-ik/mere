@@ -337,25 +337,25 @@ pub struct ProjectionSnapshot {
     pub cache_policy: CachePolicy,
 }
 
-/// First frozen-scene wire shape. A frozen scene is delivery truth, not a
-/// source-time cursor: it reproduces this exact Scenotime table snapshot and
-/// its separately addressed presentation resources.
-pub const FROZEN_SCENE_VERSION: u16 = 1;
+/// First portable projection-capture wire shape. A capture is delivery truth,
+/// not a source-time cursor: it reproduces this exact Scenotime table snapshot
+/// and its separately addressed presentation resources.
+pub const PROJECTION_CAPTURE_VERSION: u16 = 1;
 
 /// A portable, immutable scene capture. The session identity and cache policy
 /// are intentionally absent: neither contributes to the realized scene.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct FrozenSceneV1 {
+pub struct ProjectionCaptureV1 {
     pub version: u16,
     pub scene: SceneSnapshot,
     #[serde(default)]
     pub presentation: PresentationManifest,
 }
 
-/// A rejected frozen-scene capture or load.
+/// A rejected projection capture or load.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FrozenSceneError {
+pub enum ProjectionCaptureError {
     UnsupportedVersion { found: u16 },
     InvalidScene(String),
     MissingPresentationResource(ContentHash),
@@ -363,39 +363,43 @@ pub enum FrozenSceneError {
     Encode(String),
 }
 
-impl fmt::Display for FrozenSceneError {
+impl fmt::Display for ProjectionCaptureError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnsupportedVersion { found } => {
-                write!(formatter, "unsupported frozen-scene version {found}")
+                write!(formatter, "unsupported projection-capture version {found}")
             }
-            Self::InvalidScene(error) => write!(formatter, "invalid frozen scene: {error}"),
+            Self::InvalidScene(error) => write!(formatter, "invalid projection capture: {error}"),
             Self::MissingPresentationResource(resource) => write!(
                 formatter,
-                "frozen scene presentation resource {resource} is unavailable"
+                "projection capture resource {resource} is unavailable"
             ),
-            Self::Decode(error) => write!(formatter, "could not decode frozen scene: {error}"),
-            Self::Encode(error) => write!(formatter, "could not encode frozen scene: {error}"),
+            Self::Decode(error) => {
+                write!(formatter, "could not decode projection capture: {error}")
+            }
+            Self::Encode(error) => {
+                write!(formatter, "could not encode projection capture: {error}")
+            }
         }
     }
 }
 
-impl std::error::Error for FrozenSceneError {}
+impl std::error::Error for ProjectionCaptureError {}
 
-impl FrozenSceneV1 {
-    /// Freeze one already-authorized projection snapshot. This preserves the
+impl ProjectionCaptureV1 {
+    /// Capture one already-authorized projection snapshot. This preserves the
     /// Scenotime epoch and revision, but does not claim they are source history.
-    pub fn from_projection(snapshot: &ProjectionSnapshot) -> Result<Self, FrozenSceneError> {
-        let frozen = Self {
-            version: FROZEN_SCENE_VERSION,
+    pub fn from_projection(snapshot: &ProjectionSnapshot) -> Result<Self, ProjectionCaptureError> {
+        let capture = Self {
+            version: PROJECTION_CAPTURE_VERSION,
             scene: snapshot.scene.clone(),
             presentation: snapshot.presentation.clone(),
         };
-        frozen.validate()?;
-        Ok(frozen)
+        capture.validate()?;
+        Ok(capture)
     }
 
-    /// Every separately-addressed resource the frozen presentation requires.
+    /// Every separately-addressed resource the captured presentation requires.
     pub fn presentation_resources(&self) -> BTreeSet<ContentHash> {
         self.presentation
             .offers
@@ -406,49 +410,51 @@ impl FrozenSceneV1 {
     }
 
     /// Reject malformed tables before disclosure or persistence.
-    pub fn validate(&self) -> Result<(), FrozenSceneError> {
-        if self.version != FROZEN_SCENE_VERSION {
-            return Err(FrozenSceneError::UnsupportedVersion {
+    pub fn validate(&self) -> Result<(), ProjectionCaptureError> {
+        if self.version != PROJECTION_CAPTURE_VERSION {
+            return Err(ProjectionCaptureError::UnsupportedVersion {
                 found: self.version,
             });
         }
         self.scene
             .validate()
-            .map_err(|error| FrozenSceneError::InvalidScene(format!("{error:?}")))
+            .map_err(|error| ProjectionCaptureError::InvalidScene(format!("{error:?}")))
     }
 
     /// Ensure each named presentation resource can be read before a recipient
-    /// is told the frozen scene is available.
+    /// is told the projection capture is available.
     pub fn verify_resources(
         &self,
         mut available: impl FnMut(ContentHash) -> bool,
-    ) -> Result<(), FrozenSceneError> {
+    ) -> Result<(), ProjectionCaptureError> {
         self.validate()?;
         for resource in self.presentation_resources() {
             if !available(resource) {
-                return Err(FrozenSceneError::MissingPresentationResource(resource));
+                return Err(ProjectionCaptureError::MissingPresentationResource(
+                    resource,
+                ));
             }
         }
         Ok(())
     }
 
     /// Stable serialized bytes used for persistence or a carrier resource.
-    pub fn encode(&self) -> Result<Vec<u8>, FrozenSceneError> {
+    pub fn encode(&self) -> Result<Vec<u8>, ProjectionCaptureError> {
         self.validate()?;
-        serde_json::to_vec(self).map_err(|error| FrozenSceneError::Encode(error.to_string()))
+        serde_json::to_vec(self).map_err(|error| ProjectionCaptureError::Encode(error.to_string()))
     }
 
-    /// Decode and validate a frozen scene before it reaches a renderer.
-    pub fn decode(bytes: &[u8]) -> Result<Self, FrozenSceneError> {
-        let frozen = serde_json::from_slice::<Self>(bytes)
-            .map_err(|error| FrozenSceneError::Decode(error.to_string()))?;
-        frozen.validate()?;
-        Ok(frozen)
+    /// Decode and validate a projection capture before it reaches a renderer.
+    pub fn decode(bytes: &[u8]) -> Result<Self, ProjectionCaptureError> {
+        let capture = serde_json::from_slice::<Self>(bytes)
+            .map_err(|error| ProjectionCaptureError::Decode(error.to_string()))?;
+        capture.validate()?;
+        Ok(capture)
     }
 
-    /// The frozen scene's content address. A resource carrier may use this as
-    /// its resource key without knowing any source graph or live session.
-    pub fn content_address(&self) -> Result<ContentHash, FrozenSceneError> {
+    /// The projection capture's content address. A resource carrier may use
+    /// this as its resource key without knowing any source graph or live session.
+    pub fn content_address(&self) -> Result<ContentHash, ProjectionCaptureError> {
         Ok(ContentHash::of(&self.encode()?))
     }
 }
@@ -1186,8 +1192,8 @@ mod tests {
         }
     }
 
-    fn frozen_scene_fixture() -> FrozenSceneV1 {
-        let resource = ContentHash::of(b"frozen presentation");
+    fn projection_capture_fixture() -> ProjectionCaptureV1 {
+        let resource = ContentHash::of(b"captured presentation");
         let presentation = PresentationManifest {
             bindings: Vec::new(),
             offers: BTreeMap::from([(
@@ -1198,7 +1204,7 @@ mod tests {
                     byte_size: 19,
                     requires: PresentationCapability::PortableCard,
                     semantics: PresentationSemantics {
-                        label: "Frozen fixture".to_string(),
+                        label: "Captured fixture".to_string(),
                         role: SemanticRole::Graphic,
                         bounds: BoundsRelationship::FitWithinFootprint,
                         actions: Vec::new(),
@@ -1206,8 +1212,8 @@ mod tests {
                 }],
             )]),
         };
-        FrozenSceneV1 {
-            version: FROZEN_SCENE_VERSION,
+        ProjectionCaptureV1 {
+            version: PROJECTION_CAPTURE_VERSION,
             scene: SceneSnapshot::from_dense(SceneEpoch(9), Revision(4), Scene::new())
                 .expect("fixture scene is valid"),
             presentation,
@@ -1215,24 +1221,24 @@ mod tests {
     }
 
     #[test]
-    fn frozen_scene_replays_same_tables_bounds_and_presentation_addresses() {
-        let frozen = frozen_scene_fixture();
-        let bytes = frozen.encode().expect("freeze serializes");
-        let restored = FrozenSceneV1::decode(&bytes).expect("frozen scene reopens");
-        assert_eq!(restored.scene.tables, frozen.scene.tables);
-        assert_eq!(restored.scene.tables.bounds, frozen.scene.tables.bounds);
+    fn projection_capture_replays_same_tables_bounds_and_presentation_addresses() {
+        let capture = projection_capture_fixture();
+        let bytes = capture.encode().expect("capture serializes");
+        let restored = ProjectionCaptureV1::decode(&bytes).expect("projection capture reopens");
+        assert_eq!(restored.scene.tables, capture.scene.tables);
+        assert_eq!(restored.scene.tables.bounds, capture.scene.tables.bounds);
         assert_eq!(
             restored.presentation_resources(),
-            frozen.presentation_resources()
+            capture.presentation_resources()
         );
         assert_eq!(
             restored.content_address().expect("address"),
-            frozen.content_address().expect("address"),
-            "the same frozen scene has the same content address"
+            capture.content_address().expect("address"),
+            "the same projection capture has the same content address"
         );
         assert!(
             restored
-                .verify_resources(|resource| frozen.presentation_resources().contains(&resource))
+                .verify_resources(|resource| capture.presentation_resources().contains(&resource))
                 .is_ok(),
             "all named presentation resources are available"
         );
@@ -1241,7 +1247,7 @@ mod tests {
             .expect_err("a missing resource must not be silently omitted");
         assert!(matches!(
             missing,
-            FrozenSceneError::MissingPresentationResource(_)
+            ProjectionCaptureError::MissingPresentationResource(_)
         ));
     }
 

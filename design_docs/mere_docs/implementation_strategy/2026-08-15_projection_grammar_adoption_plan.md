@@ -1,12 +1,12 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status**: A0 landed. **A6 closed 2026-08-16** on both sides: holds in the
-score honored by the solver and by relaxation, and mer3ly exporting a portable
-projection that keeps a visitor's pins, live on the public site. **A1's first
-slice landed the same day**: an unmet ensure-class hold is reported on the
-scene and crosses the wire. Mer3ly ruled
-an authority-grade consumer 2026-08-16, which re-gates A1-A4, B1, and C3. Turns the projection grammar report's
+**Status (reconciled 2026-08-19)**: A0, A6, A1, C1, and B3 are closed. A2's
+serialization half is landed; resolution still waits for two coordinated
+views. B1 has semantic structure, HTML, AccessKit, a tabular alternate, and
+placement satisfaction; the headed Genet and OS screen-reader receipt remains.
+The Scenograph family is now on an unpublished 0.0.4 development line with
+Score v3. Mer3ly ruled an authority-grade consumer 2026-08-16. This plan turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
 genet, and cambium. Sequenced against the
@@ -15,8 +15,8 @@ lanes L1-L5 and governed by the
 [projection grammar catalog](../research/2026-08-15_projection_grammar_catalog.md)
 promotion rules.
 **Related**:
-[scenograph_freeze_plan](2026-07-24_scenograph_freeze_plan.md) (0.0.3 frozen;
-rulings D1-D4),
+[scenograph_0_0_3_release_plan](2026-07-24_scenograph_0_0_3_release_plan.md)
+(historical 0.0.3 release; rulings D1-D4),
 [projection_proofs_plan](2026-07-21_projection_proofs_plan.md) (P1-P5 landed),
 scene contract note
 (`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),
@@ -41,9 +41,9 @@ Two disciplines from the report govern every target here:
    receipts stay meaningful. (Report caution 4.)
 2. **A layer enters the portable contract only when a promotion proof fails
    without it.** GoTree's complexity cliff is the cost of adopting
-   speculatively; the catalog's promotion rules are the defense. Nothing in
-   this plan unfreezes 0.0.3; contract additions are 0.0.4+ material behind
-   forcing consumers. (Report caution 2.)
+    speculatively; the catalog's promotion rules are the defense. Published
+    0.0.3 remains an historical artifact; `main` evolves through explicit
+    score and crate versions behind forcing consumers. (Report caution 2.)
 
 ### Consumer ruling (2026-08-16)
 
@@ -60,7 +60,7 @@ in production.
 
 What transfers, from where, to where. Landing sites verified against the tree
 2026-08-15 (score shape read from `crates/scenograph/sceno/src/score.rs`;
-freeze rulings from the freeze plan; genet components listed from
+0.0.3 release rulings from the release plan; genet components listed from
 `repos/genet/components/`).
 
 | Transfer | Source system | Landing site |
@@ -74,15 +74,16 @@ freeze rulings from the freeze plan; genet components listed from
 | Rule-filled scales and guides; unit/aggregate distinction | Vega-Lite + ATOM | gap 1 proof (A5) |
 | Per-channel shared/independent scale resolution | Vega-Lite `resolve` | gap 4 proof (A5) |
 | Backdrop property classing (visible / collidable / hit / provenance; layout vs paint) | Mapbox Style Spec | expansion lane L2 backdrops (C3) |
-| Accessible frozen realization as a standing receipt | none external; catalog's W3C citations stand | promotion rules + genet realization (B1) |
+| Accessible static realization as a standing receipt | none external; catalog's W3C citations stand | promotion rules + Graphshell realization targeting Genet surfaces (B1) |
 | Compound scenegraph shape (hierarchy + adjacency together) | Bluefish | sceno `Scene` already carries spaces, regions, layers; hold the shape deliberately, add nothing now |
 | Effectiveness knowledge versions beside the grammar, never inside it | Draco 1 vs Draco 2 | wherever defaults/effectiveness land; `SCORE_VERSION` covers the wire, not the knowledge |
 
-Current portable baseline the targets extend: `Score` v1 with
-`Arrangement::{Spiral, Board, Geographic, Hulls}`,
+Current portable baseline the targets extend: `Score` v3 with
+`Arrangement::{Spiral, Grid, Geographic, Hulls}`,
 `Placement::{Ordinal, Cell, Coordinate}`, per-item footprint, pre-selected
-`Representation` rung, layer, visible. Intents live in chirograph (freeze
-ruling D1); picking in scenotime (D4); emphasis channels open (D3).
+`Representation` rung, layer, visibility, authored holds, and honored/unmet
+placement truth. Intents live in chirograph (release ruling D1); picking in
+scenotime (D4); emphasis channels open (D3).
 
 ## Plan
 
@@ -132,7 +133,7 @@ visitor put them; the determinism receipt still holds for the unpinned case.
 Done when: the two paths meet, and a shared scene is a portable artifact rather
 than a site-local JSON blob.
 
-**A1. Placement satisfaction state (investigation first).**
+**A1. Placement satisfaction state - CLOSED 2026-08-16.**
 Context: the catalog's free/anchored/pinned policies currently have no
 satisfaction surface. Authored coordinates exist today (isometry adapts
 authored pins to a geographic score via `Placement::Coordinate`), and two
@@ -159,7 +160,7 @@ Done when: a remote viewer can distinguish "placed as pinned" from "pin
 unmet" without source access.
 
 **A2. Selection clauses: coordination as data.**
-Context: freeze ruling D1 stands (sceno ships no intent vocabulary; the
+Context: release ruling D1 stands (sceno ships no intent vocabulary; the
 protocol owns the triple). What the report adds is the *coordination* record
 between views: Mosaic's clause (source, client set, predicate, value) with
 declared resolution (single, union, intersect, crossfilter), where crossfilter
@@ -187,7 +188,7 @@ than host-only state.
 **A3. LOD rungs as declarative conditions.**
 Context: `ScoreItem.representation` is a pre-selected rung; the conditions
 that select it live in host code, so a remote client cannot re-select on its
-own zoom and a frozen realization cannot state why a rung was chosen.
+own zoom and a static realization cannot state why a rung was chosen.
 Gosling ships the missing form: target, measure (screen-space width/height
 vs data-space zoomLevel), operation, threshold, and hysteresis padding as
 data. The measure split mirrors Mapbox's layout/paint classing: screen-space
@@ -196,15 +197,15 @@ reading-dependent.
 Tasks: stage one, conditions as data in cartography's representation
 profiles (host-side registry; the P3b card-to-glyph traversal is the named
 consumer). Stage two, portable only when a remote consumer needs client-side
-re-selection: rung conditions travel beside the score, and a frozen
-realization evaluates them at freeze zoom deterministically.
+re-selection: rung conditions travel beside the score, and a static
+realization evaluates them at its declared zoom deterministically.
 Forcing consumer: P3b (the recorded remaining half of P3: representation
 degrades card to glyph with recency and zoom, focus stays live). Mer3ly does
 not force this one: it exports `representation_registry()` to JavaScript for
 the live path's own UI, while its portable path hardcodes
 `Representation::Glyph`, and its fold/expand is a manual toggle over `visible`
 plus an untyped fold channel rather than a measure and threshold.
-Validation: same score, two freeze zooms, different rungs, deterministic; a
+Validation: same score, two declared zooms, different rungs, deterministic; a
 hysteresis test shows a rung boundary does not flicker under small zoom
 oscillation.
 Done when: the representation ladder is data a second host can honor without
@@ -230,7 +231,7 @@ sequence it steps through with a source-time control, so it is the cheapest
 place to prove a spec once one exists; what it lacks is the authored half,
 duration, easing, and staging.
 Validation: identical scene pair plus identical spec yields an identical
-schedule; a frozen realization is unaffected by transition specs; motion
+schedule; a static realization is unaffected by transition specs; motion
 stays out of arrangement types (the catalog's motion taxonomy holds).
 Done when: a projection switch reads as a staged transition, specified as
 data, on at least one consumer, with snapping still the default elsewhere.
@@ -253,7 +254,7 @@ Tasks, each strictly behind its proof:
   `Arrangement` variants, evaluate GoTree's factoring (element x placement
   rule x coordinate transform) and ATOM's recursive partition operators so
   node-link and space-filling are parameter settings of one family.
-- Every proof: an accessible frozen realization in the receipt (B1 defines
+- Every proof: an accessible static realization in the receipt (B1 defines
   the shape). Read GoFish in full before the facet and flow proofs; it is the
   chart-side proof of the catalog's central bet.
 Validation: per the catalog's promotion checklist, unchanged.
@@ -262,16 +263,16 @@ proof that forced it.
 
 ### Track B: genet (realization receipts)
 
-Genet is the realization layer of the projection stack: the accessible frozen
+Genet is the realization layer of the projection stack: the accessible static
 form and the drivable interactive form both *target* its surfaces. They do not
 live in it. **Corrected 2026-08-16 while opening B1**: genet has no dependency
 on scenograph and mere depends on genet, so a converter from `Scene` to a
-semantic form cannot sit in genet without inverting the stack. The frozen
+semantic form cannot sit in genet without inverting the stack. The static
 realization lands in mere and renders into genet's lane, which is the same
 direction mer3ly already proves by serializing cambium views to static HTML.
 Pointer docs in `genet/docs/` are founded when a slice genuinely lands there.
 
-**B1. Accessible frozen realization - FIRST SLICE LANDED 2026-08-16.**
+**B1. Accessible static realization - PARTLY LANDED 2026-08-16.**
 Context: no surveyed grammar treats the accessible form as a first-class
 realization target; the catalog's W3C citations (WAI complex images, Graphics
 ARIA, SVG structure) are the anatomy. Retrofitting accessibility contracts is
@@ -280,7 +281,7 @@ suite starts producing receipts.
 Tasks: define the receipt shape (navigable structure, names, descriptions,
 values, relations, and a tabular or long-form alternate where the visual
 alone is insufficient); realize one existing scene (the P3 spiral score or
-the P5 `coastal_map.json` fixture) as a frozen semantic form through genet's
+the P5 `coastal_map.json` fixture) as a static semantic form through genet's
 DOM lane; verify with the AccessKit lane precedent
 (accesskit_screen_reader_verification, 2026-06-09) and a genet-probe scenario
 asserting the semantic tree (apps self-drive via genet-probe; never synthetic
@@ -291,10 +292,10 @@ shipping `data-graph-interface` hidden with a runtime-built node list and a
 no-script status reading "Graphshell sandbox not initialized", so the site
 serves accessibility by rendering an entirely separate authority-derived static
 index instead. That workaround is what B1 retires.
-Validation: a screen-reader traversal of the frozen projection enumerates
+Validation: a screen-reader traversal of the static projection enumerates
 instances and relations with names; a probe scenario asserts structure
 deterministically; the same scene still produces its interactive realization.
-Done when: "frozen with navigable semantics" is a checklist item the first
+Done when: "static with navigable semantics" is a checklist item the first
 promotion proof can satisfy by following an existing worked example.
 
 **B2. Probe-drivable projections.**
@@ -382,22 +383,17 @@ consumers.
 
 ### Sequence
 
-**A0** is landed. Open now, in order of unlock-per-effort: **A6** (the seam;
-it is the precondition for A1, A2, and C3, and it has the only authority-grade
-consumer in the plan), **B1** (the report's single act-now recommendation;
-additive, uses existing scenes, and mer3ly is the standing argument for it),
-**B3** (a read of livery's DB; closed 2026-08-16).
+Closed: **A0**, **A6**, **A1**, **C1**, and **B3**. **A2's serialization half**
+is landed; its resolution half still waits on a genuine two-view ask. **B1** is
+at its buildable edge until a headed Genet host can supply the OS
+screen-reader receipt.
 
-Opens with existing lanes, no new gates invented: **A2's serialization half**
-now that L3's gate is met, with its resolution half still waiting on a two-view
-ask; **A3** with P3b; **A4 + C2** with L5's gate; **C3** with L2's gate,
-informed by mer3ly's shipped property pair. **A1** follows A6 rather than
-preceding it, and **C1** follows A1.
+Open next through existing gates: **A3** with P3b; **A4 + C2** with the first
+continuous reprojection; **C3** with L2's two backdrop consumers. **A5** stays
+behind the promotion suite.
 
-Gated on the promotion suite: **A5** entire.
-
-Non-goals, restated from the governing docs and the report: no unfreeze of
-0.0.3; no intent vocabulary in sceno (D1 stands); no global nonconvex solver
+Non-goals, restated from the governing docs and the report: no intent
+vocabulary in sceno (D1 stands); no global nonconvex solver
 in scenomise (deterministic solving is the receipt currency); no speculative
 adoption of the report's six-layer spec stack (each layer arrives only with
 its proof); no new grammar DSL (the score is the spec; the report's
@@ -442,7 +438,7 @@ not settled without it.
   what-a-spec-means typology, the latter arriving from Mark's notes and
   verified against the papers). The report artifact was updated the same day
   with both passes. Landing sites verified against the tree: score shape read
-  from `sceno/src/score.rs`, freeze rulings D1-D4 from the freeze plan,
+  from `sceno/src/score.rs`, release rulings D1-D4 from the 0.0.3 plan,
   expansion lanes L1-L5 from the brief, isometry's authored pins and P3b's
   open LOD half from the proofs plan, genet component inventory
   (cambium family, genet-probe, livery) from `repos/genet/components/`. No
@@ -516,12 +512,10 @@ not settled without it.
   plus `chirograph` (21) and `mere-cartography` (25) unaffected. A v1 score
   still loads and loads as "nothing held"; an unheld score places exactly as
   before, so no existing determinism receipt moves.
-  Not done, and deliberately: satisfaction reporting is A1, so today an
-  unsatisfiable pin is honored rather than reported. Crate versions stay at
-  0.0.3; the bump to 0.0.4 and any republish is Mark's call, and the freeze
-  plan's "0.0.4+ material behind forcing consumers" is the sanctioned path
-  when he wants it. Mer3ly's own seam (its live path still never builds a
-  score) is the next slice.
+  At this point satisfaction reporting was still A1 and crate versions stayed
+  at 0.0.3. Later entries close A1. The 2026-08-19 reconciliation opens the
+  0.0.4 development line and Score v3; nothing was republished. Mer3ly's own
+  seam (its live path still never builds a score) was the next slice.
 - 2026-08-16: **A6 mer3ly half written and verified, parked on a push.** The
   seam now exists in code: `PlacementDelta` deserializes the sandbox's own
   scene state (extra fields ignored, so a caller hands over the whole shared

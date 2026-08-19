@@ -1,7 +1,7 @@
 # Scenograph Lane Handoffs
 
 **Date**: 2026-08-18
-**Status**: dispatch document, written at Mark's request after a review of
+**Status (reconciled 2026-08-19)**: dispatch document, written at Mark's request after a review of
 what is deferred, forgotten, or open across the scenograph family and the
 threads this session opened. The [expansion brief](2026-08-10_scenograph_expansion_brief.md)
 is the map and the [content catalog](2026-08-18_scenograph_content_catalog.md)
@@ -18,17 +18,19 @@ woodshed's `design_docs/2026-07-11_stage_set_tools_plan.md`.
 
 ## Verified entry state (checked 2026-08-18, not inherited from docs)
 
-- `sceno` / `scenomise` / `scenotime` / `scenograph` are at **0.0.3**, frozen.
-- `sceno::measure` is **gone** from the tree, so the freeze note's "does
+- `sceno` / `scenomise` / `scenotime` / `scenograph` have moved from the
+  published **0.0.3** baseline to the unpublished **0.0.4** development line.
+  Score v3 names `Grid` and carries placement holds.
+- `sceno::measure` is **gone** from the tree, so the release note's "does
   `measure` earn its place" question is closed by deletion. What remains is
   `footprint`, `geometry`, `scene`, `score`.
 - **isometry and turnstone were never actually unresolved.** Both lock
   `sceno` 0.0.3, `cargo update -p sceno` moves zero packages, and both
-  compile green: a git dep on branch `main` followed the freeze unattended,
-  so the loose end the freeze plan recorded had closed itself.
+  compile green: a git dep on branch `main` followed the release unattended,
+  so the loose end the release plan recorded had closed itself.
 - **woodshed depends on no scenograph crate at all**, so L1 is a founding.
-- `mora` 0.1.0 and `sonance` 0.0.1 are published, and **nothing consumes
-  them**.
+- `mora` is consumed by Knot's landed Rosette scene through `mora-cmudict` and
+  `mora.perfect-rhyme`.
 - Display names live in **two** tables, `arrangements::registry` and the
   canvas's `CANVAS_LAYOUT_STRATEGIES`, and nothing enforces agreement.
 
@@ -45,7 +47,7 @@ Listed once here so each lane can point at them rather than re-deriving.
    Plotted definition. The eventual portable implementation replaces or
    generalizes Geographic and Semantic placement; it does not join them as a
    third duplicate, and waits for the forcing consumer before changing the
-   frozen enum.
+   portable enum.
 2. **The scene register is a sequence, not one of three rival homes.** It
    stays catalog-only until the second real scene ships. At that point a
    Mere-side complete-template surface absorbs the dormant `register-lens`
@@ -94,10 +96,10 @@ gate-is-open banner. No `sceno` dep exists in any woodshed crate.
 **First acts**: add the dep to whichever crate owns Set state (per woodshed's
 CLAUDE.md layering that is `woodshed-core`, portable state, not
 `woodshed-views`); write the Set-to-scene adapter beside it; keep musical
-facts and typed relations woodshed-side and let `sceno` own selection,
-placement, and routing.
+facts and typed relations woodshed-side and let `sceno` own scene identity,
+placement facts, and routing. Selection remains Chirograph/ViewIntent state.
 
-**Done when** Stage renders a Set graph through the frozen contract with
+**Done when** Stage renders a Set graph through the portable contract with
 fanned relations, before woodshed's release.
 
 **Pitfalls**: woodshed's CLAUDE.md forbids adding beyond the active plan's
@@ -200,8 +202,9 @@ in an MIT/Apache crate casually, where CMUdict is permissive.
 
 ## Lane D — The scene register
 
-**Repo**: mere (docs first, then wherever templates land). **Gate**: open as
-a decision, gated as code on a second scene shipping.
+**Repo**: mere (docs first, then wherever recipes land). **Gate**: the
+second-dataset Rosette proof is landed; a code register may now be founded by
+the next consumer that needs to select a named complete recipe.
 
 Deck 2 established a third naming register beside surfaces and arrangements,
 on the ruling that **levers co-vary**: Mosaic needs tiles that size
@@ -209,16 +212,17 @@ themselves to close their gaps, and Atlas needs a map beneath it, so the
 intent lives in a combination no single lever holds. Mosaic and Atlas were
 released from the arrangement register to this one.
 
-**Ruled**: catalog-only now; when the second scene ships, a Mere-side complete
-template surface absorbs `register-lens`'s dormant preset role, persona
-settings own saved variants, and `ViewIntent` owns the active instance.
-Plotted is the common direct-coordinate mechanism, with physics left to the
-scene template.
+**Ruled**: the content catalog is a collection of scene recipes composed from
+the projection grammar catalog. A future Mere-side complete-recipe surface
+may absorb `register-lens`'s dormant preset role; persona settings own saved
+variants, and `ViewIntent` owns the active instance. That surface depends on
+grammar/compiler types. `sceno` never imports it or knows scene names. Plotted
+is the common direct-coordinate direction, with physics left to the scene
+recipe.
 
-**First acts**: none in code. The next *scene* someone builds decides the
-shape, and building two by hand before generalizing is the family's own
-standard. What is owed now is only this constraint, recorded so it is not
-lost: a scene template must carry **every** lever it depends on rather than a
+**First acts**: let the next consumer that selects Rosette beside another
+named scene found the smallest recipe surface. A scene recipe must carry
+**every** lever it depends on rather than a
 placement id plus defaults, or it arrives at a second dataset as a scatter of
 dots.
 
@@ -233,7 +237,7 @@ the registry, and view intent persists as its own sidecar. Two remain.
 1. **The two-tables hazard.** `arrangements::registry` carries the
    arrangement register proper; `CANVAS_LAYOUT_STRATEGIES` carries the picker
    catalog, whose ids distinguish dispatchable variants (`kanban.default`
-   versus `kanban.community`) that the registry does not. The Board/Fractal
+   versus `kanban.community`) that the registry does not. The Columns/Fractal
    rename had to be applied in both by hand. Unify them, or derive one from
    the other; the picker correctly reads the canvas table today.
 2. **A checkmarked layout picker surface.** Palette-only today, so the active
@@ -248,9 +252,10 @@ pinned by a test. Renaming an id moves stored sessions.
 Recorded so a later session recognizes these as *decided to wait* rather than
 forgotten.
 
-- **L3 portable arrangements.** Entrance gate: the first consumer asking for
-  the same arrangement by name from a second window, device, or peer.
-- **L4 scenes as documents.** Entrance gate: the first consumer that wants
+- **L3 common arrangement citation.** Mer3ly met the first-device gate. The
+  shelfmark format remains held until a second shipping consumer asks for the
+  same arrangement record.
+- **L4 projection captures as documents.** Entrance gate: the first consumer that wants
   yesterday's projection back. Cheap when it opens, because the encoding
   exists; the work is identity and retention, which eidetic owns.
 - **L5 motion.** Entrance gate: the first continuous re-projection a consumer

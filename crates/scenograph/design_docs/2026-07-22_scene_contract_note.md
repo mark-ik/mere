@@ -1,16 +1,16 @@
 # Scene Contract Note — the first sceno slice
 
-**Date**: 2026-07-22 (updated 2026-07-24)
-**Status**: **Frozen at 0.0.3.** Landed and consumed. Written as rationale for
+**Date**: 2026-07-22 (reconciled 2026-08-19)
+**Status**: **Historical 0.0.3 release baseline.** Landed and consumed. Written as rationale for
 the P2 type sketch, before mere wired onto it; mere, isometry, and graphshell
 now all consume the contract, so the review question is no longer "is this the
 right shape to build" but "which parts did the consumers actually force".
-Current: sceno 0.0.3, 45 family tests (sceno 19, scenomise 9, scenotime 17),
-verified 2026-07-24.
+That release carried 45 family tests (sceno 19, scenomise 9, scenotime 17),
+verified 2026-07-24. Current `main` is the unpublished 0.0.4 development line.
 
 The four questions this note left open are answered below under
-[Rulings](#rulings-2026-07-24-the-freeze), executed per the
-[scenograph freeze plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-24_scenograph_freeze_plan.md).
+[Rulings](#rulings-2026-07-24-release), executed per the
+[Scenograph 0.0.3 release plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-24_scenograph_0_0_3_release_plan.md).
 
 The family moved on 2026-07-23: the standalone `scenograph` repo was absorbed
 into mere at `crates/scenograph`, so the proof sequence and findings now live
@@ -31,11 +31,10 @@ the direction record is the
   space, transform, footprint, representation slot, layer, visibility, hit
   override); `RoutedRelation` (full polyline + open kind + weight);
   `Region` (members + optional contour + confidence).
-- `measure`: `Measurement` / `Measurements` — the input half of "the
-  representation measures content; the projection places it." See the open
-  question below: this is the one module no consumer has used.
+- ~~`measure`: `Measurement` / `Measurements`~~ — removed before 0.0.3. Hosts
+  measure representations and stamp the per-instance `ScoreItem.footprint`.
 - `score` (landed 2026-07-22, after this note's first draft): `Score`,
-  `Arrangement` (`Spiral` | `Board` | `Geographic`), `ScoreItem`, `Placement`,
+  `Arrangement` (`Spiral` | `Grid` | `Geographic` | `Hulls`), `ScoreItem`, `Placement`,
   `SCORE_VERSION`. The deferral below expected these at the proof-4 era; the
   P3/P4/P5 boundary proof pulled them forward, because a product-free
   *persisted* vocabulary is what makes two adapters comparable.
@@ -147,7 +146,7 @@ capability to swatch-scale surfaces without a physics dependency, and
 graphshell G2 took `scenotime`'s snapshot/diff pair as its remote replay
 contract.
 
-## Rulings (2026-07-24, the freeze)
+## Rulings (2026-07-24 release)
 
 The four remaining items are decided. Each was answered by reading the
 consumers rather than by deliberation, which is the standard the rest of this
@@ -209,11 +208,19 @@ Also settled in passing: `Footprint::Point` contains nothing, so a
 zero-extent item is unpickable unless it supplies a `hit` shape. That is the
 case `hit` exists for, and is now documented rather than implied.
 
-The likely third consumer is **woodshed**, which gates its own scene-contract
-work on this family being proved and frozen (see that repo's
-`2026-07-11_stage_set_tools_plan.md`). The proving half is finished, so the
-freeze list above is what it is actually waiting on. It brings two inputs the
-first two consumers could not: a non-graph frame (a fretboard is a `Space`
+The third consumer is **woodshed**. Its data half is now founded through
+`StageGraphSnapshot`; headed rendering remains. It brings two inputs the first
+two consumers could not: a non-graph frame (a fretboard is a `Space`
 mapping (string, fret) to screen, with notes as point footprints and
 fingerings as paths), and a source whose relations are dense,
 multi-family, and deterministic on day one, with no authoring step.
+
+## Current delta (2026-08-19)
+
+The protocol has continued to develop. Score v2 added authored holds. Score v3
+renames the regular-cell `Board` arrangement to `Grid`. `Scene` and
+`SceneTables` carry both honored and unmet pins, Chirograph carries Selection
+separately from scene truth, and its retained transport artifact is a
+`ProjectionCaptureV1`. Graphshell's `FrozenScene` is a deliberately static,
+noninteractive realization which can be replaced by an interactive realization
+from the same scene; the name does not describe the protocol or transport.

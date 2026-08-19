@@ -341,7 +341,7 @@ fn timeline_capability() -> LayoutCapability {
 fn kanban_capability() -> LayoutCapability {
     LayoutCapability {
         id: "graph_layout:kanban".into(),
-        display_name: "Board".into(),
+        display_name: "Columns".into(),
         description: Some("Categorical column bucketing by host-provided tag.".into()),
         category: LayoutCategory::Positional,
         is_deterministic: true,
