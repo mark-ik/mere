@@ -272,7 +272,7 @@ realization lands in mere and renders into genet's lane, which is the same
 direction mer3ly already proves by serializing cambium views to static HTML.
 Pointer docs in `genet/docs/` are founded when a slice genuinely lands there.
 
-**B1. Accessible static realization - PARTLY LANDED 2026-08-16.**
+**B1. Accessible static realization - DRIVEN 2026-08-19; only the manual OS screen-reader pass remains.**
 Context: no surveyed grammar treats the accessible form as a first-class
 realization target; the catalog's W3C citations (WAI complex images, Graphics
 ARIA, SVG structure) are the anatomy. Retrofitting accessibility contracts is
@@ -721,3 +721,25 @@ not settled without it.
   not at the claimed position. The projection grammar governs primitives;
   the content catalog depends on it and collects complete scene recipes.
   Rosette is recorded as landed through Knot over poem and lyric datasets.
+- 2026-08-19: **B1 probe scenario ran for real; the no-host premise died the
+  way C1 death did.** Mark asked whether graphshell was built on cambium;
+  re-checking from the tree found what the wrong-cwd grep had hidden, and the
+  right host was turnstone: it implements genet-probe Automatable with real
+  ProbeSurfaces, carries a .scn scenario lane whose assert-a11y reads a
+  stitched AccessKit tree, and already depends on graphshell-client, sceno,
+  and cambium.
+  Landed in turnstone (49e179e): disclose_scene extracted from the endpoint
+  snapshot so the frozen form freezes exactly what a remote peer is served,
+  one recipe rather than two that drift; a Frozen Projection pane in cambium
+  chrome with instances by name and carried data-source-id, relations named
+  at both ends, the WAI summary, unmet placements, and C1 satisfaction line;
+  and an a11y arm built by FrozenScene::to_ux_tree itself, so assert-a11y
+  reads the realization actual tree rather than a summary of one.
+  Receipt: scenarios/frozen_projection.scn, RESULT ok, self-driven, offline
+  mere:// nodes, captures in Code/testing/turnstone/frozen_projection. The
+  capture shows the pane beside the live canvas: 14 items, 17 relationships,
+  harbor-notes and beacon-notes by name.
+  All three automated verification legs are now done: renderer proven by
+  parsing, AccessKit tree driven through a real host, probe scenario driven.
+  What remains is only the manual OS screen-reader pass, which no automated
+  receipt can substitute for.
