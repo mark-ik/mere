@@ -184,6 +184,39 @@ without the forgotten epochs, and carriage has no projection to rebuild. It
 would be blocked forever, exactly as `graph_keys`' `retention_probe` is. The
 shape is borrowed; the function is not.
 
+## The roster layering, ruled
+
+**Ruled 2026-08-19 (Mark): the wallet roster governs carriage, the pairing
+list governs reachability.**
+
+Three device stores exist and the question was which is authoritative for the
+replica set. The answer is that two of them are, for different halves, and the
+third is derived:
+
+- `personae::carry::DeviceRoster` decides **whether** a device holds carriage
+  at all. It is where `CarriagePolicy` already lives, beside `mode` and
+  `exposure`, and it is the wallet concept the certificate is keyed by. A
+  device absent from it, or present with `CarriagePolicy::None`, replicates
+  nothing regardless of how reachable it is.
+- `owner_settings`' `paired_devices` + `roster_roots` decide **whether** that
+  device is reachable: the Personae root that admits its writes, the
+  `last_endpoint` dial hint, the receive-only tier. Pairing a device grants it
+  no carriage, and unpairing it removes a route, not an authority.
+- `SyncRoster` stays what it is, the runtime projection of the pairing list,
+  and learns nothing about carriage.
+
+The carriage replica set is therefore the **intersection**: devices the wallet
+roster grants carriage that the pairing list can reach. Neither store takes on
+the other's job, and the failure modes stay legible. A device granted carriage
+but unpaired is an authority with no route, which is a commissioning gap the
+operator can see. A device paired but ungranted is a route with no authority,
+which is the default and the safe state.
+
+The mapping this needs is the one seam: the wallet roster is keyed by
+`DeviceId` / `DevicePublicKey`, the pairing list by Personae root. The
+`DeviceRecord` already carries the pubkey and the pairing record already
+carries the root, so the join is a lookup, not a schema change.
+
 ## Done conditions
 
 - A device that lost its record recovers it from a peer replica while the lease
@@ -199,11 +232,16 @@ shape is borrowed; the function is not.
 - No carriage record is representable as a `PersonalGraphEvent`, and no
   `PersonalGraphEvent` is admissible on the carriage topic.
 - A device with no carriage policy set replicates nothing.
+- A device granted carriage but unpaired, and a device paired but ungranted,
+  both replicate nothing, and each absence is visible in its own store.
 
 ## What this does not decide
 
-- **The trusted-peer roster.** Who replicates, and how membership is governed.
-  Unchanged from the leases doc, and shared with the participant gate.
+- ~~The trusted-peer roster.~~ **Ruled 2026-08-19**, one section up: the
+  wallet roster governs carriage, the pairing list governs reachability, and
+  the replica set is their intersection. What remains open is only membership
+  *governance* for peers beyond one's own devices, still shared with the
+  participant gate.
 - **Whether a relay may carry another device's slot.** The grammar permits it,
   since the issuer signature is what authorizes and the writer is separate. Who
   is willing to relay is a roster question, above.
