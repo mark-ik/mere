@@ -4,8 +4,8 @@ use chartulary::{FacetError, FacetId};
 use eidetic::{
     BlobSource, Hash, ManifestId, MereNativeFieldSpec, MereNativeSchemaBuilder, ModerationState,
     NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaDefinition, SchemaRef,
-    Timestamp, TrustEnvelope, TrustLevel, TypedPayload, list_typed, load_typed, save_schema,
-    save_typed,
+    PayloadSealer, Timestamp, TrustEnvelope, TrustLevel, TypedPayload, list_typed,
+    load_typed_sealed, save_schema, save_typed_sealed,
 };
 use mere::kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
 use mere::kernel::graph::{Graph, NodeKey};
@@ -167,8 +167,29 @@ pub async fn save_access_record<B: Backend>(
     store: &mut B,
     record: &AccessRecord,
 ) -> Result<ManifestId, eidetic::Error> {
-    save_typed(
+    save_access_record_sealed(store, None, record).await
+}
+
+/// Save an access record, sealing it at rest when it belongs to the private
+/// lane and a sealer is supplied.
+///
+/// The record's own `privacy` decides: `LocalOnly` and `TrustedPeersOnly` seal,
+/// the public lane stays cleartext so it keeps its dedup and self-verification
+/// properties. Passing `None` stores cleartext, which is what
+/// [`save_access_record`] does and what every caller did before this existed.
+///
+/// The sealer comes from the resident keeper, which is the only component
+/// holding the carry root: `castellan::authority::PersonaeHost::payload_sealer`.
+/// Access records are the natural first consumer because they are the private
+/// lane's densest writer, one record per visit, and they name a persona.
+pub async fn save_access_record_sealed<B: Backend>(
+    store: &mut B,
+    sealer: Option<&dyn PayloadSealer>,
+    record: &AccessRecord,
+) -> Result<ManifestId, eidetic::Error> {
+    save_typed_sealed(
         store,
+        sealer,
         record,
         Vec::<BlobSource>::new(),
         record.privacy,
@@ -220,10 +241,24 @@ pub async fn query_access_records<B: Backend>(
     store: &mut B,
     filter: &AccessRecordFilter,
 ) -> Result<Vec<AccessRecord>, eidetic::Error> {
+    query_access_records_sealed(store, None, filter).await
+}
+
+/// Query the access authority, unsealing private-lane records with `sealer`.
+///
+/// A sealed record read with `sealer = None` is a hard error from eidetic
+/// rather than a silent miss, which is the behaviour worth having: a reader
+/// that has lost its epoch should say so instead of reporting an empty history.
+pub async fn query_access_records_sealed<B: Backend>(
+    store: &mut B,
+    sealer: Option<&dyn PayloadSealer>,
+    filter: &AccessRecordFilter,
+) -> Result<Vec<AccessRecord>, eidetic::Error> {
     let mut records = Vec::new();
     let mut fetcher = NoFetcher;
     for manifest in list_typed::<AccessRecord>(store).await? {
-        let Some(record) = load_typed::<AccessRecord>(store, &mut fetcher, manifest.id).await?
+        let Some(record) =
+            load_typed_sealed::<AccessRecord>(store, &mut fetcher, sealer, manifest.id).await?
         else {
             continue;
         };
@@ -407,4 +442,133 @@ pub fn record_observation(
     );
     debug_assert_eq!(updated, GraphDeltaResult::NodeMetadataUpdated(true));
     Ok((record, true))
+}
+
+
+/// Proof that the private lane actually seals, exercised against the real
+/// wallet sealer rather than a stub.
+///
+/// `eidetic::seal` shipped inert on purpose: "nothing seals until a host wires
+/// a `PayloadSealer` in". These tests are what makes that sentence stop being
+/// true for access records, and they check the three properties the seam
+/// promises rather than only that the call compiles.
+#[cfg(all(test, feature = "native"))]
+mod seal_wiring {
+    use super::*;
+    use muniment::MemoryBackend;
+    use pandect::{KeyEpochId, PersonaId, WalletEpochSealer};
+
+    const ADDRESS: &str = "https://example.invalid/private-lane-probe";
+
+    fn record(privacy: PrivacyClass) -> AccessRecord {
+        AccessRecord {
+            record_id: Uuid::from_bytes([7; 16]),
+            container_id: Uuid::from_bytes([8; 16]),
+            address: ADDRESS.to_string(),
+            action: AccessAction::Open,
+            persona: "persona:probe".to_string(),
+            device: "device:probe".to_string(),
+            application: "graphshell.test".to_string(),
+            at_ms: 1_700_000_000_000,
+            handler: "system.default".to_string(),
+            dwell_ms: None,
+            referring_container_id: None,
+            referring_address: None,
+            transition: AccessTransition::UrlTyped,
+            capture_source: "graphshell.test".to_string(),
+            source_event_id: None,
+            privacy,
+        }
+    }
+
+    fn sealer() -> WalletEpochSealer {
+        WalletEpochSealer::from_epoch(
+            PersonaId::new(),
+            KeyEpochId(Uuid::from_bytes([0xA1; 16])),
+            b"probe-epoch-secret",
+        )
+    }
+
+    /// Every blob byte held by the store, so a cleartext leak is caught by
+    /// looking rather than by trusting the marker.
+    async fn blob_bytes(store: &MemoryBackend) -> Vec<u8> {
+        let mut all = Vec::new();
+        for key in store.list("blob:").await.unwrap() {
+            if let Some(bytes) = store.get(&key).await.unwrap() {
+                all.extend(bytes);
+            }
+        }
+        all
+    }
+
+    #[tokio::test]
+    async fn a_private_record_is_unreadable_on_disk_and_reads_back_through_the_sealer() {
+        let mut store = MemoryBackend::new();
+        bootstrap_access_record_schema(&mut store).await.unwrap();
+        let sealer = sealer();
+        let record = record(PrivacyClass::LocalOnly);
+
+        save_access_record_sealed(&mut store, Some(&sealer), &record)
+            .await
+            .unwrap();
+
+        // The claim worth checking is about bytes, not about metadata: a seal
+        // marker could be stamped on a manifest whose blob was never sealed.
+        let raw = blob_bytes(&store).await;
+        assert!(
+            !raw.windows(ADDRESS.len()).any(|w| w == ADDRESS.as_bytes()),
+            "the visited address survived in cleartext on disk"
+        );
+
+        let read = query_access_records_sealed(
+            &mut store,
+            Some(&sealer),
+            &AccessRecordFilter::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(read, vec![record], "the sealed record did not round-trip");
+    }
+
+    #[tokio::test]
+    async fn a_reader_without_the_epoch_says_so_instead_of_reporting_no_history() {
+        let mut store = MemoryBackend::new();
+        bootstrap_access_record_schema(&mut store).await.unwrap();
+        save_access_record_sealed(&mut store, Some(&sealer()), &record(PrivacyClass::LocalOnly))
+            .await
+            .unwrap();
+
+        // The failure mode this forecloses: a keyless read reporting an empty
+        // history, which is indistinguishable from having browsed nothing.
+        let blind = query_access_records(&mut store, &AccessRecordFilter::default()).await;
+        assert!(
+            blind.is_err(),
+            "a keyless read returned {:?} rather than refusing",
+            blind.map(|records| records.len())
+        );
+    }
+
+    #[tokio::test]
+    async fn the_public_lane_stays_cleartext_under_the_same_sealer() {
+        let mut store = MemoryBackend::new();
+        bootstrap_access_record_schema(&mut store).await.unwrap();
+        let record = record(PrivacyClass::PublicPortable);
+
+        save_access_record_sealed(&mut store, Some(&sealer()), &record)
+            .await
+            .unwrap();
+
+        // The wallet plan's decisive asymmetry: the public lane keeps dedup,
+        // pin-by-others and self-verification, so it must not seal even when a
+        // sealer is present and willing.
+        let raw = blob_bytes(&store).await;
+        assert!(
+            raw.windows(ADDRESS.len()).any(|w| w == ADDRESS.as_bytes()),
+            "a public-lane record was sealed; the lane asymmetry is broken"
+        );
+        let read = query_access_records(&mut store, &AccessRecordFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(read, vec![record], "a cleartext record needed a sealer");
+    }
 }

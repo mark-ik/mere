@@ -220,12 +220,22 @@ subsumes the other. That makes the carriage lane's grammar the whole of the
 remaining work, and it makes the population it serves the full one: every
 device holding a persona certificate with `private.read`, seated or not.
 
-**Noted while checking.** `WalletEpochSealer` is constructed nowhere outside
-its own tests, and `eidetic::seal` says so deliberately: the seam "changes no
-runtime behavior" until a host wires a sealer in. Carriage therefore delivers
-material for a seal path that is defined but not yet live. That does not change
-the design, and it does mean the recovery done-condition below has no runtime
-consumer to demonstrate against until the host wiring lands.
+~~**Noted while checking.** `WalletEpochSealer` is constructed nowhere outside
+its own tests.~~ **Wired 2026-08-19.** It was true when written, and
+`eidetic::seal` had said so deliberately: the seam "changes no runtime
+behavior" until a host wires a sealer in. The host is now
+`castellan::authority::PersonaeHost::payload_sealer`, which is the right place
+because the keeper already holds the carry root and no other component then has
+to learn where the wallet lives. Access records are the first consumer, through
+`save_access_record_sealed` / `query_access_records_sealed`.
+
+The recovery done-condition below therefore has something to demonstrate
+against. What the wiring proved, in three tests rather than by assertion: a
+`LocalOnly` record leaves no cleartext in the store's blob bytes, a reader
+without the epoch **refuses** rather than reporting an empty history (the
+failure mode worth foreclosing, since "no history" is indistinguishable from
+having browsed nothing), and a `PublicPortable` record stays cleartext under
+the same willing sealer, which is the lane asymmetry holding.
 
 ### Why not stickleback's epoch-retention engine
 

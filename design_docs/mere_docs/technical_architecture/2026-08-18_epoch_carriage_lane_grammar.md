@@ -207,9 +207,7 @@ shape is borrowed; the function is not.
 - **Whether a relay may carry another device's slot.** The grammar permits it,
   since the issuer signature is what authorizes and the writer is separate. Who
   is willing to relay is a roster question, above.
-- **Wiring `WalletEpochSealer` into a host.** It is constructed nowhere outside
-  its own tests, and `eidetic::seal` says the seam "changes no runtime
-  behavior" until a host wires a sealer in. Carriage delivers material for a
-  seal path that is defined and not yet live, so the recovery done-condition
-  above has nothing to demonstrate against until that lands. This is a
-  prerequisite for shipping, not for designing.
+- ~~Wiring `WalletEpochSealer` into a host.~~ **Done 2026-08-19.**
+  `castellan::authority::PersonaeHost::payload_sealer` is the supply point, and
+  access records are the first consumer. The recovery done-condition above now
+  has a live seal path to demonstrate against.

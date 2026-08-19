@@ -10,6 +10,7 @@
 //! shared vault and approval boundary without stealing the user's standard SSH
 //! agent endpoint before restart and real-login proofs exist.
 
+use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,7 +23,7 @@ use personae::{
     IdentityProvider, IdentityStorage, IdentityVault, ProfileId, ProtocolKey, UnlockTier, roster,
 };
 use serde::{Deserialize, Serialize};
-use pandect::{DeviceId, revoke_remote_auth_device};
+use pandect::{DeviceId, PersonaId, WalletEpochSealer, revoke_remote_auth_device};
 use ssh_key::{Algorithm, PrivateKey, PublicKey};
 use uuid::Uuid;
 
@@ -367,6 +368,30 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         };
         vault.remove_slot(&key)?;
         Ok(receipt)
+    }
+
+    /// The private-lane payload sealer for one persona.
+    ///
+    /// Eidetic sits below the wallet and owns no keys, so its seal seam stays
+    /// inert until a host supplies a `PayloadSealer`; its own header says
+    /// landing the seam "changes no runtime behavior" for exactly that reason.
+    /// This is the supply point. The keeper already holds the carry root, which
+    /// is the only thing beyond the persona that building one needs, so no
+    /// other component has to learn where the wallet lives.
+    ///
+    /// `None` twice over, and deliberately not an error either time: a host
+    /// with no carry root has no wallet to seal under, and a persona with no
+    /// staged epoch has nothing to seal with. Eidetic's own posture is that "a
+    /// keyless host stays in the cleartext lane, which is a host policy
+    /// decision, not this seam's to enforce", so the decision is returned to
+    /// the caller rather than taken here. A caller that requires sealing
+    /// refuses on `None`; one that does not writes cleartext, which is what
+    /// every caller does today.
+    pub fn payload_sealer(&self, persona: PersonaId) -> io::Result<Option<WalletEpochSealer>> {
+        let Some(data_root) = self.data_root.as_deref() else {
+            return Ok(None);
+        };
+        WalletEpochSealer::for_persona(data_root, persona)
     }
 
     /// Revoke one delegated device through pandect's live authority.
