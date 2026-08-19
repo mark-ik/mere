@@ -1,11 +1,12 @@
 # Knot Publishing Protocol Plan
 
 **Date**: 2026-08-07
-**Status**: Phase A implemented and physically receipted 2026-08-09. Direction
-remains **A then B** (§4). The existing K2 Graphshell projection rehearsal is
-useful precedent, not this protocol. Phase B has not begun: the Phase-A grammar
-needs real product use and an intended independent implementer before it is
-promoted into a compatibility commitment.
+**Status**: Phase A implemented and physically receipted, including a
+public-client renewal on 2026-08-19. Direction remains **A then B** (§4). The
+existing K2 Graphshell projection rehearsal is useful precedent, not this
+protocol. Phase B has not begun: the Phase-A grammar needs real product use and
+an intended independent implementer before it is promoted into a compatibility
+commitment.
 
 **Scope**: Let one persona explicitly share selected, versioned Knot documents
 with another persona without giving that reader a paired-writer grant, a vault
@@ -144,12 +145,14 @@ share ticket; its bytes, media type, content digest, and causal head verify;
 and revoking the same reader prevents a later request from revealing any
 document byte.
 
-**Status (2026-08-09):** Complete. A Windows reader discovered a ThinkPad
-holder over direct LAN mDNS, read the selected `text/vnd.knot` source, and then
-received a refusal for the identical ticket after its reader delegation was
-revoked. The holder and reader used distinct fixture identities. The core
-reader client landed at `d2090c34`; the receipt runner is subsequently kept on
-that public client path so the physical proof and product client do not drift.
+**Status (2026-08-19):** Complete. The original Windows-to-ThinkPad direct-LAN
+mDNS read and revocation receipt was renewed with a ThinkPad holder and Q-PC
+reader. The Q-PC runner was built from `162be7a9` and used
+`fetch_published_document`, rather than its former parallel Noise, Notochord,
+and wire sequence. It read the selected `text/vnd.knot` source; after holder
+revocation, the same ticket produced the reader's non-disclosing refusal while
+the holder recorded `NotAdmitted(Delegation(Revoked))`. The two fixture
+identities remained distinct.
 
 ### Phase B — publish the stable contract
 
@@ -425,9 +428,10 @@ to add the peer, complete the secured session, and fetch the selected source.
 ### P5. Run the acceptance ladder
 
 **Status:** Complete through the Phase-A stop line. Focused unit/codec and
-in-memory Noise/Notochord receipts precede the successful Windows-to-ThinkPad
-direct-LAN read and its post-revocation refusal. Relay routing remains a later
-deployment receipt, not a prerequisite for LAN publishing.
+in-memory Noise/Notochord receipts precede both the Windows-to-ThinkPad
+direct-LAN read and its post-revocation refusal, and the 2026-08-19
+ThinkPad-to-Q-PC renewal through `fetch_published_document`. Relay routing
+remains a later deployment receipt, not a prerequisite for LAN publishing.
 
 Run the following in order and preserve the distinction between them:
 
