@@ -576,6 +576,13 @@ pub struct Canvas {
     /// The persisted product-free score that drove the current analytic view.
     /// This is view state, not graph truth. (Projection proofs — P3.)
     projection_score: Option<sceno::Score>,
+    /// The score's representation request rebound from opaque `mere.graph`
+    /// sources to this Canvas's node keys. Kept beside the portable score so
+    /// the frame loop does not scan every score item for every painted node.
+    /// The value changes the face treatment only; footprint remains the one
+    /// geometry authority for layout, collision, picking, and paint bounds.
+    /// (Projection proofs — P3b renderer consumption.)
+    projection_representations: HashMap<NodeKey, sceno::Representation>,
     /// How strongly a *playing* graph is pulled toward the active arrangement's
     /// slots (`seiche::AnchorSpring` stiffness). `0.0` makes an arrangement a
     /// pure initial condition; higher holds its shape against the graph's own

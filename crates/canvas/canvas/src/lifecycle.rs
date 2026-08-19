@@ -70,6 +70,9 @@ impl Canvas {
         self.node_importance.clear();
         self.importance_dirty = true;
         self.node_recency.clear();
+        self.projection_score = None;
+        self.projection_representations.clear();
+        self.restored_score_hold = None;
         self.community_cache = None;
         self.drag = None;
         self.pinned_nodes.clear();
@@ -186,6 +189,7 @@ impl Canvas {
             active_strategy: None,
             strategy_positions: None,
             projection_score: None,
+            projection_representations: HashMap::new(),
             arrangement_pull: seiche::DEFAULT_ANCHOR_STIFFNESS,
             restored_score_hold: None,
             scope: None,

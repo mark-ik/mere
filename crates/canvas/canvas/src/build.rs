@@ -77,6 +77,14 @@ fn build_node_sheet() -> Vec<String> {
         // is the default (no class); rounded = small-web menu, circle = feed.
         ".gnode-rounded { border-radius: 9px; }".to_string(),
         ".gnode-circle { border-radius: 50%; }".to_string(),
+        // Representation is a face treatment over the measured footprint.
+        // Glyph is the terse icon rung. Card is deliberately the established
+        // Canvas face. LivePane is framed as the focused/live-capable rung; the
+        // renderer does not imply that an embedded document exists yet.
+        ".gnode-representation-glyph { border-radius: 50%; }".to_string(),
+        ".gnode-representation-glyph .gcaption { display: none; }".to_string(),
+        ".gnode-representation-live-pane { box-shadow: 0 0 0 3px var(--node-caption-fg), 0 0 16px var(--node-caption-fg); }".to_string(),
+        ".gnode-representation-live-pane .gcaption { font-weight: 700; }".to_string(),
         // The node's display label, riding beside the tile (not inside the 36px box):
         // absolutely positioned just right of the square so a long name reads in full on
         // the canvas instead of overflowing the tile. It is a child of the `.gnode`, so

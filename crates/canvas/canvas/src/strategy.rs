@@ -181,6 +181,26 @@ impl Canvas {
     /// Passing `None` drops a stale score when the host selects another
     /// strategy or returns to force physics.
     pub fn set_projection_score(&mut self, score: Option<sceno::Score>) {
+        self.projection_representations.clear();
+        if let Some(score) = score.as_ref() {
+            for item in &score.items {
+                if item.source.adapter != ::cartography::MERE_GRAPH_ADAPTER {
+                    continue;
+                }
+                let Some(key) = uuid::Uuid::parse_str(&item.source.id)
+                    .ok()
+                    .and_then(|id| self.graph.get_node_key_by_id(id))
+                else {
+                    continue;
+                };
+                // Canvas currently has one visual instance per graph node. A
+                // score may name a source more than once, so the first ordered
+                // item supplies that node's face until Canvas grows instances.
+                self.projection_representations
+                    .entry(key)
+                    .or_insert_with(|| item.representation.clone());
+            }
+        }
         self.projection_score = score;
     }
 
@@ -190,14 +210,21 @@ impl Canvas {
         self.projection_score.as_ref()
     }
 
+    /// The active score's face request for one graph node, after adapter
+    /// rebinding. `None` means the ordinary Canvas card treatment.
+    pub fn projection_representation(&self, key: NodeKey) -> Option<&sceno::Representation> {
+        self.projection_representations.get(&key)
+    }
+
     /// Restore a persisted Mere Spiral score into the live strategy buffer.
     ///
     /// The shared score remains product-free. This boundary resolves only the
     /// `mere.graph` opaque refs back to the graph's current node keys, then
-    /// reinstates the local Spiral strategy. Unknown score shapes are retained
-    /// as sidecar state but deliberately do not invent a local renderer.
+    /// reinstates the local Spiral strategy. Unknown arrangement shapes are
+    /// retained as sidecar state and may still supply generic face requests,
+    /// but deliberately do not invent local positions.
     pub fn restore_projection_score(&mut self, score: sceno::Score) -> bool {
-        self.projection_score = Some(score.clone());
+        self.set_projection_score(Some(score.clone()));
         if !matches!(score.arrangement, sceno::Arrangement::Spiral(_)) {
             return false;
         }

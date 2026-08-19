@@ -3,6 +3,7 @@ use super::*;
 use kernel::geometry::PortablePoint;
 use kernel::graph::fixtures::GraphFixtures;
 use kernel::graph::{EdgeFamily, Graph, RelationKind, RelationSelector, SemanticSubKind};
+use layout_dom_api::{LayoutDom, LocalName, Namespace};
 use std::collections::HashMap;
 
 mod selection;
@@ -3048,6 +3049,69 @@ fn persisted_spiral_score_reinstates_the_local_strategy_positions() {
     assert_eq!(canvas.layout_strategy(), Some("phyllotaxis.default"));
     assert_eq!(canvas.strategy_positions.as_ref().unwrap().len(), 2);
     assert!(canvas.projection_score().is_some());
+}
+
+fn one_item_score(id: uuid::Uuid, representation: sceno::Representation) -> sceno::Score {
+    let mut score = sceno::Score::new(sceno::Arrangement::Spiral(sceno::Spiral::default()));
+    score.items.push(sceno::ScoreItem {
+        source: sceno::SourceRef::new(::cartography::MERE_GRAPH_ADAPTER, id.to_string()),
+        ordinal: 0,
+        footprint: sceno::Footprint::Circle { radius: 18.0 },
+        representation,
+        placement: sceno::Placement::Ordinal,
+        layer: 0,
+        visible: true,
+    });
+    score
+}
+
+#[test]
+fn projection_score_rebinds_representation_and_graph_swap_clears_it() {
+    let mut canvas = Canvas::new();
+    let key = canvas.visit("https://representation.example");
+    let id = canvas.graph().get_node(key).unwrap().id;
+    canvas.set_projection_score(Some(one_item_score(id, sceno::Representation::LivePane)));
+    assert_eq!(
+        canvas.projection_representation(key),
+        Some(&sceno::Representation::LivePane),
+        "the opaque score source is rebound at the product boundary",
+    );
+
+    canvas.set_graph(Graph::new());
+    assert!(canvas.projection_score().is_none());
+    assert!(canvas.projection_representations.is_empty());
+}
+
+#[test]
+fn score_representation_changes_the_class_painted_by_frame() {
+    let mut canvas = Canvas::new();
+    let key = canvas.visit("https://face.example");
+    let id = canvas.graph().get_node(key).unwrap().id;
+    let gnode = canvas.gnode_of[&key];
+    let ns = Namespace::from("");
+    let class = LocalName::from("class");
+
+    for (representation, expected) in [
+        (sceno::Representation::Glyph, "gnode-representation-glyph"),
+        (sceno::Representation::Card, "gnode-representation-card"),
+        (
+            sceno::Representation::LivePane,
+            "gnode-representation-live-pane",
+        ),
+    ] {
+        canvas.set_projection_score(Some(one_item_score(id, representation)));
+        canvas.frame(800, 600);
+        let painted = canvas
+            .node_dom
+            .attribute(gnode, &ns, &class)
+            .expect("frame assigns a gnode class");
+        assert!(
+            painted
+                .split_ascii_whitespace()
+                .any(|class| class == expected),
+            "the score rung must reach the painted DOM class: {painted}",
+        );
+    }
 }
 
 #[test]

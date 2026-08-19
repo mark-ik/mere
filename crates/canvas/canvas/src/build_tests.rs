@@ -12,7 +12,7 @@ use genet_layout::IncrementalLayout;
 use kernel::graph::{
     ContainmentSubKind, EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind,
 };
-use layout_dom_api::LayoutDomMut;
+use layout_dom_api::{LayoutDom, LayoutDomMut};
 
 use crate::build::*;
 use crate::palette;
@@ -145,6 +145,56 @@ fn each_gnode_state_class_resolves_its_own_palette_entry() {
             "`{class}` must resolve its own --node-*-fg",
         );
     }
+}
+
+/// The representation ladder must reach properties that alter the rendered
+/// face, while leaving the gnode's measured box to the common geometry rule.
+#[test]
+fn representation_classes_change_caption_density_and_live_emphasis() {
+    let g = sample_graph();
+    let (mut dom, gnode_of, _stage) = build_pool_dom(&g);
+    let gnode = *gnode_of.values().next().expect("the pool has gnodes");
+    let caption = dom
+        .dom_children(gnode)
+        .next()
+        .expect("the gnode has a caption");
+
+    dom.set_attribute(
+        gnode,
+        qual("class"),
+        "gnode-idle gnode-representation-glyph",
+    );
+    let glyph = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
+    assert_eq!(
+        glyph.computed_value(caption, "display").as_deref(),
+        Some("none"),
+        "the glyph rung suppresses the card caption",
+    );
+    assert_eq!(
+        glyph.computed_value(gnode, "width").as_deref(),
+        Some("36px"),
+        "representation styling does not invent a second footprint",
+    );
+
+    dom.set_attribute(gnode, qual("class"), "gnode-idle gnode-representation-card");
+    let card = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
+    assert_eq!(
+        card.computed_value(caption, "display").as_deref(),
+        Some("block"),
+        "the card rung retains the ordinary labelled face",
+    );
+
+    dom.set_attribute(
+        gnode,
+        qual("class"),
+        "gnode-idle gnode-representation-live-pane",
+    );
+    let live = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
+    assert_eq!(
+        live.computed_value(caption, "font-weight").as_deref(),
+        Some("700"),
+        "the live-capable rung visibly emphasizes its caption",
+    );
 }
 
 #[test]

@@ -377,10 +377,22 @@ impl Canvas {
                 Some(NodeShape::Circle) => " gnode-circle",
                 _ => "",
             };
+            // The representation rung changes how the same measured footprint
+            // is realized, not how much space it occupies. Glyph suppresses
+            // the caption and rounds the body; Card retains the ordinary Canvas
+            // face; LivePane receives a framed focus treatment. It remains a
+            // face request here, not a claim that interactive content has been
+            // embedded. The open representation tail falls back to Card.
+            // (Projection proofs — P3b renderer consumption.)
+            let representation_class = match self.projection_representation(key) {
+                Some(sceno::Representation::Glyph) => " gnode-representation-glyph",
+                Some(sceno::Representation::LivePane) => " gnode-representation-live-pane",
+                _ => " gnode-representation-card",
+            };
             set_class(
                 &mut self.node_dom,
                 gnode,
-                &format!("{state_class}{shape_class}"),
+                &format!("{state_class}{shape_class}{representation_class}"),
             );
         }
         let mut muts = Vec::new();

@@ -386,13 +386,12 @@ consumers.
 
 ### Sequence
 
-Closed: **A0**, **A6**, **A1**, **C1**, **B3**, and **A3 stage one**. **A2's
-serialization half** is landed; its resolution half still waits on a genuine
-two-view ask. **B1's** implementation and driven probe are closed; only the
-manual OS screen-reader pass remains.
+Closed: **A0**, **A6**, **A1**, **C1**, **B3**, **A3 stage one**, and P3b's
+local selection-to-renderer proof. **A2's serialization half** is landed; its
+resolution half still waits on a genuine two-view ask. **B1's** implementation
+and driven probe are closed; only the manual OS screen-reader pass remains.
 
-Open next through existing gates: P3b's renderer half, making the selected rung
-visibly change the canvas realization; **A4 + C2** with the first continuous
+Open next through existing gates: **A4 + C2** with the first continuous
 reprojection; **C3** with L2's two backdrop consumers. **A3 stage two** waits
 for a remote re-selection consumer. **A5** stays behind the promotion suite.
 
@@ -764,3 +763,13 @@ not settled without it.
   rendering: the canvas still stores the selected score without painting
   distinct glyph/card/live-pane realizations from it. Portable conditions stay
   gated on a remote client that needs to re-select.
+- 2026-08-19: **P3b's local renderer half landed.** Canvas rebinds the score's
+  opaque `mere.graph` sources to node keys and its real frame assigns distinct
+  `Glyph`, `Card`, and `LivePane` face classes. The glyph hides the caption,
+  the card retains the established labelled node, and the live-capable rung
+  receives a frame plus caption emphasis. The measured footprint still owns
+  all geometry, and the live-capable treatment does not claim embedded browser
+  content. Tests drive score → Canvas frame → DOM class and computed style,
+  and prove a whole-graph swap clears the rebound score state. This closes the
+  local forcing consumer for A3 stage one; A3 stage two remains gated on a
+  remote client that must perform its own re-selection.

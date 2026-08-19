@@ -284,6 +284,18 @@ registry.
   retention. The canvas still does not paint distinct faces from the selected
   score slot, so P3b remains open at the renderer boundary. Conditions also do
   not enter `sceno`; remote re-selection remains gated on a real consumer.
+- 2026-08-19: **P3b renderer consumption landed.** `Canvas` now rebinds the
+  score's `mere.graph` source refs once and applies the selected rung during
+  its real DOM frame. `Glyph` rounds the node body and suppresses its caption;
+  `Card` keeps the established labelled Canvas face; `LivePane` adds a framed,
+  emphasized live-capable face. This changes presentation density while the
+  score's measured footprint remains the common authority for placement,
+  collision, picking, edge trim, and node size. `LivePane` is still a
+  representation request, not evidence that browser or editor content has
+  been embedded. Renderer receipts cover score rebinding, the three frame
+  classes, computed caption visibility/emphasis, and graph-swap invalidation.
+  P3b is closed locally. Portable rung conditions remain gated on a remote
+  client that needs to re-select.
 - 2026-07-22: **P3/P4/P5 boundary proof implementation.** `sceno::Score`
   now serializes the neutral `Spiral`, `Grid`, `Geographic`, and `Hulls` arrangements,
   measured footprints, selected representation slots, opaque source refs, and
