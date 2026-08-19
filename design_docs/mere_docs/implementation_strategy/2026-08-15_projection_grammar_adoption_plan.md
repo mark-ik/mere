@@ -205,11 +205,14 @@ not force this one: it exports `representation_registry()` to JavaScript for
 the live path's own UI, while its portable path hardcodes
 `Representation::Glyph`, and its fold/expand is a manual toggle over `visible`
 plus an untyped fold channel rather than a measure and threshold.
-Validation: same score, two declared zooms, different rungs, deterministic; a
-hysteresis test shows a rung boundary does not flicker under small zoom
-oscillation.
-Done when: the representation ladder is data a second host can honor without
-porting mere's selection code.
+Validation: same graph and placement inputs, two declared zooms, different
+selected rungs, deterministic; a hysteresis test shows a rung boundary does
+not flicker under small zoom oscillation.
+Stage-one done when: the representation ladder is registry data and one live
+host selects from it using declared view facts rather than a hardcoded branch.
+Stage-two done when: the ladder travels beside the score because a second host
+needs to re-select locally, and that host honors it without porting Mere's
+selection code.
 
 **A4. Transition specs between epochs.**
 Context: expansion lane L5 named motion the deepest of the missing 90%;
@@ -383,14 +386,15 @@ consumers.
 
 ### Sequence
 
-Closed: **A0**, **A6**, **A1**, **C1**, and **B3**. **A2's serialization half**
-is landed; its resolution half still waits on a genuine two-view ask. **B1** is
-at its buildable edge until a headed Genet host can supply the OS
-screen-reader receipt.
+Closed: **A0**, **A6**, **A1**, **C1**, **B3**, and **A3 stage one**. **A2's
+serialization half** is landed; its resolution half still waits on a genuine
+two-view ask. **B1's** implementation and driven probe are closed; only the
+manual OS screen-reader pass remains.
 
-Open next through existing gates: **A3** with P3b; **A4 + C2** with the first
-continuous reprojection; **C3** with L2's two backdrop consumers. **A5** stays
-behind the promotion suite.
+Open next through existing gates: P3b's renderer half, making the selected rung
+visibly change the canvas realization; **A4 + C2** with the first continuous
+reprojection; **C3** with L2's two backdrop consumers. **A3 stage two** waits
+for a remote re-selection consumer. **A5** stays behind the promotion suite.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -743,3 +747,20 @@ not settled without it.
   parsing, AccessKit tree driven through a real host, probe scenario driven.
   What remains is only the manual OS screen-reader pass, which no automated
   receipt can substitute for.
+- 2026-08-19: **A3 stage one landed; P3b selection is declarative.**
+  `mere.graph-representation-registry/v2` puts ordered representation rungs
+  on each class profile. A rung names its selected `sceno::Representation`
+  and a conjunction of measure, operation, threshold, and hysteresis
+  conditions. The initial policy is concrete: focus selects `LivePane`; a
+  measured, recent item at zoom 1 or closer selects `Card`; `Glyph` is the
+  fallback. Cartography resolves graph classes in registry order, normalizes
+  durable visit recency, and consults the prior score only for hysteresis.
+  Graphshell's live web host now supplies its camera zoom, measured node
+  extents, focus, and prior score, and refreshes the score after local view
+  commands. `sceno` is unchanged: it still records only the chosen rung.
+  Deterministic receipts prove identical placement at two zooms with different
+  rungs, focus overriding distance, and a card holding through the declared
+  0.1 hysteresis band. This closes A3's host-side grammar, not P3b's visible
+  rendering: the canvas still stores the selected score without painting
+  distinct glyph/card/live-pane realizations from it. Portable conditions stay
+  gated on a remote client that needs to re-select.

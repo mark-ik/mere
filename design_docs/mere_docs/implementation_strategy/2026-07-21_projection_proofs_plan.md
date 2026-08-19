@@ -274,6 +274,16 @@ registry.
   (3) camera does not auto-fit analytic layouts (hence `FitView`). P3b (LOD:
   representation degrades card→glyph with recency, focus stays live) is the
   remaining half of P3.
+- 2026-08-19: **P3b selection landed; visible realization remains.**
+  Cartography's v2 representation profiles now declare ordered rung conditions
+  over measured screen extent, normalized recency, focus, and zoom, with prior
+  score state used for hysteresis. The Spiral adapter no longer contains a
+  hardcoded size match. Graphshell's live web host re-evaluates its score from
+  camera zoom and measured node extents after local view commands. Receipts
+  cover card→glyph across zoom, focus→live-pane, stable placement, and boundary
+  retention. The canvas still does not paint distinct faces from the selected
+  score slot, so P3b remains open at the renderer boundary. Conditions also do
+  not enter `sceno`; remote re-selection remains gated on a real consumer.
 - 2026-07-22: **P3/P4/P5 boundary proof implementation.** `sceno::Score`
   now serializes the neutral `Spiral`, `Grid`, `Geographic`, and `Hulls` arrangements,
   measured footprints, selected representation slots, opaque source refs, and

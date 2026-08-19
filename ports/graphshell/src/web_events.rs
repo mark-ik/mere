@@ -68,6 +68,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
                 if let Some(member) = host.canvas.focused_member() {
                     host.primary_member = Some(member);
                 }
+                host.refresh_representation_score();
                 host.chrome_dirty = true;
                 let _ = update_semantics(&mut host);
             }
@@ -89,6 +90,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
             host.canvas
                 .wheel(-(event.delta_x() as f32), -(event.delta_y() as f32));
             host.canvas.set_ctrl(false);
+            host.refresh_representation_score();
             let _ = update_semantics(&mut host);
         }
     });

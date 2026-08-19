@@ -133,7 +133,8 @@ pub mod underlay;
 pub use cartography_scene::{
     CANVAS_LAYOUT_STRATEGIES, CanvasStrategyProjection, CartographySceneOptions,
     build_projection_request, project_canvas_lens, project_canvas_strategy,
-    project_canvas_strategy_with_score, project_canvas_subgraph, project_with, signal_overlays,
+    project_canvas_strategy_with_score, project_canvas_strategy_with_score_for_view,
+    project_canvas_subgraph, project_with, signal_overlays,
 };
 pub use geometry::CartographyGeometry;
 

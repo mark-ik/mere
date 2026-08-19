@@ -13,6 +13,7 @@ use sceno::{
     Arrangement, Footprint, Placement, Representation, Score, ScoreItem, Size2, SourceRef, Spiral,
 };
 
+use crate::representation::{RepresentationState, default_graph_representation_registry};
 use crate::scene_out::MERE_GRAPH_ADAPTER;
 use crate::{PositionedEdge, PositionedNode, Projection, ProjectionMetadata};
 
@@ -34,6 +35,22 @@ pub fn project_spiral_score(
     focus: Option<NodeKey>,
     recent_first: bool,
 ) -> MereSpiralProjection {
+    project_spiral_score_for_view(graph, extents, focus, recent_first, 1.0, None)
+}
+
+/// Build and realize Mere's P3 pane-spiral score for one declared view.
+///
+/// Representation conditions stay in Cartography's host registry. The score
+/// records only the selected rung. `previous` supplies prior selections for
+/// hysteresis; it never changes source identity, order, placement, or geometry.
+pub fn project_spiral_score_for_view(
+    graph: &Graph,
+    extents: Option<&HashMap<NodeKey, (f32, f32)>>,
+    focus: Option<NodeKey>,
+    recent_first: bool,
+    zoom_level: f32,
+    previous: Option<&Score>,
+) -> MereSpiralProjection {
     let mut ordered: Vec<NodeKey> = graph.nodes().map(|(key, _)| key).collect();
     if recent_first {
         ordered.sort_by_key(|key| {
@@ -54,6 +71,19 @@ pub fn project_spiral_score(
         });
     }
 
+    let recency = normalized_recency(graph, &ordered);
+    let registry = default_graph_representation_registry();
+    let previous: HashMap<&str, &Representation> = previous
+        .into_iter()
+        .flat_map(|score| score.items.iter())
+        .filter(|item| item.source.adapter == MERE_GRAPH_ADAPTER)
+        .map(|item| (item.source.id.as_str(), &item.representation))
+        .collect();
+    let zoom_level = if zoom_level.is_finite() && zoom_level > 0.0 {
+        zoom_level
+    } else {
+        1.0
+    };
     let mut score = Score::new(Arrangement::Spiral(Spiral::default()));
     score.generation = graph.revision();
     for (ordinal, key) in ordered.iter().enumerate() {
@@ -63,11 +93,22 @@ pub fn project_spiral_score(
         let extent = extents
             .and_then(|items| items.get(key).copied())
             .unwrap_or((0.0, 0.0));
+        let source = SourceRef::new(MERE_GRAPH_ADAPTER, node.id.to_string());
+        let profile = registry.resolve_classes(node.tags.iter().map(String::as_str));
+        let state = RepresentationState {
+            screen_width: extent.0 * zoom_level,
+            screen_height: extent.1 * zoom_level,
+            zoom_level,
+            recency: recency.get(key).copied().unwrap_or(0.0),
+            focused: focus == Some(*key),
+        };
         score.items.push(ScoreItem {
-            source: SourceRef::new(MERE_GRAPH_ADAPTER, node.id.to_string()),
+            representation: profile
+                .ladder
+                .select(state, previous.get(source.id.as_str()).copied()),
+            source,
             ordinal: ordinal as u32,
             footprint: footprint_for(extent),
-            representation: representation_for(extent, focus == Some(*key)),
             placement: Placement::Ordinal,
             layer: 0,
             visible: true,
@@ -127,6 +168,41 @@ pub fn project_spiral_score(
     MereSpiralProjection { score, projection }
 }
 
+fn normalized_recency(graph: &Graph, keys: &[NodeKey]) -> HashMap<NodeKey, f32> {
+    let times: Vec<_> = keys
+        .iter()
+        .copied()
+        .map(|key| {
+            let seconds = graph
+                .node_last_visited(key)
+                .and_then(|time| time.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs_f64())
+                .unwrap_or(0.0);
+            (key, seconds)
+        })
+        .collect();
+    let minimum = times
+        .iter()
+        .map(|(_, time)| *time)
+        .fold(f64::INFINITY, f64::min);
+    let maximum = times
+        .iter()
+        .map(|(_, time)| *time)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let span = maximum - minimum;
+    times
+        .into_iter()
+        .map(|(key, time)| {
+            let value = if span.is_finite() && span > f64::EPSILON {
+                ((time - minimum) / span) as f32
+            } else {
+                1.0
+            };
+            (key, value)
+        })
+        .collect()
+}
+
 fn footprint_for((w, h): (f32, f32)) -> Footprint {
     if w > 0.0 && h > 0.0 {
         Footprint::Rect {
@@ -137,20 +213,6 @@ fn footprint_for((w, h): (f32, f32)) -> Footprint {
     }
 }
 
-/// Mere's local LOD policy. Focus is a view fact and wins over scale; the
-/// source's live content stays an application concern, not a Scenograph type.
-fn representation_for((w, h): (f32, f32), focused: bool) -> Representation {
-    if focused {
-        Representation::LivePane
-    } else {
-        match w.max(h) {
-            side if side >= 72.0 => Representation::Card,
-            side if side >= 48.0 => Representation::Snapshot,
-            _ => Representation::Glyph,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,7 +220,7 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
-    fn recency_becomes_portable_order_and_selects_every_lod_rung() {
+    fn recency_becomes_portable_order_and_selects_declared_lod_rungs() {
         let mut graph = Graph::new();
         let keys: Vec<_> = (1..=4)
             .map(|id| {
@@ -207,16 +269,111 @@ mod tests {
                 .score
                 .items
                 .iter()
-                .any(|item| item.representation == Representation::Snapshot)
-        );
-        assert!(
-            projected
-                .score
-                .items
-                .iter()
                 .any(|item| item.representation == Representation::Glyph)
         );
         assert_eq!(projected.projection.nodes.len(), 4);
+    }
+
+    #[test]
+    fn one_graph_at_two_zooms_selects_different_rungs_without_moving_items() {
+        let mut graph = Graph::new();
+        let newest = add_node(
+            &mut graph,
+            Some(Uuid::from_u128(1)),
+            "fixture://newest".to_string(),
+            PortablePoint::zero(),
+        );
+        let oldest = add_node(
+            &mut graph,
+            Some(Uuid::from_u128(2)),
+            "fixture://oldest".to_string(),
+            PortablePoint::zero(),
+        );
+        for (key, timestamp_ms) in [(oldest, 1), (newest, 2)] {
+            let node_id = graph.get_node(key).unwrap().id;
+            apply_graph_delta(
+                &mut graph,
+                GraphDelta::ReplayTouchNodeLastVisitedById {
+                    node_id,
+                    timestamp_ms,
+                },
+            );
+        }
+        let extents = HashMap::from([(newest, (64.0, 64.0)), (oldest, (64.0, 64.0))]);
+
+        let near = project_spiral_score_for_view(&graph, Some(&extents), None, true, 1.0, None);
+        let far = project_spiral_score_for_view(&graph, Some(&extents), None, true, 0.5, None);
+
+        assert_eq!(near.score.items[0].representation, Representation::Card);
+        assert_eq!(far.score.items[0].representation, Representation::Glyph);
+        assert_eq!(near.projection, far.projection);
+        assert_eq!(near.score.items[0].source, far.score.items[0].source);
+        assert_eq!(near.score.items[0].ordinal, far.score.items[0].ordinal);
+    }
+
+    #[test]
+    fn an_unmeasured_item_does_not_claim_a_card() {
+        let mut graph = Graph::new();
+        add_node(
+            &mut graph,
+            Some(Uuid::from_u128(1)),
+            "fixture://one".to_string(),
+            PortablePoint::zero(),
+        );
+
+        let projected = project_spiral_score_for_view(&graph, None, None, true, 2.0, None);
+        assert_eq!(
+            projected.score.items[0].representation,
+            Representation::Glyph
+        );
+        assert_eq!(projected.score.items[0].footprint, Footprint::Point);
+    }
+
+    #[test]
+    fn prior_score_supplies_hysteresis_and_focus_stays_live() {
+        let mut graph = Graph::new();
+        let key = add_node(
+            &mut graph,
+            Some(Uuid::from_u128(1)),
+            "fixture://one".to_string(),
+            PortablePoint::zero(),
+        );
+        let extents = HashMap::from([(key, (64.0, 64.0))]);
+        let card = project_spiral_score_for_view(&graph, Some(&extents), None, true, 1.0, None);
+        let retained = project_spiral_score_for_view(
+            &graph,
+            Some(&extents),
+            None,
+            true,
+            0.95,
+            Some(&card.score),
+        );
+        let released = project_spiral_score_for_view(
+            &graph,
+            Some(&extents),
+            None,
+            true,
+            0.89,
+            Some(&retained.score),
+        );
+        let focused = project_spiral_score_for_view(
+            &graph,
+            Some(&extents),
+            Some(key),
+            true,
+            0.2,
+            Some(&released.score),
+        );
+
+        assert_eq!(retained.score.items[0].representation, Representation::Card);
+        assert_eq!(
+            released.score.items[0].representation,
+            Representation::Glyph
+        );
+        assert_eq!(
+            focused.score.items[0].representation,
+            Representation::LivePane
+        );
     }
 
     #[test]

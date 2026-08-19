@@ -6,7 +6,7 @@ use graphshell::product::{
     EditableRelation, ExportRequest, LocalFileMetadata, RelationFamilyFilter, SavedSceneV1,
     TransferScope,
 };
-use mere::canvas::{CameraView, Face, project_canvas_strategy_with_score};
+use mere::canvas::{CameraView, Face, project_canvas_strategy_with_score_for_view};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use wasm_bindgen::JsCast;
@@ -95,6 +95,7 @@ impl BrowserHost {
 
     pub(super) fn sync_canvas(&mut self, selected: &[Uuid], fit: bool) -> Result<(), String> {
         let camera = self.canvas.camera();
+        let previous_score = self.canvas.projection_score().cloned();
         let old = self.canvas.cartography_geometry();
         self.canvas.set_graph(self.app.host.graph().clone());
         self.canvas
@@ -110,15 +111,18 @@ impl BrowserHost {
         self.canvas.apply_cartography_materials(old.material_iter());
         self.canvas.apply_cartography_faces(old.face_iter());
 
-        let projection = project_canvas_strategy_with_score(
+        let extents = self.canvas.strategy_extents();
+        let projection = project_canvas_strategy_with_score_for_view(
             &self.layout_id,
             self.canvas.graph(),
             self.canvas.focused_key(),
             self.width,
             self.height,
             None,
-            None,
+            Some(&extents),
             true,
+            camera.zoom,
+            previous_score.as_ref(),
         );
         let old_positions: HashMap<_, _> = old.iter().collect();
         let positions: Vec<_> = projection
@@ -320,15 +324,19 @@ impl BrowserHost {
     fn apply_arrangement_from_form(&mut self) -> Result<String, String> {
         self.layout_id = select_value("arrangement-select")?;
         let selected = self.canvas.selected_members();
-        let projection = project_canvas_strategy_with_score(
+        let previous_score = self.canvas.projection_score().cloned();
+        let extents = self.canvas.strategy_extents();
+        let projection = project_canvas_strategy_with_score_for_view(
             &self.layout_id,
             self.canvas.graph(),
             self.canvas.focused_key(),
             self.width,
             self.height,
             None,
-            None,
+            Some(&extents),
             true,
+            self.canvas.camera().zoom,
+            previous_score.as_ref(),
         );
         self.canvas
             .set_layout_strategy(Some(self.layout_id.clone()));
@@ -343,6 +351,30 @@ impl BrowserHost {
         self.canvas.set_selected_members(&selected);
         self.canvas.fit_to_content();
         Ok(format!("Arrangement set to {}", self.layout_id))
+    }
+
+    /// Re-evaluate only the Spiral score's representation slots after a view
+    /// change. The canvas keeps its existing positions; the prior score gives
+    /// the registry enough state to apply hysteresis at rung boundaries.
+    pub(super) fn refresh_representation_score(&mut self) {
+        if self.layout_id != "phyllotaxis.default" {
+            return;
+        }
+        let previous_score = self.canvas.projection_score().cloned();
+        let extents = self.canvas.strategy_extents();
+        let projection = project_canvas_strategy_with_score_for_view(
+            &self.layout_id,
+            self.canvas.graph(),
+            self.canvas.focused_key(),
+            self.width,
+            self.height,
+            None,
+            Some(&extents),
+            true,
+            self.canvas.camera().zoom,
+            previous_score.as_ref(),
+        );
+        self.canvas.set_projection_score(projection.score);
     }
 
     fn toggle_physics(&mut self) -> Result<String, String> {

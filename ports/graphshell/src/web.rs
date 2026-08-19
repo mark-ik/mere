@@ -344,6 +344,9 @@ impl BrowserHost {
                 }
             }
         }
+        if self.active == ActiveSession::Local {
+            self.refresh_representation_score();
+        }
         self.chrome_dirty = true;
     }
 

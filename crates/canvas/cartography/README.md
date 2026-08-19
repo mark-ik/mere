@@ -20,8 +20,9 @@ Package `mere-cartography`, lib name `cartography`. Most contract types derive
 | `overlay` | `Overlay`, whose variants are `ClusterHalo`, `ActivityHeat`, `BridgeEmphasis`, `ImportanceScale`, `EdgeWeight`. |
 | `signals` | `IntelligenceSignals`, `ClusterSet`, `Cluster`, `AffinityScores`, `BridgeNodes`, `ImportanceWeights`, `NodeEmbeddings`. |
 | `minimap` | `MinimapDescriptor`, `MinimapOverlayKind`. |
+| `representation` | Class profiles, primitive and behavior bindings, and ordered representation ladders built from measure/operation/threshold/hysteresis conditions. |
 | `scene_out` | `scene_from_projection`, `MERE_GRAPH_ADAPTER`, `HEAT_CHANNEL`, `BRIDGE_CHANNEL`. |
-| `spiral_score` | `project_spiral_score`, `MereSpiralProjection`. |
+| `spiral_score` | `project_spiral_score`, `project_spiral_score_for_view`, `MereSpiralProjection`. |
 | `adapters` | Doc-only stub. The `graph_canvas` adapter family moved to `arrangements` on 2026-05-18. |
 
 `VERSION` and `STAGE` (`"pre-alpha"`) are crate-root constants.
@@ -56,8 +57,11 @@ becomes a `sceno::Region`. `ImportanceScale` folds into the instance transform;
 `project_spiral_score(&Graph, extents, focus, recent_first)` is mere's graph
 adapter to the spiral arrangement: it builds a `sceno::Score`, solves it with
 `scenomise::solve`, and returns both the score and the `Projection` it realizes
-as `MereSpiralProjection`. Recency ordering and the LOD rung choice
-(`Glyph` / `Snapshot` / `Card` / `LivePane`) are mere-local policy.
+as `MereSpiralProjection`. `project_spiral_score_for_view` also accepts the
+declared zoom and prior score. It evaluates each node's class profile against
+screen extent, normalized recency, focus, and zoom, using the prior selected
+rung for hysteresis. The conditions remain host-side registry data; the score
+continues to carry only the selected `Glyph`, `Card`, or `LivePane` slot.
 
 ## Dependencies
 

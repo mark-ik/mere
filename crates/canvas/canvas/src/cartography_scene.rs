@@ -473,8 +473,44 @@ pub fn project_canvas_strategy_with_score(
     extents: Option<&HashMap<NodeKey, (f32, f32)>>,
     recent_first: bool,
 ) -> CanvasStrategyProjection {
+    project_canvas_strategy_with_score_for_view(
+        id,
+        graph,
+        focus,
+        width,
+        height,
+        clusters,
+        extents,
+        recent_first,
+        1.0,
+        None,
+    )
+}
+
+/// Like [`project_canvas_strategy_with_score`], evaluated for the host's
+/// current zoom and prior score. These two view facts affect only the selected
+/// representation rung and its hysteresis; placement remains score-driven.
+pub fn project_canvas_strategy_with_score_for_view(
+    id: &str,
+    graph: &Graph,
+    focus: Option<NodeKey>,
+    width: u32,
+    height: u32,
+    clusters: Option<&cartography::ClusterSet>,
+    extents: Option<&HashMap<NodeKey, (f32, f32)>>,
+    recent_first: bool,
+    zoom_level: f32,
+    previous_score: Option<&sceno::Score>,
+) -> CanvasStrategyProjection {
     if id == "phyllotaxis.default" {
-        let result = cartography::project_spiral_score(graph, extents, focus, recent_first);
+        let result = cartography::project_spiral_score_for_view(
+            graph,
+            extents,
+            focus,
+            recent_first,
+            zoom_level,
+            previous_score,
+        );
         return CanvasStrategyProjection {
             positions: result
                 .projection

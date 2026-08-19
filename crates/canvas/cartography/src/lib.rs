@@ -82,9 +82,11 @@ pub use reading::{
     ReadingEmphasis, ReadingSurface, default_graph_reading_registry,
 };
 pub use representation::{
-    BehaviorBinding, GRAPH_REPRESENTATION_REGISTRY_SCHEMA, GraphRepresentationRegistry,
-    HostBehavior, HostGesture, PrimitiveBody, PrimitiveProfile, RepresentationProfile,
-    default_graph_representation_registry,
+    BehaviorBinding, ConditionOperation, GRAPH_REPRESENTATION_REGISTRY_SCHEMA,
+    GraphRepresentationRegistry, HostBehavior, HostGesture, PrimitiveBody, PrimitiveProfile,
+    RepresentationCondition, RepresentationLadder, RepresentationMeasure, RepresentationProfile,
+    RepresentationRung, RepresentationState, default_graph_representation_registry,
+    default_representation_ladder,
 };
 pub use request::{
     AxisValue, FormFactor, NodeFilter, ProjectionDimension, ProjectionRequest, TargetSize,
@@ -95,7 +97,7 @@ pub use signals::{
     AffinityScores, BridgeNodes, Cluster, ClusterSet, ImportanceWeights, IntelligenceSignals,
     NodeEmbeddings,
 };
-pub use spiral_score::{MereSpiralProjection, project_spiral_score};
+pub use spiral_score::{MereSpiralProjection, project_spiral_score, project_spiral_score_for_view};
 pub use strategy::LayoutStrategy;
 
 /// Crate version.
