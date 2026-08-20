@@ -37,9 +37,27 @@ when the collecting `mere-transport` store finds no remaining tag from another
 mesh or subsystem. A content hash reused by an unfinished or post-checkpoint
 job remains protected.
 
-The current proof is authority-only. There is no resident binary, Cambium view,
-Burn resource migration, Burn Remote adapter, model manifest browser, or
-trainer yet. Those remain separate slices rather than implied behavior.
+D1 adds `ResidentAuthority<B>`, the reusable body of a long-lived device
+process. The owner supplies supervisor, maintenance, and physical collection
+cadences; the type deliberately has no default policy. `ResidentStorage` opens
+a disk-backed collecting blob store and binds its custody tags to one mesh. The
+resident owns that storage, the live p2p transport, the mesh host, and their
+shutdown order.
+
+Every supervisor turn, completed maintenance run, unchanged maintenance turn,
+maintenance refusal, and shutdown request is an ordered `ResidentReceipt`.
+Scheduled maintenance keeps running after a visible refusal such as a live
+lease. A supervisor failure is fatal. An unchanged event frontier is reported
+without authoring another checkpoint.
+
+The D1 proof reopens both the redb mesh store and collecting blob store after a
+real resident run. The job remains terminal and released content stays
+released across that restart boundary.
+
+There is not yet an installed standalone binary because Distillery still needs
+a product-level choice of Personae profile and persisted settings authority.
+Cambium views, Burn resource migration, the Burn Remote adapter, model manifest
+browsing, and training remain later slices.
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/distillery`.

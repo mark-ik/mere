@@ -119,6 +119,14 @@ async fn the_port_drives_the_host_and_collects_only_after_checkpoint() {
         report.effects,
         [mesh::RetentionEffect::BlobCollected { count: 2 }]
     );
+    assert!(
+        distillery
+            .maintain_if_advanced()
+            .await
+            .expect("idle maintenance")
+            .is_none(),
+        "the resident cadence must not author the same frontier twice"
+    );
 
     for _ in 0..100 {
         if !space.has(&input).await {

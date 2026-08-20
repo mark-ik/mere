@@ -205,6 +205,34 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
         Ok(checkpoint)
     }
 
+    /// Author a retention checkpoint only when the event frontier has moved.
+    ///
+    /// A resident product may ask for maintenance on a cadence. Re-authoring
+    /// the same frontier on every interval would grow the checkpoint log while
+    /// proving nothing new, so this compares the candidate with the latest
+    /// accepted checkpoint first. An empty mesh also stays empty until it has
+    /// an event worth checkpointing.
+    pub async fn checkpoint_if_advanced(
+        &self,
+    ) -> Result<Option<mesh::RetentionCheckpoint>, HostError> {
+        let mesh_id = self.synced.mesh_id();
+        let candidate = self
+            .synced
+            .store()
+            .build_checkpoint(mesh_id, self.config.clock.now_ms())
+            .await?;
+        let current = self.synced.store().latest_checkpoint(mesh_id).await?;
+        let advanced = match current {
+            Some(current) => current.checkpoint.frontier != candidate.frontier,
+            None => !candidate.frontier.is_empty(),
+        };
+        if !advanced {
+            return Ok(None);
+        }
+
+        self.checkpoint().await.map(Some)
+    }
+
     /// Tell the ring which persona master key authorized this device's mesh
     /// authoring key, so peers can turn its jobs into a transport address.
     ///

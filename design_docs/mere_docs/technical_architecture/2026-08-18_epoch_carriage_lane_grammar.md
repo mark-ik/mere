@@ -326,7 +326,25 @@ roots. The contract as ruled:
   (`a_paired_leased_device_recovers_its_epoch_through_a_peer`). One
   layering fact it surfaced: `publish_slot` now takes ceilings per call,
   because the issuer's knowledge is per grant, not per host.
-- **The revocation fast path.** A received `SignedDelegationRevocation` should
-  destroy the certificate's leases immediately; today only expiry converges.
+- ~~The revocation fast path.~~ **Done 2026-08-19, as retraction by
+  supersession, because the ruled mechanism cannot exist under blinding.**
+  Ruling 5 said a peer receiving a `SignedDelegationRevocation` destroys the
+  certificate's leases immediately. A statement names a `DelegationId`; a
+  replica holds only blinded slots; mapping one to the other needs the
+  device's wrapping key, which no replica has and which the wallet itself
+  deletes during revocation (`remove_remote_auth_wrapping_key`). Nothing
+  should be unblinded to fix that. What the ratified grammar already provides
+  is the fast path: **supersession destroys**, so the issuer publishes an
+  empty record over the slot and every cooperative peer's admission prunes
+  the superseded operation and erases its payload in the same batch. The
+  wallet remembers its published slots in a retraction index written at
+  publish time, while the wrapping key still exists; retraction consumes it
+  after revocation. The shell rides a short lease (`RETRACTION_TTL_MS`, ten
+  minutes) and purges on schedule; a peer the retraction never reaches
+  converges at the original expiry, which is exactly ruling 5's dependency
+  posture. Proven end to end through real revocation:
+  `revoking_a_device_destroys_its_carriage_on_a_peer_before_expiry` shows the
+  peer's copy replaced by the empty shell with the lease still hours from
+  expiry, and the index consumed so retraction is once.
 - **One endpoint for both lanes.** Blocked on `set_topics` being
   replace-not-append; the carriage host runs its own endpoint meanwhile.

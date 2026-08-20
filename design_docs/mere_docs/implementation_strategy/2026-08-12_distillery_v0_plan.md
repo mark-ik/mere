@@ -1,7 +1,7 @@
 # Distillery v0 Plan
 
 **Date**: 2026-08-12  
-**Status**: Complete for D0, the authority projection and retention sweep.
+**Status**: D0 complete; D1 resident authority lifecycle implemented.
 
 ## 1. Purpose
 
@@ -90,11 +90,59 @@ Verified from `C:\Users\mark_\Code\repos\mere` with an isolated
 
 D0 does not create the resident process or lifecycle, Cambium views, the model
 manifest browser, streaming console, Burn resource migration, Burn Remote
-adapter, portable remote checkpoints, tolerant comparators, or training. The
-stable Burn migration remains the next serial mesh-host gate; the lease-bound
-remote adapter follows it.
+adapter, portable remote checkpoints, tolerant comparators, or training.
 
-The next Distillery-native slice should be a resident authority process with a
-disk-backed collecting store and owner-configurable retention settings. Views
-should follow that authority and render its receipts rather than inventing a
-parallel state model.
+## 7. D1 resident authority lifecycle
+
+D1 supplies the reusable process body without hardwiring an identity profile or
+an operating-system launcher.
+
+`ResidentSettings` has no default. The embedding owner selects:
+
+- supervisor tick cadence;
+- optional maintenance cadence;
+- physical blob collection cadence; and
+- whether accepted maintenance releases settled mesh custody.
+
+`ResidentStorage` opens a disk-backed collecting `BlobStore` and scopes its
+custody tags to one mesh. `ResidentAuthority` rejects a host for another mesh,
+owns the composed `Distillery`, p2p transport, and storage, and closes them in
+that order: endpoint, joined mesh, blob-store flush.
+
+The run loop emits ordered `ResidentReceipt` values for exact substrate steps,
+completed maintenance, unchanged maintenance, maintenance failure, supervisor
+failure, and requested stop. A maintenance refusal does not stop useful work.
+That distinction is required because a checkpoint landing during a live lease
+is expected to fail closed. A supervisor failure does end the run.
+
+Cadenced maintenance uses `MeshHost::checkpoint_if_advanced`. It compares the
+candidate event frontier with the latest accepted checkpoint and leaves an
+empty or unchanged mesh alone. The explicit `Distillery::maintain` command
+still authors whenever the owner asks.
+
+### D1 receipt
+
+The resident integration receipt uses a real p2panda transport, a redb-backed
+`MeshStore`, and a disk-backed collecting blob store. It proves:
+
+1. The configured tick cadence drives a V2 job to completion.
+2. Scheduled maintenance releases the input and output custody tags.
+3. The next maintenance turn reports an unchanged frontier without another
+   checkpoint.
+4. Shutdown is observed and closes the endpoint before persistent storage.
+5. Reopening the redb mesh store replays the terminal job.
+6. Reopening the collecting blob store preserves the custody release.
+
+## 8. Remaining boundary
+
+D1 is a resident service, not yet an installed Distillery binary. The latter
+needs one explicit product decision about which Personae profile owns the mesh
+author and where its persisted settings live; an environment seed would be a
+bad substitute for that authority.
+
+Cambium views should now follow `ResidentReceipt`. The stable Burn migration is
+the next serial compute gate, migrating ESP before Quint with the planned
+native, wasm, CPU, WGPU, real-device, and package receipts. The lease-bound Burn
+Remote adapter follows that migration. Model manifest browsing, streaming
+console, portable remote checkpoints, tolerant comparators, and training remain
+separate slices.

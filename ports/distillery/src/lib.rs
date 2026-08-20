@@ -27,19 +27,25 @@
 //! The trainer lane (Distillery-as-trainer, per the geist brief) lands here
 //! later, behind its own plan: training is one more job the works runs.
 //!
-//! [`Distillery`] is the first real consumer of `mere-mesh-host`. Its v0
-//! authority drives the non-blocking supervisor and owns the explicit
-//! checkpoint/collection operation. Views remain a later slice; when they
-//! arrive they render the reports returned here rather than reconstructing
+//! [`Distillery`] is the first real consumer of `mere-mesh-host`. Its D0
+//! authority drives the non-blocking supervisor and owns checkpoint/collection.
+//! [`ResidentAuthority`] is D1's long-lived process body: it owns persistent
+//! collecting storage, the transport shutdown order, configurable tick and
+//! maintenance cadence, and an ordered receipt stream. Views remain a later
+//! slice; when they arrive they render those receipts rather than reconstructing
 //! authority state.
 
 #![doc(html_no_source)]
 #![warn(missing_docs)]
 
 mod authority;
+mod resident;
 
 pub use authority::{
     BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
+};
+pub use resident::{
+    ResidentAuthority, ResidentError, ResidentReceipt, ResidentSettings, ResidentStorage,
 };
 
 /// Crate version.

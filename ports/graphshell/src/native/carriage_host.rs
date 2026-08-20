@@ -52,20 +52,6 @@ pub struct CarriageHostConfig {
     pub paired_nodes: Vec<[u8; 32]>,
 }
 
-/// What one commissioning pass published, and what it honestly could not.
-#[derive(Debug, Default)]
-pub struct CarriagePublishReport {
-    /// Each (device, persona) whose slot went onto the lane.
-    pub published: Vec<(pandect::DeviceId, pandect::PersonaId)>,
-    /// Leased devices whose wrapping key the wallet never retained, so their
-    /// slots cannot be addressed. Pairing retains one; direct issue does not.
-    pub skipped_no_wrapping_key: Vec<pandect::DeviceId>,
-    /// Certificates obliged to carry epoch material that have no record yet.
-    pub skipped_no_record: usize,
-    /// Certificates whose grant expiry has already passed.
-    pub skipped_grant_expired: usize,
-}
-
 /// One device's seat on one graph's carriage topic.
 pub struct CarriageHost {
     graph: [u8; 32],
@@ -472,114 +458,6 @@ impl CarriageHost {
         Ok(purged)
     }
 
-    /// Publish every slot this wallet's roster says should ride this lane.
-    ///
-    /// The issue-path integration: after grants are issued or refreshed
-    /// through `pandect`, the wallet host calls this to put each leased
-    /// device's wrapped-epoch records on the carriage topic. The roster is
-    /// the authority for *whether* (the ruled layering: wallet roster grants
-    /// carriage, pairing list routes it); this reads `CarriagePolicy` off
-    /// each `DeviceRecord` and publishes only for devices leased onto this
-    /// host's graph.
-    ///
-    /// Skips are reported rather than erred, because each is a normal state:
-    /// a device with no retained wrapping key cannot have its slot addressed
-    /// (the direct issue path retains none; pairing does), a certificate with
-    /// no epoch record has nothing to carry, and an already-expired grant has
-    /// nothing left to lease.
-    pub async fn publish_grant_carriage(
-        &self,
-        data_root: &std::path::Path,
-    ) -> Result<CarriagePublishReport, CarriageHostError> {
-        let seed = pandect::load_identity_seed(data_root)
-            .map_err(|error| CarriageHostError::Transport(error.to_string()))?
-            .ok_or_else(|| {
-                CarriageHostError::Refused("wallet root missing identity seed".into())
-            })?;
-        let provider = personae::InMemoryProvider::from_seed(seed);
-        let roster = pandect::load_device_roster(data_root)
-            .map_err(|error| CarriageHostError::Transport(error.to_string()))?
-            .unwrap_or_else(pandect::DeviceRoster::new);
-        let bridge = pandect::load_remote_auth_wrapping_key_bridge(data_root)
-            .map_err(|error| CarriageHostError::Transport(error.to_string()))?
-            .unwrap_or_default();
-
-        let mut report = CarriagePublishReport::default();
-        for device in &roster.devices {
-            if roster.revoked.contains(&device.device_id) {
-                continue;
-            }
-            let pandect::CarriagePolicy::Leased { max_ttl_ms, graph } = device.carriage else {
-                continue;
-            };
-            if graph != self.graph {
-                continue;
-            }
-            let Some(wrapping_key) = bridge
-                .keys
-                .iter()
-                .find(|key| key.device_id == device.device_id)
-                .map(|key| key.wrapping_key)
-            else {
-                report.skipped_no_wrapping_key.push(device.device_id);
-                continue;
-            };
-            let set = pandect::load_device_grant_set(data_root, device.device_id)
-                .map_err(|error| CarriageHostError::Transport(error.to_string()))?;
-            for (persona, certificate) in &set.personas {
-                if !pandect::requires_epoch_material(certificate) {
-                    continue;
-                }
-                let certificate_id = certificate.certificate.id();
-                let Some(record) = pandect::load_wrapped_epoch_record(data_root, certificate_id)
-                    .map_err(|error| CarriageHostError::Transport(error.to_string()))?
-                else {
-                    report.skipped_no_record += 1;
-                    continue;
-                };
-                let bytes = pandect::encode_epoch_record(&record)
-                    .map_err(|error| CarriageHostError::Refused(error.to_string()))?;
-
-                let now = now_ms();
-                let mut expires_at_ms = now.saturating_add(max_ttl_ms);
-                if let Some(grant_expiry) = certificate.certificate.expires_at_ms {
-                    expires_at_ms = expires_at_ms.min(grant_expiry);
-                }
-                if expires_at_ms <= now {
-                    report.skipped_grant_expired += 1;
-                    continue;
-                }
-
-                let slot = pandect::blinded_slot_id(certificate_id, wrapping_key);
-                let issue = self
-                    .held
-                    .read()
-                    .await
-                    .get(&slot)
-                    .map(|lease| lease.issue + 1)
-                    .unwrap_or(1);
-                // The persona's chain-root keypair: the same authority whose
-                // public key verifiers hold as this persona's TrustedRoot.
-                let issuer = provider
-                    .derive_keypair(&personae::carry::persona_wallet_salt(*persona))
-                    .map_err(CarriageHostError::Identity)?;
-                self.publish_slot(
-                    &issuer,
-                    slot,
-                    issue,
-                    expires_at_ms,
-                    bytes,
-                    CarriageCeilings {
-                        device_max_ttl_ms: Some(max_ttl_ms),
-                        grant_expires_at_ms: certificate.certificate.expires_at_ms,
-                    },
-                )
-                .await?;
-                report.published.push((device.device_id, *persona));
-            }
-        }
-        Ok(report)
-    }
 
     pub async fn close(self) -> Result<(), CarriageHostError> {
         self.joined.leave();
@@ -589,6 +467,12 @@ impl CarriageHost {
             .map_err(|error| CarriageHostError::Transport(error.to_string()))
     }
 }
+
+#[path = "carriage_host_commissioning.rs"]
+mod commissioning;
+pub use commissioning::{
+    CarriagePublishReport, CarriageRetractReport, RETRACTION_TTL_MS, RetractionTarget,
+};
 
 #[cfg(test)]
 #[path = "carriage_host_tests.rs"]

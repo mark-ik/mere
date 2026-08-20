@@ -127,6 +127,25 @@ impl<B: Backend + Clone + Send + Sync + 'static> Distillery<B> {
     /// sharing a content hash keeps it protected.
     pub async fn maintain(&self) -> Result<MaintenanceReport, DistilleryError> {
         let checkpoint = self.host.checkpoint().await?;
+        self.finish_maintenance(checkpoint).await
+    }
+
+    /// Run maintenance only when the mesh's event frontier has advanced.
+    ///
+    /// This is the resident-loop operation. [`Self::maintain`] remains the
+    /// explicit owner command and always authors a checkpoint; a cadence uses
+    /// this method so an idle mesh does not accumulate identical checkpoints.
+    pub async fn maintain_if_advanced(&self) -> Result<Option<MaintenanceReport>, DistilleryError> {
+        let Some(checkpoint) = self.host.checkpoint_if_advanced().await? else {
+            return Ok(None);
+        };
+        self.finish_maintenance(checkpoint).await.map(Some)
+    }
+
+    async fn finish_maintenance(
+        &self,
+        checkpoint: RetentionCheckpoint,
+    ) -> Result<MaintenanceReport, DistilleryError> {
         let synced = self.host.synced();
         let blobs = synced.store().collectable_blobs(synced.mesh_id()).await?;
         let collected = if self.retention.collect_after_checkpoint {
