@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-use personae::{IdentityError, PersonaId, SealedRecordStorage};
+use personae::{IdentityError, PersonaId, SealedRecordChange, SealedRecordStorage};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
@@ -84,7 +84,7 @@ pub enum OtpItemError {
     /// The sealed record was written by an unsupported item format.
     UnsupportedRecordVersion(u8),
     /// The final HOTP value cannot be released because it could not be
-    /// advanced and durably consumed.
+    /// advanced before the replacement record could be persisted.
     HotpCounterExhausted,
 }
 
@@ -163,31 +163,35 @@ impl OtpItemStore {
 
     /// Exercise one item after a participant-gated approval.
     ///
-    /// TOTP records are unchanged. HOTP advances its durable counter before
-    /// returning a code, so a retried host operation cannot receive the same
-    /// counter value twice. The enclosing release gate serializes this method
-    /// across its pending approvals.
+    /// TOTP records are unchanged. HOTP advances its counter before returning
+    /// a code. The sealed-store update serializes load, exercise, and replace
+    /// across every clone of the opened store, including independent gates.
     pub(crate) fn release_tile_at_unix_time(
         &self,
         id: OtpItemId,
         unix_secs: u64,
     ) -> Result<OtpCodeTile, OtpItemError> {
-        let mut record = self.require(id)?;
-        if matches!(record.kind, StoredOtpKind::Hotp { counter: u64::MAX }) {
-            return Err(OtpItemError::HotpCounterExhausted);
-        }
-        let item = record.item(id);
-        let otp = record.otp()?;
-        let code = otp
-            .code_at_unix_time(unix_secs)
-            .map_err(OtpItemError::Generation)?;
-        if let StoredOtpKind::Hotp { counter } = &mut record.kind {
-            *counter = counter
-                .checked_add(1)
-                .expect("HOTP counter was checked before the code was produced");
-            self.storage.save_record(self.record_path(id), &record)?;
-        }
-        Ok(OtpCodeTile::new(item, code, unix_secs))
+        self.storage
+            .update_record(self.record_path(id), |record: Option<StoredOtpItem>| {
+                let mut record = record.ok_or(OtpItemError::NotFound(id))?.checked()?;
+                if matches!(record.kind, StoredOtpKind::Hotp { counter: u64::MAX }) {
+                    return Err(OtpItemError::HotpCounterExhausted);
+                }
+                let item = record.item(id);
+                let otp = record.otp()?;
+                let code = otp
+                    .code_at_unix_time(unix_secs)
+                    .map_err(OtpItemError::Generation)?;
+                let change = if let StoredOtpKind::Hotp { counter } = &mut record.kind {
+                    *counter = counter
+                        .checked_add(1)
+                        .expect("HOTP counter was checked before the code was produced");
+                    SealedRecordChange::Replace(record)
+                } else {
+                    SealedRecordChange::Keep
+                };
+                Ok((OtpCodeTile::new(item, code, unix_secs), change))
+            })
     }
 
     /// Return seconds before a time-based item rolls over, or `None` for HOTP.
@@ -245,9 +249,6 @@ impl Drop for StoredOtpItem {
 
 impl StoredOtpItem {
     fn from_import(otp: Otp, imported: OtpUri) -> Result<Self, OtpItemError> {
-        if otp.secret.is_empty() {
-            return Err(OtpItemError::Generation(OtpError::EmptySecret));
-        }
         Ok(Self {
             version: RECORD_FORMAT_VERSION,
             account: imported.account,
@@ -279,14 +280,14 @@ impl StoredOtpItem {
     }
 
     fn otp(&self) -> Result<Otp, OtpItemError> {
-        if self.secret.is_empty() {
-            return Err(OtpItemError::Generation(OtpError::EmptySecret));
-        }
         let otp = match self.kind {
             StoredOtpKind::Totp { period } => Otp::totp(self.secret.clone())
+                .map_err(OtpItemError::Generation)?
                 .with_period(period)
                 .map_err(OtpItemError::Generation)?,
-            StoredOtpKind::Hotp { counter } => Otp::hotp(self.secret.clone(), counter),
+            StoredOtpKind::Hotp { counter } => {
+                Otp::hotp(self.secret.clone(), counter).map_err(OtpItemError::Generation)?
+            }
         };
         otp.with_digits(self.digits)
             .map_err(OtpItemError::Generation)

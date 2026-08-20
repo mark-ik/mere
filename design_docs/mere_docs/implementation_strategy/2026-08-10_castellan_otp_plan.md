@@ -1,8 +1,8 @@
 # Castellan C1-C2: the OTP Slice
 
 **Date:** 2026-08-10
-**Status:** C1 and the C2 core done 2026-08-20; platform adapters and issuer
-compatibility remain separate follow-on slices
+**Status:** C1 and the local C2 core hardened 2026-08-20; a real host/carrier
+consumer, platform adapters, and issuer compatibility remain follow-on slices
 **Anchors:** [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md)
 (Part I), [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md) (the
@@ -60,8 +60,12 @@ exercising it. C1 builds the exercising; C2 builds the item.
 - [x] `otpauth://totp/` and `otpauth://hotp/` URI parsing (the de-facto
       Key Uri Format): label, issuer, secret, algorithm, digits, period,
       counter; percent-decoding; issuer-prefix vs `issuer=` reconciliation
-- [x] Constant-time code comparison for verification, and a skew window so a
-      code from the adjacent step still verifies
+- [x] Constant-time code matching, and a skew window so a
+      code from the adjacent step still matches. This is deliberately named as
+      a matching primitive: replay-safe verifier state is a separate authority.
+- [x] RFC 4226's 128-bit minimum seed length, a bounded comparison window,
+      six/eight-digit Key URI validation, nonempty labels, duplicate-parameter
+      rejection, and issuer-prefix agreement
 - [x] Every file under the 600-line ceiling
 
 ### C2 core and later integrations
@@ -71,10 +75,18 @@ exercising it. C1 builds the exercising; C2 builds the item.
       local and in-process: it exposes secret-free metadata, has no seed
       accessor, and its code-bearing operation is crate-private to the gate.
 - [x] C2b: the embeddable half: `OtpCodeTile` carries code, metadata, and
-      integer remaining-seconds facts without fixing a renderer or carrier wire
-- [x] C2c: the authority half: `OtpReleaseGate` queues participant-bound
-      petitions for resident approval or denial; approval is the only public
-      code path and durably consumes an HOTP counter before return
+      an absolute expiry from which a renderer derives remaining seconds,
+      without fixing component geometry or a carrier wire
+- [x] C2c: the local authority half: `OtpReleaseGate` owns petition and release
+      time, bounds and expires its resident-approval queue, and is the only
+      public code path for sealed items. HOTP load/exercise/replace is one
+      in-process transaction shared by clones of the opened sealed store; the
+      replacement file is flushed before return.
+- [ ] First host/carrier consumer: authenticate the participant from admitted
+      session authority, prove liveness again at approval/delivery, and carry
+      the result only to that session. Until this exists, participant fields are
+      exposed as `OtpReleaseParticipantClaim::unverified` rather than
+      authentication evidence.
 - [ ] Later platform adapter: Secret Service (`org.freedesktop.secrets`), the one OS surface a third
       party can *be* rather than read
 - [ ] Later compatibility decision: Steam's nonstandard alphabet, with a real
@@ -115,10 +127,25 @@ exercising it. C1 builds the exercising; C2 builds the item.
   absent for another persona.
 
 - 2026-08-20: C2b and C2c landed. `OtpCodeTile` gives a host the code,
-  secret-free metadata, and deterministic remaining-time facts without
-  prescribing component geometry or a carrier message. `OtpReleaseGate` is
-  the only public code path: a caller supplies participant facts from its
-  authenticated carrier, the resident approves or denies the pending petition,
-  and the returned tile remains bound to that request. Denial does not exercise
-  HOTP. Approval advances and seals HOTP's next counter before returning the
-  code, so reopening the gate cannot issue that counter again.
+  secret-free metadata, and an absolute expiry without prescribing component
+  geometry or a carrier message. `OtpReleaseGate` is the only public code path
+  for sealed items: the resident approves or denies a bounded, expiring
+  petition, and denial does not exercise HOTP. Approval advances and seals
+  HOTP's next counter before returning the code.
+
+- 2026-08-20: security and standards review hardened the core. Ten-digit core
+  generation now uses a non-overflowing modulus while Key URI imports accept
+  only six or eight digits. Imports require RFC-minimum secrets, nonempty
+  labels, unambiguous known parameters, and matching issuer identities. Matching
+  windows are bounded and are not described as replay-safe verification.
+  Release time comes from the gate, pending requests have configurable lifetime
+  and capacity, session bindings are redacted from diagnostics, and TOTP tiles
+  carry absolute expiry. Sealed-record clones serialize HOTP updates below the
+  gate and flush the replacement before rename.
+
+  The limits are stated rather than hidden: this local transaction does not
+  coordinate independent store openings or processes, and AEAD does not provide
+  rollback resistance if an older valid backing directory is restored. Those
+  require a resident/storage authority with a real consumer. Likewise,
+  participant claims become authenticated facts only when an admitted-session
+  carrier adapter constructs and serves them.

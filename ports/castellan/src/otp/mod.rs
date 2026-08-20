@@ -5,21 +5,23 @@
 //!
 //! This is the castellan *exercising* a chatelaine item. The secret is
 //! material that is damaged by disclosure, so nothing here returns it; the
-//! only outputs are codes, which are meant to be shown once and then are
-//! worthless.
+//! only outputs are codes. Callers still own replay and expiry policy: a TOTP
+//! remains usable for its time step, and an HOTP remains usable until its
+//! verifier consumes the matching counter.
 //!
 //! The core accepts an imported URI. [`OtpItemStore`] seals the configured
 //! generator under one persona and gives callers no way to retrieve its seed.
-//! [`OtpReleaseGate`] accepts a participant-bound petition and turns an
-//! explicit approval into an [`OtpCodeTile`], whose timing facts let any host
-//! render its own remaining-seconds ring. It is a local typed seam, not yet a
-//! carrier wire; see the castellan OTP plan.
+//! [`OtpReleaseGate`] accepts a carrier-claimed participant petition and turns
+//! an explicit approval into an [`OtpCodeTile`], whose timing facts let any
+//! host render its own remaining-seconds ring. It is a local typed seam, not
+//! yet a carrier wire or an authentication proof; see the castellan OTP plan.
 //!
 //! ```
 //! use castellan::otp::{Otp, OtpAlgorithm};
 //!
 //! // RFC 6238's first published vector, on the SHA-1 seed.
 //! let otp = Otp::totp(b"12345678901234567890".to_vec())
+//!     .unwrap()
 //!     .with_digits(8)
 //!     .unwrap();
 //! assert_eq!(otp.code_at_unix_time(59).unwrap(), "94287082");
@@ -50,16 +52,20 @@ use zeroize::Zeroizing;
 pub use base32::Base32Error;
 pub use item::{OtpItem, OtpItemError, OtpItemId, OtpItemStore};
 pub use release::{
-    OtpReleaseDenied, OtpReleaseError, OtpReleaseGate, OtpReleaseId, OtpReleaseParticipant,
-    OtpReleaseRequest, OtpReleasedCode,
+    OtpReleaseDenied, OtpReleaseError, OtpReleaseGate, OtpReleaseId, OtpReleaseParticipantClaim,
+    OtpReleasePolicy, OtpReleaseRequest, OtpReleasedCode,
 };
 pub use tile::{OtpCodeTile, OtpTimeRing};
-pub use uri::{OtpUriError, parse_otpauth_uri};
+pub use uri::{OtpUri, OtpUriError, parse_otpauth_uri};
 
 /// The default time step, in seconds. RFC 6238 §5.2 recommends 30.
 pub const DEFAULT_PERIOD_SECS: u64 = 30;
 /// The default code length. Six digits is what authenticators show.
 pub const DEFAULT_DIGITS: u32 = 6;
+/// RFC 4226 section 4 requirement R6.
+pub const MIN_SECRET_BYTES: usize = 16;
+/// A deliberately small upper bound for a caller-selected comparison window.
+pub const MAX_SKEW_STEPS: u64 = 10;
 
 /// The HMAC hash behind a code.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -120,9 +126,16 @@ pub enum OtpError {
     TimeBeforeEpoch,
     /// The host clock is before the Unix epoch.
     ClockBeforeUnixEpoch,
-    /// An empty secret. RFC 4226 §4 R6 requires at least 128 bits, but any
-    /// secret at all is the check worth enforcing here; issuers vary.
-    EmptySecret,
+    /// A shared secret shorter than RFC 4226 requirement R6's 128-bit floor.
+    SecretTooShort {
+        /// Number of bytes supplied by the caller.
+        bytes: usize,
+    },
+    /// A comparison window too large to evaluate predictably.
+    ExcessiveSkew {
+        /// Number of adjacent steps requested in each direction.
+        steps: u64,
+    },
 }
 
 impl fmt::Display for OtpError {
@@ -136,7 +149,14 @@ impl fmt::Display for OtpError {
                 f.write_str("the requested time is before this generator's epoch")
             }
             OtpError::ClockBeforeUnixEpoch => f.write_str("the host clock is before 1970"),
-            OtpError::EmptySecret => f.write_str("the shared secret is empty"),
+            OtpError::SecretTooShort { bytes } => write!(
+                f,
+                "the shared secret is {bytes} bytes; RFC 4226 requires at least {MIN_SECRET_BYTES}"
+            ),
+            OtpError::ExcessiveSkew { steps } => write!(
+                f,
+                "the requested skew of {steps} steps exceeds the {MAX_SKEW_STEPS}-step limit"
+            ),
         }
     }
 }
@@ -172,26 +192,30 @@ impl fmt::Debug for Otp {
 
 impl Otp {
     /// A time-based generator with the default 30-second step and 6 digits.
-    pub fn totp(secret: Vec<u8>) -> Self {
-        Self {
-            secret: Zeroizing::new(secret),
+    pub fn totp(secret: Vec<u8>) -> Result<Self, OtpError> {
+        let secret = Zeroizing::new(secret);
+        validate_secret(&secret)?;
+        Ok(Self {
+            secret,
             algorithm: OtpAlgorithm::default(),
             digits: DEFAULT_DIGITS,
             kind: OtpKind::Totp {
                 period: DEFAULT_PERIOD_SECS,
                 t0: 0,
             },
-        }
+        })
     }
 
     /// A counter-based generator starting at `counter`.
-    pub fn hotp(secret: Vec<u8>, counter: u64) -> Self {
-        Self {
-            secret: Zeroizing::new(secret),
+    pub fn hotp(secret: Vec<u8>, counter: u64) -> Result<Self, OtpError> {
+        let secret = Zeroizing::new(secret);
+        validate_secret(&secret)?;
+        Ok(Self {
+            secret,
             algorithm: OtpAlgorithm::default(),
             digits: DEFAULT_DIGITS,
             kind: OtpKind::Hotp { counter },
-        }
+        })
     }
 
     /// Choose the HMAC hash.
@@ -277,9 +301,6 @@ impl Otp {
 
     /// The code for an explicit counter, which is the RFC 4226 primitive.
     pub fn code_for_counter(&self, counter: u64) -> Result<String, OtpError> {
-        if self.secret.is_empty() {
-            return Err(OtpError::EmptySecret);
-        }
         let digest = self.hmac(&counter.to_be_bytes());
         Ok(format_code(truncate(&digest), self.digits))
     }
@@ -289,14 +310,18 @@ impl Otp {
     ///
     /// A skew of 1 is the usual choice: it forgives a slow typist and a clock
     /// a few seconds out, at the cost of widening the window a guess can land
-    /// in. Comparison is constant-time so a rejected code leaks nothing about
-    /// how much of it was right.
-    pub fn verify_at_unix_time(
+    /// in. Equal-length values are compared without an early exit. This is a
+    /// matching primitive, not a verifier authority: it does not consume an
+    /// HOTP counter or remember a successfully accepted TOTP step.
+    pub fn matches_at_unix_time(
         &self,
         candidate: &str,
         unix_secs: u64,
         skew_steps: u64,
     ) -> Result<bool, OtpError> {
+        if skew_steps > MAX_SKEW_STEPS {
+            return Err(OtpError::ExcessiveSkew { steps: skew_steps });
+        }
         let centre = self.counter_at_unix_time(unix_secs)?;
         let mut matched = false;
         for counter in centre.saturating_sub(skew_steps)..=centre.saturating_add(skew_steps) {
@@ -337,8 +362,21 @@ fn truncate(digest: &[u8]) -> u32 {
 }
 
 fn format_code(value: u32, digits: u32) -> String {
-    let modulus = 10u32.pow(digits);
-    format!("{:0width$}", value % modulus, width = digits as usize)
+    let modulus = 10u64.pow(digits);
+    format!(
+        "{:0width$}",
+        u64::from(value) % modulus,
+        width = digits as usize
+    )
+}
+
+fn validate_secret(secret: &[u8]) -> Result<(), OtpError> {
+    if secret.len() < MIN_SECRET_BYTES {
+        return Err(OtpError::SecretTooShort {
+            bytes: secret.len(),
+        });
+    }
+    Ok(())
 }
 
 fn now_unix_secs() -> Result<u64, OtpError> {

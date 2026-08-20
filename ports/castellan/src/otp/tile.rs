@@ -5,9 +5,10 @@
 //!
 //! A tile is a short-lived presentation result from the resident authority.
 //! It holds the code a host is allowed to show, ordinary item metadata, and
-//! enough integer timing information for any renderer to draw the remaining
-//! time ring. It deliberately has no serialization or public constructor:
-//! carriers do not get a new code wire before an actual carrier needs one.
+//! an absolute expiry for any renderer to draw the remaining-time ring and
+//! stop presenting a stale TOTP. It deliberately has no serialization or
+//! public constructor: carriers do not get a new code wire before an actual
+//! carrier needs one.
 
 use std::fmt;
 
@@ -43,7 +44,7 @@ impl OtpCodeTile {
                 let seconds_remaining = period - (elapsed % period);
                 Some(OtpTimeRing {
                     period_seconds: period,
-                    seconds_remaining,
+                    expires_at_unix_secs: unix_secs.saturating_add(seconds_remaining),
                 })
             }
             OtpKind::Hotp { .. } => None,
@@ -60,9 +61,19 @@ impl OtpCodeTile {
         &self.item
     }
 
-    /// The short-lived code the admitted host may display.
-    pub fn code(&self) -> &str {
-        self.code.as_str()
+    /// The code when it is still current at `unix_secs`.
+    ///
+    /// HOTP values have no clock expiry and are always returned. TOTP values
+    /// disappear at the absolute step boundary carried by their time ring.
+    pub fn code_at_unix_time(&self, unix_secs: u64) -> Option<&str> {
+        if self
+            .time_ring
+            .is_some_and(|ring| ring.is_expired_at(unix_secs))
+        {
+            None
+        } else {
+            Some(self.code.as_str())
+        }
     }
 
     /// Remaining-time facts for a TOTP code, or `None` for HOTP.
@@ -73,31 +84,42 @@ impl OtpCodeTile {
 
 /// Integer facts for a TOTP tile's remaining-time ring.
 ///
-/// Renderers choose their own geometry and motion. The values are fixed for a
-/// code at one instant, so a host can redraw without copying secret material
-/// or deriving time from the seed.
+/// Renderers choose their own geometry and motion. The absolute expiry keeps
+/// carrier delay and redraw cadence from extending the code's presentation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OtpTimeRing {
     /// The TOTP period selected by the issuer.
     pub period_seconds: u64,
-    /// Whole seconds before this code is replaced. At a fresh step this equals
-    /// `period_seconds`; immediately before rollover it is one.
-    pub seconds_remaining: u64,
+    /// Unix second at which this code is replaced and must stop being shown.
+    pub expires_at_unix_secs: u64,
 }
 
 impl OtpTimeRing {
+    /// Whole seconds remaining at the supplied Unix time.
+    pub fn seconds_remaining_at(self, unix_secs: u64) -> u64 {
+        self.expires_at_unix_secs
+            .saturating_sub(unix_secs)
+            .min(self.period_seconds)
+    }
+
+    /// Whether the code has reached its absolute step boundary.
+    pub fn is_expired_at(self, unix_secs: u64) -> bool {
+        unix_secs >= self.expires_at_unix_secs
+    }
+
     /// Whole seconds elapsed within this code's period.
-    pub fn elapsed_seconds(self) -> u64 {
-        self.period_seconds.saturating_sub(self.seconds_remaining)
+    pub fn elapsed_seconds_at(self, unix_secs: u64) -> u64 {
+        self.period_seconds
+            .saturating_sub(self.seconds_remaining_at(unix_secs))
     }
 
     /// Completed ring fraction, quantized to 0 through 1000.
-    pub fn completed_per_mille(self) -> u16 {
+    pub fn completed_per_mille_at(self, unix_secs: u64) -> u16 {
         if self.period_seconds == 0 {
             return 0;
         }
         let completed = self
-            .elapsed_seconds()
+            .elapsed_seconds_at(unix_secs)
             .saturating_mul(1_000)
             .checked_div(self.period_seconds)
             .unwrap_or(0);
@@ -129,16 +151,18 @@ mod tests {
             29,
         );
 
-        assert_eq!(tile.code(), "123456");
+        assert_eq!(tile.code_at_unix_time(29), Some("123456"));
         assert_eq!(
             tile.time_ring(),
             Some(OtpTimeRing {
                 period_seconds: 30,
-                seconds_remaining: 1,
+                expires_at_unix_secs: 30,
             })
         );
-        assert_eq!(tile.time_ring().unwrap().elapsed_seconds(), 29);
-        assert_eq!(tile.time_ring().unwrap().completed_per_mille(), 966);
+        assert_eq!(tile.time_ring().unwrap().seconds_remaining_at(29), 1);
+        assert_eq!(tile.time_ring().unwrap().elapsed_seconds_at(29), 29);
+        assert_eq!(tile.time_ring().unwrap().completed_per_mille_at(29), 966);
+        assert_eq!(tile.code_at_unix_time(30), None);
         assert!(!format!("{tile:?}").contains("123456"));
     }
 
@@ -147,5 +171,6 @@ mod tests {
         let tile = OtpCodeTile::new(item(OtpKind::Hotp { counter: 7 }), "123456".to_string(), 59);
 
         assert_eq!(tile.time_ring(), None);
+        assert_eq!(tile.code_at_unix_time(u64::MAX), Some("123456"));
     }
 }

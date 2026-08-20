@@ -92,7 +92,7 @@ pub use crate::provider::{
 pub use crate::roster::{OpenedVault, Roster, RosterEntry, open_shared};
 pub use crate::seal::{seal_bytes, unseal_bytes};
 pub use crate::sealed_profile_storage::SealedProfileStorage;
-pub use crate::sealed_record_storage::SealedRecordStorage;
+pub use crate::sealed_record_storage::{SealedRecordChange, SealedRecordStorage};
 pub use crate::startup_unlock::{
     StartupUnlockMode, auto_unlock_backend_available, load_or_create_auto_unlock_root,
 };

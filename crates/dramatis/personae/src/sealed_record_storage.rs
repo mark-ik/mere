@@ -9,7 +9,9 @@
 //! the passphrase-unlocked vault root, while others need a seed-derived wrapping
 //! key for syncable records. One backend, different key ladders.
 
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
@@ -30,6 +32,14 @@ struct SealedRecordEnvelope {
     ciphertext: Vec<u8>,
 }
 
+/// What an atomic record update should do after inspecting the current value.
+pub enum SealedRecordChange<T> {
+    /// Return the closure's result without writing the record.
+    Keep,
+    /// Seal and atomically replace the record before returning the result.
+    Replace(T),
+}
+
 /// Directory-backed sealed-record storage.
 ///
 /// Each relative record path maps to one sealed JSON envelope on disk. The
@@ -39,6 +49,7 @@ struct SealedRecordEnvelope {
 pub struct SealedRecordStorage {
     root: PathBuf,
     key: Zeroizing<[u8; 32]>,
+    update_lock: Arc<Mutex<()>>,
 }
 
 impl SealedRecordStorage {
@@ -48,6 +59,7 @@ impl SealedRecordStorage {
         Self {
             root: root.into(),
             key: Zeroizing::new(key),
+            update_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -56,7 +68,15 @@ impl SealedRecordStorage {
     where
         T: DeserializeOwned,
     {
-        let (path, aad) = resolve_record_path(&self.root, relative.as_ref())?;
+        let _guard = self.lock_updates();
+        self.load_record_unlocked(relative.as_ref())
+    }
+
+    fn load_record_unlocked<T>(&self, relative: &Path) -> Result<Option<T>, IdentityError>
+    where
+        T: DeserializeOwned,
+    {
+        let (path, aad) = resolve_record_path(&self.root, relative)?;
         let bytes = match std::fs::read(&path) {
             Ok(bytes) => bytes,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -108,7 +128,15 @@ impl SealedRecordStorage {
     where
         T: Serialize,
     {
-        let (path, aad) = resolve_record_path(&self.root, relative.as_ref())?;
+        let _guard = self.lock_updates();
+        self.save_record_unlocked(relative.as_ref(), value)
+    }
+
+    fn save_record_unlocked<T>(&self, relative: &Path, value: &T) -> Result<(), IdentityError>
+    where
+        T: Serialize,
+    {
+        let (path, aad) = resolve_record_path(&self.root, relative)?;
         let plaintext = Zeroizing::new(serde_json::to_vec(value).map_err(|err| {
             IdentityError::Backend(format!("encode sealed record {:?}: {err}", path))
         })?);
@@ -133,8 +161,33 @@ impl SealedRecordStorage {
         save_json_atomic(&path, &envelope)
     }
 
+    /// Read, inspect, and optionally replace one record under a lock shared by
+    /// clones of this opened store.
+    ///
+    /// The replacement is visible only after its sealed file has been flushed
+    /// and renamed. This is an in-process transaction boundary; independent
+    /// store openings and rollback of the backing directory require a higher
+    /// storage authority.
+    pub fn update_record<T, R, E, F>(&self, relative: impl AsRef<Path>, update: F) -> Result<R, E>
+    where
+        T: DeserializeOwned + Serialize,
+        E: From<IdentityError>,
+        F: FnOnce(Option<T>) -> Result<(R, SealedRecordChange<T>), E>,
+    {
+        let _guard = self.lock_updates();
+        let relative = relative.as_ref();
+        let current = self.load_record_unlocked(relative).map_err(E::from)?;
+        let (result, change) = update(current)?;
+        if let SealedRecordChange::Replace(next) = change {
+            self.save_record_unlocked(relative, &next)
+                .map_err(E::from)?;
+        }
+        Ok(result)
+    }
+
     /// Delete one record. Missing files are ignored.
     pub fn delete_record(&self, relative: impl AsRef<Path>) -> Result<(), IdentityError> {
+        let _guard = self.lock_updates();
         let (path, _) = resolve_record_path(&self.root, relative.as_ref())?;
         match std::fs::remove_file(&path) {
             Ok(()) => Ok(()),
@@ -144,6 +197,12 @@ impl SealedRecordStorage {
                 path
             ))),
         }
+    }
+
+    fn lock_updates(&self) -> MutexGuard<'_, ()> {
+        self.update_lock
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
@@ -194,11 +253,31 @@ where
     std::fs::create_dir_all(parent)
         .map_err(|err| IdentityError::Backend(format!("create dir {:?}: {err}", parent)))?;
     let tmp = tempfile_in_dir(parent)?;
-    std::fs::write(&tmp, &bytes)
-        .map_err(|err| IdentityError::Backend(format!("write tmp {:?}: {err}", tmp)))?;
-    std::fs::rename(&tmp, path).map_err(|err| {
-        IdentityError::Backend(format!("rename tmp {:?} -> {:?}: {err}", tmp, path))
-    })?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .map_err(|err| IdentityError::Backend(format!("create tmp {:?}: {err}", tmp)))?;
+    if let Err(err) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
+        drop(file);
+        let _ = std::fs::remove_file(&tmp);
+        return Err(IdentityError::Backend(format!(
+            "write and flush tmp {:?}: {err}",
+            tmp
+        )));
+    }
+    drop(file);
+    if let Err(err) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(IdentityError::Backend(format!(
+            "rename tmp {:?} -> {:?}: {err}",
+            tmp, path
+        )));
+    }
+    #[cfg(unix)]
+    std::fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|err| IdentityError::Backend(format!("flush dir {:?}: {err}", parent)))?;
     Ok(())
 }
 
@@ -228,6 +307,11 @@ mod tests {
     struct SampleRecord {
         label: String,
         bytes: Vec<u8>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct CounterRecord {
+        value: u64,
     }
 
     #[test]
@@ -289,5 +373,41 @@ mod tests {
         let text = String::from_utf8(bytes).unwrap();
         assert!(!text.contains("Tablet"));
         assert!(!text.contains("\"label\":\"Tablet\""));
+    }
+
+    #[test]
+    fn cloned_store_updates_are_one_load_modify_replace_transaction() {
+        let dir = tempdir().unwrap();
+        let store = SealedRecordStorage::open_with_key(dir.path(), [0x44; 32]);
+        store
+            .save_record("counter/value.json", &CounterRecord { value: 0 })
+            .unwrap();
+
+        let increment = |store: SealedRecordStorage| {
+            std::thread::spawn(move || {
+                for _ in 0..50 {
+                    store
+                        .update_record(
+                            "counter/value.json",
+                            |current: Option<CounterRecord>| -> Result<_, IdentityError> {
+                                let mut current = current.expect("counter exists");
+                                current.value += 1;
+                                Ok(((), SealedRecordChange::Replace(current)))
+                            },
+                        )
+                        .unwrap();
+                }
+            })
+        };
+        let left = increment(store.clone());
+        let right = increment(store.clone());
+        left.join().unwrap();
+        right.join().unwrap();
+
+        let restored = store
+            .load_record::<CounterRecord>("counter/value.json")
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.value, 100);
     }
 }

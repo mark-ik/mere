@@ -17,6 +17,7 @@ const RFC6238_SHA1_SECRET: &[u8] = b"12345678901234567890";
 const RFC6238_SHA256_SECRET: &[u8] = b"12345678901234567890123456789012";
 const RFC6238_SHA512_SECRET: &[u8] =
     b"1234567890123456789012345678901234567890123456789012345678901234";
+const RFC4226_SECRET_BASE32: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 
 #[test]
 fn rfc4226_appendix_d_hotp_values() {
@@ -24,7 +25,7 @@ fn rfc4226_appendix_d_hotp_values() {
         "755224", "287082", "359152", "969429", "338314", "254676", "287922", "162583", "399871",
         "520489",
     ];
-    let otp = Otp::hotp(RFC4226_SECRET.to_vec(), 0);
+    let otp = Otp::hotp(RFC4226_SECRET.to_vec(), 0).unwrap();
     for (counter, want) in expected.iter().enumerate() {
         assert_eq!(
             &otp.code_for_counter(counter as u64).unwrap(),
@@ -54,6 +55,7 @@ fn rfc6238_appendix_b_totp_values() {
         ];
         for (algorithm, secret, want) in variants {
             let otp = Otp::totp(secret.to_vec())
+                .unwrap()
                 .with_algorithm(algorithm)
                 .with_digits(8)
                 .unwrap();
@@ -68,7 +70,7 @@ fn rfc6238_appendix_b_totp_values() {
 
 #[test]
 fn totp_counter_is_the_step_count_since_t0() {
-    let otp = Otp::totp(RFC4226_SECRET.to_vec());
+    let otp = Otp::totp(RFC4226_SECRET.to_vec()).unwrap();
     assert_eq!(otp.counter_at_unix_time(0).unwrap(), 0);
     assert_eq!(otp.counter_at_unix_time(29).unwrap(), 0);
     assert_eq!(otp.counter_at_unix_time(30).unwrap(), 1);
@@ -79,53 +81,79 @@ fn totp_counter_is_the_step_count_since_t0() {
 
 #[test]
 fn seconds_remaining_counts_down_within_the_step() {
-    let otp = Otp::totp(RFC4226_SECRET.to_vec());
+    let otp = Otp::totp(RFC4226_SECRET.to_vec()).unwrap();
     assert_eq!(otp.seconds_remaining_at(0), Some(30));
     assert_eq!(otp.seconds_remaining_at(1), Some(29));
     assert_eq!(otp.seconds_remaining_at(29), Some(1));
     assert_eq!(otp.seconds_remaining_at(30), Some(30));
     // Counter-based codes do not expire, so there is nothing to count down.
     assert_eq!(
-        Otp::hotp(RFC4226_SECRET.to_vec(), 0).seconds_remaining_at(0),
+        Otp::hotp(RFC4226_SECRET.to_vec(), 0)
+            .unwrap()
+            .seconds_remaining_at(0),
         None
     );
 }
 
 #[test]
-fn verification_accepts_the_adjacent_step_when_skew_is_allowed() {
+fn matching_accepts_the_adjacent_step_when_skew_is_allowed() {
     let otp = Otp::totp(RFC6238_SHA1_SECRET.to_vec())
+        .unwrap()
         .with_digits(8)
         .unwrap();
     let previous = otp.code_at_unix_time(29).unwrap();
     let current = otp.code_at_unix_time(59).unwrap();
 
-    assert!(otp.verify_at_unix_time(&current, 59, 0).unwrap());
+    assert!(otp.matches_at_unix_time(&current, 59, 0).unwrap());
     // The previous step's code is refused with no skew and accepted with one.
-    assert!(!otp.verify_at_unix_time(&previous, 59, 0).unwrap());
-    assert!(otp.verify_at_unix_time(&previous, 59, 1).unwrap());
-    assert!(!otp.verify_at_unix_time("00000000", 59, 1).unwrap());
+    assert!(!otp.matches_at_unix_time(&previous, 59, 0).unwrap());
+    assert!(otp.matches_at_unix_time(&previous, 59, 1).unwrap());
+    assert!(!otp.matches_at_unix_time("00000000", 59, 1).unwrap());
 }
 
 #[test]
 fn digit_counts_outside_the_representable_range_are_refused() {
     let secret = RFC4226_SECRET.to_vec();
     assert_eq!(
-        Otp::totp(secret.clone()).with_digits(5).unwrap_err(),
+        Otp::totp(secret.clone())
+            .unwrap()
+            .with_digits(5)
+            .unwrap_err(),
         OtpError::UnsupportedDigits(5)
     );
     // Dynamic truncation yields 31 bits, so 10 digits is the ceiling.
-    assert!(Otp::totp(secret.clone()).with_digits(10).is_ok());
+    let ten_digits = Otp::totp(secret.clone())
+        .unwrap()
+        .with_digits(10)
+        .unwrap()
+        .code_at_unix_time(59)
+        .unwrap();
+    assert_eq!(ten_digits.len(), 10);
     assert_eq!(
-        Otp::totp(secret).with_digits(11).unwrap_err(),
+        Otp::totp(secret).unwrap().with_digits(11).unwrap_err(),
         OtpError::UnsupportedDigits(11)
     );
 }
 
 #[test]
-fn an_empty_secret_is_refused_rather_than_producing_a_code() {
+fn a_secret_below_the_rfc_minimum_is_refused_at_construction() {
     assert_eq!(
-        Otp::totp(Vec::new()).code_at_unix_time(59).unwrap_err(),
-        OtpError::EmptySecret
+        Otp::totp(vec![0x55; MIN_SECRET_BYTES - 1]).unwrap_err(),
+        OtpError::SecretTooShort {
+            bytes: MIN_SECRET_BYTES - 1
+        }
+    );
+}
+
+#[test]
+fn an_excessive_skew_window_is_refused_before_iteration() {
+    let otp = Otp::totp(RFC4226_SECRET.to_vec()).unwrap();
+    assert_eq!(
+        otp.matches_at_unix_time("000000", 59, MAX_SKEW_STEPS + 1)
+            .unwrap_err(),
+        OtpError::ExcessiveSkew {
+            steps: MAX_SKEW_STEPS + 1
+        }
     );
 }
 
@@ -133,6 +161,7 @@ fn an_empty_secret_is_refused_rather_than_producing_a_code() {
 fn a_zero_period_is_refused() {
     assert_eq!(
         Otp::totp(RFC4226_SECRET.to_vec())
+            .unwrap()
             .with_period(0)
             .unwrap_err(),
         OtpError::ZeroPeriod
@@ -141,7 +170,7 @@ fn a_zero_period_is_refused() {
 
 #[test]
 fn debug_does_not_print_the_secret() {
-    let otp = Otp::totp(b"super-secret-value".to_vec());
+    let otp = Otp::totp(b"super-secret-value".to_vec()).unwrap();
     let rendered = format!("{otp:?}");
     assert!(!rendered.contains("super-secret-value"), "{rendered}");
     assert!(rendered.contains("redacted"), "{rendered}");
@@ -165,23 +194,35 @@ fn a_typical_authenticator_uri_parses() {
 }
 
 #[test]
-fn the_issuer_parameter_wins_over_a_stale_label_prefix() {
-    let (_, meta) =
-        parse_otpauth_uri("otpauth://totp/OldName:alice?secret=MZXW6YTBOI&issuer=NewName").unwrap();
-    assert_eq!(meta.issuer.as_deref(), Some("NewName"));
-    assert_eq!(meta.account, "alice");
+fn conflicting_issuer_identities_are_refused() {
+    assert_eq!(
+        parse_otpauth_uri(&format!(
+            "otpauth://totp/OldName:alice?secret={RFC4226_SECRET_BASE32}&issuer=NewName"
+        ))
+        .unwrap_err(),
+        OtpUriError::IssuerMismatch {
+            label: "OldName".into(),
+            parameter: "NewName".into()
+        }
+    );
 }
 
 #[test]
 fn the_label_prefix_is_used_when_no_issuer_parameter_is_given() {
-    let (_, meta) = parse_otpauth_uri("otpauth://totp/GitHub:alice?secret=MZXW6YTBOI").unwrap();
+    let (_, meta) = parse_otpauth_uri(&format!(
+        "otpauth://totp/GitHub:alice?secret={RFC4226_SECRET_BASE32}"
+    ))
+    .unwrap();
     assert_eq!(meta.issuer.as_deref(), Some("GitHub"));
     assert_eq!(meta.account, "alice");
 }
 
 #[test]
 fn defaults_apply_when_optional_parameters_are_absent() {
-    let (otp, meta) = parse_otpauth_uri("otpauth://totp/alice?secret=MZXW6YTBOI").unwrap();
+    let (otp, meta) = parse_otpauth_uri(&format!(
+        "otpauth://totp/alice?secret={RFC4226_SECRET_BASE32}"
+    ))
+    .unwrap();
     assert_eq!(otp.digits(), DEFAULT_DIGITS);
     assert_eq!(otp.algorithm(), OtpAlgorithm::Sha1);
     assert_eq!(
@@ -196,14 +237,20 @@ fn defaults_apply_when_optional_parameters_are_absent() {
 
 #[test]
 fn an_hotp_uri_carries_its_counter() {
-    let (otp, _) = parse_otpauth_uri("otpauth://hotp/alice?secret=MZXW6YTBOI&counter=7").unwrap();
+    let (otp, _) = parse_otpauth_uri(&format!(
+        "otpauth://hotp/alice?secret={RFC4226_SECRET_BASE32}&counter=7"
+    ))
+    .unwrap();
     assert_eq!(otp.kind(), OtpKind::Hotp { counter: 7 });
 }
 
 #[test]
 fn an_hotp_uri_without_a_counter_is_refused() {
     assert_eq!(
-        parse_otpauth_uri("otpauth://hotp/alice?secret=MZXW6YTBOI").unwrap_err(),
+        parse_otpauth_uri(&format!(
+            "otpauth://hotp/alice?secret={RFC4226_SECRET_BASE32}"
+        ))
+        .unwrap_err(),
         OtpUriError::MissingCounter
     );
 }
@@ -211,17 +258,19 @@ fn an_hotp_uri_without_a_counter_is_refused() {
 #[test]
 fn unknown_parameters_are_ignored_rather_than_rejected() {
     // Issuers add their own; a credential that is otherwise valid must import.
-    let (otp, _) = parse_otpauth_uri(
-        "otpauth://totp/alice?secret=MZXW6YTBOI&lock=true&image=https://example.com/i.png",
-    )
+    let (otp, _) = parse_otpauth_uri(&format!(
+        "otpauth://totp/alice?secret={RFC4226_SECRET_BASE32}&lock=true&image=https://example.com/i.png"
+    ))
     .unwrap();
     assert_eq!(otp.digits(), DEFAULT_DIGITS);
 }
 
 #[test]
 fn an_unpadded_secret_parses_the_way_qr_codes_write_it() {
-    let (padded, _) = parse_otpauth_uri("otpauth://totp/a?secret=MZXW6===").unwrap();
-    let (unpadded, _) = parse_otpauth_uri("otpauth://totp/a?secret=MZXW6").unwrap();
+    let (padded, _) =
+        parse_otpauth_uri("otpauth://totp/a?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY======").unwrap();
+    let (unpadded, _) =
+        parse_otpauth_uri("otpauth://totp/a?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY").unwrap();
     assert_eq!(
         padded.code_at_unix_time(59).unwrap(),
         unpadded.code_at_unix_time(59).unwrap()
@@ -230,7 +279,12 @@ fn an_unpadded_secret_parses_the_way_qr_codes_write_it() {
 
 #[test]
 fn the_scheme_is_matched_case_insensitively() {
-    assert!(parse_otpauth_uri("OTPAUTH://TOTP/alice?secret=MZXW6YTBOI").is_ok());
+    assert!(
+        parse_otpauth_uri(&format!(
+            "OTPAUTH://TOTP/alice?secret={RFC4226_SECRET_BASE32}"
+        ))
+        .is_ok()
+    );
 }
 
 #[test]
@@ -244,11 +298,17 @@ fn malformed_uris_are_refused_with_a_reason() {
         OtpUriError::MissingSecret
     );
     assert_eq!(
-        parse_otpauth_uri("otpauth://wat/alice?secret=MZXW6YTBOI").unwrap_err(),
+        parse_otpauth_uri(&format!(
+            "otpauth://wat/alice?secret={RFC4226_SECRET_BASE32}"
+        ))
+        .unwrap_err(),
         OtpUriError::UnknownType("wat".into())
     );
     assert!(matches!(
-        parse_otpauth_uri("otpauth://totp/alice?secret=MZXW6YTBOI&digits=many").unwrap_err(),
+        parse_otpauth_uri(&format!(
+            "otpauth://totp/alice?secret={RFC4226_SECRET_BASE32}&digits=many"
+        ))
+        .unwrap_err(),
         OtpUriError::InvalidNumber {
             parameter: "digits",
             ..
@@ -258,6 +318,35 @@ fn malformed_uris_are_refused_with_a_reason() {
         parse_otpauth_uri("otpauth://totp/alice?secret=!!!").unwrap_err(),
         OtpUriError::Secret(_)
     ));
+}
+
+#[test]
+fn security_relevant_uri_ambiguities_are_refused() {
+    assert_eq!(
+        parse_otpauth_uri(&format!("otpauth://totp/?secret={RFC4226_SECRET_BASE32}")).unwrap_err(),
+        OtpUriError::MissingLabel
+    );
+    assert_eq!(
+        parse_otpauth_uri(&format!(
+            "otpauth://totp/alice?secret={RFC4226_SECRET_BASE32}&digits=7"
+        ))
+        .unwrap_err(),
+        OtpUriError::UnsupportedDigits(7)
+    );
+    assert_eq!(
+        parse_otpauth_uri(&format!(
+            "otpauth://totp/alice?secret={RFC4226_SECRET_BASE32}&issuer="
+        ))
+        .unwrap_err(),
+        OtpUriError::EmptyIssuer
+    );
+    assert_eq!(
+        parse_otpauth_uri(&format!(
+            "otpauth://totp/alice?secret={RFC4226_SECRET_BASE32}&secret={RFC4226_SECRET_BASE32}"
+        ))
+        .unwrap_err(),
+        OtpUriError::DuplicateParameter("secret")
+    );
 }
 
 /// A URI carrying a known RFC seed must produce the RFC's codes, which ties

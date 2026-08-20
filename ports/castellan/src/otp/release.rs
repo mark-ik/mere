@@ -1,20 +1,73 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Participant-gated OTP code release.
+//! Participant-claimed OTP code release.
 //!
-//! A host petitions [`OtpReleaseGate`] with carrier-authenticated participant
-//! facts and a sealed-item handle. The gate exposes only secret-free pending
-//! requests. The resident authority then explicitly approves or denies one;
-//! only approval produces an [`OtpCodeTile`]. There is deliberately no remote
-//! wire here. A carrier must prove its participant and session before a wire
-//! vocabulary would be worth fixing.
+//! A host petitions [`OtpReleaseGate`] with carrier-supplied participant facts
+//! and a sealed-item handle. The gate exposes only secret-free pending requests.
+//! The resident authority then explicitly approves or denies one; only approval
+//! produces an [`OtpCodeTile`]. There is deliberately no remote wire here. This
+//! local type validates presentation safety, expiry, and resident consent. A
+//! future carrier adapter remains responsible for authenticating the participant
+//! and proving that the named session is live.
 
 use std::collections::BTreeMap;
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::{OtpCodeTile, OtpItem, OtpItemError, OtpItemId, OtpItemStore};
+
+const DEFAULT_REQUEST_TTL_SECS: u64 = 5 * 60;
+const DEFAULT_MAX_PENDING: usize = 128;
+
+type ReleaseClock = dyn Fn() -> Result<u64, OtpReleaseError> + Send + Sync;
+
+/// Resident-configurable limits for pending OTP release petitions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OtpReleasePolicy {
+    request_ttl_secs: u64,
+    max_pending: usize,
+}
+
+impl OtpReleasePolicy {
+    /// Build a policy with explicit request lifetime and queue capacity.
+    pub fn new(request_ttl_secs: u64, max_pending: usize) -> Result<Self, OtpReleaseError> {
+        if request_ttl_secs == 0 {
+            return Err(OtpReleaseError::InvalidPolicy(
+                "request lifetime must be at least one second",
+            ));
+        }
+        if max_pending == 0 {
+            return Err(OtpReleaseError::InvalidPolicy(
+                "pending-request capacity must be at least one",
+            ));
+        }
+        Ok(Self {
+            request_ttl_secs,
+            max_pending,
+        })
+    }
+
+    /// Seconds a resident may wait before a petition expires.
+    pub fn request_ttl_secs(self) -> u64 {
+        self.request_ttl_secs
+    }
+
+    /// Maximum number of live petitions held in memory.
+    pub fn max_pending(self) -> usize {
+        self.max_pending
+    }
+}
+
+impl Default for OtpReleasePolicy {
+    fn default() -> Self {
+        Self {
+            request_ttl_secs: DEFAULT_REQUEST_TTL_SECS,
+            max_pending: DEFAULT_MAX_PENDING,
+        }
+    }
+}
 
 /// Stable identifier for one pending OTP release petition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -32,21 +85,33 @@ impl fmt::Display for OtpReleaseId {
     }
 }
 
-/// Carrier-authenticated participant facts attached to a release petition.
+/// Carrier-supplied participant facts attached to a release petition.
 ///
-/// `principal` identifies the participant the carrier authenticated, not a
-/// mutable display label. `session_binding` proves the request belongs to one
-/// live session. The gate retains both for the visible approval surface and
-/// does not attempt to invent transport authentication.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OtpReleaseParticipant {
+/// Construction validates only that the facts are safe to retain and present.
+/// This type is not authentication evidence. The eventual carrier adapter must
+/// authenticate `principal` and prove the `session_binding` before constructing
+/// a petition.
+#[derive(Clone, PartialEq, Eq)]
+pub struct OtpReleaseParticipantClaim {
     principal: String,
     session_binding: String,
 }
 
-impl OtpReleaseParticipant {
-    /// Validate carrier-authenticated participant and session facts.
-    pub fn new(
+impl fmt::Debug for OtpReleaseParticipantClaim {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OtpReleaseParticipantClaim")
+            .field("principal", &self.principal)
+            .field("session_binding", &"<redacted>")
+            .finish()
+    }
+}
+
+impl OtpReleaseParticipantClaim {
+    /// Validate an unverified carrier-supplied participant and session claim.
+    ///
+    /// Authentication is deliberately outside this constructor. Callers must
+    /// not treat successful construction as proof of either value.
+    pub fn unverified(
         principal: impl Into<String>,
         session_binding: impl Into<String>,
     ) -> Result<Self, OtpReleaseError> {
@@ -58,12 +123,12 @@ impl OtpReleaseParticipant {
         })
     }
 
-    /// Stable identity of the participant the carrier authenticated.
+    /// Stable identity claimed by the carrier for the participant.
     pub fn principal(&self) -> &str {
         &self.principal
     }
 
-    /// Opaque binding of the petition to the participant's live session.
+    /// Opaque carrier claim associating the petition with one live session.
     pub fn session_binding(&self) -> &str {
         &self.session_binding
     }
@@ -74,12 +139,14 @@ impl OtpReleaseParticipant {
 pub struct OtpReleaseRequest {
     /// Stable release-petition identifier used for approval or denial.
     pub id: OtpReleaseId,
-    /// Carrier-authenticated recipient facts.
-    pub participant: OtpReleaseParticipant,
+    /// Carrier-supplied recipient facts shown to the resident.
+    pub participant: OtpReleaseParticipantClaim,
     /// Secret-free item metadata shown to the resident before release.
     pub item: OtpItem,
-    /// Carrier-recorded Unix time when the petition arrived.
+    /// Gate-recorded Unix time when the petition arrived.
     pub requested_at_unix_secs: u64,
+    /// Gate-recorded Unix time after which approval is refused.
+    pub expires_at_unix_secs: u64,
 }
 
 /// An explicit denial receipt. It deliberately contains no code.
@@ -89,7 +156,7 @@ pub struct OtpReleaseDenied {
     pub request: OtpReleaseRequest,
 }
 
-/// One approved code, bound to the request whose participant may receive it.
+/// One approved code associated with the request the carrier must serve.
 pub struct OtpReleasedCode {
     request: OtpReleaseRequest,
     tile: OtpCodeTile,
@@ -105,12 +172,15 @@ impl fmt::Debug for OtpReleasedCode {
 }
 
 impl OtpReleasedCode {
-    /// The participant-bound approval that authorized this code.
+    /// The approval request associated with this code.
     pub fn request(&self) -> &OtpReleaseRequest {
         &self.request
     }
 
-    /// The code tile that may be delivered only to this request's participant.
+    /// The code tile the future carrier adapter must deliver to this request.
+    ///
+    /// Association here is structural. Cryptographic session-bound delivery is
+    /// a carrier responsibility and has not been implemented by this local seam.
     pub fn tile(&self) -> &OtpCodeTile {
         &self.tile
     }
@@ -119,9 +189,20 @@ impl OtpReleasedCode {
 /// Failure while submitting or resolving an OTP release petition.
 #[derive(Debug)]
 pub enum OtpReleaseError {
-    /// The candidate participant or session fact was absent, too long, or not
-    /// safe to retain in the visible pending-request model.
+    /// The candidate participant or session fact was absent, too long, padded
+    /// with whitespace, or unsafe to retain in a visible request.
     InvalidParticipant,
+    /// A resident configured an unusable queue policy.
+    InvalidPolicy(&'static str),
+    /// The host clock could not be represented as Unix time.
+    ClockBeforeUnixEpoch,
+    /// The pending-request queue reached its configured capacity.
+    TooManyPending {
+        /// Configured capacity at the time of refusal.
+        limit: usize,
+    },
+    /// The petition reached its gate-recorded expiry before approval.
+    Expired(OtpReleaseId),
     /// The sealed OTP item could not be read or exercised.
     Item(OtpItemError),
     /// The release had already been approved, denied, or was never pending.
@@ -131,9 +212,17 @@ pub enum OtpReleaseError {
 impl fmt::Display for OtpReleaseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OtpReleaseError::InvalidParticipant => {
-                f.write_str("release participant facts must be printable nonempty text")
+            OtpReleaseError::InvalidParticipant => f.write_str(
+                "release participant facts must be trimmed printable text of at most 256 characters",
+            ),
+            OtpReleaseError::InvalidPolicy(reason) => {
+                write!(f, "invalid OTP release policy: {reason}")
             }
+            OtpReleaseError::ClockBeforeUnixEpoch => f.write_str("the host clock is before 1970"),
+            OtpReleaseError::TooManyPending { limit } => {
+                write!(f, "the OTP release queue has reached its {limit}-request limit")
+            }
+            OtpReleaseError::Expired(id) => write!(f, "OTP release {id} has expired"),
             OtpReleaseError::Item(error) => write!(f, "OTP item: {error}"),
             OtpReleaseError::NotPending(id) => write!(f, "OTP release {id} is not pending"),
         }
@@ -144,7 +233,12 @@ impl std::error::Error for OtpReleaseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             OtpReleaseError::Item(error) => Some(error),
-            OtpReleaseError::InvalidParticipant | OtpReleaseError::NotPending(_) => None,
+            OtpReleaseError::InvalidParticipant
+            | OtpReleaseError::InvalidPolicy(_)
+            | OtpReleaseError::ClockBeforeUnixEpoch
+            | OtpReleaseError::TooManyPending { .. }
+            | OtpReleaseError::Expired(_)
+            | OtpReleaseError::NotPending(_) => None,
         }
     }
 }
@@ -155,85 +249,125 @@ impl From<OtpItemError> for OtpReleaseError {
     }
 }
 
-/// Resident authority for one persona's sealed OTP item store.
+/// Resident approval authority for one persona's sealed OTP item store.
 ///
-/// The gate owns the only code-bearing store operation. Its mutex covers
-/// resolution through a durable HOTP counter update, so two approvals cannot
-/// issue the same counter even when they arrive on different host threads.
+/// The gate owns the only code-bearing operation for sealed OTP items. HOTP
+/// serialization lives below it in the sealed-store update transaction, so
+/// independent gates over clones of one opened store cannot issue one counter.
 #[derive(Clone)]
 pub struct OtpReleaseGate {
     store: OtpItemStore,
     pending: Arc<Mutex<BTreeMap<OtpReleaseId, OtpReleaseRequest>>>,
+    policy: OtpReleasePolicy,
+    clock: Arc<ReleaseClock>,
 }
 
 impl OtpReleaseGate {
-    /// Build the resident release gate over an already-unlocked item store.
+    /// Build a resident release gate with the default queue policy.
     pub fn new(store: OtpItemStore) -> Self {
+        Self::with_clock(
+            store,
+            OtpReleasePolicy::default(),
+            Arc::new(system_unix_secs),
+        )
+    }
+
+    /// Build a resident release gate with explicit queue limits.
+    pub fn with_policy(store: OtpItemStore, policy: OtpReleasePolicy) -> Self {
+        Self::with_clock(store, policy, Arc::new(system_unix_secs))
+    }
+
+    fn with_clock(store: OtpItemStore, policy: OtpReleasePolicy, clock: Arc<ReleaseClock>) -> Self {
         Self {
             store,
             pending: Arc::new(Mutex::new(BTreeMap::new())),
+            policy,
+            clock,
         }
     }
 
-    /// Submit a carrier-authenticated petition for one item.
+    /// Submit carrier-supplied participant claims for resident approval.
     pub fn petition(
         &self,
         item_id: OtpItemId,
-        participant: OtpReleaseParticipant,
-        requested_at_unix_secs: u64,
+        participant: OtpReleaseParticipantClaim,
     ) -> Result<OtpReleaseRequest, OtpReleaseError> {
+        let now = (self.clock)()?;
         let item = self
             .store
             .get(item_id)?
             .ok_or(OtpItemError::NotFound(item_id))?;
+        let mut pending = lock_pending(&self.pending);
+        retain_live(&mut pending, now);
+        if pending.len() >= self.policy.max_pending {
+            return Err(OtpReleaseError::TooManyPending {
+                limit: self.policy.max_pending,
+            });
+        }
         let request = OtpReleaseRequest {
             id: OtpReleaseId::mint(),
             participant,
             item,
-            requested_at_unix_secs,
+            requested_at_unix_secs: now,
+            expires_at_unix_secs: now.saturating_add(self.policy.request_ttl_secs),
         };
-        self.pending
-            .lock()
-            .unwrap()
-            .insert(request.id, request.clone());
+        pending.insert(request.id, request.clone());
         Ok(request)
     }
 
-    /// Snapshot the requests that still need a resident decision.
-    pub fn pending(&self) -> Vec<OtpReleaseRequest> {
-        let mut pending: Vec<_> = self.pending.lock().unwrap().values().cloned().collect();
-        pending.sort_by_key(|request| (request.requested_at_unix_secs, request.id));
-        pending
+    /// Snapshot live requests that still need a resident decision.
+    pub fn pending(&self) -> Result<Vec<OtpReleaseRequest>, OtpReleaseError> {
+        let now = (self.clock)()?;
+        let mut pending = lock_pending(&self.pending);
+        retain_live(&mut pending, now);
+        let mut requests: Vec<_> = pending.values().cloned().collect();
+        requests.sort_by_key(|request| (request.requested_at_unix_secs, request.id));
+        Ok(requests)
     }
 
-    /// Approve one pending petition and issue its participant-bound code tile.
-    pub fn approve(
-        &self,
-        id: OtpReleaseId,
-        released_at_unix_secs: u64,
-    ) -> Result<OtpReleasedCode, OtpReleaseError> {
-        let mut pending = self.pending.lock().unwrap();
+    /// Approve one live petition and issue its associated code tile.
+    pub fn approve(&self, id: OtpReleaseId) -> Result<OtpReleasedCode, OtpReleaseError> {
+        let now = (self.clock)()?;
+        let mut pending = lock_pending(&self.pending);
         let request = pending
             .get(&id)
             .cloned()
             .ok_or(OtpReleaseError::NotPending(id))?;
-        let tile = self
-            .store
-            .release_tile_at_unix_time(request.item.id, released_at_unix_secs)?;
+        if now >= request.expires_at_unix_secs {
+            pending.remove(&id);
+            return Err(OtpReleaseError::Expired(id));
+        }
+        let tile = self.store.release_tile_at_unix_time(request.item.id, now)?;
         pending.remove(&id);
         Ok(OtpReleasedCode { request, tile })
     }
 
     /// Deny one pending petition without exercising its OTP item.
     pub fn deny(&self, id: OtpReleaseId) -> Result<OtpReleaseDenied, OtpReleaseError> {
-        let request = self
-            .pending
-            .lock()
-            .unwrap()
+        let request = lock_pending(&self.pending)
             .remove(&id)
             .ok_or(OtpReleaseError::NotPending(id))?;
         Ok(OtpReleaseDenied { request })
     }
+}
+
+fn lock_pending(
+    pending: &Mutex<BTreeMap<OtpReleaseId, OtpReleaseRequest>>,
+) -> MutexGuard<'_, BTreeMap<OtpReleaseId, OtpReleaseRequest>> {
+    pending
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn retain_live(pending: &mut BTreeMap<OtpReleaseId, OtpReleaseRequest>, now: u64) {
+    pending.retain(|_, request| now < request.expires_at_unix_secs);
+}
+
+fn system_unix_secs() -> Result<u64, OtpReleaseError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| OtpReleaseError::ClockBeforeUnixEpoch)
 }
 
 fn validate_participant_fact(value: String) -> Result<String, OtpReleaseError> {
@@ -248,13 +382,37 @@ fn validate_participant_fact(value: String) -> Result<String, OtpReleaseError> {
 }
 
 #[cfg(test)]
+#[path = "release_concurrency_tests.rs"]
+mod concurrency_tests;
+
+#[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use tempfile::tempdir;
 
     use super::*;
     use personae::{PersonaId, SealedRecordStorage};
 
     const RFC4226_SECRET_BASE32: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+
+    #[derive(Clone)]
+    struct ManualClock(Arc<AtomicU64>);
+
+    impl ManualClock {
+        fn new(now: u64) -> Self {
+            Self(Arc::new(AtomicU64::new(now)))
+        }
+
+        fn set(&self, now: u64) {
+            self.0.store(now, Ordering::SeqCst);
+        }
+
+        fn function(&self) -> Arc<ReleaseClock> {
+            let state = Arc::clone(&self.0);
+            Arc::new(move || Ok(state.load(Ordering::SeqCst)))
+        }
+    }
 
     fn store(root: &std::path::Path, persona: PersonaId) -> OtpItemStore {
         OtpItemStore::new(
@@ -263,12 +421,16 @@ mod tests {
         )
     }
 
-    fn participant() -> OtpReleaseParticipant {
-        OtpReleaseParticipant::new("device:q-pc", "session:carrier-proof").unwrap()
+    fn test_gate(items: OtpItemStore, clock: &ManualClock) -> OtpReleaseGate {
+        OtpReleaseGate::with_clock(items, OtpReleasePolicy::default(), clock.function())
+    }
+
+    fn participant() -> OtpReleaseParticipantClaim {
+        OtpReleaseParticipantClaim::unverified("device:q-pc", "session:carrier-proof").unwrap()
     }
 
     #[test]
-    fn approval_releases_a_tile_only_to_the_pending_participant() {
+    fn approval_uses_gate_time_and_releases_a_live_tile() {
         let dir = tempdir().unwrap();
         let items = store(dir.path(), PersonaId::new());
         let item = items
@@ -276,21 +438,27 @@ mod tests {
                 "otpauth://totp/Merely:mark?secret={RFC4226_SECRET_BASE32}&issuer=Merely&digits=8"
             ))
             .unwrap();
-        let gate = OtpReleaseGate::new(items);
-        let request = gate.petition(item.id, participant(), 58).unwrap();
+        let clock = ManualClock::new(58);
+        let gate = test_gate(items, &clock);
+        let request = gate.petition(item.id, participant()).unwrap();
 
-        assert_eq!(gate.pending(), vec![request.clone()]);
-        let released = gate.approve(request.id, 59).unwrap();
+        assert_eq!(gate.pending().unwrap(), vec![request.clone()]);
+        clock.set(59);
+        let released = gate.approve(request.id).unwrap();
 
         assert_eq!(released.request(), &request);
-        assert_eq!(released.tile().code(), "94287082");
-        assert_eq!(released.tile().time_ring().unwrap().seconds_remaining, 1);
-        assert!(gate.pending().is_empty());
+        assert_eq!(released.tile().code_at_unix_time(59), Some("94287082"));
+        let ring = released.tile().time_ring().unwrap();
+        assert_eq!(ring.seconds_remaining_at(59), 1);
+        assert_eq!(ring.expires_at_unix_secs, 60);
+        assert!(gate.pending().unwrap().is_empty());
         assert!(matches!(
-            gate.approve(request.id, 59),
+            gate.approve(request.id),
             Err(OtpReleaseError::NotPending(id)) if id == request.id
         ));
-        assert!(!format!("{released:?}").contains("94287082"));
+        let debug = format!("{released:?}");
+        assert!(!debug.contains("94287082"));
+        assert!(!debug.contains("session:carrier-proof"));
     }
 
     #[test]
@@ -302,14 +470,19 @@ mod tests {
                 "otpauth://hotp/Merely:mark?secret={RFC4226_SECRET_BASE32}&issuer=Merely&counter=0"
             ))
             .unwrap();
-        let gate = OtpReleaseGate::new(items);
-        let denied = gate.petition(item.id, participant(), 1).unwrap();
+        let clock = ManualClock::new(1);
+        let gate = test_gate(items, &clock);
+        let denied = gate.petition(item.id, participant()).unwrap();
 
         assert_eq!(gate.deny(denied.id).unwrap().request, denied);
-        let approved = gate.petition(item.id, participant(), 2).unwrap();
+        clock.set(2);
+        let approved = gate.petition(item.id, participant()).unwrap();
         assert_eq!(
-            gate.approve(approved.id, 2).unwrap().tile().code(),
-            "755224"
+            gate.approve(approved.id)
+                .unwrap()
+                .tile()
+                .code_at_unix_time(2),
+            Some("755224")
         );
     }
 
@@ -323,32 +496,83 @@ mod tests {
                 "otpauth://hotp/Merely:mark?secret={RFC4226_SECRET_BASE32}&issuer=Merely&counter=0"
             ))
             .unwrap();
-        let gate = OtpReleaseGate::new(items);
+        let clock = ManualClock::new(1);
+        let gate = test_gate(items, &clock);
 
-        let first = gate.petition(item.id, participant(), 1).unwrap();
-        assert_eq!(gate.approve(first.id, 1).unwrap().tile().code(), "755224");
-
-        let reopened = OtpReleaseGate::new(store(dir.path(), persona));
-        let second = reopened.petition(item.id, participant(), 2).unwrap();
+        let first = gate.petition(item.id, participant()).unwrap();
         assert_eq!(
-            reopened.approve(second.id, 2).unwrap().tile().code(),
-            "287082"
+            gate.approve(first.id).unwrap().tile().code_at_unix_time(1),
+            Some("755224")
+        );
+
+        clock.set(2);
+        let reopened = test_gate(store(dir.path(), persona), &clock);
+        let second = reopened.petition(item.id, participant()).unwrap();
+        assert_eq!(
+            reopened
+                .approve(second.id)
+                .unwrap()
+                .tile()
+                .code_at_unix_time(2),
+            Some("287082")
         );
     }
 
     #[test]
-    fn participant_facts_must_be_presentable_but_not_free_form_logs() {
+    fn expired_petition_cannot_release_a_code() {
+        let dir = tempdir().unwrap();
+        let items = store(dir.path(), PersonaId::new());
+        let item = items
+            .import_otpauth_uri(&format!(
+                "otpauth://totp/Merely:mark?secret={RFC4226_SECRET_BASE32}&issuer=Merely"
+            ))
+            .unwrap();
+        let clock = ManualClock::new(10);
+        let policy = OtpReleasePolicy::new(5, 2).unwrap();
+        let gate = OtpReleaseGate::with_clock(items, policy, clock.function());
+        let request = gate.petition(item.id, participant()).unwrap();
+
+        clock.set(15);
         assert!(matches!(
-            OtpReleaseParticipant::new("", "session"),
+            gate.approve(request.id),
+            Err(OtpReleaseError::Expired(id)) if id == request.id
+        ));
+    }
+
+    #[test]
+    fn pending_capacity_is_configurable_and_bounded() {
+        let dir = tempdir().unwrap();
+        let items = store(dir.path(), PersonaId::new());
+        let item = items
+            .import_otpauth_uri(&format!(
+                "otpauth://totp/Merely:mark?secret={RFC4226_SECRET_BASE32}&issuer=Merely"
+            ))
+            .unwrap();
+        let clock = ManualClock::new(10);
+        let policy = OtpReleasePolicy::new(60, 1).unwrap();
+        let gate = OtpReleaseGate::with_clock(items, policy, clock.function());
+        gate.petition(item.id, participant()).unwrap();
+
+        assert!(matches!(
+            gate.petition(item.id, participant()),
+            Err(OtpReleaseError::TooManyPending { limit: 1 })
+        ));
+    }
+
+    #[test]
+    fn participant_facts_must_be_presentable_and_session_debug_is_redacted() {
+        assert!(matches!(
+            OtpReleaseParticipantClaim::unverified("", "session"),
             Err(OtpReleaseError::InvalidParticipant)
         ));
         assert!(matches!(
-            OtpReleaseParticipant::new("device", "session\nsecret"),
+            OtpReleaseParticipantClaim::unverified("device", "session\nsecret"),
             Err(OtpReleaseError::InvalidParticipant)
         ));
         assert!(matches!(
-            OtpReleaseParticipant::new(" device", "session"),
+            OtpReleaseParticipantClaim::unverified(" device", "session"),
             Err(OtpReleaseError::InvalidParticipant)
         ));
+        assert!(!format!("{:?}", participant()).contains("session:carrier-proof"));
     }
 }

@@ -6,10 +6,11 @@
 //!
 //! The format has no RFC. It is a de-facto standard set by Google
 //! Authenticator's wiki page and followed by every issuer since, so this
-//! parser is written to what is actually emitted rather than to a spec:
-//! padding is often missing from the secret, the issuer is often stated twice
-//! (once as a label prefix and once as a parameter), and unknown parameters
-//! turn up and must be ignored rather than rejected.
+//! parser is written to what is actually emitted while keeping the format's
+//! security-relevant invariants: padding is often missing from the secret,
+//! the issuer is often stated twice, and unknown parameters turn up and must
+//! be ignored. Duplicate known parameters and conflicting issuer identities
+//! are rejected rather than interpreted differently by different consumers.
 
 use std::fmt;
 
@@ -33,6 +34,10 @@ pub enum OtpUriError {
     UnknownType(String),
     /// No `secret` parameter, which is the one thing a URI must carry.
     MissingSecret,
+    /// The path carried no account label.
+    MissingLabel,
+    /// An issuer position was present but empty.
+    EmptyIssuer,
     /// The secret was not valid base32.
     Secret(base32::Base32Error),
     /// A `hotp://` URI without the `counter` it requires.
@@ -46,6 +51,17 @@ pub enum OtpUriError {
     },
     /// An `algorithm` value outside SHA1 / SHA256 / SHA512.
     UnknownAlgorithm(String),
+    /// The Key URI format permits six- or eight-digit codes.
+    UnsupportedDigits(u32),
+    /// A security-relevant query parameter appeared more than once.
+    DuplicateParameter(&'static str),
+    /// The issuer label prefix and `issuer=` parameter disagreed.
+    IssuerMismatch {
+        /// Issuer parsed from the label prefix.
+        label: String,
+        /// Issuer parsed from the query parameter.
+        parameter: String,
+    },
     /// The generator rejected the configuration.
     Configuration(OtpError),
 }
@@ -56,20 +72,38 @@ impl fmt::Display for OtpUriError {
             OtpUriError::NotOtpauth => f.write_str("not an otpauth:// uri"),
             OtpUriError::UnknownType(t) => write!(f, "unknown otp type {t:?}"),
             OtpUriError::MissingSecret => f.write_str("the uri carries no secret parameter"),
+            OtpUriError::MissingLabel => f.write_str("the uri carries no account label"),
+            OtpUriError::EmptyIssuer => f.write_str("the uri carries an empty issuer"),
             OtpUriError::Secret(e) => write!(f, "the secret is not valid base32: {e}"),
-            OtpUriError::MissingCounter => {
-                f.write_str("an hotp uri must carry a counter parameter")
-            }
+            OtpUriError::MissingCounter => f.write_str("a hotp uri must carry a counter parameter"),
             OtpUriError::InvalidNumber { parameter, value } => {
                 write!(f, "{parameter} is not a number: {value:?}")
             }
             OtpUriError::UnknownAlgorithm(a) => write!(f, "unknown algorithm {a:?}"),
+            OtpUriError::UnsupportedDigits(digits) => {
+                write!(f, "the key uri format supports 6 or 8 digits, not {digits}")
+            }
+            OtpUriError::DuplicateParameter(parameter) => {
+                write!(f, "the uri repeats the {parameter} parameter")
+            }
+            OtpUriError::IssuerMismatch { label, parameter } => write!(
+                f,
+                "issuer label {label:?} does not match issuer parameter {parameter:?}"
+            ),
             OtpUriError::Configuration(e) => write!(f, "{e}"),
         }
     }
 }
 
-impl std::error::Error for OtpUriError {}
+impl std::error::Error for OtpUriError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            OtpUriError::Secret(error) => Some(error),
+            OtpUriError::Configuration(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 /// Parse an `otpauth://totp/...` or `otpauth://hotp/...` URI.
 ///
@@ -93,29 +127,41 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<(Otp, OtpUri), OtpUriError> {
         other => return Err(OtpUriError::UnknownType(other.to_string())),
     };
 
-    let params = parse_query(query);
-    let get = |name: &str| {
-        params
-            .iter()
-            .find(|(k, _)| k == name)
-            .map(|(_, v)| v.as_str())
-    };
+    let get = |name| query_value(query, name);
 
-    let secret = base32::decode(get("secret").ok_or(OtpUriError::MissingSecret)?)
+    let secret = base32::decode(get("secret")?.ok_or(OtpUriError::MissingSecret)?)
         .map_err(OtpUriError::Secret)?;
 
     // The label is `issuer:account` or just `account`. When both the prefix
-    // and the `issuer=` parameter are present they normally agree; the
-    // parameter is the authority when they do not, because the prefix is the
-    // older convention and more often stale.
+    // and the `issuer=` parameter are present the format requires agreement.
+    // Rejecting disagreement prevents different consumers from presenting a
+    // credential under different issuer identities.
     let label = percent_decode(label);
     let (label_issuer, account) = match label.split_once(':') {
         Some((issuer, account)) => (Some(issuer.trim().to_string()), account.trim().to_string()),
         None => (None, label.trim().to_string()),
     };
-    let issuer = get("issuer").map(percent_decode).or(label_issuer);
+    if account.is_empty() {
+        return Err(OtpUriError::MissingLabel);
+    }
+    if label_issuer.as_deref() == Some("") {
+        return Err(OtpUriError::EmptyIssuer);
+    }
+    let parameter_issuer = get("issuer")?.map(percent_decode);
+    if parameter_issuer.as_deref() == Some("") {
+        return Err(OtpUriError::EmptyIssuer);
+    }
+    if let (Some(label), Some(parameter)) = (&label_issuer, &parameter_issuer)
+        && label != parameter
+    {
+        return Err(OtpUriError::IssuerMismatch {
+            label: label.clone(),
+            parameter: parameter.clone(),
+        });
+    }
+    let issuer = parameter_issuer.or(label_issuer);
 
-    let algorithm = match get("algorithm") {
+    let algorithm = match get("algorithm")? {
         None => OtpAlgorithm::default(),
         Some(a) => match a.to_ascii_uppercase().as_str() {
             "SHA1" => OtpAlgorithm::Sha1,
@@ -125,16 +171,19 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<(Otp, OtpUri), OtpUriError> {
         },
     };
 
-    let digits = match get("digits") {
+    let digits = match get("digits")? {
         None => DEFAULT_DIGITS,
         Some(d) => d.parse().map_err(|_| OtpUriError::InvalidNumber {
             parameter: "digits",
             value: d.to_string(),
         })?,
     };
+    if !matches!(digits, 6 | 8) {
+        return Err(OtpUriError::UnsupportedDigits(digits));
+    }
 
     let otp = if is_totp {
-        let period = match get("period") {
+        let period = match get("period")? {
             None => DEFAULT_PERIOD_SECS,
             Some(p) => p.parse().map_err(|_| OtpUriError::InvalidNumber {
                 parameter: "period",
@@ -142,13 +191,14 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<(Otp, OtpUri), OtpUriError> {
             })?,
         };
         Otp::totp(secret)
+            .map_err(OtpUriError::Configuration)?
             .with_algorithm(algorithm)
             .with_digits(digits)
             .map_err(OtpUriError::Configuration)?
             .with_period(period)
             .map_err(OtpUriError::Configuration)?
     } else {
-        let counter_text = get("counter").ok_or(OtpUriError::MissingCounter)?;
+        let counter_text = get("counter")?.ok_or(OtpUriError::MissingCounter)?;
         let counter = counter_text
             .parse()
             .map_err(|_| OtpUriError::InvalidNumber {
@@ -156,6 +206,7 @@ pub fn parse_otpauth_uri(uri: &str) -> Result<(Otp, OtpUri), OtpUriError> {
                 value: counter_text.to_string(),
             })?;
         Otp::hotp(secret, counter)
+            .map_err(OtpUriError::Configuration)?
             .with_algorithm(algorithm)
             .with_digits(digits)
             .map_err(OtpUriError::Configuration)?
@@ -171,15 +222,15 @@ fn strip_scheme(uri: &str) -> Option<&str> {
         .then(|| &uri["otpauth://".len()..])
 }
 
-fn parse_query(query: &str) -> Vec<(String, String)> {
-    query
-        .split('&')
-        .filter(|pair| !pair.is_empty())
-        .map(|pair| match pair.split_once('=') {
-            Some((k, v)) => (k.to_ascii_lowercase(), v.to_string()),
-            None => (pair.to_ascii_lowercase(), String::new()),
-        })
-        .collect()
+fn query_value<'a>(query: &'a str, name: &'static str) -> Result<Option<&'a str>, OtpUriError> {
+    let mut found = None;
+    for pair in query.split('&').filter(|pair| !pair.is_empty()) {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if key.eq_ignore_ascii_case(name) && found.replace(value).is_some() {
+            return Err(OtpUriError::DuplicateParameter(name));
+        }
+    }
+    Ok(found)
 }
 
 /// Decode `%XX` escapes and `+` as space. Invalid escapes are left as written
