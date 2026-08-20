@@ -86,15 +86,17 @@ impl SealedRecordStorage {
         }
         let cipher = ChaCha20Poly1305::new(Key::from_slice(self.key.as_ref()));
         let nonce = Nonce::from_slice(&envelope.nonce);
-        let plaintext = cipher
-            .decrypt(
-                nonce,
-                Payload {
-                    msg: envelope.ciphertext.as_slice(),
-                    aad: aad.as_bytes(),
-                },
-            )
-            .map_err(|_| IdentityError::Backend(format!("decrypt sealed record {:?}", path)))?;
+        let plaintext = Zeroizing::new(
+            cipher
+                .decrypt(
+                    nonce,
+                    Payload {
+                        msg: envelope.ciphertext.as_slice(),
+                        aad: aad.as_bytes(),
+                    },
+                )
+                .map_err(|_| IdentityError::Backend(format!("decrypt sealed record {:?}", path)))?,
+        );
         let value = serde_json::from_slice(&plaintext).map_err(|err| {
             IdentityError::Backend(format!("decode sealed record plaintext {:?}: {err}", path))
         })?;
@@ -107,9 +109,9 @@ impl SealedRecordStorage {
         T: Serialize,
     {
         let (path, aad) = resolve_record_path(&self.root, relative.as_ref())?;
-        let plaintext = serde_json::to_vec(value).map_err(|err| {
+        let plaintext = Zeroizing::new(serde_json::to_vec(value).map_err(|err| {
             IdentityError::Backend(format!("encode sealed record {:?}: {err}", path))
-        })?;
+        })?);
         let nonce = random_bytes(NONCE_LEN);
         let cipher = ChaCha20Poly1305::new(Key::from_slice(self.key.as_ref()));
         let ciphertext = cipher

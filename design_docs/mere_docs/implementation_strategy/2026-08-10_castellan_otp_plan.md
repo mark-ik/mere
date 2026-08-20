@@ -1,7 +1,7 @@
 # Castellan C1: the OTP Slice
 
 **Date:** 2026-08-10
-**Status:** C1 done 2026-08-10; C2 open
+**Status:** C1 done 2026-08-10; C2a done 2026-08-20; C2b and later open
 **Anchors:** [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md)
 (Part I), [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md) (the
@@ -65,8 +65,10 @@ exercising it. C1 builds the exercising; C2 builds the item.
 
 ### C2 and beyond: not this slice
 
-- [ ] The chatelaine item: a stored, sealed OTP secret over
-      `SealedRecordStorage`, persona-scoped
+- [x] C2a: the chatelaine item: a stored, sealed OTP secret over
+      `SealedRecordStorage`, persona-scoped. `OtpItemStore` is deliberately
+      local and in-process: it exposes secret-free metadata and can exercise
+      a code, but has no seed accessor and is not the future gate surface.
 - [ ] The embeddable half: code tiles with their remaining-seconds ring
 - [ ] The authority half: release through the participant gate
 - [ ] Secret Service (`org.freedesktop.secrets`), the one OS surface a third
@@ -99,3 +101,11 @@ exercising it. C1 builds the exercising; C2 builds the item.
   - `Otp` holds the secret and hands it back through no accessor, and its
     `Debug` redacts. That is the chatelaine rule (exercised, never shown)
     enforced at the type rather than by convention, and a test asserts it.
+
+- 2026-08-20: C2a landed. `OtpItemStore` writes one sealed record under
+  `castellan/otp/v1/<persona>/<item>.json`; Personae binds that path into the
+  authenticated ciphertext as well as keeping it below the persona namespace.
+  The store round-trips RFC 6238 material after reopening, keeps account and
+  issuer out of the on-disk plaintext, and proves that the same item handle is
+  absent for another persona. Counter advancement and any release to a host
+  still belong to the participant-gated C2b authority slice.

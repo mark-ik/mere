@@ -30,8 +30,9 @@ Lives in the [mere](https://github.com/merely-made/mere) workspace at
 
 Implemented:
 
-- `otp` — RFC 6238/4226 codes and `otpauth://` URIs (the chatelaine's 2FA
-  algorithm half).
+- `otp` — RFC 6238/4226 codes and `otpauth://` URIs, plus persona-scoped OTP
+  items sealed through Personae's record store. The item read model exposes
+  metadata and codes, never seeds.
 - `reticulum` — the first device-identity issue seam: a radio credential
   derived from a Persona provider, no device-local account file.
 - feature `keeper` — the two halves made real, moved home from graphshell
@@ -44,9 +45,9 @@ Implemented:
 Graphshell composes all three and re-exports them at its pre-founding paths,
 so it is the first host rather than the owner. The intent wire strings keep
 their `castellan.*` values for now; renaming the wire vocabulary is
-a separate decision. Storage of foreign secrets, CXF import, and
-gate-mediated release are later slices — see the keeper founding plan and the
-credential port brief in mere's `design_docs`.
+a separate decision. CXF import, presentation, and gate-mediated release are
+later slices — see the keeper founding plan and the credential port brief in
+mere's `design_docs`.
 
 ## License
 

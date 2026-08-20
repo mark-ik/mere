@@ -8,9 +8,10 @@
 //! only outputs are codes, which are meant to be shown once and then are
 //! worthless.
 //!
-//! Scope is deliberately the algorithm and its import format. Storage,
-//! presentation, and release-through-the-gate are later slices; see the
-//! castellan OTP plan.
+//! The core accepts an imported URI. [`OtpItemStore`] is the first storage
+//! slice: it seals the configured generator under one persona and still gives
+//! callers no way to retrieve its seed. Presentation and release through the
+//! participant gate remain later slices; see the castellan OTP plan.
 //!
 //! ```
 //! use castellan::otp::{Otp, OtpAlgorithm};
@@ -27,6 +28,7 @@
 //! [RFC 6238]: https://www.rfc-editor.org/rfc/rfc6238
 
 pub mod base32;
+mod item;
 mod uri;
 
 use std::fmt;
@@ -39,8 +41,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
+use zeroize::Zeroizing;
 
 pub use base32::Base32Error;
+pub use item::{OtpItem, OtpItemError, OtpItemId, OtpItemStore};
 pub use uri::{OtpUriError, parse_otpauth_uri};
 
 /// The default time step, in seconds. RFC 6238 §5.2 recommends 30.
@@ -132,12 +136,12 @@ impl std::error::Error for OtpError {}
 
 /// A configured one-time-password generator.
 ///
-/// The secret is held but never handed back: `Debug` redacts it, and there is
-/// no accessor. A caller that needs the secret bytes is doing storage, which
-/// is the chatelaine's job, not this type's.
+/// The secret is held but never handed back: `Debug` redacts it, there is no
+/// accessor, and the buffer is zeroized when dropped. A caller that needs the
+/// secret bytes is doing storage, which is the chatelaine's job, not this type's.
 #[derive(Clone)]
 pub struct Otp {
-    secret: Vec<u8>,
+    secret: Zeroizing<Vec<u8>>,
     algorithm: OtpAlgorithm,
     digits: u32,
     kind: OtpKind,
@@ -161,7 +165,7 @@ impl Otp {
     /// A time-based generator with the default 30-second step and 6 digits.
     pub fn totp(secret: Vec<u8>) -> Self {
         Self {
-            secret,
+            secret: Zeroizing::new(secret),
             algorithm: OtpAlgorithm::default(),
             digits: DEFAULT_DIGITS,
             kind: OtpKind::Totp {
@@ -174,7 +178,7 @@ impl Otp {
     /// A counter-based generator starting at `counter`.
     pub fn hotp(secret: Vec<u8>, counter: u64) -> Self {
         Self {
-            secret,
+            secret: Zeroizing::new(secret),
             algorithm: OtpAlgorithm::default(),
             digits: DEFAULT_DIGITS,
             kind: OtpKind::Hotp { counter },
@@ -301,7 +305,7 @@ impl Otp {
         // three lines of expansion.
         macro_rules! mac_with {
             ($hash:ty) => {{
-                let mut mac = <Hmac<$hash> as KeyInit>::new_from_slice(&self.secret)
+                let mut mac = <Hmac<$hash> as KeyInit>::new_from_slice(self.secret.as_slice())
                     .expect("HMAC accepts a key of any length");
                 mac.update(message);
                 mac.finalize().into_bytes().to_vec()

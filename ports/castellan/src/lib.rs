@@ -44,9 +44,10 @@
 //!
 //! Graphshell composes all three (and re-exports them at their old paths);
 //! any other host embeds the subset it needs without inheriting graphshell.
-//! Storage of foreign secrets, CXF import, and gate-mediated release remain
-//! later slices; see the castellan OTP plan and the keeper founding plan in
-//! mere's design docs.
+//! OTP items now seal their imported configuration under a Persona through
+//! [`otp::OtpItemStore`]. CXF import, presentation, and gate-mediated release
+//! remain later slices; see the castellan OTP plan and the keeper founding plan
+//! in mere's design docs.
 
 #![doc(html_no_source)]
 #![warn(missing_docs)]
