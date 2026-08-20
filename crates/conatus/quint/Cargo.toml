@@ -22,7 +22,8 @@ numen = { path = "../numen", version = "0.2" }
 uuid = { version = "1", default-features = false, features = ["serde"] }
 # Burn-backed lowering of the field algebra (AST -> a fused tensor program).
 # ndarray backend for portable per-target compute; generic over `B: Backend`.
-burn = { version = "0.21", default-features = false, features = ["std"], optional = true }
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["std"], optional = true }
+burn-wgpu = { version = "0.22.0-pre.2", default-features = false, features = ["std", "autotune"], optional = true }
 # Rhai composition surface for fields, couplings, and edge-path rules.
 rhai = { version = "1.20", default-features = false, features = ["std"], optional = true }
 # The resident lane's device types. The device itself is always the
@@ -34,7 +35,7 @@ bytemuck = { version = "1", features = ["derive"], optional = true }
 # wgpu consumers. This is the direction CubeCL supports without a copy:
 # compute allocations can be exported, while foreign buffers cannot be
 # cheaply adopted as tensors.
-cubecl = { version = "0.10", default-features = false, features = ["std", "wgpu"], optional = true }
+cubecl = { version = "0.11.0-pre.2", default-features = false, features = ["std", "wgpu"], optional = true }
 
 # The burn tree reaches getrandom on wasm; 0.4 needs its wasm_js backend
 # feature enabled by someone in the graph (compile_error! otherwise). Same
@@ -56,11 +57,13 @@ field-gpu = [
     "dep:cubecl",
     "dep:burn",
     "burn/wgpu",
+    "burn/extension",
+    "dep:burn-wgpu",
     "dep:getrandom",
 ]
 field-burn = ["dep:burn", "burn/ndarray"]
 # Adds the wgpu backend so consumers can target GPU evaluation.
-field-burn-wgpu = ["field-burn", "burn/wgpu", "dep:getrandom"]
+field-burn-wgpu = ["field-burn", "burn/wgpu", "burn/extension", "dep:burn-wgpu", "dep:getrandom"]
 field-rhai = ["dep:rhai"]
 
 [dev-dependencies]

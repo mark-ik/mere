@@ -2,6 +2,41 @@
 
 **Date**: 2026-08-09
 
+**Status: EXECUTED 2026-08-20, on the 0.22.0-pre.2 row Mark chose.** Both
+production roots migrated (esp then quint, the plan's order), the vendored
+`support/patches/cubecl-wgpu` backport retired with it exactly as the probe
+predicted, and the workspace carries one `wgpu` 30.0.0 and one
+`libsqlite3-sys` 0.38.2 (rusqlite behind CubeCL's autotune cache, as the probe
+also predicted: the workspace is no longer sqlite-free, and that is CubeCL's
+own persistence, not a crossing of mere's storage boundary).
+
+The API shift was larger than "churn": 0.22 removes the backend type
+parameter entirely. `Tensor<B, D>` is `Tensor<const D>`, every `B: Backend`
+generic dies, and devices become runtime values (`Device::ndarray()`,
+`Device::wgpu(DeviceKind)`) with type-erased dispatch. esp's model stacks
+came out *simpler* (the generics were plumbing). Three findings worth keeping:
+
+- **Fusion is a default of standalone `burn-wgpu`**, and quint's resident
+  interop must build on the non-fused backend (`burn_wgpu::Wgpu`) or
+  `from_primitive` sees a `FusionTensor` where it expects a `CubeTensor`.
+  quint deps `burn-wgpu` with `default-features = false`.
+- **The raw-tensor bridge survives** behind `burn/extension`:
+  `Tensor::from_primitive::<burn_wgpu::Wgpu>(cube_tensor)` and
+  `try_into_primitive` replace 0.21's `TensorPrimitive::Float` wrapping.
+- **cubecl 0.11 launches slices, not `Array`**: kernel params become `&[T]` /
+  `&mut [T]`, `ArrayArg` becomes `BufferArg`, and `SharedMemory::<f32>::new`
+  becomes `Shared::<[f32]>::new_slice`.
+
+Receipts, all on this machine's real GPU in release: quint parity 4 (repulse,
+node exclusion, scalar and vector lowering), resident chunk receipt 3 and
+resident 4 (the raw-buffer bridge), esp vector-kernel parity, BERT
+ndarray/wgpu parity. CPU suites: esp 173, quint 63. Prior 0.21 numbers are
+historical per the migration rules. The wasm and cross-device receipts have
+not been re-run and stay owed.
+
+Original doc follows.
+
+
 **Status**: Release-gated on stable 0.22 only. The second reason (the sqlite
 conflict) cleared on 2026-08-16, verified by probe; see below. Original note
 follows.

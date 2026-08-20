@@ -407,7 +407,11 @@ vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-3
 # been attempted: whether burn 0.22.0-pre.2 / cubecl 0.11.0-pre.2 resolve and
 # behave here is the burn migration's question, not this patch entry's. See
 # docs: 2026-08-09_burn_0_22_migration_plan.md.
-cubecl-wgpu = { path = "support/patches/cubecl-wgpu" }
+# RETIRED 2026-08-20 with the burn 0.22 migration: cubecl-wgpu 0.11.0-pre.2
+# from the registry already names wgpu 30, which is all the vendored backport
+# existed to do. The vendored copy remains at support/patches/cubecl-wgpu for
+# archaeology until a stable 0.22 lands, but it is no longer patched in.
+# cubecl-wgpu = { path = "support/patches/cubecl-wgpu" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored

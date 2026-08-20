@@ -22,7 +22,7 @@
 //! the large-body simulation lane.
 
 #[cfg(any(feature = "field-burn", feature = "field-gpu"))]
-use burn::tensor::{Tensor, backend::Backend};
+use burn::tensor::Tensor;
 
 /// Input rejected before a staging helper creates a tensor program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,11 +95,11 @@ impl Default for NodeExclusionParams {
 /// `strength · Σ_{j} (p_i − p_j) / (|p_i − p_j|² + ε²)^{3/2}`. The `j = i` term
 /// vanishes (numerator zero), so it is summed over all j including self.
 #[cfg(any(feature = "field-burn", feature = "field-gpu"))]
-pub fn repulsion<B: Backend>(
-    xs: Tensor<B, 1>,
-    ys: Tensor<B, 1>,
+pub fn repulsion(
+    xs: Tensor<1>,
+    ys: Tensor<1>,
     params: RepulsionParams,
-) -> (Tensor<B, 1>, Tensor<B, 1>) {
+) -> (Tensor<1>, Tensor<1>) {
     let n = xs.dims()[0];
 
     // Pairwise displacements by broadcasting [N,1] against [1,N]:
@@ -129,11 +129,11 @@ pub fn repulsion<B: Backend>(
 /// [`crate::resident::ResidentTensor`] inputs and publish the output buffer to its
 /// next resident consumer without bringing force bytes to the CPU.
 #[cfg(any(feature = "field-burn", feature = "field-gpu"))]
-pub fn node_exclusion<B: Backend>(
-    xs: Tensor<B, 1>,
-    ys: Tensor<B, 1>,
+pub fn node_exclusion(
+    xs: Tensor<1>,
+    ys: Tensor<1>,
     params: NodeExclusionParams,
-) -> (Tensor<B, 1>, Tensor<B, 1>) {
+) -> (Tensor<1>, Tensor<1>) {
     let n = xs.dims()[0];
     let dx = xs.clone().reshape([n, 1]) - xs.reshape([1, n]);
     let dy = ys.clone().reshape([n, 1]) - ys.reshape([1, n]);
@@ -174,13 +174,10 @@ pub fn repulsion_wgpu_roundtrip(
             ys: ys.len(),
         });
     }
-    use burn::backend::Wgpu;
-    use burn::tensor::backend::BackendTypes;
-    type B = Wgpu<f32, i32>;
-    let dev = <B as BackendTypes>::Device::default();
-    let (fx, fy) = repulsion::<B>(
-        Tensor::<B, 1>::from_floats(xs, &dev),
-        Tensor::<B, 1>::from_floats(ys, &dev),
+    let dev = burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0));
+    let (fx, fy) = repulsion(
+        Tensor::<1>::from_floats(xs, &dev),
+        Tensor::<1>::from_floats(ys, &dev),
         params,
     );
     Ok((
@@ -207,13 +204,10 @@ pub fn node_exclusion_wgpu_roundtrip(
             ys: ys.len(),
         });
     }
-    use burn::backend::Wgpu;
-    use burn::tensor::backend::BackendTypes;
-    type B = Wgpu<f32, i32>;
-    let dev = <B as BackendTypes>::Device::default();
-    let (fx, fy) = node_exclusion::<B>(
-        Tensor::<B, 1>::from_floats(xs, &dev),
-        Tensor::<B, 1>::from_floats(ys, &dev),
+    let dev = burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0));
+    let (fx, fy) = node_exclusion(
+        Tensor::<1>::from_floats(xs, &dev),
+        Tensor::<1>::from_floats(ys, &dev),
         params,
     );
     Ok((
@@ -290,16 +284,14 @@ pub fn node_exclusion_reference(
 #[cfg(all(test, feature = "field-burn"))]
 mod tests {
     use super::*;
-    use burn::backend::NdArray;
-    use burn::tensor::backend::BackendTypes;
 
-    type B = NdArray<f32>;
+    // backend chosen per call site via Device
 
-    fn run<Bk: Backend>(xs: &[f32], ys: &[f32], p: RepulsionParams) -> (Vec<f32>, Vec<f32>) {
-        let dev = <Bk as BackendTypes>::Device::default();
-        let (fx, fy) = repulsion::<Bk>(
-            Tensor::<Bk, 1>::from_floats(xs, &dev),
-            Tensor::<Bk, 1>::from_floats(ys, &dev),
+    fn run(xs: &[f32], ys: &[f32], p: RepulsionParams) -> (Vec<f32>, Vec<f32>) {
+        let dev = burn::tensor::Device::ndarray();
+        let (fx, fy) = repulsion(
+            Tensor::<1>::from_floats(xs, &dev),
+            Tensor::<1>::from_floats(ys, &dev),
             p,
         );
         (
@@ -308,15 +300,15 @@ mod tests {
         )
     }
 
-    fn run_node_exclusion<Bk: Backend>(
+    fn run_node_exclusion(
         xs: &[f32],
         ys: &[f32],
         p: NodeExclusionParams,
     ) -> (Vec<f32>, Vec<f32>) {
-        let dev = <Bk as BackendTypes>::Device::default();
-        let (fx, fy) = node_exclusion::<Bk>(
-            Tensor::<Bk, 1>::from_floats(xs, &dev),
-            Tensor::<Bk, 1>::from_floats(ys, &dev),
+        let dev = burn::tensor::Device::ndarray();
+        let (fx, fy) = node_exclusion(
+            Tensor::<1>::from_floats(xs, &dev),
+            Tensor::<1>::from_floats(ys, &dev),
             p,
         );
         (
@@ -330,7 +322,7 @@ mod tests {
         let xs = [0.0f32, 1.0, -2.0, 3.5, 0.7];
         let ys = [0.0f32, 2.0, 1.0, -1.5, 4.0];
         let p = RepulsionParams::default();
-        let (bx, by) = run::<B>(&xs, &ys, p);
+        let (bx, by) = run(&xs, &ys, p);
         let (rx, ry) = repulsion_reference(&xs, &ys, p);
         for (a, b) in bx.iter().zip(&rx) {
             assert!((a - b).abs() < 1.0e-4, "fx {a} vs {b}");
@@ -344,7 +336,7 @@ mod tests {
     fn two_bodies_repel_apart() {
         // Body 0 at origin, body 1 to its right: 0 pushed left (−x), 1 right (+x),
         // equal and opposite, no y component.
-        let (fx, fy) = run::<B>(&[0.0, 1.0], &[0.0, 0.0], RepulsionParams::default());
+        let (fx, fy) = run(&[0.0, 1.0], &[0.0, 0.0], RepulsionParams::default());
         assert!(fx[0] < 0.0, "left body pushed left: {}", fx[0]);
         assert!(fx[1] > 0.0, "right body pushed right: {}", fx[1]);
         assert!((fx[0] + fx[1]).abs() < 1.0e-5, "equal and opposite");
@@ -354,7 +346,7 @@ mod tests {
     #[test]
     fn self_term_contributes_zero() {
         // One body feels no force from itself.
-        let (fx, fy) = run::<B>(&[2.0], &[3.0], RepulsionParams::default());
+        let (fx, fy) = run(&[2.0], &[3.0], RepulsionParams::default());
         assert!(fx[0].abs() < 1.0e-6 && fy[0].abs() < 1.0e-6);
     }
 
@@ -369,7 +361,7 @@ mod tests {
             cutoff: 10.0,
             min_distance: 4.0,
         };
-        let (bx, by) = run_node_exclusion::<B>(&xs, &ys, params);
+        let (bx, by) = run_node_exclusion(&xs, &ys, params);
         let (rx, ry) = node_exclusion_reference(&xs, &ys, params).unwrap();
         for (actual, expected) in bx.iter().zip(&rx) {
             assert!(
@@ -397,11 +389,7 @@ mod tests {
 #[cfg(all(test, feature = "field-burn-wgpu"))]
 mod tests_wgpu {
     use super::*;
-    use burn::backend::{NdArray, Wgpu};
-    use burn::tensor::backend::BackendTypes;
 
-    type Cpu = NdArray<f32>;
-    type Gpu = Wgpu<f32, i32>;
 
     /// Deterministic spread of N positions; no RNG (varies by index).
     fn positions(n: usize) -> (Vec<f32>, Vec<f32>) {
@@ -413,11 +401,11 @@ mod tests_wgpu {
             .unzip()
     }
 
-    fn run<B: Backend>(xs: &[f32], ys: &[f32]) -> (Vec<f32>, Vec<f32>) {
-        let dev = <B as BackendTypes>::Device::default();
-        let (fx, fy) = repulsion::<B>(
-            Tensor::<B, 1>::from_floats(xs, &dev),
-            Tensor::<B, 1>::from_floats(ys, &dev),
+    fn run(xs: &[f32], ys: &[f32], dev: &burn::tensor::Device) -> (Vec<f32>, Vec<f32>) {
+        let dev = dev.clone();
+        let (fx, fy) = repulsion(
+            Tensor::<1>::from_floats(xs, &dev),
+            Tensor::<1>::from_floats(ys, &dev),
             RepulsionParams::default(),
         );
         (
@@ -426,15 +414,16 @@ mod tests_wgpu {
         )
     }
 
-    fn run_node_exclusion<B: Backend>(
+    fn run_node_exclusion(
         xs: &[f32],
         ys: &[f32],
         params: NodeExclusionParams,
+        dev_param: &burn::tensor::Device,
     ) -> (Vec<f32>, Vec<f32>) {
-        let dev = <B as BackendTypes>::Device::default();
-        let (fx, fy) = node_exclusion::<B>(
-            Tensor::<B, 1>::from_floats(xs, &dev),
-            Tensor::<B, 1>::from_floats(ys, &dev),
+        let dev = dev_param.clone();
+        let (fx, fy) = node_exclusion(
+            Tensor::<1>::from_floats(xs, &dev),
+            Tensor::<1>::from_floats(ys, &dev),
             params,
         );
         (
@@ -446,8 +435,8 @@ mod tests_wgpu {
     #[test]
     fn parity_ndarray_wgpu() {
         let (xs, ys) = positions(257);
-        let (cx, cy) = run::<Cpu>(&xs, &ys);
-        let (gx, gy) = run::<Gpu>(&xs, &ys);
+        let (cx, cy) = run(&xs, &ys, &burn::tensor::Device::ndarray());
+        let (gx, gy) = run(&xs, &ys, &burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0)));
         let max = |a: &[f32], b: &[f32]| {
             a.iter()
                 .zip(b)
@@ -466,8 +455,8 @@ mod tests_wgpu {
             cutoff: 100.0,
             min_distance: 8.0,
         };
-        let (cx, cy) = run_node_exclusion::<Cpu>(&xs, &ys, params);
-        let (gx, gy) = run_node_exclusion::<Gpu>(&xs, &ys, params);
+        let (cx, cy) = run_node_exclusion(&xs, &ys, params, &burn::tensor::Device::ndarray());
+        let (gx, gy) = run_node_exclusion(&xs, &ys, params, &burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0)));
         let max_relative = |a: &[f32], b: &[f32]| {
             a.iter()
                 .zip(b)
@@ -493,14 +482,15 @@ mod tests_wgpu {
     fn timing_repulsion_cpu_vs_gpu() {
         for n in [256usize, 1_000, 4_000] {
             let (xs, ys) = positions(n);
-            let _warm = run::<Gpu>(&xs, &ys);
+            let gpu_dev = burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0));
+            let _warm = run(&xs, &ys, &gpu_dev);
 
             let t = std::time::Instant::now();
-            let _ = run::<Cpu>(&xs, &ys);
+            let _ = run(&xs, &ys, &burn::tensor::Device::ndarray());
             let cpu_us = t.elapsed().as_micros();
 
             let t = std::time::Instant::now();
-            let _ = run::<Gpu>(&xs, &ys);
+            let _ = run(&xs, &ys, &gpu_dev);
             let gpu_us = t.elapsed().as_micros();
 
             println!("n={n}: ndarray={cpu_us}us wgpu={gpu_us}us");

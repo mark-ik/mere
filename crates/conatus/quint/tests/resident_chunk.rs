@@ -87,7 +87,10 @@ fn burn_and_raw_views_are_the_same_cubecl_allocation() {
     // Resolve the primitive carried by the public Burn tensor, rather than
     // trusting two metadata values both minted by quint. Its CubeCL handle
     // must resolve to the exact raw buffer range.
-    let primitive = burn.into_tensor().into_primitive().tensor();
+    let primitive = burn
+        .into_tensor()
+        .try_into_primitive::<burn_wgpu::Wgpu>()
+        .expect("resident tensor is a wgpu tensor");
     let managed = primitive
         .client
         .get_resource(primitive.handle.clone())

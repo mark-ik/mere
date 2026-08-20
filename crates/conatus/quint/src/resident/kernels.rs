@@ -39,8 +39,8 @@ pub const STRIDE: u32 = 4;
 /// barrier: a cube that diverges at a barrier is undefined behaviour.
 #[cube(launch_unchecked)]
 pub fn repulse(
-    positions: &Array<f32>,
-    forces: &mut Array<f32>,
+    positions: &[f32],
+    forces: &mut [f32],
     n: u32,
     repulsion: f32,
     min_distance: f32,
@@ -48,7 +48,7 @@ pub fn repulse(
 ) {
     // Shared-memory extent is comptime, as is the stride: both are
     // shapes the compiler needs before it can lay the cube out.
-    let mut tile = SharedMemory::<f32>::new(tile_floats);
+    let mut tile = Shared::<[f32]>::new_slice(tile_floats);
     let stride = STRIDE as usize;
     let width = CUBE_DIM as usize;
     let count_n = n as usize;
@@ -119,10 +119,10 @@ pub fn repulse(
 /// needed (and WGSL has none).
 #[cube(launch_unchecked)]
 pub fn springs(
-    positions: &Array<f32>,
-    forces: &mut Array<f32>,
-    offsets: &Array<u32>,
-    targets: &Array<u32>,
+    positions: &[f32],
+    forces: &mut [f32],
+    offsets: &[u32],
+    targets: &[u32],
     n: u32,
     spring_k: f32,
     rest_length: f32,
@@ -169,10 +169,10 @@ pub fn springs(
 /// probe, and the host reads four bytes rather than the cloud.
 #[cube(launch_unchecked)]
 pub fn integrate(
-    positions: &mut Array<f32>,
-    velocities: &mut Array<f32>,
-    forces: &Array<f32>,
-    settle: &mut Array<Atomic<u32>>,
+    positions: &mut [f32],
+    velocities: &mut [f32],
+    forces: &[f32],
+    settle: &mut [Atomic<u32>],
     n: u32,
     dt: f32,
     damping: f32,
@@ -209,7 +209,7 @@ pub fn integrate(
 /// Reset the settle word before a step, so each step's maximum is its
 /// own rather than the running maximum of every step so far.
 #[cube(launch_unchecked)]
-pub fn clear_settle(settle: &mut Array<Atomic<u32>>) {
+pub fn clear_settle(settle: &mut [Atomic<u32>]) {
     if ABSOLUTE_POS < 1 {
         Atomic::store(&settle[0], 0u32);
     }

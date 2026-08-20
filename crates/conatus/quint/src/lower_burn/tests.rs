@@ -1,23 +1,21 @@
 use super::*;
 use crate::ast::{ScalarField, VectorField};
 use crate::eval;
-use burn::backend::NdArray;
 use burn::tensor::Tensor;
-use burn::tensor::backend::BackendTypes;
 
-type B = NdArray<f32>;
+// backend chosen per call site via Device
 
-fn device() -> <B as BackendTypes>::Device {
+fn device() -> burn::tensor::Device {
     Default::default()
 }
 
-fn make_xs_ys(points: &[(f32, f32)]) -> (Tensor<B, 1>, Tensor<B, 1>) {
+fn make_xs_ys(points: &[(f32, f32)]) -> (Tensor<1>, Tensor<1>) {
     let dev = device();
     let xs: Vec<f32> = points.iter().map(|(x, _)| *x).collect();
     let ys: Vec<f32> = points.iter().map(|(_, y)| *y).collect();
     (
-        Tensor::<B, 1>::from_floats(xs.as_slice(), &dev),
-        Tensor::<B, 1>::from_floats(ys.as_slice(), &dev),
+        Tensor::<1>::from_floats(xs.as_slice(), &dev),
+        Tensor::<1>::from_floats(ys.as_slice(), &dev),
     )
 }
 

@@ -34,7 +34,7 @@ use crate::ast::{Falloff, ScalarField, VectorField};
 use crate::registry::{FieldDef, FieldId, FieldRegistry};
 
 #[cfg(feature = "field-burn")]
-use burn::tensor::{Tensor, backend::Backend};
+use burn::tensor::Tensor;
 
 /// Reasons a field expression cannot be lowered to Burn.
 #[derive(Debug, Clone, PartialEq)]
@@ -54,13 +54,13 @@ pub enum LowerError {
 /// `xs` and `ys` are rank-1 tensors of shape `[N]`. The result is a rank-1
 /// tensor of shape `[N]`.
 #[cfg(feature = "field-burn")]
-pub fn lower_scalar<B: Backend>(
+pub fn lower_scalar(
     field: &ScalarField,
     registry: &FieldRegistry,
-    xs: Tensor<B, 1>,
-    ys: Tensor<B, 1>,
+    xs: Tensor<1>,
+    ys: Tensor<1>,
     time: f32,
-) -> Result<Tensor<B, 1>, LowerError> {
+) -> Result<Tensor<1>, LowerError> {
     match field {
         ScalarField::Const(c) => Ok(xs.zeros_like().add_scalar(*c)),
         ScalarField::CoordX => Ok(xs),
@@ -136,7 +136,7 @@ pub fn lower_scalar<B: Backend>(
 }
 
 #[cfg(feature = "field-burn")]
-fn apply_falloff_tensor<B: Backend>(u: Tensor<B, 1>, falloff: Falloff) -> Tensor<B, 1> {
+fn apply_falloff_tensor(u: Tensor<1>, falloff: Falloff) -> Tensor<1> {
     match falloff {
         Falloff::Hard => u.zeros_like().add_scalar(1.0),
         Falloff::Linear => u.neg().add_scalar(1.0),
@@ -158,13 +158,13 @@ fn apply_falloff_tensor<B: Backend>(u: Tensor<B, 1>, falloff: Falloff) -> Tensor
 /// Lower a vector field to a pair of Burn tensor programs `(vx, vy)`
 /// evaluated at `(xs, ys, t)`.
 #[cfg(feature = "field-burn")]
-pub fn lower_vector<B: Backend>(
+pub fn lower_vector(
     field: &VectorField,
     registry: &FieldRegistry,
-    xs: Tensor<B, 1>,
-    ys: Tensor<B, 1>,
+    xs: Tensor<1>,
+    ys: Tensor<1>,
     time: f32,
-) -> Result<(Tensor<B, 1>, Tensor<B, 1>), LowerError> {
+) -> Result<(Tensor<1>, Tensor<1>), LowerError> {
     match field {
         VectorField::ConstVec { x, y } => Ok((
             xs.zeros_like().add_scalar(*x),
@@ -208,13 +208,13 @@ pub fn lower_vector<B: Backend>(
 /// gradient (the host can fall back to the CPU `grad_scalar` evaluator on
 /// the same expression).
 #[cfg(feature = "field-burn")]
-fn lower_gradient<B: Backend>(
+fn lower_gradient(
     scalar: &ScalarField,
     registry: &FieldRegistry,
-    xs: Tensor<B, 1>,
-    ys: Tensor<B, 1>,
+    xs: Tensor<1>,
+    ys: Tensor<1>,
     time: f32,
-) -> Result<(Tensor<B, 1>, Tensor<B, 1>), LowerError> {
+) -> Result<(Tensor<1>, Tensor<1>), LowerError> {
     match scalar {
         ScalarField::Const(_) | ScalarField::Time => Ok((xs.zeros_like(), ys.zeros_like())),
         ScalarField::CoordX => Ok((xs.zeros_like().add_scalar(1.0), ys.zeros_like())),

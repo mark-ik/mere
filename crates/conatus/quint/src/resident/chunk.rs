@@ -7,18 +7,13 @@
 
 use std::{collections::BTreeMap, fmt, num::NonZeroU64};
 
-use burn::{
-    backend::{
-        Wgpu,
-        wgpu::{CubeTensor, RuntimeOptions, WgpuDevice, WgpuRuntime, WgpuSetup, init_device},
-    },
-    tensor::{DType, Shape, Tensor, TensorPrimitive},
-};
+use burn::tensor::{DType, Shape, Tensor};
+use burn_wgpu::{CubeTensor, Wgpu, RuntimeOptions, WgpuDevice, WgpuRuntime, WgpuSetup, init_device};
 use bytemuck::Pod;
 use cubecl::{Runtime, client::ComputeClient, server::Handle};
 
 /// Burn's view of one resident `f32` channel plane.
-pub type ResidentTensor = Tensor<Wgpu<f32, i32>, 3>;
+pub type ResidentTensor = Tensor<3>;
 
 /// The host schedule epoch in which a materialized chunk is safe to read.
 ///
@@ -534,7 +529,7 @@ impl<I> ResidentChunk<I> {
             plane.handle.clone(),
             DType::F32,
         );
-        let tensor = Tensor::from_primitive(TensorPrimitive::Float(primitive));
+        let tensor = Tensor::from_primitive::<Wgpu>(primitive);
         Ok(BurnTensorView {
             tensor,
             allocation,

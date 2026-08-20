@@ -9,12 +9,15 @@
 
 use super::*;
 use crate::ast::{ScalarField, VectorField};
-use burn::backend::{NdArray, Wgpu};
 use burn::tensor::Tensor;
-use burn::tensor::backend::{Backend, BackendTypes};
+use burn::tensor::Device;
 
-type Cpu = NdArray<f32>;
-type Gpu = Wgpu<f32, i32>;
+fn cpu_device() -> Device {
+    Device::ndarray()
+}
+fn gpu_device() -> Device {
+    Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0))
+}
 
 /// A composition that exercises Gaussian, Linear, Mul, Scale, and Add in
 /// one program: gaussian(0,0,σ=10) + 0.25·(x·linear(2,-3,1)).
@@ -54,34 +57,32 @@ fn points(n: usize) -> Vec<(f32, f32)> {
         .collect()
 }
 
-fn tensors<B: Backend>(
+fn tensors(
     pts: &[(f32, f32)],
-    dev: &<B as BackendTypes>::Device,
-) -> (Tensor<B, 1>, Tensor<B, 1>) {
+    dev: &Device,
+) -> (Tensor<1>, Tensor<1>) {
     let xs: Vec<f32> = pts.iter().map(|(x, _)| *x).collect();
     let ys: Vec<f32> = pts.iter().map(|(_, y)| *y).collect();
     (
-        Tensor::<B, 1>::from_floats(xs.as_slice(), dev),
-        Tensor::<B, 1>::from_floats(ys.as_slice(), dev),
+        Tensor::<1>::from_floats(xs.as_slice(), dev),
+        Tensor::<1>::from_floats(ys.as_slice(), dev),
     )
 }
 
-fn run_scalar<B: Backend>(f: &ScalarField, pts: &[(f32, f32)]) -> Vec<f32> {
+fn run_scalar(f: &ScalarField, pts: &[(f32, f32)], dev: &Device) -> Vec<f32> {
     let reg = FieldRegistry::new();
-    let dev = <B as BackendTypes>::Device::default();
-    let (xs, ys) = tensors::<B>(pts, &dev);
-    lower_scalar::<B>(f, &reg, xs, ys, 0.0)
+    let (xs, ys) = tensors(pts, dev);
+    lower_scalar(f, &reg, xs, ys, 0.0)
         .unwrap()
         .into_data()
         .to_vec::<f32>()
         .unwrap()
 }
 
-fn run_vector<B: Backend>(f: &VectorField, pts: &[(f32, f32)]) -> (Vec<f32>, Vec<f32>) {
+fn run_vector(f: &VectorField, pts: &[(f32, f32)], dev: &Device) -> (Vec<f32>, Vec<f32>) {
     let reg = FieldRegistry::new();
-    let dev = <B as BackendTypes>::Device::default();
-    let (xs, ys) = tensors::<B>(pts, &dev);
-    let (rx, ry) = lower_vector::<B>(f, &reg, xs, ys, 0.0).unwrap();
+    let (xs, ys) = tensors(pts, dev);
+    let (rx, ry) = lower_vector(f, &reg, xs, ys, 0.0).unwrap();
     (
         rx.into_data().to_vec::<f32>().unwrap(),
         ry.into_data().to_vec::<f32>().unwrap(),
@@ -96,8 +97,8 @@ fn approx(a: &[f32], b: &[f32], eps: f32) -> bool {
 fn scalar_parity_ndarray_wgpu() {
     let f = scalar_program();
     let pts = points(257); // odd size: no accidental tile alignment
-    let cpu = run_scalar::<Cpu>(&f, &pts);
-    let gpu = run_scalar::<Gpu>(&f, &pts);
+    let cpu = run_scalar(&f, &pts, &cpu_device());
+    let gpu = run_scalar(&f, &pts, &gpu_device());
     assert!(
         approx(&cpu, &gpu, 1.0e-3),
         "cpu[..4]={:?} gpu[..4]={:?}",
@@ -110,8 +111,8 @@ fn scalar_parity_ndarray_wgpu() {
 fn vector_parity_ndarray_wgpu() {
     let f = vector_program();
     let pts = points(257);
-    let (cx, cy) = run_vector::<Cpu>(&f, &pts);
-    let (gx, gy) = run_vector::<Gpu>(&f, &pts);
+    let (cx, cy) = run_vector(&f, &pts, &cpu_device());
+    let (gx, gy) = run_vector(&f, &pts, &gpu_device());
     assert!(approx(&cx, &gx, 1.0e-3), "x diverged");
     assert!(approx(&cy, &gy, 1.0e-3), "y diverged");
 }
@@ -126,14 +127,14 @@ fn timing_scalar_cpu_vs_gpu() {
     let f = scalar_program();
     for n in [1_000usize, 10_000, 100_000] {
         let pts = points(n);
-        let _warm = run_scalar::<Gpu>(&f, &pts);
+        let _warm = run_scalar(&f, &pts, &gpu_device());
 
         let t = std::time::Instant::now();
-        let _cpu = run_scalar::<Cpu>(&f, &pts);
+        let _cpu = run_scalar(&f, &pts, &cpu_device());
         let cpu_us = t.elapsed().as_micros();
 
         let t = std::time::Instant::now();
-        let _gpu = run_scalar::<Gpu>(&f, &pts);
+        let _gpu = run_scalar(&f, &pts, &gpu_device());
         let gpu_us = t.elapsed().as_micros();
 
         println!("n={n}: ndarray={cpu_us}us wgpu={gpu_us}us");
