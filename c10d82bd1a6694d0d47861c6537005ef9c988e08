@@ -1,0 +1,5 @@
+The message says the genet re-lock 'is this commit's Cargo.lock delta'. It is
+not: Cargo.lock was untracked by ea9d3169 (build: stop committing Cargo.lock)
+before this commit, so the re-lock is local resolution state only. The taffy
+re-unification described is real but arrives on any machine by fresh
+resolution, not by this commit.
