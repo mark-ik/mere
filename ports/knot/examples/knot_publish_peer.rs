@@ -29,9 +29,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use knot::{
     KnotPublishCatalog, KnotPublishHost, KnotPublishHostLimits, KnotPublishRead,
-    KnotShareRecipient, KnotShareTicket, KnotSyncEvent, KnotSyncStore, KnotVault,
-    decode_share_ticket, encode_share_ticket, fetch_published_document, publish_alpn,
-    publish_policy, revoke_share,
+    KnotShareRecipient, KnotSyncEvent, KnotSyncStore, KnotVault, decode_share_ticket,
+    encode_share_ticket, fetch_published_document, publish_alpn, publish_policy, revoke_share,
 };
 use notochord::{NetworkId, ProfileRef, TrustedRoot};
 use personae::{IdentityProvider, InMemoryProvider};
