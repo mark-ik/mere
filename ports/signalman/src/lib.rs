@@ -16,10 +16,13 @@ use castellan::reticulum::ReticulumStationMaterial;
 use castellan::reticulum::grant::{
     SitedStationGrant, SitedStationGrantError, SitedStationGrantRequest,
 };
-use personae::{IdentityError, IdentityProvider};
-use postilion::{Event, Sent, Station, StationConfig};
-use retinue::identity::{Identity, PrivateIdentity};
+use outrider::LxmfPayload;
 use pandect::{DeviceId, RemoteAuthRevocationOutcome};
+use personae::{IdentityError, IdentityProvider};
+use postilion::management::ManagementSnapshot;
+use postilion::{Event, Sent, Station, StationConfig};
+use retinue::hash::AddressHash;
+use retinue::identity::{Identity, PrivateIdentity};
 use tokio::sync::Mutex;
 use zeroize::Zeroize;
 
@@ -179,6 +182,30 @@ impl SitedStation {
         &self.lease
     }
 
+    /// The delivery destination owned by this running station.
+    ///
+    /// Reading a public address still rechecks the lease so a caller cannot
+    /// keep presenting a revoked station as live through this handle.
+    pub async fn address(&self) -> Result<AddressHash, SitedStationError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        Ok(station
+            .as_ref()
+            .ok_or(SitedStationError::Stopped)?
+            .address())
+    }
+
+    /// Capture the station's read-only management facts under the current
+    /// lease. The mutable Retinue tables remain private.
+    pub async fn management_snapshot(&self) -> Result<ManagementSnapshot, SitedStationError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        Ok(station
+            .as_ref()
+            .ok_or(SitedStationError::Stopped)?
+            .management_snapshot())
+    }
+
     /// Recheck the host grant before announcing the station.
     pub async fn announce(&self) -> Result<(), SitedStationError> {
         self.authorize_now()?;
@@ -204,6 +231,29 @@ impl SitedStation {
             let station = self.station.lock().await;
             let station = station.as_ref().ok_or(SitedStationError::Stopped)?;
             tokio::time::timeout(window, station.send_text(prefix, body, patience)).await
+        };
+        match result {
+            Ok(result) => result.map_err(SitedStationError::Station),
+            Err(_) => self.stop_after_deadline().await,
+        }
+    }
+
+    /// Carry one complete LXMF payload while the station lease remains live.
+    ///
+    /// Application-owned fields remain in their authenticated LXMF positions;
+    /// this boundary does not copy them into a text body.
+    pub async fn send_payload(
+        &self,
+        prefix: &str,
+        payload: &LxmfPayload,
+        patience: Duration,
+    ) -> Result<Sent, SitedStationError> {
+        let (now_ms, expires_at_ms) = self.authorize_now()?;
+        let window = remaining_window(now_ms, expires_at_ms);
+        let result = {
+            let station = self.station.lock().await;
+            let station = station.as_ref().ok_or(SitedStationError::Stopped)?;
+            tokio::time::timeout(window, station.send_payload(prefix, payload, patience)).await
         };
         match result {
             Ok(result) => result.map_err(SitedStationError::Station),

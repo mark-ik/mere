@@ -5,7 +5,7 @@ resolver = "2"
 name = "mere-signalman"
 version = "0.0.1"
 edition = "2024"
-rust-version = "1.92"
+rust-version = "1.96"
 license = "MPL-2.0"
 repository = "https://github.com/merely-made/mere"
 publish = false
@@ -19,8 +19,9 @@ p2panda-core = "0.7.0"
 # This port is consumed from mere.git, where a sibling Retinue checkout does
 # not exist. Signalman's desktop workspace patches this exact source back to
 # its local Retinue crates so Cargo still builds one type-bearing family.
-postilion = { version = "=0.1.0", git = "https://github.com/merely-made/retinue.git", rev = "10d193762784ed254d434f6c80ffa1a5a680c918" }
-retinue = { version = "=0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "10d193762784ed254d434f6c80ffa1a5a680c918", features = ["tulle-radio"] }
+outrider = { version = "=0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "01a939df1b09dbb66afc8309fd49a719f5150aea" }
+postilion = { version = "=0.1.0", git = "https://github.com/merely-made/retinue.git", rev = "01a939df1b09dbb66afc8309fd49a719f5150aea" }
+retinue = { version = "=0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "01a939df1b09dbb66afc8309fd49a719f5150aea", features = ["tulle-radio"] }
 serde = { version = "1", features = ["derive"] }
 pandect = { path = "../../crates/system/pandect" }
 tokio = { version = "1", features = ["rt", "sync", "time"] }
