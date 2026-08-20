@@ -3,9 +3,12 @@
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1};
 use serde::Serialize;
+
+static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
 /// Portable content identity written into clip provenance.
 ///
@@ -75,9 +78,15 @@ impl KnotClipEvidenceStore for FileClipEvidenceStore {
                 .ok_or_else(|| "clip evidence path has no parent".to_string())?;
             fs::create_dir_all(parent)
                 .map_err(|error| format!("could not create clip evidence directory: {error}"))?;
-            let temporary = parent.join(format!(".{digest}.{}.tmp", std::process::id()));
-            write_new(&temporary, &artifact.bytes)
-                .map_err(|error| format!("could not stage clip evidence: {error}"))?;
+            let temporary = parent.join(format!(
+                ".{digest}.{}.{}.tmp",
+                std::process::id(),
+                NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed)
+            ));
+            if let Err(error) = write_new(&temporary, &artifact.bytes) {
+                let _ = fs::remove_file(&temporary);
+                return Err(format!("could not stage clip evidence: {error}"));
+            }
             match fs::rename(&temporary, &path) {
                 Ok(()) => {}
                 Err(error) if path.exists() => {

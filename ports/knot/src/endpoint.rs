@@ -12,12 +12,12 @@ use chirograph::{
     EditableTextV1, EndpointDescriptor, InsertKnotClipV1, InsertKnotClipV2, IntentEffect,
     IntentInvocation, IntentReference, IntentResult, KNOT_BLOCK_RUN_INTENT, KNOT_BLOCK_RUN_SCHEMA,
     KNOT_CLIP_INSERT_INTENT, KNOT_CLIP_INSERT_SCHEMA, KNOT_CLIP_INSERT_SCHEMA_V2,
-    KNOT_TRANSCLUSION_RESOLVE_INTENT, KNOT_TRANSCLUSION_RESOLVE_SCHEMA, KnotEffectV1,
-    NativeGlyphV1, PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
-    PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck,
-    ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
-    ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole,
-    TextEncoding,
+    KNOT_TRANSCLUSION_RESOLVE_INTENT, KNOT_TRANSCLUSION_RESOLVE_SCHEMA, KnotClipArtifactRoleV1,
+    KnotClipArtifactV1, KnotClipSelectorV1, KnotEffectV1, NativeGlyphV1, PortableCardV1,
+    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
+    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer,
+    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
+    ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole, TextEncoding,
 };
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
@@ -1600,6 +1600,20 @@ impl KnotEndpoint {
                 });
             }
         }
+        if payload
+            .selectors
+            .iter()
+            .any(|selector| !selector_matches_artifacts(selector, &payload.artifacts))
+            || payload.fidelity.iter().any(|entry| {
+                entry.selector.as_ref().is_some_and(|selector| {
+                    !selector_matches_artifacts(selector, &payload.artifacts)
+                })
+            })
+        {
+            return Ok(IntentResult::Rejected {
+                reason: "clip selector names an artifact role the clip did not retain".into(),
+            });
+        }
 
         // Check the revision before retaining bytes. A stale gesture must not
         // grow the evidence store.
@@ -1958,6 +1972,23 @@ impl KnotEndpoint {
         }
         Ok(())
     }
+}
+
+fn selector_matches_artifacts(
+    selector: &KnotClipSelectorV1,
+    artifacts: &[KnotClipArtifactV1],
+) -> bool {
+    let role = match selector {
+        KnotClipSelectorV1::TextQuote { artifact_role, .. }
+        | KnotClipSelectorV1::TextPosition { artifact_role, .. } => *artifact_role,
+        KnotClipSelectorV1::DomRange { artifact_role, .. } => {
+            if *artifact_role != KnotClipArtifactRoleV1::ObservedRepresentation {
+                return false;
+            }
+            *artifact_role
+        }
+    };
+    artifacts.iter().any(|artifact| artifact.role == role)
 }
 
 fn render_effect_input(input: &EngineInput) -> Result<EngineDocument, String> {
@@ -2808,6 +2839,41 @@ mod tests {
         assert!(saved.contains(r#""class":"arrangement-unchecked""#));
         assert!(saved.contains(r#""relation":"link""#));
         assert!(!saved.contains("<article>"));
+    }
+
+    #[test]
+    fn dom_range_selectors_require_an_observed_representation() {
+        let source = KnotClipArtifactV1 {
+            role: KnotClipArtifactRoleV1::SourceResponse,
+            media_type: "text/html".into(),
+            canonical_uri: "https://example.test/report".into(),
+            bytes: b"<p>A useful finding.</p>".to_vec(),
+        };
+        let selector = KnotClipSelectorV1::DomRange {
+            artifact_role: KnotClipArtifactRoleV1::SourceResponse,
+            anchor_path: vec![0, 1],
+            anchor_offset: 0,
+            focus_path: vec![0, 1],
+            focus_offset: 17,
+            quote: "A useful finding.".into(),
+        };
+        assert!(!selector_matches_artifacts(&selector, &[source]));
+
+        let observed = KnotClipArtifactV1 {
+            role: KnotClipArtifactRoleV1::ObservedRepresentation,
+            media_type: "application/vnd.mere.dom+json".into(),
+            canonical_uri: "https://example.test/report".into(),
+            bytes: br#"{"node":"p","text":"A useful finding."}"#.to_vec(),
+        };
+        let selector = KnotClipSelectorV1::DomRange {
+            artifact_role: KnotClipArtifactRoleV1::ObservedRepresentation,
+            anchor_path: vec![0, 1],
+            anchor_offset: 0,
+            focus_path: vec![0, 1],
+            focus_offset: 17,
+            quote: "A useful finding.".into(),
+        };
+        assert!(selector_matches_artifacts(&selector, &[observed]));
     }
 
     #[test]

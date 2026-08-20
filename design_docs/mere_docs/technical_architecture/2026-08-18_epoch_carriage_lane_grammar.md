@@ -1,10 +1,11 @@
 # The epoch carriage lane grammar
 
-**Decided 2026-08-18, with Mark. First implementation landed 2026-08-19**:
-`graphshell::carriage` (extension, lease signing and verification, fail-closed
-admission, propose/execute purge), `pandect::blinded_slot_id`, and
-`CarriagePolicy` on the roster's `DeviceRecord`. Divergences from this text are
-noted inline where they occur. Closes the last gate on
+**Decided 2026-08-18, with Mark. Implemented 2026-08-19**: the grammar
+(`graphshell::carriage`, `pandect::blinded_slot_id`, `CarriagePolicy` on the
+roster's `DeviceRecord`) and the host (`graphshell::native::carriage_host`),
+with the recovery done-condition demonstrated end to end over live sync.
+Divergences from this text are noted inline where they occur. Closes the last
+gate on
 [epoch carriage retention: leased slots](2026-08-14_epoch_carriage_retention_leases.md),
 whose implementation section was left "gated on a carriage lane". Follows
 [epoch carriage and replication](2026-08-14_epoch_carriage_replication.md)
@@ -240,7 +241,46 @@ The mapping this needs is the one seam: the wallet roster is keyed by
 `DeviceRecord` already carries the pubkey and the pairing record already
 carries the root, so the join is a lookup, not a schema change.
 
+## One log per slot, which the prune law forced
+
+**Found at implementation, 2026-08-19.** The first cut gave the lane a single
+per-author log. That is wrong, and the prune law is why:
+`PruneBeforeCurrent` deletes every operation before the admitted one *in its
+log*, so two slots sharing a log would let one slot's supersession destroy the
+other slot's live version. **The log id is the slot itself** (`[u8; 32]`
+satisfies p2panda's blanket `LogId` impl), so a prune cannot reach past its
+own slot by construction rather than by care.
+
+## The host, as built
+
+`graphshell::native::carriage_host::CarriageHost` joins the carriage topic,
+mirrors `PersonalSyncHost`'s transport wiring, and holds the slot view the
+admission policy's ordering check reads, rebuilt from the store at open so a
+restart cannot desynchronize it. Its own endpoint for now: `set_topics`
+replaces a peer's topic set, so folding both lanes onto one bound endpoint
+waits on an append form; noted in the module header rather than hidden.
+
+Two behaviours worth naming. **The issuer admits its own writes** through the
+same policy peers apply, so a lease violating a knowable ceiling is refused
+loudly at issue rather than silently dropped by every peer. And **recovery
+refuses expired on read** even when bytes are still present, so a replica
+never serves material its lease no longer covers.
+
 ## Done conditions
+
+**Status 2026-08-19**, each against a named test in `carriage.rs` /
+`carriage_host.rs`: recovery without re-pairing is **demonstrated**
+(`a_peer_recovers_a_live_slot_and_supersession_replaces_it`, two hosts over
+live sync, the replica learning the slot from sync alone); supersession
+replaces and a stale issue is refused (same test, plus
+`the_refusal_ladder_names_each_failure`); expiry converges with zero messages
+(`an_expired_lease_is_refused_on_read_and_purged_on_schedule`), though the
+revocation-statement fast path is not yet wired; the ceilings bind where
+knowable (`the_knowable_ceilings_bind_where_known`,
+`a_ceiling_violation_is_refused_at_the_issuer`); the grammars cannot be
+crossed (`the_two_grammars_cannot_be_crossed_by_accident`); and replica
+nescience is structural, since the host holds only blinded slots and trusted
+roots. The contract as ruled:
 
 - A device that lost its record recovers it from a peer replica while the lease
   is live, without re-pairing.
@@ -272,3 +312,11 @@ carries the root, so the join is a lookup, not a schema change.
   `castellan::authority::PersonaeHost::payload_sealer` is the supply point, and
   access records are the first consumer. The recovery done-condition above now
   has a live seal path to demonstrate against.
+- **Issue-path integration.** The wallet's grant issue/refresh flows do not
+  yet call `publish_slot`; the host exists and the flows still write only the
+  local wallet file. Wiring them together is where `CarriagePolicy::Leased`
+  starts mattering at commissioning.
+- **The revocation fast path.** A received `SignedDelegationRevocation` should
+  destroy the certificate's leases immediately; today only expiry converges.
+- **One endpoint for both lanes.** Blocked on `set_topics` being
+  replace-not-append; the carriage host runs its own endpoint meanwhile.

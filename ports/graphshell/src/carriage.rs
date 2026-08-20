@@ -27,8 +27,16 @@ const CARRIAGE_TOPIC_CONTEXT: &str = "mere.graphshell.carriage.topic.v1";
 /// Domain separating a lease signature from every other use of the issuer key.
 const LEASE_SIGNING_CONTEXT: &[u8] = b"mere.graphshell.carriage.lease.v1";
 
-/// The single per-author log carriage uses on its topic.
-pub const CARRIAGE_LOG: u64 = 0;
+/// The per-author log a slot's versions live on: the slot itself.
+///
+/// Not a single shared log, and the reason is the prune law:
+/// `PruneBeforeCurrent` deletes every operation before the admitted one in
+/// its log, so two slots sharing a log would let one slot's supersession
+/// destroy the other's live version. One log per slot makes a prune unable
+/// to reach past its own slot by construction.
+pub fn carriage_log(slot: BlindedSlotId) -> [u8; 32] {
+    slot.0
+}
 
 /// Backstop ceiling on any lease, against misconfiguration rather than as a
 /// target: thirty days, sized generously above any sensible per-device TTL.
@@ -79,7 +87,13 @@ pub struct CarriageExt {
 /// Domain-separated and fixed-width throughout, so no field can bleed into
 /// its neighbor. Binding the payload hash means a signature authorizes one
 /// exact record: replacing the body under a kept lease fails verification.
-fn lease_message(graph: [u8; 32], slot: BlindedSlotId, issue: u64, expires_at_ms: u64, payload: Hash) -> Vec<u8> {
+fn lease_message(
+    graph: [u8; 32],
+    slot: BlindedSlotId,
+    issue: u64,
+    expires_at_ms: u64,
+    payload: Hash,
+) -> Vec<u8> {
     let mut message = Vec::with_capacity(LEASE_SIGNING_CONTEXT.len() + 32 + 32 + 8 + 8 + 32);
     message.extend_from_slice(LEASE_SIGNING_CONTEXT);
     message.extend_from_slice(&graph);
@@ -189,9 +203,9 @@ impl CarriageAdmissionPolicy {
 }
 
 impl OperationPolicy<CarriageExt> for CarriageAdmissionPolicy {
-    type LogId = u64;
+    type LogId = [u8; 32];
 
-    fn admit(&self, operation: &Operation<CarriageExt>) -> Result<Admission<u64>, Reject> {
+    fn admit(&self, operation: &Operation<CarriageExt>) -> Result<Admission<[u8; 32]>, Reject> {
         let ext = &operation.header.extensions;
 
         // 1. The right lane. An operation naming another graph is not an
@@ -275,7 +289,10 @@ impl OperationPolicy<CarriageExt> for CarriageAdmissionPolicy {
 
         // 6. Only now, the destructive replace: prune the slot's log prefix
         //    and erase the superseded payload in the same backend batch.
-        let target = StoreTarget::new(Topic::from(carriage_topic(self.graph)), CARRIAGE_LOG);
+        let target = StoreTarget::new(
+            Topic::from(carriage_topic(self.graph)),
+            carriage_log(ext.slot),
+        );
         let admission = Admission::prune_before_current(target);
         Ok(match previous {
             Some(previous) => admission.erasing_payloads([previous.payload]),
@@ -446,7 +463,10 @@ mod tests {
             admission.history,
             stickleback::HistoryAction::PruneBeforeCurrent
         ));
-        assert_eq!(admission.erase_payloads, vec![Hash::digest(b"superseded-record")]);
+        assert_eq!(
+            admission.erase_payloads,
+            vec![Hash::digest(b"superseded-record")]
+        );
         assert_eq!(
             admission.target.topic,
             Topic::from(carriage_topic(GRAPH)),
@@ -481,7 +501,10 @@ mod tests {
                     sign_lease(&stranger, GRAPH, slot(), 2, NOW_MS + 60_000, payload);
                 operation(ext)
             }),
-            ("carriage-stale-issue", operation(signed_ext(1, NOW_MS + 60_000))),
+            (
+                "carriage-stale-issue",
+                operation(signed_ext(1, NOW_MS + 60_000)),
+            ),
         ];
         for (code, op) in cases {
             let reject = policy(Some(holding(1))).admit(&op).unwrap_err();
@@ -569,7 +592,10 @@ mod tests {
 
         let blocked = propose_carriage_purge(NOW_MS, None);
         assert!(!blocked.is_executable());
-        assert!(blocked.expired.is_empty(), "a blocked purge proposes nothing");
+        assert!(
+            blocked.expired.is_empty(),
+            "a blocked purge proposes nothing"
+        );
         assert_eq!(
             blocked.blockers,
             vec![CarriagePurgeBlocker::HeldViewUnavailable]
