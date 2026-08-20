@@ -114,12 +114,47 @@ fn gemini_identity_is_scoped_to_one_capsule_origin() {
     .unwrap();
     assert!(identity.applies_to(&url::Url::parse("gemini://capsule.example/private").unwrap()));
     assert!(identity.applies_to(&url::Url::parse("gemini://capsule.example:1965/other").unwrap()));
+    assert!(identity.applies_to(&url::Url::parse("titan://capsule.example/upload").unwrap()));
     assert!(!identity.applies_to(&url::Url::parse("gemini://other.example/private").unwrap()));
     assert!(
         !identity.applies_to(&url::Url::parse("gemini://capsule.example:1966/private").unwrap())
     );
     assert!(!identity.applies_to(&url::Url::parse("https://capsule.example/private").unwrap()));
     assert_eq!(identity.origin(), "gemini://capsule.example");
+}
+
+#[test]
+fn submission_redirect_is_returned_without_becoming_a_fetch() {
+    let request = url::Url::parse("titan://capsule.example/upload").unwrap();
+    let response = errand::Response {
+        url: request.clone(),
+        status: errand::Status::Redirect,
+        raw_status: Some(30),
+        meta: "gemini://capsule.example/posts/1".into(),
+        body: Vec::new(),
+    };
+    assert_eq!(
+        smolweb_submission_answer(&request, response),
+        Ok(SubmissionAnswer::Redirect(
+            "gemini://capsule.example/posts/1".into()
+        ))
+    );
+}
+
+#[test]
+fn spartan_submission_redirect_cannot_cross_origin() {
+    let request = url::Url::parse("spartan://capsule.example/form").unwrap();
+    let response = errand::Response {
+        url: request.clone(),
+        status: errand::Status::Redirect,
+        raw_status: Some(3),
+        meta: "spartan://other.example/receipt".into(),
+        body: Vec::new(),
+    };
+    assert!(matches!(
+        smolweb_submission_answer(&request, response),
+        Err(FetchFailure::Failed(message)) if message.contains("crossed")
+    ));
 }
 
 #[test]

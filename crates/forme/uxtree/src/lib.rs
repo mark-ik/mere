@@ -376,7 +376,9 @@ where
                 f(url.as_str(), title.as_ref(), spans.as_slice());
                 walk_inline_links(spans, f);
             }
-            InlineSpan::Emphasis(inner) | InlineSpan::Strong(inner) => {
+            InlineSpan::Emphasis(inner)
+            | InlineSpan::Strong(inner)
+            | InlineSpan::Submit { spans: inner, .. } => {
                 walk_inline_links(inner, f);
             }
             InlineSpan::Text(_)

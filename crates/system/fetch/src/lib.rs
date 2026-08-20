@@ -116,6 +116,46 @@ pub struct FetchOutcome {
     pub result: Result<Fetched, FetchFailure>,
 }
 
+/// One explicit small-web mutation. Kept separate from page fetches so the
+/// actor cannot deduplicate, redirect-follow, or retry a write as if it were a
+/// read.
+pub enum SmolwebSubmission {
+    Titan {
+        url: String,
+        body: Vec<u8>,
+        mime: String,
+        token: Option<String>,
+        identity: Option<GeminiClientIdentity>,
+    },
+    Spartan {
+        url: String,
+        body: Vec<u8>,
+    },
+}
+
+impl SmolwebSubmission {
+    pub fn url(&self) -> &str {
+        match self {
+            Self::Titan { url, .. } | Self::Spartan { url, .. } => url,
+        }
+    }
+}
+
+/// A write response. Redirects are returned to the host rather than followed,
+/// because following them inside the write operation would erase the boundary
+/// between the mutation receipt and the subsequent read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubmissionAnswer {
+    Success(Fetched),
+    Redirect(String),
+}
+
+pub struct SubmissionOutcome {
+    pub request: u64,
+    pub url: String,
+    pub result: Result<SubmissionAnswer, FetchFailure>,
+}
+
 /// A fetched subresource: raw bytes for an absolute URL (page CSS via
 /// `<link>`, an `<img>`, ...). Carried as bytes, not text, since media is
 /// binary. Only successful fetches are delivered; a failure simply never
@@ -169,8 +209,11 @@ impl GeminiClientIdentity {
         private_key_pkcs8_der: Vec<u8>,
     ) -> Result<Self, String> {
         let url = url::Url::parse(capsule_url).map_err(|error| error.to_string())?;
-        if url.scheme() != "gemini" {
-            return Err("Gemini client identity requires a gemini:// capsule".to_string());
+        if !matches!(url.scheme(), "gemini" | "titan") {
+            return Err(
+                "Gemini-family client identity requires a gemini:// or titan:// capsule"
+                    .to_string(),
+            );
         }
         let host = url
             .host_str()
@@ -205,7 +248,7 @@ impl GeminiClientIdentity {
     }
 
     fn applies_to(&self, url: &url::Url) -> bool {
-        url.scheme() == "gemini"
+        matches!(url.scheme(), "gemini" | "titan")
             && url
                 .host_str()
                 .is_some_and(|host| host.eq_ignore_ascii_case(&self.host))
@@ -277,6 +320,11 @@ pub enum FetchCommand {
     /// icon to that node. Carried separately from `Subresource` so favicon bytes
     /// reach the graph, not the content actors' render stores. (Favicon-on-tile.)
     Favicon { owner_url: String, url: String },
+    /// Perform one user-confirmed smolweb write exactly once.
+    Submit {
+        request: u64,
+        submission: SmolwebSubmission,
+    },
 }
 
 /// An update from the fetch actor: one completed page, subresource, or favicon fetch.
@@ -289,6 +337,7 @@ pub enum FetchUpdate {
         owner_url: String,
         bytes: Vec<u8>,
     },
+    Submission(SubmissionOutcome),
 }
 
 /// Spawn the fetch actor on its own thread (armillary harness). It owns a
@@ -338,9 +387,131 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                         }
                     });
                 }
+                FetchCommand::Submit {
+                    request,
+                    submission,
+                } => {
+                    let out = out.clone();
+                    runtime.spawn(async move {
+                        let url = submission.url().to_string();
+                        let result = submit_smolweb(submission).await;
+                        out.emit(FetchUpdate::Submission(SubmissionOutcome {
+                            request,
+                            url,
+                            result,
+                        }));
+                    });
+                }
             }
         }
     })
+}
+
+async fn submit_smolweb(submission: SmolwebSubmission) -> Result<SubmissionAnswer, FetchFailure> {
+    if match &submission {
+        SmolwebSubmission::Titan { body, .. } | SmolwebSubmission::Spartan { body, .. } => {
+            body.len() > PAGE_BODY_CAP
+        }
+    } {
+        return Err(FetchFailure::Failed(format!(
+            "submission exceeds the {PAGE_BODY_CAP}-byte cap"
+        )));
+    }
+
+    let (url, response) = match submission {
+        SmolwebSubmission::Titan {
+            url,
+            body,
+            mime,
+            token,
+            identity,
+        } => {
+            let parsed = url::Url::parse(&url)
+                .map_err(|error| FetchFailure::Failed(format!("bad URL: {error}")))?;
+            if parsed.scheme() != "titan" {
+                return Err(FetchFailure::Failed(
+                    "Titan submission requires a titan:// URL".to_string(),
+                ));
+            }
+            let exchange = async {
+                match identity
+                    .as_ref()
+                    .filter(|identity| identity.applies_to(&parsed))
+                {
+                    Some(identity) => {
+                        errand::titan_upload_with_identity(
+                            &parsed,
+                            &body,
+                            &mime,
+                            token.as_deref(),
+                            identity.errand_view(),
+                        )
+                        .await
+                    }
+                    None => errand::titan_upload(&parsed, &body, &mime, token.as_deref()).await,
+                }
+            };
+            let response = tokio::time::timeout(SMOLWEB_TIMEOUT, exchange)
+                .await
+                .map_err(|_| FetchFailure::Failed("submission timed out".to_string()))?
+                .map_err(|error| smolweb_transport_failure(&parsed, error))?;
+            (parsed, response)
+        }
+        SmolwebSubmission::Spartan { url, body } => {
+            let parsed = url::Url::parse(&url)
+                .map_err(|error| FetchFailure::Failed(format!("bad URL: {error}")))?;
+            if parsed.scheme() != "spartan" {
+                return Err(FetchFailure::Failed(
+                    "Spartan submission requires a spartan:// URL".to_string(),
+                ));
+            }
+            let response =
+                tokio::time::timeout(SMOLWEB_TIMEOUT, errand::spartan_submit(&parsed, &body))
+                    .await
+                    .map_err(|_| FetchFailure::Failed("submission timed out".to_string()))?
+                    .map_err(|error| smolweb_transport_failure(&parsed, error))?;
+            (parsed, response)
+        }
+    };
+    smolweb_submission_answer(&url, response)
+}
+
+fn smolweb_submission_answer(
+    request_url: &url::Url,
+    response: errand::Response,
+) -> Result<SubmissionAnswer, FetchFailure> {
+    match response.status {
+        errand::Status::Success => Ok(SubmissionAnswer::Success(Fetched {
+            content_type: Some(smolweb_content_type(request_url, &response)),
+            body: String::from_utf8_lossy(&response.body).into_owned(),
+        })),
+        errand::Status::Redirect => {
+            let target = request_url
+                .join(&response.meta)
+                .map_err(|error| FetchFailure::Failed(format!("bad redirect target: {error}")))?;
+            if request_url.scheme() == "spartan"
+                && (target.scheme() != "spartan"
+                    || target.host_str() != request_url.host_str()
+                    || target.port_or_known_default() != request_url.port_or_known_default())
+            {
+                return Err(FetchFailure::Failed(
+                    "Spartan redirect crossed its request origin".to_string(),
+                ));
+            }
+            Ok(SubmissionAnswer::Redirect(target.to_string()))
+        }
+        errand::Status::Input => Err(smolweb_input_failure(request_url, &response)),
+        errand::Status::CertRequired => Err(FetchFailure::ClientCertificateRequired {
+            url: request_url.to_string(),
+            prompt: response.meta,
+            code: response.raw_status,
+        }),
+        errand::Status::Failure => Err(FetchFailure::Failed(if response.meta.is_empty() {
+            "submission failed".to_string()
+        } else {
+            response.meta
+        })),
+    }
 }
 
 /// Fetch a page at the default page body cap ([`PAGE_BODY_CAP`]). The page-load and
