@@ -694,7 +694,9 @@ fn collect_span_links(spans: &[InlineSpan], links: &mut Vec<String>) {
                 links.push(url.clone());
                 collect_span_links(inner, links);
             }
-            InlineSpan::Emphasis(inner) | InlineSpan::Strong(inner) => {
+            InlineSpan::Emphasis(inner)
+            | InlineSpan::Strong(inner)
+            | InlineSpan::Submit { spans: inner, .. } => {
                 collect_span_links(inner, links);
             }
             InlineSpan::Text(_)
@@ -827,6 +829,23 @@ mod tests {
         assert_eq!(clip.links, vec!["https://example.test/ref"]);
         assert!(clip.text.contains("Heading"));
         assert!(clip.text.contains("reference"));
+    }
+
+    #[test]
+    fn submission_target_is_not_imported_as_a_navigation_link() {
+        let blocks = vec![Block::Paragraph {
+            spans: vec![InlineSpan::Submit {
+                target: "spartan://example.test/write".to_string(),
+                spans: vec![InlineSpan::Link {
+                    url: "gemini://example.test/help".to_string(),
+                    title: None,
+                    spans: vec![InlineSpan::Text("help".to_string())],
+                    predicate: None,
+                }],
+            }],
+        }];
+
+        assert_eq!(block_links(&blocks), vec!["gemini://example.test/help"]);
     }
 
     #[test]
