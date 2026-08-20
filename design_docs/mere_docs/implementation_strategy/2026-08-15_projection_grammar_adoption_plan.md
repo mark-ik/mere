@@ -301,7 +301,7 @@ deterministically; the same scene still produces its interactive realization.
 Done when: "static with navigable semantics" is a checklist item the first
 promotion proof can satisfy by following an existing worked example.
 
-**B2. Probe-drivable projections.**
+**B2. Probe-drivable projections - CLOSED 2026-08-20.**
 Context: genet-probe drives applications through DOM-carried identity, and
 chirograph intents target an `InstanceId`. The two identities should meet:
 a scenario should pick a projected instance and invoke an intent on it by
@@ -316,6 +316,18 @@ Validation: a scenario addresses an instance by identity, invokes an intent,
 and asserts the `IntentResult`; renaming or moving the instance on screen
 does not break the scenario.
 Done when: projection receipts are driven by identity end to end.
+**Landed.** Turnstone's retained Knot toolbar carries the projected
+`InstanceId` and advertised intent in DOM data attributes on Save, Resolve,
+and Run. The Knot session retains the endpoint's exact `IntentResult` as a
+visible receipt carrying the same target and intent. `knot_authoring.scn`
+selects Resolve as `.knot-resolve @data-projection-instance=1`, independent of
+its label and screen position, then asserts
+`Projection intent 1: knot.transclusion.resolve accepted` and the derived
+content. A focused unit proof resolves a second fixture at `InstanceId(17)`
+through genet-probe. The headed scenario completed with `RESULT ok`. The
+boundary stayed narrow: Turnstone carries the host identity, genet-probe uses
+its existing generic class-plus-attribute resolver, and chirograph continues
+to own `InstanceId`, invocation, and result.
 
 **B3. Livery property-classing check - CLOSED 2026-08-16, recorded.**
 Context: Mapbox's layout/paint split is prior art for classing every visual
@@ -388,7 +400,7 @@ consumers.
 
 ### Sequence
 
-Closed: **A0**, **A6**, **A1**, **C1**, **B3**, **C3**, **A3 stage one**,
+Closed: **A0**, **A6**, **A1**, **C1**, **B2**, **B3**, **C3**, **A3 stage one**,
 **A4 + C2**, and P3b's local selection-to-renderer proof. **A2's serialization half** is
 landed; its resolution half still waits on a genuine two-view ask. **B1's**
 implementation and driven probe are closed; only the manual OS screen-reader
@@ -396,9 +408,7 @@ pass remains.
 
 The remaining implementation targets keep their entrance gates. **A2's
 resolution half** waits for a genuine two-view ask. **A3 stage two** waits for
-a remote re-selection consumer. **A5** stays behind the promotion suite, and
-**B2** waits for the first headed receipt that invokes a projected instance by
-identity.
+a remote re-selection consumer. **A5** stays behind the promotion suite.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -829,3 +839,10 @@ not settled without it.
   Receipts: 22 sceno tests, 31 scenomise tests, 30 scenotime tests, 116
   Graphshell tests, Isometry's views and Graphshell endpoint tests, Woodshed's
   `stage_backdrop` wire test, and the Graphshell wasm32 build.
+- 2026-08-20: **B2 landed through Turnstone Knot authoring.** Save, Resolve,
+  and Run expose the projection instance and intent in the retained DOM. The
+  session records the endpoint's typed intent result as visible scene text.
+  The shared genet-probe scenario selects Resolve by `InstanceId(1)`, asserts
+  the accepted result, and verifies the resulting transclusion before running
+  the document. Receipts: the focused `InstanceId(17)` resolver unit test and
+  the headed `knot_authoring.scn` run, `RESULT ok`.
