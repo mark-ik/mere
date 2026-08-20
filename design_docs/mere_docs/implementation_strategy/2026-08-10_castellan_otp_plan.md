@@ -1,7 +1,8 @@
-# Castellan C1: the OTP Slice
+# Castellan C1-C2: the OTP Slice
 
 **Date:** 2026-08-10
-**Status:** C1 done 2026-08-10; C2a done 2026-08-20; C2b and later open
+**Status:** C1 and the C2 core done 2026-08-20; platform adapters and issuer
+compatibility remain separate follow-on slices
 **Anchors:** [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md)
 (Part I), [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md) (the
@@ -63,17 +64,21 @@ exercising it. C1 builds the exercising; C2 builds the item.
       code from the adjacent step still verifies
 - [x] Every file under the 600-line ceiling
 
-### C2 and beyond: not this slice
+### C2 core and later integrations
 
 - [x] C2a: the chatelaine item: a stored, sealed OTP secret over
       `SealedRecordStorage`, persona-scoped. `OtpItemStore` is deliberately
-      local and in-process: it exposes secret-free metadata and can exercise
-      a code, but has no seed accessor and is not the future gate surface.
-- [ ] The embeddable half: code tiles with their remaining-seconds ring
-- [ ] The authority half: release through the participant gate
-- [ ] Secret Service (`org.freedesktop.secrets`), the one OS surface a third
+      local and in-process: it exposes secret-free metadata, has no seed
+      accessor, and its code-bearing operation is crate-private to the gate.
+- [x] C2b: the embeddable half: `OtpCodeTile` carries code, metadata, and
+      integer remaining-seconds facts without fixing a renderer or carrier wire
+- [x] C2c: the authority half: `OtpReleaseGate` queues participant-bound
+      petitions for resident approval or denial; approval is the only public
+      code path and durably consumes an HOTP counter before return
+- [ ] Later platform adapter: Secret Service (`org.freedesktop.secrets`), the one OS surface a third
       party can *be* rather than read
-- [ ] Steam's nonstandard alphabet: decide explicitly whether to carry it
+- [ ] Later compatibility decision: Steam's nonstandard alphabet, with a real
+      issuer corpus and user-facing contract before carrying it
 
 ## Deliberate non-goals
 
@@ -107,5 +112,13 @@ exercising it. C1 builds the exercising; C2 builds the item.
   authenticated ciphertext as well as keeping it below the persona namespace.
   The store round-trips RFC 6238 material after reopening, keeps account and
   issuer out of the on-disk plaintext, and proves that the same item handle is
-  absent for another persona. Counter advancement and any release to a host
-  still belong to the participant-gated C2b authority slice.
+  absent for another persona.
+
+- 2026-08-20: C2b and C2c landed. `OtpCodeTile` gives a host the code,
+  secret-free metadata, and deterministic remaining-time facts without
+  prescribing component geometry or a carrier message. `OtpReleaseGate` is
+  the only public code path: a caller supplies participant facts from its
+  authenticated carrier, the resident approves or denies the pending petition,
+  and the returned tile remains bound to that request. Denial does not exercise
+  HOTP. Approval advances and seals HOTP's next counter before returning the
+  code, so reopening the gate cannot issue that counter again.

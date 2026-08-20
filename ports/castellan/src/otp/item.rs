@@ -9,8 +9,8 @@
 //! to produce a code. Its read model contains only display metadata; the seed
 //! is neither a field nor an accessor on any public type here.
 //!
-//! This is an in-process storage seam, not the participant-gated authority
-//! surface. A later authority slice will decide which petitions may call it.
+//! This is the storage seam below [`super::OtpReleaseGate`], which is the only
+//! public path that can turn a sealed record into a code-bearing tile.
 
 use std::fmt;
 
@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 use super::uri::OtpUri;
-use super::{Otp, OtpAlgorithm, OtpError, OtpKind, OtpUriError, parse_otpauth_uri};
+use super::{Otp, OtpAlgorithm, OtpCodeTile, OtpError, OtpKind, OtpUriError, parse_otpauth_uri};
 
 const RECORD_FORMAT_VERSION: u8 = 1;
 const RECORD_DIRECTORY: &str = "castellan/otp/v1";
@@ -83,6 +83,9 @@ pub enum OtpItemError {
     NotFound(OtpItemId),
     /// The sealed record was written by an unsupported item format.
     UnsupportedRecordVersion(u8),
+    /// The final HOTP value cannot be released because it could not be
+    /// advanced and durably consumed.
+    HotpCounterExhausted,
 }
 
 impl fmt::Display for OtpItemError {
@@ -95,6 +98,9 @@ impl fmt::Display for OtpItemError {
             OtpItemError::UnsupportedRecordVersion(version) => {
                 write!(f, "unsupported sealed OTP item version {version}")
             }
+            OtpItemError::HotpCounterExhausted => {
+                f.write_str("the HOTP counter has no next durable value")
+            }
         }
     }
 }
@@ -105,7 +111,9 @@ impl std::error::Error for OtpItemError {
             OtpItemError::Storage(error) => Some(error),
             OtpItemError::Import(error) => Some(error),
             OtpItemError::Generation(error) => Some(error),
-            OtpItemError::NotFound(_) | OtpItemError::UnsupportedRecordVersion(_) => None,
+            OtpItemError::NotFound(_)
+            | OtpItemError::UnsupportedRecordVersion(_)
+            | OtpItemError::HotpCounterExhausted => None,
         }
     }
 }
@@ -153,18 +161,33 @@ impl OtpItemStore {
         Ok(self.load(id)?.map(|record| record.item(id)))
     }
 
-    /// Produce the item code at an explicit Unix time.
+    /// Exercise one item after a participant-gated approval.
     ///
-    /// Counter-based items ignore `unix_secs` and use their stored counter,
-    /// matching [`Otp::code_at_unix_time`]. Counter advancement belongs to the
-    /// later, participant-gated release operation and is intentionally absent
-    /// here.
-    pub fn code_at_unix_time(&self, id: OtpItemId, unix_secs: u64) -> Result<String, OtpItemError> {
-        let record = self.require(id)?;
-        record
-            .otp()?
+    /// TOTP records are unchanged. HOTP advances its durable counter before
+    /// returning a code, so a retried host operation cannot receive the same
+    /// counter value twice. The enclosing release gate serializes this method
+    /// across its pending approvals.
+    pub(crate) fn release_tile_at_unix_time(
+        &self,
+        id: OtpItemId,
+        unix_secs: u64,
+    ) -> Result<OtpCodeTile, OtpItemError> {
+        let mut record = self.require(id)?;
+        if matches!(record.kind, StoredOtpKind::Hotp { counter: u64::MAX }) {
+            return Err(OtpItemError::HotpCounterExhausted);
+        }
+        let item = record.item(id);
+        let otp = record.otp()?;
+        let code = otp
             .code_at_unix_time(unix_secs)
-            .map_err(OtpItemError::Generation)
+            .map_err(OtpItemError::Generation)?;
+        if let StoredOtpKind::Hotp { counter } = &mut record.kind {
+            *counter = counter
+                .checked_add(1)
+                .expect("HOTP counter was checked before the code was produced");
+            self.storage.save_record(self.record_path(id), &record)?;
+        }
+        Ok(OtpCodeTile::new(item, code, unix_secs))
     }
 
     /// Return seconds before a time-based item rolls over, or `None` for HOTP.
@@ -344,7 +367,7 @@ mod tests {
     }
 
     #[test]
-    fn imported_item_reopens_and_exercises_the_sealed_generator() {
+    fn imported_item_reopens_with_its_secret_free_metadata() {
         let dir = tempdir().unwrap();
         let persona = PersonaId::new();
         let items = store(dir.path(), persona);
@@ -353,11 +376,9 @@ mod tests {
         assert_eq!(item.account, "mark");
         assert_eq!(item.issuer.as_deref(), Some("Merely"));
         assert_eq!(item.digits, 8);
-        assert_eq!(items.code_at_unix_time(item.id, 59).unwrap(), "94287082",);
 
         let reopened = store(dir.path(), persona);
         assert_eq!(reopened.get(item.id).unwrap(), Some(item.clone()));
-        assert_eq!(reopened.code_at_unix_time(item.id, 59).unwrap(), "94287082",);
         assert_eq!(reopened.seconds_remaining_at(item.id, 59).unwrap(), Some(1));
     }
 
@@ -383,7 +404,7 @@ mod tests {
 
         assert_eq!(other.get(item.id).unwrap(), None);
         assert!(matches!(
-            other.code_at_unix_time(item.id, 59),
+            other.seconds_remaining_at(item.id, 59),
             Err(OtpItemError::NotFound(id)) if id == item.id
         ));
     }

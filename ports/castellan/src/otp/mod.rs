@@ -8,10 +8,12 @@
 //! only outputs are codes, which are meant to be shown once and then are
 //! worthless.
 //!
-//! The core accepts an imported URI. [`OtpItemStore`] is the first storage
-//! slice: it seals the configured generator under one persona and still gives
-//! callers no way to retrieve its seed. Presentation and release through the
-//! participant gate remain later slices; see the castellan OTP plan.
+//! The core accepts an imported URI. [`OtpItemStore`] seals the configured
+//! generator under one persona and gives callers no way to retrieve its seed.
+//! [`OtpReleaseGate`] accepts a participant-bound petition and turns an
+//! explicit approval into an [`OtpCodeTile`], whose timing facts let any host
+//! render its own remaining-seconds ring. It is a local typed seam, not yet a
+//! carrier wire; see the castellan OTP plan.
 //!
 //! ```
 //! use castellan::otp::{Otp, OtpAlgorithm};
@@ -29,6 +31,8 @@
 
 pub mod base32;
 mod item;
+mod release;
+mod tile;
 mod uri;
 
 use std::fmt;
@@ -45,6 +49,11 @@ use zeroize::Zeroizing;
 
 pub use base32::Base32Error;
 pub use item::{OtpItem, OtpItemError, OtpItemId, OtpItemStore};
+pub use release::{
+    OtpReleaseDenied, OtpReleaseError, OtpReleaseGate, OtpReleaseId, OtpReleaseParticipant,
+    OtpReleaseRequest, OtpReleasedCode,
+};
+pub use tile::{OtpCodeTile, OtpTimeRing};
 pub use uri::{OtpUriError, parse_otpauth_uri};
 
 /// The default time step, in seconds. RFC 6238 §5.2 recommends 30.

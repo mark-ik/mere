@@ -26,13 +26,14 @@ players; castellan guards and presents you).
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/castellan`.
 
-## State (2026-08-14)
+## State (2026-08-20)
 
 Implemented:
 
 - `otp` — RFC 6238/4226 codes and `otpauth://` URIs, plus persona-scoped OTP
-  items sealed through Personae's record store. The item read model exposes
-  metadata and codes, never seeds.
+  items sealed through Personae's record store. `OtpReleaseGate` returns a
+  redacted-debug `OtpCodeTile` only after a participant-bound petition receives
+  an explicit approval; its time facts leave ring geometry to the host.
 - `reticulum` — the first device-identity issue seam: a radio credential
   derived from a Persona provider, no device-local account file.
 - feature `keeper` — the two halves made real, moved home from graphshell
@@ -45,9 +46,9 @@ Implemented:
 Graphshell composes all three and re-exports them at its pre-founding paths,
 so it is the first host rather than the owner. The intent wire strings keep
 their `castellan.*` values for now; renaming the wire vocabulary is
-a separate decision. CXF import, presentation, and gate-mediated release are
-later slices — see the keeper founding plan and the credential port brief in
-mere's `design_docs`.
+a separate decision. CXF import, a Secret Service adapter, and Steam's
+nonstandard alphabet remain separate follow-on work — see the keeper founding
+plan and the credential port brief in mere's `design_docs`.
 
 ## License
 
