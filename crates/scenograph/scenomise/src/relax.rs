@@ -16,7 +16,7 @@
 //! scale (tens of nodes) and the wrong one at canvas scale (thousands). A
 //! surface with a real sim should keep using it.
 
-use sceno::{Footprint, InstanceId, Scene, Vec2};
+use sceno::{Footprint, InstanceId, Rect, Scene, Transform2, Vec2};
 
 /// How a scene loosens up. All terms are optional: zero any of them out and it
 /// simply stops contributing.
@@ -68,6 +68,59 @@ fn item_clearance(footprint: &Footprint) -> f32 {
         .bounds()
         .map(|b| b.size.w.max(b.size.h) * 0.5)
         .unwrap_or(0.0)
+}
+
+/// Conservative axis-aligned bounds for a placed footprint. Rotation is
+/// retained by transforming all four local bounds corners.
+fn placed_bounds(footprint: &Footprint, transform: Transform2) -> Option<Rect> {
+    let local = footprint.bounds()?;
+    let min = local.origin;
+    let max = Vec2::new(local.origin.x + local.size.w, local.origin.y + local.size.h);
+    let corners = [
+        transform.apply(min),
+        transform.apply(Vec2::new(max.x, min.y)),
+        transform.apply(max),
+        transform.apply(Vec2::new(min.x, max.y)),
+    ];
+    let (mut min_x, mut min_y, mut max_x, mut max_y) =
+        (corners[0].x, corners[0].y, corners[0].x, corners[0].y);
+    for corner in &corners[1..] {
+        min_x = min_x.min(corner.x);
+        min_y = min_y.min(corner.y);
+        max_x = max_x.max(corner.x);
+        max_y = max_y.max(corner.y);
+    }
+    Some(Rect::new(
+        Vec2::new(min_x, min_y),
+        sceno::Size2::new(max_x - min_x, max_y - min_y),
+    ))
+}
+
+/// Smallest deterministic translation that carries `item` outside `obstacle`.
+fn separating_shift(item: Rect, obstacle: Rect) -> Option<Vec2> {
+    let item_max = Vec2::new(item.origin.x + item.size.w, item.origin.y + item.size.h);
+    let obstacle_max = Vec2::new(
+        obstacle.origin.x + obstacle.size.w,
+        obstacle.origin.y + obstacle.size.h,
+    );
+    if item_max.x <= obstacle.origin.x
+        || obstacle_max.x <= item.origin.x
+        || item_max.y <= obstacle.origin.y
+        || obstacle_max.y <= item.origin.y
+    {
+        return None;
+    }
+    let candidates = [
+        Vec2::new(obstacle.origin.x - item_max.x, 0.0),
+        Vec2::new(obstacle_max.x - item.origin.x, 0.0),
+        Vec2::new(0.0, obstacle.origin.y - item_max.y),
+        Vec2::new(0.0, obstacle_max.y - item.origin.y),
+    ];
+    candidates.into_iter().min_by(|left, right| {
+        let left_len = left.x.abs() + left.y.abs();
+        let right_len = right.x.abs() + right.y.abs();
+        left_len.total_cmp(&right_len)
+    })
 }
 
 /// Loosen `scene` in place: items push apart, related items pull together, and
@@ -155,6 +208,34 @@ pub fn relax_holding(scene: &mut Scene, settings: &Relaxation, immovable: &[Inst
                     forces[b].y += uy * push;
                 }
             }
+
+            // Backdrops are static environment geometry. A collidable one
+            // excludes item placement in its own coordinate space, while its
+            // visibility has no bearing on collision. The solver deliberately
+            // leaves cross-space collision to hosts with a full physics world;
+            // this small relaxer already assumes its item forces share a space.
+            for (index, item) in scene.items.iter().enumerate() {
+                let Some(item_bounds) = placed_bounds(&item.footprint, item.transform) else {
+                    continue;
+                };
+                for backdrop in scene
+                    .backdrops
+                    .iter()
+                    .filter(|backdrop| backdrop.collidable && backdrop.space == item.space)
+                {
+                    let Some(obstacle) = placed_bounds(&backdrop.footprint, backdrop.transform)
+                    else {
+                        continue;
+                    };
+                    let Some(shift) = separating_shift(item_bounds, obstacle) else {
+                        continue;
+                    };
+                    let extent = obstacle.size.w.max(obstacle.size.h).max(1.0);
+                    let strength = settings.repulsion / extent;
+                    forces[index].x += shift.x * strength;
+                    forces[index].y += shift.y * strength;
+                }
+            }
         }
 
         // Springs along the scene's own relations.
@@ -220,7 +301,8 @@ pub fn relax_holding(scene: &mut Scene, settings: &Relaxation, immovable: &[Inst
 mod tests {
     use super::*;
     use sceno::{
-        InstanceId, ProjectedItem, Representation, RoutedRelation, Size2, SourceRef, Transform2,
+        Backdrop, InstanceId, ProjectedItem, Representation, RoutedRelation, Size2, SourceRef,
+        Transform2,
     };
 
     fn scene_with(points: &[(f32, f32)]) -> Scene {
@@ -308,11 +390,7 @@ mod tests {
         // Three items on top of each other: maximum pressure to displace.
         let mut scene = scene_with(&[(0.0, 0.0), (1.0, 0.0), (-1.0, 0.5)]);
         let anchored = scene.items[0].transform.translate;
-        relax_holding(
-            &mut scene,
-            &Relaxation::default(),
-            &[InstanceId(0)],
-        );
+        relax_holding(&mut scene, &Relaxation::default(), &[InstanceId(0)]);
         assert_eq!(
             scene.items[0].transform.translate, anchored,
             "a hold was relaxed away, which is the silent-soft failure"
@@ -351,6 +429,50 @@ mod tests {
             "a crowded pair should loosen, got {} from {before}",
             separation(&scene, 0, 1)
         );
+    }
+
+    #[test]
+    fn a_collidable_backdrop_excludes_item_placement_even_when_invisible() {
+        let mut scene = scene_with(&[(0.0, 0.0)]);
+        let source = scene.intern_source(SourceRef::new("test", "wall"));
+        scene.backdrops.push(Backdrop {
+            source,
+            space: Scene::WORLD,
+            transform: Transform2::IDENTITY,
+            footprint: Footprint::Rect {
+                size: Size2::new(80.0, 80.0),
+            },
+            kind: "test:wall".into(),
+            visible: false,
+            collidable: true,
+        });
+
+        relax(&mut scene, &Relaxation::default().untethered());
+
+        let item = placed_bounds(&scene.items[0].footprint, scene.items[0].transform).unwrap();
+        let obstacle =
+            placed_bounds(&scene.backdrops[0].footprint, scene.backdrops[0].transform).unwrap();
+        assert_eq!(separating_shift(item, obstacle), None);
+    }
+
+    #[test]
+    fn a_noncollidable_backdrop_does_not_move_an_item() {
+        let mut scene = scene_with(&[(0.0, 0.0)]);
+        let source = scene.intern_source(SourceRef::new("test", "floor"));
+        scene.backdrops.push(Backdrop {
+            source,
+            space: Scene::WORLD,
+            transform: Transform2::IDENTITY,
+            footprint: Footprint::Rect {
+                size: Size2::new(80.0, 80.0),
+            },
+            kind: "test:floor".into(),
+            visible: true,
+            collidable: false,
+        });
+        let before = scene.items[0].transform;
+        relax(&mut scene, &Relaxation::default().untethered());
+        assert_eq!(scene.items[0].transform, before);
     }
 
     #[test]

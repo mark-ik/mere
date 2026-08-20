@@ -1,8 +1,8 @@
 use std::fmt::Write;
 
 use base64::Engine;
-use graphshell_client::{ResolvedContent, ResolvedPresentation};
 use chirograph::{AdvertisedAction, SceneSnapshot, SemanticRole};
+use graphshell_client::{ResolvedContent, ResolvedPresentation};
 
 use crate::canary::{CanaryError, CanaryRun, run_loopback_canary};
 
@@ -25,15 +25,47 @@ pub struct SceneRelationView {
     pub to: usize,
 }
 
+/// One visible environment element realized from portable scene data alone.
+pub struct SceneBackdropView {
+    pub kind: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub collidable: bool,
+}
+
 /// The spatial part of a disclosed Scenograph scene, kept separate from the
 /// resolved presentation payloads that fill each placed item.
 pub struct ProjectionLayoutView {
+    pub backdrops: Vec<SceneBackdropView>,
     pub placements: Vec<ScenePlacementView>,
     pub relations: Vec<SceneRelationView>,
 }
 
 impl ProjectionLayoutView {
     pub fn from_scene(scene: &SceneSnapshot) -> Self {
+        let backdrops = scene
+            .active_backdrops_in_order()
+            .into_iter()
+            .filter_map(|(_, backdrop)| {
+                if !backdrop.visible {
+                    return None;
+                }
+                let local = backdrop.footprint.bounds()?;
+                let space = scene.tables.space_to_world(backdrop.space)?;
+                let transform = space.then(&backdrop.transform);
+                let bounds = transformed_rect(local, transform);
+                Some(SceneBackdropView {
+                    kind: backdrop.kind.clone(),
+                    x: bounds.origin.x,
+                    y: bounds.origin.y,
+                    width: bounds.size.w,
+                    height: bounds.size.h,
+                    collidable: backdrop.collidable,
+                })
+            })
+            .collect();
         let items = scene.active_items_in_order();
         let by_instance = items
             .iter()
@@ -64,10 +96,33 @@ impl ProjectionLayoutView {
             })
             .collect();
         Self {
+            backdrops,
             placements,
             relations,
         }
     }
+}
+
+fn transformed_rect(rect: sceno::Rect, transform: sceno::Transform2) -> sceno::Rect {
+    let max = sceno::Vec2::new(rect.origin.x + rect.size.w, rect.origin.y + rect.size.h);
+    let corners = [
+        transform.apply(rect.origin),
+        transform.apply(sceno::Vec2::new(max.x, rect.origin.y)),
+        transform.apply(max),
+        transform.apply(sceno::Vec2::new(rect.origin.x, max.y)),
+    ];
+    let (mut min_x, mut min_y, mut max_x, mut max_y) =
+        (corners[0].x, corners[0].y, corners[0].x, corners[0].y);
+    for corner in &corners[1..] {
+        min_x = min_x.min(corner.x);
+        min_y = min_y.min(corner.y);
+        max_x = max_x.max(corner.x);
+        max_y = max_y.max(corner.y);
+    }
+    sceno::Rect::new(
+        sceno::Vec2::new(min_x, min_y),
+        sceno::Size2::new(max_x - min_x, max_y - min_y),
+    )
 }
 
 fn world_origin(
@@ -439,6 +494,43 @@ fn escape(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remote_layout_realizes_a_backdrop_from_snapshot_data() {
+        let mut scene = sceno::Scene::new();
+        let source = scene.intern_source(sceno::SourceRef::new("fixture", "floor"));
+        let room = scene.push_space(
+            sceno::Scene::WORLD,
+            sceno::Transform2::translation(10.0, 20.0),
+            Some("room".into()),
+        );
+        scene.backdrops.push(sceno::Backdrop {
+            source,
+            space: room,
+            transform: sceno::Transform2::translation(5.0, 6.0),
+            footprint: sceno::Footprint::Rect {
+                size: sceno::Size2::new(20.0, 10.0),
+            },
+            kind: "fixture:floor".into(),
+            visible: true,
+            collidable: true,
+        });
+        let snapshot = SceneSnapshot::from_dense(
+            chirograph::SceneEpoch(1),
+            chirograph::Revision(1),
+            scene,
+        )
+        .unwrap();
+
+        let layout = ProjectionLayoutView::from_scene(&snapshot);
+
+        assert_eq!(layout.backdrops.len(), 1);
+        let backdrop = &layout.backdrops[0];
+        assert_eq!(backdrop.kind, "fixture:floor");
+        assert_eq!((backdrop.x, backdrop.y), (5.0, 21.0));
+        assert_eq!((backdrop.width, backdrop.height), (20.0, 10.0));
+        assert!(backdrop.collidable);
+    }
 
     #[test]
     fn receipt_contains_both_resolutions_and_real_actions() {

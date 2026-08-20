@@ -1,9 +1,10 @@
 use sceno::{
-    InstanceId, ProjectedItem, Rect, Region, RoutedRelation, SourceIx, SourceRef, Space, SpaceId,
+    Backdrop, InstanceId, ProjectedItem, Rect, Region, RoutedRelation, SourceIx, SourceRef, Space,
+    SpaceId,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{RegionId, RelationId, Revision, SceneEpoch, SceneSnapshot, SnapshotError};
+use crate::{BackdropId, RegionId, RelationId, Revision, SceneEpoch, SceneSnapshot, SnapshotError};
 
 /// One idempotent transition within a scene epoch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -39,6 +40,17 @@ pub enum SceneOp {
     },
     TombstoneSpace {
         index: SpaceId,
+    },
+    AddBackdrop {
+        index: BackdropId,
+        value: Backdrop,
+    },
+    UpdateBackdrop {
+        index: BackdropId,
+        value: Backdrop,
+    },
+    TombstoneBackdrop {
+        index: BackdropId,
     },
     AddItem {
         index: InstanceId,
@@ -167,6 +179,15 @@ impl SceneSnapshot {
                 update(&mut tables.spaces, index.0, value.clone(), "space")
             }
             SceneOp::TombstoneSpace { index } => tombstone(&mut tables.spaces, index.0, "space"),
+            SceneOp::AddBackdrop { index, value } => {
+                append(&mut tables.backdrops, index.0, value.clone(), "backdrop")
+            }
+            SceneOp::UpdateBackdrop { index, value } => {
+                update(&mut tables.backdrops, index.0, value.clone(), "backdrop")
+            }
+            SceneOp::TombstoneBackdrop { index } => {
+                tombstone(&mut tables.backdrops, index.0, "backdrop")
+            }
             SceneOp::AddItem {
                 index,
                 value,
@@ -267,7 +288,7 @@ fn operation_error<T>(message: impl Into<String>) -> Result<T, DiffError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sceno::{Footprint, Representation, Scene, Size2, Transform2};
+    use sceno::{Backdrop, Footprint, Representation, Scene, Size2, Transform2};
 
     #[test]
     fn a_violation_survives_the_wire_a_remote_viewer_reads() {
@@ -285,7 +306,10 @@ mod tests {
         let wire = serde_json::to_string(&snapshot).expect("serialize");
         let far_side: SceneSnapshot = serde_json::from_str(&wire).expect("deserialize");
         assert_eq!(far_side.tables.unmet_holds[0].source.id, "ghost");
-        assert_eq!(far_side.tables.unmet_holds[0].at, sceno::Vec2::new(7.0, 7.0));
+        assert_eq!(
+            far_side.tables.unmet_holds[0].at,
+            sceno::Vec2::new(7.0, 7.0)
+        );
     }
 
     #[test]
@@ -373,13 +397,24 @@ mod tests {
 
     #[test]
     fn a_snapshot_written_before_violations_existed_still_reads() {
-        let snapshot = SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), Scene::new())
-            .expect("snapshot");
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), Scene::new()).expect("snapshot");
         let wire = serde_json::to_string(&snapshot).expect("serialize");
         let older = wire.replace(",\"unmet_holds\":[]", "");
         assert!(!older.contains("unmet_holds"), "older wire shape");
         let far_side: SceneSnapshot = serde_json::from_str(&older).expect("older wire loads");
         assert!(far_side.tables.unmet_holds.is_empty());
+    }
+
+    #[test]
+    fn a_snapshot_written_before_backdrops_existed_still_reads() {
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), Scene::new()).expect("snapshot");
+        let wire = serde_json::to_string(&snapshot).expect("serialize");
+        let older = wire.replace("\"backdrops\":[],", "");
+        assert!(!older.contains("backdrops"), "older wire shape");
+        let far_side: SceneSnapshot = serde_json::from_str(&older).expect("older wire loads");
+        assert!(far_side.tables.backdrops.is_empty());
     }
 
     fn item(source: SourceIx, x: f32) -> ProjectedItem {
@@ -403,6 +438,52 @@ mod tests {
         let source = scene.intern_source(SourceRef::new("fixture", "one"));
         scene.items.push(item(source, 0.0));
         SceneSnapshot::from_dense(SceneEpoch(7), Revision(1), scene).unwrap()
+    }
+
+    fn backdrop(source: SourceIx, kind: &str) -> Backdrop {
+        Backdrop {
+            source,
+            space: Scene::WORLD,
+            transform: Transform2::IDENTITY,
+            footprint: Footprint::Rect {
+                size: Size2::new(80.0, 60.0),
+            },
+            kind: kind.into(),
+            visible: true,
+            collidable: false,
+        }
+    }
+
+    #[test]
+    fn backdrop_changes_cross_the_wire_in_stable_slots() {
+        let mut state = snapshot();
+        let added = backdrop(SourceIx(0), "fixture:floor");
+        let diff = SceneDiff {
+            epoch: SceneEpoch(7),
+            base: Revision(1),
+            revision: Revision(2),
+            operations: vec![SceneOp::AddBackdrop {
+                index: BackdropId(0),
+                value: added.clone(),
+            }],
+        };
+        let wire = serde_json::to_string(&diff).unwrap();
+        let far_side: SceneDiff = serde_json::from_str(&wire).unwrap();
+        state.apply_diff(&far_side).unwrap();
+        assert_eq!(state.active_backdrop(BackdropId(0)), Some(&added));
+
+        state
+            .apply_diff(&SceneDiff {
+                epoch: SceneEpoch(7),
+                base: Revision(2),
+                revision: Revision(3),
+                operations: vec![SceneOp::TombstoneBackdrop {
+                    index: BackdropId(0),
+                }],
+            })
+            .unwrap();
+        assert_eq!(state.active_backdrop(BackdropId(0)), None);
+        assert_eq!(state.tables.backdrops.len(), 1, "slot remains allocated");
     }
 
     #[test]

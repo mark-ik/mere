@@ -19,8 +19,8 @@ use chirograph::{
     SemanticRole,
 };
 use sceno::{
-    Arrangement, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene, Score, Size2,
-    SourceRef, Transform2, Vec2,
+    Arrangement, Backdrop, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene,
+    Score, Size2, SourceRef, Transform2, Vec2,
 };
 use scenotime::{Revision, SceneEpoch, SceneSnapshot};
 
@@ -84,6 +84,18 @@ impl FixtureEndpoint {
         let mut scene = Scene::new();
         let note = scene.intern_source(SourceRef::new("fixture.graphshell", "note:recent"));
         let map = scene.intern_source(SourceRef::new("fixture.graphshell", "tile:coast"));
+        let floor = scene.intern_source(SourceRef::new("fixture.graphshell", "remote-floor"));
+        scene.backdrops.push(Backdrop {
+            source: floor,
+            space: Scene::WORLD,
+            transform: Transform2::translation(305.0, 146.0),
+            footprint: Footprint::Rect {
+                size: Size2::new(570.0, 200.0),
+            },
+            kind: "graphshell:remote-grid".into(),
+            visible: true,
+            collidable: false,
+        });
         scene.items.push(ProjectedItem {
             source: note,
             space: Scene::WORLD,
@@ -490,6 +502,15 @@ mod tests {
             ResolvedContent::NativeGlyph(_)
         ));
         assert_eq!(run.compact[1].content, ResolvedContent::LabeledPlaceholder);
+    }
+
+    #[test]
+    fn loopback_discloses_the_remote_viewers_backdrop() {
+        let mut endpoint = FixtureEndpoint::new();
+        let snapshot = endpoint.snapshot(endpoint.request()).unwrap();
+        let backdrops = snapshot.scene.active_backdrops_in_order();
+        assert_eq!(backdrops.len(), 1);
+        assert_eq!(backdrops[0].1.kind, "graphshell:remote-grid");
     }
 
     #[test]

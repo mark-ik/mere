@@ -1,7 +1,7 @@
 //! The projection scene — the output side of the contract.
 //!
 //! Identity is an index (the data-oriented doctrine): sources, spaces,
-//! items, relations, and regions are dense vectors; ids are indexes into
+//! backdrops, items, relations, and regions are dense vectors; ids are indexes into
 //! them. The source/instance separation is structural: one [`SourceRef`]
 //! entry may be pointed at by many [`ProjectedItem`]s, which is how one
 //! phrase appears in the loop table, the history branch, and the similarity
@@ -48,6 +48,27 @@ pub struct SpaceId(pub u32);
 /// source identity by design.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct InstanceId(pub u32);
+
+/// One environment element behind the graph proper.
+///
+/// Backdrops are kept out of [`Scene::items`] on purpose: they do not acquire
+/// graph-instance identity or intercept item picking merely because they are
+/// visible. Their source still records provenance, while `kind` is the open
+/// host-recognized face used to realize them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Backdrop {
+    pub source: SourceIx,
+    pub space: SpaceId,
+    pub transform: Transform2,
+    pub footprint: Footprint,
+    /// Open host-recognized appearance kind.
+    pub kind: String,
+    /// Whether a host paints this element. Invisible collision geometry is
+    /// valid, so this is independent of [`Self::collidable`].
+    pub visible: bool,
+    /// Whether placement and physics hosts treat the footprint as an obstacle.
+    pub collidable: bool,
+}
 
 /// A coordinate space: a transform within an optional parent. Frames, hull
 /// groups, a geographic projection's ground plane, and a nested map are all
@@ -157,6 +178,11 @@ pub struct Scene {
     /// `spaces[0]` is the world space (no parent, identity transform, by
     /// construction via [`Scene::new`]).
     pub spaces: Vec<Space>,
+    /// Environment elements, in back-to-front paint order. Every backdrop
+    /// paints before graph relations, regions, and items; interleaving belongs
+    /// in the item table when a consumer actually needs it.
+    #[serde(default)]
+    pub backdrops: Vec<Backdrop>,
     pub items: Vec<ProjectedItem>,
     pub relations: Vec<RoutedRelation>,
     pub regions: Vec<Region>,
@@ -306,6 +332,17 @@ mod tests {
     fn scene_round_trips_through_serde() {
         let mut scene = Scene::new();
         let src = scene.intern_source(SourceRef::new("mere.graph", "uuid:abc"));
+        scene.backdrops.push(Backdrop {
+            source: src,
+            space: Scene::WORLD,
+            transform: Transform2::IDENTITY,
+            footprint: Footprint::Rect {
+                size: crate::geometry::Size2::new(320.0, 180.0),
+            },
+            kind: "mere:grid-paper".into(),
+            visible: true,
+            collidable: false,
+        });
         scene.items.push(ProjectedItem {
             source: src,
             space: Scene::WORLD,

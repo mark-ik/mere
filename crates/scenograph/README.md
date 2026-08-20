@@ -21,9 +21,9 @@ each.
 
 | Crate | Contents |
 | --- | --- |
-| [sceno](sceno/) | Core contracts. `SourceRef` / `SourceIx`, `Space` / `SpaceId`, `InstanceId`, `Footprint`, `Representation`, `ProjectedItem`, `RoutedRelation`, `Region`, `Scene`, plus the persisted `Score` / `ScoreItem` / `Arrangement` / `Placement` / `SCORE_VERSION` vocabulary and the geometry types `Vec2`, `Size2`, `Rect`, `Transform2`. |
-| [scenomise](scenomise/) | Choreography. `solve(&Score) -> Scene` realizes the arrangements; `relax(&mut Scene, &Relaxation)` is a dependency-free repulsion / spring / arrangement-pull pass for surfaces without their own physics sim. |
-| [scenotime](scenotime/) | Runtime. `SceneSnapshot` / `SceneTables` with tombstoned slots, `SceneEpoch` / `Revision` / `RelationId` / `RegionId`, `SceneDiff` / `SceneOp` / `apply_diff` returning `ApplyOutcome`, `TransitionSpec` / `TransitionSchedule` with pure host-time sampling, and `pick(world) -> Option<InstanceId>`. |
+| [sceno](sceno/) | Core contracts. `SourceRef` / `SourceIx`, `Space` / `SpaceId`, `InstanceId`, `Backdrop`, `Footprint`, `Representation`, `ProjectedItem`, `RoutedRelation`, `Region`, `Scene`, plus the persisted `Score` / `ScoreItem` / `Arrangement` / `Placement` / `SCORE_VERSION` vocabulary and the geometry types `Vec2`, `Size2`, `Rect`, `Transform2`. |
+| [scenomise](scenomise/) | Choreography. `solve(&Score) -> Scene` realizes the arrangements; `relax(&mut Scene, &Relaxation)` is a dependency-free repulsion / spring / arrangement-pull pass for surfaces without their own physics sim, including static collision against collidable backdrops. |
+| [scenotime](scenotime/) | Runtime. `SceneSnapshot` / `SceneTables` with tombstoned slots, `SceneEpoch` / `Revision` / `BackdropId` / `RelationId` / `RegionId`, `SceneDiff` / `SceneOp` / `apply_diff` returning `ApplyOutcome`, `TransitionSpec` / `TransitionSchedule` with pure host-time sampling, and `pick(world) -> Option<InstanceId>`. |
 | [scenograph](scenograph/) | Thin facade re-exporting the three. |
 
 ## Vocabulary
@@ -33,8 +33,9 @@ each.
 - `Footprint`: `Point`, `Circle`, `Rect`, `Polygon`, `Path`.
 - `Representation`: `Glyph`, `Card`, `Sprite`, `Snapshot`, `LivePane`,
   `Open { kind }`.
-- `SceneOp`: add / update / tombstone for sources, spaces, items, relations and
-  regions, plus `SetItemLayer`, `SetItemOrder`, `SetBounds`, `SetGeneration`.
+- `SceneOp`: add / update / tombstone for sources, spaces, backdrops, items,
+  relations and regions, plus `SetItemLayer`, `SetItemOrder`, `SetBounds`,
+  `SetGeneration`.
 - `TransitionSpec`: duration, easing, and enter / update / exit stage windows;
   `TransitionSchedule` derives stable item windows from one validated diff and
   samples them at host-supplied elapsed time.
@@ -42,6 +43,11 @@ each.
 A `ProjectedItem` carries `source`, `space`, `transform`, `footprint`,
 `representation`, `layer`, `visible`, an optional `hit` shape, and an open
 `channels` map of `(name, value)` emphasis pairs.
+
+A `Backdrop` carries source provenance, space, transform, footprint, an open
+appearance kind, visibility, and collision participation. Backdrops paint in
+table order behind graph content and remain pointer-transparent. Interactive
+features stay ordinary items over the environment.
 
 `SceneSnapshot::from_dense` starts an epoch from a one-shot `Scene`;
 `SceneTables::pick` resolves a world point to the topmost live instance

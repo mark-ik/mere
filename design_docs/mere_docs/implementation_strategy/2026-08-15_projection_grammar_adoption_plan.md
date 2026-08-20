@@ -365,7 +365,8 @@ Validation: pausing the host clock pauses the transition; identical inputs
 replay identically; a consumer that never adopts transitions still snaps.
 Done when: one shipping cambium consumer plays a staged epoch transition.
 
-**C3. Backdrop realization (consumer half of expansion lane L2).**
+**C3. Backdrop realization (consumer half of expansion lane L2) - CLOSED
+2026-08-20.**
 Context: L2's two waiting consumers (isometry's map, woodshed's stage floor)
 force the backdrop contract; the report adds the vocabulary: class backdrop
 properties explicitly (visible, collidable, hit-transparent, provenance;
@@ -387,15 +388,17 @@ consumers.
 
 ### Sequence
 
-Closed: **A0**, **A6**, **A1**, **C1**, **B3**, **A3 stage one**, **A4 + C2**,
-and P3b's local selection-to-renderer proof. **A2's serialization half** is
+Closed: **A0**, **A6**, **A1**, **C1**, **B3**, **C3**, **A3 stage one**,
+**A4 + C2**, and P3b's local selection-to-renderer proof. **A2's serialization half** is
 landed; its resolution half still waits on a genuine two-view ask. **B1's**
 implementation and driven probe are closed; only the manual OS screen-reader
 pass remains.
 
-Open next through existing gates: **C3** with L2's two backdrop consumers.
-**A3 stage two** waits for a remote re-selection consumer. **A5** stays behind
-the promotion suite.
+The remaining implementation targets keep their entrance gates. **A2's
+resolution half** waits for a genuine two-view ask. **A3 stage two** waits for
+a remote re-selection consumer. **A5** stays behind the promotion suite, and
+**B2** waits for the first headed receipt that invokes a projected instance by
+identity.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -808,3 +811,21 @@ not settled without it.
   Stage two, portable rung conditions traveling beside the score, remains
   gated exactly as written: the P3b entry itself says remote re-selection
   waits on a real remote consumer, and nothing about stage one changes that.
+- 2026-08-20: **C3 and L2 landed through Isometry and Woodshed.** The two
+  consumers forced a separate backdrop table rather than an item kind or a
+  generalized Region. Each backdrop carries a source reference, coordinate
+  space, transform, footprint, open appearance kind, visibility, and collision
+  participation. Table order is back-to-front and the whole table paints before
+  graph content. Pointer transparency is structural: selecting part of a map
+  remains an ordinary item over the environment, so intent routing keeps one
+  `InstanceId` path.
+  Isometry's authored board now supplies `isometry:tile-board` behind its
+  selectable tile items. Woodshed's Stage supplies `woodshed:stage-floor`
+  around its arranged cards. Both cross `SceneSnapshot`; stable backdrop slots
+  also cross `SceneDiff`. Graphshell's remote canvas derives transformed
+  backdrop bounds and deterministic fallback paint from the snapshot before it
+  draws items. Scenomise treats collidable backdrop footprints as static
+  placement obstacles while visibility remains independent.
+  Receipts: 22 sceno tests, 31 scenomise tests, 30 scenotime tests, 116
+  Graphshell tests, Isometry's views and Graphshell endpoint tests, Woodshed's
+  `stage_backdrop` wire test, and the Graphshell wasm32 build.

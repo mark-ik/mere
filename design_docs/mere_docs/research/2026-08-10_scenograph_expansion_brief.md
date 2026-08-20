@@ -99,7 +99,7 @@ boundary recorded for later: the relations lifted are formula-level and so
 key-agnostic, which makes keyed relations (diatonic in, dominant of, resolves
 to) a further slice, and the Stage projection is where they belong.
 
-### L2. Backdrops (two consumers already waiting)
+### L2. Backdrops - LANDED 2026-08-20
 
 Isometry's map *is* a backdrop: a pixel-art VTT scene is mostly environment.
 Woodshed's stage floor / fretboard context is the second. Graphshell remote
@@ -111,6 +111,16 @@ transparency (backdrops mostly never pick, except VTT maps that do, which is
 what `hit` overrides are for). **Entrance gate**: prototype against
 isometry's map and woodshed's stage; ship whichever shape both force,
 nothing either fails to force.
+
+**Ruling:** both consumers forced a separate backdrop table. A backdrop has
+source provenance, a coordinate space, transform and footprint, an open
+appearance kind, visibility, and collision participation. Backdrops paint in
+table order behind graph content. They do not pick. A selectable VTT feature is
+an item over the map, which preserves the existing `InstanceId` intent path.
+Isometry uses the table for its authored board under selectable tiles;
+Woodshed uses it for the Stage floor under cards. Graphshell renders the same
+table remotely, and scenomise reads collidable entries as static placement
+obstacles. Interleaving remains unmodeled because neither consumer needed it.
 
 ### L3. Portable arrangement choice and citation
 
@@ -153,8 +163,8 @@ module ships. The 0.0.3 release plan's evidence standard stands.
 
 ## 5. Sequence
 
-L1's data half is founded and its headed rendering half remains. L2 opens with
-the two backdrop prototypes. L3's first-device proof is met, while the shared
+L1's data half is founded and its headed rendering half remains. L2 is closed
+through Isometry, Woodshed, and Graphshell remote realization. L3's first-device proof is met, while the shared
 shelfmark format waits for a second consumer. L4 opens on a
 save-my-projection ask. L5 rides the first continuous reprojection. Published
 0.0.3 remains historical; current work advances the versioned 0.0.4 line.

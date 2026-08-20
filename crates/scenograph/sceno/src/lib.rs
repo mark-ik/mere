@@ -55,8 +55,8 @@ pub mod score;
 pub use footprint::Footprint;
 pub use geometry::{Rect, Size2, Transform2, Vec2};
 pub use scene::{
-    InstanceId, ProjectedItem, Region, Representation, RoutedRelation, Scene, SourceIx, SourceRef,
-    Space, SpaceId,
+    Backdrop, InstanceId, ProjectedItem, Region, Representation, RoutedRelation, Scene, SourceIx,
+    SourceRef, Space, SpaceId,
 };
 pub use score::{
     Arrangement, Geographic, Grid, HeldPlacement, Hold, HonoredHold, Hulls, Placement,

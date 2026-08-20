@@ -17,6 +17,10 @@
 //! contract targets and for a per-click query; a client with a large scene
 //! and a hot pick path should build an index over the same tables rather
 //! than call this in a loop.
+//!
+//! Backdrops are structurally pointer-transparent. A selectable map feature
+//! is an item over a backdrop, preserving the protocol's `InstanceId` intent
+//! path without giving environment paint a second, competing identity lane.
 
 use sceno::{Footprint, InstanceId, ProjectedItem, SpaceId, Transform2, Vec2};
 
@@ -95,7 +99,7 @@ impl SceneTables {
 
 #[cfg(test)]
 mod tests {
-    use sceno::{Representation, Scene, SourceRef};
+    use sceno::{Backdrop, Representation, Scene, SourceRef};
 
     use super::*;
     use crate::{Revision, SceneEpoch};
@@ -168,6 +172,26 @@ mod tests {
         let under = card(&mut scene, "under", Vec2::ZERO, 0);
         let snap = snapshot(scene);
         assert_eq!(snap.pick(Vec2::ZERO), Some(under));
+    }
+
+    #[test]
+    fn a_backdrop_never_intercepts_item_picking() {
+        let mut scene = Scene::new();
+        let backdrop_source = scene.intern_source(SourceRef::new("fixture", "floor"));
+        scene.backdrops.push(Backdrop {
+            source: backdrop_source,
+            space: Scene::WORLD,
+            transform: Transform2::IDENTITY,
+            footprint: Footprint::Rect {
+                size: sceno::Size2::new(200.0, 200.0),
+            },
+            kind: "fixture:floor".into(),
+            visible: true,
+            collidable: false,
+        });
+        let item = card(&mut scene, "item", Vec2::ZERO, 0);
+        let snap = snapshot(scene);
+        assert_eq!(snap.pick(Vec2::ZERO), Some(item));
     }
 
     #[test]

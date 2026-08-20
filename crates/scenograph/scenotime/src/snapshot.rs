@@ -1,10 +1,10 @@
 use sceno::{
-    HeldPlacement, Hold, HonoredHold, InstanceId, ProjectedItem, Rect, Region, RoutedRelation,
-    Scene, SourceRef, Space, SpaceId,
+    Backdrop, HeldPlacement, Hold, HonoredHold, InstanceId, ProjectedItem, Rect, Region,
+    RoutedRelation, Scene, SourceRef, Space, SpaceId,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{RegionId, RelationId, Revision, SceneEpoch};
+use crate::{BackdropId, RegionId, RelationId, Revision, SceneEpoch};
 
 /// Stable scene tables. `None` is a tombstone, never an invitation to reuse the
 /// index during this epoch.
@@ -12,6 +12,8 @@ use crate::{RegionId, RelationId, Revision, SceneEpoch};
 pub struct SceneTables {
     pub sources: Vec<Option<SourceRef>>,
     pub spaces: Vec<Option<Space>>,
+    #[serde(default)]
+    pub backdrops: Vec<Option<Backdrop>>,
     pub items: Vec<Option<ProjectedItem>>,
     /// Explicit visual order, independent of the stable item slot.
     pub item_order: Vec<Option<i32>>,
@@ -63,6 +65,7 @@ impl SceneSnapshot {
             tables: SceneTables {
                 sources: scene.sources.into_iter().map(Some).collect(),
                 spaces: scene.spaces.into_iter().map(Some).collect(),
+                backdrops: scene.backdrops.into_iter().map(Some).collect(),
                 items: scene.items.into_iter().map(Some).collect(),
                 item_order: (0..item_count).map(|index| Some(index as i32)).collect(),
                 relations: scene.relations.into_iter().map(Some).collect(),
@@ -79,6 +82,20 @@ impl SceneSnapshot {
 
     pub fn active_item(&self, id: InstanceId) -> Option<&ProjectedItem> {
         self.tables.items.get(id.0 as usize)?.as_ref()
+    }
+
+    pub fn active_backdrop(&self, id: BackdropId) -> Option<&Backdrop> {
+        self.tables.backdrops.get(id.0 as usize)?.as_ref()
+    }
+
+    /// Active backdrops in their declared back-to-front order.
+    pub fn active_backdrops_in_order(&self) -> Vec<(BackdropId, &Backdrop)> {
+        self.tables
+            .backdrops
+            .iter()
+            .enumerate()
+            .filter_map(|(index, backdrop)| Some((BackdropId(index as u32), backdrop.as_ref()?)))
+            .collect()
     }
 
     pub fn active_relation(&self, id: RelationId) -> Option<&RoutedRelation> {
@@ -153,6 +170,10 @@ impl SceneSnapshot {
             if item.source.0 as usize >= tables.sources.len() {
                 return invalid(format!("item {index} has dangling source"));
             }
+        }
+        for backdrop in tables.backdrops.iter().flatten() {
+            require_active(&tables.sources, backdrop.source.0, "backdrop source")?;
+            require_active(&tables.spaces, backdrop.space.0, "backdrop space")?;
         }
         for relation in tables.relations.iter().flatten() {
             require_active(&tables.items, relation.from.0, "relation start")?;

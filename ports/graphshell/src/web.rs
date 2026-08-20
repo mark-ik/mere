@@ -50,6 +50,7 @@ use graphshell::mere_host::{
     FIXTURE_DEVICE_TWO_ADDRESS, FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef,
 };
 use graphshell::product::{ProjectionClock, RelationFamilyFilter, SavedSceneV1};
+use graphshell::view::ProjectionLayoutView;
 use graphshell_client::frozen::Satisfaction;
 use muniment::IndexedDbBackend;
 use uuid::Uuid;
@@ -63,6 +64,23 @@ const CAPTURE_POLICY_GLOBAL: &str = "graphshellCapturePolicyJson";
 const CAPTURE_VISITS_GLOBAL: &str = "graphshellInitialVisitsJson";
 const HISTORY_FILTER_GLOBAL: &str = "graphshellHistoryFilterJson";
 const HISTORY_FORGET_GLOBAL: &str = "graphshellHistoryForgetJson";
+
+/// Stable fallback paint for an open backdrop kind. Product hosts can replace
+/// this with native art; an unfamiliar remote scene still gets a distinct,
+/// deterministic face from its wire data.
+fn remote_backdrop_color(kind: &str) -> [f32; 4] {
+    const PALETTE: [[f32; 4]; 5] = [
+        [0.10, 0.19, 0.22, 1.0],
+        [0.16, 0.17, 0.25, 1.0],
+        [0.18, 0.14, 0.20, 1.0],
+        [0.13, 0.21, 0.17, 1.0],
+        [0.22, 0.18, 0.12, 1.0],
+    ];
+    let hash = kind.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    PALETTE[hash as usize % PALETTE.len()]
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct InitialCaptureSummary {
@@ -422,6 +440,23 @@ impl BrowserHost {
             .min(1.0);
         let origin_x = (self.width as f32 - bounds.size.w * scale) * 0.5 - bounds.origin.x * scale;
         let origin_y = 116.0 - bounds.origin.y * scale;
+        let layout = ProjectionLayoutView::from_scene(&mounted.scene);
+        for backdrop in &layout.backdrops {
+            let x0 = origin_x + backdrop.x * scale;
+            let y0 = origin_y + backdrop.y * scale;
+            let x1 = x0 + backdrop.width * scale;
+            let y1 = y0 + backdrop.height * scale;
+            let color = remote_backdrop_color(&backdrop.kind);
+            scene.push_rect(x0, y0, x1, y1, color);
+            if backdrop.collidable {
+                let stroke = 2.0;
+                let edge = [0.78, 0.61, 0.31, 0.9];
+                scene.push_rect(x0, y0, x1, y0 + stroke, edge);
+                scene.push_rect(x0, y1 - stroke, x1, y1, edge);
+                scene.push_rect(x0, y0, x0 + stroke, y1, edge);
+                scene.push_rect(x1 - stroke, y0, x1, y1, edge);
+            }
+        }
         for (instance, item) in mounted.scene.active_items_in_order() {
             let center_x = origin_x + item.transform.translate.x * scale;
             let center_y = origin_y + item.transform.translate.y * scale;
