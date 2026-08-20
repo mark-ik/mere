@@ -186,7 +186,10 @@ impl FrozenScene {
             rows.push((
                 "relation".to_owned(),
                 format!("{} to {}", relation.from, relation.to),
-                relation.kind.clone().unwrap_or_else(|| "related".to_owned()),
+                relation
+                    .kind
+                    .clone()
+                    .unwrap_or_else(|| "related".to_owned()),
             ));
         }
         for held in &self.unmet_holds {
@@ -307,7 +310,10 @@ impl FrozenScene {
         if !self.relations.is_empty() {
             html.push_str("<ul class=\"frozen-relations\">");
             for relation in &self.relations {
-                let kind = relation.kind.clone().unwrap_or_else(|| "related to".to_owned());
+                let kind = relation
+                    .kind
+                    .clone()
+                    .unwrap_or_else(|| "related to".to_owned());
                 html.push_str(&format!(
                     "<li>{} {} {}</li>",
                     escape(&relation.from),
@@ -384,7 +390,10 @@ mod tree {
             for (index, relation) in self.relations.iter().enumerate() {
                 let id = node_id_for_path(&format!("{path}/relation/{index}"));
                 let mut node = Node::new(Role::ListItem);
-                let kind = relation.kind.clone().unwrap_or_else(|| "related to".to_owned());
+                let kind = relation
+                    .kind
+                    .clone()
+                    .unwrap_or_else(|| "related to".to_owned());
                 node.set_label(format!("{} {} {}", relation.from, kind, relation.to));
                 nodes.push((id, node));
                 relation_ids.push(id);
@@ -481,7 +490,13 @@ impl Satisfaction {
         if self.is_quiet() {
             return None;
         }
-        let pins = |n: usize| if n == 1 { "pin".to_owned() } else { "pins".to_owned() };
+        let pins = |n: usize| {
+            if n == 1 {
+                "pin".to_owned()
+            } else {
+                "pins".to_owned()
+            }
+        };
         Some(match (self.honored, self.unmet) {
             (h, 0) => format!("{h} {} held", pins(h)),
             (0, u) => format!("{u} {} unmet", pins(u)),
@@ -521,7 +536,11 @@ mod tests {
         let frozen = FrozenScene::freeze(&scene, "Coastal map", &names);
 
         let visible = scene.items.iter().filter(|item| item.visible).count();
-        assert_eq!(frozen.instances.len(), visible, "every visible item is listed");
+        assert_eq!(
+            frozen.instances.len(),
+            visible,
+            "every visible item is listed"
+        );
         assert!(frozen.instances.iter().any(|i| i.name == "Harbor"));
         assert!(frozen.instances.iter().any(|i| i.name == "Beacon"));
         // The underlay had no supplied name, so it falls back and is counted.
@@ -539,7 +558,11 @@ mod tests {
         let scene = coastal();
         let frozen = FrozenScene::freeze(&scene, "Coastal map", &HashMap::new());
         // The alternate must not be able to drift from the enumeration under it.
-        assert!(frozen.summary.contains(&format!("{} items", frozen.instances.len())));
+        assert!(
+            frozen
+                .summary
+                .contains(&format!("{} items", frozen.instances.len()))
+        );
         assert!(frozen.instances.iter().all(|i| i.named_by_fallback));
         assert_eq!(frozen.unnamed, frozen.instances.len());
     }
@@ -584,7 +607,10 @@ mod tests {
         let frozen = FrozenScene::freeze(
             &scene,
             "Two stations",
-            &named(&[("fixture", "north", "North station"), ("fixture", "south", "South station")]),
+            &named(&[
+                ("fixture", "north", "North station"),
+                ("fixture", "south", "South station"),
+            ]),
         );
         assert_eq!(frozen.relations.len(), 1);
         assert_eq!(frozen.relations[0].from, "North station");
@@ -630,7 +656,10 @@ mod tests {
         ));
         let serialized = dom.inner_html(dom.document());
 
-        assert!(serialized.contains("graphics-document"), "document role survives parsing");
+        assert!(
+            serialized.contains("graphics-document"),
+            "document role survives parsing"
+        );
         assert!(serialized.contains("graphics-symbol") || serialized.contains("graphics-object"));
         assert!(serialized.contains("Harbor"));
         assert!(serialized.contains("Every item and relationship in this projection"));
@@ -662,7 +691,10 @@ mod tests {
             frozen.instances.len(),
             "no instance reaches a reader unlabelled"
         );
-        assert_eq!(html.matches("role=\"graphics-").count(), frozen.instances.len() + 1);
+        assert_eq!(
+            html.matches("role=\"graphics-").count(),
+            frozen.instances.len() + 1
+        );
     }
 
     #[test]
@@ -687,13 +719,12 @@ mod tests {
             channels: Vec::new(),
         });
         let hostile = "</li></ul><script>alert(1)</script>";
-        let frozen = FrozenScene::freeze(
-            &scene,
-            "Hostile",
-            &named(&[("fixture", "x", hostile)]),
-        );
+        let frozen = FrozenScene::freeze(&scene, "Hostile", &named(&[("fixture", "x", hostile)]));
         let html = frozen.to_html("h");
-        assert!(!html.contains("<script>"), "the tag never survives as markup");
+        assert!(
+            !html.contains("<script>"),
+            "the tag never survives as markup"
+        );
         assert!(html.contains("&lt;script&gt;"), "it survives as text");
 
         let dom = ScriptedDom::from_serialized_document(&format!(
@@ -758,10 +789,15 @@ mod tests {
             );
         }
         assert!(
-            labels.iter().any(|l| l.contains("Harbor") && l.contains("sights")),
+            labels
+                .iter()
+                .any(|l| l.contains("Harbor") && l.contains("sights")),
             "the relation is announced with both ends named"
         );
-        assert_eq!(labels[0], "Coastal map", "the document announces itself first");
+        assert_eq!(
+            labels[0], "Coastal map",
+            "the document announces itself first"
+        );
     }
 
     #[cfg(feature = "accesskit")]
@@ -788,7 +824,9 @@ mod tests {
         let frozen = FrozenScene::freeze(&scene, "Coastal map", &HashMap::new());
         let labels = traverse(&frozen.to_ux_tree("coastal"));
         assert!(
-            labels.iter().any(|l| l.contains("ghost") && l.contains("could not be placed")),
+            labels
+                .iter()
+                .any(|l| l.contains("ghost") && l.contains("could not be placed")),
             "the violation a sighted reader sees is spoken too"
         );
     }
@@ -874,9 +912,16 @@ mod tests {
         // The aria-label path: a scenario written against what a person hears
         // resolves the same element as one written against the id.
         assert!(
-            resolve(&surfaces, &Selector::role("graphics-object").containing("Harbor")).is_some()
-                || resolve(&surfaces, &Selector::role("graphics-symbol").containing("Harbor"))
-                    .is_some(),
+            resolve(
+                &surfaces,
+                &Selector::role("graphics-object").containing("Harbor")
+            )
+            .is_some()
+                || resolve(
+                    &surfaces,
+                    &Selector::role("graphics-symbol").containing("Harbor")
+                )
+                .is_some(),
             "the announced name is not selectable"
         );
         assert!(text_present(&surfaces, "Harbor"));
@@ -910,7 +955,10 @@ mod tests {
         let frozen = FrozenScene::freeze(
             &scene,
             "Twins",
-            &named(&[("fixture", "first", "Example"), ("fixture", "second", "Example")]),
+            &named(&[
+                ("fixture", "first", "Example"),
+                ("fixture", "second", "Example"),
+            ]),
         );
         let dom = probe_dom(&frozen);
         let surfaces = [ProbeSurface {
@@ -966,7 +1014,10 @@ mod tests {
         let satisfaction = Satisfaction::of(&snapshot.tables);
         assert_eq!(satisfaction.honored, 1);
         assert_eq!(satisfaction.unmet, 1);
-        assert_eq!(satisfaction.line().as_deref(), Some("1 pin unmet, 1 pin held"));
+        assert_eq!(
+            satisfaction.line().as_deref(),
+            Some("1 pin unmet, 1 pin held")
+        );
         // The distinction a host draws with, rather than infers.
         assert!(Satisfaction::is_pinned(&snapshot.tables, InstanceId(1)));
         assert!(!Satisfaction::is_pinned(&snapshot.tables, InstanceId(0)));
@@ -976,8 +1027,8 @@ mod tests {
     fn an_unpinned_scene_says_nothing_at_all() {
         use scenotime::{Revision, SceneEpoch, SceneSnapshot};
 
-        let snapshot = SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), coastal())
-            .expect("snapshot");
+        let snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(1), Revision(1), coastal()).expect("snapshot");
         let satisfaction = Satisfaction::of(&snapshot.tables);
         assert!(satisfaction.is_quiet());
         // Zero of zero is noise, not information.
@@ -986,15 +1037,28 @@ mod tests {
 
     #[test]
     fn the_line_leads_with_the_failure() {
-        let both = Satisfaction { honored: 3, unmet: 2 };
+        let both = Satisfaction {
+            honored: 3,
+            unmet: 2,
+        };
         let line = both.line().expect("a line");
         assert!(line.starts_with("2 pins unmet"), "{line}");
         assert_eq!(
-            Satisfaction { honored: 2, unmet: 0 }.line().as_deref(),
+            Satisfaction {
+                honored: 2,
+                unmet: 0
+            }
+            .line()
+            .as_deref(),
             Some("2 pins held")
         );
         assert_eq!(
-            Satisfaction { honored: 0, unmet: 1 }.line().as_deref(),
+            Satisfaction {
+                honored: 0,
+                unmet: 1
+            }
+            .line()
+            .as_deref(),
             Some("1 pin unmet")
         );
     }

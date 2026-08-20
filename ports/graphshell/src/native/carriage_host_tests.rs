@@ -294,7 +294,10 @@ mod commissioning {
 
         // The roster-driven publish. One persona certificate carries epoch
         // material, so exactly one slot goes onto the lane.
-        let report = wallet_host.publish_grant_carriage(&carry_root).await.unwrap();
+        let report = wallet_host
+            .publish_grant_carriage(&carry_root)
+            .await
+            .unwrap();
         assert_eq!(report.published, vec![(device_id, persona)]);
         assert!(report.skipped_no_wrapping_key.is_empty());
         assert_eq!(report.skipped_no_record, 0);
@@ -319,13 +322,9 @@ mod commissioning {
         // which is recovery without re-pairing, the lane's whole point.
         let record = decode_epoch_record(&bytes).unwrap();
         assert_eq!(record.certificate, certificate_id);
-        let secret = unwrap_private_epoch_material(
-            &record.epochs[0],
-            persona,
-            epoch,
-            pairing.wrapping_key,
-        )
-        .unwrap();
+        let secret =
+            unwrap_private_epoch_material(&record.epochs[0], persona, epoch, pairing.wrapping_key)
+                .unwrap();
         assert_eq!(secret, b"commissioned-epoch-secret".to_vec());
 
         wallet_host.close().await.unwrap();
@@ -341,8 +340,8 @@ mod retraction {
         CarriagePolicy, DeviceExposure, DeviceId, DevicePublicKey, KeyEpochId,
         PairedRemoteAuthGrantSpec, PersonaId, PrivateEpochPlaintext, blinded_slot_id,
         decode_epoch_record, ensure_wallet_state, issue_remote_auth_device_grant_from_pairing,
-        load_device_grant_set, load_device_roster, load_identity_seed,
-        revoke_remote_auth_device, save_device_roster,
+        load_device_grant_set, load_device_roster, load_identity_seed, revoke_remote_auth_device,
+        save_device_roster,
     };
     use personae::InMemoryProvider;
     use personae::carry::derive_persona_chain_root;
@@ -427,7 +426,10 @@ mod retraction {
         let certificate_id = set.personas.get(&persona).unwrap().certificate.id();
         let slot = blinded_slot_id(certificate_id, pairing.wrapping_key);
 
-        let report = wallet_host.publish_grant_carriage(&carry_root).await.unwrap();
+        let report = wallet_host
+            .publish_grant_carriage(&carry_root)
+            .await
+            .unwrap();
         assert_eq!(report.published.len(), 1);
         let mut held = None;
         for _ in 0..100 {

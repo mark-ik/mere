@@ -217,8 +217,7 @@ impl CarriageHost {
         }
         let index = self.retraction_index();
         let key = retraction_index_key(device);
-        let mut merged: Vec<RetractionTarget> =
-            index.load(&key).await?.unwrap_or_default();
+        let mut merged: Vec<RetractionTarget> = index.load(&key).await?.unwrap_or_default();
         for target in targets {
             if !merged.iter().any(|existing| existing.slot == target.slot) {
                 merged.push(target);
@@ -261,9 +260,8 @@ impl CarriageHost {
                 report.skipped_not_held.push(target.slot);
                 continue;
             };
-            let shell = WrappedEpochRecord::new(personae::delegation::DelegationId(
-                target.certificate,
-            ));
+            let shell =
+                WrappedEpochRecord::new(personae::delegation::DelegationId(target.certificate));
             let bytes = encode_epoch_record(&shell)
                 .map_err(|error| CarriageHostError::Refused(error.to_string()))?;
             let issuer = provider

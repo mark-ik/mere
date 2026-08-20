@@ -102,7 +102,11 @@ mod tests {
         );
         let statements = revoke_device_grant_set(MASTER_SEED, &set, NOW_MS + 1).unwrap();
 
-        assert_eq!(statements.len(), 3, "one device certificate and two personas");
+        assert_eq!(
+            statements.len(),
+            3,
+            "one device certificate and two personas"
+        );
         assert!(statements.iter().all(|statement| statement.verify()));
     }
 

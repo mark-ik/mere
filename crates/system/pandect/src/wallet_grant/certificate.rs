@@ -19,10 +19,10 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use identity::carry::{DeviceGrantSet, WALLET_SCHEMA_VERSION};
-use identity::delegation::{DelegationId, SignedDelegationCertificate};
 use identity::PersonaId;
 use identity::carry::ACTION_PRIVATE_READ;
+use identity::carry::{DeviceGrantSet, WALLET_SCHEMA_VERSION};
+use identity::delegation::{DelegationId, SignedDelegationCertificate};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use serde::{Deserialize, Serialize};
 
@@ -61,12 +61,7 @@ impl WrappedEpochRecord {
     ///
     /// Takes the wrapping key because the entries are blinded: only a holder
     /// can tell which persona a record serves, which is the point.
-    pub fn covers(
-        &self,
-        persona: PersonaId,
-        epoch: KeyEpochId,
-        wrapping_key: [u8; 32],
-    ) -> bool {
+    pub fn covers(&self, persona: PersonaId, epoch: KeyEpochId, wrapping_key: [u8; 32]) -> bool {
         let index = blinded_epoch_index(persona, epoch, wrapping_key);
         self.epochs.iter().any(|entry| entry.index == index)
     }
@@ -302,7 +297,10 @@ pub fn decode_device_grant_set(bytes: &[u8]) -> Result<DeviceGrantSet, DeviceGra
 ///
 /// Revocation calls this: a withdrawn device's key carriage should not linger
 /// in the wallet, and removing it is also what keeps revocation idempotent.
-pub fn remove_wrapped_epoch_record(data_root: &Path, certificate: DelegationId) -> io::Result<bool> {
+pub fn remove_wrapped_epoch_record(
+    data_root: &Path,
+    certificate: DelegationId,
+) -> io::Result<bool> {
     match std::fs::remove_file(wrapped_epoch_record_path(data_root, certificate)) {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
@@ -316,7 +314,13 @@ pub fn remove_wrapped_epoch_record(data_root: &Path, certificate: DelegationId) 
 /// the inverse. Returns `None` for a scope built by something else, which is
 /// how a certificate from a foreign domain fails closed here.
 pub fn certificate_device_id(certificate: &SignedDelegationCertificate) -> Option<DeviceId> {
-    let bytes: [u8; 16] = certificate.certificate.scope.resource.as_slice().try_into().ok()?;
+    let bytes: [u8; 16] = certificate
+        .certificate
+        .scope
+        .resource
+        .as_slice()
+        .try_into()
+        .ok()?;
     Some(DeviceId::from_uuid(uuid::Uuid::from_bytes(bytes)))
 }
 
@@ -351,8 +355,8 @@ pub fn check_epoch_carriage(
 
 #[cfg(test)]
 mod tests {
-    use identity::carry::{DevicePublicKey, issue_persona_device_grant};
     use identity::carry::{ACTION_TRANSPORT_EGRESS, KeyEpochId};
+    use identity::carry::{DevicePublicKey, issue_persona_device_grant};
 
     use super::*;
 
@@ -447,7 +451,14 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let certificate = grant(&[ACTION_PRIVATE_READ]);
 
-        let error = check_epoch_carriage(root.path(), &certificate, persona(), test_epoch(), WRAPPING_KEY).unwrap_err();
+        let error = check_epoch_carriage(
+            root.path(),
+            &certificate,
+            persona(),
+            test_epoch(),
+            WRAPPING_KEY,
+        )
+        .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(error.to_string().contains(ACTION_PRIVATE_READ));
     }
@@ -460,7 +471,14 @@ mod tests {
         record.epochs.push(material());
         save_wrapped_epoch_record(root.path(), &record).unwrap();
 
-        check_epoch_carriage(root.path(), &certificate, persona(), test_epoch(), WRAPPING_KEY).unwrap();
+        check_epoch_carriage(
+            root.path(),
+            &certificate,
+            persona(),
+            test_epoch(),
+            WRAPPING_KEY,
+        )
+        .unwrap();
     }
 
     /// A grant that never promised private reading owes no carriage, so the
@@ -471,7 +489,14 @@ mod tests {
         let certificate = grant(&[ACTION_TRANSPORT_EGRESS]);
 
         assert!(!requires_epoch_material(&certificate));
-        check_epoch_carriage(root.path(), &certificate, persona(), test_epoch(), WRAPPING_KEY).unwrap();
+        check_epoch_carriage(
+            root.path(),
+            &certificate,
+            persona(),
+            test_epoch(),
+            WRAPPING_KEY,
+        )
+        .unwrap();
     }
 
     fn issue_set(actions: &[&str], personas: &[PersonaId]) -> DeviceGrantSet {
@@ -506,7 +531,10 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let other = PersonaId::from_uuid(uuid::Uuid::from_u128(0x9004));
         let set = issue_set(
-            &[ACTION_TRANSPORT_EGRESS, identity::carry::ACTION_IDENTITY_ACT],
+            &[
+                ACTION_TRANSPORT_EGRESS,
+                identity::carry::ACTION_IDENTITY_ACT,
+            ],
             &[persona(), other],
         );
         save_device_grant_set(root.path(), device(), &set).unwrap();
@@ -531,7 +559,10 @@ mod tests {
     fn the_set_ref_tracks_every_member() {
         let station = issue_set(&[ACTION_TRANSPORT_EGRESS], &[]);
         let with_persona = issue_set(
-            &[ACTION_TRANSPORT_EGRESS, identity::carry::ACTION_IDENTITY_ACT],
+            &[
+                ACTION_TRANSPORT_EGRESS,
+                identity::carry::ACTION_IDENTITY_ACT,
+            ],
             &[persona()],
         );
 

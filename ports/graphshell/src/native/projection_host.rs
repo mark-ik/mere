@@ -230,13 +230,13 @@ mod tests {
     use crate::network_carrier::{
         CarrierRuntime, NetworkCarrier, dial_projection_session, projection_binding,
     };
-    use graphshell_endpoint::{
-        IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
-    };
     use chirograph::{
         CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
         EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot,
         ProtocolVersion, ResourceRequest, ResourceResponse, SessionOpen,
+    };
+    use graphshell_endpoint::{
+        IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
     };
     use notochord::{NetworkId, ProfileRef, TrafficClass, TrustedRoot};
     use personae::delegation::{

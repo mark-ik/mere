@@ -189,9 +189,9 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Reconcile additions live, so pairing does not wait for a restart.
-    // Additive only for now: dropping a writer changes admission, which the
-    // store fixed at open, so unpairing still takes effect on the next start.
+    // Reconcile pairing live. Writer admission and evidence access are shared
+    // mutable Personae materializations, while the address-book topic is only
+    // the route used to reach that admitted identity.
     let mut applied: std::collections::HashSet<[u8; 32]> =
         sync.paired_writer_keys()?.into_iter().collect();
     loop {
@@ -205,13 +205,13 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         };
         let Some(sync) = reloaded.sync else { continue };
         let desired = match sync.paired_writer_keys() {
-            Ok(keys) => keys,
+            Ok(keys) => keys.into_iter().collect::<std::collections::HashSet<_>>(),
             Err(error) => {
                 tracing::warn!(%error, "knot sync settings hold an unusable writer key");
                 continue;
             }
         };
-        for writer in desired {
+        for writer in desired.iter().copied() {
             if !applied.insert(writer) {
                 continue;
             }
@@ -224,6 +224,22 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                     applied.remove(&writer);
                     tracing::warn!(%error, writer = %knot::hex32(&writer), "could not reach a paired device");
                 }
+            }
+        }
+        for writer in applied.difference(&desired).copied().collect::<Vec<_>>() {
+            match host.unpair_writer(writer).await {
+                Ok(()) => {
+                    applied.remove(&writer);
+                    tracing::info!(
+                        writer = %knot::hex32(&writer),
+                        "revoked an unpaired device without a restart"
+                    );
+                }
+                Err(error) => tracing::warn!(
+                    %error,
+                    writer = %knot::hex32(&writer),
+                    "revoked an unpaired device but could not remove its route"
+                ),
             }
         }
         host.refresh_dial_hints(&sync, &settings_file).await;

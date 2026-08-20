@@ -26,6 +26,7 @@
 
 use std::fmt::Debug;
 use std::future::Future;
+use std::pin::Pin;
 
 use p2panda_core::{Extensions, Hash, LogId, Operation, SeqNum, Topic, VerifyingKey};
 use p2panda_net::sync::SyncHandle;
@@ -60,6 +61,8 @@ pub enum JoinError {
     Subscribe(String),
     #[error("publish: {0}")]
     Publish(String),
+    #[error("logsync shutdown: {0}")]
+    Shutdown(String),
 }
 
 /// A joined reconciling-log session: the LogSync session, its live stream
@@ -73,7 +76,27 @@ where
     space: SyncedSpace,
     handle: SyncHandle<Operation<E>, TopicLogSyncEvent<E>>,
     /// Keeps the session actor alive; store and log-id types erased.
-    _log_sync: Box<dyn std::any::Any + Send + Sync>,
+    log_sync: Box<dyn LogSyncLifetime>,
+}
+
+trait LogSyncLifetime: Send + Sync {
+    fn shutdown(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>>;
+}
+
+impl<S, L, E> LogSyncLifetime for LogSync<S, L, E>
+where
+    S: LogStore<Operation<E>, VerifyingKey, L, SeqNum, Hash>
+        + TopicStore<Topic, VerifyingKey, L>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    L: LogId + Debug + Send + Sync + 'static,
+    E: Extensions + Send + Sync + 'static,
+{
+    fn shutdown(self: Box<Self>) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> {
+        Box::pin(async move { (*self).shutdown().await.map_err(|error| error.to_string()) })
+    }
 }
 
 impl<E> JoinedSpace<E>
@@ -117,6 +140,7 @@ where
             + Sync
             + 'static,
         L: LogId + Debug + Send + Sync + 'static,
+        E: Sync,
         A: FnMut(Operation<E>) -> Fut + Send + 'static,
         Fut: Future<Output = bool> + Send,
     {
@@ -137,7 +161,7 @@ where
         Ok(Self {
             space,
             handle,
-            _log_sync: Box::new(log_sync),
+            log_sync: Box::new(log_sync),
         })
     }
 
@@ -154,6 +178,23 @@ where
     /// Exactly what dropping does — named so a caller can say it, and so a
     /// deliberate leave reads differently from a value going out of scope.
     pub fn leave(self) {}
+
+    /// Leave and wait until the drain and sync actor have released their
+    /// captured store handles.
+    ///
+    /// Resident processes use this stronger boundary before reopening a
+    /// single-writer backend. Ordinary scope-based holders may keep using
+    /// [`Self::leave`] or drop.
+    pub async fn leave_and_wait(self) -> Result<(), JoinError> {
+        let Self {
+            space,
+            handle,
+            log_sync,
+        } = self;
+        space.shutdown().await;
+        drop(handle);
+        log_sync.shutdown().await.map_err(JoinError::Shutdown)
+    }
 
     /// The drain, for callers composing their own status across a second
     /// lane (murm's gossip counters, say).

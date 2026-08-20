@@ -11,7 +11,7 @@ an editable knot later.
 This plan **implements** existing design; it does not re-design. It realizes the
 [gloss Navigator design](../design/2026-06-07_gloss_navigator_design.md)'s deferred
 outline form factor (G3) and its §2a DOM-not-Scene decision, consumes the
-[graph signals layer](2026-06-22_graph_signals_layer_plan.md) for the expensive
+[graph signals layer](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) for the expensive
 metrics (never reproducing them), and registers the outline as the **sixth projection**
 beyond the five in the [graph projections research](../research/2026-06-22_graph_projections_research.md),
 under that doc's projection contract and gloss no-split rule.
@@ -52,7 +52,7 @@ later follow.
 - **Expensive metrics belong to graph_signals.** Centrality (betweenness / PageRank),
   community (Leiden / Louvain), and bridge/articulation scores are **not** in the kernel
   and are reserved on `cartography::IntelligenceSignals` (`signals.rs:21-32`) for the
-  unbuilt `intel/signals` producer ([graph_signals P1-P3](2026-06-22_graph_signals_layer_plan.md)).
+  unbuilt `intel/signals` producer ([graph_signals P1-P3](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)).
   The outline **consumes** them when they ship and **falls back** (degree for importance,
   components for community) until then. It must not become a second producer.
 - **mere-orrery is the right home + already nearly free.** Pure `Graph -> view` domain
@@ -231,7 +231,7 @@ an ad-hoc list: the format *is* the editing + export path.
   2026-07-01.
 - [gloss Navigator design](../design/2026-06-07_gloss_navigator_design.md) — the outline form
   factor (deferred G3) + §2a DOM decision this plan realizes.
-- [graph signals layer plan](2026-06-22_graph_signals_layer_plan.md) — P6 gloss lens + the
+- [graph signals layer plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) — P6 gloss lens + the
   `intel/signals` producer the outline's expensive metrics consume (P3).
 - [graph projections research](../research/2026-06-22_graph_projections_research.md) — the
   projection contract, the no-split rule, the outline as the sixth projection.

@@ -96,12 +96,11 @@ pub const PERSONA_EPOCH_BRIDGE_FILENAME: &str = "private-epoch-bridge.json";
 // (`pandect::wallet_store::*`) compiling unchanged.
 pub use identity::carry::{
     CapabilitySlotRef, CarriagePolicy, CarryHashFn, CarryRef, CarryRefParseError, DeviceExposure,
-    DeviceGrantRef,
-    DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster, IdentityWalletManifest,
-    KeyEpochId, LocalDeviceIdentity, PersonaChainRoot, PersonaEpochBridge, PersonaWalletManifest,
-    PersonaWalletRef, PrivateEpochRecord, PrivateRoots, PublicRoots, RecoveryPolicy,
-    RemoteAuthWrappingKeyBridge, RemoteAuthWrappingKeyRecord, WALLET_SCHEMA_VERSION,
-    derive_persona_chain_root, persona_wallet_salt,
+    DeviceGrantRef, DeviceId, DeviceMode, DevicePublicKey, DeviceRecord, DeviceRoster,
+    IdentityWalletManifest, KeyEpochId, LocalDeviceIdentity, PersonaChainRoot, PersonaEpochBridge,
+    PersonaWalletManifest, PersonaWalletRef, PrivateEpochRecord, PrivateRoots, PublicRoots,
+    RecoveryPolicy, RemoteAuthWrappingKeyBridge, RemoteAuthWrappingKeyRecord,
+    WALLET_SCHEMA_VERSION, derive_persona_chain_root, persona_wallet_salt,
 };
 
 pub use bootstrap::{WalletBootstrapMode, bootstrap_wallet_state, ensure_wallet_state};

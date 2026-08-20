@@ -182,6 +182,13 @@ impl SyncedSpace {
             items_received: last.saturating_sub(start),
         }
     }
+
+    /// Abort the drain and wait until its captured acceptance store is
+    /// released.
+    pub async fn shutdown(mut self) {
+        self.task.abort();
+        let _ = (&mut self.task).await;
+    }
 }
 
 impl Drop for SyncedSpace {

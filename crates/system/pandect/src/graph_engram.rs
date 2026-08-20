@@ -174,9 +174,7 @@ fn graph_engram_provenance(created_at: Timestamp) -> ProvenanceRecord {
     ProvenanceRecord {
         origin: ProvenanceOrigin::Generated,
         upstream: Vec::new(),
-        tooling: Some(
-            concat!("pandect/graph-engram@", env!("CARGO_PKG_VERSION")).to_string(),
-        ),
+        tooling: Some(concat!("pandect/graph-engram@", env!("CARGO_PKG_VERSION")).to_string()),
         generated_at: created_at,
     }
 }
@@ -371,11 +369,7 @@ pub async fn compose_graph_engrams_sealed(
         origin: ProvenanceOrigin::Derived,
         upstream: ids.to_vec(),
         tooling: Some(
-            concat!(
-                "pandect/graph-engram-compose@",
-                env!("CARGO_PKG_VERSION")
-            )
-            .to_string(),
+            concat!("pandect/graph-engram-compose@", env!("CARGO_PKG_VERSION")).to_string(),
         ),
         generated_at: created_at,
     };

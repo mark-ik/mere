@@ -17,7 +17,7 @@ up; this doc is the menu and the shared framing, not a build schedule.
 - [gloss_navigator_design](../design/2026-06-07_gloss_navigator_design.md) — the Navigator is one
   configurable summary surface (scope x form factor), never split. Three of the five are better
   framed as gloss lenses or orrery modes than as new panes, so the no-split rule holds.
-- [graph_signals_layer_plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
+- [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)
   — the producer layer (communities / affinity / bridges / importance / embeddings). #5 below is a
   *consumer* surface of that layer, not a second producer; #4 borrows its importance signal.
 - [node_representation_arrangement_plan](../implementation_strategy/2026-06-18_node_representation_arrangement_plan.md)
@@ -184,7 +184,7 @@ days." Click a cell to push that subset into the orrery or open it as a workbenc
 **Lives as.** A gloss lens (a tabular form factor alongside outline and swatch) for browsing, or a
 dedicated pane for heavy analysis. The cell layout reuses the `grid` arrangement; the importance
 signal from
-[graph_signals_layer_plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md) can
+[graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) can
 rank within a cell.
 
 **New vs. existing.** The facet projection is built and tested. The matrix UI (axis pickers, the
@@ -315,7 +315,7 @@ menu all summon them by id. Representation choices ride along untouched.
 - 2026-06-22: **Created from a chat pitch Mark accepted ("I like 'em all").** Code-verified the
   graph primitives each projection reads (node fields, edge taxonomy, lineage visit tree, facet
   projection, signal contract, lens enum). Reconciled the five against the same-day
-  [graph_signals_layer_plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md) (so
+  [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) (so
   Neighborhoods is a consumer surface, not a duplicate producer, and Facets borrows its importance
   signal) and the [gloss_navigator_design](../design/2026-06-07_gloss_navigator_design.md) (so the
   no-split rule holds: three of the five are orrery modes or gloss lenses, only Trail and Provenance

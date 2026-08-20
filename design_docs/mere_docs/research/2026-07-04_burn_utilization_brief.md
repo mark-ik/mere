@@ -121,7 +121,7 @@ measurably improves a recall or ranking task over the untuned baseline.
 
 Embeddings driving arrangement: semantic clustering as an arrangement source,
 suggested edges from similarity (a producer for the
-[graph_signals_layer_plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)),
+[graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)),
 and the borrowed-ideas "semantic neighbors" living-document block. For large
 graphs, a tensorized force pass written in the field algebra rides aether's
 existing lowering; gyre stays burn-free and integrates whatever the field

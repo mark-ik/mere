@@ -40,7 +40,7 @@ each existing fragment; it extends them, it does not duplicate them.
 - [petgraph / RDF plan](2026-06-18_petgraph_rdf_plan.md) **owns edge multigraph
   storage** and the ruling that visual collapse is an experience-LOD setting. P4 is
   that experience-LOD render; it needs no kernel storage change.
-- [graph signals layer plan](2026-06-22_graph_signals_layer_plan.md) **owns the
+- [graph signals layer plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) **owns the
   gloss lens / its own `ProjectionRequest`**. P6 migrates the minimap render onto
   the DOM swatch under it.
 - [scriptable field regions plan](2026-06-13_scriptable_field_regions_plan.md) owns

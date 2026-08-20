@@ -21,7 +21,7 @@ promotion rules.
 scene contract note
 (`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),
 [multi_window_plan](2026-06-10_multi_window_plan.md),
-[graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md),
+[graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md),
 [accesskit_screen_reader_verification](2026-06-09_accesskit_screen_reader_verification.md).
 
 ## Ruling context

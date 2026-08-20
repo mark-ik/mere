@@ -86,8 +86,8 @@ pub(crate) fn refresh_remote_auth_private_read_grant(
             ));
         };
         let id = certificate.certificate.id();
-        let mut record =
-            load_wrapped_epoch_record(data_root, id)?.unwrap_or_else(|| WrappedEpochRecord::new(id));
+        let mut record = load_wrapped_epoch_record(data_root, id)?
+            .unwrap_or_else(|| WrappedEpochRecord::new(id));
         // Replace rather than filter. The record is keyed by *this persona's*
         // certificate, so by construction every entry in it is this persona's;
         // there is nothing to keep. That also means the blinded entries never

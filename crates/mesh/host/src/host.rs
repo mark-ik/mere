@@ -233,6 +233,26 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
         self.checkpoint().await.map(Some)
     }
 
+    /// Stop every local run and leave the sync lane without detaching tasks.
+    ///
+    /// Process shutdown does not author a revoke or completion: there may be no
+    /// transport left to carry it. The next host folds the still-live lease and
+    /// its bounded window normally. What this boundary guarantees locally is
+    /// that no job or sync task keeps device or store resources after it
+    /// returns.
+    pub async fn shutdown(mut self) -> Result<(), HostError> {
+        for flight in self.inflight.values() {
+            flight.handle.cancel();
+            flight.task.abort();
+        }
+        let inflight = std::mem::take(&mut self.inflight);
+        for (_, flight) in inflight {
+            let _ = flight.task.await;
+        }
+        self.synced.leave().await?;
+        Ok(())
+    }
+
     /// Tell the ring which persona master key authorized this device's mesh
     /// authoring key, so peers can turn its jobs into a transport address.
     ///

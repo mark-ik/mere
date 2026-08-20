@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 use muniment::{Backend, MemoryBackend, RedbBackend, StoreError, WriteOp};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
@@ -117,7 +118,7 @@ pub enum KnotSyncError {
 #[derive(Clone)]
 struct KnotSyncPolicy {
     space_id: [u8; 32],
-    writers: BTreeSet<[u8; 32]>,
+    writers: Arc<RwLock<BTreeSet<[u8; 32]>>>,
     encryption: KnotEncryptionProfile,
 }
 
@@ -139,7 +140,8 @@ impl OperationPolicy<KnotSyncExt> for KnotSyncPolicy {
         }
         if !self
             .writers
-            .contains(operation.header.verifying_key.as_bytes())
+            .read()
+            .is_ok_and(|writers| writers.contains(operation.header.verifying_key.as_bytes()))
         {
             return Err(Reject::new(
                 "unrecognized-knot-writer",
@@ -314,7 +316,7 @@ impl KnotSyncStore<MemoryBackend> {
             store: MunimentStore::new(MemoryBackend::new()),
             policy: KnotSyncPolicy {
                 space_id,
-                writers: writers.into_iter().collect(),
+                writers: Arc::new(RwLock::new(writers.into_iter().collect())),
                 encryption,
             },
         }
@@ -358,7 +360,7 @@ impl KnotSyncStore<RedbBackend> {
             store: MunimentStore::new(RedbBackend::open(path)?),
             policy: KnotSyncPolicy {
                 space_id,
-                writers: writers.into_iter().collect(),
+                writers: Arc::new(RwLock::new(writers.into_iter().collect())),
                 encryption,
             },
         })
@@ -375,6 +377,50 @@ where
 
     pub fn encryption_profile(&self) -> KnotEncryptionProfile {
         self.policy.encryption
+    }
+
+    /// Writers currently admitted by this replica's materialized policy.
+    pub fn admitted_writers(&self) -> Vec<[u8; 32]> {
+        self.policy
+            .writers
+            .read()
+            .map(|writers| writers.iter().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// Admit one newly paired writer without rebuilding the active LogSync
+    /// session. Returns whether the materialized policy changed.
+    pub fn admit_writer(&self, writer: [u8; 32]) -> bool {
+        self.policy
+            .writers
+            .write()
+            .map(|mut writers| writers.insert(writer))
+            .unwrap_or(false)
+    }
+
+    /// Revoke one paired writer for future operation admission.
+    pub fn deny_writer(&self, writer: &[u8; 32]) -> bool {
+        self.policy
+            .writers
+            .write()
+            .map(|mut writers| writers.remove(writer))
+            .unwrap_or(false)
+    }
+
+    /// Replace communal writer admission from a newly materialized Gemot view.
+    pub fn replace_admitted_writers(&self, writers: impl IntoIterator<Item = [u8; 32]>) -> bool {
+        let next = writers.into_iter().collect::<BTreeSet<_>>();
+        self.policy
+            .writers
+            .write()
+            .map(|mut current| {
+                if *current == next {
+                    return false;
+                }
+                *current = next;
+                true
+            })
+            .unwrap_or(false)
     }
 
     /// Seal, sign, admit, and store the next event in this device's log.
@@ -1704,6 +1750,40 @@ mod tests {
             a.documents(&alice_vault).await.unwrap(),
             b.documents(&bob_vault).await.unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn refreshed_writer_authority_changes_live_operation_admission() {
+        let roots = tempdir().unwrap();
+        let (alice, bob) = identities();
+        let alice_writer = alice.master_public_key().to_bytes();
+        let bob_writer = bob.master_public_key().to_bytes();
+        let author = KnotSyncStore::in_memory(SPACE, [alice_writer]);
+        let receiver = KnotSyncStore::in_memory(SPACE, [bob_writer]);
+        let vault = KnotVault::open(roots.path().join("vault"), VAULT_KEY).unwrap();
+        let first = author
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("first", "admitted after pairing")),
+            )
+            .await
+            .unwrap();
+
+        assert!(receiver.accept(&first).await.is_err());
+        assert!(receiver.admit_writer(alice_writer));
+        assert!(receiver.accept(&first).await.unwrap());
+
+        let second = author
+            .author(
+                alice.master_keypair().to_seed(),
+                &vault,
+                &KnotSyncEvent::Put(doc("second", "rejected after revocation")),
+            )
+            .await
+            .unwrap();
+        assert!(receiver.replace_admitted_writers([bob_writer]));
+        assert!(receiver.accept(&second).await.is_err());
     }
 
     #[tokio::test]

@@ -41,10 +41,7 @@ pub fn load_revocation_ledger(data_root: &Path) -> io::Result<RevocationLedger> 
 }
 
 /// Persist the revocation ledger, returning its content ref.
-pub fn save_revocation_ledger(
-    data_root: &Path,
-    ledger: &RevocationLedger,
-) -> io::Result<CarryRef> {
+pub fn save_revocation_ledger(data_root: &Path, ledger: &RevocationLedger) -> io::Result<CarryRef> {
     let bytes = encode_cbor(ledger)
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, DeviceGrantError::Encode))?;
     let path = revocation_ledger_path(data_root);
@@ -121,9 +118,9 @@ pub fn revoked_certificate_count(data_root: &Path, set: &DeviceGrantSet) -> io::
 
 #[cfg(test)]
 mod tests {
+    use super::super::issue_remote_auth_device_grant;
     use super::super::test_support::*;
     use super::*;
-    use super::super::issue_remote_auth_device_grant;
 
     const AT_MS: u64 = 1_750_000_000_000;
 

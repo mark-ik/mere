@@ -17,7 +17,8 @@ use uuid::Uuid;
 /// A v5 (name-based) UUID, not v4: the id has to be a function of the receipt
 /// so that ingesting the same directory twice reaches the same node instead of
 /// minting a second one.
-pub(crate) const RECEIPT_NAMESPACE: Uuid = Uuid::from_u128(0x8f2c_41d7_5e3b_4a90_9c17_6de2_0b84_f5a3);
+pub(crate) const RECEIPT_NAMESPACE: Uuid =
+    Uuid::from_u128(0x8f2c_41d7_5e3b_4a90_9c17_6de2_0b84_f5a3);
 
 /// The facet carrying a run's provenance.
 pub const FACET_RUN: &str = "receipt.run";
@@ -156,7 +157,10 @@ impl ReceiptManifest {
     pub fn address(&self) -> String {
         format!(
             "receipt:{}/{}/{}/{}",
-            self.repo, self.host(), self.scenario, self.ran_at_utc
+            self.repo,
+            self.host(),
+            self.scenario,
+            self.ran_at_utc
         )
     }
 

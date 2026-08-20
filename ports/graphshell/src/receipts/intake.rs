@@ -70,7 +70,9 @@ pub fn captures_in(events: &[PersonalGraphEvent]) -> Vec<(String, [u8; 32])> {
         if facet != crate::receipts::FACET_ARTIFACTS {
             continue;
         }
-        let Some(items) = value.as_array() else { continue };
+        let Some(items) = value.as_array() else {
+            continue;
+        };
         for item in items {
             let (Some(name), Some(hex)) = (
                 item.get("name").and_then(|v| v.as_str()),

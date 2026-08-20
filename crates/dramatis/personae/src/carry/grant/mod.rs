@@ -265,9 +265,14 @@ mod tests {
     fn a_self_grant_names_the_persona_as_its_own_subject() {
         let provider = provider();
         let master = provider.master_public_key().to_bytes();
-        let grant =
-            issue_self_grant(&provider, device(), &[ACTION_TRANSPORT_EGRESS], 60_000, NOW_MS)
-                .unwrap();
+        let grant = issue_self_grant(
+            &provider,
+            device(),
+            &[ACTION_TRANSPORT_EGRESS],
+            60_000,
+            NOW_MS,
+        )
+        .unwrap();
 
         assert_eq!(grant.certificate.issuer, master);
         assert_eq!(grant.certificate.subject, master);
@@ -314,9 +319,14 @@ mod tests {
 
     #[test]
     fn a_device_grant_always_expires() {
-        let grant =
-            issue_self_grant(&provider(), device(), &[ACTION_TRANSPORT_EGRESS], 60_000, NOW_MS)
-                .unwrap();
+        let grant = issue_self_grant(
+            &provider(),
+            device(),
+            &[ACTION_TRANSPORT_EGRESS],
+            60_000,
+            NOW_MS,
+        )
+        .unwrap();
 
         assert_eq!(grant.certificate.expires_at_ms, Some(NOW_MS + 60_000));
     }
@@ -371,7 +381,10 @@ mod tests {
 
         let expected = crate::carry::derive_persona_chain_root(MASTER_SEED, persona(1)).unwrap();
         assert_eq!(grant.certificate.issuer, expected.0);
-        assert_ne!(grant.certificate.issuer, master.master_public_key().to_bytes());
+        assert_ne!(
+            grant.certificate.issuer,
+            master.master_public_key().to_bytes()
+        );
         assert_eq!(grant.certificate.subject, holder().0);
         assert!(grant.verify());
     }

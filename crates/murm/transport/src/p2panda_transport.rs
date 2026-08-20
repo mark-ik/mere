@@ -68,7 +68,7 @@ use stickleback::MunimentAddressBook;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
-use crate::blobs::BlobStore;
+use crate::blobs::{BlobPeerAuthorizer, BlobStore};
 use crate::{AcceptedSession, Alpn, IngressContext, PeerID, Transport, TransportError};
 
 /// A bidirectional p2panda-net QUIC stream presented as `AsyncRead + AsyncWrite`.
@@ -198,6 +198,39 @@ impl ProtocolHandler for StreamQueueHandler {
     }
 }
 
+/// Domain-authorized wrapper around the ordinary iroh-blobs protocol.
+///
+/// Authorization is evaluated from the transport-authenticated remote key
+/// before the peer can name or read any hash in the store.
+struct AuthorizedBlobsProtocol {
+    inner: iroh_blobs::BlobsProtocol,
+    authorizer: BlobPeerAuthorizer,
+}
+
+impl std::fmt::Debug for AuthorizedBlobsProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuthorizedBlobsProtocol")
+            .field("admitted_peers", &self.authorizer.peers().len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl ProtocolHandler for AuthorizedBlobsProtocol {
+    async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        if !self.authorizer.allows(connection.remote_id().as_bytes()) {
+            return Err(AcceptError::from_err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "peer is not authorized for this blob store",
+            )));
+        }
+        self.inner.accept(connection).await
+    }
+
+    async fn shutdown(&self) {
+        self.inner.shutdown().await;
+    }
+}
+
 type AlpnQueues =
     Arc<StdMutex<HashMap<Alpn, Arc<TokioMutex<mpsc::UnboundedReceiver<QueuedStream>>>>>>;
 
@@ -236,6 +269,7 @@ pub struct P2pandaTransportBuilder<'a> {
     signing_seed: [u8; 32],
     alpns: Vec<Alpn>,
     blobs: Option<&'a BlobStore>,
+    blob_authorizer: Option<BlobPeerAuthorizer>,
     mdns: Option<MdnsDiscoveryMode>,
     discovery: Option<DiscoveryConfig>,
     gossip: bool,
@@ -256,6 +290,28 @@ impl<'a> P2pandaTransportBuilder<'a> {
             signing_seed: self.signing_seed,
             alpns: self.alpns,
             blobs: Some(store),
+            blob_authorizer: None,
+            mdns: self.mdns,
+            discovery: self.discovery,
+            gossip: self.gossip,
+            relay_urls: self.relay_urls,
+        }
+    }
+
+    /// Serve blobs only to peers admitted by the domain-owned authorizer.
+    ///
+    /// The peer identity comes from the authenticated QUIC connection. The
+    /// transport does not infer pairing, membership, or capability authority.
+    pub fn authorized_blobs<'b>(
+        self,
+        store: &'b BlobStore,
+        authorizer: BlobPeerAuthorizer,
+    ) -> P2pandaTransportBuilder<'b> {
+        P2pandaTransportBuilder {
+            signing_seed: self.signing_seed,
+            alpns: self.alpns,
+            blobs: Some(store),
+            blob_authorizer: Some(authorizer),
             mdns: self.mdns,
             discovery: self.discovery,
             gossip: self.gossip,
@@ -321,6 +377,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
             self.signing_seed,
             self.alpns,
             self.blobs,
+            self.blob_authorizer,
             self.mdns,
             self.discovery,
             self.gossip,
@@ -355,6 +412,7 @@ impl P2pandaTransport {
             signing_seed: master.to_seed(),
             alpns: Vec::new(),
             blobs: None,
+            blob_authorizer: None,
             mdns: None,
             discovery: None,
             relay_urls: Vec::new(),
@@ -372,6 +430,7 @@ impl P2pandaTransport {
             signing_seed,
             alpns: Vec::new(),
             blobs: None,
+            blob_authorizer: None,
             mdns: None,
             discovery: None,
             relay_urls: Vec::new(),
@@ -389,7 +448,17 @@ impl P2pandaTransport {
         signing_seed: [u8; 32],
         alpns: Vec<Alpn>,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(signing_seed, alpns, None, None, None, false, Vec::new()).await
+        Self::bind_inner(
+            signing_seed,
+            alpns,
+            None,
+            None,
+            None,
+            None,
+            false,
+            Vec::new(),
+        )
+        .await
     }
 
     /// Bind with the given ALPNs and serve iroh-blobs against the provided store.
@@ -404,6 +473,27 @@ impl P2pandaTransport {
             blobs,
             None,
             None,
+            None,
+            false,
+            Vec::new(),
+        )
+        .await
+    }
+
+    /// Bind and serve blobs only to transport-authenticated admitted peers.
+    pub async fn bind_with_authorized_blobs(
+        master: &Ed25519Keypair,
+        alpns: Vec<Alpn>,
+        blobs: &BlobStore,
+        authorizer: BlobPeerAuthorizer,
+    ) -> Result<Self, TransportError> {
+        Self::bind_inner(
+            master.to_seed(),
+            alpns,
+            Some(blobs),
+            Some(authorizer),
+            None,
+            None,
             false,
             Vec::new(),
         )
@@ -414,6 +504,7 @@ impl P2pandaTransport {
         signing_seed: [u8; 32],
         alpns: Vec<Alpn>,
         blobs: Option<&BlobStore>,
+        blob_authorizer: Option<BlobPeerAuthorizer>,
         mdns: Option<MdnsDiscoveryMode>,
         discovery: Option<DiscoveryConfig>,
         gossip: bool,
@@ -457,10 +548,25 @@ impl P2pandaTransport {
 
         if let Some(store) = blobs {
             let blobs_protocol = iroh_blobs::BlobsProtocol::new(store.store(), None);
-            endpoint
-                .accept(iroh_blobs::ALPN, blobs_protocol)
-                .await
-                .map_err(|e| TransportError::Backend(format!("blobs register: {e}")))?;
+            if let Some(authorizer) = blob_authorizer {
+                endpoint
+                    .accept(
+                        iroh_blobs::ALPN,
+                        AuthorizedBlobsProtocol {
+                            inner: blobs_protocol,
+                            authorizer,
+                        },
+                    )
+                    .await
+                    .map_err(|e| {
+                        TransportError::Backend(format!("authorized blobs register: {e}"))
+                    })?;
+            } else {
+                endpoint
+                    .accept(iroh_blobs::ALPN, blobs_protocol)
+                    .await
+                    .map_err(|e| TransportError::Backend(format!("blobs register: {e}")))?;
+            }
         }
 
         // Optional LAN discovery: mDNS populates the address book so peers on

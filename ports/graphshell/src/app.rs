@@ -1,11 +1,11 @@
 //! Graphshell's reference-host composition over local and remote projections.
 
-use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
-use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionSource};
 use chirograph::{
     CacheRetention, CapabilityProfile, ContentHash, IntentInvocation, IntentResult,
     PresentationCapability, ProjectionSession, ProjectionSnapshot, ResourceRequest,
 };
+use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
+use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionSource};
 use muniment::Backend;
 use sceno::InstanceId;
 
@@ -491,13 +491,13 @@ mod tests {
     async fn h4_exportable_identity_cards_and_access_survive_scene_reopen_as_projections() {
         use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionSource};
         use mere::canvas::CartographyGeometry;
-        use personae::ssh_slot::{protocol_key_for, slot_for};
-        use personae::{
-            Ed25519Keypair, IdentityVault, InMemoryStorage, Profile, ProfileId, UnlockTier,
-        };
         use pandect::{
             DeviceExposure, DeviceId, DevicePublicKey, PersonaId, RemoteAuthGrantSpec,
             ensure_wallet_state, issue_remote_auth_device_grant, load_device_roster,
+        };
+        use personae::ssh_slot::{protocol_key_for, slot_for};
+        use personae::{
+            Ed25519Keypair, IdentityVault, InMemoryStorage, Profile, ProfileId, UnlockTier,
         };
         use ssh_agent_lib::agent::Session;
         use ssh_agent_lib::proto::SignRequest;

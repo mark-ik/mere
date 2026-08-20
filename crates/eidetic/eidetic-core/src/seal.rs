@@ -282,10 +282,10 @@ mod tests {
     impl PayloadSealer for TestSealer {
         fn seal(&self, content_hash: &Hash, cleartext: &[u8]) -> Result<(Vec<u8>, SealedBlobRef)> {
             let key = self.history[&self.current];
-            let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
+            let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
             let sealed = cipher
                 .encrypt(
-                    XNonce::from_slice(&Self::nonce(content_hash)),
+                    &XNonce::try_from(&Self::nonce(content_hash)[..]).expect("fixed-length key material"),
                     Payload {
                         msg: cleartext,
                         aad: &Self::aad(content_hash, &self.current),
@@ -311,10 +311,10 @@ mod tests {
                 .history
                 .get(&marker.epoch)
                 .ok_or_else(|| Error::new(format!("no key for epoch {}", marker.epoch.to_hex())))?;
-            let cipher = XChaCha20Poly1305::new(Key::from_slice(key));
+            let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
             cipher
                 .decrypt(
-                    XNonce::from_slice(&Self::nonce(content_hash)),
+                    &XNonce::try_from(&Self::nonce(content_hash)[..]).expect("fixed-length key material"),
                     Payload {
                         msg: sealed,
                         aad: &Self::aad(content_hash, &marker.epoch),

@@ -68,6 +68,14 @@ async fn the_port_drives_the_host_and_collects_only_after_checkpoint() {
             collect_after_checkpoint: true,
         },
     );
+    assert!(
+        distillery
+            .maintain_if_advanced()
+            .await
+            .expect("empty maintenance")
+            .is_none(),
+        "an empty resident mesh has no frontier worth checkpointing"
+    );
 
     let input = space.put(b"distillery mash").await.expect("stage input");
     distillery

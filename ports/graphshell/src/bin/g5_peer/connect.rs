@@ -2,12 +2,12 @@
 
 use std::time::{Duration, Instant};
 
-use graphshell::admission::open_session;
-use graphshell::carrier::projection_alpn;
 use chirograph::{
     CarrierRequest, CarrierRequestBody, CarrierResponse, ProjectionSession, ResumeRequest,
     Revision, SceneEpoch,
 };
+use graphshell::admission::open_session;
+use graphshell::carrier::projection_alpn;
 use notochord::{NetworkId, SessionReply, TrafficClass, initiate_session};
 use personae::{IdentityProvider, InMemoryProvider};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

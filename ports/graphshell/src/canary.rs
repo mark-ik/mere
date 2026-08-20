@@ -1,13 +1,5 @@
 use std::collections::BTreeMap;
 
-use graphshell_client::{
-    AccessibilityTree, ClientState, PresentationResolution, ResolutionError, ResolvedPresentation,
-    ResourceCacheError, SnapshotApplyError,
-};
-use graphshell_endpoint::{
-    IntentSink, LiveViewReferenceGate, LiveViewReferenceRefusal, PresentationSource,
-    ProjectionCatalog, ProjectionSource, resolve_live_view_reference,
-};
 use chirograph::{
     ActionFormChoiceV1, ActionFormFieldV1, ActionFormV1, AdvertisedAction, BoundsRelationship,
     CachePolicy, CapabilityProfile, CardValueV1, ContentHash, EndpointDescriptor, IntentEffect,
@@ -17,6 +9,14 @@ use chirograph::{
     PresentationOffer, PresentationSemantics, ProjectionOffer, ProjectionRequest,
     ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse,
     SemanticRole,
+};
+use graphshell_client::{
+    AccessibilityTree, ClientState, PresentationResolution, ResolutionError, ResolvedPresentation,
+    ResourceCacheError, SnapshotApplyError,
+};
+use graphshell_endpoint::{
+    IntentSink, LiveViewReferenceGate, LiveViewReferenceRefusal, PresentationSource,
+    ProjectionCatalog, ProjectionSource, resolve_live_view_reference,
 };
 use sceno::{
     Arrangement, Backdrop, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene,

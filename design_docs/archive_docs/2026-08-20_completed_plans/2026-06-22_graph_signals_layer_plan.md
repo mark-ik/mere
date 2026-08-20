@@ -1,7 +1,7 @@
 # Graph Signals Layer Plan: a producer layer feeding arrangements, encodings, and the gloss lens
 
 **Date**: 2026-06-22 (rev 3, 2026-06-24: grounded + decisions settled, building P1)
-**Status**: Planning + **starting P1** (with Mark). Phase A (kanban/timeline arrangements) landed;
+**Status**: complete 2026-06-24; see the closing note. Phase A (kanban/timeline arrangements) landed;
 P1-P6 open. **Rev 2 corrects rev 1**; **rev 3 (2026-06-24)** grounds the cache + channels against
 the live tree, settles the open decisions (edges-first, multi-edge multiplicity, size precedence,
 the two-layer seam), and corrects two stale claims (the overlay vocabulary mostly already exists;
@@ -18,28 +18,28 @@ errors are corrected below, each verified against the code.
 
 Sibling / converging docs:
 
-- [node_representation_arrangement_plan](2026-06-18_node_representation_arrangement_plan.md):
+- [node_representation_arrangement_plan](../../mere_docs/implementation_strategy/2026-06-18_node_representation_arrangement_plan.md):
   the arrangement half of node-rep (Phase A = kanban/timeline lives there). **Decision 2 reserves
   node face color for activation state** — the encoding collision below.
-- [graph_cluster_namespaces_brief](2026-05-10_graph_cluster_namespaces_brief.md): already states
+- [graph_cluster_namespaces_brief](../../mere_docs/implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md): already states
   recomputing community decomposition on every insertion is impractical — the cache below answers it.
-- [scriptable_field_regions_plan](2026-06-13_scriptable_field_regions_plan.md): gyre's
+- [scriptable_field_regions_plan](../../mere_docs/implementation_strategy/2026-06-13_scriptable_field_regions_plan.md): gyre's
   `CouplingForce` is a **field** mechanism (per-node field sample), *not* the pairwise affinity
   force — the affinity force is new.
-- [document_script_substrate_plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md): the
+- [document_script_substrate_plan](../2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md): the
   wasmtime-async lane is the **scriptable** path for user-authored analyses (below).
-- [meaningful_physics_signals_plan](2026-06-24_meaningful_physics_signals_plan.md): the
+- [meaningful_physics_signals_plan](../../mere_docs/implementation_strategy/2026-06-24_meaningful_physics_signals_plan.md): the
   **physics-side consumer**. It maps runtime signals (content / sync / observability) *and* the
   graph-structural signals this plan produces onto physical parameters (material / size) via
   configurable presets. Clean seam, confirmed 2026-06-24: this plan **produces** the structural
   signals + their **non-physics** encodings (size, arrangements, gloss lens, the affinity force);
   that plan **consumes** them + runtime signals and binds both onto physics. Two layers of
   consumption, one producer.
-- [gloss_outline_lens_plan](2026-06-23_gloss_outline_lens_plan.md): a **consumer of P1-P3**. Its
+- [gloss_outline_lens_plan](../../mere_docs/implementation_strategy/2026-06-23_gloss_outline_lens_plan.md): a **consumer of P1-P3**. Its
   outline metrics read importance + community (with a degree / connected-components fallback until
   the cache lands). Distinct from P6 (the gloss swatch's own `Projection`); both honour the gloss
   no-split rule (one surface, form-factor toggle).
-- [node_body_face_model_plan](2026-06-23_node_body_face_model_plan.md): owns the encoding
+- [node_body_face_model_plan](../../mere_docs/implementation_strategy/2026-06-23_node_body_face_model_plan.md): owns the encoding
   **rendering hardware** (per-node size, and the body's rings). This plan owns the **signal + the
   channel decision** (importance to size, community to a ring). The size + ring channel occupancy
   is grounded in the Decisions section below.
@@ -184,7 +184,7 @@ A development pass grounded the plan against the live tree and settled the open 
    fallback when no importance signal is present. (`node_size`, `lib.rs:1255-1265`; importance slots
    in as a new input, applied only to nodes absent from `node_sizes`.)
 4. **Two signal layers, one producer.** Confirmed the seam with
-   [meaningful_physics_signals_plan](2026-06-24_meaningful_physics_signals_plan.md): this plan
+   [meaningful_physics_signals_plan](../../mere_docs/implementation_strategy/2026-06-24_meaningful_physics_signals_plan.md): this plan
    produces graph-structural signals + non-physics encodings; that plan consumes them (plus runtime
    signals) and binds onto physics.
 
@@ -668,3 +668,13 @@ first *new* visual is then the edge channel (multiplicity -> thickness).
   size-survives-disable path. The refuted finding (the now-unread `LayoutExtras::semantic_similarity`
   field) is intentional — a generic similarity input, harmless to populate. All suites green after the
   fixes (signals 23 / arrangements 94 / orrery 80 / meerkat compiles).
+
+## Closing note, archived 2026-08-20
+
+Complete 2026-06-24 (P1 through P6, the A/B cache generalization, community
+and bridge rings, the off-thread lane, the affinity force, the overlay pipe,
+the full gloss lens), and the 2026-06-25 polish pass then closed every entry
+on the only-if-wanted list too. The header's "P1-P6 open" was stale from rev
+3 and contradicted by the log below it. Re-checked on the way out:
+`crates/intel/signals` exists as `mere-signals`, exactly where this plan put
+it.

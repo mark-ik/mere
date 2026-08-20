@@ -51,7 +51,11 @@ const PASSPHRASE: &[u8] = b"graphshell-persona-switch-receipt";
 
 /// One persona plus an SSH slot only it holds, so "whose keys is the agent
 /// serving" has an unambiguous answer.
-fn persona(id: &str, name: &str, seed: u8) -> Result<(Profile, String), Box<dyn std::error::Error>> {
+fn persona(
+    id: &str,
+    name: &str,
+    seed: u8,
+) -> Result<(Profile, String), Box<dyn std::error::Error>> {
     let mut private = ssh_key::PrivateKey::random(&mut rand_core::OsRng, Algorithm::Ed25519)?;
     private.set_comment(format!("{name} key"));
     let mut profile = Profile::new(
@@ -238,7 +242,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|profile| profile.id.as_str())
         .collect();
     roster_ids.sort();
-    assert_eq!(roster_ids, ["alt", "studio", "work"], "the persona is in the vault");
+    assert_eq!(
+        roster_ids,
+        ["alt", "studio", "work"],
+        "the persona is in the vault"
+    );
     assert_eq!(
         with_studio
             .profiles
@@ -256,7 +264,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             display_name: "Escape".to_string(),
         })?,
     );
-    assert!(hostile.is_err(), "an id that cannot be a filename is refused");
+    assert!(
+        hostile.is_err(),
+        "an id that cannot be a filename is refused"
+    );
     assert_eq!(
         host.snapshot()?.profiles.len(),
         3,

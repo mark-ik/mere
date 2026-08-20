@@ -162,8 +162,8 @@ mod tests {
 
     fn seeded(tag: &str) -> (std::path::PathBuf, [u8; 32], [u8; 32]) {
         let root = temp_data_root(tag);
-        let seed =
-            crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC").unwrap();
+        let seed = crate::wallet_store::ensure_wallet_state(&root, fixture_persona(), "Studio PC")
+            .unwrap();
         let master = identity::InMemoryProvider::from_seed(seed)
             .master_public_key()
             .to_bytes();

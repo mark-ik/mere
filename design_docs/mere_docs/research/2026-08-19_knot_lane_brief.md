@@ -32,9 +32,35 @@ that cut 4. It is not required for the product floor or for cuts 1 through 3.
 One useful piece has been taken from that future work now: a portable content
 reference. A captured artifact is named `urn:blake3:<digest>`. The name is
 independent of the local store and can survive copying the authored Djot. It
-identifies bytes; it does not by itself make those bytes available to another
-peer. A carrier or bundle format can solve availability later without changing
-the identity recorded today.
+identifies bytes; it does not encode a location or turn the Djot document into
+a package.
+
+Availability beside p2p replication is now a separate resident path. Murm's
+blob store retains the bytes under that digest. Stickleback and p2panda
+replicate the ordinary encrypted Djot document containing the reference. The
+receiving Knot then asks an authorized peer for the named blob over the same
+authenticated transport and verifies the byte count and BLAKE3 digest before
+exposing it. A named local tag keeps the fetched blob available after restart.
+
+The ownership split is concrete:
+
+- Personae pairing supplies the symmetric peer set for a personal vault;
+- a communal space materializes document writers and evidence readers from
+  Gemot capability paths;
+- Knot decides what a reference means and when verified bytes may be shown;
+- Murm carries and persists opaque bytes;
+- p2panda and Stickleback replicate the signed causal document operations.
+
+This is useful p2panda synergy, but not a reason to invent `.knot`. The document
+and the artifact have distinct replication and retention behavior while still
+sharing stable content identity and authenticated peer identity.
+
+The resident composition shares one blob-store handle between authoring and
+sync in a single process. The existing `knot_endpoint` and
+`knot_sync_host` executables still have separate lifetimes, and the redb-backed
+blob store must have one process owner. Joining those executable paths requires
+either one combined resident or an explicit local retain/fetch IPC. Pointing
+both processes at the same directory would only disguise the ownership bug.
 
 ## 1. Evidence-bearing clipping
 
@@ -53,10 +79,11 @@ to be checked without turning the Djot body into an archive container.
 
 Knot only advertises v2 when the host injects an evidence store. Otherwise it
 continues to advertise and accept v1. A v2 insertion retains the exact artifact
-bytes under their BLAKE3 digest, then writes only their portable references and
-the observation metadata into the authored Djot. The evidence root is a host
-setting, including its byte limit, and Turnstone rejects a directory inside the
-served document tree so retained blobs cannot be mistaken for authored files.
+bytes in the transport blob store under their BLAKE3 digest, then writes only
+their portable references and the observation metadata into the authored Djot.
+The evidence root is a host setting, including its byte limit, and Turnstone
+rejects a directory inside the served document tree so retained blobs cannot be
+mistaken for authored files.
 
 The proven vertical path is deliberately narrower than the ideal one. Genet's
 static session retains the exact response bytes it parsed. Turnstone lowers the
@@ -78,6 +105,8 @@ Done means:
 
 - exact bytes cross Genet, Turnstone, and Knot without being embedded in Djot;
 - the authored provenance contains a carrier-independent content identity;
+- a paired peer can replicate the Djot first and fetch the artifact separately;
+- fetched bytes remain usable offline and fail closed on size or digest mismatch;
 - selectors say which artifact they address;
 - unavailable evidence storage cannot be silently advertised;
 - v1 remains readable and usable.
@@ -142,9 +171,9 @@ Done means:
 ## What remains deferred
 
 Cut 4 starts only when a concrete portable consumer needs more than a Djot file
-plus content references. Its questions include bundling or fetching referenced
-artifacts, evidence retention transitions, offline availability, and whether a
-single enriched object is better than a document beside a content-addressed
-store.
+plus content references. Peer fetch and offline blob retention no longer wait
+for that cut. Its questions are single-object bundling, export/import manifests,
+evidence retention transitions, and whether a portable enriched object is
+actually better than a document beside a content-addressed store.
 
 That work may eventually justify `.knot`. Cuts 1 through 3 do not.

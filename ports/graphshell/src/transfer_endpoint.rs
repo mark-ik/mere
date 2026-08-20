@@ -6,9 +6,6 @@
 
 use std::collections::BTreeMap;
 
-use graphshell_endpoint::{
-    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
-};
 use chirograph::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CacheRetention, CardValueV1, ContentHash,
     EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
@@ -16,6 +13,9 @@ use chirograph::{
     PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck,
     ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
     ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SemanticRole,
+};
+use graphshell_endpoint::{
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
 };
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Representation, Scene, Score, Size2,

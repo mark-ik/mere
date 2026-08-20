@@ -16,12 +16,12 @@ use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-use graphshell_client::{ClientState, ResolvedPresentation, RetainedEndpointSession, unexpected};
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use chirograph::{
     CapabilityProfile, Carrier, CarrierRequestBody, CarrierResponseBody, IntentInvocation,
     IntentResult, PresentationCapability, ProjectionSession,
 };
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use graphshell_client::{ClientState, ResolvedPresentation, RetainedEndpointSession, unexpected};
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use graphshell_stdio::StdioCarrier;
 
@@ -247,10 +247,10 @@ fn escape(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use graphshell_client::resume_request_for_notice;
     use chirograph::{
         CachePolicy, CarrierNotice, PresentationManifest, ProjectionSnapshot, ProtocolVersion,
     };
+    use graphshell_client::resume_request_for_notice;
     use sceno::Scene;
     use scenotime::{Revision, SceneEpoch, SceneSnapshot};
 

@@ -78,13 +78,13 @@ mod tests {
     use crate::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE};
     use crate::lifecycle::SessionAuthority;
     use crate::session_loop::{SessionEnd, serve_admitted_session};
-    use graphshell_endpoint::{
-        IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
-    };
     use chirograph::{
         CapabilityProfile, Carrier, CarrierRequestBody, CarrierResponseBody, EndpointDescriptor,
         IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
         ResourceRequest, ResourceResponse, ResumeRequest, SessionOpen,
+    };
+    use graphshell_endpoint::{
+        IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
     };
     use notochord::{
         AdmittedPrincipal, AdmittedSession, CarrierKind, NetworkId, ProfileRef, RequestedAction,

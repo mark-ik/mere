@@ -293,7 +293,10 @@ impl Resident {
     }
 
     fn read_all(&self, handle: &Handle) -> Vec<[f32; 4]> {
-        let bytes = self.client.read_one(handle.clone()).expect("field readback");
+        let bytes = self
+            .client
+            .read_one(handle.clone())
+            .expect("field readback");
         bytemuck::cast_slice(&bytes[..(self.params.n as usize) * 16]).to_vec()
     }
 

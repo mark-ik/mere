@@ -190,9 +190,7 @@ pub enum SessionPlaneVerb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chirograph::{
-        ContentHash, MAX_RESOURCE_CHUNK_BYTES, ProjectionSession, ResourceAssembly,
-    };
+    use chirograph::{ContentHash, MAX_RESOURCE_CHUNK_BYTES, ProjectionSession, ResourceAssembly};
 
     struct FixtureLiveViewGate {
         answer: Result<(), LiveViewReferenceRefusal>,

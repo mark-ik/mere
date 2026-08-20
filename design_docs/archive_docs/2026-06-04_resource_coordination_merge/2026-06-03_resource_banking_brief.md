@@ -17,7 +17,7 @@ are cited inline with the surviving confidence.
 - [`../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md`](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md) — the built reputation ledger (Phases 1-5, 60 tests, two-peer convergence) + the `reciprocity` sibling ledger. Resource banking extends this grammar; it does not replace it.
 - [`2026-05-10_geist_models_brief.md`](2026-05-10_geist_models_brief.md) — compute-as-utility (LoRA train/inference), compute-offer/ask/receipt, trainer/evaluator separation, canary/poisoning gates. This brief reframes that marketplace as bounty-shaped and supplies the missing verification + valve mechanics.
 - [`../implementation_strategy/2026-05-07_event_dag_substrate_brief.md`](../implementation_strategy/2026-05-07_event_dag_substrate_brief.md) — the signed event-DAG (BLAKE3 + Ed25519 + CBOR) all banking events ride; §8.7/§8.9 persona-chain Sybil posture; the §8.8 cap stack the verifier gate sits beside.
-- [`../implementation_strategy/2026-06-03_actor_constellation_plan.md`](../implementation_strategy/2026-06-03_actor_constellation_plan.md) — a decentralized compute bounty is the network-scale form of a compute-actor request; the armillary message taxonomy is the same request-to-result shape with a wider recipient.
+- [`../implementation_strategy/2026-06-03_actor_constellation_plan.md`](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md) — a decentralized compute bounty is the network-scale form of a compute-actor request; the armillary message taxonomy is the same request-to-result shape with a wider recipient.
 
 ---
 

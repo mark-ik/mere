@@ -76,10 +76,10 @@ pub fn wrap_vault_root(
     let salt = random_bytes(ARGON2_SALT_LEN);
     let kek = derive_kek(passphrase, &salt)?;
     let nonce = random_bytes(NONCE_LEN);
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(kek.as_ref()));
+    let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
     let wrapped_root = cipher
         .encrypt(
-            Nonce::from_slice(&nonce),
+            &Nonce::try_from(&nonce[..]).expect("fixed-length key material"),
             Payload {
                 msg: root.as_slice(),
                 aad: PASSPHRASE_ROOT_AAD,
@@ -115,11 +115,11 @@ pub fn unwrap_vault_root(
         )));
     }
     let kek = derive_kek(passphrase, &file.salt)?;
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(kek.as_ref()));
+    let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
     let plaintext = Zeroizing::new(
         cipher
             .decrypt(
-                Nonce::from_slice(&file.nonce),
+                &Nonce::try_from(&file.nonce[..]).expect("fixed-length key material"),
                 Payload {
                     msg: file.wrapped_root.as_slice(),
                     aad: PASSPHRASE_ROOT_AAD,

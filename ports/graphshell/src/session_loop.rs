@@ -27,13 +27,13 @@
 //! session is refused and the loop ends, rather than serving scenes on
 //! authority that stopped holding.
 
-use graphshell_endpoint::{
-    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, SessionPlaneVerb,
-    dispatch_common,
-};
 use chirograph::{
     CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest, CarrierResponse,
     CarrierResponseBody, ResumeReply, ResumeRequest, SessionOpened, SessionStatus,
+};
+use graphshell_endpoint::{
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, SessionPlaneVerb,
+    dispatch_common,
 };
 use notochord::{AdmittedSession, RevocationLedger};
 use std::fmt::Display;
@@ -333,12 +333,12 @@ mod tests {
     use crate::identity::VaultProtectionView;
     use crate::identity_endpoint::IdentityEndpoint;
     use crate::identity_projection::{SIGNING_APPROVE_ONCE_INTENT, SigningDecisionIntentV1};
-    use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
     use chirograph::{
         CapabilityProfile, CarrierRequestBody, EndpointDescriptor, IntentInvocation, IntentResult,
         PresentationCapability, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
         ResourceRequest, ResourceResponse, Revision, SceneEpoch, SessionOpen,
     };
+    use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
     use notochord::{
         AdmittedPrincipal, CarrierKind, LocalNetworkPolicy, NetworkId, ProfileRef, RequestedAction,
         ServiceAccess, ServiceRule, SessionClaims, SessionFacts, TrafficClass, TrustedRoot,

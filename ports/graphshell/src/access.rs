@@ -3,9 +3,9 @@
 use chartulary::{FacetError, FacetId};
 use eidetic::{
     BlobSource, Hash, ManifestId, MereNativeFieldSpec, MereNativeSchemaBuilder, ModerationState,
-    NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaDefinition, SchemaRef,
-    PayloadSealer, Timestamp, TrustEnvelope, TrustLevel, TypedPayload, list_typed,
-    load_typed_sealed, save_schema, save_typed_sealed,
+    NoFetcher, PayloadSealer, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaDefinition,
+    SchemaRef, Timestamp, TrustEnvelope, TrustLevel, TypedPayload, list_typed, load_typed_sealed,
+    save_schema, save_typed_sealed,
 };
 use mere::kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
 use mere::kernel::graph::{Graph, NodeKey};
@@ -444,7 +444,6 @@ pub fn record_observation(
     Ok((record, true))
 }
 
-
 /// Proof that the private lane actually seals, exercised against the real
 /// wallet sealer rather than a stub.
 ///
@@ -520,13 +519,10 @@ mod seal_wiring {
             "the visited address survived in cleartext on disk"
         );
 
-        let read = query_access_records_sealed(
-            &mut store,
-            Some(&sealer),
-            &AccessRecordFilter::default(),
-        )
-        .await
-        .unwrap();
+        let read =
+            query_access_records_sealed(&mut store, Some(&sealer), &AccessRecordFilter::default())
+                .await
+                .unwrap();
         assert_eq!(read, vec![record], "the sealed record did not round-trip");
     }
 
@@ -534,9 +530,13 @@ mod seal_wiring {
     async fn a_reader_without_the_epoch_says_so_instead_of_reporting_no_history() {
         let mut store = MemoryBackend::new();
         bootstrap_access_record_schema(&mut store).await.unwrap();
-        save_access_record_sealed(&mut store, Some(&sealer()), &record(PrivacyClass::LocalOnly))
-            .await
-            .unwrap();
+        save_access_record_sealed(
+            &mut store,
+            Some(&sealer()),
+            &record(PrivacyClass::LocalOnly),
+        )
+        .await
+        .unwrap();
 
         // The failure mode this forecloses: a keyless read reporting an empty
         // history, which is indistinguishable from having browsed nothing.

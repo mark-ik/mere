@@ -27,7 +27,10 @@ mod vault;
 mod watcher;
 mod writer;
 
-pub use clip_evidence::{FileClipEvidenceStore, KnotClipEvidenceRef, KnotClipEvidenceStore};
+pub use clip_evidence::{
+    BlobClipEvidenceStore, FileClipEvidenceStore, KnotClipEvidenceRef, KnotClipEvidenceStore,
+    clip_evidence_references,
+};
 pub use content_classes::{
     FILE_CLASS, FILE_DOCUMENT_FACET, KnotContentClasses, NOTE_CLASS, NOTE_DOCUMENT_FACET,
 };
@@ -71,7 +74,10 @@ pub use publish_wire::{
     PublishWireError, PublishWireLimits, candidate_fixture_corpus, decode_request, decode_response,
     encode_request, encode_response,
 };
-pub use resident::{KnotSyncHost, KnotSyncHostConfig, KnotSyncHostError};
+pub use resident::{
+    KnotCommunalPeerAuthority, KnotEvidenceFetchReceipt, KnotEvidenceFetchStatus, KnotSyncHost,
+    KnotSyncHostConfig, KnotSyncHostError,
+};
 pub use rosette::{
     CmudictPronunciations, LexiconCoverage, LineMeter, MetricalBeat, MetricalFoot,
     PronunciationLexicon, RosetteConfig, RosetteInterior, RosetteInteriorKind, RosetteProjection,

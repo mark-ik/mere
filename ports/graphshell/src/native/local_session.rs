@@ -196,12 +196,8 @@ mod tests {
             client_nonce: challenge.host_nonce.clone(),
         };
         let app = LocalLink::accept("turnstone".to_string(), &challenge, connect.clone()).unwrap();
-        let browser = LocalLink::accept(
-            "chrome-extension://abc/".to_string(),
-            &challenge,
-            connect,
-        )
-        .unwrap();
+        let browser =
+            LocalLink::accept("chrome-extension://abc/".to_string(), &challenge, connect).unwrap();
         assert_ne!(app.shared_link, browser.shared_link);
     }
 }

@@ -241,9 +241,7 @@ pub async fn save_live_view_record_sealed(
         ProvenanceRecord {
             origin: ProvenanceOrigin::Generated,
             upstream: Vec::new(),
-            tooling: Some(
-                concat!("pandect/live-view@", env!("CARGO_PKG_VERSION")).to_string(),
-            ),
+            tooling: Some(concat!("pandect/live-view@", env!("CARGO_PKG_VERSION")).to_string()),
             generated_at: created_at,
         },
         TrustEnvelope::self_asserted(),

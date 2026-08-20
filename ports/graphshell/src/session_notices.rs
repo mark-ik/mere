@@ -21,10 +21,10 @@ use std::fmt::Display;
 use std::sync::RwLock;
 use std::time::Duration;
 
+use chirograph::{ResumeReply, ResumeRequest};
 use graphshell_endpoint::{
     IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
 };
-use chirograph::{ResumeReply, ResumeRequest};
 use notochord::{AdmittedSession, RevocationLedger};
 use tokio::io::{AsyncRead, AsyncWrite};
 

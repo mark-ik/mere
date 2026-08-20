@@ -132,12 +132,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graphshell_endpoint::{
-        IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
-    };
     use chirograph::{
         EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSnapshot,
         ResourceRequest, ResourceResponse,
+    };
+    use graphshell_endpoint::{
+        IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
     };
 
     /// The smallest endpoint that answers discovery, so the carrier is what is

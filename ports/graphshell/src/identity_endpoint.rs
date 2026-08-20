@@ -8,7 +8,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
-use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use chirograph::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CacheRetention, ContentHash,
     EndpointDescriptor, IntentEffect, IntentInvocation, IntentReference, IntentResult,
@@ -17,6 +16,7 @@ use chirograph::{
     ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
     ResourceChunkRequest, ResourceChunkResponse, ResourceRequest, ResourceResponse, SemanticRole,
 };
+use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use personae::IdentityStorage;
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Rect, Representation, Scene, Score, Size2,
@@ -673,8 +673,8 @@ impl<S: IdentityStorage + 'static> IntentSink for IdentityEndpoint<S> {
 
 #[cfg(test)]
 mod tests {
-    use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
     use chirograph::ResourceAssembly;
+    use graphshell_client::{ClientState, PresentationResolution, ResolvedContent};
     use personae::{Ed25519Keypair, IdentityVault, InMemoryStorage, Profile, ProfileId};
     use ssh_key::{Algorithm, LineEnding};
 

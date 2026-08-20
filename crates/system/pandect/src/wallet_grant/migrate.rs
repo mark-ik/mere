@@ -129,7 +129,10 @@ pub(crate) fn legacy_grant_hint(data_root: &Path, device_id: DeviceId) -> String
             device_id.as_uuid()
         )
     } else {
-        format!("device grant certificates missing for {}", device_id.as_uuid())
+        format!(
+            "device grant certificates missing for {}",
+            device_id.as_uuid()
+        )
     }
 }
 
@@ -319,7 +322,11 @@ mod tests {
         .unwrap();
 
         assert!(set.device.is_some());
-        assert!(!load_device_grant_set(&root, fixture_device()).unwrap().is_empty());
+        assert!(
+            !load_device_grant_set(&root, fixture_device())
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -345,6 +352,10 @@ mod tests {
         assert!(retire_legacy_grant(&root, spec.device_id).unwrap());
         assert!(!device_grant_path(&root, spec.device_id).exists());
         // Retiring residue must not disturb the authority that replaced it.
-        assert!(!load_device_grant_set(&root, spec.device_id).unwrap().is_empty());
+        assert!(
+            !load_device_grant_set(&root, spec.device_id)
+                .unwrap()
+                .is_empty()
+        );
     }
 }

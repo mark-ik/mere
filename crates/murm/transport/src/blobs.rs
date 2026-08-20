@@ -28,7 +28,9 @@
 //! already on disk instead of refetching from the peer, and a device can
 //! still serve a blob to a sibling after the process that received it exited.
 
+use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -73,6 +75,74 @@ impl From<Hash> for BlobHash {
 impl From<BlobHash> for Hash {
     fn from(h: BlobHash) -> Self {
         h.0
+    }
+}
+
+/// Mutable peer admission for one blob-serving endpoint.
+///
+/// The iroh-blobs protocol addresses content by hash but does not decide who
+/// may ask for it. A domain host supplies that decision from its own durable
+/// authority facts and may refresh the set as pairing or group authority
+/// changes. An empty authorizer denies every remote peer.
+#[derive(Clone, Debug, Default)]
+pub struct BlobPeerAuthorizer {
+    peers: Arc<RwLock<BTreeSet<[u8; 32]>>>,
+}
+
+impl BlobPeerAuthorizer {
+    /// Admit the supplied transport-authenticated peer identities.
+    pub fn from_peers(peers: impl IntoIterator<Item = [u8; 32]>) -> Self {
+        Self {
+            peers: Arc::new(RwLock::new(peers.into_iter().collect())),
+        }
+    }
+
+    /// Whether this transport-authenticated peer may use the blob protocol.
+    pub fn allows(&self, peer: &[u8; 32]) -> bool {
+        self.peers
+            .read()
+            .map(|peers| peers.contains(peer))
+            .unwrap_or(false)
+    }
+
+    /// Admit a peer immediately. Returns whether the set changed.
+    pub fn allow(&self, peer: [u8; 32]) -> bool {
+        self.peers
+            .write()
+            .map(|mut peers| peers.insert(peer))
+            .unwrap_or(false)
+    }
+
+    /// Withdraw a peer immediately. Returns whether the set changed.
+    pub fn deny(&self, peer: &[u8; 32]) -> bool {
+        self.peers
+            .write()
+            .map(|mut peers| peers.remove(peer))
+            .unwrap_or(false)
+    }
+
+    /// Replace the effective peer set from a newly materialized authority
+    /// view. Returns whether the set changed.
+    pub fn replace(&self, peers: impl IntoIterator<Item = [u8; 32]>) -> bool {
+        let next = peers.into_iter().collect::<BTreeSet<_>>();
+        self.peers
+            .write()
+            .map(|mut current| {
+                if *current == next {
+                    return false;
+                }
+                *current = next;
+                true
+            })
+            .unwrap_or(false)
+    }
+
+    /// Current admitted peers, sorted for deterministic receipts.
+    pub fn peers(&self) -> Vec<[u8; 32]> {
+        self.peers
+            .read()
+            .map(|peers| peers.iter().copied().collect())
+            .unwrap_or_default()
     }
 }
 
@@ -651,6 +721,59 @@ mod tests {
         assert!(bob_blobs.has(hash).await.unwrap());
         let got = bob_blobs.get_bytes(hash).await.unwrap();
         assert_eq!(got, payload);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn blob_protocol_refuses_a_transport_authenticated_unadmitted_peer() {
+        use crate::{P2pandaTransport, PeerID};
+        use identity::{IdentityProvider, InMemoryProvider};
+
+        let alice = InMemoryProvider::from_seed([31; 32]);
+        let bob = InMemoryProvider::from_seed([32; 32]);
+        let charlie = InMemoryProvider::from_seed([33; 32]);
+        let alice_blobs = BlobStore::new();
+        let bob_blobs = BlobStore::new();
+        let charlie_blobs = BlobStore::new();
+        let bob_id = PeerID::from_public_key(bob.master_public_key());
+        let alice_id = PeerID::from_public_key(alice.master_public_key());
+        let access = BlobPeerAuthorizer::from_peers([bob_id.to_bytes()]);
+
+        let alice_transport = P2pandaTransport::bind_with_authorized_blobs(
+            alice.master_keypair(),
+            vec![],
+            &alice_blobs,
+            access,
+        )
+        .await
+        .unwrap();
+        let bob_transport =
+            P2pandaTransport::bind_with_blobs(bob.master_keypair(), vec![], Some(&bob_blobs))
+                .await
+                .unwrap();
+        let charlie_transport = P2pandaTransport::bind_with_blobs(
+            charlie.master_keypair(),
+            vec![],
+            Some(&charlie_blobs),
+        )
+        .await
+        .unwrap();
+        let alice_addr = alice_transport.endpoint_addr().await.unwrap();
+        bob_transport.add_peer(alice_addr.clone()).await.unwrap();
+        charlie_transport.add_peer(alice_addr).await.unwrap();
+
+        let payload = Bytes::from_static(b"paired evidence");
+        let hash = alice_blobs.put_bytes(payload.clone()).await.unwrap();
+        bob_blobs
+            .fetch_from(&bob_transport, alice_id, hash)
+            .await
+            .unwrap();
+        assert_eq!(bob_blobs.get_bytes(hash).await.unwrap(), payload);
+
+        let refused = charlie_blobs
+            .fetch_from(&charlie_transport, alice_id, hash)
+            .await;
+        assert!(refused.is_err());
+        assert!(!charlie_blobs.has(hash).await.unwrap());
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

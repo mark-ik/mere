@@ -201,8 +201,7 @@ where
     };
     let server = match selected_endpoint {
         BrowserSessionEndpoint::Identity { surface } => {
-            let mut endpoint =
-                identity_endpoint_for(Arc::clone(&personae), &authority, surface);
+            let mut endpoint = identity_endpoint_for(Arc::clone(&personae), &authority, surface);
             tokio::spawn(async move {
                 let revocations = RwLock::new(revocations);
                 let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {

@@ -133,8 +133,7 @@ pub(crate) fn revoke_persona_grant_access(
         // costs a re-wrap; under-rotating leaves a withdrawn device holding a
         // live epoch. Idempotence comes from removing the record below rather
         // than from narrowing the test.
-        let should_rotate =
-            private_read && held.is_some_and(|record| !record.epochs.is_empty());
+        let should_rotate = private_read && held.is_some_and(|record| !record.epochs.is_empty());
         let next_epoch = if should_rotate {
             let next_epoch = KeyEpochId::new();
             wallet.private_epoch_head = next_epoch;
@@ -275,7 +274,12 @@ mod tests {
         let outcome = revoke_remote_auth_device(&root, spec.device_id).unwrap();
 
         assert_eq!(outcome.statements.len(), set.certificates().count());
-        assert!(outcome.statements.iter().all(|statement| statement.verify()));
+        assert!(
+            outcome
+                .statements
+                .iter()
+                .all(|statement| statement.verify())
+        );
         assert!(
             crate::wallet_grant::device_is_fully_revoked(&root, spec.device_id).unwrap(),
             "the wallet's own ledger should already carry them"
@@ -301,18 +305,16 @@ mod tests {
             personas: vec![fixture_persona()],
             scopes: vec!["identity.act".into(), "private.read".into()],
             attenuations: vec!["no-subdelegation".into()],
-            wrapped_private_epochs: vec![
-                EpochCarriage {
-                    persona_id: fixture_persona(),
-                    material: wrap_private_epoch_material(
-                        fixture_persona(),
-                        current_epoch.epoch_id,
-                        &current_epoch.epoch_secret,
-                        [23; 32],
-                    )
-                    .unwrap(),
-                },
-            ],
+            wrapped_private_epochs: vec![EpochCarriage {
+                persona_id: fixture_persona(),
+                material: wrap_private_epoch_material(
+                    fixture_persona(),
+                    current_epoch.epoch_id,
+                    &current_epoch.epoch_secret,
+                    [23; 32],
+                )
+                .unwrap(),
+            }],
         };
         issue_remote_auth_device_grant(&root, &spec).unwrap();
 

@@ -100,7 +100,7 @@ both are scoped here so the design is settled before federation data starts flow
   [document_script_substrate plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md): the
   in-app capability senses this is distinct from.
 - [persona_transport_unlinkability](2026-06-25_persona_transport_unlinkability_plan.md),
-  [actor_constellation](2026-06-03_actor_constellation_plan.md): persona and federation
+  [actor_constellation](../../archive_docs/2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md): persona and federation
   context.
 
 ## Progress

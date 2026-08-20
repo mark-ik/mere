@@ -107,8 +107,7 @@ async fn turnstone_opens_a_session_and_reads_a_capture() {
             &AppMessage::Connect {
                 schema: APP_CONNECT_SCHEMA.into(),
                 host_nonce: challenge.host_nonce,
-                client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD
-                    .encode([0x92; 32]),
+                client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x92; 32]),
             },
         )
         .await
@@ -286,8 +285,7 @@ async fn the_browser_connect_frame_does_not_open_an_application_session() {
             &AppMessage::Connect {
                 schema: "mere.graphshell/browser-connect/v1".into(),
                 host_nonce: challenge.host_nonce,
-                client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD
-                    .encode([0x93; 32]),
+                client_nonce: base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0x93; 32]),
             },
         )
         .await
@@ -324,7 +322,10 @@ async fn the_client_reads_cards_over_the_served_endpoint() {
     let endpoint = format!(r"\\.\pipe\graphshell-app-client-{}", uuid::Uuid::new_v4());
     #[cfg(not(windows))]
     let endpoint = std::env::temp_dir()
-        .join(format!("graphshell-app-client-{}.sock", uuid::Uuid::new_v4()))
+        .join(format!(
+            "graphshell-app-client-{}.sock",
+            uuid::Uuid::new_v4()
+        ))
         .display()
         .to_string();
 
@@ -371,9 +372,8 @@ async fn the_client_reads_cards_over_the_served_endpoint() {
 
     // Read the capture the card names, exactly as a renderer would.
     let opened = client.open_session().await.unwrap();
-    let session = chirograph::ProjectionSession(
-        opened.descriptor.projections[0].request.session.0.clone(),
-    );
+    let session =
+        chirograph::ProjectionSession(opened.descriptor.projections[0].request.session.0.clone());
     let bytes = client.resource(session, hash).await.unwrap();
     assert_eq!(bytes, capture, "the capture arrives byte for byte");
 

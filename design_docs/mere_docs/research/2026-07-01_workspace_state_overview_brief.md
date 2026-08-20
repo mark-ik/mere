@@ -60,7 +60,7 @@ complete), user zoom shipped, auto-DPI planned.
   extraction as publishable siblings.
 - **Swatch as the fourth primitive**: the P5 visibility stack
   (`GraphDefault < GraphViewOverride < SelectionOverride`), templates, and the
-  [graph-signals producer](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
+  [graph-signals producer](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)
   that arrangements, encodings, and the gloss lens all wait on.
 - **The resource-coordination ring**: mesh M2, lease scheduler, kith
   capability sharing, bounty economy, commitment proofs (all scoped

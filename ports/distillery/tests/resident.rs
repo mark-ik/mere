@@ -16,7 +16,7 @@ use mesh::{
     MeshRetentionPolicy, MeshStore, PayloadRule, PolicyRevision, ResourceId, SyncedMesh,
 };
 use mesh_host::{HostConfig, MeshHost, Step};
-use transport::{BlobStore, P2pandaTransport};
+use transport::{BlobHash, BlobStore, P2pandaTransport};
 
 const MESH: [u8; 32] = [0xd2; 32];
 
@@ -111,10 +111,30 @@ async fn resident_lifecycle_ticks_maintains_persists_and_closes() {
         .expect("post resident job");
 
     let mut receipts = Vec::new();
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
+    let mut stop_tx = Some(stop_tx);
+    let mut maintenance_completed = false;
     resident
-        .run_until(tokio::time::sleep(Duration::from_millis(350)), |receipt| {
-            receipts.push(receipt);
-        })
+        .run_until(
+            async move {
+                tokio::select! {
+                    _ = stop_rx => {}
+                    _ = tokio::time::sleep(Duration::from_secs(3)) => {}
+                }
+            },
+            |receipt| {
+                match &receipt {
+                    ResidentReceipt::MaintenanceCompleted(_) => maintenance_completed = true,
+                    ResidentReceipt::MaintenanceIdle if maintenance_completed => {
+                        if let Some(stop_tx) = stop_tx.take() {
+                            let _ = stop_tx.send(());
+                        }
+                    }
+                    _ => {}
+                }
+                receipts.push(receipt);
+            },
+        )
         .await
         .expect("run resident authority");
 
@@ -174,6 +194,14 @@ async fn resident_lifecycle_ticks_maintains_persists_and_closes() {
         .await
         .expect("reopen resident blobs");
     assert!(reopened_blobs.is_persistent());
+    let input_hash = BlobHash::from_bytes(input.digest.as_32().expect("blake3 input reference"));
+    assert!(
+        !reopened_blobs
+            .has(input_hash)
+            .await
+            .expect("query reopened blobs"),
+        "released input stayed absent after the restart boundary"
+    );
     reopened_blobs
         .shutdown()
         .await

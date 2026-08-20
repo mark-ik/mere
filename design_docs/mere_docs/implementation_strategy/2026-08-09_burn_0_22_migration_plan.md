@@ -42,7 +42,7 @@ release does.
 **2026-08-16 (later the same day): the sqlite blocker is CLEARED, and it did
 not take a release to clear it.** The re-check this paragraph asks for was run
 as an isolated prerelease probe, and the conflict is gone from our side. The
-[address book muniment port](2026-08-16_address_book_muniment_port_plan.md)
+[address book muniment port](../../archive_docs/2026-08-20_completed_plans/2026-08-16_address_book_muniment_port_plan.md)
 took sqlx out of the workspace entirely, so `libsqlite3-sys` has no second
 claimant. Note also that the diagnosis above was partly wrong: `p2panda-store`'s
 `groups`/`encryption` features were never enabled here at all. The real enablers

@@ -247,5 +247,5 @@ What remains:
 - [document_script_substrate_plan](archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md)
   (D-doc: the capability profiles, the per-turn contract §10.2, the transaction
   contract §10.3, the capability-grant mechanics §10.4, runtime-sharing tension §10.5).
-- [actor_constellation_plan](mere_docs/implementation_strategy/2026-06-03_actor_constellation_plan.md)
+- [actor_constellation_plan](archive_docs/2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md)
   (the shared armillary actor substrate both ride on).

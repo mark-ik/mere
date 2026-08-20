@@ -66,7 +66,7 @@ wants `com.apple.security.hardened-process.checked-allocations`.
 ## What it means for Mere
 
 **Mere's actor constellation already is this decomposition.** BEK's process roles map almost
-one-to-one onto Mere's actors (see [actor_constellation_plan](../implementation_strategy/2026-06-03_actor_constellation_plan.md)):
+one-to-one onto Mere's actors (see [actor_constellation_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md)):
 
 | BEK process | Mere actor | Mere type(s) |
 |---|---|---|

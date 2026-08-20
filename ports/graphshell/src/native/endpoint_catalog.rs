@@ -10,14 +10,14 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::time::Duration;
 
-use graphshell_endpoint::{
-    IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
-    ResumableProjectionSource,
-};
 use chirograph::{
     CarrierNotice, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
     ProjectionSnapshot, ResourceChunkRequest, ResourceChunkResponse, ResourceRequest,
     ResourceResponse, ResumeReply, ResumeRequest,
+};
+use graphshell_endpoint::{
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
+    ResumableProjectionSource,
 };
 
 use crate::lifecycle::AdmittedEndpointContext;

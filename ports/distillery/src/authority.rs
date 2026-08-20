@@ -118,6 +118,12 @@ impl<B: Backend + Clone + Send + Sync + 'static> Distillery<B> {
         self.retention = retention;
     }
 
+    /// Stop local work and wait until the joined mesh has released its store.
+    pub async fn shutdown(self) -> Result<(), DistilleryError> {
+        self.host.shutdown().await?;
+        Ok(())
+    }
+
     /// Author a checkpoint and, if enabled, release the mesh's settled blob
     /// custody claims.
     ///

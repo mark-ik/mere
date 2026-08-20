@@ -6,7 +6,7 @@
 which is substantially complete (P0 cues, P1 per-node form, P2-static sprite faces + the
 sprite-alpha hull collider, P3/P4 done) and whose representation axis this plan re-bases. The
 arrangement half already spun out to
-[graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) (Decision 7). This plan
+[graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) (Decision 7). This plan
 collects the still-open representation follow-ons so they are not orphaned.
 **Code**: `crates/orrery/orrery` (the representation + sprite + hull maps, `node_collider`),
 `crates/orrery/gyre` (`NodeCollider`, the body-spawn material params), `crates/meerkat`
@@ -191,14 +191,14 @@ Open representation threads, each with its home, so closing the predecessor plan
   already shipped (the picker writes `ViewIntent.strategy` + `save_session`, restored on boot /
   switch); the remaining per-scene picker UI consolidation rides the settings-lane scene page, and
   the signal derivation behind analytic arrangements rides
-  [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md). Noted so the arrangement-axis
+  [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md). Noted so the arrangement-axis
   handoff is explicit, not silently dropped.
 - **Edge-trim on routed paths (P0 residual).** Straight edges already trim to the node face
   (shipped 2026-06-21); routed-path edges (explicit geometry) still attach at the collider center.
   Trimming them to the face endpoints is a cosmetic refinement that follows the body's outline, so
   it sits with this axis. Low priority.
 - **Dormant analytic arrangements + signal-driven encodings** (centrality to size, community to a
-  ring/halo) are owned by [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md);
+  ring/halo) are owned by [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md);
   cross-ref only.
 - **The per-object widget surface** (Body / Face / material widgets in the in-canvas card) is
   owned by [object_card_plan](2026-06-21_object_card_plan.md); this plan supplies the underlying

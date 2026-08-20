@@ -515,12 +515,9 @@ mod tests {
             visible: true,
             collidable: true,
         });
-        let snapshot = SceneSnapshot::from_dense(
-            chirograph::SceneEpoch(1),
-            chirograph::Revision(1),
-            scene,
-        )
-        .unwrap();
+        let snapshot =
+            SceneSnapshot::from_dense(chirograph::SceneEpoch(1), chirograph::Revision(1), scene)
+                .unwrap();
 
         let layout = ProjectionLayoutView::from_scene(&snapshot);
 

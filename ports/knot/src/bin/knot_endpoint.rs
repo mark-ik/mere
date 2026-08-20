@@ -40,10 +40,13 @@ fn main() {
                 )),
             )
             .expect("Knot could not open the requested writable directory");
-            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
-                PathBuf::from(evidence_root),
-                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
-            ));
+            endpoint.grant_clip_evidence(
+                knot::BlobClipEvidenceStore::open(
+                    PathBuf::from(evidence_root),
+                    parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+                )
+                .expect("Knot could not open the clip evidence blob store"),
+            );
             endpoint
         }
         [
@@ -110,10 +113,13 @@ fn main() {
                 max_source_bytes,
                 Some(&root),
             ));
-            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
-                PathBuf::from(evidence_root),
-                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
-            ));
+            endpoint.grant_clip_evidence(
+                knot::BlobClipEvidenceStore::open(
+                    PathBuf::from(evidence_root),
+                    parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+                )
+                .expect("Knot could not open the clip evidence blob store"),
+            );
             endpoint
         }
         [mode, data_root, persona, max_source_bytes] if mode == "persona-vault" => {
@@ -165,10 +171,13 @@ fn main() {
                 )))
             })
             .expect("Knot could not startup-unlock the requested persona vault");
-            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
-                PathBuf::from(evidence_root),
-                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
-            ));
+            endpoint.grant_clip_evidence(
+                knot::BlobClipEvidenceStore::open(
+                    PathBuf::from(evidence_root),
+                    parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+                )
+                .expect("Knot could not open the clip evidence blob store"),
+            );
             endpoint
         }
         [
@@ -257,10 +266,13 @@ fn main() {
                 max_source_bytes,
                 None,
             ));
-            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
-                PathBuf::from(evidence_root),
-                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
-            ));
+            endpoint.grant_clip_evidence(
+                knot::BlobClipEvidenceStore::open(
+                    PathBuf::from(evidence_root),
+                    parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+                )
+                .expect("Knot could not open the clip evidence blob store"),
+            );
             endpoint
         }
         [

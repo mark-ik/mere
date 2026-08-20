@@ -12,17 +12,15 @@
 //! pipelining, that pressure should reshape the wire, not hide in a client.
 
 use chirograph::{
-    CarrierRequest, CarrierRequestBody, CarrierResponseBody, CapabilityProfile, ContentHash,
+    CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponseBody, ContentHash,
     PortableCardV1, PresentationCodec, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
     ResourceRequest, SessionOpen, SessionOpened,
 };
 use rand_core::{OsRng, RngCore};
 
 use crate::browser_carrier::{read_native_message_async, write_native_message_async};
-use crate::native::app_broker::{
-    APP_CONNECT_SCHEMA, AppBrokerError, AppHostMessage, AppMessage,
-};
 use crate::native::app_admission::{AppHello, AppId, configured_app_endpoint};
+use crate::native::app_broker::{APP_CONNECT_SCHEMA, AppBrokerError, AppHostMessage, AppMessage};
 use crate::native::local_endpoint::{LocalStream, connect_local};
 
 #[derive(Debug, thiserror::Error)]
@@ -197,9 +195,9 @@ impl AppBrokerClient {
         )
         .await?;
         match read_host(&mut self.stream).await? {
-            AppHostMessage::Response { response } => {
-                response.body.map_err(|error| AppClientError::Refused(error.message))
-            }
+            AppHostMessage::Response { response } => response
+                .body
+                .map_err(|error| AppClientError::Refused(error.message)),
             other => Err(unexpected("a carrier response", &other)),
         }
     }

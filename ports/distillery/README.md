@@ -42,7 +42,9 @@ process. The owner supplies supervisor, maintenance, and physical collection
 cadences; the type deliberately has no default policy. `ResidentStorage` opens
 a disk-backed collecting blob store and binds its custody tags to one mesh. The
 resident owns that storage, the live p2p transport, the mesh host, and their
-shutdown order.
+shutdown order. Shutdown waits for the LogSync drain, every topic manager, and
+the top-level actor task to drop their store handles, so a successful return is
+a real restart boundary rather than an asynchronous stop notification.
 
 Every supervisor turn, completed maintenance run, unchanged maintenance turn,
 maintenance refusal, and shutdown request is an ordered `ResidentReceipt`.

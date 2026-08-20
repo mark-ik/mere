@@ -94,6 +94,9 @@ adapter, portable remote checkpoints, tolerant comparators, or training.
 
 ## 7. D1 resident authority lifecycle
 
+D1 in this document is Distillery-local. It does not rename the ESP
+consolidation plan's D1 device-policy decision.
+
 D1 supplies the reusable process body without hardwiring an identity profile or
 an operating-system launcher.
 
@@ -108,6 +111,16 @@ an operating-system launcher.
 custody tags to one mesh. `ResidentAuthority` rejects a host for another mesh,
 owns the composed `Distillery`, p2p transport, and storage, and closes them in
 that order: endpoint, joined mesh, blob-store flush.
+
+The first restart receipt exposed a deeper lifecycle distinction: dropping a
+LogSync requested actor stop but returned before its redb handle was released.
+`p2panda-net::LogSync::shutdown`, `JoinedSpace::leave_and_wait`, and the
+consuming mesh-host shutdown path now abort and await local job/drain tasks,
+drain every topic manager, await the top-level sync actor's owning task so its
+state has actually dropped, then return. Shutdown failure is carried through
+the full authority chain while the remaining close operations are still
+attempted. A reported clean shutdown therefore permits an immediate same-path
+reopen.
 
 The run loop emits ordered `ResidentReceipt` values for exact substrate steps,
 completed maintenance, unchanged maintenance, maintenance failure, supervisor
@@ -132,6 +145,12 @@ The resident integration receipt uses a real p2panda transport, a redb-backed
 4. Shutdown is observed and closes the endpoint before persistent storage.
 5. Reopening the redb mesh store replays the terminal job.
 6. Reopening the collecting blob store preserves the custody release.
+
+The 2026-08-20 receipt passed all three Distillery tests, including immediate
+same-path redb/blob reopening, and strict Clippy for the Distillery targets and
+the changed `p2panda-net` library. Shared Cargo cache contention required an
+isolated manifest over the exact source files; the source and test targets were
+unchanged.
 
 ## 8. Remaining boundary
 

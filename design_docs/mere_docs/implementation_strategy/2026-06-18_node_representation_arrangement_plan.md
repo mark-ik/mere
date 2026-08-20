@@ -7,7 +7,7 @@ collider, P3 + P4 done). The **representation axis** is re-based and continued b
 [node_body_face_model_plan](2026-06-23_node_body_face_model_plan.md) (Body × Face, tile/shape as
 body presets, decoupled hull, per-node material, the generalized shape editor, and the corrected
 interactive/scripted-form feasibility). The **arrangement axis** is owned by
-[graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) (Decision 7). Kept as the
+[graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) (Decision 7). Kept as the
 record of P0-P4; new representation work lands in the successor.
 
 **Rename banner (2026-07-02):** this doc's code pointers predate the node/card terminology

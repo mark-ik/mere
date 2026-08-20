@@ -1,9 +1,5 @@
 //! Deterministic disconnect and resume acceptance fixture for G2.
 
-use graphshell_client::{ClientState, DiffApplication, ResumeApplication, ResumeApplyError};
-use graphshell_endpoint::{
-    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
-};
 use chirograph::{
     BoundsRelationship, CachePolicy, EndpointDescriptor, IntentInvocation, IntentResult,
     PresentationBinding, PresentationCapability, PresentationChange, PresentationCodec,
@@ -11,6 +7,10 @@ use chirograph::{
     ProjectionDiff, ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot,
     ProtocolVersion, ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SemanticRole,
     SessionStatus,
+};
+use graphshell_client::{ClientState, DiffApplication, ResumeApplication, ResumeApplyError};
+use graphshell_endpoint::{
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource, ResumableProjectionSource,
 };
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Representation, Scene, Score, Size2,

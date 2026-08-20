@@ -122,8 +122,8 @@ async fn run(args: &Args) -> Result<(), ReceiptError> {
     // is about to be authored on their behalf, and it keeps a receipt
     // self-describing if it is ever moved by hand.
     let events_path = args.dir.join("graph-events.json");
-    let json = serde_json::to_string_pretty(&ingested.events)
-        .expect("personal graph events serialize");
+    let json =
+        serde_json::to_string_pretty(&ingested.events).expect("personal graph events serialize");
     std::fs::write(&events_path, json)?;
     println!("wrote   {}", events_path.display());
 

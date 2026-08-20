@@ -86,7 +86,7 @@ it dovetails with Tessera as the trust receipt. **Mark's framing:** p2panda-depe
 It rides the persona and federation work
 ([persona transport unlinkability](../implementation_strategy/2026-06-25_persona_transport_unlinkability_plan.md),
 [persona wallet carry](../implementation_strategy/2026-06-25_persona_wallet_carry_layer_plan.md),
-[actor constellation](../implementation_strategy/2026-06-03_actor_constellation_plan.md)),
+[actor constellation](../../archive_docs/2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md)),
 adopted as a layered borrow there rather than standalone.
 
 ## Agentic
@@ -121,7 +121,7 @@ related, and selectively connected depending on the graph's edge config (which
 edges count). So the region's membership is the query, while its drawn connections
 are filtered by the active edge lens, showing only edges that count under the
 current configuration. That keeps the region honest. Ties to the
-[graph signals layer](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
+[graph signals layer](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)
 for the edge config. The `=query` polyglot block is the in-note form of the same
 idea, a live query rendered inline, which slots into the
 [knot editor](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md)
@@ -163,7 +163,7 @@ feature in itself:**
 
 - [carve syntax harvest](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md#syntax-harvest-from-carve-extensions-over-djot):
   the grammar-level companion.
-- [graph signals layer plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md):
+- [graph signals layer plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md):
   edge config and lens, for live query regions.
 - [operator presence overlay plan](../implementation_strategy/2026-06-25_operator_presence_overlay_plan.md):
   multiplayer presence (already scoped).
@@ -171,7 +171,7 @@ feature in itself:**
   engram schema layer (Cambria home).
 - [persona transport unlinkability](../implementation_strategy/2026-06-25_persona_transport_unlinkability_plan.md),
   [persona wallet carry](../implementation_strategy/2026-06-25_persona_wallet_carry_layer_plan.md),
-  [actor constellation](../implementation_strategy/2026-06-03_actor_constellation_plan.md):
+  [actor constellation](../../archive_docs/2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md):
   persona and federation, for capability-scoped sharing.
 - [document script substrate](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md),
   [document script followons](../../archive_docs/2026-07-03_completed_plans/2026-06-23_document_script_followons_plan.md):

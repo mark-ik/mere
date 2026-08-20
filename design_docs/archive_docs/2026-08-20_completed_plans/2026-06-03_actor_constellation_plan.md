@@ -33,9 +33,9 @@ fits the shape: an armillary sphere is a frame of rings around a central point,
 which is exactly this structure, the kernel at the center with the actor rings
 (its constellation) around it.
 
-Related: [modular integration plan](2026-06-02_modular_integration_plan.md) (the
-host model and S-phases), [linked-data ingest plan](2026-05-22_linked_data_ingest_export_plan.md)
-(the contribution boundary + v5 identity), [netfetcher plan](2026-05-25_netfetcher_plan.md)
+Related: [modular integration plan](../../mere_docs/implementation_strategy/2026-06-02_modular_integration_plan.md) (the
+host model and S-phases), [linked-data ingest plan](../2026-06-09_completed_plans/2026-05-22_linked_data_ingest_export_plan.md)
+(the contribution boundary + v5 identity), [netfetcher plan](../2026-06-09_completed_plans/2026-05-25_netfetcher_plan.md)
 (the network I/O actor). The concurrency ground truth (wasm-in-browser, browser
 threading, the model menu) was researched and adversarially verified 2026-06-03;
 the load-bearing facts are inlined under **Technical ground truth** below.
@@ -600,7 +600,7 @@ complete.
   target a local thread or a remote device over p2panda, so local frame-spill,
   federated mesh compute, and communal big-model hosting are one abstraction at two
   scopes (the mesh is a compute actor with a remote recipient). See the
-  [resource-coordination brief](../research/2026-06-04_resource_coordination_brief.md).
+  [resource-coordination brief](../../mere_docs/research/2026-06-04_resource_coordination_brief.md).
 
 ## Risks and hard parts
 
@@ -916,3 +916,15 @@ what is most likely to break, the mitigation, and a pointer.
   `archive/2026-06-24_event_loop_rigor_plan.md` and landed there (E4 completed
   2026-07-02; plan archived 2026-07-05, residuals in genet's
   `2026-07-05_event_loop_rigor_followups.md`).
+
+## Closing note, archived 2026-08-20
+
+The spine was declared complete 2026-06-04 (typed boundary, harness, all three
+I/O actors, off-thread content, the plural self-healing pooled constellation),
+and the two big features that remained were re-homed rather than abandoned:
+P3 was re-scoped 2026-06-12 into the scripted tier's isolated lane, with the
+event-loop rigor thread continued and finished in genet
+(`docs/2026-07-05_event_loop_rigor_followups.md` carries its residuals), and
+P6 was reframed 2026-06-something as the local case of the mesh, whose
+successor is the mesh host lanes plan (2026-08-09) and the live `crates/mesh`
+family. Nothing in this plan still waits on this plan.

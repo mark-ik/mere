@@ -14,6 +14,12 @@ use std::sync::RwLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use chirograph::{
+    CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
+    EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSession,
+    ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, ResumeRequest,
+    Revision, SceneEpoch, SessionOpen,
+};
 use graphshell::admission::open_session;
 use graphshell::carrier::{accept_projection_session, projection_policy};
 use graphshell::lifecycle::SessionAuthority;
@@ -23,12 +29,6 @@ use graphshell::network_carrier::{
 use graphshell::session_notices::serve_admitted_session_notifying;
 use graphshell_endpoint::ProjectionNoticeSource;
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
-use chirograph::{
-    CapabilityProfile, Carrier, CarrierNotice, CarrierRequestBody, CarrierResponseBody,
-    EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest, ProjectionSession,
-    ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, ResumeRequest,
-    Revision, SceneEpoch, SessionOpen,
-};
 use notochord::{
     LocalNetworkPolicy, NetworkId, ProfileRef, RevocationLedger, TrafficClass, TrustedRoot,
 };

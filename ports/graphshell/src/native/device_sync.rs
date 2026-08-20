@@ -913,8 +913,7 @@ async fn stage_captures(
             continue;
         }
         let path = receipt.source.join(&name);
-        let bytes = std::fs::read(&path)
-            .map_err(|error| format!("{}: {error}", path.display()))?;
+        let bytes = std::fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?;
         let hash = host
             .blobs()
             .put_bytes(bytes)

@@ -128,7 +128,9 @@ impl<B: Backend, C: Codec> MunimentAddressBook<B, C> {
             info,
         };
         let bytes = C::encode(&record)?;
-        self.backend.put(&node_key(&record.info.node_id), &bytes).await
+        self.backend
+            .put(&node_key(&record.info.node_id), &bytes)
+            .await
     }
 
     /// Every stored record, in key order.
@@ -179,9 +181,7 @@ impl<B: Backend, C: Codec> MunimentAddressBook<B, C> {
     }
 }
 
-impl<B: Backend, C: Codec> AddressBookStore<VerifyingKey, NodeInfo>
-    for MunimentAddressBook<B, C>
-{
+impl<B: Backend, C: Codec> AddressBookStore<VerifyingKey, NodeInfo> for MunimentAddressBook<B, C> {
     type Error = StoreError;
 
     async fn insert_node_info(&self, info: NodeInfo) -> Result<bool, Self::Error> {
@@ -198,7 +198,9 @@ impl<B: Backend, C: Codec> AddressBookStore<VerifyingKey, NodeInfo>
         self.backend
             .apply(&[
                 WriteOp::Delete { key: node_key(id) },
-                WriteOp::Delete { key: topics_key(id) },
+                WriteOp::Delete {
+                    key: topics_key(id),
+                },
             ])
             .await?;
         Ok(true)
@@ -220,7 +222,14 @@ impl<B: Backend, C: Codec> AddressBookStore<VerifyingKey, NodeInfo>
 
         let ops: Vec<WriteOp> = stale
             .iter()
-            .flat_map(|id| [WriteOp::Delete { key: node_key(id) }, WriteOp::Delete { key: topics_key(id) }])
+            .flat_map(|id| {
+                [
+                    WriteOp::Delete { key: node_key(id) },
+                    WriteOp::Delete {
+                        key: topics_key(id),
+                    },
+                ]
+            })
             .collect();
         self.backend.apply(&ops).await?;
         Ok(stale.len())
@@ -280,7 +289,9 @@ impl<B: Backend, C: Codec> AddressBookStore<VerifyingKey, NodeInfo>
         if topics.is_empty() {
             self.backend.delete(&topics_key(&id)).await
         } else {
-            self.backend.put(&topics_key(&id), &C::encode(&topics)?).await
+            self.backend
+                .put(&topics_key(&id), &C::encode(&topics)?)
+                .await
         }
     }
 
@@ -365,8 +376,12 @@ mod tests {
         let (a, b) = (Topic::random(), Topic::random());
 
         book.insert_node_info(info.clone()).await.unwrap();
-        book.set_topics(info.node_id, HashSet::from([a])).await.unwrap();
-        book.set_topics(info.node_id, HashSet::from([b])).await.unwrap();
+        book.set_topics(info.node_id, HashSet::from([a]))
+            .await
+            .unwrap();
+        book.set_topics(info.node_id, HashSet::from([b]))
+            .await
+            .unwrap();
 
         assert_eq!(
             book.node_topics(&info.node_id).await.unwrap(),
@@ -405,7 +420,10 @@ mod tests {
         assert_eq!(book.all_nodes_len().await.unwrap(), 2);
         assert_eq!(book.all_bootstrap_nodes_len().await.unwrap(), 1);
         assert_eq!(
-            book.random_bootstrap_node().await.unwrap().map(|i| i.node_id),
+            book.random_bootstrap_node()
+                .await
+                .unwrap()
+                .map(|i| i.node_id),
             Some(boot.node_id)
         );
     }
@@ -483,7 +501,10 @@ mod tests {
         );
         assert_eq!(book.node_info(&old.node_id).await.unwrap(), None);
         assert_eq!(
-            book.node_info(&fresh.node_id).await.unwrap().map(|i| i.node_id),
+            book.node_info(&fresh.node_id)
+                .await
+                .unwrap()
+                .map(|i| i.node_id),
             Some(fresh.node_id)
         );
     }

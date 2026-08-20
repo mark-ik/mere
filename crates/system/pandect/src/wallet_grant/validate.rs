@@ -200,11 +200,7 @@ mod tests {
         spec.wrapped_private_epochs.push(EpochCarriage {
             persona_id: second_persona(),
             material: WrappedEpochMaterial {
-                index: blinded_epoch_index(
-                    second_persona(),
-                    fixture_epoch(),
-                    FIXTURE_WRAPPING_KEY,
-                ),
+                index: blinded_epoch_index(second_persona(), fixture_epoch(), FIXTURE_WRAPPING_KEY),
                 wrap_format: "xchacha20poly1305-v1".into(),
                 wrapped_key: vec![0xca, 0xfe],
             },

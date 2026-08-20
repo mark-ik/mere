@@ -62,7 +62,7 @@ We do not fake them. (Degree is a real, cheap stand-in for importance in the mea
 **Boundary with the graph signals layer.** Producing these graph-structure signals (the `intel/signals`
 cache, the community / centrality / affinity computation) and their *non-physics* encodings (size,
 arrangements, the gloss lens, a new affinity force) is owned by the
-[graph signals layer plan](2026-06-22_graph_signals_layer_plan.md). This plan does **not** re-derive
+[graph signals layer plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md). This plan does **not** re-derive
 them. It owns (1) the **runtime / system** signals above (content / sync / ops / observability, which
 graph_signals does not cover) and (2) the **physics-binding layer** that maps *any* signal, graph or
 runtime, onto a physical parameter. When graph_signals produces importance / affinity, this plan
@@ -130,7 +130,7 @@ Mark's caution: do not choke the system with simulation when it is mid-heavy-tas
 3. **The mapping layer + presets.** A configurable signal → parameter table and named presets;
    conditional presets (tag / query / state → preset).
 4. **Consume the graph signals layer.** Once
-   [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) produces `ImportanceWeights` /
+   [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) produces `ImportanceWeights` /
    `AffinityScores` / clusters, bind them as physical parameters (weight = importance, tension =
    affinity, cluster forces) through the preset / mapping layer. That plan owns producing them + the
    size encoding + the affinity force; this plan owns the physics-binding surface that maps them

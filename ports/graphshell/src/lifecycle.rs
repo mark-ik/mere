@@ -30,11 +30,11 @@
 //! [`SessionAuthority::retain_admitted`] preserve the chain for expiry and
 //! revocation checks without decoding application bytes a second time.
 
-use graphshell_client::ClientState;
 use chirograph::{
     CachePolicy, IntentInvocation, IntentResult, ProjectionSession, Revision, SceneEpoch,
     SessionStatus,
 };
+use graphshell_client::ClientState;
 use notochord::{
     AdmittedPrincipal, AdmittedSession, AuthorityLapse, RetainedAuthority, RevocationLedger,
 };
@@ -309,9 +309,7 @@ fn purges_on(policy: &CachePolicy) -> bool {
 mod tests {
     use super::*;
     use crate::admission::GRAPHSHELL_DOMAIN;
-    use chirograph::{
-        PresentationManifest, ProjectionSnapshot, ProtocolVersion, SceneSnapshot,
-    };
+    use chirograph::{PresentationManifest, ProjectionSnapshot, ProtocolVersion, SceneSnapshot};
     use notochord::{
         CarrierKind, HandshakeLimits, NetworkId, ProfileRef, RequestedAction, SessionClaims,
         SessionFacts, TrafficClass,

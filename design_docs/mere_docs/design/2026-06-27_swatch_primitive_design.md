@@ -16,7 +16,7 @@ as the Navigator; this realizes it),
 (owns the focus-card-slot card),
 [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
 (owns the per-window instance machinery + graphlets),
-[graph signals layer plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
+[graph signals layer plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)
 (owns the gloss swatch lens),
 [petgraph / RDF plan](../implementation_strategy/2026-06-18_petgraph_rdf_plan.md)
 (owns edge multigraph storage + the collapse-as-LOD ruling),
@@ -257,7 +257,7 @@ Fragments exist, each owned by a sibling plan; the unifying primitive does not.
   (`render/paint.rs`, via `Orrery::gloss_geometry`). It does not use `swatch.rs`.
   gloss §2a already names it "a candidate to migrate onto the DOM swatch"; its lens
   is owned by
-  [graph signals layer plan](../implementation_strategy/2026-06-22_graph_signals_layer_plan.md)
+  [graph signals layer plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)
   P6.
 - **The object card** is `FocusCardKind::ObjectCard { widgets }`, DOM, in the
   orrery's single focus-card slot (`window_view/mod.rs`). The slot also holds

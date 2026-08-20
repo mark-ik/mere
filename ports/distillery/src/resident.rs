@@ -129,18 +129,18 @@ pub enum ResidentReceipt {
         steps: Vec<Step>,
     },
     /// The event frontier advanced and maintenance committed.
-    MaintenanceCompleted(MaintenanceReport),
+    MaintenanceCompleted(Box<MaintenanceReport>),
     /// The cadence fired, but the frontier had not advanced.
     MaintenanceIdle,
     /// Maintenance was refused or its custody operation failed. This is
     /// observable and non-fatal; a live lease is an expected example.
     MaintenanceFailed {
-        /// Stable display form of the maintenance refusal.
+        /// Display form of the maintenance refusal.
         error: String,
     },
     /// The supervisor itself failed, so the resident loop is ending.
     SupervisorFailed {
-        /// Stable display form of the fatal supervisor error.
+        /// Display form of the fatal supervisor error.
         error: String,
     },
     /// The caller's shutdown signal won the lifecycle race.
@@ -165,11 +165,15 @@ pub enum ResidentError {
     /// The persistent blob store could not open.
     #[error(transparent)]
     Storage(#[from] BlobError),
-    /// Shutdown tried both owned resources and reports either refusal.
-    #[error("resident shutdown failed (transport: {transport:?}, blob store: {storage:?})")]
+    /// Shutdown tried all owned resources and reports every refusal.
+    #[error(
+        "resident shutdown failed (transport: {transport:?}, authority: {authority:?}, blob store: {storage:?})"
+    )]
     Shutdown {
         /// Failure while closing the network endpoint.
         transport: Option<String>,
+        /// Failure while stopping work and releasing the mesh store.
+        authority: Option<String>,
         /// Failure while flushing and closing persistent blob storage.
         storage: Option<String>,
     },
@@ -290,7 +294,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> ResidentAuthority<B> {
                 } => {
                     match self.authority.maintain_if_advanced().await {
                         Ok(Some(report)) => {
-                            observe(ResidentReceipt::MaintenanceCompleted(report));
+                            observe(ResidentReceipt::MaintenanceCompleted(Box::new(report)));
                         }
                         Ok(None) => observe(ResidentReceipt::MaintenanceIdle),
                         Err(error) => observe(ResidentReceipt::MaintenanceFailed {
@@ -303,7 +307,7 @@ impl<B: Backend + Clone + Send + Sync + 'static> ResidentAuthority<B> {
     }
 
     /// Close the endpoint, drop the joined mesh, then flush and close blob
-    /// storage. Both close attempts run even when one fails.
+    /// storage. All close attempts run even when an earlier one fails.
     pub async fn shutdown(self) -> Result<(), ResidentError> {
         let Self {
             authority,
@@ -312,18 +316,23 @@ impl<B: Backend + Clone + Send + Sync + 'static> ResidentAuthority<B> {
             ..
         } = self;
         let transport_error = transport.close().await.err().map(|error| error.to_string());
-        drop(authority);
+        let authority_error = authority
+            .shutdown()
+            .await
+            .err()
+            .map(|error| error.to_string());
         drop(transport);
         let storage_error = storage
             .shutdown()
             .await
             .err()
             .map(|error| error.to_string());
-        if transport_error.is_none() && storage_error.is_none() {
+        if transport_error.is_none() && authority_error.is_none() && storage_error.is_none() {
             Ok(())
         } else {
             Err(ResidentError::Shutdown {
                 transport: transport_error,
+                authority: authority_error,
                 storage: storage_error,
             })
         }

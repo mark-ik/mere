@@ -530,7 +530,7 @@ graduated both into near-term editor work).
   ([gloss_navigator_design](../../mere_docs/design/2026-06-07_gloss_navigator_design.md) §2a), so
   the `=query` block is a swatch embedded by a fence, its (scope, lens, filters) the
   query. Edge-config filtering and the result set ride the
-  [graph signals layer](../../mere_docs/implementation_strategy/2026-06-22_graph_signals_layer_plan.md).
+  [graph signals layer](../2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md).
 - **Agent node.** Promote a `=query` to a whole knot node: its body is the query or
   policy, its edges are the materialized, continuously-maintained result set (a
   Tinderbox agent made spatial). The editor authors the body, the orrery materializes

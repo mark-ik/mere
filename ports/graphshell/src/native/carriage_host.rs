@@ -458,7 +458,6 @@ impl CarriageHost {
         Ok(purged)
     }
 
-
     pub async fn close(self) -> Result<(), CarriageHostError> {
         self.joined.leave();
         self.transport

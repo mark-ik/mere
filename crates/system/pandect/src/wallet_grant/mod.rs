@@ -116,27 +116,13 @@ pub(crate) use wrapping::{
     load_remote_auth_wrapping_key, remove_remote_auth_wrapping_key, upsert_remote_auth_wrapping_key,
 };
 
-pub(crate) use migrate::legacy_grant_hint;
-pub use migrate::{
-    LegacyGrant, reissue_legacy_grant, retire_legacy_grant, survey_legacy_grants,
-};
-pub use trust::{
-    GrantStanding, assess_device_grant, wallet_trusted_roots,
-};
-pub use revocation::{
-    device_is_fully_revoked, fold_revocations, load_revocation_ledger, revocation_ledger_path,
-    revoke_device_certificates, revoked_certificate_count, save_revocation_ledger,
-};
 pub use certificate::{
-    remove_wrapped_epoch_record,
-    decode_device_grant_set, encode_device_grant_set,
-    certificate_device_id,
-    device_grant_set_ref, device_scope_certificate_path, load_device_grant_set,
-    save_device_grant_set,
-    WrappedEpochRecord, check_epoch_carriage, decode_certificate, decode_epoch_record,
-    device_certificate_path, encode_certificate, encode_epoch_record, load_device_certificate,
-    load_wrapped_epoch_record, requires_epoch_material, save_device_certificate,
-    save_wrapped_epoch_record, wrapped_epoch_record_path,
+    WrappedEpochRecord, certificate_device_id, check_epoch_carriage, decode_certificate,
+    decode_device_grant_set, decode_epoch_record, device_certificate_path, device_grant_set_ref,
+    device_scope_certificate_path, encode_certificate, encode_device_grant_set,
+    encode_epoch_record, load_device_certificate, load_device_grant_set, load_wrapped_epoch_record,
+    remove_wrapped_epoch_record, requires_epoch_material, save_device_certificate,
+    save_device_grant_set, save_wrapped_epoch_record, wrapped_epoch_record_path,
 };
 pub use enroll::{
     build_remote_auth_enrollment_bundle, decode_remote_auth_enrollment_bundle,
@@ -145,8 +131,7 @@ pub use enroll::{
 };
 pub use epochs::{
     BlindedEpochIndex, BlindedSlotId, blinded_epoch_index, blinded_slot_id,
-    unwrap_private_epoch_material,
-    wrap_private_epoch_material,
+    unwrap_private_epoch_material, wrap_private_epoch_material,
 };
 pub use errors::{
     DeviceGrantError, EnrollmentBundleError, PairingCodeError, PairingMaterialError,
@@ -156,15 +141,22 @@ pub use issue::{
     issue_remote_auth_device_grant, issue_remote_auth_device_grant_from_pairing,
     issue_remote_auth_device_grant_from_ticket,
 };
+pub(crate) use migrate::legacy_grant_hint;
+pub use migrate::{LegacyGrant, reissue_legacy_grant, retire_legacy_grant, survey_legacy_grants};
 pub use pairing::{
     decode_remote_auth_pairing_ticket, derive_remote_auth_pairing_material,
     encode_remote_auth_pairing_ticket, format_remote_auth_pairing_code,
     mint_remote_auth_pairing_ticket, parse_remote_auth_pairing_code,
 };
+pub use revocation::{
+    device_is_fully_revoked, fold_revocations, load_revocation_ledger, revocation_ledger_path,
+    revoke_device_certificates, revoked_certificate_count, save_revocation_ledger,
+};
 pub use revoke::revoke_remote_auth_device;
+pub use trust::{GrantStanding, assess_device_grant, wallet_trusted_roots};
 pub use types::{
-    EpochCarriage, PairedRemoteAuthGrantSpec, PrivateEpochPlaintext,
-    RemoteAuthEnrollmentBundle, RemoteAuthGrantSpec, RemoteAuthPairingMaterial,
-    RemoteAuthPairingResponse, RemoteAuthPairingTicket, RemoteAuthPairingTicketRequest,
-    RemoteAuthRevocationOutcome, WrappedEpochMaterial,
+    EpochCarriage, PairedRemoteAuthGrantSpec, PrivateEpochPlaintext, RemoteAuthEnrollmentBundle,
+    RemoteAuthGrantSpec, RemoteAuthPairingMaterial, RemoteAuthPairingResponse,
+    RemoteAuthPairingTicket, RemoteAuthPairingTicketRequest, RemoteAuthRevocationOutcome,
+    WrappedEpochMaterial,
 };

@@ -6,7 +6,7 @@ bridge (P4) + live meerkat content-affinity wiring (P5) + blended affinity and
 content-text enrichment (P6) are all in and tested. Open: the `semantic-embeddings`
 BERT-provider upgrade (a separate slice), the off-thread embedding actor (raw-body
 text + the intel-index lift), and the P3 live force-pass injection (held — niche).
-**Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 5), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (L1: shipped burn-wgpu embeddings + aether field lowering + the CPU-vs-GPU timing methodology this reuses), [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) (the consumer for similarity edges), `crates/orrery/aether` (the burn-lowering home; gyre stays burn-free), `crates/intel/embed` (`field_bridge` / `canvas_search`: the embedding→field seam already built).
+**Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 5), [burn_wgpu_flip_plan](2026-07-04_burn_wgpu_flip_plan.md) (L1: shipped burn-wgpu embeddings + aether field lowering + the CPU-vs-GPU timing methodology this reuses), [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) (the consumer for similarity edges), `crates/orrery/aether` (the burn-lowering home; gyre stays burn-free), `crates/intel/embed` (`field_bridge` / `canvas_search`: the embedding→field seam already built).
 
 ## Scope
 
@@ -117,7 +117,7 @@ embeddings (an `EmbeddingProvider` over each node) plus the recompute-on-
 mutation discipline `set_affinity_force` already expects, then the orrery hook.
 Higher value than P3's wiring (semantic clustering helps at any graph size),
 and the natural next slice. The similarity-edges-as-graph-signals producer
-(the [graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md)
+(the [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md)
 consumer) rides the same `affinity_pairs` output.
 
 ### P5 — Live meerkat wiring, content-affinity half (landed 2026-07-06)

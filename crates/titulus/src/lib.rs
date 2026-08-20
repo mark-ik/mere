@@ -463,9 +463,11 @@ mod tests {
 
     #[test]
     fn schema_is_a_reserved_field_name_because_the_form_writes_it_itself() {
-        let clashing = ActionFormV1::new("fixture.save/v1").with_field(
-            ActionFormFieldV1::choice("schema", "Schema", [ActionFormChoiceV1::new("x", "X")]),
-        );
+        let clashing = ActionFormV1::new("fixture.save/v1").with_field(ActionFormFieldV1::choice(
+            "schema",
+            "Schema",
+            [ActionFormChoiceV1::new("x", "X")],
+        ));
         assert_eq!(clashing.validate(), Err(ActionFormError::ReservedFieldName));
     }
 

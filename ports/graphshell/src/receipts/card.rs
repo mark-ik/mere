@@ -87,7 +87,11 @@ pub fn receipt_card(
     values.push(pair("Address", address.to_string()));
 
     let mut badges = vec!["Receipt".to_string()];
-    badges.push(if passed { "Passed".into() } else { "Failed".into() });
+    badges.push(if passed {
+        "Passed".into()
+    } else {
+        "Failed".into()
+    });
     if dirty > 0 {
         // A badge rather than a footnote: this is the one fact that decides
         // whether the capture can be trusted as evidence about a commit.

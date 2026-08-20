@@ -15,8 +15,8 @@
 //! assuming it: a silent disagreement would offer blobs under hashes no
 //! destination can ask for.
 
-use eidetic::Hash;
 use chirograph::ContentHash;
+use eidetic::Hash;
 use muniment::{Backend, BlobStore};
 use transport::BlobHash;
 

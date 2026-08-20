@@ -142,9 +142,18 @@ as the thing to revisit if a consumer grows the set.
   before: dropping it on burn 0.21 puts wgpu 29 back. The migration itself is
   real API work (`burn::backend` and `burn::tensor::backend` moved, `Tensor`'s
   rank parameter changed) and was not attempted. Probe reverted. Recorded in
-  [burn 0.22 migration](2026-08-09_burn_0_22_migration_plan.md).
+  [burn 0.22 migration](../../mere_docs/implementation_strategy/2026-08-09_burn_0_22_migration_plan.md).
 - Adopting burn 0.22 reintroduces an embedded SQLite as `rusqlite`, behind
   CubeCL's autotune cache. It does not cross mere's storage boundary, but the
   workspace should not be called sqlite-free after that point.
 - A wasm address book needs `MunimentAddressBook` over `IndexedDbBackend` and a
   p2panda-net runtime assessment. Not in scope.
+
+## Closing note, archived 2026-08-20
+
+Complete 2026-08-16, all four phases verified at the time. Re-checked on the
+way out: `sqlx` and `libsqlite3-sys` remain absent from the workspace lock,
+which was the point of the whole port, and `stickleback::MunimentAddressBook`
+is live in the transport. The finding worth keeping: the plan's own headline
+claim ("the single place sqlite leaked in") was wrong, and `cargo tree -e
+features` caught the second enabler edge; trust the resolver over the doc.

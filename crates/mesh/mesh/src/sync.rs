@@ -230,6 +230,14 @@ impl<B: Backend + Clone + Send + Sync + 'static> SyncedMesh<B> {
     pub async fn resync(&self) -> Result<SyncRound, MeshSyncError> {
         Ok(self.joined.resync().await)
     }
+
+    /// Leave the sync lane and wait until its durable store handles are free.
+    pub async fn leave(self) -> Result<(), MeshSyncError> {
+        self.joined
+            .leave_and_wait()
+            .await
+            .map_err(|error| MeshSyncError::Backend(error.to_string()))
+    }
 }
 
 #[cfg(test)]

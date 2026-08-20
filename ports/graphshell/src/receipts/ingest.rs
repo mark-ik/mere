@@ -36,7 +36,6 @@ use crate::receipts::manifest::{
     FACET_ARTIFACTS, FACET_RUN, RECEIPT_NAMESPACE, ReceiptError, ReceiptManifest,
 };
 
-
 /// What one ingest produced.
 #[derive(Clone, Debug)]
 pub struct IngestedReceipt {
@@ -97,7 +96,11 @@ pub async fn ingest_manifest<B: Backend>(
         format!("repo:{}", manifest.repo),
         format!("platform:{}", manifest.platform),
         format!("host:{}", manifest.host()),
-        if manifest.passed() { "receipt:ok".into() } else { "receipt:failed".into() },
+        if manifest.passed() {
+            "receipt:ok".into()
+        } else {
+            "receipt:failed".into()
+        },
     ] {
         events.push(PersonalGraphEvent::AddTag { node, tag });
     }
@@ -240,10 +243,9 @@ mod tests {
         assert!(a.address().starts_with("receipt:woodshed/thinkpad/"));
 
         // A different run is a different receipt.
-        let other = ReceiptManifest::parse(
-            &manifest_json("").replace("mark@thinkpad", "mark@imac"),
-        )
-        .unwrap();
+        let other =
+            ReceiptManifest::parse(&manifest_json("").replace("mark@thinkpad", "mark@imac"))
+                .unwrap();
         assert_ne!(a.node_id(), other.node_id());
     }
 
@@ -299,10 +301,7 @@ mod tests {
                 ingested
                     .events
                     .iter()
-                    .filter(|e| matches!(
-                        e,
-                        PersonalGraphEvent::ObserveBlobAvailability { .. }
-                    ))
+                    .filter(|e| matches!(e, PersonalGraphEvent::ObserveBlobAvailability { .. }))
                     .count(),
                 1,
             );
@@ -355,7 +354,9 @@ mod tests {
             )
             .unwrap();
 
-            let a = ingest_directory(laptop.path(), &store, "laptop").await.unwrap();
+            let a = ingest_directory(laptop.path(), &store, "laptop")
+                .await
+                .unwrap();
             let b = ingest_directory(imac.path(), &store, "imac").await.unwrap();
 
             assert_ne!(a.node, b.node, "two runs, two receipts");

@@ -14,13 +14,13 @@ mod native {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    use graphshell_endpoint::{
-        IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
-        ProjectionSource, ResumableProjectionSource,
-    };
     use chirograph::{
         CarrierError, CarrierFailure, CarrierNotice, CarrierOutput, CarrierRequest,
         CarrierRequestBody, CarrierResponse, CarrierResponseBody,
+    };
+    use graphshell_endpoint::{
+        IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
+        ProjectionSource, ResumableProjectionSource,
     };
 
     /// Serve discovery, snapshots, resources, and intents until the input
@@ -148,10 +148,7 @@ mod native {
         <E as IntentSink>::Error: Display,
         R: Read,
         W: Write,
-        F: FnMut(
-            &mut E,
-            chirograph::ResumeRequest,
-        ) -> Result<chirograph::ResumeReply, String>,
+        F: FnMut(&mut E, chirograph::ResumeRequest) -> Result<chirograph::ResumeReply, String>,
     {
         let reader = BufReader::new(reader);
         let mut writer = BufWriter::new(writer);
@@ -203,10 +200,7 @@ mod native {
         <E as ProjectionSource>::Error: Display,
         <E as PresentationSource>::Error: Display,
         <E as IntentSink>::Error: Display,
-        F: FnMut(
-            &mut E,
-            chirograph::ResumeRequest,
-        ) -> Result<chirograph::ResumeReply, String>,
+        F: FnMut(&mut E, chirograph::ResumeRequest) -> Result<chirograph::ResumeReply, String>,
     {
         let session_plane = match graphshell_endpoint::dispatch_common(endpoint, request, resume) {
             Ok(response) => return (response, false),
@@ -427,16 +421,16 @@ mod native {
         use std::io::{Cursor, Read};
         use std::time::Duration;
 
-        use graphshell_endpoint::{
-            IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
-            ProjectionSource, ResumableProjectionSource,
-        };
         use chirograph::{
             CachePolicy, CapabilityProfile, CarrierNotice, CarrierOutput, CarrierRequest,
             CarrierRequestBody, CarrierResponse, CarrierResponseBody, EndpointDescriptor,
             IntentInvocation, IntentResult, ProjectionAck, ProjectionOffer, ProjectionRequest,
             ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
             ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
+        };
+        use graphshell_endpoint::{
+            IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
+            ProjectionSource, ResumableProjectionSource,
         };
         use sceno::{Arrangement, Scene, Score, Spiral};
         use scenotime::{Revision, SceneEpoch, SceneSnapshot};

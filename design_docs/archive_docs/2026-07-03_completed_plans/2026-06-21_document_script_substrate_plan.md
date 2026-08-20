@@ -19,7 +19,7 @@ portability, ownership, and scheduling. The missing invention is therefore not
 universal execution (Wasm largely supplies that) but a good capability-oriented
 definition of what a document script is *permitted to do*.
 
-Related: [actor_constellation_plan](2026-06-03_actor_constellation_plan.md) (the
+Related: [actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md) (the
 host kernel + actor boundary this rides on; the deferred "capability / wasm-component
 isolation" seam this fills), [protocol_architecture_plan](2026-05-05_protocol_architecture_plan.md)
 (the deferred Extism/Wasmtime/Boa scripting-host probe this supersedes),
@@ -108,7 +108,7 @@ same conclusion the two-heap reflector finding reached from the other direction
   the Component Model as a cross-language script substrate today. It is not ruled
   out; it is simply not in the architectural conversation. (Confidence: high; full
   design-corpus sweep 2026-06-20.)
-- **The deferred seam is named.** [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
+- **The deferred seam is named.** [actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md)
   lists "capability / wasm-component isolation" as a *future plugin seam, not a
   near-term primitive*, and descopes the in-process wasmtime sandbox (P5) on the
   grounds that it "would require compiling the entire genet + Nova content engine
@@ -352,7 +352,7 @@ on two uncommitted engines).
 - **Wasmtime-on-native dependency call** (P0 gate, §7.3). Accept Cranelift in the
   native process for the contract + uniformity payoff, or defer until the
   untrusted-extension use-case is concrete.
-- **The P5-descope reconsideration.** [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
+- **The P5-descope reconsideration.** [actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md)
   framed isolation as binary: semi-trusted in-process, or hostile to an
   OS-subprocess. The Component Model is the **missing third option**: in-process
   capability confinement of genuinely untrusted extensions. An actor boundary
@@ -490,7 +490,7 @@ grows.
 
 - **AOT, not only JIT** (corrects §7.3, §9). "Native means a Cranelift JIT in the
   process" is too binary. Precompiled `.cwasm` artifacts plus a no-codegen runtime
-  (Wasmtime's Pulley, already noted in [actor_constellation_plan](2026-06-03_actor_constellation_plan.md))
+  (Wasmtime's Pulley, already noted in [actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md))
   keep the compiler at build time and embed only the executor. Add this as a third
   option in the §9 decision.
 - **Trim "remote-component boundary"** (corrects §6, §8). The Component Model gives
@@ -501,11 +501,11 @@ grows.
 - **Rune's warranty is partial** (refines §9). Wasm confines memory and removes
   ambient authority. It does not establish interpreter maturity, determinism, or
   tenant isolation inside a shared runtime, all of which the corpus already flags
-  ([actor_constellation_plan](2026-06-03_actor_constellation_plan.md):66-71: Rune
+  ([actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md):66-71: Rune
   self-labels its sandbox "no warranty" at 0.x; determinism documented by neither).
   Reopen Rune as a contained experiment, not a warranted one.
 - **Define "script instance"** (refines §6 P2). The actor model is one content actor
-  per origin / agent cluster ([actor_constellation_plan](2026-06-03_actor_constellation_plan.md):51),
+  per origin / agent cluster ([actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md):51),
   and an origin hosts many scripts. "One armillary actor per script instance" would
   multiply actors past that. Use one execution-host actor per origin (or trust
   principal) that schedules several component instances locally.
@@ -1026,7 +1026,7 @@ DOM model is the decision.
   `docs/2026-05-20_genet_script_engine_plan.md` (reflector model + per-target
   backend selection), `docs/2026-05-25_js_execution_strategy.md` (no-JIT, weval),
   `docs/2026-06-11_gc_arena_dom_plan.md` (the owned DOM store + mark-sweep).
-- mere: [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
+- mere: [actor_constellation_plan](../2026-08-20_completed_plans/2026-06-03_actor_constellation_plan.md)
   (the actor boundary + deferred plugin seam + P5 descope + Rune reopen trigger),
   [protocol_architecture_plan](2026-05-05_protocol_architecture_plan.md) (Extism
   gesture), [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)

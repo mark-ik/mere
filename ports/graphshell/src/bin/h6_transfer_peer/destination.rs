@@ -3,6 +3,11 @@
 use std::path::Path;
 use std::time::Instant;
 
+use chirograph::{
+    CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
+    ContentHash, IntentInvocation, IntentResult, PortableCardV1, ProtocolVersion, ResourceRequest,
+    ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
+};
 use eidetic::PrivacyClass;
 use graphshell::access::AccessContext;
 use graphshell::admission::open_session;
@@ -13,11 +18,6 @@ use graphshell::transfer::{
     apply_transfer,
 };
 use graphshell::transfer_endpoint::{TRANSFER_BEGIN_INTENT, TransferBeginV1};
-use chirograph::{
-    CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
-    ContentHash, IntentInvocation, IntentResult, PortableCardV1, ProtocolVersion, ResourceRequest,
-    ResourceResponse, ResumeReply, ResumeRequest, SessionOpen,
-};
 use muniment::{BlobStore, MemoryBackend};
 use notochord::{NetworkId, SessionReply, TrafficClass, initiate_session};
 use personae::{IdentityProvider, InMemoryProvider};
@@ -391,9 +391,7 @@ fn opened(body: CarrierResponseBody) -> Result<Box<chirograph::SessionOpened>, S
     }
 }
 
-fn snapshot(
-    body: CarrierResponseBody,
-) -> Result<Box<chirograph::ProjectionSnapshot>, String> {
+fn snapshot(body: CarrierResponseBody) -> Result<Box<chirograph::ProjectionSnapshot>, String> {
     match body {
         CarrierResponseBody::Snapshot(snapshot) => Ok(snapshot),
         other => Err(format!("expected snapshot, found {other:?}")),

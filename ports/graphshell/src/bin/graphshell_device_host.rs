@@ -9,10 +9,10 @@ use std::sync::Arc;
 
 use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
-#[cfg(feature = "personal-sync")]
-use graphshell::native::device_broker::serve_browser_broker_with_cards;
 use graphshell::native::app_admission::{AllowedApps, configured_app_endpoint};
 use graphshell::native::app_broker::serve_app_broker;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::device_broker::serve_browser_broker_with_cards;
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
 #[cfg(feature = "personal-sync")]
 use graphshell::native::device_sync;

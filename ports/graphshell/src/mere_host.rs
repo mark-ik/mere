@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use chartulary::{FacetError, FacetId};
-use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use chirograph::{
     BoundsRelationship, CachePolicy, CardValueV1, ContentHash, EndpointDescriptor,
     IntentInvocation, IntentResult, PortableCardV1, PresentationBinding, PresentationCapability,
@@ -11,6 +10,7 @@ use chirograph::{
     PresentationSemantics, ProjectionOffer, ProjectionRequest, ProjectionSession,
     ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, SemanticRole,
 };
+use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
 use mere::kernel::graph::{

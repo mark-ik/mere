@@ -123,8 +123,7 @@ pub fn pinned_instances(score: &Score, scene: &Scene) -> Vec<InstanceId> {
         .enumerate()
         .filter_map(|(index, item)| {
             let source = scene.sources.get(item.source.0 as usize)?;
-            matches!(score.hold_for(source)?.hold, Hold::Pinned)
-                .then_some(InstanceId(index as u32))
+            matches!(score.hold_for(source)?.hold, Hold::Pinned).then_some(InstanceId(index as u32))
         })
         .collect()
 }
@@ -369,7 +368,10 @@ mod tests {
         assert_eq!(pinned.len(), 2, "both instances of source 0 are pinned");
         // Anchored is best effort, so it is not immovable.
         for instance in &pinned {
-            assert_eq!(scene.sources[scene.items[instance.0 as usize].source.0 as usize].id, "0");
+            assert_eq!(
+                scene.sources[scene.items[instance.0 as usize].source.0 as usize].id,
+                "0"
+            );
         }
     }
 

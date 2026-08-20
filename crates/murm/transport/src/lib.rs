@@ -58,7 +58,7 @@ mod transport;
 
 pub use crate::accepted::{AcceptedSession, IngressContext, IngressInterfaceId, TransportKind};
 pub use crate::alpn::Alpn;
-pub use crate::blobs::{BlobError, BlobHash, BlobStore};
+pub use crate::blobs::{BlobError, BlobHash, BlobPeerAuthorizer, BlobStore};
 pub use crate::error::TransportError;
 pub use crate::p2panda_transport::{P2pandaStream, P2pandaTransport, sync_overlay_topic};
 // The gossip handle returned by `P2pandaTransport::subscribe` (space live-sync):

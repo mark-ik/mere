@@ -79,19 +79,10 @@ pub enum AppMessage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AppHostMessage {
-    Challenge {
-        challenge: BrowserChallenge,
-    },
-    Connected {
-        app: AppId,
-        session: String,
-    },
-    Response {
-        response: CarrierResponse,
-    },
-    Failure {
-        message: String,
-    },
+    Challenge { challenge: BrowserChallenge },
+    Connected { app: AppId, session: String },
+    Response { response: CarrierResponse },
+    Failure { message: String },
 }
 
 /// Open a connection to the resident host as `app`.
@@ -118,26 +109,30 @@ pub async fn serve_app_broker<S>(
 where
     S: IdentityStorage + 'static,
 {
-    serve_local(endpoint, "first-party", move |stream: Box<dyn LocalStream>| {
-        let personae = Arc::clone(&personae);
-        let allowed = allowed.clone();
-        let surface = surface.clone();
-        async move {
-            let (mut reader, mut writer) = tokio::io::split(stream);
-            if let Err(error) = serve_app_connection(
-                &mut reader,
-                &mut writer,
-                personae,
-                &allowed,
-                session_duration_ms,
-                surface,
-            )
-            .await
-            {
-                tracing::warn!(%error, "first-party session failed");
+    serve_local(
+        endpoint,
+        "first-party",
+        move |stream: Box<dyn LocalStream>| {
+            let personae = Arc::clone(&personae);
+            let allowed = allowed.clone();
+            let surface = surface.clone();
+            async move {
+                let (mut reader, mut writer) = tokio::io::split(stream);
+                if let Err(error) = serve_app_connection(
+                    &mut reader,
+                    &mut writer,
+                    personae,
+                    &allowed,
+                    session_duration_ms,
+                    surface,
+                )
+                .await
+                {
+                    tracing::warn!(%error, "first-party session failed");
+                }
             }
-        }
-    })
+        },
+    )
     .await?;
     Ok(())
 }
@@ -170,15 +165,7 @@ where
         Some(surface) => surface.read().await.clone(),
         None => DeviceSurface::default(),
     };
-    serve_admitted_app(
-        reader,
-        writer,
-        personae,
-        app,
-        session_duration_ms,
-        surface,
-    )
-    .await
+    serve_admitted_app(reader, writer, personae, app, session_duration_ms, surface).await
 }
 
 async fn serve_admitted_app<S, R, W>(

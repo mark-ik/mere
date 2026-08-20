@@ -92,7 +92,9 @@ pub(crate) fn grant_lifetime_ms(issued_at_ms: u64, expires_at_ms: Option<u64>) -
     expires.checked_sub(issued_at_ms).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("device grant expires_at_ms {expires} is not after issued_at_ms {issued_at_ms}"),
+            format!(
+                "device grant expires_at_ms {expires} is not after issued_at_ms {issued_at_ms}"
+            ),
         )
     })
 }
@@ -261,7 +263,7 @@ mod tests {
                 fixture_epoch(),
                 wrapping_key,
             )
-                .unwrap(),
+            .unwrap(),
             b"private-epoch-seed".to_vec()
         );
 
@@ -328,7 +330,9 @@ mod tests {
         let error = issue_remote_auth_device_grant(&root, &spec).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
         assert!(
-            load_device_grant_set(&root, spec.device_id).unwrap().is_empty()
+            load_device_grant_set(&root, spec.device_id)
+                .unwrap()
+                .is_empty()
         );
 
         let _ = std::fs::remove_dir_all(&root);

@@ -104,8 +104,8 @@ impl SealedRecordStorage {
                 NONCE_LEN
             )));
         }
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(self.key.as_ref()));
-        let nonce = Nonce::from_slice(&envelope.nonce);
+        let cipher = ChaCha20Poly1305::new(&Key::try_from(&self.key.as_ref()[..]).expect("fixed-length key material"));
+        let nonce = &Nonce::try_from(&envelope.nonce[..]).expect("fixed-length key material");
         let plaintext = Zeroizing::new(
             cipher
                 .decrypt(
@@ -141,10 +141,10 @@ impl SealedRecordStorage {
             IdentityError::Backend(format!("encode sealed record {:?}: {err}", path))
         })?);
         let nonce = random_bytes(NONCE_LEN);
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(self.key.as_ref()));
+        let cipher = ChaCha20Poly1305::new(&Key::try_from(&self.key.as_ref()[..]).expect("fixed-length key material"));
         let ciphertext = cipher
             .encrypt(
-                Nonce::from_slice(&nonce),
+                &Nonce::try_from(&nonce[..]).expect("fixed-length key material"),
                 Payload {
                     msg: plaintext.as_slice(),
                     aad: aad.as_bytes(),

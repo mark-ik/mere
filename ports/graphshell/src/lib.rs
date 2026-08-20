@@ -16,6 +16,8 @@ pub mod browser_storage;
 pub mod canary;
 #[cfg(feature = "web")]
 pub mod capture;
+#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+pub mod carriage;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod carrier;
 #[cfg(feature = "web")]
@@ -35,18 +37,16 @@ pub mod native;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod network_carrier;
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
-pub mod carriage;
-#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod personal_sync;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod policy_projection;
-/// Receipt ingest: a scenario-receipt directory becomes personal-graph facts.
-#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
-pub mod receipts;
 #[cfg(feature = "web")]
 pub mod product;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod profile;
+/// Receipt ingest: a scenario-receipt directory becomes personal-graph facts.
+#[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
+pub mod receipts;
 pub mod resume;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod session_loop;
@@ -61,6 +61,6 @@ pub mod transfer_endpoint;
 pub mod transfer_offer;
 pub mod view;
 
+pub use chirograph as protocol;
 pub use graphshell_client as client;
 pub use graphshell_endpoint as endpoint;
-pub use chirograph as protocol;

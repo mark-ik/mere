@@ -102,10 +102,10 @@ pub fn wrap_private_epoch_material(
 ) -> Result<WrappedEpochMaterial, WrappedEpochError> {
     let mut nonce_bytes = [0u8; 24];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let cipher = XChaCha20Poly1305::new(Key::from_slice(&wrapping_key));
+    let cipher = XChaCha20Poly1305::new(&Key::try_from(&wrapping_key[..]).expect("fixed-length key material"));
     let ciphertext = cipher
         .encrypt(
-            XNonce::from_slice(&nonce_bytes),
+            &XNonce::try_from(&nonce_bytes[..]).expect("fixed-length key material"),
             Payload {
                 msg: epoch_secret,
                 aad: &wrapped_epoch_aad(persona_id, epoch_id),
@@ -146,10 +146,10 @@ pub fn unwrap_private_epoch_material(
         return Err(WrappedEpochError::InvalidWrappedKeyLength);
     }
     let (nonce_bytes, ciphertext) = material.wrapped_key.split_at(24);
-    let cipher = XChaCha20Poly1305::new(Key::from_slice(&wrapping_key));
+    let cipher = XChaCha20Poly1305::new(&Key::try_from(&wrapping_key[..]).expect("fixed-length key material"));
     cipher
         .decrypt(
-            XNonce::from_slice(nonce_bytes),
+            &XNonce::try_from(&nonce_bytes[..]).expect("fixed-length key material"),
             Payload {
                 msg: ciphertext,
                 aad: &wrapped_epoch_aad(persona_id, epoch_id),
@@ -266,13 +266,9 @@ mod tests {
             wrap_format: wrapped.wrap_format.clone(),
             wrapped_key: wrapped.wrapped_key.clone(),
         };
-        let err = unwrap_private_epoch_material(
-            &forged,
-            fixture_persona(),
-            second_epoch(),
-            wrapping_key,
-        )
-        .unwrap_err();
+        let err =
+            unwrap_private_epoch_material(&forged, fixture_persona(), second_epoch(), wrapping_key)
+                .unwrap_err();
         assert_eq!(err, WrappedEpochError::Decrypt);
     }
 
@@ -297,7 +293,13 @@ mod tests {
     fn the_index_separates_personas_and_epochs() {
         let key = [4; 32];
         let base = blinded_epoch_index(fixture_persona(), fixture_epoch(), key);
-        assert_ne!(base, blinded_epoch_index(second_persona(), fixture_epoch(), key));
-        assert_ne!(base, blinded_epoch_index(fixture_persona(), second_epoch(), key));
+        assert_ne!(
+            base,
+            blinded_epoch_index(second_persona(), fixture_epoch(), key)
+        );
+        assert_ne!(
+            base,
+            blinded_epoch_index(fixture_persona(), second_epoch(), key)
+        );
     }
 }
