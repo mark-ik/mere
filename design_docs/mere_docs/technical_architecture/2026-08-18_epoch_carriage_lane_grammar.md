@@ -346,5 +346,17 @@ roots. The contract as ruled:
   `revoking_a_device_destroys_its_carriage_on_a_peer_before_expiry` shows the
   peer's copy replaced by the empty shell with the lease still hours from
   expiry, and the index consumed so retraction is once.
-- **One endpoint for both lanes.** Blocked on `set_topics` being
-  replace-not-append; the carriage host runs its own endpoint meanwhile.
+- ~~One endpoint for both lanes.~~ **Done 2026-08-20, after Mark challenged
+  the blocker.** The replace-not-append limitation was in code we own three
+  layers deep, and the append form (`AddressBook::add_topic`) already existed
+  in the p2panda fork; murm now exposes it as `add_topics`, the sync host
+  passes it and its bound endpoint through, and `CarriageHost::attach` joins
+  the carriage topic on that endpoint with no second bind. An attached host
+  reports the sync host's node id, shares its ticket and pairing (the routing
+  half of the layering ruling, made physical), and never closes the shared
+  transport. Proven by
+  `both_lanes_converge_over_one_endpoint_per_device`: a slot recovers and a
+  graph node syncs between the same two endpoints, which is what shows the
+  overlay tags composed instead of clobbering. One consequence: the sync
+  host's close probe waits ten seconds rather than one, since an attached
+  lane's tasks release the store asynchronously after drop.

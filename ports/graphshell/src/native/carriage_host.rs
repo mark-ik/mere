@@ -8,11 +8,12 @@
 //! grants carriage, pairing list routes) is enforced by who gets a lease
 //! issued and who gets paired, not here.
 //!
-//! Its own endpoint, for now. The grammar puts carriage on a sibling topic of
-//! the same transport stack, and this host mirrors `PersonalSyncHost`'s
-//! wiring exactly; folding both lanes onto one bound endpoint is a later
-//! step, because `set_topics` replaces a peer's topic set and the two hosts
-//! would clobber each other's overlay tags today.
+//! Two ways onto the wire. [`CarriageHost::open`] binds its own endpoint,
+//! mirroring `PersonalSyncHost`'s wiring; [`CarriageHost::attach`] joins the
+//! carriage topic on the sync host's already-bound endpoint, which is the
+//! grammar's sibling-topic ruling made physical. The fold was unblocked by
+//! `add_topics`, the append form of `set_topics`, so the second lane's
+//! overlay tag no longer clobbers the first's.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -57,7 +58,10 @@ pub struct CarriageHost {
     graph: [u8; 32],
     store: MunimentStore<RedbBackend, CarriageExt>,
     joined: JoinedSpace<CarriageExt>,
-    transport: P2pandaTransport,
+    /// Owned in standalone mode; `None` when attached to the personal sync
+    /// host's endpoint, which then outlives and closes the transport.
+    transport: Option<P2pandaTransport>,
+    node_id: [u8; 32],
     writer: SigningKey,
     trusted_roots: Vec<[u8; 32]>,
     ceilings: CarriageCeilings,
@@ -187,20 +191,132 @@ impl CarriageHost {
         let (endpoint, gossip) = transport
             .sync_parts()
             .ok_or_else(|| CarriageHostError::Transport("gossip is unavailable".into()))?;
-        let intake_store = store.clone();
-        let intake_held = Arc::clone(&held);
         let graph = config.graph;
-        let trusted_roots = config.trusted_roots.clone();
-        let ceilings = config.ceilings;
-        let joined = JoinedSpace::join::<_, [u8; 32], _, _>(
-            lane_id("graphshell/carriage/v1", graph),
+        let joined = Self::join_lane(
+            graph,
             store.clone(),
+            endpoint,
+            gossip,
+            config.trusted_roots.clone(),
+            config.ceilings,
+            Arc::clone(&held),
+        )
+        .await?;
+
+        Ok(Self {
+            graph,
+            store,
+            joined,
+            node_id: transport.local_peer_id().to_bytes(),
+            transport: Some(transport),
+            writer,
+            trusted_roots: config.trusted_roots,
+            ceilings: config.ceilings,
+            held,
+        })
+    }
+
+    /// Join the carriage topic on an already-bound personal sync endpoint,
+    /// instead of opening a second endpoint per device.
+    ///
+    /// This is the fold the module header used to rule out: it became
+    /// possible when `add_topics` landed as the append form of `set_topics`,
+    /// so the carriage overlay tag no longer clobbers the graph lane's. The
+    /// writer identity stays carriage's own derivation; only the wire is
+    /// shared. Peers reach an attached host through the sync host's ticket
+    /// and pairing, which is the layering ruling made physical: the pairing
+    /// list routes, and it routes both lanes at once.
+    pub async fn attach<P: IdentityProvider + ?Sized>(
+        identity: &P,
+        sync: &super::personal_sync_host::PersonalSyncHost,
+        store_path: PathBuf,
+        trusted_roots: Vec<[u8; 32]>,
+        ceilings: CarriageCeilings,
+        peers: &[[u8; 32]],
+    ) -> Result<Self, CarriageHostError> {
+        let graph = sync.graph();
+        if let Some(parent) = store_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| CarriageHostError::Transport(error.to_string()))?;
+        }
+        let backend = RedbBackend::open(&store_path)?;
+        let store: MunimentStore<RedbBackend, CarriageExt> = MunimentStore::new(backend);
+        let held = Arc::new(RwLock::new(scan_held(&store, graph).await?));
+        let transport_key = identity.derive_keypair(&carriage_identity_salt(graph))?;
+        let writer = SigningKey::from_bytes(&transport_key.to_seed());
+
+        let overlay = sync_overlay_topic(carriage_topic(graph));
+        for node in peers {
+            sync.add_topics(*node, &[overlay])
+                .await
+                .map_err(|error| CarriageHostError::Transport(error.to_string()))?;
+        }
+        let (endpoint, gossip) = sync
+            .sync_parts()
+            .ok_or_else(|| CarriageHostError::Transport("gossip is unavailable".into()))?;
+        let joined = Self::join_lane(
+            graph,
+            store.clone(),
+            endpoint,
+            gossip,
+            trusted_roots.clone(),
+            ceilings,
+            Arc::clone(&held),
+        )
+        .await?;
+        Ok(Self {
+            graph,
+            store,
+            joined,
+            node_id: sync.node_id(),
+            transport: None,
+            writer,
+            trusted_roots,
+            ceilings,
+            held,
+        })
+    }
+
+    pub fn node_id(&self) -> [u8; 32] {
+        self.node_id
+    }
+
+    /// A dial ticket, in standalone mode only. An attached host shares the
+    /// sync host's endpoint, so peers dial that host's ticket.
+    pub async fn ticket(&self) -> Result<String, CarriageHostError> {
+        let Some(transport) = &self.transport else {
+            return Err(CarriageHostError::Transport(
+                "attached carriage shares the sync host's endpoint; use its ticket".into(),
+            ));
+        };
+        transport
+            .ticket()
+            .await
+            .map_err(|error| CarriageHostError::Transport(error.to_string()))
+    }
+
+    /// Join the carriage lane over any endpoint, own or shared: the one
+    /// intake both constructors speak, so an attached host admits exactly
+    /// what a standalone one would.
+    async fn join_lane(
+        graph: [u8; 32],
+        store: MunimentStore<RedbBackend, CarriageExt>,
+        endpoint: transport::p2panda_transport::Endpoint,
+        gossip: transport::p2panda_transport::Gossip,
+        trusted_roots: Vec<[u8; 32]>,
+        ceilings: CarriageCeilings,
+        held: Arc<RwLock<HashMap<BlindedSlotId, HeldLease>>>,
+    ) -> Result<JoinedSpace<CarriageExt>, CarriageHostError> {
+        let intake_store = store.clone();
+        Ok(JoinedSpace::join::<_, [u8; 32], _, _>(
+            lane_id("graphshell/carriage/v1", graph),
+            store,
             endpoint,
             gossip,
             carriage_topic(graph),
             move |operation| {
                 let store = intake_store.clone();
-                let held = Arc::clone(&intake_held);
+                let held = Arc::clone(&held);
                 let trusted_roots = trusted_roots.clone();
                 async move {
                     let view = held.read().await.clone();
@@ -239,29 +355,7 @@ impl CarriageHost {
                 }
             },
         )
-        .await?;
-
-        Ok(Self {
-            graph,
-            store,
-            joined,
-            transport,
-            writer,
-            trusted_roots: config.trusted_roots,
-            ceilings: config.ceilings,
-            held,
-        })
-    }
-
-    pub fn node_id(&self) -> [u8; 32] {
-        self.transport.local_peer_id().to_bytes()
-    }
-
-    pub async fn ticket(&self) -> Result<String, CarriageHostError> {
-        self.transport
-            .ticket()
-            .await
-            .map_err(|error| CarriageHostError::Transport(error.to_string()))
+        .await?)
     }
 
     /// Publish one slot version: sign the lease, chain it onto this writer's
@@ -460,10 +554,13 @@ impl CarriageHost {
 
     pub async fn close(self) -> Result<(), CarriageHostError> {
         self.joined.leave();
-        self.transport
-            .close()
-            .await
-            .map_err(|error| CarriageHostError::Transport(error.to_string()))
+        if let Some(transport) = self.transport {
+            transport
+                .close()
+                .await
+                .map_err(|error| CarriageHostError::Transport(error.to_string()))?;
+        }
+        Ok(())
     }
 }
 

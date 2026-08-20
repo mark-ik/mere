@@ -479,3 +479,147 @@ mod retraction {
         replica_host.close().await.unwrap();
     }
 }
+
+/// The endpoint fold: carriage attached to the personal sync host's bound
+/// endpoint, both lanes converging over one connection per device.
+mod attached {
+    use super::*;
+    use crate::native::personal_sync_host::{PersonalSyncHost, PersonalSyncHostConfig};
+    use crate::personal_sync::{PersonalGraphEvent, SyncRoster, SyncSelection};
+    use personae::{IdentityProvider, InMemoryProvider};
+    use uuid::Uuid;
+
+    const GRAPH: [u8; 32] = [0xB1; 32];
+
+    fn issuer() -> Ed25519Keypair {
+        Ed25519Keypair::from_seed([0xB2; 32])
+    }
+
+    fn slot() -> BlindedSlotId {
+        pandect::blinded_slot_id(
+            personae::delegation::DelegationId([0xB3; 32]),
+            [0xB4; 32],
+        )
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn both_lanes_converge_over_one_endpoint_per_device() {
+        let directory = tempfile::tempdir().unwrap();
+        let owner = InMemoryProvider::from_seed([0xB5; 32]);
+        let sibling = InMemoryProvider::from_seed([0xB6; 32]);
+        let roster = SyncRoster::new([
+            owner.master_public_key().to_bytes(),
+            sibling.master_public_key().to_bytes(),
+        ]);
+        let sync_config = |path: std::path::PathBuf, tickets: Vec<String>| PersonalSyncHostConfig {
+            graph: GRAPH,
+            store_path: path,
+            roster: roster.clone(),
+            selection: SyncSelection::default(),
+            peer_tickets: tickets,
+            peer_hints: Vec::new(),
+            paired_nodes: Vec::new(),
+            relay_urls: Vec::new(),
+        };
+        let owner_sync = PersonalSyncHost::open(
+            &owner,
+            sync_config(directory.path().join("owner.redb"), Vec::new()),
+        )
+        .await
+        .unwrap();
+        let sibling_sync = PersonalSyncHost::open(
+            &sibling,
+            sync_config(
+                directory.path().join("sibling.redb"),
+                vec![owner_sync.ticket().await.unwrap()],
+            ),
+        )
+        .await
+        .unwrap();
+        owner_sync.pair_node(sibling_sync.node_id()).await.unwrap();
+
+        // Attach carriage to BOTH existing endpoints: no second bind, and the
+        // append-form overlay tag must leave the graph lane's tag standing.
+        let trusted = vec![issuer().public_key().to_bytes()];
+        let owner_carriage = CarriageHost::attach(
+            &owner,
+            &owner_sync,
+            directory.path().join("owner-carriage.redb"),
+            trusted.clone(),
+            CarriageCeilings::default(),
+            &[sibling_sync.node_id()],
+        )
+        .await
+        .unwrap();
+        let sibling_carriage = CarriageHost::attach(
+            &sibling,
+            &sibling_sync,
+            directory.path().join("sibling-carriage.redb"),
+            trusted,
+            CarriageCeilings::default(),
+            &[owner_sync.node_id()],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            owner_carriage.node_id(),
+            owner_sync.node_id(),
+            "an attached lane is the same endpoint, not a second identity"
+        );
+
+        // Carriage lane converges...
+        owner_carriage
+            .publish_slot(
+                &issuer(),
+                slot(),
+                1,
+                now_ms() + 60_000,
+                b"folded-lane-record".to_vec(),
+                CarriageCeilings::default(),
+            )
+            .await
+            .unwrap();
+        let mut recovered = None;
+        for _ in 0..100 {
+            recovered = sibling_carriage.recover(slot()).await.unwrap();
+            if recovered.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(
+            recovered.as_deref(),
+            Some(b"folded-lane-record".as_slice()),
+            "the carriage lane must converge over the shared endpoint"
+        );
+
+        // ...and the graph lane still does, which is what proves the overlay
+        // tags composed instead of clobbering.
+        owner_sync
+            .author(vec![PersonalGraphEvent::AddNode {
+                id: Uuid::from_u128(0xB7),
+                address: "https://folded.test/".into(),
+                title: "Folded-lane node".into(),
+            }])
+            .await
+            .unwrap();
+        let mut graph_converged = false;
+        for _ in 0..100 {
+            let cards = sibling_sync.supplemental_cards().await.unwrap();
+            if cards.iter().any(|card| card.card.title == "Folded-lane node") {
+                graph_converged = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert!(
+            graph_converged,
+            "the graph lane must still converge beside carriage"
+        );
+
+        owner_carriage.close().await.unwrap();
+        sibling_carriage.close().await.unwrap();
+        owner_sync.close().await.unwrap();
+        sibling_sync.close().await.unwrap();
+    }
+}

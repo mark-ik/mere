@@ -339,6 +339,30 @@ impl PersonalSyncHost {
         self.graph
     }
 
+    /// The endpoint and gossip handles a sibling lane joins with, as owned
+    /// clones. What lets carriage ride this same bound endpoint instead of
+    /// opening a second one per device.
+    pub fn sync_parts(&self) -> Option<(transport::p2panda_transport::Endpoint, transport::p2panda_transport::Gossip)> {
+        self.transport.sync_parts()
+    }
+
+    /// Tag a peer with additional overlay topics, keeping its existing tags.
+    ///
+    /// The append form a sibling lane must use: `set_topics` replaces, so a
+    /// second lane tagging through it would clobber this lane's overlay.
+    pub async fn add_topics(
+        &self,
+        node: [u8; 32],
+        topics: &[[u8; 32]],
+    ) -> Result<(), PersonalSyncHostError> {
+        let peer = PeerID::from_bytes(&node)
+            .map_err(|error| PersonalSyncHostError::Transport(format!("peer node id: {error}")))?;
+        self.transport
+            .add_topics(peer, topics)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+    }
+
     /// This device's blob store: what it serves to siblings, and where a
     /// fetched blob lands.
     pub fn blobs(&self) -> &BlobStore {
@@ -927,7 +951,11 @@ impl PersonalSyncHost {
         drop(self.replica);
 
         let mut last_error = None;
-        for _ in 0..50 {
+        // Ten seconds rather than one. An attached sibling lane (carriage)
+        // holds endpoint clones whose LogSync tasks shut down asynchronously
+        // after drop, and until they do the graph store's final release can
+        // lag; one second was calibrated for the single-lane host.
+        for _ in 0..500 {
             match RedbBackend::open(&store_path) {
                 Ok(probe) => {
                     drop(probe);

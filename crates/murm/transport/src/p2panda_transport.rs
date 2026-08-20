@@ -54,7 +54,10 @@ use iroh_tickets::endpoint::EndpointTicket;
 use p2panda_core::{SigningKey, Topic, VerifyingKey};
 use p2panda_net::addrs::NodeInfo;
 use p2panda_net::discovery::DiscoveryConfig;
-use p2panda_net::gossip::{Gossip, GossipHandle};
+pub use p2panda_net::Endpoint;
+pub use p2panda_net::gossip::Gossip;
+
+use p2panda_net::gossip::GossipHandle;
 // Re-exported: [`P2pandaTransportBuilder::mdns`] is public but its argument
 // type was not, so no consumer outside this crate could call it.
 pub use p2panda_net::iroh_mdns::MdnsDiscoveryMode;
@@ -63,7 +66,7 @@ pub use p2panda_net::iroh_mdns::MdnsDiscoveryMode;
 pub use iroh::RelayUrl;
 use muniment::{JsonCodec, MemoryBackend};
 use p2panda_net::address_book::AddressBookStoreHandle;
-use p2panda_net::{AddressBook, Discovery, Endpoint, MdnsDiscovery};
+use p2panda_net::{AddressBook, Discovery, MdnsDiscovery};
 use stickleback::MunimentAddressBook;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
@@ -824,6 +827,28 @@ impl P2pandaTransport {
             .set_topics(node_id, topics.iter().map(|t| Topic::from(*t)))
             .await
             .map_err(|e| TransportError::Backend(format!("set_topics: {e}")))
+    }
+
+    /// Tag `peer` with additional overlay topics, keeping its existing set.
+    ///
+    /// The append form of [`set_topics`](Self::set_topics), which replaces.
+    /// Two lanes sharing one endpoint (e.g. a personal graph and its carriage
+    /// sibling) must use this for the second lane's tag, or each host clobbers
+    /// the other's overlay and neither converges.
+    pub async fn add_topics(
+        &self,
+        peer: PeerID,
+        topics: &[[u8; 32]],
+    ) -> Result<(), TransportError> {
+        let node_id = VerifyingKey::from_bytes(&peer.to_bytes())
+            .map_err(|e| TransportError::Backend(format!("peer key: {e}")))?;
+        for topic in topics {
+            self.address_book
+                .add_topic(node_id, Topic::from(*topic))
+                .await
+                .map_err(|e| TransportError::Backend(format!("add_topic: {e}")))?;
+        }
+        Ok(())
     }
 
     /// The endpoint + gossip handles a `LogSync` session needs, as owned clones.
