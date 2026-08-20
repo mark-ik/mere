@@ -185,10 +185,10 @@ pub(super) fn schedule_frames(state: Rc<RefCell<BrowserHost>>) -> Result<(), Str
     let frame = Rc::new(RefCell::new(None::<FrameClosure>));
     let next = frame.clone();
     let callback_state = state.clone();
-    *next.borrow_mut() = Some(Closure::new(move |_: f64| {
+    *next.borrow_mut() = Some(Closure::new(move |host_ms: f64| {
         {
             let mut host = callback_state.borrow_mut();
-            if let Err(error) = host.render() {
+            if let Err(error) = host.render(host_ms) {
                 web_sys::console::error_1(&error.clone().into());
                 if let Ok(document) = document() {
                     document.set_title(&format!("GRAPHSHELL H3 FAIL: {error}"));

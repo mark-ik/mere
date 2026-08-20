@@ -23,7 +23,7 @@ each.
 | --- | --- |
 | [sceno](sceno/) | Core contracts. `SourceRef` / `SourceIx`, `Space` / `SpaceId`, `InstanceId`, `Footprint`, `Representation`, `ProjectedItem`, `RoutedRelation`, `Region`, `Scene`, plus the persisted `Score` / `ScoreItem` / `Arrangement` / `Placement` / `SCORE_VERSION` vocabulary and the geometry types `Vec2`, `Size2`, `Rect`, `Transform2`. |
 | [scenomise](scenomise/) | Choreography. `solve(&Score) -> Scene` realizes the arrangements; `relax(&mut Scene, &Relaxation)` is a dependency-free repulsion / spring / arrangement-pull pass for surfaces without their own physics sim. |
-| [scenotime](scenotime/) | Runtime. `SceneSnapshot` / `SceneTables` with tombstoned slots, `SceneEpoch` / `Revision` / `RelationId` / `RegionId`, `SceneDiff` / `SceneOp` / `apply_diff` returning `ApplyOutcome`, and `pick(world) -> Option<InstanceId>`. |
+| [scenotime](scenotime/) | Runtime. `SceneSnapshot` / `SceneTables` with tombstoned slots, `SceneEpoch` / `Revision` / `RelationId` / `RegionId`, `SceneDiff` / `SceneOp` / `apply_diff` returning `ApplyOutcome`, `TransitionSpec` / `TransitionSchedule` with pure host-time sampling, and `pick(world) -> Option<InstanceId>`. |
 | [scenograph](scenograph/) | Thin facade re-exporting the three. |
 
 ## Vocabulary
@@ -35,6 +35,9 @@ each.
   `Open { kind }`.
 - `SceneOp`: add / update / tombstone for sources, spaces, items, relations and
   regions, plus `SetItemLayer`, `SetItemOrder`, `SetBounds`, `SetGeneration`.
+- `TransitionSpec`: duration, easing, and enter / update / exit stage windows;
+  `TransitionSchedule` derives stable item windows from one validated diff and
+  samples them at host-supplied elapsed time.
 
 A `ProjectedItem` carries `source`, `space`, `transform`, `footprint`,
 `representation`, `layer`, `visible`, an optional `hit` shape, and an open
@@ -54,9 +57,10 @@ engine, or GPU dependencies.
 ## Status
 
 Action intents are not modelled here. `sceno` owns instance identity,
-`scenotime` owns epoch and revision identity, and the consuming protocol owns
-the intent triple. Incremental signal evaluation and renderer realization are
-later work.
+`scenotime` owns epoch and revision identity plus deterministic transition
+evaluation. The consuming protocol owns the intent triple, and the host owns
+the clock. Incremental signal evaluation and renderer realization are later
+work.
 
 See [the scene contract note](design_docs/2026-07-22_scene_contract_note.md) and
 [the epoch/diff note](design_docs/2026-07-22_scenotime_epoch_diff_note.md).

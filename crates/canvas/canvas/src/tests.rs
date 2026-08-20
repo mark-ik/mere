@@ -1113,6 +1113,30 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
 }
 
 #[test]
+fn transition_preview_uses_the_strategy_buffer_until_the_final_snap() {
+    let mut canvas = Canvas::new();
+    let key = canvas.visit("https://transition-preview.example");
+    canvas.set_layout_strategy(Some("test.grid".to_string()));
+    canvas.apply_strategy_positions(&[(key, PortablePoint::new(10.0, 20.0))]);
+
+    canvas.preview_strategy_positions(&[(key, PortablePoint::new(40.0, 50.0))]);
+    canvas.apply_strategy_to_view();
+    assert_eq!(
+        canvas.view.position_of(key),
+        Some(PortablePoint::new(40.0, 50.0)),
+        "a host-clock sample reaches the same render buffer as a snapped strategy",
+    );
+
+    canvas.apply_strategy_positions(&[(key, PortablePoint::new(70.0, 80.0))]);
+    canvas.apply_strategy_to_view();
+    assert_eq!(
+        canvas.view.position_of(key),
+        Some(PortablePoint::new(70.0, 80.0)),
+        "the final placement still goes through the ordinary strategy authority",
+    );
+}
+
+#[test]
 fn dragging_a_node_updates_its_active_strategy_slot() {
     let mut graph = Graph::new();
     graph.add_node(

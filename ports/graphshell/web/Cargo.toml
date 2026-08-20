@@ -18,6 +18,7 @@ mere = { path = "../../../crates/mere", default-features = false, features = ["g
 muniment = { path = "../../../crates/eidetic/muniment", features = ["indexeddb"] }
 graphshell-client = { path = "../../../crates/graphshell/graphshell-client" }
 sceno = { path = "../../../crates/scenograph/sceno" }
+scenotime = { path = "../../../crates/scenograph/scenotime" }
 serde.workspace = true
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 genet-layout = { git = "https://github.com/merely-made/genet.git", branch = "main" }

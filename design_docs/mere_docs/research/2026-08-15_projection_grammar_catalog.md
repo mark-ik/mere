@@ -224,7 +224,12 @@ Motion has several meanings and should not collapse into one physics switch:
 - data-encoded motion;
 - ambient product behavior.
 
-Scenotime can carry portable epochs, diffs, and picking state. Hosts and renderers decide the interpolation and product meaning.
+Scenotime carries portable epochs, diffs, picking state, and deterministic
+transition schedules between revisions. A transition spec declares class
+windows, duration ratios, and easing; pure evaluation accepts elapsed time from
+the host. The host still owns the clock and product meaning, while its renderer
+realizes the sampled values. Solver motion, direct manipulation, data-encoded
+motion, and ambient behavior remain separate systems.
 
 ## Projection family catalog
 

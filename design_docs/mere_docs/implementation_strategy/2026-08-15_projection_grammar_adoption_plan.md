@@ -214,7 +214,7 @@ Stage-two done when: the ladder travels beside the score because a second host
 needs to re-select locally, and that host honors it without porting Mere's
 selection code.
 
-**A4. Transition specs between epochs.**
+**A4. Transition specs between epochs - CLOSED 2026-08-19.**
 Context: expansion lane L5 named motion the deepest of the missing 90%;
 `scenotime::diff` computes what changed and every consumer snaps. Gemini's
 result: transitions specified relative to explicit start and end states, over
@@ -355,7 +355,8 @@ item returning home, and an unmet pin visibly reported.
 Done when: no best-effort placement is presented as satisfied truth in any
 cambium-hosted view.
 
-**C2. Transition playback with the host clock (consumer half of A4).**
+**C2. Transition playback with the host clock (consumer half of A4) - CLOSED
+2026-08-19.**
 Context: scenotime evaluates transitions purely; a cambium host owns time.
 Tasks: the host drives A4's schedule with its frame clock; woodshed's
 rehearsal filmstrip is the named first consumer (L5); the canvas projection
@@ -386,14 +387,15 @@ consumers.
 
 ### Sequence
 
-Closed: **A0**, **A6**, **A1**, **C1**, **B3**, **A3 stage one**, and P3b's
-local selection-to-renderer proof. **A2's serialization half** is landed; its
-resolution half still waits on a genuine two-view ask. **B1's** implementation
-and driven probe are closed; only the manual OS screen-reader pass remains.
+Closed: **A0**, **A6**, **A1**, **C1**, **B3**, **A3 stage one**, **A4 + C2**,
+and P3b's local selection-to-renderer proof. **A2's serialization half** is
+landed; its resolution half still waits on a genuine two-view ask. **B1's**
+implementation and driven probe are closed; only the manual OS screen-reader
+pass remains.
 
-Open next through existing gates: **A4 + C2** with the first continuous
-reprojection; **C3** with L2's two backdrop consumers. **A3 stage two** waits
-for a remote re-selection consumer. **A5** stays behind the promotion suite.
+Open next through existing gates: **C3** with L2's two backdrop consumers.
+**A3 stage two** waits for a remote re-selection consumer. **A5** stays behind
+the promotion suite.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -773,3 +775,19 @@ not settled without it.
   and prove a whole-graph swap clears the rebound score state. This closes the
   local forcing consumer for A3 stage one; A3 stage two remains gated on a
   remote client that must perform its own re-selection.
+- 2026-08-19: **A4 + C2 landed through Graphshell's Canvas arrangement
+  switch.** `scenotime::TransitionSpec` declares duration, easing, class
+  windows, and stable stagger ratios over a validated `SceneDiff`.
+  `TransitionSchedule::sample_at` is a pure function of that data and elapsed
+  host time. The default stages exits, updates, and entrances without adding
+  motion to `Arrangement` or changing direct diff application.
+  Graphshell builds the arrangement change as a real scene diff, advances it
+  from browser frame timestamps, and feeds sampled positions through Canvas's
+  preview buffer. Completion returns to the ordinary strategy apply, which is
+  still the authority that seeds physics. The host clock explicitly excludes
+  paused intervals; identical timestamp sequences replay identically.
+  Receipts: 27 scenotime tests, 179 Canvas tests, the focused Graphshell host
+  clock test, and a wasm32 build. A headed browser drive reported
+  `Arrangement changing to grid.default` before
+  `Arrangement set to grid.default`; the start and final canvas captures were
+  distinct. Consumers that do not construct a schedule continue to snap.

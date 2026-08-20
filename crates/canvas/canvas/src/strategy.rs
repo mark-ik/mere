@@ -143,6 +143,18 @@ impl Canvas {
         }
     }
 
+    /// Display an in-between analytic placement without reseeding physics.
+    ///
+    /// A host-clocked projection transition calls this for sampled frames and
+    /// finishes with [`apply_strategy_positions`](Self::apply_strategy_positions)
+    /// so only the final arrangement becomes the physics initial condition.
+    /// Consumers that never adopt transitions keep using the snap method.
+    pub fn preview_strategy_positions(&mut self, positions: &[(NodeKey, PortablePoint)]) {
+        if self.active_strategy.is_some() {
+            self.strategy_positions = Some(positions.to_vec());
+        }
+    }
+
     /// Install the active arrangement's slots as anchor springs, so a *playing*
     /// graph is pulled toward the arrangement while repulsion, edge springs,
     /// collisions, coupled fields, and drag all still act — the arrangement as

@@ -130,6 +130,7 @@ pub mod sprite_hull;
 /// The canvas scene-paint underlay (edges + demoted node rects + overlays).
 pub mod underlay;
 
+pub use ::cartography::MERE_GRAPH_ADAPTER;
 pub use cartography_scene::{
     CANVAS_LAYOUT_STRATEGIES, CanvasStrategyProjection, CartographySceneOptions,
     build_projection_request, project_canvas_lens, project_canvas_strategy,

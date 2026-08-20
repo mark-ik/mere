@@ -25,6 +25,45 @@ pub const SAVED_SCENE_FACET: &str = "graphshell.saved-scene/v2";
 pub const PINNED_PROJECTION_FACET: &str = "graphshell.pinned-projection/v1";
 pub const PRODUCT_ENGRAM_SCHEMA: &str = "graphshell.graph-engram/v1";
 
+/// The host-owned elapsed clock for one projection transition.
+///
+/// Browser frame timestamps enter through [`observe`](Self::observe). Pausing
+/// keeps observing the host so resuming cannot charge the paused interval to
+/// the transition. Scenotime sees only the resulting elapsed value.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProjectionClock {
+    elapsed_ms: f32,
+    last_host_ms: Option<f64>,
+    paused: bool,
+}
+
+impl ProjectionClock {
+    pub fn observe(&mut self, host_ms: f64) -> f32 {
+        if !host_ms.is_finite() {
+            return self.elapsed_ms;
+        }
+        let previous = self.last_host_ms.replace(host_ms);
+        if !self.paused
+            && let Some(previous) = previous
+        {
+            self.elapsed_ms += (host_ms - previous).max(0.0) as f32;
+        }
+        self.elapsed_ms
+    }
+
+    pub fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused
+    }
+
+    pub fn elapsed_ms(&self) -> f32 {
+        self.elapsed_ms
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TransferScope {
@@ -727,6 +766,23 @@ mod tests {
             persona: FIXTURE_PERSONA_ADDRESS.to_string(),
             profile: "profile:graphshell-h3".to_string(),
         }
+    }
+
+    #[test]
+    fn projection_clock_excludes_paused_host_time_and_replays_deterministically() {
+        fn run() -> Vec<f32> {
+            let mut clock = ProjectionClock::default();
+            let mut receipt = vec![clock.observe(100.0), clock.observe(140.0)];
+            clock.set_paused(true);
+            receipt.push(clock.observe(240.0));
+            receipt.push(clock.observe(300.0));
+            clock.set_paused(false);
+            receipt.push(clock.observe(340.0));
+            receipt
+        }
+
+        assert_eq!(run(), vec![0.0, 40.0, 40.0, 40.0, 80.0]);
+        assert_eq!(run(), run(), "identical host timestamps replay identically");
     }
 
     #[test]

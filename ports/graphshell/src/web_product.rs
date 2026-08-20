@@ -94,6 +94,7 @@ impl BrowserHost {
     }
 
     pub(super) fn sync_canvas(&mut self, selected: &[Uuid], fit: bool) -> Result<(), String> {
+        self.arrangement_transition = None;
         let camera = self.canvas.camera();
         let previous_score = self.canvas.projection_score().cloned();
         let old = self.canvas.cartography_geometry();
@@ -168,6 +169,7 @@ impl BrowserHost {
     }
 
     pub(super) fn apply_saved_scene(&mut self, scene: SavedSceneV1) -> Result<(), String> {
+        self.arrangement_transition = None;
         self.layout_id = scene
             .layout_strategy
             .clone()
@@ -322,12 +324,12 @@ impl BrowserHost {
     }
 
     fn apply_arrangement_from_form(&mut self) -> Result<String, String> {
-        self.layout_id = select_value("arrangement-select")?;
+        let next_layout_id = select_value("arrangement-select")?;
         let selected = self.canvas.selected_members();
         let previous_score = self.canvas.projection_score().cloned();
         let extents = self.canvas.strategy_extents();
         let projection = project_canvas_strategy_with_score_for_view(
-            &self.layout_id,
+            &next_layout_id,
             self.canvas.graph(),
             self.canvas.focused_key(),
             self.width,
@@ -338,10 +340,14 @@ impl BrowserHost {
             self.canvas.camera().zoom,
             previous_score.as_ref(),
         );
+        let transitioning = self.begin_arrangement_transition(&projection.positions)?;
+        self.layout_id = next_layout_id;
         self.canvas
             .set_layout_strategy(Some(self.layout_id.clone()));
         self.canvas.set_projection_score(projection.score);
-        self.canvas.apply_strategy_positions(&projection.positions);
+        if !transitioning {
+            self.canvas.apply_strategy_positions(&projection.positions);
+        }
         self.canvas.note_strategy_computed(
             &self.layout_id,
             self.width,
@@ -349,8 +355,14 @@ impl BrowserHost {
             self.canvas.focused_key(),
         );
         self.canvas.set_selected_members(&selected);
-        self.canvas.fit_to_content();
-        Ok(format!("Arrangement set to {}", self.layout_id))
+        if !transitioning {
+            self.canvas.fit_to_content();
+        }
+        Ok(if transitioning {
+            format!("Arrangement changing to {}", self.layout_id)
+        } else {
+            format!("Arrangement set to {}", self.layout_id)
+        })
     }
 
     /// Re-evaluate only the Spiral score's representation slots after a view
