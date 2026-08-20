@@ -275,7 +275,7 @@ realization lands in mere and renders into genet's lane, which is the same
 direction mer3ly already proves by serializing cambium views to static HTML.
 Pointer docs in `genet/docs/` are founded when a slice genuinely lands there.
 
-**B1. Accessible static realization - DRIVEN 2026-08-19; only the manual OS screen-reader pass remains.**
+**B1. Accessible static realization - CLOSED 2026-08-20. All legs, including the manual pass.**
 Context: no surveyed grammar treats the accessible form as a first-class
 realization target; the catalog's W3C citations (WAI complex images, Graphics
 ARIA, SVG structure) are the anatomy. Retrofitting accessibility contracts is
@@ -846,3 +846,24 @@ not settled without it.
   the accepted result, and verifies the resulting transclusion before running
   the document. Receipts: the focused `InstanceId(17)` resolver unit test and
   the headed `knot_authoring.scn` run, `RESULT ok`.
+- 2026-08-20: **B1 closed. Mark ran the manual screen-reader pass, and it
+  earned its place twice before it passed.** Preflight found the OS bridge
+  had never existed: accesskit was in-process only, so assert-a11y read a
+  complete tree while Narrator saw a bare window; turnstone gained
+  shell/a11y_bridge.rs (accesskit_winit installed before first show, shared
+  slot for cross-thread activation, thirty-frame cadence, ActionRequests
+  dropped honestly rather than routed nowhere). Attempt one then dead-ended
+  at the omnibar: a live UIA dump showed every projected node boundless
+  (rect -Infinity), which Narrator treats as off-screen and stops at, while
+  the in-process integrity test written on the spot passed - a structurally
+  sound tree that no reader could walk, the exact gap between iterating a
+  node list and being a UIA client with geometry. Window-extent bounds fixed
+  it. Attempt two: the full walk - window, chrome, canvas group, the
+  Disclosed projection document with its summary spoken, twelve items by
+  name, all twenty-seven relationships to the last entry, in the operator's
+  words "made it to 27 of 27". Receipt at turnstone
+  design_docs/2026-08-20_screen_reader_pass_receipt.md (05a2ec8), replacing
+  the meerkat-era checklist as the worked example. Recorded follow-ups, none
+  speculative: route ActionRequests when a consumer asks for operable rather
+  than readable, per-node rects from the surface plan, and a label for the
+  frisket root group that announces as blank.
