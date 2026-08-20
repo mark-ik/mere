@@ -11,10 +11,12 @@
 //!
 //! The core accepts an imported URI. [`OtpItemStore`] seals the configured
 //! generator under one persona and gives callers no way to retrieve its seed.
-//! [`OtpReleaseGate`] accepts a carrier-claimed participant petition and turns
-//! an explicit approval into an [`OtpCodeTile`], whose timing facts let any
-//! host render its own remaining-seconds ring. It is a local typed seam, not
-//! yet a carrier wire or an authentication proof; see the castellan OTP plan.
+//! [`OtpReleaseGate`] turns an explicit approval into an [`OtpCodeTile`], whose
+//! timing facts let any host render its own remaining-seconds ring. Direct
+//! petitions are marked unverified. [`OtpAdmittedSession`] instead derives the
+//! participant and exact item scope from Notochord, rechecks retained authority
+//! at approval and delivery, and pairs the opaque approval only with its
+//! original carrier. The host keeps its own application encoding.
 //!
 //! ```
 //! use castellan::otp::{Otp, OtpAlgorithm};
@@ -31,8 +33,10 @@
 //! [RFC 4226]: https://www.rfc-editor.org/rfc/rfc4226
 //! [RFC 6238]: https://www.rfc-editor.org/rfc/rfc6238
 
+mod admitted;
 pub mod base32;
 mod item;
+mod participant;
 mod release;
 mod tile;
 mod uri;
@@ -49,11 +53,16 @@ use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use zeroize::Zeroizing;
 
+pub use admitted::{
+    OTP_RELEASE_ACTION, OTP_RELEASE_DOMAIN, OTP_RELEASE_SERVICE, OtpAdmittedReleaseError,
+    OtpAdmittedSession, OtpApprovedRelease, OtpSessionDelivery, otp_item_path, otp_release_policy,
+};
 pub use base32::Base32Error;
 pub use item::{OtpItem, OtpItemError, OtpItemId, OtpItemStore};
+pub use participant::{OtpReleaseParticipantClaim, OtpReleaseParticipantProof};
 pub use release::{
-    OtpReleaseDenied, OtpReleaseError, OtpReleaseGate, OtpReleaseId, OtpReleaseParticipantClaim,
-    OtpReleasePolicy, OtpReleaseRequest, OtpReleasedCode,
+    OtpReleaseDenied, OtpReleaseError, OtpReleaseGate, OtpReleaseId, OtpReleasePolicy,
+    OtpReleaseRequest, OtpReleasedCode,
 };
 pub use tile::{OtpCodeTile, OtpTimeRing};
 pub use uri::{OtpUri, OtpUriError, parse_otpauth_uri};

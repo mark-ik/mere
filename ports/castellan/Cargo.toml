@@ -37,6 +37,7 @@ keeper = [
 # HMAC + the three hashes RFC 6238 allows. RustCrypto, and sha2 is already a
 # workspace pin, so this adds one lineage rather than three.
 hmac = "0.13"
+notochord.workspace = true
 personae.workspace = true
 serde.workspace = true
 sha1 = "0.11"

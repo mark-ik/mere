@@ -1,8 +1,8 @@
 # Castellan C1-C2: the OTP Slice
 
 **Date:** 2026-08-10
-**Status:** C1 and the local C2 core hardened 2026-08-20; a real host/carrier
-consumer, platform adapters, and issuer compatibility remain follow-on slices
+**Status:** C1 and C2 complete 2026-08-20; platform adapters and issuer
+compatibility remain follow-on slices
 **Anchors:** [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md)
 (Part I), [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md) (the
@@ -82,11 +82,14 @@ exercising it. C1 builds the exercising; C2 builds the item.
       public code path for sealed items. HOTP load/exercise/replace is one
       in-process transaction shared by clones of the opened sealed store; the
       replacement file is flushed before return.
-- [ ] First host/carrier consumer: authenticate the participant from admitted
-      session authority, prove liveness again at approval/delivery, and carry
-      the result only to that session. Until this exists, participant fields are
-      exposed as `OtpReleaseParticipantClaim::unverified` rather than
-      authentication evidence.
+- [x] First host/carrier consumer: `OtpAdmittedSession` consumes a Notochord
+      admission for one exact persona/item path, derives participant and session identity
+      from its signed transcript, and rechecks retained expiry/revocation before
+      petition, approval, and delivery. Approval stays opaque until a final guard
+      pairs the tile with that session's original carrier. The guard holds the
+      caller's revocation snapshot through its application-protocol write rather
+      than founding a second wire. Direct local claims remain explicitly
+      `unverified` and cannot approve an admission-derived petition.
 - [ ] Later platform adapter: Secret Service (`org.freedesktop.secrets`), the one OS surface a third
       party can *be* rather than read
 - [ ] Later compatibility decision: Steam's nonstandard alphabet, with a real
@@ -146,6 +149,18 @@ exercising it. C1 builds the exercising; C2 builds the item.
   The limits are stated rather than hidden: this local transaction does not
   coordinate independent store openings or processes, and AEAD does not provide
   rollback resistance if an older valid backing directory is restored. Those
-  require a resident/storage authority with a real consumer. Likewise,
-  participant claims become authenticated facts only when an admitted-session
-  carrier adapter constructs and serves them.
+  require a process-wide storage authority and durable rollback evidence in a
+  separate slice. The admitted adapter does not upgrade caller text into proof;
+  it constructs the authenticated participant form only from Notochord's local
+  admission conclusion.
+
+- 2026-08-20: the admitted-session consumer landed. The owner policy requires a
+  Personae delegation and transport-authenticated identity for
+  `mere.castellan` / `/services/castellan/otp/{persona}/{item}` / `release`. A signed
+  Notochord admission produces the only authenticated participant form. Each
+  session can petition only for its admitted item; approval rechecks the live
+  chain, and the resulting code is opaque until same-session delivery rechecks
+  it again. Revocation, expiry, cross-session substitution, direct-gate bypass,
+  and unresolved-session cleanup have executable receipts. The adapter defines
+  no carrier bytes; a successful write on the paired carrier remains the host's
+  transport-liveness receipt.

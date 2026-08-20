@@ -7,16 +7,19 @@
 //! and a sealed-item handle. The gate exposes only secret-free pending requests.
 //! The resident authority then explicitly approves or denies one; only approval
 //! produces an [`OtpCodeTile`]. There is deliberately no remote wire here. This
-//! local type validates presentation safety, expiry, and resident consent. A
-//! future carrier adapter remains responsible for authenticating the participant
-//! and proving that the named session is live.
+//! local type validates presentation safety, expiry, and resident consent.
+//! [`super::OtpAdmittedSession`] supplies the authenticated, session-bound path;
+//! direct callers remain explicitly unverified.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::{OtpCodeTile, OtpItem, OtpItemError, OtpItemId, OtpItemStore};
+use super::{
+    OtpCodeTile, OtpItem, OtpItemError, OtpItemId, OtpItemStore, OtpReleaseParticipantClaim,
+    OtpReleaseParticipantProof,
+};
 
 const DEFAULT_REQUEST_TTL_SECS: u64 = 5 * 60;
 const DEFAULT_MAX_PENDING: usize = 128;
@@ -82,55 +85,6 @@ impl OtpReleaseId {
 impl fmt::Display for OtpReleaseId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-/// Carrier-supplied participant facts attached to a release petition.
-///
-/// Construction validates only that the facts are safe to retain and present.
-/// This type is not authentication evidence. The eventual carrier adapter must
-/// authenticate `principal` and prove the `session_binding` before constructing
-/// a petition.
-#[derive(Clone, PartialEq, Eq)]
-pub struct OtpReleaseParticipantClaim {
-    principal: String,
-    session_binding: String,
-}
-
-impl fmt::Debug for OtpReleaseParticipantClaim {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OtpReleaseParticipantClaim")
-            .field("principal", &self.principal)
-            .field("session_binding", &"<redacted>")
-            .finish()
-    }
-}
-
-impl OtpReleaseParticipantClaim {
-    /// Validate an unverified carrier-supplied participant and session claim.
-    ///
-    /// Authentication is deliberately outside this constructor. Callers must
-    /// not treat successful construction as proof of either value.
-    pub fn unverified(
-        principal: impl Into<String>,
-        session_binding: impl Into<String>,
-    ) -> Result<Self, OtpReleaseError> {
-        let principal = validate_participant_fact(principal.into())?;
-        let session_binding = validate_participant_fact(session_binding.into())?;
-        Ok(Self {
-            principal,
-            session_binding,
-        })
-    }
-
-    /// Stable identity claimed by the carrier for the participant.
-    pub fn principal(&self) -> &str {
-        &self.principal
-    }
-
-    /// Opaque carrier claim associating the petition with one live session.
-    pub fn session_binding(&self) -> &str {
-        &self.session_binding
     }
 }
 
@@ -207,6 +161,8 @@ pub enum OtpReleaseError {
     Item(OtpItemError),
     /// The release had already been approved, denied, or was never pending.
     NotPending(OtpReleaseId),
+    /// An admission-derived petition must be resolved through its live session.
+    SessionBoundApprovalRequired(OtpReleaseId),
 }
 
 impl fmt::Display for OtpReleaseError {
@@ -225,6 +181,10 @@ impl fmt::Display for OtpReleaseError {
             OtpReleaseError::Expired(id) => write!(f, "OTP release {id} has expired"),
             OtpReleaseError::Item(error) => write!(f, "OTP item: {error}"),
             OtpReleaseError::NotPending(id) => write!(f, "OTP release {id} is not pending"),
+            OtpReleaseError::SessionBoundApprovalRequired(id) => write!(
+                f,
+                "OTP release {id} must be approved through its admitted session"
+            ),
         }
     }
 }
@@ -238,7 +198,8 @@ impl std::error::Error for OtpReleaseError {
             | OtpReleaseError::ClockBeforeUnixEpoch
             | OtpReleaseError::TooManyPending { .. }
             | OtpReleaseError::Expired(_)
-            | OtpReleaseError::NotPending(_) => None,
+            | OtpReleaseError::NotPending(_)
+            | OtpReleaseError::SessionBoundApprovalRequired(_) => None,
         }
     }
 }
@@ -275,6 +236,11 @@ impl OtpReleaseGate {
     /// Build a resident release gate with explicit queue limits.
     pub fn with_policy(store: OtpItemStore, policy: OtpReleasePolicy) -> Self {
         Self::with_clock(store, policy, Arc::new(system_unix_secs))
+    }
+
+    /// The persona namespace whose sealed OTP items this gate may exercise.
+    pub fn persona(&self) -> personae::PersonaId {
+        self.store.persona()
     }
 
     fn with_clock(store: OtpItemStore, policy: OtpReleasePolicy, clock: Arc<ReleaseClock>) -> Self {
@@ -325,14 +291,35 @@ impl OtpReleaseGate {
         Ok(requests)
     }
 
-    /// Approve one live petition and issue its associated code tile.
+    /// Approve one live, explicitly unverified local petition.
+    ///
+    /// Admission-derived petitions must use [`super::OtpAdmittedSession`],
+    /// which rechecks the retained authority before exercising the item.
     pub fn approve(&self, id: OtpReleaseId) -> Result<OtpReleasedCode, OtpReleaseError> {
+        self.approve_with_proof(id, OtpReleaseParticipantProof::Unverified)
+    }
+
+    pub(super) fn approve_admitted(
+        &self,
+        id: OtpReleaseId,
+    ) -> Result<OtpReleasedCode, OtpReleaseError> {
+        self.approve_with_proof(id, OtpReleaseParticipantProof::AdmittedSession)
+    }
+
+    fn approve_with_proof(
+        &self,
+        id: OtpReleaseId,
+        expected_proof: OtpReleaseParticipantProof,
+    ) -> Result<OtpReleasedCode, OtpReleaseError> {
         let now = (self.clock)()?;
         let mut pending = lock_pending(&self.pending);
         let request = pending
             .get(&id)
             .cloned()
             .ok_or(OtpReleaseError::NotPending(id))?;
+        if request.participant.proof() != expected_proof {
+            return Err(OtpReleaseError::SessionBoundApprovalRequired(id));
+        }
         if now >= request.expires_at_unix_secs {
             pending.remove(&id);
             return Err(OtpReleaseError::Expired(id));
@@ -368,17 +355,6 @@ fn system_unix_secs() -> Result<u64, OtpReleaseError> {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .map_err(|_| OtpReleaseError::ClockBeforeUnixEpoch)
-}
-
-fn validate_participant_fact(value: String) -> Result<String, OtpReleaseError> {
-    if value.is_empty()
-        || value.trim() != value
-        || value.chars().count() > 256
-        || value.chars().any(char::is_control)
-    {
-        return Err(OtpReleaseError::InvalidParticipant);
-    }
-    Ok(value)
 }
 
 #[cfg(test)]

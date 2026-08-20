@@ -47,9 +47,11 @@
 //! OTP items seal their imported configuration under a Persona through
 //! [`otp::OtpItemStore`]. [`otp::OtpReleaseGate`] returns an
 //! [`otp::OtpCodeTile`] only after a participant-bound petition receives a
-//! resident approval. CXF import, Secret Service, and any Steam compatibility
-//! decision remain separate follow-on work; see the castellan OTP plan and the
-//! keeper founding plan in mere's design docs.
+//! resident approval. [`otp::OtpAdmittedSession`] binds remote petitions to one
+//! exact item and the Notochord transcript that admitted their carrier. CXF
+//! import, Secret Service, and any Steam compatibility decision remain separate
+//! follow-on work; see the castellan OTP plan and the keeper founding plan in
+//! mere's design docs.
 
 #![doc(html_no_source)]
 #![warn(missing_docs)]
