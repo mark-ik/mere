@@ -26,6 +26,7 @@ chirograph.workspace = true
 graphshell-stdio.workspace = true
 inker.workspace = true
 illume.workspace = true
+jotdown = "0.10"
 knot-editor-host.workspace = true
 muniment = { workspace = true, features = ["redb"] }
 mora.workspace = true

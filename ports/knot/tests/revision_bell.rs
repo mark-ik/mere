@@ -1,12 +1,12 @@
 use std::ffi::OsStr;
 use std::fs;
 
-use graphshell::client::ResolvedContent;
-use graphshell::sessions::spawn_endpoint_session;
 use chirograph::{
     CapabilityProfile, CarrierRequestBody, CarrierResponseBody, IntentResult,
     PresentationCapability, ResumeReply, ResumeRequest, SaveTextV1,
 };
+use graphshell::client::ResolvedContent;
+use graphshell::sessions::spawn_endpoint_session;
 use graphshell_stdio::StdioCarrier;
 use tempfile::tempdir;
 
@@ -124,12 +124,8 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
         startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
     };
     pandect::save_device_settings(root.path(), &settings).unwrap();
-    pandect::wallet_store::ensure_wallet_state(
-        root.path(),
-        persona,
-        "Knot process receipt",
-    )
-    .unwrap();
+    pandect::wallet_store::ensure_wallet_state(root.path(), persona, "Knot process receipt")
+        .unwrap();
     let authority = knot::StartupUnlockedPersonalVault::open(
         root.path(),
         persona,

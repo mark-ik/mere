@@ -40,6 +40,10 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use chirograph::{
+    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession, SaveTextV1,
+    SessionStatus,
+};
 use graphshell::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE, open_session};
 use graphshell::carrier::projection_policy;
 use graphshell::client::{ResolvedContent, RetainedEndpointSession};
@@ -47,10 +51,6 @@ use graphshell::native::endpoint_catalog::{ResidentEndpointCatalog, ResidentEndp
 use graphshell::native::projection_host::ResidentProjectionHost;
 use graphshell::network_carrier::{
     CarrierRuntime, NetworkCarrier, dial_projection_session, projection_binding,
-};
-use chirograph::{
-    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession, SaveTextV1,
-    SessionStatus,
 };
 use notochord::{NetworkId, ProfileRef, TrustedRoot};
 use personae::delegation::{

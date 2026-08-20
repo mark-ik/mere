@@ -6,21 +6,22 @@ use std::io;
 use std::path::Path;
 
 use chartulary::{Addressed, Labeled};
-use graphshell_endpoint::{
-    IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
-    ResumableProjectionSource,
-};
 use chirograph::{
     AdvertisedAction, BoundsRelationship, CachePolicy, CardValueV1, CarrierNotice, ContentHash,
     DerivedCacheInfoV1, DerivedTextV1, EDITABLE_TEXT_SAVE_INTENT, EDITABLE_TEXT_SAVE_SCHEMA,
-    EditableTextV1, EndpointDescriptor, InsertKnotClipV1, IntentEffect, IntentInvocation,
-    IntentReference, IntentResult, KNOT_BLOCK_RUN_INTENT, KNOT_BLOCK_RUN_SCHEMA,
-    KNOT_CLIP_INSERT_INTENT, KNOT_CLIP_INSERT_SCHEMA, KNOT_TRANSCLUSION_RESOLVE_INTENT,
-    KNOT_TRANSCLUSION_RESOLVE_SCHEMA, KnotEffectV1, NativeGlyphV1, PortableCardV1,
-    PresentationBinding, PresentationCapability, PresentationCodec, PresentationKey,
-    PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck, ProjectionOffer,
-    ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion, ResourceRequest,
-    ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole, TextEncoding,
+    EditableTextV1, EndpointDescriptor, InsertKnotClipV1, InsertKnotClipV2, IntentEffect,
+    IntentInvocation, IntentReference, IntentResult, KNOT_BLOCK_RUN_INTENT, KNOT_BLOCK_RUN_SCHEMA,
+    KNOT_CLIP_INSERT_INTENT, KNOT_CLIP_INSERT_SCHEMA, KNOT_CLIP_INSERT_SCHEMA_V2,
+    KNOT_TRANSCLUSION_RESOLVE_INTENT, KNOT_TRANSCLUSION_RESOLVE_SCHEMA, KnotEffectV1,
+    NativeGlyphV1, PortableCardV1, PresentationBinding, PresentationCapability, PresentationCodec,
+    PresentationKey, PresentationManifest, PresentationOffer, PresentationSemantics, ProjectionAck,
+    ProjectionOffer, ProjectionRequest, ProjectionSession, ProjectionSnapshot, ProtocolVersion,
+    ResourceRequest, ResourceResponse, ResumeReply, ResumeRequest, SaveTextV1, SemanticRole,
+    TextEncoding,
+};
+use graphshell_endpoint::{
+    IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource, ProjectionSource,
+    ResumableProjectionSource,
 };
 use inker::{
     BlockEvaluators, DocumentTrustState, Engine, EngineDocument, EngineInput, EvaluationPolicy,
@@ -38,8 +39,9 @@ use zeroize::Zeroizing;
 
 use crate::{
     CmudictPronunciations, DirectorySource, DirectoryWatcher, DiskDocument, DocumentFormat,
-    KnotDocumentProjection, KnotSyncEvent, KnotSyncFileStore, KnotVault, RosetteConfig,
-    RosetteInteriorKind, VaultDocument, project_rosette,
+    KnotClipEvidenceRef, KnotClipEvidenceStore, KnotDocumentProjection, KnotSyncEvent,
+    KnotSyncFileStore, KnotVault, RosetteConfig, RosetteInteriorKind, VaultDocument,
+    project_rosette,
 };
 
 const FIXTURE_SESSION: &str = "loopback:knot:k0";
@@ -231,6 +233,7 @@ pub struct KnotEndpoint {
     observed_source_revision: Option<u64>,
     scene_revision: Revision,
     effects: Option<KnotEffectAuthority>,
+    clip_evidence: Option<Box<dyn KnotClipEvidenceStore>>,
     derived: BTreeMap<String, DerivedDocument>,
     rosette_config: KnotRosetteConfig,
     rosette_snapshots: BTreeMap<ProjectionSession, ProjectionSnapshot>,
@@ -289,6 +292,7 @@ impl KnotEndpoint {
             observed_source_revision: None,
             scene_revision: Revision(0),
             effects: None,
+            clip_evidence: None,
             derived: BTreeMap::new(),
             rosette_config: KnotRosetteConfig::default(),
             rosette_snapshots: BTreeMap::new(),
@@ -351,6 +355,7 @@ impl KnotEndpoint {
             observed_source_revision: None,
             scene_revision: Revision(0),
             effects: None,
+            clip_evidence: None,
             derived: BTreeMap::new(),
             rosette_config: KnotRosetteConfig::default(),
             rosette_snapshots: BTreeMap::new(),
@@ -381,6 +386,7 @@ impl KnotEndpoint {
             observed_source_revision: None,
             scene_revision: Revision(0),
             effects: None,
+            clip_evidence: None,
             derived: BTreeMap::new(),
             rosette_config: KnotRosetteConfig::default(),
             rosette_snapshots: BTreeMap::new(),
@@ -664,6 +670,27 @@ impl KnotEndpoint {
                 documents
             }
         }
+    }
+
+    /// Install host-owned clip evidence retention. The configured store is the
+    /// authority for all paths, limits, and persistence; clip payloads cannot
+    /// choose a destination.
+    pub fn grant_clip_evidence(&mut self, store: impl KnotClipEvidenceStore + 'static) {
+        self.clip_evidence = Some(Box::new(store));
+        self.snapshot = None;
+        self.resources.clear();
+        self.bindings.clear();
+    }
+
+    /// Remove clip evidence authority and return to the v1 clip contract.
+    pub fn revoke_clip_evidence(&mut self) -> bool {
+        let had_authority = self.clip_evidence.take().is_some();
+        if had_authority {
+            self.snapshot = None;
+            self.resources.clear();
+            self.bindings.clear();
+        }
+        had_authority
     }
 
     fn rosette_documents(&self) -> Vec<PresentedDocument> {
@@ -1124,10 +1151,18 @@ impl KnotEndpoint {
                 editable_semantics.actions.push(AdvertisedAction {
                     intent: IntentReference(KNOT_CLIP_INSERT_INTENT.into()),
                     label: "Insert clip".into(),
-                    explanation:
+                    explanation: if self.clip_evidence.is_some() {
+                        "Retain observed source bytes and append a semantic clip with content-addressed provenance through Knot authority."
+                    } else {
                         "Append a semantic clip with structured source provenance through Knot authority."
-                            .into(),
-                    payload_schema: KNOT_CLIP_INSERT_SCHEMA.into(),
+                    }
+                    .into(),
+                    payload_schema: if self.clip_evidence.is_some() {
+                        KNOT_CLIP_INSERT_SCHEMA_V2
+                    } else {
+                        KNOT_CLIP_INSERT_SCHEMA
+                    }
+                    .into(),
                     input_form: None,
                     effect: IntentEffect::DomainTruth,
                 });
@@ -1491,23 +1526,12 @@ impl KnotEndpoint {
     }
 
     fn insert_clip(&mut self, id: &str, payload: InsertKnotClipV1) -> Result<IntentResult, String> {
-        if payload.source_url.is_empty()
-            || payload.source_url.len() > 8 * 1024
-            || payload.source_url.chars().any(char::is_control)
-            || !has_absolute_uri_scheme(&payload.source_url)
-        {
-            return Ok(IntentResult::Rejected {
-                reason: "clip source_url must be an absolute URI of at most 8192 bytes".into(),
-            });
-        }
-        if payload
-            .title
-            .as_ref()
-            .is_some_and(|title| title.len() > 1024)
-        {
-            return Ok(IntentResult::Rejected {
-                reason: "clip title exceeds 1024 bytes".into(),
-            });
+        if let Some(rejected) = validate_clip_header(
+            &payload.source_url,
+            payload.title.as_deref(),
+            &payload.knot_body,
+        ) {
+            return Ok(rejected);
         }
         if payload
             .selector
@@ -1518,25 +1542,6 @@ impl KnotEndpoint {
                 reason: "clip selector exceeds 4096 bytes".into(),
             });
         }
-        if payload.knot_body.trim().is_empty() {
-            return Ok(IntentResult::Rejected {
-                reason: "clip contains no semantic Knot body".into(),
-            });
-        }
-
-        let document = self
-            .documents()
-            .into_iter()
-            .find(|document| document.id == id)
-            .ok_or_else(|| "intent target is no longer present".to_string())?;
-        let Some(current) = self.editable_text(&document) else {
-            return Ok(IntentResult::Rejected {
-                reason: "this document is not currently writable".into(),
-            });
-        };
-        if payload.base_token != current.base_token {
-            return Ok(self.stale_result());
-        }
 
         let provenance = serde_json::json!({
             "schema": KNOT_CLIP_INSERT_SCHEMA,
@@ -1544,6 +1549,137 @@ impl KnotEndpoint {
             "title": payload.title,
             "selector": payload.selector,
         });
+        self.append_clip(id, payload.base_token, payload.knot_body, provenance)
+    }
+
+    fn insert_clip_v2(
+        &mut self,
+        id: &str,
+        payload: InsertKnotClipV2,
+    ) -> Result<IntentResult, String> {
+        if let Some(rejected) = validate_clip_header(
+            &payload.source_url,
+            payload.title.as_deref(),
+            &payload.knot_body,
+        ) {
+            return Ok(rejected);
+        }
+        if payload.artifacts.is_empty() || payload.artifacts.len() > 2 {
+            return Ok(IntentResult::Rejected {
+                reason: "evidence-bearing clips require one or two source artifacts".into(),
+            });
+        }
+        if payload.selectors.len() > 16
+            || payload.fidelity.len() > 256
+            || payload.discovered_edges.len() > 2048
+        {
+            return Ok(IntentResult::Rejected {
+                reason: "clip evidence exceeds selector, fidelity, or edge count limits".into(),
+            });
+        }
+        let structured_bytes = serde_json::to_vec(&(
+            &payload.selectors,
+            &payload.fidelity,
+            &payload.discovered_edges,
+        ))
+        .map_err(|error| format!("could not validate structured clip evidence: {error}"))?;
+        if structured_bytes.len() > 256 * 1024 {
+            return Ok(IntentResult::Rejected {
+                reason: "structured clip evidence exceeds 262144 bytes".into(),
+            });
+        }
+        for artifact in &payload.artifacts {
+            if artifact.media_type.is_empty()
+                || artifact.media_type.len() > 256
+                || artifact.canonical_uri.is_empty()
+                || artifact.canonical_uri.len() > 8 * 1024
+                || !has_absolute_uri_scheme(&artifact.canonical_uri)
+            {
+                return Ok(IntentResult::Rejected {
+                    reason: "clip artifact metadata is invalid".into(),
+                });
+            }
+        }
+
+        // Check the revision before retaining bytes. A stale gesture must not
+        // grow the evidence store.
+        let current = match self.current_clip_target(id, &payload.base_token)? {
+            Ok(current) => current,
+            Err(result) => return Ok(result),
+        };
+        let Some(store) = self.clip_evidence.as_mut() else {
+            return Ok(IntentResult::Rejected {
+                reason: "this Knot endpoint has no clip evidence authority".into(),
+            });
+        };
+        let mut evidence: Vec<KnotClipEvidenceRef> = Vec::with_capacity(payload.artifacts.len());
+        for artifact in &payload.artifacts {
+            match store.retain(artifact) {
+                Ok(reference) => evidence.push(reference),
+                Err(reason) => return Ok(IntentResult::Rejected { reason }),
+            }
+        }
+        let provenance = serde_json::json!({
+            "schema": KNOT_CLIP_INSERT_SCHEMA_V2,
+            "source_url": payload.source_url,
+            "title": payload.title,
+            "selectors": payload.selectors,
+            "evidence": evidence,
+            "fidelity": payload.fidelity,
+            "discovered_edges": payload.discovered_edges,
+        });
+        self.append_clip_to_current(
+            id,
+            payload.base_token,
+            payload.knot_body,
+            provenance,
+            current,
+        )
+    }
+
+    fn append_clip(
+        &mut self,
+        id: &str,
+        base_token: Vec<u8>,
+        knot_body: String,
+        provenance: serde_json::Value,
+    ) -> Result<IntentResult, String> {
+        let current = match self.current_clip_target(id, &base_token)? {
+            Ok(current) => current,
+            Err(result) => return Ok(result),
+        };
+        self.append_clip_to_current(id, base_token, knot_body, provenance, current)
+    }
+
+    fn current_clip_target(
+        &mut self,
+        id: &str,
+        base_token: &[u8],
+    ) -> Result<Result<EditableTextV1, IntentResult>, String> {
+        let document = self
+            .documents()
+            .into_iter()
+            .find(|document| document.id == id)
+            .ok_or_else(|| "intent target is no longer present".to_string())?;
+        let Some(current) = self.editable_text(&document) else {
+            return Ok(Err(IntentResult::Rejected {
+                reason: "this document is not currently writable".into(),
+            }));
+        };
+        if base_token != current.base_token {
+            return Ok(Err(self.stale_result()));
+        }
+        Ok(Ok(current))
+    }
+
+    fn append_clip_to_current(
+        &mut self,
+        id: &str,
+        base_token: Vec<u8>,
+        knot_body: String,
+        provenance: serde_json::Value,
+        current: EditableTextV1,
+    ) -> Result<IntentResult, String> {
         let provenance = serde_json::to_string(&provenance)
             .map_err(|error| format!("could not encode clip provenance: {error}"))?;
         let mut source = current.source.trim_end().to_string();
@@ -1553,16 +1689,10 @@ impl KnotEndpoint {
         source.push_str("```knot.clip.provenance\n");
         source.push_str(&provenance);
         source.push_str("\n```\n\n");
-        source.push_str(payload.knot_body.trim());
+        source.push_str(knot_body.trim());
         source.push('\n');
 
-        self.save_text(
-            id,
-            SaveTextV1 {
-                base_token: payload.base_token,
-                source,
-            },
-        )
+        self.save_text(id, SaveTextV1 { base_token, source })
     }
 
     fn resolve_transclusions(
@@ -1897,6 +2027,33 @@ fn vault_base_token(id: &str, operation: &[u8; 32]) -> Vec<u8> {
     hasher.finalize().as_bytes().to_vec()
 }
 
+fn validate_clip_header(
+    source_url: &str,
+    title: Option<&str>,
+    knot_body: &str,
+) -> Option<IntentResult> {
+    if source_url.is_empty()
+        || source_url.len() > 8 * 1024
+        || source_url.chars().any(char::is_control)
+        || !has_absolute_uri_scheme(source_url)
+    {
+        return Some(IntentResult::Rejected {
+            reason: "clip source_url must be an absolute URI of at most 8192 bytes".into(),
+        });
+    }
+    if title.is_some_and(|title| title.len() > 1024) {
+        return Some(IntentResult::Rejected {
+            reason: "clip title exceeds 1024 bytes".into(),
+        });
+    }
+    if knot_body.trim().is_empty() {
+        return Some(IntentResult::Rejected {
+            reason: "clip contains no semantic Knot body".into(),
+        });
+    }
+    None
+}
+
 fn has_absolute_uri_scheme(address: &str) -> bool {
     let Some((scheme, _)) = address.split_once(':') else {
         return false;
@@ -2114,6 +2271,7 @@ impl IntentSink for KnotEndpoint {
         }
         let expected_schema = match intent.intent.as_str() {
             EDITABLE_TEXT_SAVE_INTENT => EDITABLE_TEXT_SAVE_SCHEMA,
+            KNOT_CLIP_INSERT_INTENT if self.clip_evidence.is_some() => KNOT_CLIP_INSERT_SCHEMA_V2,
             KNOT_CLIP_INSERT_INTENT => KNOT_CLIP_INSERT_SCHEMA,
             KNOT_TRANSCLUSION_RESOLVE_INTENT => KNOT_TRANSCLUSION_RESOLVE_SCHEMA,
             KNOT_BLOCK_RUN_INTENT => KNOT_BLOCK_RUN_SCHEMA,
@@ -2156,15 +2314,27 @@ impl IntentSink for KnotEndpoint {
                 self.save_text(&document_id, payload)
             }
             KNOT_CLIP_INSERT_INTENT => {
-                let payload: InsertKnotClipV1 = match serde_json::from_slice(&intent.payload) {
-                    Ok(payload) => payload,
-                    Err(_) => {
-                        return Ok(IntentResult::Rejected {
-                            reason: "clip payload does not match knot.clip.insert/v1".into(),
-                        });
-                    }
-                };
-                self.insert_clip(&document_id, payload)
+                if self.clip_evidence.is_some() {
+                    let payload: InsertKnotClipV2 = match serde_json::from_slice(&intent.payload) {
+                        Ok(payload) => payload,
+                        Err(_) => {
+                            return Ok(IntentResult::Rejected {
+                                reason: "clip payload does not match knot.clip.insert/v2".into(),
+                            });
+                        }
+                    };
+                    self.insert_clip_v2(&document_id, payload)
+                } else {
+                    let payload: InsertKnotClipV1 = match serde_json::from_slice(&intent.payload) {
+                        Ok(payload) => payload,
+                        Err(_) => {
+                            return Ok(IntentResult::Rejected {
+                                reason: "clip payload does not match knot.clip.insert/v1".into(),
+                            });
+                        }
+                    };
+                    self.insert_clip(&document_id, payload)
+                }
             }
             KNOT_TRANSCLUSION_RESOLVE_INTENT | KNOT_BLOCK_RUN_INTENT => {
                 let payload: KnotEffectV1 = match serde_json::from_slice(&intent.payload) {
@@ -2197,13 +2367,15 @@ impl IntentSink for KnotEndpoint {
 mod tests {
     use std::fs;
 
+    use chirograph::{
+        AdvertisedAction, EditableTextV1, InsertKnotClipV1, InsertKnotClipV2,
+        KnotClipArtifactRoleV1, KnotClipArtifactV1, KnotClipFidelityV1, KnotClipObservedEdgeV1,
+        KnotClipSelectorV1, PresentationCodec, ResourceRequest, ResumeReply, ResumeRequest,
+        SaveTextV1,
+    };
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionNoticeSource,
         ProjectionSource, ResumableProjectionSource,
-    };
-    use chirograph::{
-        AdvertisedAction, EditableTextV1, InsertKnotClipV1, PresentationCodec, ResourceRequest,
-        ResumeReply, ResumeRequest, SaveTextV1,
     };
     use p2panda_core::SigningKey;
     use tempfile::tempdir;
@@ -2574,6 +2746,71 @@ mod tests {
     }
 
     #[test]
+    fn evidence_clip_retains_bytes_and_authors_only_a_portable_reference() {
+        let temp = tempdir().unwrap();
+        let evidence_temp = tempdir().unwrap();
+        let evidence = evidence_temp.path();
+        let path = temp.path().join("field.djot");
+        fs::write(&path, "# Field\n").unwrap();
+        let mut endpoint =
+            KnotEndpoint::open_writable(temp.path(), KnotWriteGrant::new(4096)).unwrap();
+        endpoint.grant_clip_evidence(crate::FileClipEvidenceStore::new(&evidence, 4096));
+        let request = endpoint.describe().projections.remove(0).request;
+        let snapshot = endpoint.snapshot(request).unwrap();
+        let (target, editable, _) = editable_resource(&mut endpoint, &snapshot, "field.djot");
+        let action = action_for(&snapshot, target, KNOT_CLIP_INSERT_INTENT);
+        assert_eq!(action.payload_schema, KNOT_CLIP_INSERT_SCHEMA_V2);
+
+        let bytes = b"<article><p>A useful finding.</p></article>".to_vec();
+        let digest = blake3::hash(&bytes).to_hex().to_string();
+        let accepted = endpoint
+            .invoke(clip_v2_invocation(
+                &snapshot,
+                target,
+                &InsertKnotClipV2 {
+                    base_token: editable.base_token,
+                    source_url: "https://example.test/report".into(),
+                    title: Some("The report".into()),
+                    selectors: vec![KnotClipSelectorV1::TextQuote {
+                        artifact_role: KnotClipArtifactRoleV1::SourceResponse,
+                        exact: "A useful finding.".into(),
+                        prefix: None,
+                        suffix: None,
+                    }],
+                    knot_body: "A useful finding.\n".into(),
+                    artifacts: vec![KnotClipArtifactV1 {
+                        role: KnotClipArtifactRoleV1::SourceResponse,
+                        media_type: "text/html".into(),
+                        canonical_uri: "https://example.test/report".into(),
+                        bytes: bytes.clone(),
+                    }],
+                    fidelity: vec![KnotClipFidelityV1 {
+                        class: "arrangement-unchecked".into(),
+                        detail: "Static source capture did not compare computed layout.".into(),
+                        selector: None,
+                    }],
+                    discovered_edges: vec![KnotClipObservedEdgeV1 {
+                        target: "https://example.test/source".into(),
+                        relation: "link".into(),
+                    }],
+                },
+            ))
+            .unwrap();
+        assert_eq!(accepted, IntentResult::Accepted);
+        assert_eq!(
+            fs::read(evidence.join("blake3").join(&digest)).unwrap(),
+            bytes
+        );
+
+        let saved = fs::read_to_string(path).unwrap();
+        assert!(saved.contains(r#""schema":"knot.clip.insert/v2""#));
+        assert!(saved.contains(&format!("urn:blake3:{digest}")));
+        assert!(saved.contains(r#""class":"arrangement-unchecked""#));
+        assert!(saved.contains(r#""relation":"link""#));
+        assert!(!saved.contains("<article>"));
+    }
+
+    #[test]
     fn resolve_and_run_are_consented_revisioned_derived_state() {
         let temp = tempdir().unwrap();
         let path = temp.path().join("field.knot");
@@ -2915,6 +3152,21 @@ Fallback.
         assert_eq!(notice.epoch, snapshot.scene.epoch);
         assert!(notice.revision > snapshot.scene.revision);
         assert_eq!(endpoint.poll_notice().unwrap(), None);
+    }
+
+    fn clip_v2_invocation(
+        snapshot: &ProjectionSnapshot,
+        target: InstanceId,
+        payload: &InsertKnotClipV2,
+    ) -> IntentInvocation {
+        IntentInvocation {
+            session: snapshot.session.clone(),
+            target,
+            observed_epoch: snapshot.scene.epoch,
+            observed_revision: snapshot.scene.revision,
+            intent: KNOT_CLIP_INSERT_INTENT.into(),
+            payload: serde_json::to_vec(payload).unwrap(),
+        }
     }
 
     #[test]

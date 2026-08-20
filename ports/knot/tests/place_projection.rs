@@ -19,6 +19,10 @@ use std::fs;
 use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
+use chirograph::{
+    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession, ResumeRequest,
+    SaveTextV1, SessionStatus,
+};
 use graphshell::admission::{CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_SERVICE, open_session};
 use graphshell::carrier::{accept_projection_session, projection_policy};
 use graphshell::client::{ResolvedContent, RetainedEndpointSession};
@@ -30,10 +34,6 @@ use graphshell::network_carrier::{
 };
 use graphshell::session_notices::serve_admitted_session_notifying;
 use graphshell_endpoint::ResumableProjectionSource;
-use chirograph::{
-    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession, ResumeRequest,
-    SaveTextV1, SessionStatus,
-};
 use notochord::{
     LocalNetworkPolicy, NetworkId, ProfileRef, RevocationLedger, TrafficClass, TrustedRoot,
 };

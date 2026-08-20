@@ -5,8 +5,10 @@
 //! discloses those containers through Graphshell. The directory remains source
 //! truth.
 
+mod clip_evidence;
 mod content_classes;
 mod directory;
+mod djot_merge;
 mod editor;
 mod endpoint;
 mod mark;
@@ -25,6 +27,7 @@ mod vault;
 mod watcher;
 mod writer;
 
+pub use clip_evidence::{FileClipEvidenceStore, KnotClipEvidenceRef, KnotClipEvidenceStore};
 pub use content_classes::{
     FILE_CLASS, FILE_DOCUMENT_FACET, KnotContentClasses, NOTE_CLASS, NOTE_DOCUMENT_FACET,
 };
@@ -70,8 +73,9 @@ pub use publish_wire::{
 };
 pub use resident::{KnotSyncHost, KnotSyncHostConfig, KnotSyncHostError};
 pub use rosette::{
-    CmudictPronunciations, LexiconCoverage, PronunciationLexicon, RosetteConfig, RosetteInterior,
-    RosetteInteriorKind, RosetteProjection, UnresolvedToken, project_rosette,
+    CmudictPronunciations, LexiconCoverage, LineMeter, MetricalBeat, MetricalFoot,
+    PronunciationLexicon, RosetteConfig, RosetteInterior, RosetteInteriorKind, RosetteProjection,
+    UnresolvedToken, project_rosette,
 };
 pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
 pub use settings::{

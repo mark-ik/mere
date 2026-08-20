@@ -267,13 +267,12 @@ fn parse_from(args: Vec<String>) -> Result<Args, String> {
         // Resolving rather than guessing: personas are real cryptographic
         // identities, and syncing the wrong one is not a recoverable oops.
         None => {
-            let personas =
-                pandect::wallet_store::list_personas(&data_root).map_err(|error| {
-                    format!(
-                        "could not list personas under {}: {error}",
-                        data_root.display()
-                    )
-                })?;
+            let personas = pandect::wallet_store::list_personas(&data_root).map_err(|error| {
+                format!(
+                    "could not list personas under {}: {error}",
+                    data_root.display()
+                )
+            })?;
             match personas.as_slice() {
                 [only] => *only,
                 [] => {

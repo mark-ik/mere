@@ -29,6 +29,27 @@ fn main() {
             mode,
             root,
             max_source_bytes,
+            evidence_root,
+            max_evidence_bytes,
+        ] if mode == "directory-write-evidence" => {
+            let mut endpoint = knot::KnotEndpoint::open_writable(
+                PathBuf::from(root),
+                knot::KnotWriteGrant::new(parse_u64(
+                    max_source_bytes,
+                    "directory-write byte limit",
+                )),
+            )
+            .expect("Knot could not open the requested writable directory");
+            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
+                PathBuf::from(evidence_root),
+                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+            ));
+            endpoint
+        }
+        [
+            mode,
+            root,
+            max_source_bytes,
             resolve,
             run,
             schemes,
@@ -57,6 +78,44 @@ fn main() {
             ));
             endpoint
         }
+        [
+            mode,
+            root,
+            max_source_bytes,
+            resolve,
+            run,
+            schemes,
+            languages,
+            max_depth,
+            max_ops,
+            evidence_root,
+            max_evidence_bytes,
+        ] if mode == "directory-write-effects-evidence" => {
+            let root = PathBuf::from(root);
+            let mut endpoint = knot::KnotEndpoint::open_writable(
+                &root,
+                knot::KnotWriteGrant::new(parse_u64(
+                    max_source_bytes,
+                    "directory-write byte limit",
+                )),
+            )
+            .expect("Knot could not open the requested writable directory");
+            endpoint.grant_effects(effect_authority(
+                resolve,
+                run,
+                schemes,
+                languages,
+                max_depth,
+                max_ops,
+                max_source_bytes,
+                Some(&root),
+            ));
+            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
+                PathBuf::from(evidence_root),
+                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+            ));
+            endpoint
+        }
         [mode, data_root, persona, max_source_bytes] if mode == "persona-vault" => {
             let persona = persona
                 .to_string_lossy()
@@ -78,6 +137,39 @@ fn main() {
                 authority.into_endpoint(knot::KnotWriteGrant::new(max_source_bytes))
             })
             .expect("Knot could not startup-unlock the requested persona vault")
+        }
+        [
+            mode,
+            data_root,
+            persona,
+            max_source_bytes,
+            evidence_root,
+            max_evidence_bytes,
+        ] if mode == "persona-vault-evidence" => {
+            let persona = persona
+                .to_string_lossy()
+                .parse::<uuid::Uuid>()
+                .map(personae::PersonaId::from_uuid)
+                .expect("persona-vault persona must be a UUID");
+            let mut endpoint = knot::StartupUnlockedPersonalVault::open(
+                PathBuf::from(data_root),
+                persona,
+                knot::local_device_root(Path::new(data_root), "knot")
+                    .expect("Knot could not open this device identity"),
+                [],
+            )
+            .and_then(|authority| {
+                authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
+                    max_source_bytes,
+                    "persona-vault byte limit",
+                )))
+            })
+            .expect("Knot could not startup-unlock the requested persona vault");
+            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
+                PathBuf::from(evidence_root),
+                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+            ));
+            endpoint
         }
         [
             mode,
@@ -124,6 +216,55 @@ fn main() {
         }
         [
             mode,
+            data_root,
+            persona,
+            max_source_bytes,
+            resolve,
+            run,
+            schemes,
+            languages,
+            max_depth,
+            max_ops,
+            evidence_root,
+            max_evidence_bytes,
+        ] if mode == "persona-vault-effects-evidence" => {
+            let persona = persona
+                .to_string_lossy()
+                .parse::<uuid::Uuid>()
+                .map(personae::PersonaId::from_uuid)
+                .expect("persona-vault persona must be a UUID");
+            let mut endpoint = knot::StartupUnlockedPersonalVault::open(
+                PathBuf::from(data_root),
+                persona,
+                knot::local_device_root(Path::new(data_root), "knot")
+                    .expect("Knot could not open this device identity"),
+                [],
+            )
+            .and_then(|authority| {
+                authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
+                    max_source_bytes,
+                    "persona-vault byte limit",
+                )))
+            })
+            .expect("Knot could not startup-unlock the requested persona vault");
+            endpoint.grant_effects(effect_authority(
+                resolve,
+                run,
+                schemes,
+                languages,
+                max_depth,
+                max_ops,
+                max_source_bytes,
+                None,
+            ));
+            endpoint.grant_clip_evidence(knot::FileClipEvidenceStore::new(
+                PathBuf::from(evidence_root),
+                parse_u64(max_evidence_bytes, "clip evidence byte limit"),
+            ));
+            endpoint
+        }
+        [
+            mode,
             root,
             max_source_bytes,
             resolve,
@@ -149,11 +290,20 @@ fn main() {
         _ => panic!(
             "usage: knot_endpoint [directory] | directory <root> | \
              directory-write <root> <max-source-bytes> | \
+             directory-write-evidence <root> <max-source-bytes> <evidence-root> <max-evidence-bytes> | \
              directory-write-effects <root> <max-source-bytes> \
              <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops> | \
+             directory-write-effects-evidence <root> <max-source-bytes> \
+             <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops> \
+             <evidence-root> <max-evidence-bytes> | \
              persona-vault <data-root> <persona-id> <max-source-bytes> | \
+             persona-vault-evidence <data-root> <persona-id> <max-source-bytes> \
+             <evidence-root> <max-evidence-bytes> | \
              persona-vault-effects <data-root> <persona-id> <max-source-bytes> \
              <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops> | \
+             persona-vault-effects-evidence <data-root> <persona-id> <max-source-bytes> \
+             <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops> \
+             <evidence-root> <max-evidence-bytes> | \
              communal-fixture-effects <root> <max-source-bytes> \
              <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops>"
         ),

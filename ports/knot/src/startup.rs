@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use p2panda_core::SigningKey;
-use personae::{Ed25519Keypair, PersonaId};
 use pandect::wallet_store;
+use personae::{Ed25519Keypair, PersonaId};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{

@@ -5,8 +5,9 @@
 //! into document or graph truth.
 
 use mora::Phone;
-use mora::english::SYLLABLE_RULE;
-use mora::sonance::is_perfect_rhyme;
+use mora::english::{SYLLABLE_RULE, WEIGHT_RULE};
+use mora::meter::{Beat, Foot, Mode, beats, scan_best};
+use mora::sonance::{is_perfect_rhyme, is_slant_rhyme};
 use mora::syllable::syllabify;
 use sceno::{
     Footprint, InstanceId, ProjectedItem, Rect, Representation, RoutedRelation, Scene, Size2,
@@ -16,6 +17,7 @@ use sceno::{
 const LINE_REPRESENTATION: &str = "knot.rosette.line";
 const STANZA_REPRESENTATION: &str = "knot.rosette.stanza";
 const PERFECT_RHYME: &str = "mora.perfect-rhyme";
+const SLANT_RHYME: &str = "mora.slant-rhyme";
 
 /// Supplies every known pronunciation for one normalized token.
 ///
@@ -54,6 +56,12 @@ pub struct RosetteConfig {
     pub stanza_footprint: Size2,
     /// Angle of the first line item.
     pub start_angle_radians: f32,
+    /// Whether terminal perfect-rhyme chords are derived.
+    pub perfect_rhyme: bool,
+    /// Whether terminal slant-rhyme chords are derived.
+    pub slant_rhyme: bool,
+    /// Whether line-level accentual scansion is returned.
+    pub meter: bool,
 }
 
 impl Default for RosetteConfig {
@@ -64,6 +72,9 @@ impl Default for RosetteConfig {
             line_footprint: Size2::new(176.0, 48.0),
             stanza_footprint: Size2::new(72.0, 28.0),
             start_angle_radians: -std::f32::consts::FRAC_PI_2,
+            perfect_rhyme: true,
+            slant_rhyme: true,
+            meter: true,
         }
     }
 }
@@ -101,6 +112,45 @@ pub struct RosetteProjection {
     pub coverage: LexiconCoverage,
     /// Source ranges presented by the scene's items.
     pub interiors: Vec<RosetteInterior>,
+    /// Derived accentual meter for lines with at least one resolved token.
+    pub meter: Vec<LineMeter>,
+}
+
+/// A line-level metrical reading derived from the selected pronunciations.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineMeter {
+    /// Zero-based projected line ordinal.
+    pub line: u32,
+    /// Stress pattern in source order.
+    pub beats: Vec<MetricalBeat>,
+    /// Best common foot for the available pronunciation coverage.
+    pub foot: MetricalFoot,
+    /// Number of repetitions of `foot` in the best scan.
+    pub feet: usize,
+    /// Share of compared positions matching that meter.
+    pub fit: f32,
+    /// Difference between observed syllables and expected positions.
+    pub overrun: isize,
+    /// Whether every position matched with no overrun.
+    pub regular: bool,
+    /// Tokens represented in this scan. Unresolved tokens remain in coverage.
+    pub resolved_tokens: usize,
+}
+
+/// Portable stress strength used by [`LineMeter`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricalBeat {
+    Weak,
+    Strong,
+}
+
+/// Portable names for the common feet Mora scans.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricalFoot {
+    Iamb,
+    Trochee,
+    Dactyl,
+    Anapest,
 }
 
 /// Which document interior one Rosette item presents.
@@ -144,12 +194,14 @@ pub fn project_rosette(
     scene.generation = generation(&document, text);
     let mut coverage = LexiconCoverage::default();
     let mut interiors = Vec::new();
+    let mut meter = Vec::new();
 
     if lines.is_empty() {
         return RosetteProjection {
             scene,
             coverage,
             interiors,
+            meter,
         };
     }
 
@@ -238,6 +290,14 @@ pub fn project_rosette(
         });
     }
 
+    if config.meter {
+        for (index, line) in lines.iter().enumerate() {
+            if let Some(scansion) = scan_line(index as u32, line, lexicon) {
+                meter.push(scansion);
+            }
+        }
+    }
+
     for left in 0..lines.len() {
         let Some(left_word) = lines[left].tokens.last() else {
             continue;
@@ -253,14 +313,20 @@ pub fn project_rosette(
             let Some(right_pronunciations) = lexicon.pronunciations(&right_word.normalized) else {
                 continue;
             };
-            if pronunciations_rhyme(left_pronunciations, right_pronunciations) {
+            let relation = pronunciations_rhyme(left_pronunciations, right_pronunciations);
+            let kind = match relation {
+                Some(RhymeKind::Perfect) if config.perfect_rhyme => Some((PERFECT_RHYME, 1.0)),
+                Some(RhymeKind::Slant) if config.slant_rhyme => Some((SLANT_RHYME, 0.6)),
+                _ => None,
+            };
+            if let Some((kind, weight)) = kind {
                 scene.relations.push(RoutedRelation {
                     from: InstanceId(left as u32),
                     to: InstanceId(right as u32),
                     space: Scene::WORLD,
                     points: vec![positions[left], positions[right]],
-                    kind: Some(PERFECT_RHYME.into()),
-                    weight: Some(1.0),
+                    kind: Some(kind.into()),
+                    weight: Some(weight),
                 });
             }
         }
@@ -279,16 +345,76 @@ pub fn project_rosette(
         scene,
         coverage,
         interiors,
+        meter,
     }
 }
 
-fn pronunciations_rhyme(left: &[Vec<Phone>], right: &[Vec<Phone>]) -> bool {
-    left.iter().any(|left| {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RhymeKind {
+    Perfect,
+    Slant,
+}
+
+fn pronunciations_rhyme(left: &[Vec<Phone>], right: &[Vec<Phone>]) -> Option<RhymeKind> {
+    let mut slant = false;
+    for left in left {
         let left_syllables = syllabify(left, SYLLABLE_RULE);
-        right.iter().any(|right| {
+        for right in right {
             let right_syllables = syllabify(right, SYLLABLE_RULE);
-            is_perfect_rhyme((left, &left_syllables), (right, &right_syllables))
-        })
+            if is_perfect_rhyme((left, &left_syllables), (right, &right_syllables)) {
+                return Some(RhymeKind::Perfect);
+            }
+            slant |= is_slant_rhyme((left, &left_syllables), (right, &right_syllables));
+        }
+    }
+    slant.then_some(RhymeKind::Slant)
+}
+
+fn scan_line(
+    line_index: u32,
+    line: &Line,
+    lexicon: &impl PronunciationLexicon,
+) -> Option<LineMeter> {
+    let mut line_beats = Vec::new();
+    let mut resolved_tokens = 0;
+    for token in &line.tokens {
+        let Some(pronunciation) = lexicon
+            .pronunciations(&token.normalized)
+            .and_then(|pronunciations| pronunciations.first())
+        else {
+            continue;
+        };
+        let syllables = syllabify(pronunciation, SYLLABLE_RULE);
+        line_beats.extend(beats(
+            pronunciation,
+            &syllables,
+            Mode::Accentual,
+            WEIGHT_RULE,
+        ));
+        resolved_tokens += 1;
+    }
+    let scansion = scan_best(&line_beats, &Foot::COMMON)?;
+    Some(LineMeter {
+        line: line_index,
+        beats: line_beats
+            .into_iter()
+            .map(|beat| match beat {
+                Beat::Weak => MetricalBeat::Weak,
+                Beat::Strong => MetricalBeat::Strong,
+            })
+            .collect(),
+        foot: match scansion.meter.foot {
+            Foot::Iamb => MetricalFoot::Iamb,
+            Foot::Trochee => MetricalFoot::Trochee,
+            Foot::Dactyl => MetricalFoot::Dactyl,
+            Foot::Anapest => MetricalFoot::Anapest,
+            _ => unreachable!("Mora's common-foot scan returned a non-common foot"),
+        },
+        feet: scansion.meter.feet,
+        fit: scansion.fit(),
+        overrun: scansion.overrun,
+        regular: scansion.is_regular(),
+        resolved_tokens,
     })
 }
 
@@ -482,6 +608,8 @@ mod tests {
             assert!(projection.coverage.total_tokens > 0);
             assert!(projection.coverage.resolved_tokens > 0);
             assert!(projection.coverage.unresolved.len() < projection.coverage.total_tokens);
+            assert_eq!(projection.meter.len(), 4);
+            assert!(projection.meter.iter().all(|line| !line.beats.is_empty()));
 
             let first = serde_json::to_vec(&projection.scene).unwrap();
             let second = serde_json::to_vec(&repeated.scene).unwrap();
@@ -507,5 +635,27 @@ mod tests {
         assert_eq!(unresolved.byte_start, 6);
         assert_eq!(unresolved.byte_end, 21);
         assert!(projection.scene.sources[0].id.contains("line:bytes=0..21"));
+    }
+
+    #[test]
+    fn slant_rhyme_and_meter_are_derived_without_touching_source_truth() {
+        let projection = project_rosette(
+            SourceRef::new("knot.fixture", "slant"),
+            "A cat\nA cut\n",
+            &CmudictPronunciations,
+            Default::default(),
+        );
+        assert!(projection.scene.relations.iter().any(|relation| {
+            relation.kind.as_deref() == Some(SLANT_RHYME) && relation.weight == Some(0.6)
+        }));
+        assert_eq!(projection.meter.len(), 2);
+        assert!(
+            projection
+                .meter
+                .iter()
+                .all(|line| line.resolved_tokens == 2)
+        );
+        assert_eq!(projection.interiors[0].byte_start, 0);
+        assert_eq!(projection.interiors[0].byte_end, 5);
     }
 }

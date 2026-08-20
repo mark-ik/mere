@@ -22,7 +22,7 @@ use stickleback::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{KnotVault, VaultDocument};
+use crate::{KnotVault, VaultDocument, djot_merge::merge_djot_sources};
 
 const LOG_ID: u64 = 0;
 const SYNC_AAD: &[u8] = b"mere.knot.sync-operation.v1";
@@ -1269,7 +1269,13 @@ fn merge_text_document(
     let base_body = std::str::from_utf8(&base.body).ok()?;
     let left_body = std::str::from_utf8(&left.body).ok()?;
     let right_body = std::str::from_utf8(&right.body).ok()?;
-    let body = merge_text_lines(base_body, left_body, right_body)?.into_bytes();
+    let body = if matches!(media_type.as_str(), "text/djot" | "text/vnd.knot") {
+        merge_djot_sources(base_body, left_body, right_body)
+            .or_else(|| merge_text_lines(base_body, left_body, right_body))?
+    } else {
+        merge_text_lines(base_body, left_body, right_body)?
+    }
+    .into_bytes();
     Some(VaultDocument {
         id: base.id.clone(),
         title,
@@ -1315,7 +1321,7 @@ fn line_edits(base: &[&str], branch: &[&str]) -> Vec<LineEdit> {
         .collect()
 }
 
-fn merge_text_lines(base: &str, left: &str, right: &str) -> Option<String> {
+pub(crate) fn merge_text_lines(base: &str, left: &str, right: &str) -> Option<String> {
     if left == right {
         return Some(left.into());
     }

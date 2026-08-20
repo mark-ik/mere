@@ -185,7 +185,7 @@ trip is deterministic; clause removal restores the unfiltered reading.
 Done when: brush, filter, and focus are named, serialized citizens rather
 than host-only state.
 
-**A3. LOD rungs as declarative conditions.**
+**A3. LOD rungs as declarative conditions - STAGE ONE LANDED 2026-08-19 (via P3b); stage two stays gated.**
 Context: `ScoreItem.representation` is a pre-selected rung; the conditions
 that select it live in host code, so a remote client cannot re-select on its
 own zoom and a static realization cannot state why a rung was chosen.
@@ -791,3 +791,20 @@ not settled without it.
   `Arrangement changing to grid.default` before
   `Arrangement set to grid.default`; the start and final canvas captures were
   distinct. Consumers that do not construct a schedule continue to snap.
+- 2026-08-19: **A3 stage one arrived under P3b's flag, landed by a sibling
+  session and verified here against the tree.** The P3b check Mark ordered
+  found the gate had fallen the same day: cartography's v2 representation
+  profiles now declare `RepresentationCondition { measure, operation,
+  threshold, hysteresis }`, which is Gosling's anatomy verbatim, serde-derived
+  so the conditions are data, with the measure split A3 asked for
+  (ScreenWidth/ScreenHeight are realization-space; ZoomLevel, Recency, Focused
+  are view facts). Hysteresis relaxes the threshold only for the rung already
+  selected, so a card holds to zoom 0.9 while a glyph still needs 1.0, and
+  `profile_ladder_selects_from_data_and_retains_through_hysteresis` is the
+  no-flicker receipt A3's validation named. The renderer half consumes the
+  selected rung in the real canvas frame. What was the hint: the frozen-pane
+  captures showing plain nodes flip object to symbol between runs, which was
+  rung selection moving with recency and focus.
+  Stage two, portable rung conditions traveling beside the score, remains
+  gated exactly as written: the P3b entry itself says remote re-selection
+  waits on a real remote consumer, and nothing about stage one changes that.
