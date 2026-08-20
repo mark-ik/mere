@@ -19,8 +19,8 @@ p2panda-core = "0.7.0"
 # This port is consumed from mere.git, where a sibling Retinue checkout does
 # not exist. Signalman's desktop workspace patches this exact source back to
 # its local Retinue crates so Cargo still builds one type-bearing family.
-postilion = { version = "=0.1.0", git = "https://github.com/merely-made/retinue.git", rev = "10d193762784ed254d434f6c80ffa1a5a680c918" }
-retinue = { version = "=0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "10d193762784ed254d434f6c80ffa1a5a680c918", features = ["tulle-radio"] }
+postilion = { version = "=0.1.0", git = "https://github.com/merely-made/retinue.git", rev = "655336dd966ec87d64b8121ec7df9093c089e4e7" }
+retinue = { version = "=0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "655336dd966ec87d64b8121ec7df9093c089e4e7", features = ["tulle-radio"] }
 serde = { version = "1", features = ["derive"] }
 pandect = { path = "../../crates/system/pandect" }
 tokio = { version = "1", features = ["rt", "sync", "time"] }

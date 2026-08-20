@@ -247,6 +247,24 @@ impl SitedStation {
         .await
     }
 
+    /// Capture Postilion's bounded management read model while the lease
+    /// remains live.
+    ///
+    /// The snapshot is a read-only fact capture: it mutates no station,
+    /// endpoint, or lease state beyond the ordinary fail-closed authorization
+    /// recheck every public station operation performs, and the caller
+    /// receives owned data rather than any handle onto the private station.
+    pub async fn management_snapshot(
+        &self,
+    ) -> Result<postilion::management::ManagementSnapshot, SitedStationError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        Ok(station
+            .as_ref()
+            .ok_or(SitedStationError::Stopped)?
+            .management_snapshot())
+    }
+
     /// Wait for the next event, returning instead when the active deadline
     /// arrives so the caller cannot hold the station past expiry.
     pub async fn next_event(&self) -> Result<Event, SitedStationError> {
