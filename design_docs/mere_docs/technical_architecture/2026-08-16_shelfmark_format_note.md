@@ -8,6 +8,17 @@ scoped below, chirograph the fallback if the scoping fails in practice;
 (4) checkability is v1, not deferred; (5) the name is **shelfmark**.
 Founding the format in code waits for the second shipping consumer; this note
 exists so mer3ly's v2 converges instead of diverging.
+**Proving ground receipt, 2026-08-19:** mer3ly v2 shipped the convergence
+(`mer3ly` `4447472`, live on mer3ly.net). The wire is the shelfmark shape:
+authority cite with revision cursor, projection cite by registry ids, required
+`expects.generation` computed from the same recipe that stamps
+`score.generation`, and a delta of named sections with `placement` as
+`HeldPlacement` verbatim and `selection` as `chirograph::Selection`. Motion and
+backdrop ride as host-local sections under the unhonored rule. Verified live in
+a browser: a shared link restores and reports "citation verified against this
+authority"; a tampered generation reports "authority has moved"; a foreign
+`acme.experimental` section survives the re-share round trip and is counted in
+the report. v1 links keep decoding.
 Date: 2026-08-16
 Scope: v1 envelope fields, the delta rule, checkability, home, and the
 convergence map from `mer3ly.graphshell-scene-state/v1`
