@@ -68,8 +68,11 @@ use against a v2-only target.
 The current fidelity result is also explicit about its limit. Source response
 retention proves what the parser consumed. It does not prove post-script DOM or
 visual arrangement. Turnstone records arrangement as unchecked rather than
-calling the clip lossless. Retaining an observed DOM or layout artifact is a
-separate consumer-driven extension of the same two-role contract.
+calling the clip lossless. A DOM-range selector is retained only when an
+observed representation exists; with raw source alone, Turnstone demotes it to
+an exact source quote when possible and otherwise records it as unanchored.
+Retaining an observed DOM or layout artifact is a separate consumer-driven
+extension of the same two-role contract.
 
 Done means:
 

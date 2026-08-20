@@ -13,14 +13,13 @@
 use std::fmt;
 use std::path::Path;
 
-use personae::carry::DeviceGrantSet;
-use personae::{IdentityProvider, InMemoryProvider};
 use pandect::{
     DeviceExposure, DeviceGrantError, DeviceId, DeviceMode, DevicePublicKey, RemoteAuthGrantSpec,
     certificate_device_id, device_grant_set_ref, device_is_fully_revoked,
-    issue_remote_auth_device_grant,
-    load_device_grant_set, load_device_roster, load_identity_seed,
+    issue_remote_auth_device_grant, load_device_grant_set, load_device_roster, load_identity_seed,
 };
+use personae::carry::DeviceGrantSet;
+use personae::{IdentityProvider, InMemoryProvider};
 
 /// The sole capability a sited station can receive.
 pub const TRANSPORT_EGRESS_SCOPE: &str = "transport.egress";
@@ -105,7 +104,9 @@ impl SitedStationGrant {
             return Err(SitedStationGrantError::IssuerMismatch);
         }
 
-        if let Some(existing) = Some(load_device_grant_set(data_root, request.device_id)?).filter(|set| !set.is_empty()) {
+        if let Some(existing) =
+            Some(load_device_grant_set(data_root, request.device_id)?).filter(|set| !set.is_empty())
+        {
             let existing = Self::from_signed(existing)?;
             if request.expires_at_ms <= existing.expires_at_ms() {
                 return Err(SitedStationGrantError::NonExtendingRenewal {
@@ -136,7 +137,8 @@ impl SitedStationGrant {
         station_ed25519_public_key: [u8; 32],
         now_ms: u64,
     ) -> Result<Self, SitedStationGrantError> {
-        let grant = Some(load_device_grant_set(data_root, device_id)?).filter(|set| !set.is_empty())
+        let grant = Some(load_device_grant_set(data_root, device_id)?)
+            .filter(|set| !set.is_empty())
             .ok_or(SitedStationGrantError::MissingGrant { device_id })?;
         let station_grant = Self::from_signed(grant)?;
 
@@ -528,8 +530,7 @@ mod tests {
     fn a_station_grant_can_only_be_renewed_with_a_later_expiry() {
         let root = tempfile::tempdir().unwrap();
         let persona = personae::PersonaId::new();
-        let seed =
-            pandect::ensure_wallet_state(root.path(), persona, "Station host").unwrap();
+        let seed = pandect::ensure_wallet_state(root.path(), persona, "Station host").unwrap();
         let issuer = InMemoryProvider::from_seed(seed);
         let device_id = DeviceId::new();
         let key = issuer

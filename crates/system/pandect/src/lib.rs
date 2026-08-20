@@ -218,7 +218,7 @@ pub use wallet_grant::{
     GrantStanding, assess_device_grant, certificate_device_id, decode_device_grant_set,
     device_is_fully_revoked, encode_device_grant_set, fold_revocations, load_revocation_ledger,
     revoke_device_certificates, revoked_certificate_count, wallet_trusted_roots,
-    device_grant_set_ref, load_device_grant_set,
+    decode_epoch_record, device_grant_set_ref, encode_epoch_record, load_device_grant_set,
     save_device_grant_set, load_wrapped_epoch_record, save_wrapped_epoch_record,
     WrappedEpochRecord, requires_epoch_material,
     DEVICE_GRANT_SCHEMA_VERSION, DeviceGrantError, EnrollmentBundleError, PairedRemoteAuthGrantSpec, PairingCodeError, PairingMaterialError,

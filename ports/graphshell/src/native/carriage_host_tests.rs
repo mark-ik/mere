@@ -1,0 +1,334 @@
+//! Proof tests for the carriage host, split out for the file ceiling.
+//!
+//! A `#[path]` child of `carriage_host`, so private internals (`scan_held`,
+//! the store field) stay reachable without widening their visibility.
+
+use super::*;
+
+mod lane {
+    use super::*;
+    use personae::InMemoryProvider;
+
+    const GRAPH: [u8; 32] = [0x81; 32];
+
+    fn issuer() -> Ed25519Keypair {
+        Ed25519Keypair::from_seed([0x82; 32])
+    }
+
+    fn slot() -> BlindedSlotId {
+        pandect::blinded_slot_id(personae::delegation::DelegationId([0x83; 32]), [0x84; 32])
+    }
+
+    fn config(path: PathBuf, tickets: Vec<String>) -> CarriageHostConfig {
+        CarriageHostConfig {
+            graph: GRAPH,
+            store_path: path,
+            trusted_roots: vec![issuer().public_key().to_bytes()],
+            ceilings: CarriageCeilings::default(),
+            peer_tickets: tickets,
+            paired_nodes: Vec::new(),
+        }
+    }
+
+    /// The lane's whole point, demonstrated end to end: a peer that never
+    /// held the record recovers it over the wire while the lease is live,
+    /// without re-pairing, and a superseded version is replaced rather than
+    /// accumulated.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_peer_recovers_a_live_slot_and_supersession_replaces_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let wallet_device = InMemoryProvider::from_seed([0x85; 32]);
+        let replica_device = InMemoryProvider::from_seed([0x86; 32]);
+
+        let wallet = CarriageHost::open(
+            &wallet_device,
+            config(directory.path().join("wallet.redb"), Vec::new()),
+        )
+        .await
+        .unwrap();
+        let replica = CarriageHost::open(
+            &replica_device,
+            config(
+                directory.path().join("replica.redb"),
+                vec![wallet.ticket().await.unwrap()],
+            ),
+        )
+        .await
+        .unwrap();
+
+        let lease_expiry = now_ms() + 60_000;
+        wallet
+            .publish_slot(
+                &issuer(),
+                slot(),
+                1,
+                lease_expiry,
+                b"wrapped-record-v1".to_vec(),
+                CarriageCeilings::default(),
+            )
+            .await
+            .unwrap();
+
+        // The replica learns the slot from sync alone; nothing hands it over.
+        let mut recovered = None;
+        for _ in 0..100 {
+            recovered = replica.recover(slot()).await.unwrap();
+            if recovered.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(
+            recovered.as_deref(),
+            Some(b"wrapped-record-v1".as_slice()),
+            "the replica must serve back exactly what the wallet published"
+        );
+
+        // Supersession: issue 2 replaces issue 1 on the replica, and the
+        // replica never accumulates history it could be harvested for.
+        wallet
+            .publish_slot(
+                &issuer(),
+                slot(),
+                2,
+                lease_expiry,
+                b"wrapped-record-v2".to_vec(),
+                CarriageCeilings::default(),
+            )
+            .await
+            .unwrap();
+        let mut superseded = None;
+        for _ in 0..100 {
+            superseded = replica.recover(slot()).await.unwrap();
+            if superseded.as_deref() == Some(b"wrapped-record-v2".as_slice()) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert_eq!(superseded.as_deref(), Some(b"wrapped-record-v2".as_slice()));
+        let stale = scan_held(&replica.store, GRAPH).await.unwrap();
+        assert_eq!(
+            stale.get(&slot()).map(|lease| lease.issue),
+            Some(2),
+            "the store holds the head version only"
+        );
+
+        wallet.close().await.unwrap();
+        replica.close().await.unwrap();
+    }
+
+    /// Ruling 4's two enforcement points, on one host: an expired lease is
+    /// refused on read, and the purge pass removes it from the store.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn an_expired_lease_is_refused_on_read_and_purged_on_schedule() {
+        let directory = tempfile::tempdir().unwrap();
+        let device = InMemoryProvider::from_seed([0x87; 32]);
+        let host = CarriageHost::open(
+            &device,
+            config(directory.path().join("solo.redb"), Vec::new()),
+        )
+        .await
+        .unwrap();
+
+        host.publish_slot(
+            &issuer(),
+            slot(),
+            1,
+            now_ms() + 150,
+            b"short-lease".to_vec(),
+            CarriageCeilings::default(),
+        )
+        .await
+        .unwrap();
+        assert!(host.recover(slot()).await.unwrap().is_some());
+
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        assert!(
+            host.recover(slot()).await.unwrap().is_none(),
+            "an expired lease must be refused on read"
+        );
+
+        let proposal = host.propose_purge().await;
+        assert!(proposal.is_executable());
+        assert_eq!(proposal.expired, vec![slot()]);
+        let purged = host.execute_purge(&proposal).await.unwrap();
+        assert!(purged >= 1, "the purge must delete the expired operation");
+        assert_eq!(host.held_count().await, 0);
+
+        host.close().await.unwrap();
+    }
+
+    /// Issue-side loudness: a lease violating a knowable ceiling is refused
+    /// at the issuer, not silently dropped by every peer.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_ceiling_violation_is_refused_at_the_issuer() {
+        let directory = tempfile::tempdir().unwrap();
+        let device = InMemoryProvider::from_seed([0x88; 32]);
+        let host = CarriageHost::open(
+            &device,
+            config(directory.path().join("ceiling.redb"), Vec::new()),
+        )
+        .await
+        .unwrap();
+
+        let refused = host
+            .publish_slot(
+                &issuer(),
+                slot(),
+                1,
+                now_ms() + 60_000,
+                b"too-long".to_vec(),
+                CarriageCeilings {
+                    device_max_ttl_ms: Some(1_000),
+                    grant_expires_at_ms: None,
+                },
+            )
+            .await;
+        assert!(
+            matches!(refused, Err(CarriageHostError::Refused(_))),
+            "a lease over the device TTL must be refused at issue: {refused:?}"
+        );
+        host.close().await.unwrap();
+    }
+}
+
+/// The commissioning story end to end, through the real machinery at every
+/// step: a wallet pairs a device with a private epoch, leases it onto a
+/// graph, publishes through the roster-driven path, and a peer replica
+/// serves back a record the pairing key can actually open.
+mod commissioning {
+    use super::*;
+    use pandect::{
+        CarriagePolicy, DeviceExposure, DeviceId, DevicePublicKey, KeyEpochId,
+        PairedRemoteAuthGrantSpec, PersonaId, PrivateEpochPlaintext, blinded_slot_id,
+        decode_epoch_record, ensure_wallet_state, issue_remote_auth_device_grant_from_pairing,
+        load_device_grant_set, load_device_roster, load_identity_seed, save_device_roster,
+        unwrap_private_epoch_material,
+    };
+    use personae::InMemoryProvider;
+    use personae::carry::derive_persona_chain_root;
+    use uuid::Uuid;
+
+    const GRAPH: [u8; 32] = [0x91; 32];
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_paired_leased_device_recovers_its_epoch_through_a_peer() {
+        let directory = tempfile::tempdir().unwrap();
+        let carry_root = directory.path().join("wallet-root");
+        let persona = PersonaId::new();
+        ensure_wallet_state(&carry_root, persona, "Graphshell workstation").unwrap();
+
+        // Pair a device carrying one private epoch. The pairing path is the
+        // one that retains a wrapping key, which is what makes the slot
+        // addressable at publish time.
+        let device_id = DeviceId::new();
+        let epoch = KeyEpochId(Uuid::from_u128(0x92));
+        let delegatee = Ed25519Keypair::from_seed([0x93; 32]);
+        let now = now_ms();
+        let (_grant, pairing) = issue_remote_auth_device_grant_from_pairing(
+            &carry_root,
+            &PairedRemoteAuthGrantSpec {
+                device_id,
+                delegatee_pubkey: DevicePublicKey::from(delegatee.public_key()),
+                label: "Pocket relay".into(),
+                exposure: DeviceExposure::HiddenClient,
+                issued_at_ms: now,
+                expires_at_ms: Some(now + 7 * 24 * 60 * 60 * 1000),
+                personas: vec![persona],
+                scopes: vec!["identity.act".into(), "private.read".into()],
+                attenuations: vec!["no-subdelegation".into()],
+                pairing_secret: b"qr-code-derived-shared-secret".to_vec(),
+                private_epochs: vec![PrivateEpochPlaintext {
+                    persona_id: persona,
+                    epoch_id: epoch,
+                    epoch_secret: b"commissioned-epoch-secret".to_vec(),
+                }],
+            },
+        )
+        .unwrap();
+
+        // Lease the device onto this graph: the ruled layering's "whether",
+        // decided on the roster where the other posture fields live.
+        let mut roster = load_device_roster(&carry_root).unwrap().unwrap();
+        let record = roster
+            .devices
+            .iter_mut()
+            .find(|record| record.device_id == device_id)
+            .unwrap();
+        record.carriage = CarriagePolicy::Leased {
+            max_ttl_ms: 60_000,
+            graph: GRAPH,
+        };
+        save_device_roster(&carry_root, &roster).unwrap();
+
+        // Verifiers hold one trusted root per persona: its chain root.
+        let master_seed = load_identity_seed(&carry_root).unwrap().unwrap();
+        let chain_root = derive_persona_chain_root(master_seed, persona).unwrap();
+        let trusted = vec![chain_root.0];
+
+        let wallet_device = InMemoryProvider::from_seed([0x94; 32]);
+        let replica_device = InMemoryProvider::from_seed([0x95; 32]);
+        let host_config = |path: PathBuf, tickets: Vec<String>| CarriageHostConfig {
+            graph: GRAPH,
+            store_path: path,
+            trusted_roots: trusted.clone(),
+            ceilings: CarriageCeilings::default(),
+            peer_tickets: tickets,
+            paired_nodes: Vec::new(),
+        };
+        let wallet_host = CarriageHost::open(
+            &wallet_device,
+            host_config(directory.path().join("wallet.redb"), Vec::new()),
+        )
+        .await
+        .unwrap();
+        let replica_host = CarriageHost::open(
+            &replica_device,
+            host_config(
+                directory.path().join("replica.redb"),
+                vec![wallet_host.ticket().await.unwrap()],
+            ),
+        )
+        .await
+        .unwrap();
+
+        // The roster-driven publish. One persona certificate carries epoch
+        // material, so exactly one slot goes onto the lane.
+        let report = wallet_host.publish_grant_carriage(&carry_root).await.unwrap();
+        assert_eq!(report.published, vec![(device_id, persona)]);
+        assert!(report.skipped_no_wrapping_key.is_empty());
+        assert_eq!(report.skipped_no_record, 0);
+
+        // The device's side of the story: it knows its certificate and its
+        // pairing key, so it can compute its slot and ask a peer.
+        let set = load_device_grant_set(&carry_root, device_id).unwrap();
+        let certificate_id = set.personas.get(&persona).unwrap().certificate.id();
+        let slot = blinded_slot_id(certificate_id, pairing.wrapping_key);
+
+        let mut recovered = None;
+        for _ in 0..100 {
+            recovered = replica_host.recover(slot).await.unwrap();
+            if recovered.is_some() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        let bytes = recovered.expect("the replica must serve the commissioned slot");
+
+        // The recovered record is not just bytes: the pairing key opens it,
+        // which is recovery without re-pairing, the lane's whole point.
+        let record = decode_epoch_record(&bytes).unwrap();
+        assert_eq!(record.certificate, certificate_id);
+        let secret = unwrap_private_epoch_material(
+            &record.epochs[0],
+            persona,
+            epoch,
+            pairing.wrapping_key,
+        )
+        .unwrap();
+        assert_eq!(secret, b"commissioned-epoch-secret".to_vec());
+
+        wallet_host.close().await.unwrap();
+        replica_host.close().await.unwrap();
+    }
+}

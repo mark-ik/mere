@@ -17,9 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::view::{
-    AgentListenerView, IdentitySurfaceSnapshot, VaultLockView, VaultProtectionView,
-};
+use crate::view::{AgentListenerView, IdentitySurfaceSnapshot, VaultLockView, VaultProtectionView};
 
 pub const SIGNING_APPROVE_ONCE_INTENT: &str = "castellan.signing.approve-once";
 pub const SIGNING_APPROVE_IDLE_INTENT: &str = "castellan.signing.approve-until-idle";

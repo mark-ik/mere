@@ -52,6 +52,20 @@ pub struct CarriageHostConfig {
     pub paired_nodes: Vec<[u8; 32]>,
 }
 
+/// What one commissioning pass published, and what it honestly could not.
+#[derive(Debug, Default)]
+pub struct CarriagePublishReport {
+    /// Each (device, persona) whose slot went onto the lane.
+    pub published: Vec<(pandect::DeviceId, pandect::PersonaId)>,
+    /// Leased devices whose wrapping key the wallet never retained, so their
+    /// slots cannot be addressed. Pairing retains one; direct issue does not.
+    pub skipped_no_wrapping_key: Vec<pandect::DeviceId>,
+    /// Certificates obliged to carry epoch material that have no record yet.
+    pub skipped_no_record: usize,
+    /// Certificates whose grant expiry has already passed.
+    pub skipped_grant_expired: usize,
+}
+
 /// One device's seat on one graph's carriage topic.
 pub struct CarriageHost {
     graph: [u8; 32],
@@ -278,6 +292,7 @@ impl CarriageHost {
         issue: u64,
         expires_at_ms: u64,
         record: Vec<u8>,
+        ceilings: CarriageCeilings,
     ) -> Result<(), CarriageHostError> {
         let body = Body::new(&record);
         let ext = CarriageExt {
@@ -337,7 +352,7 @@ impl CarriageHost {
             self.graph,
             now_ms(),
             self.trusted_roots.clone(),
-            self.ceilings,
+            ceilings,
             Some(view),
         );
         let processor = OperationProcessor::new(self.store.clone(), policy);
@@ -457,6 +472,115 @@ impl CarriageHost {
         Ok(purged)
     }
 
+    /// Publish every slot this wallet's roster says should ride this lane.
+    ///
+    /// The issue-path integration: after grants are issued or refreshed
+    /// through `pandect`, the wallet host calls this to put each leased
+    /// device's wrapped-epoch records on the carriage topic. The roster is
+    /// the authority for *whether* (the ruled layering: wallet roster grants
+    /// carriage, pairing list routes it); this reads `CarriagePolicy` off
+    /// each `DeviceRecord` and publishes only for devices leased onto this
+    /// host's graph.
+    ///
+    /// Skips are reported rather than erred, because each is a normal state:
+    /// a device with no retained wrapping key cannot have its slot addressed
+    /// (the direct issue path retains none; pairing does), a certificate with
+    /// no epoch record has nothing to carry, and an already-expired grant has
+    /// nothing left to lease.
+    pub async fn publish_grant_carriage(
+        &self,
+        data_root: &std::path::Path,
+    ) -> Result<CarriagePublishReport, CarriageHostError> {
+        let seed = pandect::load_identity_seed(data_root)
+            .map_err(|error| CarriageHostError::Transport(error.to_string()))?
+            .ok_or_else(|| {
+                CarriageHostError::Refused("wallet root missing identity seed".into())
+            })?;
+        let provider = personae::InMemoryProvider::from_seed(seed);
+        let roster = pandect::load_device_roster(data_root)
+            .map_err(|error| CarriageHostError::Transport(error.to_string()))?
+            .unwrap_or_else(pandect::DeviceRoster::new);
+        let bridge = pandect::load_remote_auth_wrapping_key_bridge(data_root)
+            .map_err(|error| CarriageHostError::Transport(error.to_string()))?
+            .unwrap_or_default();
+
+        let mut report = CarriagePublishReport::default();
+        for device in &roster.devices {
+            if roster.revoked.contains(&device.device_id) {
+                continue;
+            }
+            let pandect::CarriagePolicy::Leased { max_ttl_ms, graph } = device.carriage else {
+                continue;
+            };
+            if graph != self.graph {
+                continue;
+            }
+            let Some(wrapping_key) = bridge
+                .keys
+                .iter()
+                .find(|key| key.device_id == device.device_id)
+                .map(|key| key.wrapping_key)
+            else {
+                report.skipped_no_wrapping_key.push(device.device_id);
+                continue;
+            };
+            let set = pandect::load_device_grant_set(data_root, device.device_id)
+                .map_err(|error| CarriageHostError::Transport(error.to_string()))?;
+            for (persona, certificate) in &set.personas {
+                if !pandect::requires_epoch_material(certificate) {
+                    continue;
+                }
+                let certificate_id = certificate.certificate.id();
+                let Some(record) = pandect::load_wrapped_epoch_record(data_root, certificate_id)
+                    .map_err(|error| CarriageHostError::Transport(error.to_string()))?
+                else {
+                    report.skipped_no_record += 1;
+                    continue;
+                };
+                let bytes = pandect::encode_epoch_record(&record)
+                    .map_err(|error| CarriageHostError::Refused(error.to_string()))?;
+
+                let now = now_ms();
+                let mut expires_at_ms = now.saturating_add(max_ttl_ms);
+                if let Some(grant_expiry) = certificate.certificate.expires_at_ms {
+                    expires_at_ms = expires_at_ms.min(grant_expiry);
+                }
+                if expires_at_ms <= now {
+                    report.skipped_grant_expired += 1;
+                    continue;
+                }
+
+                let slot = pandect::blinded_slot_id(certificate_id, wrapping_key);
+                let issue = self
+                    .held
+                    .read()
+                    .await
+                    .get(&slot)
+                    .map(|lease| lease.issue + 1)
+                    .unwrap_or(1);
+                // The persona's chain-root keypair: the same authority whose
+                // public key verifiers hold as this persona's TrustedRoot.
+                let issuer = provider
+                    .derive_keypair(&personae::carry::persona_wallet_salt(*persona))
+                    .map_err(CarriageHostError::Identity)?;
+                self.publish_slot(
+                    &issuer,
+                    slot,
+                    issue,
+                    expires_at_ms,
+                    bytes,
+                    CarriageCeilings {
+                        device_max_ttl_ms: Some(max_ttl_ms),
+                        grant_expires_at_ms: certificate.certificate.expires_at_ms,
+                    },
+                )
+                .await?;
+                report.published.push((device.device_id, *persona));
+            }
+        }
+        Ok(report)
+    }
+
     pub async fn close(self) -> Result<(), CarriageHostError> {
         self.joined.leave();
         self.transport
@@ -467,182 +591,5 @@ impl CarriageHost {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use personae::InMemoryProvider;
-
-    const GRAPH: [u8; 32] = [0x81; 32];
-
-    fn issuer() -> Ed25519Keypair {
-        Ed25519Keypair::from_seed([0x82; 32])
-    }
-
-    fn slot() -> BlindedSlotId {
-        pandect::blinded_slot_id(personae::delegation::DelegationId([0x83; 32]), [0x84; 32])
-    }
-
-    fn config(path: PathBuf, tickets: Vec<String>) -> CarriageHostConfig {
-        CarriageHostConfig {
-            graph: GRAPH,
-            store_path: path,
-            trusted_roots: vec![issuer().public_key().to_bytes()],
-            ceilings: CarriageCeilings::default(),
-            peer_tickets: tickets,
-            paired_nodes: Vec::new(),
-        }
-    }
-
-    /// The lane's whole point, demonstrated end to end: a peer that never
-    /// held the record recovers it over the wire while the lease is live,
-    /// without re-pairing, and a superseded version is replaced rather than
-    /// accumulated.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn a_peer_recovers_a_live_slot_and_supersession_replaces_it() {
-        let directory = tempfile::tempdir().unwrap();
-        let wallet_device = InMemoryProvider::from_seed([0x85; 32]);
-        let replica_device = InMemoryProvider::from_seed([0x86; 32]);
-
-        let wallet = CarriageHost::open(
-            &wallet_device,
-            config(directory.path().join("wallet.redb"), Vec::new()),
-        )
-        .await
-        .unwrap();
-        let replica = CarriageHost::open(
-            &replica_device,
-            config(
-                directory.path().join("replica.redb"),
-                vec![wallet.ticket().await.unwrap()],
-            ),
-        )
-        .await
-        .unwrap();
-
-        let lease_expiry = now_ms() + 60_000;
-        wallet
-            .publish_slot(
-                &issuer(),
-                slot(),
-                1,
-                lease_expiry,
-                b"wrapped-record-v1".to_vec(),
-            )
-            .await
-            .unwrap();
-
-        // The replica learns the slot from sync alone; nothing hands it over.
-        let mut recovered = None;
-        for _ in 0..100 {
-            recovered = replica.recover(slot()).await.unwrap();
-            if recovered.is_some() {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        assert_eq!(
-            recovered.as_deref(),
-            Some(b"wrapped-record-v1".as_slice()),
-            "the replica must serve back exactly what the wallet published"
-        );
-
-        // Supersession: issue 2 replaces issue 1 on the replica, and the
-        // replica never accumulates history it could be harvested for.
-        wallet
-            .publish_slot(
-                &issuer(),
-                slot(),
-                2,
-                lease_expiry,
-                b"wrapped-record-v2".to_vec(),
-            )
-            .await
-            .unwrap();
-        let mut superseded = None;
-        for _ in 0..100 {
-            superseded = replica.recover(slot()).await.unwrap();
-            if superseded.as_deref() == Some(b"wrapped-record-v2".as_slice()) {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
-        assert_eq!(superseded.as_deref(), Some(b"wrapped-record-v2".as_slice()));
-        let stale = scan_held(&replica.store, GRAPH).await.unwrap();
-        assert_eq!(
-            stale.get(&slot()).map(|lease| lease.issue),
-            Some(2),
-            "the store holds the head version only"
-        );
-
-        wallet.close().await.unwrap();
-        replica.close().await.unwrap();
-    }
-
-    /// Ruling 4's two enforcement points, on one host: an expired lease is
-    /// refused on read, and the purge pass removes it from the store.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn an_expired_lease_is_refused_on_read_and_purged_on_schedule() {
-        let directory = tempfile::tempdir().unwrap();
-        let device = InMemoryProvider::from_seed([0x87; 32]);
-        let host = CarriageHost::open(
-            &device,
-            config(directory.path().join("solo.redb"), Vec::new()),
-        )
-        .await
-        .unwrap();
-
-        host.publish_slot(
-            &issuer(),
-            slot(),
-            1,
-            now_ms() + 150,
-            b"short-lease".to_vec(),
-        )
-        .await
-        .unwrap();
-        assert!(host.recover(slot()).await.unwrap().is_some());
-
-        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-        assert!(
-            host.recover(slot()).await.unwrap().is_none(),
-            "an expired lease must be refused on read"
-        );
-
-        let proposal = host.propose_purge().await;
-        assert!(proposal.is_executable());
-        assert_eq!(proposal.expired, vec![slot()]);
-        let purged = host.execute_purge(&proposal).await.unwrap();
-        assert!(purged >= 1, "the purge must delete the expired operation");
-        assert_eq!(host.held_count().await, 0);
-
-        host.close().await.unwrap();
-    }
-
-    /// Issue-side loudness: a lease violating a knowable ceiling is refused
-    /// at the issuer, not silently dropped by every peer.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn a_ceiling_violation_is_refused_at_the_issuer() {
-        let directory = tempfile::tempdir().unwrap();
-        let device = InMemoryProvider::from_seed([0x88; 32]);
-        let mut config = config(directory.path().join("ceiling.redb"), Vec::new());
-        config.ceilings = CarriageCeilings {
-            device_max_ttl_ms: Some(1_000),
-            grant_expires_at_ms: None,
-        };
-        let host = CarriageHost::open(&device, config).await.unwrap();
-
-        let refused = host
-            .publish_slot(
-                &issuer(),
-                slot(),
-                1,
-                now_ms() + 60_000,
-                b"too-long".to_vec(),
-            )
-            .await;
-        assert!(
-            matches!(refused, Err(CarriageHostError::Refused(_))),
-            "a lease over the device TTL must be refused at issue: {refused:?}"
-        );
-        host.close().await.unwrap();
-    }
-}
+#[path = "carriage_host_tests.rs"]
+mod tests;

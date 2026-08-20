@@ -9,12 +9,12 @@
 use std::io;
 use std::path::Path;
 
+use pandect::{
+    DeviceExposure, DeviceMode, RecoveryPolicy, load_device_grant_set, load_device_roster,
+    load_identity_wallet, load_wrapped_epoch_record, requires_epoch_material,
+};
 use personae::signing::{PendingSigningRequest, SigningRecord};
 use serde::{Deserialize, Serialize};
-use pandect::{
-    DeviceExposure, DeviceMode, RecoveryPolicy, load_device_roster, load_identity_wallet,
-    load_device_grant_set, load_wrapped_epoch_record, requires_epoch_material,
-};
 
 /// Storage protection selected for the resident vault.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

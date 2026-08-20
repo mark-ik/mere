@@ -312,10 +312,20 @@ roots. The contract as ruled:
   `castellan::authority::PersonaeHost::payload_sealer` is the supply point, and
   access records are the first consumer. The recovery done-condition above now
   has a live seal path to demonstrate against.
-- **Issue-path integration.** The wallet's grant issue/refresh flows do not
-  yet call `publish_slot`; the host exists and the flows still write only the
-  local wallet file. Wiring them together is where `CarriagePolicy::Leased`
-  starts mattering at commissioning.
+- ~~Issue-path integration.~~ **Done 2026-08-19.**
+  `CarriageHost::publish_grant_carriage` walks the roster, publishes a slot
+  for every device leased onto this graph whose persona certificates carry
+  epoch material, and reports what it honestly could not: a leased device
+  whose wrapping key the wallet never retained (the direct issue path retains
+  none; pairing does), a certificate with no record yet, an already-expired
+  grant. The issuer signs with the persona's chain-root keypair and passes
+  the full ceilings, so a bad lease fails at issue. The commissioning test
+  runs the real machinery end to end: pairing issue with a private epoch,
+  roster lease, roster-driven publish, live sync, recovery on a peer, and
+  the recovered record opened with the pairing key
+  (`a_paired_leased_device_recovers_its_epoch_through_a_peer`). One
+  layering fact it surfaced: `publish_slot` now takes ceilings per call,
+  because the issuer's knowledge is per grant, not per host.
 - **The revocation fast path.** A received `SignedDelegationRevocation` should
   destroy the certificate's leases immediately; today only expiry converges.
 - **One endpoint for both lanes.** Blocked on `set_topics` being

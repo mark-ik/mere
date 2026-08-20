@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use pandect::{DeviceId, PersonaId, WalletEpochSealer, revoke_remote_auth_device};
 use personae::agent::VaultAgent;
 use personae::signing::{ApprovalBroker, DecisionError, RememberApproval, SigningDecision};
 use personae::ssh_slot;
@@ -23,21 +24,19 @@ use personae::{
     IdentityProvider, IdentityStorage, IdentityVault, ProfileId, ProtocolKey, UnlockTier, roster,
 };
 use serde::{Deserialize, Serialize};
-use pandect::{DeviceId, PersonaId, WalletEpochSealer, revoke_remote_auth_device};
 use ssh_key::{Algorithm, PrivateKey, PublicKey};
 use uuid::Uuid;
 
+use crate::projection::{
+    CreateProfileIntentV1, DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1,
+    ImportSshKeyNativeIntentV1, PROFILE_CREATE_INTENT, PROFILE_SWITCH_INTENT, RemoveSshKeyIntentV1,
+    RevokeDeviceIntentV1, SIGNING_APPROVE_IDLE_INTENT, SIGNING_APPROVE_ONCE_INTENT,
+    SIGNING_DENY_INTENT, SSH_GENERATE_INTENT, SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT,
+    SigningDecisionIntentV1, SshUnlockPolicyIntentV1, SwitchProfileIntentV1,
+};
 use crate::view::{
     AgentListenerView, CarryView, IdentitySurfaceSnapshot, ProfileView, SshKeyView, VaultLockView,
     VaultProtectionView, VaultView, load_carry_view,
-};
-use crate::projection::{
-    CreateProfileIntentV1, DEVICE_REVOKE_INTENT, GenerateSshKeyIntentV1, ImportSshKeyNativeIntentV1,
-    PROFILE_CREATE_INTENT, PROFILE_SWITCH_INTENT, RemoveSshKeyIntentV1, RevokeDeviceIntentV1,
-    SIGNING_APPROVE_IDLE_INTENT,
-    SIGNING_APPROVE_ONCE_INTENT, SIGNING_DENY_INTENT, SSH_GENERATE_INTENT,
-    SSH_IMPORT_NATIVE_INTENT, SSH_REMOVE_INTENT, SigningDecisionIntentV1, SshUnlockPolicyIntentV1,
-    SwitchProfileIntentV1,
 };
 
 const MAX_SHORT_TTL_SECONDS: u32 = 24 * 60 * 60;
@@ -598,7 +597,8 @@ impl<S: IdentityStorage + 'static> PersonaeHost<S> {
         // matters: minting over a persona would replace its master key and
         // every certificate rooted on it.
         let vault = self.vault.lock().unwrap();
-        let profile = roster::create_profile(vault.storage(), &ProfileId(id.to_string()), display_name)?;
+        let profile =
+            roster::create_profile(vault.storage(), &ProfileId(id.to_string()), display_name)?;
         Ok(ProfileCreatedReceipt {
             id: profile.id.0,
             display_name: profile.display_name,
