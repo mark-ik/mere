@@ -63,7 +63,7 @@ struct HeadPersistence {
 impl SitedStationHead {
     /// Seal a freshly provisioned delegated station identity and an empty
     /// control receiver before opening any radio port.
-    pub fn provision(
+    pub(crate) fn provision(
         storage: SealedRecordStorage,
         record_path: impl AsRef<Path>,
         device_id: DeviceId,
@@ -557,8 +557,8 @@ fn remaining_window(now_ms: u64, expires_at_ms: u64) -> Duration {
 
 #[cfg(test)]
 mod tests {
-    use personae::{InMemoryProvider, PersonaId};
     use pandect::ensure_wallet_state;
+    use personae::{InMemoryProvider, PersonaId};
     use tempfile::tempdir;
 
     use super::*;

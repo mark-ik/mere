@@ -17,11 +17,27 @@ snapshot is non-secret state to persist beside the device's delegated identity.
 `SitedStationHead` seals both through a caller-provided `SealedRecordStorage`,
 persists an accepted transition before returning its acknowledgement, and
 checks the receiver before every public radio operation. The process that
-selects a board's secure-storage root and the physical radio receipt remain
-deployment work.
+selects a board's secure-storage root remains deployment-owned. The
+`mere-signalman-provision` command creates that sealed record without exposing
+the derived private identity:
 
-This integration package is intentionally a separate workspace while it uses
-the neighboring Retinue checkout. It is not a publishable dependency story.
+```text
+mere-signalman-provision \
+  --authority-root PATH \
+  --station-root PATH \
+  --record RELATIVE_PATH \
+  --label NAME \
+  --expires-hours HOURS
+```
+
+The command requires an explicit finite grant duration, installs the signed
+grant before the radio opens, verifies the station-signed acknowledgement, and
+refuses to replace an existing record. It prints only public receipt fields.
+The physical radio receipt remains deployment work.
+
+This integration package is intentionally a separate workspace and pins the
+Retinue source revision consumed by downstream Signalman builds. It is not a
+publishable dependency story.
 The portable boundary is `postilion::StationConfig`, which accepts a supplied
 `PrivateIdentity`; this port is its first real Persona-backed consumer.
 

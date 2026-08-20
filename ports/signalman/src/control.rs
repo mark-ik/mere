@@ -10,14 +10,12 @@ use std::fmt;
 
 use castellan::reticulum::grant::{SitedStationGrant, SitedStationGrantError};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use pandect::{DeviceGrantError, DeviceId, decode_device_grant_set, encode_device_grant_set};
 use personae::{
     DerivedKeyAttestation, Ed25519Keypair, Ed25519Signature, IdentityError, IdentityProvider,
 };
 use retinue::identity::{Identity, PrivateIdentity};
 use serde::{Deserialize, Serialize};
-use pandect::{
-    DeviceGrantError, DeviceId, decode_device_grant_set, encode_device_grant_set,
-};
 
 /// LXMF title identifying a version-one station-control frame.
 pub const SITED_STATION_CONTROL_TITLE: &[u8] = b"mere.sited-station-control/v1";
@@ -61,6 +59,10 @@ impl SitedStationControlSigner {
             keypair: provider.derive_keypair(&salt)?,
             attestation: provider.attest_derived_key(&salt)?,
         })
+    }
+
+    pub(crate) fn device_id(&self) -> DeviceId {
+        self.device_id
     }
 
     /// Sign a grant-delivery or renewal frame for this station.
@@ -843,8 +845,8 @@ fn decode<T: for<'de> Deserialize<'de>>(bytes: &[u8]) -> Result<T, SitedStationC
 
 #[cfg(test)]
 mod tests {
-    use personae::{InMemoryProvider, PersonaId};
     use pandect::{DeviceId, ensure_wallet_state};
+    use personae::{InMemoryProvider, PersonaId};
     use tempfile::tempdir;
 
     use super::*;
