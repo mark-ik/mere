@@ -1,7 +1,9 @@
 # Dramatis Tier Plan
 
 **Date:** 2026-08-10
-**Status:** ratified by Mark 2026-08-10; D1-D3 executing this session
+**Status:** ratified by Mark 2026-08-10; D1-D3 complete 2026-08-10; D4's wallet
+fold-in (2026-08-10) and credential port (castellan C1-C2, 2026-08-21) done;
+the `dramatis` facade reservation stays empty until something imports it
 **Authority for gaz internals:** `crates/dramatis/gaz/design_docs/2026-08-08_gaz_founding_plan.md` (travels with the crate)
 
 ## What was ratified
@@ -81,7 +83,9 @@ on package name and are unaffected.
       see the [keeper founding plan](2026-08-14_castellan_keeper_founding_plan.md).
       0.0.2 published 2026-08-15, the `keeper` feature carrying the authority
       half. The credential runway is [its own plan](2026-08-10_castellan_otp_plan.md):
-      C1 (the OTP core, RFC-vector-verified) done; C2 open.
+      C1 (the OTP core, RFC-vector-verified) and C2 (sealed items, tile and
+      release gate, admitted-session consumer, Linux Secret Service, Steam
+      Guard) complete 2026-08-21; product hosting open.
 - [ ] Any facade content in the `dramatis` crate. The reservation stays empty
       until something imports it.
 
@@ -134,3 +138,7 @@ supersede it.
   2026-07-08 "an index, not a broadcast" rationale is superseded; the recovered
   sense is the official gazette, where appointments are *gazetted*: officially
   announced and thereby resolvable, which is what a resolver does.
+- 2026-08-21: D4 closed. The wallet fold-in completed 2026-08-10 and
+  castellan's C1-C2 completed 2026-08-21 (see the [OTP plan](2026-08-10_castellan_otp_plan.md));
+  the header and the D4 checklist now say so. Only the empty `dramatis`
+  facade reservation remains, still waiting for an importing consumer.

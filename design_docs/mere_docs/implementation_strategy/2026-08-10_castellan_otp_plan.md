@@ -1,8 +1,10 @@
 # Castellan C1-C2: the OTP Slice
 
 **Date:** 2026-08-10
-**Status:** C1 and C2 complete 2026-08-20; platform adapters and issuer
-compatibility remain follow-on slices
+**Status:** C1 and C2 complete 2026-08-20, hardened and extended 2026-08-21
+(resident lock and freshness ledger, Linux Secret Service, Steam Guard).
+Library-complete; product hosting of `CastellanResident`, credential
+replication between persona devices, and CXF import are follow-on slices
 **Anchors:** [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md)
 (Part I), [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md) (the
@@ -200,3 +202,19 @@ exercising it. C1 builds the exercising; C2 builds the item.
   (`zvI...44s=`, Unix time `1616374841`, code `2F9J5`), uses a fixed 20-byte
   secret, SHA-1, 30-second steps, and Valve's 26-character alphabet. Stored
   release still passes through the existing participant gate and expiring tile.
+
+- 2026-08-21: status repaired; the slice is library-complete, not
+  product-complete. `OtpAdmittedSession` is a tested consumer, but nothing
+  outside Castellan's own tests hosts `CastellanResident`, renders
+  `OtpCodeTile`, approves through Cambium, or starts `secret_service::serve`;
+  graphshell enables only `keeper`. No replication or carry path exists for
+  the OTP or Secret Service record namespaces, so records are durable on one
+  device only. Follow-on slices, in order: product hosting (device-host
+  composition per the [device resident consolidation plan](2026-08-20_device_resident_consolidation_plan.md),
+  Cambium tile and approval, Linux user-service lifecycle); credential
+  replication designed together with per-device freshness evidence; CXF/CXP
+  import. Windows Credential Manager and macOS Keychain import, KDBX, and a
+  WebAuthn/CTAP2 provider stay separate projects. Steam enrollment,
+  recovery codes, and Valve API integration are out of scope; current Steam
+  support imports a `shared_secret` and generates codes. The crate is still
+  0.0.2; no release followed C2.
