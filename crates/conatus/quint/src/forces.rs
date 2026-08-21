@@ -95,11 +95,7 @@ impl Default for NodeExclusionParams {
 /// `strength · Σ_{j} (p_i − p_j) / (|p_i − p_j|² + ε²)^{3/2}`. The `j = i` term
 /// vanishes (numerator zero), so it is summed over all j including self.
 #[cfg(any(feature = "field-burn", feature = "field-gpu"))]
-pub fn repulsion(
-    xs: Tensor<1>,
-    ys: Tensor<1>,
-    params: RepulsionParams,
-) -> (Tensor<1>, Tensor<1>) {
+pub fn repulsion(xs: Tensor<1>, ys: Tensor<1>, params: RepulsionParams) -> (Tensor<1>, Tensor<1>) {
     let n = xs.dims()[0];
 
     // Pairwise displacements by broadcasting [N,1] against [1,N]:
@@ -300,11 +296,7 @@ mod tests {
         )
     }
 
-    fn run_node_exclusion(
-        xs: &[f32],
-        ys: &[f32],
-        p: NodeExclusionParams,
-    ) -> (Vec<f32>, Vec<f32>) {
+    fn run_node_exclusion(xs: &[f32], ys: &[f32], p: NodeExclusionParams) -> (Vec<f32>, Vec<f32>) {
         let dev = burn::tensor::Device::ndarray();
         let (fx, fy) = node_exclusion(
             Tensor::<1>::from_floats(xs, &dev),
@@ -390,7 +382,6 @@ mod tests {
 mod tests_wgpu {
     use super::*;
 
-
     /// Deterministic spread of N positions; no RNG (varies by index).
     fn positions(n: usize) -> (Vec<f32>, Vec<f32>) {
         (0..n)
@@ -436,7 +427,11 @@ mod tests_wgpu {
     fn parity_ndarray_wgpu() {
         let (xs, ys) = positions(257);
         let (cx, cy) = run(&xs, &ys, &burn::tensor::Device::ndarray());
-        let (gx, gy) = run(&xs, &ys, &burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0)));
+        let (gx, gy) = run(
+            &xs,
+            &ys,
+            &burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0)),
+        );
         let max = |a: &[f32], b: &[f32]| {
             a.iter()
                 .zip(b)
@@ -456,7 +451,12 @@ mod tests_wgpu {
             min_distance: 8.0,
         };
         let (cx, cy) = run_node_exclusion(&xs, &ys, params, &burn::tensor::Device::ndarray());
-        let (gx, gy) = run_node_exclusion(&xs, &ys, params, &burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0)));
+        let (gx, gy) = run_node_exclusion(
+            &xs,
+            &ys,
+            params,
+            &burn::tensor::Device::wgpu(burn::tensor::DeviceKind::DiscreteGpu(0)),
+        );
         let max_relative = |a: &[f32], b: &[f32]| {
             a.iter()
                 .zip(b)

@@ -412,6 +412,12 @@ vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-3
 # existed to do. The vendored copy remains at support/patches/cubecl-wgpu for
 # archaeology until a stable 0.22 lands, but it is no longer patched in.
 # cubecl-wgpu = { path = "support/patches/cubecl-wgpu" }
+# cubecl-runtime 0.11.0-pre.2's published manifest omitted the direct
+# wasm-bindgen-futures edge used by its wasm tuner and left serde/hash support
+# desktop-only. The source is the unchanged registry crate; its manifest carries
+# upstream fixes bce4e489 and 7a2ee1c3. Delete this patch when a Burn/CubeCL
+# release containing those fixes replaces the prerelease row.
+cubecl-runtime = { path = "support/patches/cubecl-runtime" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored

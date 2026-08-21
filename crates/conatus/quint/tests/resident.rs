@@ -86,7 +86,7 @@ fn the_kernel_computes_quints_own_force_law() {
         ..Default::default()
     };
 
-    let mut resident = Resident::new(
+    let resident = Resident::new(
         &client,
         &positions,
         Adjacency {

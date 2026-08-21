@@ -2,8 +2,9 @@
 
 **Date**: 2026-08-09
 
-**Status: EXECUTED 2026-08-20, on the 0.22.0-pre.2 row Mark chose.** Both
-production roots migrated (esp then quint, the plan's order), the vendored
+**Status: PRERELEASE MIGRATION EXECUTED 2026-08-20; stable closure remains
+release-gated.** On the 0.22.0-pre.2 row Mark chose, both production roots
+migrated (esp then quint, the plan's order), the vendored
 `support/patches/cubecl-wgpu` backport retired with it exactly as the probe
 predicted, and the workspace carries one `wgpu` 30.0.0 and one
 `libsqlite3-sys` 0.38.2 (rusqlite behind CubeCL's autotune cache, as the probe
@@ -31,8 +32,37 @@ Receipts, all on this machine's real GPU in release: quint parity 4 (repulse,
 node exclusion, scalar and vector lowering), resident chunk receipt 3 and
 resident 4 (the raw-buffer bridge), esp vector-kernel parity, BERT
 ndarray/wgpu parity. CPU suites: esp 173, quint 63. Prior 0.21 numbers are
-historical per the migration rules. The wasm and cross-device receipts have
-not been re-run and stay owed.
+historical per the migration rules.
+
+**Closure receipts 2026-08-20:** all eleven ESP feature combinations and all
+five Quint feature combinations now compile for `wasm32-unknown-unknown`,
+including every WGPU row and Quint's resident `field-gpu` row. The run found
+two real prerelease packaging gaps: `cubecl-runtime 0.11.0-pre.2` omitted its
+direct `wasm-bindgen-futures` dependency and left `cubecl-common`'s `serde` /
+`hash` features desktop-only. `support/patches/cubecl-runtime` is the unchanged
+published source plus the manifest corrections already made upstream in
+CubeCL commits `bce4e489` and `7a2ee1c3`; delete it when a release containing
+those fixes replaces this row. The same run found and fixed Quint's own missing
+`getrandom/wasm_js` feature edge under `field-burn`.
+
+The existing-device boundary is re-proven by the seven release-mode Quint
+receipts inherited by this migration: the host opens the wgpu
+adapter/device/queue, `ResidentClient::init` registers those handles with
+Burn/CubeCL, four resident kernel receipts execute, and three chunk receipts
+prove the Burn tensor and raw-kernel view resolve to the same allocation. The
+current shared tree also passed a fourth chunk receipt from the concurrent
+resident-patch lane; it is evidence, but not part of this migration's change
+set. The earlier phrase "cross-device receipt" was imprecise: this plan requires
+host-owned existing-device adoption, not remote or cross-machine execution. The
+detailed command ledger is in the
+[prerelease closure receipt](../testing/2026-08-20_burn_0_22_prerelease_closure.md).
+The same closure passed `cargo package -p esp` from a detached clean worktree;
+Cargo built and verified the extracted package. Repeat that receipt after the
+stable repin because dependency packaging is part of the release gate.
+
+Stable Burn 0.22 is still unpublished as of this recheck. Publication and the
+Burn Remote adapter therefore remain closed even though the chosen prerelease
+implementation and portability evidence are green.
 
 Original doc follows.
 

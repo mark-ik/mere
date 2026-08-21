@@ -21,7 +21,8 @@ numen = { path = "../numen", version = "0.2" }
 # UUID-backed kernel FieldId embedded in FieldRegistry.
 uuid = { version = "1", default-features = false, features = ["serde"] }
 # Burn-backed lowering of the field algebra (AST -> a fused tensor program).
-# ndarray backend for portable per-target compute; generic over `B: Backend`.
+# NdArray supplies portable per-target compute; the execution device is chosen
+# at runtime by each call.
 burn = { version = "0.22.0-pre.2", default-features = false, features = ["std"], optional = true }
 burn-wgpu = { version = "0.22.0-pre.2", default-features = false, features = ["std", "autotune"], optional = true }
 # Rhai composition surface for fields, couplings, and edge-path rules.
@@ -61,7 +62,7 @@ field-gpu = [
     "dep:burn-wgpu",
     "dep:getrandom",
 ]
-field-burn = ["dep:burn", "burn/ndarray"]
+field-burn = ["dep:burn", "burn/ndarray", "dep:getrandom"]
 # Adds the wgpu backend so consumers can target GPU evaluation.
 field-burn-wgpu = ["field-burn", "burn/wgpu", "burn/extension", "dep:burn-wgpu", "dep:getrandom"]
 field-rhai = ["dep:rhai"]

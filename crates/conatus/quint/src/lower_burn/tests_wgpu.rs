@@ -9,8 +9,8 @@
 
 use super::*;
 use crate::ast::{ScalarField, VectorField};
-use burn::tensor::Tensor;
 use burn::tensor::Device;
+use burn::tensor::Tensor;
 
 fn cpu_device() -> Device {
     Device::ndarray()
@@ -57,10 +57,7 @@ fn points(n: usize) -> Vec<(f32, f32)> {
         .collect()
 }
 
-fn tensors(
-    pts: &[(f32, f32)],
-    dev: &Device,
-) -> (Tensor<1>, Tensor<1>) {
+fn tensors(pts: &[(f32, f32)], dev: &Device) -> (Tensor<1>, Tensor<1>) {
     let xs: Vec<f32> = pts.iter().map(|(x, _)| *x).collect();
     let ys: Vec<f32> = pts.iter().map(|(_, y)| *y).collect();
     (
