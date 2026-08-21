@@ -337,3 +337,10 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   disposable prerelease probe. Endpoint, model-session/adapter, training, and
   communal lanes remain entrance-gated rather than being smuggled into those
   scopes.
+- **2026-08-21, D2 first headed row**: Distillery now hosts the independent
+  browser evidence surface. The MiniLM artifact, integrity, IndexedDB reopen,
+  copy ladder, worker termination, and warm restart passed. ESP's async BERT
+  path reached BrowserWebGpu execution, but CubeCL emitted invalid
+  max-reduction WGSL and the returned vector failed the committed MiniLM
+  fixture. This is a measured Burn/CubeCL browser ceiling, not completion of
+  ESP's wasm execution tail. D2c and decoder cancellation remain unopened.

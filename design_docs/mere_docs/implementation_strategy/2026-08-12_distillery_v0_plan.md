@@ -159,6 +159,14 @@ needs one explicit product decision about which Personae profile owns the mesh
 author and where its persisted settings live; an environment seed would be a
 bad substitute for that authority.
 
+Distillery now also homes D2's standalone browser development probe without
+making it product chrome. Its first headed MiniLM row passes artifact storage,
+integrity, warm reopen, worker termination, and restart, but stops at
+Burn/CubeCL BrowserWebGpu execution: the generated reduction WGSL is invalid
+and the returned vector fails ESP's numerical reference. This does not resolve
+the installed-binary authority decision and does not open model-size sweep or
+decoder cancellation work.
+
 Cambium views should now follow `ResidentReceipt`. The stable Burn migration is
 the next serial compute gate, migrating ESP before Quint with the planned
 native, wasm, CPU, WGPU, real-device, and package receipts. The lease-bound Burn

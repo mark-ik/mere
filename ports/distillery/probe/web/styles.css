@@ -1,0 +1,30 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  background: #101413;
+  color: #e4e9e4;
+}
+
+body { margin: 0; }
+main { width: min(920px, calc(100% - 32px)); margin: 32px auto 80px; }
+header, form, section { border: 1px solid #38443e; background: #171d1a; padding: 20px; margin-bottom: 16px; }
+.eyebrow { color: #9fb8a8; text-transform: uppercase; letter-spacing: .08em; }
+h1, h2 { margin-top: 0; }
+label { display: grid; gap: 6px; margin: 12px 0; color: #bdc9c1; }
+input, textarea, button { font: inherit; }
+input, textarea { box-sizing: border-box; width: 100%; border: 1px solid #536359; background: #0c100e; color: #f2f5f2; padding: 9px; }
+textarea { min-height: 76px; resize: vertical; }
+.row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.check { display: flex; align-items: center; grid-template-columns: auto 1fr; }
+.check input { width: auto; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+button { border: 1px solid #82998b; background: #29382f; color: #f4f7f5; padding: 10px 14px; cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+pre { overflow: auto; max-height: 560px; white-space: pre-wrap; word-break: break-word; }
+#state-log { max-height: 240px; overflow: auto; }
+body[data-probe-state="failed"] #status { color: #ff9f98; }
+body[data-probe-state="complete"] #status { color: #9de1b0; }
+
+@media (max-width: 680px) {
+  .row { grid-template-columns: 1fr; }
+}

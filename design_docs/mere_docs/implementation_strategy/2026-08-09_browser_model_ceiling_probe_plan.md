@@ -2,8 +2,10 @@
 
 **Date**: 2026-08-09
 
-**Status**: Scoped, ready as an independent evidence lane. It does not wait for
-the personal mesh, Burn Remote, or Burn 0.22.
+**Status**: D2a complete for the 90.9 MB MiniLM row on 2026-08-21. D2b proves
+worker termination and warm restart but fails its numerical/reference gate in
+Burn/CubeCL BrowserWebGpu execution. D2c is unopened. This remains independent
+of the personal mesh and Burn Remote.
 
 **Related**:
 [`2026-07-05_inference_provider_plan.md`](2026-07-05_inference_provider_plan.md),
@@ -215,3 +217,29 @@ product default is a later decision informed by these receipts.
   `ResolvedModel` byte ownership as a possible false ceiling; and required a
   worker lifecycle, copy ladder, configurable sweep, and machine-readable
   headed receipt.
+- **2026-08-21, MiniLM D2a/D2b receipt**: added the standalone development
+  surface under `ports/distillery/probe`, including worker-capable Muniment
+  IndexedDB, an async ESP BERT readback path, configurable controls, frame
+  sampling, raw WebGPU error capture, and JSON export. A headed Chromium run
+  saved all-MiniLM-L6-v2 through `ModelLibrary`, reopened the same manifest and
+  hashes from IndexedDB, accounted for five full 90,868,376-byte host copies,
+  terminated a worker at `executing`, observed no late message during the
+  300 ms quiet window, and repeated the warm reopen in a fresh worker.
+
+  Execution did not pass. CubeCL's generated max-reduction WGSL was rejected
+  because its constant bitcast represents negative infinity. The returned
+  384-float buffer had norm zero and missed ESP's reference fixture; its first
+  eight float bit patterns decode exactly to the input token ids `101, 2023,
+  2003, 1037, 7099, 6251, 1012, 102`. Repeatability therefore is not evidence
+  of a correct embedding. The page reports `limited`, and the limiting layer is
+  Burn/CubeCL BrowserWebGpu at the first embedding row. The raw receipt and
+  interpretation are in
+  [`2026-08-21_browser_model_ceiling_receipt.md`](../testing/2026-08-21_browser_model_ceiling_receipt.md).
+
+  A separate packaging trap was isolated before that ceiling: wgpu 30 with
+  wasm-bindgen 0.2.126 panics while decoding a successful null WebGPU error
+  scope. The probe pins the verified 0.2.122/0.4.72/0.3.99 compatibility row
+  and requires a matching CLI. That pin exposes the model failure; it does not
+  fix it. D2b resumes when an upstream or narrowly justified patch produces a
+  fixture-valid vector. Decoder cancellation and the size sweep stay closed
+  until then.

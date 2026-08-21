@@ -24,7 +24,9 @@ use futures_channel::oneshot;
 use js_sys::{Array, Uint8Array};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::{Closure, JsValue};
-use web_sys::{Event, IdbDatabase, IdbObjectStore, IdbRequest, IdbTransaction, IdbTransactionMode};
+use web_sys::{
+    Event, IdbDatabase, IdbFactory, IdbObjectStore, IdbRequest, IdbTransaction, IdbTransactionMode,
+};
 
 use crate::{Backend, StoreError, WriteOp};
 
@@ -41,11 +43,7 @@ impl IndexedDbBackend {
     /// Open or create a database whose one object store contains flat Muniment
     /// byte keys.
     pub async fn open(database_name: &str, store_name: &str) -> Result<Self, StoreError> {
-        let factory = web_sys::window()
-            .ok_or_else(|| backend_error("browser window is unavailable"))?
-            .indexed_db()
-            .map_err(js_backend_error)?
-            .ok_or_else(|| backend_error("IndexedDB is unavailable"))?;
+        let factory = indexed_db_factory()?;
         let request = factory
             .open_with_u32(database_name, DATABASE_VERSION)
             .map_err(js_backend_error)?;
@@ -99,6 +97,24 @@ impl IndexedDbBackend {
             .filter_map(|key| key.as_string())
             .collect())
     }
+}
+
+fn indexed_db_factory() -> Result<IdbFactory, StoreError> {
+    if let Some(window) = web_sys::window() {
+        return window
+            .indexed_db()
+            .map_err(js_backend_error)?
+            .ok_or_else(|| backend_error("IndexedDB is unavailable"));
+    }
+
+    let global = js_sys::global();
+    let worker = global
+        .dyn_into::<web_sys::WorkerGlobalScope>()
+        .map_err(|_| backend_error("browser window or worker scope is unavailable"))?;
+    worker
+        .indexed_db()
+        .map_err(js_backend_error)?
+        .ok_or_else(|| backend_error("IndexedDB is unavailable"))
 }
 
 #[async_trait(?Send)]

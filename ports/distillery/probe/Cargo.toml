@@ -1,0 +1,37 @@
+[package]
+name = "distillery-model-probe"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/merely-made/mere"
+publish = false
+description = "Headed browser evidence surface for Distillery's local model corridor."
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+blake3 = "1.5"
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["std", "wgpu"] }
+eidetic = { package = "mere-eidetic", path = "../../../crates/eidetic/eidetic-core", default-features = false }
+esp = { path = "../../../crates/intel/esp", features = ["bert-wgpu"] }
+# wgpu 30's BrowserWebGpu binding expects the pre-0.2.123 nullable
+# popErrorScope conversion. Newer wasm-bindgen releases turn a successful
+# null result into an object that wgpu classifies as an unexpected GPU error.
+js-sys = "=0.3.99"
+muniment = { path = "../../../crates/eidetic/muniment", features = ["indexeddb"] }
+wasm-bindgen = "=0.2.122"
+wasm-bindgen-futures = "=0.4.72"
+web-sys = { version = "=0.3.99", features = [
+    "DedicatedWorkerGlobalScope",
+    "Response",
+] }
+
+[patch.crates-io]
+cubecl-runtime = { path = "../../../support/patches/cubecl-runtime" }

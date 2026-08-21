@@ -56,6 +56,12 @@ The D1 proof reopens both the redb mesh store and collecting blob store after a
 real resident run. The job remains terminal and released content stays
 released across that restart boundary.
 
+`probe/` is D2's standalone headed-browser evidence surface. Its first MiniLM
+row proves the Eidetic/Muniment artifact corridor, warm IndexedDB reopen, and
+worker lifecycle. Burn/CubeCL BrowserWebGpu execution currently fails the
+reference-vector gate, so the probe records a measured limit rather than
+claiming a usable browser model.
+
 There is not yet an installed standalone binary because Distillery still needs
 a product-level choice of Personae profile and persisted settings authority.
 Cambium views, Burn resource migration, the Burn Remote adapter, model manifest
