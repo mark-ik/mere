@@ -10,6 +10,11 @@
 
 use std::path::PathBuf;
 
+#[cfg(feature = "secret-service")]
+use std::collections::BTreeMap;
+#[cfg(feature = "secret-service")]
+use std::sync::{Arc, Mutex};
+
 use personae::{IdentityError, PersonaId, SealedRecordStorage};
 
 use crate::otp::OtpItemStore;
@@ -18,6 +23,8 @@ use crate::otp::OtpItemStore;
 #[derive(Clone)]
 pub struct CastellanResident {
     records: SealedRecordStorage,
+    #[cfg(feature = "secret-service")]
+    secret_service_transactions: Arc<Mutex<BTreeMap<PersonaId, Arc<Mutex<()>>>>>,
 }
 
 impl CastellanResident {
@@ -40,6 +47,8 @@ impl CastellanResident {
                 freshness_root,
                 freshness_key,
             )?,
+            #[cfg(feature = "secret-service")]
+            secret_service_transactions: Arc::new(Mutex::new(BTreeMap::new())),
         })
     }
 
@@ -55,7 +64,19 @@ impl CastellanResident {
         persona: PersonaId,
         limits: crate::secret_service::SecretServiceLimits,
     ) -> crate::secret_service::SecretServiceStore {
-        crate::secret_service::SecretServiceStore::new(self.records.clone(), persona, limits)
+        let transaction = self
+            .secret_service_transactions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(persona)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
+        crate::secret_service::SecretServiceStore::new(
+            self.records.clone(),
+            persona,
+            limits,
+            transaction,
+        )
     }
 }
 
@@ -100,5 +121,84 @@ mod tests {
 
         assert_eq!(first.tile().code_at_unix_time(0), Some("755224"));
         assert_eq!(second.tile().code_at_unix_time(0), Some("287082"));
+    }
+
+    #[test]
+    fn resident_rejects_restored_hotp_state_before_releasing_it_again() {
+        let dir = tempdir().unwrap();
+        let records = dir.path().join("records");
+        let resident = claim(dir.path());
+        let persona = PersonaId::new();
+        let items = resident.otp_items(persona);
+        let item = items
+            .import_otpauth_uri(&format!(
+                "otpauth://hotp/Steam:mark?secret={RFC4226_SECRET_BASE32}&issuer=Steam&counter=0"
+            ))
+            .unwrap();
+        let record = records
+            .join("castellan/otp/v1")
+            .join(persona.as_uuid().to_string())
+            .join(format!("{}.json", item.id));
+        let counter_zero = std::fs::read(&record).unwrap();
+        let gate = OtpReleaseGate::new(items);
+        let participant =
+            || OtpReleaseParticipantClaim::unverified("local:test", "rollback:test").unwrap();
+
+        let first = gate.petition(item.id, participant()).unwrap();
+        assert_eq!(
+            gate.approve(first.id).unwrap().tile().code_at_unix_time(0),
+            Some("755224")
+        );
+        let second = gate.petition(item.id, participant()).unwrap();
+        std::fs::write(&record, counter_zero).unwrap();
+
+        let error = gate.approve(second.id).unwrap_err();
+        assert!(error.to_string().contains("rollback detected"));
+    }
+
+    #[cfg(feature = "secret-service")]
+    #[test]
+    fn independent_secret_service_views_share_one_composite_transaction() {
+        use crate::secret_service::{NewSecretItem, SecretServiceLimits};
+
+        let dir = tempdir().unwrap();
+        let resident = claim(dir.path());
+        let persona = PersonaId::new();
+        let left = resident.secret_service(persona, SecretServiceLimits::default());
+        let right = resident.secret_service(persona, SecretServiceLimits::default());
+        let collection = left.ensure_default_collection("Castellan", 1).unwrap();
+        let create = |store: crate::secret_service::SecretServiceStore, prefix: &'static str| {
+            std::thread::spawn(move || {
+                for index in 0..20 {
+                    store
+                        .create_item(NewSecretItem {
+                            collection: collection.id,
+                            label: format!("{prefix} {index}"),
+                            attributes: std::collections::BTreeMap::from([(
+                                "id".to_string(),
+                                format!("{prefix}-{index}"),
+                            )]),
+                            secret: vec![index],
+                            content_type: "application/octet-stream".into(),
+                            replace: false,
+                            unix_secs: index.into(),
+                        })
+                        .unwrap();
+                }
+            })
+        };
+        let left = create(left, "left");
+        let right = create(right, "right");
+        left.join().unwrap();
+        right.join().unwrap();
+
+        assert_eq!(
+            resident
+                .secret_service(persona, SecretServiceLimits::default())
+                .items(collection.id)
+                .unwrap()
+                .len(),
+            40
+        );
     }
 }

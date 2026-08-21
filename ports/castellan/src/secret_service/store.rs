@@ -1,13 +1,19 @@
 use std::collections::BTreeMap;
 use std::fmt;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use personae::{IdentityError, PersonaId, SealedRecordChange, SealedRecordStorage};
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
+#[cfg(any(test, target_os = "linux"))]
+use zeroize::Zeroizing;
 
 const RECORD_VERSION: u8 = 1;
 const RECORD_DIRECTORY: &str = "castellan/secret-service/v1";
+
+mod persistence;
+
+use persistence::{StoredCollection, StoredItem};
 
 /// Resource limits applied before any Secret Service value reaches storage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -124,6 +130,31 @@ pub struct SecretItem {
     pub modified: u64,
 }
 
+/// Values required to create or exact-attribute-replace one secret item.
+pub struct NewSecretItem {
+    /// Collection that will own the item.
+    pub collection: SecretCollectionId,
+    /// Human-readable item label.
+    pub label: String,
+    /// Exact-match lookup attributes.
+    pub attributes: BTreeMap<String, String>,
+    /// Secret bytes to seal.
+    pub secret: Vec<u8>,
+    /// MIME-style content type for the secret bytes.
+    pub content_type: String,
+    /// Replace an item in the collection with identical attributes.
+    pub replace: bool,
+    /// Host-supplied Unix timestamp for creation or replacement.
+    pub unix_secs: u64,
+}
+
+impl Drop for NewSecretItem {
+    fn drop(&mut self) {
+        self.secret.zeroize();
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
 pub(super) struct SecretValue {
     pub(super) bytes: Zeroizing<Vec<u8>>,
     pub(super) content_type: String,
@@ -169,12 +200,13 @@ impl SecretServiceStore {
         storage: SealedRecordStorage,
         persona: PersonaId,
         limits: SecretServiceLimits,
+        transaction: Arc<Mutex<()>>,
     ) -> Self {
         Self {
             storage,
             persona,
             limits,
-            transaction: Arc::new(Mutex::new(())),
+            transaction,
         }
     }
 
@@ -183,6 +215,7 @@ impl SecretServiceStore {
         self.persona
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub(super) fn limits(&self) -> SecretServiceLimits {
         self.limits
     }
@@ -230,7 +263,7 @@ impl SecretServiceStore {
     ) -> Result<SecretCollection, SecretServiceError> {
         self.validate_name(label, "collection label")?;
         if let Some(alias) = alias {
-            self.validate_name(alias, "collection alias")?;
+            self.validate_alias(alias)?;
         }
         let _guard = self.lock();
         let catalog = self.load_catalog()?;
@@ -250,6 +283,7 @@ impl SecretServiceStore {
         Ok(self.load_catalog()?.aliases.get(alias).copied())
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub(super) fn aliases(
         &self,
     ) -> Result<BTreeMap<String, SecretCollectionId>, SecretServiceError> {
@@ -263,7 +297,7 @@ impl SecretServiceStore {
         alias: &str,
         collection: Option<SecretCollectionId>,
     ) -> Result<(), SecretServiceError> {
-        self.validate_name(alias, "collection alias")?;
+        self.validate_alias(alias)?;
         let _guard = self.lock();
         if let Some(id) = collection {
             self.require_collection(id)?;
@@ -355,31 +389,25 @@ impl SecretServiceStore {
     /// Create or exact-attribute-replace one item.
     pub fn create_item(
         &self,
-        collection: SecretCollectionId,
-        label: &str,
-        attributes: BTreeMap<String, String>,
-        secret: Vec<u8>,
-        content_type: &str,
-        replace: bool,
-        unix_secs: u64,
+        mut request: NewSecretItem,
     ) -> Result<SecretItem, SecretServiceError> {
-        self.validate_name(label, "item label")?;
-        self.validate_name(content_type, "content type")?;
-        self.validate_attributes(&attributes)?;
-        self.validate_secret(&secret)?;
+        self.validate_name(&request.label, "item label")?;
+        self.validate_name(&request.content_type, "content type")?;
+        self.validate_attributes(&request.attributes)?;
+        self.validate_secret(&request.secret)?;
         let _guard = self.lock();
         let mut collection_record = self
-            .load_collection_record(collection)?
-            .ok_or(SecretServiceError::CollectionNotFound(collection))?;
-        if replace {
+            .load_collection_record(request.collection)?
+            .ok_or(SecretServiceError::CollectionNotFound(request.collection))?;
+        if request.replace {
             for id in &collection_record.items {
                 let mut current = self.require_item_record(*id)?;
-                if current.attributes == attributes {
-                    current.label = label.to_string();
+                if current.attributes == request.attributes {
+                    current.label.clone_from(&request.label);
                     current.secret.zeroize();
-                    current.secret = secret;
-                    current.content_type = content_type.to_string();
-                    current.modified = unix_secs;
+                    current.secret = std::mem::take(&mut request.secret);
+                    current.content_type.clone_from(&request.content_type);
+                    current.modified = request.unix_secs;
                     let metadata = current.metadata(*id);
                     self.storage.save_record(self.item_path(*id), &current)?;
                     return Ok(metadata);
@@ -392,20 +420,20 @@ impl SecretServiceStore {
         let id = SecretItemId::mint();
         let record = StoredItem {
             version: RECORD_VERSION,
-            collection,
-            label: label.to_string(),
-            attributes,
-            secret,
-            content_type: content_type.to_string(),
-            created: unix_secs,
-            modified: unix_secs,
+            collection: request.collection,
+            label: std::mem::take(&mut request.label),
+            attributes: std::mem::take(&mut request.attributes),
+            secret: std::mem::take(&mut request.secret),
+            content_type: std::mem::take(&mut request.content_type),
+            created: request.unix_secs,
+            modified: request.unix_secs,
         };
         let metadata = record.metadata(id);
         self.storage.save_record(self.item_path(id), &record)?;
         collection_record.items.push(id);
-        collection_record.modified = unix_secs;
+        collection_record.modified = request.unix_secs;
         self.storage
-            .save_record(self.collection_path(collection), &collection_record)?;
+            .save_record(self.collection_path(request.collection), &collection_record)?;
         Ok(metadata)
     }
 
@@ -443,6 +471,7 @@ impl SecretServiceStore {
         })
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub(super) fn set_secret(
         &self,
         id: SecretItemId,
@@ -460,6 +489,7 @@ impl SecretServiceStore {
         })
     }
 
+    #[cfg(any(test, target_os = "linux"))]
     pub(super) fn secret(&self, id: SecretItemId) -> Result<SecretValue, SecretServiceError> {
         let _guard = self.lock();
         let item = self.require_item_record(id)?;
@@ -550,308 +580,8 @@ impl SecretServiceStore {
             },
         )
     }
-
-    fn load_catalog(&self) -> Result<StoredCatalog, SecretServiceError> {
-        self.storage
-            .load_record(self.catalog_path())?
-            .map(StoredCatalog::check_version)
-            .transpose()
-            .map(|catalog| catalog.unwrap_or_default())
-    }
-
-    fn save_catalog(&self, catalog: &StoredCatalog) -> Result<(), SecretServiceError> {
-        self.storage
-            .save_record(self.catalog_path(), catalog)
-            .map_err(SecretServiceError::from)
-    }
-
-    fn load_collection_record(
-        &self,
-        id: SecretCollectionId,
-    ) -> Result<Option<StoredCollection>, SecretServiceError> {
-        self.storage
-            .load_record(self.collection_path(id))?
-            .map(StoredCollection::check_version)
-            .transpose()
-    }
-
-    fn require_collection(
-        &self,
-        id: SecretCollectionId,
-    ) -> Result<SecretCollection, SecretServiceError> {
-        self.load_collection_record(id)?
-            .map(|record| record.metadata(id))
-            .ok_or(SecretServiceError::CollectionNotFound(id))
-    }
-
-    fn require_item_record(&self, id: SecretItemId) -> Result<StoredItem, SecretServiceError> {
-        self.storage
-            .load_record(self.item_path(id))?
-            .ok_or(SecretServiceError::ItemNotFound(id))
-            .and_then(StoredItem::check_version)
-    }
-
-    fn require_item(&self, id: SecretItemId) -> Result<SecretItem, SecretServiceError> {
-        self.require_item_record(id)
-            .map(|record| record.metadata(id))
-    }
-
-    fn validate_name(&self, text: &str, kind: &'static str) -> Result<(), SecretServiceError> {
-        if text.is_empty() || text.chars().any(char::is_control) {
-            return Err(SecretServiceError::InvalidText(kind));
-        }
-        if text.len() > self.limits.max_name_bytes {
-            return Err(SecretServiceError::Limit(kind));
-        }
-        Ok(())
-    }
-
-    fn validate_attributes(
-        &self,
-        attributes: &BTreeMap<String, String>,
-    ) -> Result<(), SecretServiceError> {
-        if attributes.len() > self.limits.max_attributes {
-            return Err(SecretServiceError::Limit("attributes per item"));
-        }
-        for (key, value) in attributes {
-            self.validate_name(key, "attribute key")?;
-            if value.len() > self.limits.max_attribute_value_bytes
-                || value.chars().any(char::is_control)
-            {
-                return Err(SecretServiceError::Limit("attribute value"));
-            }
-        }
-        Ok(())
-    }
-
-    fn validate_secret(&self, secret: &[u8]) -> Result<(), SecretServiceError> {
-        if secret.len() > self.limits.max_secret_bytes {
-            Err(SecretServiceError::Limit("secret bytes"))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn base_path(&self) -> String {
-        format!("{RECORD_DIRECTORY}/{}", self.persona.as_uuid())
-    }
-
-    fn catalog_path(&self) -> String {
-        format!("{}/catalog.json", self.base_path())
-    }
-
-    fn collection_path(&self, id: SecretCollectionId) -> String {
-        format!("{}/collections/{id}.json", self.base_path())
-    }
-
-    fn item_path(&self, id: SecretItemId) -> String {
-        format!("{}/items/{id}.json", self.base_path())
-    }
-
-    fn lock(&self) -> MutexGuard<'_, ()> {
-        self.transaction
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct StoredCatalog {
-    version: u8,
-    collections: Vec<SecretCollectionId>,
-    aliases: BTreeMap<String, SecretCollectionId>,
-}
-
-impl Default for StoredCatalog {
-    fn default() -> Self {
-        Self {
-            version: RECORD_VERSION,
-            collections: Vec::new(),
-            aliases: BTreeMap::new(),
-        }
-    }
-}
-
-impl StoredCatalog {
-    fn check_version(self) -> Result<Self, SecretServiceError> {
-        check_version(self.version)?;
-        Ok(self)
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct StoredCollection {
-    version: u8,
-    label: String,
-    items: Vec<SecretItemId>,
-    created: u64,
-    modified: u64,
-}
-
-impl StoredCollection {
-    fn check_version(self) -> Result<Self, SecretServiceError> {
-        check_version(self.version)?;
-        Ok(self)
-    }
-
-    fn metadata(&self, id: SecretCollectionId) -> SecretCollection {
-        SecretCollection {
-            id,
-            label: self.label.clone(),
-            created: self.created,
-            modified: self.modified,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct StoredItem {
-    version: u8,
-    collection: SecretCollectionId,
-    label: String,
-    attributes: BTreeMap<String, String>,
-    secret: Vec<u8>,
-    content_type: String,
-    created: u64,
-    modified: u64,
-}
-
-impl Drop for StoredItem {
-    fn drop(&mut self) {
-        self.secret.zeroize();
-    }
-}
-
-impl StoredItem {
-    fn check_version(self) -> Result<Self, SecretServiceError> {
-        check_version(self.version)?;
-        Ok(self)
-    }
-
-    fn metadata(&self, id: SecretItemId) -> SecretItem {
-        SecretItem {
-            id,
-            collection: self.collection,
-            label: self.label.clone(),
-            attributes: self.attributes.clone(),
-            created: self.created,
-            modified: self.modified,
-        }
-    }
-}
-
-fn check_version(version: u8) -> Result<(), SecretServiceError> {
-    if version == RECORD_VERSION {
-        Ok(())
-    } else {
-        Err(SecretServiceError::UnsupportedRecordVersion(version))
-    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::resident::CastellanResident;
-    use tempfile::tempdir;
-
-    fn store(root: &std::path::Path, persona: PersonaId) -> SecretServiceStore {
-        let resident = CastellanResident::claim(
-            root.join("records"),
-            [0x91; 32],
-            root.join("freshness"),
-            [0x92; 32],
-        )
-        .unwrap();
-        resident.secret_service(persona, SecretServiceLimits::default())
-    }
-
-    fn attributes() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("application".into(), "turnstone".into()),
-            ("account".into(), "mark".into()),
-        ])
-    }
-
-    #[test]
-    fn default_collection_stores_searches_replaces_and_deletes_a_secret() {
-        let dir = tempdir().unwrap();
-        let store = store(dir.path(), PersonaId::new());
-        let collection = store.ensure_default_collection("Castellan", 10).unwrap();
-        let item = store
-            .create_item(
-                collection.id,
-                "Turnstone",
-                attributes(),
-                b"first".to_vec(),
-                "text/plain; charset=utf8",
-                false,
-                11,
-            )
-            .unwrap();
-
-        assert_eq!(store.search(&attributes()).unwrap(), vec![item.clone()]);
-        assert_eq!(store.secret(item.id).unwrap().bytes.as_slice(), b"first");
-
-        let replaced = store
-            .create_item(
-                collection.id,
-                "Turnstone login",
-                attributes(),
-                b"second".to_vec(),
-                "text/plain; charset=utf8",
-                true,
-                12,
-            )
-            .unwrap();
-        assert_eq!(replaced.id, item.id);
-        assert_eq!(store.items(collection.id).unwrap().len(), 1);
-        assert_eq!(store.secret(item.id).unwrap().bytes.as_slice(), b"second");
-
-        store.delete_item(item.id).unwrap();
-        assert!(matches!(
-            store.item(item.id),
-            Err(SecretServiceError::ItemNotFound(id)) if id == item.id
-        ));
-    }
-
-    #[test]
-    fn persona_namespaces_and_plaintext_storage_stay_separate() {
-        let dir = tempdir().unwrap();
-        let owner = store(dir.path(), PersonaId::new());
-        let collection = owner.ensure_default_collection("Castellan", 10).unwrap();
-        owner
-            .create_item(
-                collection.id,
-                "Private",
-                attributes(),
-                b"not-on-disk-in-clear".to_vec(),
-                "text/plain",
-                false,
-                11,
-            )
-            .unwrap();
-        drop(owner);
-
-        let bytes = std::fs::read_dir(dir.path().join("records"))
-            .unwrap()
-            .flat_map(|entry| walk(entry.unwrap().path()))
-            .flat_map(|path| std::fs::read(path).unwrap_or_default())
-            .collect::<Vec<_>>();
-        assert!(!String::from_utf8_lossy(&bytes).contains("not-on-disk-in-clear"));
-
-        let other = store(dir.path(), PersonaId::new());
-        assert!(other.collections().unwrap().is_empty());
-    }
-
-    fn walk(path: std::path::PathBuf) -> Vec<std::path::PathBuf> {
-        if path.is_file() {
-            return vec![path];
-        }
-        std::fs::read_dir(path)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .flat_map(|entry| walk(entry.path()))
-            .collect()
-    }
-}
+#[path = "store_tests.rs"]
+mod tests;

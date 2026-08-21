@@ -39,6 +39,7 @@ secret-service = ["dep:thiserror", "dep:tokio", "dep:zbus"]
 [dependencies]
 # HMAC + the three hashes RFC 6238 allows. RustCrypto, and sha2 is already a
 # workspace pin, so this adds one lineage rather than three.
+base64.workspace = true
 hmac = "0.13"
 notochord.workspace = true
 personae.workspace = true

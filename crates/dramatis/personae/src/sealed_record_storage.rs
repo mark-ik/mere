@@ -106,6 +106,7 @@ impl SealedRecordStorage {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&lease_path)
             .map_err(|error| {
                 IdentityError::Backend(format!(
@@ -185,19 +186,12 @@ impl SealedRecordStorage {
         }
         let legacy = envelope.version == LEGACY_SEALED_RECORD_FORMAT_VERSION;
         let generation = if legacy { 0 } else { envelope.generation };
-        self.reconcile_freshness(
-            &aad,
-            revision(Some(&bytes), generation, envelope.deleted),
-            legacy,
-        )?;
-        if envelope.deleted {
-            return Ok(None);
-        }
+        let observed = revision(Some(&bytes), generation, envelope.deleted);
         let cipher = ChaCha20Poly1305::new(
-            &Key::try_from(&self.key.as_ref()[..]).expect("fixed-length key material"),
+            &Key::try_from(self.key.as_ref()).expect("fixed-length key material"),
         );
         let nonce = &Nonce::try_from(&envelope.nonce[..]).expect("fixed-length key material");
-        let encryption_aad = envelope_aad(&aad, envelope.version, generation, false);
+        let encryption_aad = envelope_aad(&aad, envelope.version, generation, envelope.deleted);
         let plaintext = Zeroizing::new(
             cipher
                 .decrypt(
@@ -209,9 +203,20 @@ impl SealedRecordStorage {
                 )
                 .map_err(|_| IdentityError::Backend(format!("decrypt sealed record {:?}", path)))?,
         );
+        if envelope.deleted {
+            if !plaintext.is_empty() {
+                return Err(IdentityError::Backend(format!(
+                    "sealed tombstone {:?} contains unexpected plaintext",
+                    path
+                )));
+            }
+            self.reconcile_freshness(&aad, observed, legacy)?;
+            return Ok(None);
+        }
         let value = serde_json::from_slice(&plaintext).map_err(|err| {
             IdentityError::Backend(format!("decode sealed record plaintext {:?}: {err}", path))
         })?;
+        self.reconcile_freshness(&aad, observed, legacy)?;
         Ok(Some(value))
     }
 
@@ -238,7 +243,7 @@ impl SealedRecordStorage {
         })?);
         let nonce = random_bytes(NONCE_LEN);
         let cipher = ChaCha20Poly1305::new(
-            &Key::try_from(&self.key.as_ref()[..]).expect("fixed-length key material"),
+            &Key::try_from(self.key.as_ref()).expect("fixed-length key material"),
         );
         let encryption_aad = envelope_aad(&aad, SEALED_RECORD_FORMAT_VERSION, generation, false);
         let ciphertext = cipher
@@ -297,7 +302,7 @@ impl SealedRecordStorage {
             })?;
             let nonce = random_bytes(NONCE_LEN);
             let cipher = ChaCha20Poly1305::new(
-                &Key::try_from(&self.key.as_ref()[..]).expect("fixed-length key material"),
+                &Key::try_from(self.key.as_ref()).expect("fixed-length key material"),
             );
             let encryption_aad = envelope_aad(&aad, SEALED_RECORD_FORMAT_VERSION, generation, true);
             let ciphertext = cipher
@@ -660,6 +665,62 @@ mod tests {
     }
 
     #[test]
+    fn authority_child_probe() {
+        if std::env::var_os("PERSONAE_AUTHORITY_PROBE").is_none() {
+            return;
+        }
+        let records = PathBuf::from(std::env::var_os("PERSONAE_AUTHORITY_RECORDS").unwrap());
+        let freshness = PathBuf::from(std::env::var_os("PERSONAE_AUTHORITY_FRESHNESS").unwrap());
+        let result = SealedRecordStorage::claim_with_file_freshness(
+            records, [0x55; 32], freshness, [0x56; 32],
+        );
+        match std::env::var("PERSONAE_AUTHORITY_EXPECT").unwrap().as_str() {
+            "blocked" => assert!(
+                result
+                    .err()
+                    .expect("second process must be blocked")
+                    .to_string()
+                    .contains("already held")
+            ),
+            "open" => drop(result.unwrap()),
+            expectation => panic!("unsupported authority probe expectation {expectation:?}"),
+        }
+    }
+
+    #[test]
+    fn authoritative_opening_is_exclusive_across_processes() {
+        let dir = tempdir().unwrap();
+        let records = dir.path().join("records");
+        let freshness = dir.path().join("freshness");
+        let authority = authoritative_store(&records, &freshness);
+
+        let probe = |expectation: &str| {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "sealed_record_storage::tests::authority_child_probe",
+                    "--nocapture",
+                ])
+                .env("PERSONAE_AUTHORITY_PROBE", "1")
+                .env("PERSONAE_AUTHORITY_RECORDS", &records)
+                .env("PERSONAE_AUTHORITY_FRESHNESS", &freshness)
+                .env("PERSONAE_AUTHORITY_EXPECT", expectation)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "authority child probe failed:\n{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+
+        probe("blocked");
+        drop(authority);
+        probe("open");
+    }
+
+    #[test]
     fn external_freshness_evidence_rejects_an_older_valid_record() {
         let dir = tempdir().unwrap();
         let records = dir.path().join("records");
@@ -679,6 +740,34 @@ mod tests {
 
         let error = store.load_record::<CounterRecord>(relative).unwrap_err();
         assert!(error.to_string().contains("rollback detected"));
+    }
+
+    #[test]
+    fn unauthenticated_legacy_record_does_not_establish_a_freshness_baseline() {
+        let dir = tempdir().unwrap();
+        let records = dir.path().join("records");
+        let freshness = dir.path().join("freshness");
+        let store = authoritative_store(&records, &freshness);
+        let relative = Path::new("identity/forged-legacy.json");
+        let (path, aad) = resolve_record_path(&records.canonicalize().unwrap(), relative).unwrap();
+        save_json_atomic(
+            &path,
+            &SealedRecordEnvelope {
+                version: LEGACY_SEALED_RECORD_FORMAT_VERSION,
+                generation: 0,
+                deleted: false,
+                nonce: vec![0; NONCE_LEN],
+                ciphertext: vec![0; 16],
+            },
+        )
+        .unwrap();
+
+        let error = store.load_record::<SampleRecord>(relative).unwrap_err();
+        assert!(error.to_string().contains("decrypt sealed record"));
+        let ledger = freshness
+            .join("records")
+            .join(format!("{}.json", blake3::hash(aad.as_bytes()).to_hex()));
+        assert!(!ledger.exists());
     }
 
     #[test]

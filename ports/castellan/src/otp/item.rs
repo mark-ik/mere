@@ -18,10 +18,15 @@ use personae::{IdentityError, PersonaId, SealedRecordChange, SealedRecordStorage
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
+use super::steam_guard::decode_shared_secret;
 use super::uri::OtpUri;
-use super::{Otp, OtpAlgorithm, OtpCodeTile, OtpError, OtpKind, OtpUriError, parse_otpauth_uri};
+use super::{
+    Otp, OtpAlgorithm, OtpCodeStyle, OtpCodeTile, OtpError, OtpKind, OtpUriError, SteamGuard,
+    SteamGuardError, parse_otpauth_uri,
+};
 
-const RECORD_FORMAT_VERSION: u8 = 1;
+const LEGACY_RECORD_FORMAT_VERSION: u8 = 1;
+const RECORD_FORMAT_VERSION: u8 = 2;
 const RECORD_DIRECTORY: &str = "castellan/otp/v1";
 
 /// Stable handle for one sealed OTP item.
@@ -64,8 +69,8 @@ pub struct OtpItem {
     pub issuer: Option<String>,
     /// HMAC hash behind the generated code.
     pub algorithm: OtpAlgorithm,
-    /// Number of decimal digits in each code.
-    pub digits: u32,
+    /// Character vocabulary and width used to present each code.
+    pub code_style: OtpCodeStyle,
     /// Whether this item is time- or counter-based.
     pub kind: OtpKind,
 }
@@ -77,6 +82,8 @@ pub enum OtpItemError {
     Storage(IdentityError),
     /// The supplied provisioning URI was malformed or unsupported.
     Import(OtpUriError),
+    /// Steam Guard compatibility material was malformed.
+    SteamGuard(SteamGuardError),
     /// A stored generator could not produce a code.
     Generation(OtpError),
     /// The caller asked for an item absent from this persona's store.
@@ -93,6 +100,7 @@ impl fmt::Display for OtpItemError {
         match self {
             OtpItemError::Storage(error) => write!(f, "sealed OTP storage: {error}"),
             OtpItemError::Import(error) => write!(f, "OTP import: {error}"),
+            OtpItemError::SteamGuard(error) => write!(f, "Steam Guard import: {error}"),
             OtpItemError::Generation(error) => write!(f, "OTP generation: {error}"),
             OtpItemError::NotFound(id) => write!(f, "no OTP item {id} for this persona"),
             OtpItemError::UnsupportedRecordVersion(version) => {
@@ -110,6 +118,7 @@ impl std::error::Error for OtpItemError {
         match self {
             OtpItemError::Storage(error) => Some(error),
             OtpItemError::Import(error) => Some(error),
+            OtpItemError::SteamGuard(error) => Some(error),
             OtpItemError::Generation(error) => Some(error),
             OtpItemError::NotFound(_)
             | OtpItemError::UnsupportedRecordVersion(_)
@@ -121,6 +130,12 @@ impl std::error::Error for OtpItemError {
 impl From<IdentityError> for OtpItemError {
     fn from(error: IdentityError) -> Self {
         Self::Storage(error)
+    }
+}
+
+impl From<SteamGuardError> for OtpItemError {
+    fn from(error: SteamGuardError) -> Self {
+        Self::SteamGuard(error)
     }
 }
 
@@ -156,6 +171,30 @@ impl OtpItemStore {
         Ok(item)
     }
 
+    /// Seal one Valve Steam Guard mobile authenticator `shared_secret`.
+    ///
+    /// The base64 value comes from a Steam authenticator file. It is not an
+    /// `otpauth://` extension and is always presented as a five-character
+    /// Steam Guard code under the fixed `Steam` issuer.
+    pub fn import_steam_guard(
+        &self,
+        account: &str,
+        shared_secret: &str,
+    ) -> Result<OtpItem, OtpItemError> {
+        if account.is_empty()
+            || account != account.trim()
+            || account.len() > 256
+            || account.chars().any(char::is_control)
+        {
+            return Err(SteamGuardError::InvalidAccount.into());
+        }
+        let id = OtpItemId::mint();
+        let record = StoredOtpItem::from_steam_guard(account, shared_secret)?;
+        let item = record.item(id);
+        self.storage.save_record(self.record_path(id), &record)?;
+        Ok(item)
+    }
+
     /// Read one item's secret-free metadata, or `None` when it is absent.
     pub fn get(&self, id: OtpItemId) -> Result<Option<OtpItem>, OtpItemError> {
         Ok(self.load(id)?.map(|record| record.item(id)))
@@ -178,10 +217,7 @@ impl OtpItemStore {
                     return Err(OtpItemError::HotpCounterExhausted);
                 }
                 let item = record.item(id);
-                let otp = record.otp()?;
-                let code = otp
-                    .code_at_unix_time(unix_secs)
-                    .map_err(OtpItemError::Generation)?;
+                let code = record.code_at_unix_time(unix_secs)?;
                 let change = if let StoredOtpKind::Hotp { counter } = &mut record.kind {
                     *counter = counter
                         .checked_add(1)
@@ -200,7 +236,7 @@ impl OtpItemStore {
         id: OtpItemId,
         unix_secs: u64,
     ) -> Result<Option<u64>, OtpItemError> {
-        Ok(self.require(id)?.otp()?.seconds_remaining_at(unix_secs))
+        self.require(id)?.seconds_remaining_at(unix_secs)
     }
 
     /// Remove one item from this persona's sealed namespace.
@@ -238,6 +274,8 @@ struct StoredOtpItem {
     secret: Vec<u8>,
     algorithm: StoredOtpAlgorithm,
     digits: u32,
+    #[serde(default)]
+    code_style: StoredOtpCodeStyle,
     kind: StoredOtpKind,
 }
 
@@ -256,12 +294,30 @@ impl StoredOtpItem {
             secret: otp.secret.to_vec(),
             algorithm: otp.algorithm.into(),
             digits: otp.digits,
+            code_style: StoredOtpCodeStyle::Decimal,
             kind: otp.kind.into(),
         })
     }
 
+    fn from_steam_guard(account: &str, shared_secret: &str) -> Result<Self, OtpItemError> {
+        let secret = decode_shared_secret(shared_secret)?;
+        Ok(Self {
+            version: RECORD_FORMAT_VERSION,
+            account: account.to_string(),
+            issuer: Some("Steam".to_string()),
+            secret: secret.as_slice().to_vec(),
+            algorithm: StoredOtpAlgorithm::Sha1,
+            digits: 5,
+            code_style: StoredOtpCodeStyle::SteamGuard,
+            kind: StoredOtpKind::Totp { period: 30 },
+        })
+    }
+
     fn checked(self) -> Result<Self, OtpItemError> {
-        if self.version == RECORD_FORMAT_VERSION {
+        if matches!(
+            self.version,
+            LEGACY_RECORD_FORMAT_VERSION | RECORD_FORMAT_VERSION
+        ) {
             Ok(self)
         } else {
             Err(OtpItemError::UnsupportedRecordVersion(self.version))
@@ -274,8 +330,32 @@ impl StoredOtpItem {
             account: self.account.clone(),
             issuer: self.issuer.clone(),
             algorithm: self.algorithm.into(),
-            digits: self.digits,
+            code_style: match self.code_style {
+                StoredOtpCodeStyle::Decimal => OtpCodeStyle::Decimal {
+                    digits: self.digits,
+                },
+                StoredOtpCodeStyle::SteamGuard => OtpCodeStyle::SteamGuard,
+            },
             kind: self.kind.into(),
+        }
+    }
+
+    fn code_at_unix_time(&self, unix_secs: u64) -> Result<String, OtpItemError> {
+        match self.code_style {
+            StoredOtpCodeStyle::Decimal => self
+                .otp()?
+                .code_at_unix_time(unix_secs)
+                .map_err(OtpItemError::Generation),
+            StoredOtpCodeStyle::SteamGuard => {
+                Ok(SteamGuard::from_secret_bytes(&self.secret)?.code_at_unix_time(unix_secs))
+            }
+        }
+    }
+
+    fn seconds_remaining_at(&self, unix_secs: u64) -> Result<Option<u64>, OtpItemError> {
+        match self.code_style {
+            StoredOtpCodeStyle::Decimal => Ok(self.otp()?.seconds_remaining_at(unix_secs)),
+            StoredOtpCodeStyle::SteamGuard => Ok(Some(30 - (unix_secs % 30))),
         }
     }
 
@@ -300,6 +380,13 @@ enum StoredOtpAlgorithm {
     Sha1,
     Sha256,
     Sha512,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+enum StoredOtpCodeStyle {
+    #[default]
+    Decimal,
+    SteamGuard,
 }
 
 impl From<OtpAlgorithm> for StoredOtpAlgorithm {
@@ -353,6 +440,7 @@ mod tests {
     use super::*;
 
     const RFC6238_SHA1_SECRET_BASE32: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+    const STEAM_SHARED_SECRET: &str = "zvIayp3JPvtvX/QGHqsqKBk/44s=";
 
     fn store(root: &std::path::Path, persona: PersonaId) -> OtpItemStore {
         OtpItemStore::new(
@@ -376,7 +464,7 @@ mod tests {
 
         assert_eq!(item.account, "mark");
         assert_eq!(item.issuer.as_deref(), Some("Merely"));
-        assert_eq!(item.digits, 8);
+        assert_eq!(item.code_style, OtpCodeStyle::Decimal { digits: 8 });
 
         let reopened = store(dir.path(), persona);
         assert_eq!(reopened.get(item.id).unwrap(), Some(item.clone()));
@@ -419,5 +507,37 @@ mod tests {
         items.delete(item.id).unwrap();
 
         assert_eq!(items.get(item.id).unwrap(), None);
+    }
+
+    #[test]
+    fn steam_guard_is_an_explicit_stored_style_and_uses_the_release_tile() {
+        let dir = tempdir().unwrap();
+        let items = store(dir.path(), PersonaId::new());
+        let item = items
+            .import_steam_guard("mark", STEAM_SHARED_SECRET)
+            .unwrap();
+
+        assert_eq!(item.issuer.as_deref(), Some("Steam"));
+        assert_eq!(item.code_style, OtpCodeStyle::SteamGuard);
+        assert_eq!(item.code_style.character_count(), 5);
+        assert_eq!(item.kind, OtpKind::Totp { period: 30, t0: 0 });
+        let tile = items
+            .release_tile_at_unix_time(item.id, 1_616_374_841)
+            .unwrap();
+        assert_eq!(tile.code_at_unix_time(1_616_374_841), Some("2F9J5"));
+        assert_eq!(tile.code_at_unix_time(1_616_374_860), None);
+    }
+
+    #[test]
+    fn steam_guard_import_does_not_reclassify_otpauth_extensions() {
+        let dir = tempdir().unwrap();
+        let items = store(dir.path(), PersonaId::new());
+        let item = items
+            .import_otpauth_uri(&format!(
+                "otpauth://totp/Steam:mark?secret={RFC6238_SHA1_SECRET_BASE32}&issuer=Steam&encoder=steam"
+            ))
+            .unwrap();
+
+        assert_eq!(item.code_style, OtpCodeStyle::Decimal { digits: 6 });
     }
 }

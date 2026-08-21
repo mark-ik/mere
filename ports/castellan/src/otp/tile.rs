@@ -130,7 +130,7 @@ impl OtpTimeRing {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::otp::{OtpAlgorithm, OtpItemId};
+    use crate::otp::{OtpAlgorithm, OtpCodeStyle, OtpItemId};
 
     fn item(kind: OtpKind) -> OtpItem {
         OtpItem {
@@ -138,7 +138,7 @@ mod tests {
             account: "mark".to_string(),
             issuer: Some("Merely".to_string()),
             algorithm: OtpAlgorithm::Sha1,
-            digits: 6,
+            code_style: OtpCodeStyle::Decimal { digits: 6 },
             kind,
         }
     }

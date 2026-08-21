@@ -171,10 +171,12 @@ impl ServiceInterface {
             let id = super::parse_item_path(&path).ok_or_else(|| {
                 SecretDbusError::NoSuchObject(format!("{path} is not a Secret Service item"))
             })?;
+            if self.state.item_locked(id)? {
+                continue;
+            }
             self.state
                 .authorize(connection, &header, SecretServiceOperation::ReadSecret(id))
                 .await?;
-            self.state.require_item_unlocked(id)?;
             let secret = self.state.store.secret(id)?;
             secrets.insert(
                 path,
@@ -226,7 +228,9 @@ impl ServiceInterface {
         };
         let path = alias_path(name)?;
         if self.state.store.read_alias(name)?.is_some() {
-            server.remove::<super::CollectionInterface, _>(&path).await?;
+            server
+                .remove::<super::CollectionInterface, _>(&path)
+                .await?;
         }
         self.state.store.set_alias(name, collection)?;
         if let Some(collection) = collection {
@@ -292,11 +296,14 @@ impl SessionInterface {
         &self,
         #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
+        #[zbus(object_server)] server: &ObjectServer,
     ) -> Result<(), SecretDbusError> {
         let caller = self
             .state
             .authorize(connection, &header, SecretServiceOperation::OpenSession)
             .await?;
-        self.state.close_session(&self.path, &caller.bus_name)
+        self.state.close_session(&self.path, &caller.bus_name)?;
+        server.remove::<SessionInterface, _>(&self.path).await?;
+        Ok(())
     }
 }

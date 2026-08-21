@@ -85,6 +85,21 @@ async fn secret_tool_store_lookup_and_clear() {
         .await
         .unwrap();
 
+    let untrusted = zbus::Connection::session().await.unwrap();
+    let proxy = zbus::Proxy::new(
+        &untrusted,
+        "org.freedesktop.secrets",
+        "/org/freedesktop/secrets",
+        "org.freedesktop.Secret.Service",
+    )
+    .await
+    .unwrap();
+    let denied = proxy
+        .get_property::<Vec<zbus::zvariant::OwnedObjectPath>>("Collections")
+        .await
+        .unwrap_err();
+    assert!(denied.to_string().contains("AccessDenied"));
+
     secret_tool(
         &[
             "store",
@@ -100,7 +115,10 @@ async fn secret_tool_store_lookup_and_clear() {
         &["lookup", "application", "turnstone", "account", "mark"],
         None,
     );
-    assert_eq!(String::from_utf8(lookup.stdout).unwrap().trim(), "swordfish");
+    assert_eq!(
+        String::from_utf8(lookup.stdout).unwrap().trim(),
+        "swordfish"
+    );
 
     secret_tool(
         &["clear", "application", "turnstone", "account", "mark"],

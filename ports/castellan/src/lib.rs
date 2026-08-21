@@ -48,10 +48,12 @@
 //! [`otp::OtpItemStore`]. [`otp::OtpReleaseGate`] returns an
 //! [`otp::OtpCodeTile`] only after a participant-bound petition receives a
 //! resident approval. [`otp::OtpAdmittedSession`] binds remote petitions to one
-//! exact item and the Notochord transcript that admitted their carrier. CXF
-//! import, Secret Service, and any Steam compatibility decision remain separate
-//! follow-on work; see the castellan OTP plan and the keeper founding plan in
-//! mere's design docs.
+//! exact item and the Notochord transcript that admitted their carrier.
+//! [`resident::CastellanResident`] retains the process-wide sealed-record
+//! authority. Feature `secret-service` adds the Linux desktop adapter, and
+//! [`otp::SteamGuard`] is an explicitly nonstandard Valve compatibility shape.
+//! CXF import remains follow-on work; see the castellan OTP plan and the keeper
+//! founding plan in mere's design docs.
 
 #![doc(html_no_source)]
 #![warn(missing_docs)]

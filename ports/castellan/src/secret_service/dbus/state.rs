@@ -31,21 +31,37 @@ pub struct SecretServiceCaller {
 /// Security-relevant operation presented to the host policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SecretServiceOperation {
+    /// Establish a transfer session.
     OpenSession,
+    /// Read the service collection catalog.
     ListCollections,
+    /// Create a collection.
     CreateCollection,
+    /// Search item attributes.
     Search,
+    /// Lock named objects.
     Lock,
+    /// Unlock named objects.
     Unlock,
+    /// Resolve a collection alias.
     ReadAlias,
+    /// Change a collection alias.
     SetAlias,
+    /// Read collection metadata.
     ReadCollection(SecretCollectionId),
+    /// Change collection metadata.
     ChangeCollection(SecretCollectionId),
+    /// Delete a collection and its items.
     DeleteCollection(SecretCollectionId),
+    /// Create an item in a collection.
     CreateItem(SecretCollectionId),
+    /// Read item metadata.
     ReadItem(SecretItemId),
+    /// Release an item's secret bytes.
     ReadSecret(SecretItemId),
+    /// Change item metadata or secret bytes.
     ChangeItem(SecretItemId),
+    /// Delete an item.
     DeleteItem(SecretItemId),
 }
 
@@ -209,6 +225,22 @@ impl ServiceState {
             }
         }
         Ok((unlocked, locked))
+    }
+
+    pub(super) fn forget_item(&self, id: SecretItemId) {
+        self.locked_items.lock().unwrap().remove(&id);
+    }
+
+    pub(super) fn forget_collection(
+        &self,
+        id: SecretCollectionId,
+        items: impl IntoIterator<Item = SecretItemId>,
+    ) {
+        self.locked_collections.lock().unwrap().remove(&id);
+        let mut locked_items = self.locked_items.lock().unwrap();
+        for item in items {
+            locked_items.remove(&item);
+        }
     }
 }
 

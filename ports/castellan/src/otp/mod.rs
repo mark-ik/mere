@@ -38,6 +38,7 @@ pub mod base32;
 mod item;
 mod participant;
 mod release;
+mod steam_guard;
 mod tile;
 mod uri;
 
@@ -64,6 +65,7 @@ pub use release::{
     OtpReleaseDenied, OtpReleaseError, OtpReleaseGate, OtpReleaseId, OtpReleasePolicy,
     OtpReleaseRequest, OtpReleasedCode,
 };
+pub use steam_guard::{SteamGuard, SteamGuardError};
 pub use tile::{OtpCodeTile, OtpTimeRing};
 pub use uri::{OtpUri, OtpUriError, parse_otpauth_uri};
 
@@ -120,6 +122,28 @@ pub enum OtpKind {
         /// The next counter value to use.
         counter: u64,
     },
+}
+
+/// Characters used to present a generated code.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OtpCodeStyle {
+    /// RFC-style decimal output with an explicit width.
+    Decimal {
+        /// Number of decimal digits in the code.
+        digits: u32,
+    },
+    /// Valve's five-character Steam Guard compatibility alphabet.
+    SteamGuard,
+}
+
+impl OtpCodeStyle {
+    /// Number of visible characters in a code of this style.
+    pub fn character_count(self) -> u32 {
+        match self {
+            Self::Decimal { digits } => digits,
+            Self::SteamGuard => 5,
+        }
+    }
 }
 
 /// Why a generator could not be built or a code could not be produced.

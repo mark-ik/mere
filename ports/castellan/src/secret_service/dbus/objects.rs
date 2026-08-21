@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use zbus::Connection;
 use zbus::message::Header;
-use zbus::object_server::SignalEmitter;
+use zbus::object_server::{ObjectServer, SignalEmitter};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 use super::service::ServiceInterface;
 use super::state::{SecretServiceOperation, ServiceState};
 use super::{
-    DbusSecret, ITEM_LABEL_PROPERTY, SERVICE_PATH, SecretDbusError, collection_path, item_path,
-    now_unix_secs, property_attributes, property_string, register_item, root_path,
+    DbusSecret, ITEM_LABEL_PROPERTY, SERVICE_PATH, SecretDbusError, alias_path, collection_path,
+    item_path, now_unix_secs, property_attributes, property_string, register_item, root_path,
 };
 use crate::secret_service::{SecretCollectionId, SecretItemId};
 
@@ -23,6 +23,22 @@ impl CollectionInterface {
     pub(super) fn new(state: Arc<ServiceState>, id: SecretCollectionId) -> Self {
         Self { state, id }
     }
+
+    async fn authorize_read(
+        &self,
+        header: Option<Header<'_>>,
+        connection: &Connection,
+    ) -> zbus::fdo::Result<()> {
+        let header = required_header(header)?;
+        self.state
+            .authorize(
+                connection,
+                &header,
+                SecretServiceOperation::ReadCollection(self.id),
+            )
+            .await?;
+        Ok(())
+    }
 }
 
 #[zbus::interface(name = "org.freedesktop.Secret.Collection")]
@@ -31,6 +47,7 @@ impl CollectionInterface {
         &self,
         #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
+        #[zbus(object_server)] server: &ObjectServer,
     ) -> Result<OwnedObjectPath, SecretDbusError> {
         self.state
             .authorize(
@@ -40,9 +57,35 @@ impl CollectionInterface {
             )
             .await?;
         self.state.require_collection_unlocked(self.id)?;
+        let items: Vec<_> = self
+            .state
+            .store
+            .items(self.id)?
+            .into_iter()
+            .map(|item| item.id)
+            .collect();
+        let aliases: Vec<_> = self
+            .state
+            .store
+            .aliases()?
+            .into_iter()
+            .filter_map(|(alias, id)| (id == self.id).then_some(alias))
+            .collect();
         self.state.store.delete_collection(self.id)?;
         let emitter = SignalEmitter::new(connection, SERVICE_PATH)?;
         ServiceInterface::collection_deleted(&emitter, collection_path(self.id)).await?;
+        for item in &items {
+            server.remove::<ItemInterface, _>(item_path(*item)).await?;
+        }
+        for alias in aliases {
+            server
+                .remove::<CollectionInterface, _>(alias_path(&alias)?)
+                .await?;
+        }
+        server
+            .remove::<CollectionInterface, _>(collection_path(self.id))
+            .await?;
+        self.state.forget_collection(self.id, items);
         Ok(root_path())
     }
 
@@ -104,15 +147,15 @@ impl CollectionInterface {
         } else {
             None
         };
-        let item = self.state.store.create_item(
-            self.id,
-            &label,
+        let item = self.state.store.create_item(super::super::NewSecretItem {
+            collection: self.id,
+            label,
             attributes,
-            secret.2,
-            &secret.3,
+            secret: secret.2,
+            content_type: secret.3,
             replace,
-            now_unix_secs(),
-        )?;
+            unix_secs: now_unix_secs(),
+        })?;
         let path = item_path(item.id);
         if before.is_some() {
             emitter.item_changed(path.clone()).await?;
@@ -182,21 +225,38 @@ impl CollectionInterface {
         self.state
             .store
             .set_collection_label(self.id, label, now_unix_secs())?;
+        let emitter = SignalEmitter::new(connection, SERVICE_PATH)?;
+        ServiceInterface::collection_changed(&emitter, collection_path(self.id)).await?;
         Ok(())
     }
 
     #[zbus(property)]
-    async fn locked(&self) -> bool {
-        self.state.collection_locked(self.id)
+    async fn locked(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<bool> {
+        self.authorize_read(header, connection).await?;
+        Ok(self.state.collection_locked(self.id))
     }
 
     #[zbus(property)]
-    async fn created(&self) -> zbus::fdo::Result<u64> {
+    async fn created(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<u64> {
+        self.authorize_read(header, connection).await?;
         Ok(self.state.store.collection(self.id)?.created)
     }
 
     #[zbus(property)]
-    async fn modified(&self) -> zbus::fdo::Result<u64> {
+    async fn modified(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<u64> {
+        self.authorize_read(header, connection).await?;
         Ok(self.state.store.collection(self.id)?.modified)
     }
 
@@ -235,6 +295,22 @@ impl ItemInterface {
         CollectionInterface::item_changed(&emitter, item_path(self.id)).await?;
         Ok(())
     }
+
+    async fn authorize_read(
+        &self,
+        header: Option<Header<'_>>,
+        connection: &Connection,
+    ) -> zbus::fdo::Result<()> {
+        let header = required_header(header)?;
+        self.state
+            .authorize(
+                connection,
+                &header,
+                SecretServiceOperation::ReadItem(self.id),
+            )
+            .await?;
+        Ok(())
+    }
 }
 
 #[zbus::interface(name = "org.freedesktop.Secret.Item")]
@@ -243,6 +319,7 @@ impl ItemInterface {
         &self,
         #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
+        #[zbus(object_server)] server: &ObjectServer,
     ) -> Result<OwnedObjectPath, SecretDbusError> {
         self.state
             .authorize(
@@ -256,6 +333,10 @@ impl ItemInterface {
         self.state.store.delete_item(self.id)?;
         let emitter = SignalEmitter::new(connection, collection_path(collection))?;
         CollectionInterface::item_deleted(&emitter, item_path(self.id)).await?;
+        server
+            .remove::<ItemInterface, _>(item_path(self.id))
+            .await?;
+        self.state.forget_item(self.id);
         Ok(root_path())
     }
 
@@ -312,12 +393,22 @@ impl ItemInterface {
     }
 
     #[zbus(property)]
-    async fn locked(&self) -> zbus::fdo::Result<bool> {
+    async fn locked(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<bool> {
+        self.authorize_read(header, connection).await?;
         Ok(self.state.item_locked(self.id)?)
     }
 
     #[zbus(property)]
-    async fn attributes(&self) -> zbus::fdo::Result<HashMap<String, String>> {
+    async fn attributes(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<HashMap<String, String>> {
+        self.authorize_read(header, connection).await?;
         Ok(self
             .state
             .store
@@ -352,7 +443,12 @@ impl ItemInterface {
     }
 
     #[zbus(property)]
-    async fn label(&self) -> zbus::fdo::Result<String> {
+    async fn label(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<String> {
+        self.authorize_read(header, connection).await?;
         Ok(self.state.store.item(self.id)?.label)
     }
 
@@ -379,20 +475,28 @@ impl ItemInterface {
     }
 
     #[zbus(property)]
-    async fn created(&self) -> zbus::fdo::Result<u64> {
+    async fn created(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<u64> {
+        self.authorize_read(header, connection).await?;
         Ok(self.state.store.item(self.id)?.created)
     }
 
     #[zbus(property)]
-    async fn modified(&self) -> zbus::fdo::Result<u64> {
+    async fn modified(
+        &self,
+        #[zbus(header)] header: Option<Header<'_>>,
+        #[zbus(connection)] connection: &Connection,
+    ) -> zbus::fdo::Result<u64> {
+        self.authorize_read(header, connection).await?;
         Ok(self.state.store.item(self.id)?.modified)
     }
 }
 
 fn required_header(header: Option<Header<'_>>) -> zbus::fdo::Result<Header<'_>> {
     header.ok_or_else(|| {
-        zbus::fdo::Error::AccessDenied(
-            "property operation has no authenticated header".into(),
-        )
+        zbus::fdo::Error::AccessDenied("property operation has no authenticated header".into())
     })
 }

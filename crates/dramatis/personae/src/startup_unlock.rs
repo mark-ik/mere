@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::IdentityError;
 
+#[cfg(windows)]
 const AUTO_UNLOCK_KEY_FILE_VERSION: u8 = 1;
 
 /// Startup unlock policy for the identity vault.
@@ -37,6 +38,7 @@ pub fn auto_unlock_backend_available() -> bool {
     cfg!(windows)
 }
 
+#[cfg(windows)]
 #[derive(Debug, Serialize, Deserialize)]
 struct AutoUnlockKeyFile {
     version: u8,
@@ -101,6 +103,7 @@ fn load_or_create_auto_unlock_root_impl(path: &Path) -> Result<Option<[u8; 32]>,
     Ok(Some(root))
 }
 
+#[cfg(windows)]
 fn save_json_atomic<T>(path: &Path, value: &T) -> Result<(), IdentityError>
 where
     T: Serialize,
@@ -119,6 +122,7 @@ where
     Ok(())
 }
 
+#[cfg(windows)]
 fn tempfile_in_dir(dir: &Path) -> Result<PathBuf, IdentityError> {
     use std::time::{SystemTime, UNIX_EPOCH};
 

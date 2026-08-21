@@ -90,10 +90,16 @@ exercising it. C1 builds the exercising; C2 builds the item.
       caller's revocation snapshot through its application-protocol write rather
       than founding a second wire. Direct local claims remain explicitly
       `unverified` and cannot approve an admission-derived petition.
-- [ ] Later platform adapter: Secret Service (`org.freedesktop.secrets`), the one OS surface a third
-      party can *be* rather than read
-- [ ] Later compatibility decision: Steam's nonstandard alphabet, with a real
-      issuer corpus and user-facing contract before carrying it
+- [x] Linux platform adapter: Secret Service (`org.freedesktop.secrets`), the one OS surface a third
+      party can *be* rather than read. It uses the Freedesktop 0.2 object tree,
+      caller-bound plain sessions, host policy over bus credentials and
+      executable identity, bounded stores, and a real `secret-tool` receipt.
+- [x] Steam Guard compatibility: a separate five-character code style and
+      base64 `shared_secret` import. The checked shared-secret/time/code corpus
+      comes from the independently maintained `steamguard` 0.18.4 library,
+      whose account-link flow verifies generated codes with Valve. Valve does
+      not publish a normative algorithm or corpus, so this is named
+      compatibility and never inferred from an `otpauth://` extension.
 
 ## Deliberate non-goals
 
@@ -149,8 +155,8 @@ exercising it. C1 builds the exercising; C2 builds the item.
   The limits are stated rather than hidden: this local transaction does not
   coordinate independent store openings or processes, and AEAD does not provide
   rollback resistance if an older valid backing directory is restored. Those
-  require a process-wide storage authority and durable rollback evidence in a
-  separate slice. The admitted adapter does not upgrade caller text into proof;
+  gaps are closed by the 2026-08-21 resident slice below. The admitted adapter
+  does not upgrade caller text into proof;
   it constructs the authenticated participant form only from Notochord's local
   admission conclusion.
 
@@ -164,3 +170,33 @@ exercising it. C1 builds the exercising; C2 builds the item.
   and unresolved-session cleanup have executable receipts. The adapter defines
   no carrier bytes; a successful write on the paired carrier remains the host's
   transport-liveness receipt.
+
+- 2026-08-21: the Castellan resident now claims one exclusive OS file lock for
+  the credential-record directory and retains it through every clone. A child
+  process receipt proves a second authority is refused. Independent Secret
+  Service views for one persona share the same composite transaction lock.
+
+  Sealed-record envelopes now carry authenticated generations and authenticated
+  tombstones. A keyed freshness ledger lives under a separately required root
+  and uses prepare/write/commit evidence so interrupted replacement can be
+  reconciled. Restoring an older valid HOTP record is rejected during approval,
+  before the old counter can be released again. The boundary stays explicit:
+  rolling back both roots together is outside a file ledger's power, and
+  version-one records establish their first freshness baseline on authoritative
+  access.
+
+- 2026-08-21: feature `secret-service` implements the Freedesktop Secret
+  Service 0.2 service, collection, item, and session interfaces on Linux. It
+  requests the standard name without replacement, supports the specification's
+  recommended plain transfer session, binds each session to its unique D-Bus
+  caller, and asks a host policy about every catalog, metadata, mutation, and
+  secret release operation using bus-supplied uid, pid, security label, and
+  resolved executable facts. An isolated-session-bus test on the ThinkPad ran
+  `secret-tool store`, `lookup`, and `clear` successfully.
+
+- 2026-08-21: Steam Guard compatibility is carried as `OtpCodeStyle::SteamGuard`
+  and `import_steam_guard`, not as a new RFC OTP mode or an `otpauth://`
+  parameter. The implementation matches the `steamguard` 0.18.4 corpus
+  (`zvI...44s=`, Unix time `1616374841`, code `2F9J5`), uses a fixed 20-byte
+  secret, SHA-1, 30-second steps, and Valve's 26-character alphabet. Stored
+  release still passes through the existing participant gate and expiring tile.

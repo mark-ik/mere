@@ -26,7 +26,7 @@ players; castellan guards and presents you).
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/castellan`.
 
-## State (2026-08-20)
+## State (2026-08-21)
 
 Implemented:
 
@@ -37,7 +37,20 @@ Implemented:
   `OtpAdmittedSession` consumes Notochord admission for one exact item, derives
   the participant from the signed transcript, rechecks expiry and revocation at
   approval and delivery, and exposes the tile only beside the original carrier.
-  It leaves byte encoding to the composing host's existing protocol.
+  It leaves byte encoding to the composing host's existing protocol. Steam
+  Guard is a separate, explicit code style with Valve's five-character
+  alphabet and base64 `shared_secret` import. It does not reinterpret an
+  `otpauth://` extension as Steam.
+- `resident` — one process-wide owner for Castellan's sealed records. The
+  resident retains an exclusive OS file lock, shares composite Secret Service
+  transactions across independent views, and checks a separately rooted keyed
+  freshness ledger before releasing restored HOTP state.
+- feature `secret-service` — the Freedesktop Secret Service 0.2 object tree on
+  Linux. The resident owns `org.freedesktop.secrets` without replacement,
+  implements the recommended `plain` transfer session, binds sessions to D-Bus
+  callers, and delegates every operation to a host policy over bus credentials
+  and `/proc` executable identity. A `secret-tool` store/lookup/clear receipt
+  runs under a disposable session bus.
 - `reticulum` — the first device-identity issue seam: a radio credential
   derived from a Persona provider, no device-local account file.
 - feature `keeper` — the two halves made real, moved home from graphshell
@@ -50,9 +63,11 @@ Implemented:
 Graphshell composes all three and re-exports them at its pre-founding paths,
 so it is the first host rather than the owner. The intent wire strings keep
 their `castellan.*` values for now; renaming the wire vocabulary is
-a separate decision. CXF import, a Secret Service adapter, and Steam's
-nonstandard alphabet remain separate follow-on work — see the keeper founding
-plan and the credential port brief in mere's `design_docs`.
+a separate decision. CXF import remains follow-on work. The file freshness
+ledger detects rollback of the credential-record root only when its separate
+root was not restored with it; stronger platform monotonic storage remains a
+host deployment choice. See the keeper founding plan and the credential port
+brief in mere's `design_docs`.
 
 ## License
 
