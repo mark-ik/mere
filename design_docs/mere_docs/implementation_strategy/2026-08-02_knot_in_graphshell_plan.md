@@ -8,6 +8,12 @@ than answered. K2's three clauses are proven against the real resident host,
 and its physical two-machine receipt passed on 2026-08-08. K3 kept the spawn
 path deliberately.
 
+**2026-08-20 topology addendum:** K3's stdio carrier remains a conformance and
+isolated-deployment proof. Its persona-vault production topology is superseded
+by the [device resident consolidation plan](2026-08-20_device_resident_consolidation_plan.md):
+one logical resident owns personal Knot authoring, sync, and content, while
+Turnstone and standalone Knot consume or embed that resident.
+
 **Physical receipt (2026-08-08):** `ports/knot/examples/k2_peer.rs` held a real
 vault on Q-PC and visited it from Windows over an explicit endpoint ticket.
 The visitor was admitted, mounted `Knot`, saved, heard the unseen revision,

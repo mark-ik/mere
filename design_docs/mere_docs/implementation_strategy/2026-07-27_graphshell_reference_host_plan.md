@@ -1,11 +1,19 @@
 # Graphshell Reference Host Plan
 
 **Date:** 2026-07-27
-**Status:** product boundary ruled with Mark; H0-H3 complete; H4 operational follow-ons remain; H5-H7 complete; H8-H9 not started.
+**Status:** product boundary ruled with Mark; H0-H3 complete; H4 operational
+follow-ons remain; H5-H7 complete; H8 not started; H9's first-party
+application door and Turnstone receipts client are complete, while its AI and
+MCP surfaces remain open.
 **Scope:** Make Graphshell Mere's useful, WASM-safe reference host: a graph
 portal, Personae identity-vault surface, browser-extension companion,
 application launcher, and personal cross-device surface for addressed things.
 It does not wait for Turnstone's WPT or media work.
+
+**2026-08-20 topology addendum:** the installed Graphshell device host becomes
+the first desktop composition of the product-neutral logical resident. Knot is
+the second consumer. See the
+[device resident consolidation plan](2026-08-20_device_resident_consolidation_plan.md).
 
 This plan amends the product center of the
 [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md).

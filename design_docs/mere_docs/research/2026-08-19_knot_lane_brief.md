@@ -62,6 +62,13 @@ blob store must have one process owner. Joining those executable paths requires
 either one combined resident or an explicit local retain/fetch IPC. Pointing
 both processes at the same directory would only disguise the ownership bug.
 
+**Ruling, 2026-08-20:** use one logical device resident, daemonized on desktop
+and embedded where the platform requires it. The resident owns Knot's
+persona-vault source, sync join, and blob store; first-party clients reach it
+through the existing owner-only Graphshell application door. The implementation
+sequence, standards-oriented content identity, and consolidation gates live in
+the [device resident consolidation plan](../implementation_strategy/2026-08-20_device_resident_consolidation_plan.md).
+
 ## 1. Evidence-bearing clipping
 
 The distinction remains useful: authored Djot is a statement, while a clip is
