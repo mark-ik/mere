@@ -8,8 +8,8 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use super::state::{SecretServiceOperation, ServiceState};
 use super::{
-    COLLECTION_LABEL_PROPERTY, DbusSecret, SecretDbusError, collection_path, now_unix_secs,
-    property_string, register_collection, root_path,
+    COLLECTION_LABEL_PROPERTY, DbusSecret, SecretDbusError, alias_path, collection_path,
+    now_unix_secs, property_string, register_alias, register_collection, root_path,
 };
 
 pub(super) struct ServiceInterface {
@@ -93,6 +93,9 @@ impl ServiceInterface {
         let path = collection_path(collection.id);
         if existing.is_none() {
             register_collection(connection, Arc::clone(&self.state), collection.id).await?;
+            if !alias.is_empty() {
+                register_alias(connection, Arc::clone(&self.state), alias, collection.id).await?;
+            }
             emitter.collection_created(path.clone()).await?;
         } else {
             emitter.collection_changed(path.clone()).await?;
@@ -209,6 +212,7 @@ impl ServiceInterface {
         collection: OwnedObjectPath,
         #[zbus(header)] header: Header<'_>,
         #[zbus(connection)] connection: &Connection,
+        #[zbus(object_server)] server: &ObjectServer,
     ) -> Result<(), SecretDbusError> {
         self.state
             .authorize(connection, &header, SecretServiceOperation::SetAlias)
@@ -220,7 +224,14 @@ impl ServiceInterface {
                 SecretDbusError::NoSuchObject("alias target is not a collection".into())
             })?)
         };
+        let path = alias_path(name)?;
+        if self.state.store.read_alias(name)?.is_some() {
+            server.remove::<super::CollectionInterface, _>(&path).await?;
+        }
         self.state.store.set_alias(name, collection)?;
+        if let Some(collection) = collection {
+            register_alias(connection, Arc::clone(&self.state), name, collection).await?;
+        }
         Ok(())
     }
 

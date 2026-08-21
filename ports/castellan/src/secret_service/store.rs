@@ -250,6 +250,13 @@ impl SecretServiceStore {
         Ok(self.load_catalog()?.aliases.get(alias).copied())
     }
 
+    pub(super) fn aliases(
+        &self,
+    ) -> Result<BTreeMap<String, SecretCollectionId>, SecretServiceError> {
+        let _guard = self.lock();
+        Ok(self.load_catalog()?.aliases)
+    }
+
     /// Point or remove a well-known alias.
     pub fn set_alias(
         &self,

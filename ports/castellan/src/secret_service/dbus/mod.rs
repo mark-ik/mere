@@ -78,11 +78,14 @@ pub async fn serve(
             register_item(&connection, Arc::clone(&state), item.id).await?;
         }
     }
+    for (alias, collection) in state.store.aliases()? {
+        register_alias(&connection, Arc::clone(&state), &alias, collection).await?;
+    }
 
     Ok(SecretServiceServer { connection })
 }
 
-pub(super) async fn register_collection(
+async fn register_collection(
     connection: &Connection,
     state: Arc<ServiceState>,
     id: SecretCollectionId,
@@ -94,7 +97,7 @@ pub(super) async fn register_collection(
     Ok(())
 }
 
-pub(super) async fn register_item(
+async fn register_item(
     connection: &Connection,
     state: Arc<ServiceState>,
     id: SecretItemId,
@@ -102,6 +105,19 @@ pub(super) async fn register_item(
     connection
         .object_server()
         .at(item_path(id), ItemInterface::new(state, id))
+        .await?;
+    Ok(())
+}
+
+async fn register_alias(
+    connection: &Connection,
+    state: Arc<ServiceState>,
+    alias: &str,
+    id: SecretCollectionId,
+) -> Result<(), zbus::Error> {
+    connection
+        .object_server()
+        .at(alias_path(alias)?, CollectionInterface::new(state, id))
         .await?;
     Ok(())
 }
@@ -117,6 +133,14 @@ pub(super) fn collection_path(id: SecretCollectionId) -> OwnedObjectPath {
 pub(super) fn item_path(id: SecretItemId) -> OwnedObjectPath {
     OwnedObjectPath::try_from(format!("{SERVICE_PATH}/item/{}", id.as_uuid().simple()))
         .expect("UUID item path is valid")
+}
+
+pub(super) fn alias_path(alias: &str) -> DbusResult<OwnedObjectPath> {
+    OwnedObjectPath::try_from(format!("{SERVICE_PATH}/aliases/{alias}")).map_err(|_| {
+        SecretDbusError::InvalidArgs(format!(
+            "collection alias {alias:?} is not a valid D-Bus object-path element"
+        ))
+    })
 }
 
 pub(super) fn root_path() -> OwnedObjectPath {
