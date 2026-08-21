@@ -1,7 +1,8 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** direction approved by Mark; implementation not started.
+**Status:** R1 and C1 complete; R2 is the next resident slice. C2 remains the
+gate before any physical store consolidation in C3.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -430,5 +431,23 @@ This plan does not:
 - **2026-08-20:** Mark approved the resident/client topology, RFC-oriented
   content identity, and redundancy cuts. Plan written from the live
   `graphshell_device_host`, application broker, resident endpoint catalog,
-  `PersonalSyncHost`, `KnotSyncHost`, and evidence-store seams. Implementation
-  has not started.
+  `PersonalSyncHost`, `KnotSyncHost`, and evidence-store seams.
+- **2026-08-21, R1:** `91f1297e` made the first-party door route-aware. The
+  version-one hello still selects `identity`; version two requests a
+  host-granted route. Product factories open only after local and Graphshell
+  admission. The focused broker suite passed 18 tests, and a real resident
+  integration opened Knot's fixture through a Turnstone grant.
+- **2026-08-21, C1:** `7655a625` added the shared
+  `PortableContentRefV1` and canonical `ni:///sha-256;<base64url>` parser and
+  serializer, checked against RFC 6920's `Hello World!` vector. New Knot
+  evidence writes NI plus `blake3:<hex>`, legacy `urn:blake3` still verifies,
+  and conflicts fail closed. Graphshell authors the same NI type and no longer
+  repeats its digest as private SHA-256 hex; transfer verification retains a
+  legacy-hex read fallback.
+- **2026-08-21, C1 consumer:** Turnstone `1464043` injects the Murm blob store
+  for clip evidence and updates its ignored source-evidence receipt to reopen
+  the blob store and verify the retained bytes. Formatting and staged-diff
+  checks pass. Running that receipt remains open: Turnstone's current lock and
+  retired Genet path patches reject the local Mere metadata, while a disposable
+  resolution advances 101 same-source packages. That dependency update is not
+  part of C1.
