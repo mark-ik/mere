@@ -110,6 +110,6 @@ async fn secret_tool_store_lookup_and_clear() {
         .args(["lookup", "application", "turnstone", "account", "mark"])
         .output()
         .expect("launch final secret-tool lookup");
-    assert!(lookup.status.success());
+    assert!(!lookup.status.success());
     assert!(lookup.stdout.is_empty());
 }
