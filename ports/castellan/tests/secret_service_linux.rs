@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use castellan::resident::CastellanResident;
 use castellan::secret_service::{
-    SecretServiceAccessPolicy, SecretServiceLimits, SecretServiceOperation, serve,
+    SecretServiceAccessPolicy, SecretServiceCaller, SecretServiceLimits, SecretServiceOperation,
+    serve,
 };
 use personae::PersonaId;
 use tempfile::tempdir;
@@ -75,9 +76,11 @@ async fn secret_tool_store_lookup_and_clear() {
     let store = resident.secret_service(PersonaId::new(), SecretServiceLimits::default());
 
     let admitted_executable = executable_on_path("secret-tool");
-    let policy: Arc<dyn SecretServiceAccessPolicy> = Arc::new(move |caller: &_, _operation: &SecretServiceOperation| {
-        caller.executable.as_deref() == Some(admitted_executable.as_path())
-    });
+    let policy: Arc<dyn SecretServiceAccessPolicy> = Arc::new(
+        move |caller: &SecretServiceCaller, _operation: &SecretServiceOperation| {
+            caller.executable.as_deref() == Some(admitted_executable.as_path())
+        },
+    );
     let _server = serve(store, policy, "Castellan test collection")
         .await
         .unwrap();
