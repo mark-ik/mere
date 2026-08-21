@@ -1,0 +1,12 @@
+[package]
+name = "djinn"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Name reservation for a possible public package name for Knot, Mere's Djot editor."
+readme = "README.md"
+keywords = ["djot", "editor", "documents", "local-first"]
+categories = ["text-editors"]
+
+[dependencies]

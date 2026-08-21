@@ -97,6 +97,7 @@ members = [
     "ports/graphshell",
     "ports/graphshell/web",
     "ports/knot",
+    "ports/djinn",
     "ports/castellan",
     "ports/distillery",
 ]
