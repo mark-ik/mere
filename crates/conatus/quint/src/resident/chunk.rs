@@ -5,10 +5,12 @@
 //! arrangements of that allocation. Neither view imports or copies the
 //! plane, and this module deliberately offers no CPU whole-plane read.
 
-use std::{collections::BTreeMap, fmt, num::NonZeroU64};
+use std::{collections::BTreeMap, fmt, mem::size_of_val, num::NonZeroU64};
 
 use burn::tensor::{DType, Shape, Tensor};
-use burn_wgpu::{CubeTensor, Wgpu, RuntimeOptions, WgpuDevice, WgpuRuntime, WgpuSetup, init_device};
+use burn_wgpu::{
+    CubeTensor, RuntimeOptions, Wgpu, WgpuDevice, WgpuRuntime, WgpuSetup, init_device,
+};
 use bytemuck::Pod;
 use cubecl::{Runtime, client::ComputeClient, server::Handle};
 
@@ -496,6 +498,107 @@ impl<I> ResidentChunk<I> {
         Ok(())
     }
 
+    /// Apply one authority-approved patch without replacing the CubeCL allocation.
+    ///
+    /// The caller owns the record and the shared-device schedule. Quint checks that
+    /// the patch was derived from the resident stamp still being replaced, writes
+    /// only the supplied aligned range, then publishes the committed stamp and dirty
+    /// regions together. Views minted before this call retain their old stamp and
+    /// must be rejected by revision-aware consumers.
+    ///
+    /// This narrow form accepts a single-plane chunk. A bundle-wide stamp cannot
+    /// truthfully advance after one of several planes changes; that case needs one
+    /// validated batch commit covering every changed plane.
+    pub fn commit_plane_patch<T: ResidentElement>(
+        &mut self,
+        queue: &wgpu::Queue,
+        id: &PlaneId,
+        expected_stamp: ChunkStamp,
+        element_offset: usize,
+        values: &[T],
+        committed_stamp: ChunkStamp,
+        dirty_regions: Vec<DirtyRegion>,
+    ) -> Result<(), ResidentChunkError> {
+        if self.stamp != expected_stamp {
+            return Err(ResidentChunkError::StaleStamp {
+                expected: expected_stamp,
+                actual: self.stamp,
+            });
+        }
+        if committed_stamp.revision <= expected_stamp.revision
+            || committed_stamp.valid_read_epoch <= expected_stamp.valid_read_epoch
+        {
+            return Err(ResidentChunkError::NonAdvancingStamp {
+                previous: expected_stamp,
+                committed: committed_stamp,
+            });
+        }
+        for region in &dirty_regions {
+            let fits = !region.extent.contains(&0)
+                && (0..3).all(|axis| {
+                    region.origin[axis]
+                        .checked_add(region.extent[axis])
+                        .is_some_and(|end| end <= self.bounds.extent[axis])
+                });
+            if !fits {
+                return Err(ResidentChunkError::DirtyRegionOutOfBounds {
+                    region: *region,
+                    chunk_extent: self.bounds.extent,
+                });
+            }
+        }
+
+        let plane = self.plane(id)?;
+        if self.planes.len() != 1 {
+            return Err(ResidentChunkError::PatchRequiresSinglePlane {
+                plane_count: self.planes.len(),
+            });
+        }
+        if plane.layout.element_type != T::ELEMENT_TYPE {
+            return Err(ResidentChunkError::PatchElementType {
+                plane: id.clone(),
+                expected: plane.layout.element_type,
+                actual: T::ELEMENT_TYPE,
+            });
+        }
+
+        let byte_offset = element_offset
+            .checked_mul(T::ELEMENT_TYPE.byte_width())
+            .ok_or_else(|| ResidentChunkError::PatchRangeOverflow { plane: id.clone() })?;
+        let byte_len = size_of_val(values);
+        let byte_end = byte_offset
+            .checked_add(byte_len)
+            .ok_or_else(|| ResidentChunkError::PatchRangeOverflow { plane: id.clone() })?;
+        if byte_len == 0 || byte_end > plane.layout.byte_len() {
+            return Err(ResidentChunkError::PatchRange {
+                plane: id.clone(),
+                byte_offset,
+                byte_len,
+                plane_byte_len: plane.layout.byte_len(),
+            });
+        }
+
+        let alignment = wgpu::COPY_BUFFER_ALIGNMENT as usize;
+        if !byte_offset.is_multiple_of(alignment) || !byte_len.is_multiple_of(alignment) {
+            return Err(ResidentChunkError::UnalignedPatch {
+                plane: id.clone(),
+                byte_offset,
+                byte_len,
+                required_alignment: alignment,
+            });
+        }
+
+        let allocation = self.allocation(&plane.handle)?;
+        queue.write_buffer(
+            allocation.buffer(),
+            allocation.offset() + byte_offset as u64,
+            bytemuck::cast_slice(values),
+        );
+        self.stamp = committed_stamp;
+        self.dirty_regions = dirty_regions;
+        Ok(())
+    }
+
     /// Construct a raw storage-buffer view without copying the plane.
     pub fn raw_kernel_view(&self, id: &PlaneId) -> Result<RawKernelView, ResidentChunkError> {
         let plane = self.plane(id)?;
@@ -584,6 +687,41 @@ pub enum ResidentChunkError {
         plane: PlaneId,
         actual: PlaneElementType,
     },
+    StaleStamp {
+        expected: ChunkStamp,
+        actual: ChunkStamp,
+    },
+    NonAdvancingStamp {
+        previous: ChunkStamp,
+        committed: ChunkStamp,
+    },
+    DirtyRegionOutOfBounds {
+        region: DirtyRegion,
+        chunk_extent: [u32; 3],
+    },
+    PatchRequiresSinglePlane {
+        plane_count: usize,
+    },
+    PatchElementType {
+        plane: PlaneId,
+        expected: PlaneElementType,
+        actual: PlaneElementType,
+    },
+    PatchRangeOverflow {
+        plane: PlaneId,
+    },
+    PatchRange {
+        plane: PlaneId,
+        byte_offset: usize,
+        byte_len: usize,
+        plane_byte_len: usize,
+    },
+    UnalignedPatch {
+        plane: PlaneId,
+        byte_offset: usize,
+        byte_len: usize,
+        required_alignment: usize,
+    },
     Resource(String),
 }
 
@@ -615,6 +753,61 @@ impl fmt::Display for ResidentChunkError {
             Self::BurnElementType { plane, actual } => write!(
                 formatter,
                 "resident plane {plane} is {actual:?}, not F32, so it has no Burn float view"
+            ),
+            Self::StaleStamp { expected, actual } => write!(
+                formatter,
+                "resident patch expected stamp {expected:?}, but the chunk is at {actual:?}"
+            ),
+            Self::NonAdvancingStamp {
+                previous,
+                committed,
+            } => write!(
+                formatter,
+                "resident patch must advance revision and read epoch beyond {previous:?}, got {committed:?}"
+            ),
+            Self::DirtyRegionOutOfBounds {
+                region,
+                chunk_extent,
+            } => write!(
+                formatter,
+                "resident dirty region {region:?} does not fit chunk extent {chunk_extent:?}"
+            ),
+            Self::PatchRequiresSinglePlane { plane_count } => write!(
+                formatter,
+                "single-plane resident patch cannot restamp a bundle containing {plane_count} planes"
+            ),
+            Self::PatchElementType {
+                plane,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "resident plane {plane} stores {expected:?}, not patch element type {actual:?}"
+            ),
+            Self::PatchRangeOverflow { plane } => {
+                write!(
+                    formatter,
+                    "resident patch range for plane {plane} overflowed"
+                )
+            }
+            Self::PatchRange {
+                plane,
+                byte_offset,
+                byte_len,
+                plane_byte_len,
+            } => write!(
+                formatter,
+                "resident patch [{byte_offset}..{}) does not fit plane {plane}'s {plane_byte_len} bytes",
+                byte_offset + byte_len
+            ),
+            Self::UnalignedPatch {
+                plane,
+                byte_offset,
+                byte_len,
+                required_alignment,
+            } => write!(
+                formatter,
+                "resident patch for plane {plane} has byte offset {byte_offset} and length {byte_len}; both must be multiples of {required_alignment}"
             ),
             Self::Resource(error) => write!(formatter, "CubeCL resource export failed: {error}"),
         }

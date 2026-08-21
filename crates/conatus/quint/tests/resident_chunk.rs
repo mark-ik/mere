@@ -7,8 +7,8 @@
 #![cfg(feature = "field-gpu")]
 
 use quint::resident::{
-    ChunkBounds, DirtyRegion, PlaneClass, PlaneElementType, PlaneId, ReadEpoch, ResidentChunk,
-    ResidentChunkError, ResidentClient,
+    ChunkBounds, ChunkStamp, DirtyRegion, PlaneClass, PlaneElementType, PlaneId, RawKernelView,
+    ReadEpoch, ResidentChunk, ResidentChunkError, ResidentClient,
 };
 
 fn setup() -> Option<burn::backend::wgpu::WgpuSetup> {
@@ -40,6 +40,35 @@ fn setup() -> Option<burn::backend::wgpu::WgpuSetup> {
         queue,
         backend,
     })
+}
+
+fn readback(device: &wgpu::Device, queue: &wgpu::Queue, view: &RawKernelView) -> Vec<u8> {
+    let lease = view.lease();
+    let staging = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("quint resident patch readback"),
+        size: lease.byte_len(),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("quint resident patch readback"),
+    });
+    encoder.copy_buffer_to_buffer(lease.buffer, lease.offset, &staging, 0, lease.byte_len());
+    let submission = queue.submit([encoder.finish()]);
+    staging.slice(..).map_async(wgpu::MapMode::Read, |_| ());
+    device
+        .poll(wgpu::PollType::Wait {
+            submission_index: Some(submission),
+            timeout: None,
+        })
+        .unwrap();
+    let bytes = staging
+        .slice(..)
+        .get_mapped_range()
+        .expect("resident patch readback mapped")
+        .to_vec();
+    staging.unmap();
+    bytes
 }
 
 #[test]
@@ -181,4 +210,138 @@ fn a_lease_reports_the_bytes_its_shape_describes() {
     };
     assert_eq!(overshot.byte_len(), 48);
     assert!(!overshot.fits());
+}
+
+#[test]
+fn committed_patch_retains_the_allocation_and_restamps_new_views() {
+    let Some(setup) = setup() else {
+        eprintln!("no wgpu adapter: skipping the resident patch receipt");
+        return;
+    };
+    let device = setup.device.clone();
+    let queue = setup.queue.clone();
+    let mut chunk = ResidentChunk::new(
+        ResidentClient::init(setup),
+        "retained",
+        ChunkBounds {
+            origin: [0, 0, 0],
+            extent: [8, 1, 1],
+        },
+        12,
+        ReadEpoch::new(20),
+        Vec::new(),
+    );
+    let id = PlaneId::new("material").unwrap();
+    chunk
+        .insert_plane(
+            id.clone(),
+            PlaneClass::Exact,
+            [8, 1, 1],
+            &[3u8, 7, 4, 5, 6, 7, 8, 9],
+        )
+        .unwrap();
+
+    let before = chunk.raw_kernel_view(&id).unwrap();
+    let expected = before.stamp();
+    let committed = ChunkStamp {
+        revision: 13,
+        valid_read_epoch: ReadEpoch::new(21),
+    };
+    let dirty = vec![DirtyRegion {
+        origin: [4, 0, 0],
+        extent: [1, 1, 1],
+    }];
+
+    let unaligned = chunk
+        .commit_plane_patch(
+            &queue,
+            &id,
+            expected,
+            1,
+            &[0u8; 4],
+            committed,
+            dirty.clone(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        unaligned,
+        ResidentChunkError::UnalignedPatch {
+            plane: id.clone(),
+            byte_offset: 1,
+            byte_len: 4,
+            required_alignment: wgpu::COPY_BUFFER_ALIGNMENT as usize,
+        }
+    );
+    assert_eq!(chunk.stamp(), expected);
+
+    chunk
+        .commit_plane_patch(
+            &queue,
+            &id,
+            expected,
+            4,
+            &[11u8, 12, 13, 14],
+            committed,
+            dirty.clone(),
+        )
+        .unwrap();
+    let after = chunk.raw_kernel_view(&id).unwrap();
+
+    assert_eq!(before.allocation(), after.allocation());
+    assert_eq!(
+        before.stamp(),
+        expected,
+        "old views keep their source stamp"
+    );
+    assert_eq!(after.stamp(), committed);
+    assert_eq!(chunk.dirty_regions(), dirty);
+    let bytes = readback(&device, &queue, &after);
+    assert_eq!(bytes, &[3, 7, 4, 5, 11, 12, 13, 14]);
+
+    let auxiliary = PlaneId::new("auxiliary").unwrap();
+    chunk
+        .insert_plane(auxiliary, PlaneClass::Derived, [8, 1, 1], &[0u8; 8])
+        .unwrap();
+    let bundle_error = chunk
+        .commit_plane_patch(
+            &queue,
+            &id,
+            committed,
+            0,
+            &[5u8; 4],
+            ChunkStamp {
+                revision: 14,
+                valid_read_epoch: ReadEpoch::new(22),
+            },
+            Vec::new(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        bundle_error,
+        ResidentChunkError::PatchRequiresSinglePlane { plane_count: 2 }
+    );
+    assert_eq!(chunk.stamp(), committed);
+
+    let error = chunk
+        .commit_plane_patch(
+            &queue,
+            &id,
+            expected,
+            0,
+            &[5u8; 4],
+            ChunkStamp {
+                revision: 14,
+                valid_read_epoch: ReadEpoch::new(22),
+            },
+            Vec::new(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        error,
+        ResidentChunkError::StaleStamp {
+            expected,
+            actual: committed,
+        }
+    );
+    assert_eq!(chunk.stamp(), committed, "a stale patch changed the stamp");
 }
