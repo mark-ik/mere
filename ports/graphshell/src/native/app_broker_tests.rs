@@ -4,6 +4,7 @@
 //! budget, and these tests drive a whole session rather than checking a part.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tokio::sync::RwLock;
 
@@ -17,13 +18,14 @@ use crate::identity::VaultProtectionView;
 
 use crate::browser_carrier::{read_native_message_async, write_native_message_async};
 use crate::identity_endpoint::SupplementalCard;
-use crate::native::app_admission::{AllowedApps, AppHello, AppId};
+use crate::native::app_admission::{AllowedAppRoutes, AppHello, AppId, AppRouteId};
 use crate::native::app_broker::{
-    APP_CONNECT_SCHEMA, AppHostMessage, AppMessage, serve_app_broker,
+    APP_CONNECT_SCHEMA, AppEndpointCatalog, AppHostMessage, AppMessage, serve_app_broker,
     serve_app_connection_for_tests,
 };
 use crate::native::app_client::AppBrokerClient;
 use crate::native::device_broker::DeviceSurface;
+use crate::native::endpoint_catalog::ResidentEndpointCatalog;
 use crate::native::personae_host::PersonaeHost;
 
 fn resident_host() -> Arc<PersonaeHost<InMemoryStorage>> {
@@ -80,7 +82,7 @@ async fn turnstone_opens_a_session_and_reads_a_capture() {
     let (mut host_reader, mut host_writer) = tokio::io::split(host_stream);
     let (mut app_reader, mut app_writer) = tokio::io::split(app_stream);
 
-    let allowed = AllowedApps::default();
+    let allowed = AllowedAppRoutes::default();
     let host = serve_app_connection_for_tests(
         &mut host_reader,
         &mut host_writer,
@@ -88,6 +90,7 @@ async fn turnstone_opens_a_session_and_reads_a_capture() {
         &allowed,
         60_000,
         Some(Arc::new(RwLock::new(surface))),
+        AppEndpointCatalog::default(),
     );
 
     let app = async {
@@ -221,7 +224,7 @@ async fn an_unadmitted_application_never_sees_a_challenge() {
     write_native_message_async(&mut app_writer, &AppHello::new(AppId::new("not-ours")))
         .await
         .unwrap();
-    let allowed = AllowedApps::default();
+    let allowed = AllowedAppRoutes::default();
     let served = serve_app_connection_for_tests(
         &mut host_reader,
         &mut host_writer,
@@ -229,6 +232,7 @@ async fn an_unadmitted_application_never_sees_a_challenge() {
         &allowed,
         60_000,
         Some(Arc::new(RwLock::new(DeviceSurface::default()))),
+        AppEndpointCatalog::default(),
     )
     .await;
     assert!(served.is_err(), "an unadmitted application is refused");
@@ -250,6 +254,50 @@ async fn an_unadmitted_application_never_sees_a_challenge() {
     );
 }
 
+/// A known application cannot turn its name into product authority. Route
+/// grants are checked before Graphshell admission and therefore before the
+/// catalog is allowed to construct product state.
+#[tokio::test]
+async fn an_ungranted_route_never_opens_its_product_endpoint() {
+    let personae = resident_host();
+    let opened = Arc::new(AtomicUsize::new(0));
+    let factory_opened = Arc::clone(&opened);
+    let mut catalog = ResidentEndpointCatalog::new();
+    catalog
+        .register_erased("knot", "Knot fixture", move |_| {
+            factory_opened.fetch_add(1, Ordering::SeqCst);
+            Err("the ungranted factory was opened".to_string())
+        })
+        .unwrap();
+
+    let (host_stream, app_stream) = tokio::io::duplex(16 * 1024);
+    let (mut host_reader, mut host_writer) = tokio::io::split(host_stream);
+    let (_app_reader, mut app_writer) = tokio::io::split(app_stream);
+    write_native_message_async(
+        &mut app_writer,
+        &AppHello::for_route(AppId::new("turnstone"), AppRouteId::new("knot").unwrap()),
+    )
+    .await
+    .unwrap();
+
+    let served = serve_app_connection_for_tests(
+        &mut host_reader,
+        &mut host_writer,
+        personae,
+        &AllowedAppRoutes::default(),
+        60_000,
+        Some(Arc::new(RwLock::new(DeviceSurface::default()))),
+        AppEndpointCatalog::new(catalog),
+    )
+    .await;
+    assert!(served.is_err(), "the ungranted route is refused");
+    assert_eq!(
+        opened.load(Ordering::SeqCst),
+        0,
+        "route refusal happens before product state opens",
+    );
+}
+
 /// The browser's connect frame does not open an application session. The two
 /// doors do not accept each other's wire, in either direction.
 #[tokio::test]
@@ -259,7 +307,7 @@ async fn the_browser_connect_frame_does_not_open_an_application_session() {
     let (mut host_reader, mut host_writer) = tokio::io::split(host_stream);
     let (mut app_reader, mut app_writer) = tokio::io::split(app_stream);
 
-    let allowed = AllowedApps::default();
+    let allowed = AllowedAppRoutes::default();
     let host = serve_app_connection_for_tests(
         &mut host_reader,
         &mut host_writer,
@@ -267,6 +315,7 @@ async fn the_browser_connect_frame_does_not_open_an_application_session() {
         &allowed,
         60_000,
         Some(Arc::new(RwLock::new(DeviceSurface::default()))),
+        AppEndpointCatalog::default(),
     );
     let app = async {
         write_native_message_async(&mut app_writer, &AppHello::new(AppId::new("turnstone")))
@@ -334,9 +383,10 @@ async fn the_client_reads_cards_over_the_served_endpoint() {
         let _ = serve_app_broker(
             &server_endpoint,
             personae,
-            AllowedApps::default(),
+            AllowedAppRoutes::default(),
             60_000,
             Some(Arc::new(RwLock::new(surface))),
+            AppEndpointCatalog::default(),
         )
         .await;
     });

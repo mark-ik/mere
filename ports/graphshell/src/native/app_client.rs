@@ -19,7 +19,7 @@ use chirograph::{
 use rand_core::{OsRng, RngCore};
 
 use crate::browser_carrier::{read_native_message_async, write_native_message_async};
-use crate::native::app_admission::{AppHello, AppId, configured_app_endpoint};
+use crate::native::app_admission::{AppHello, AppId, AppRouteId, configured_app_endpoint};
 use crate::native::app_broker::{APP_CONNECT_SCHEMA, AppBrokerError, AppHostMessage, AppMessage};
 use crate::native::local_endpoint::{LocalStream, connect_local};
 
@@ -65,10 +65,33 @@ impl AppBrokerClient {
         Self::open_at(&configured_app_endpoint(), app).await
     }
 
+    /// Connect to the configured endpoint and request one granted resident
+    /// route through the version-two hello.
+    pub async fn open_route(app: AppId, route: AppRouteId) -> Result<Self, AppClientError> {
+        Self::open_route_at(&configured_app_endpoint(), app, route).await
+    }
+
     /// The same, at an explicit endpoint. Tests and receipts use this.
     pub async fn open_at(endpoint: &str, app: AppId) -> Result<Self, AppClientError> {
+        Self::open_with_hello(endpoint, AppHello::new(app.clone()), app).await
+    }
+
+    /// Route-aware connection at an explicit endpoint.
+    pub async fn open_route_at(
+        endpoint: &str,
+        app: AppId,
+        route: AppRouteId,
+    ) -> Result<Self, AppClientError> {
+        Self::open_with_hello(endpoint, AppHello::for_route(app.clone(), route), app).await
+    }
+
+    async fn open_with_hello(
+        endpoint: &str,
+        hello: AppHello,
+        app: AppId,
+    ) -> Result<Self, AppClientError> {
         let mut stream = connect_local(endpoint).await?;
-        write_native_message_async(&mut stream, &AppHello::new(app.clone())).await?;
+        write_native_message_async(&mut stream, &hello).await?;
         let challenge = match read_host(&mut stream).await? {
             AppHostMessage::Challenge { challenge } => challenge,
             other => return Err(unexpected("a challenge", &other)),
@@ -88,7 +111,17 @@ impl AppBrokerClient {
         )
         .await?;
         let session = match read_host(&mut stream).await? {
-            AppHostMessage::Connected { session, .. } => session,
+            AppHostMessage::Connected {
+                app: connected_app,
+                session,
+            } => {
+                if connected_app != app {
+                    return Err(AppClientError::Refused(format!(
+                        "resident host connected {connected_app}, expected {app}"
+                    )));
+                }
+                session
+            }
             other => return Err(unexpected("connected", &other)),
         };
         Ok(Self {

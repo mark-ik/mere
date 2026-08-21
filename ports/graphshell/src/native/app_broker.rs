@@ -31,13 +31,19 @@ use crate::browser_carrier::{
 };
 use crate::identity_endpoint::IdentityEndpoint;
 use crate::lifecycle::SessionAuthority;
-use crate::native::app_admission::{AllowedApps, AppAdmissionError, AppHello, AppId};
+use crate::native::app_admission::{
+    APP_IDENTITY_ROUTE, AllowedAppRoutes, AppAdmissionError, AppHello, AppId, AppRouteId,
+};
 use crate::native::browser_host::BrowserHostError;
 use crate::native::device_broker::{DeviceSurface, DeviceSurfaceHandle};
+use crate::native::endpoint_catalog::{
+    ResidentEndpointCatalog, ResidentEndpointCatalogError, ResidentEndpointSession,
+};
 use crate::native::local_endpoint::{LocalStream, connect_local, serve_local};
 use crate::native::local_session::{LocalSession, admit_local_client, identity_endpoint_for};
 use crate::native::personae_host::PersonaeHost;
 use crate::session_loop::{SessionSummary, serve_admitted_session};
+use crate::session_notices::serve_admitted_session_notifying;
 use chirograph::ResumeRequest;
 
 /// Schema of the connect answer an application sends.
@@ -49,6 +55,8 @@ pub enum AppBrokerError {
     Admission(#[from] AppAdmissionError),
     #[error(transparent)]
     Host(#[from] BrowserHostError),
+    #[error(transparent)]
+    Catalog(#[from] ResidentEndpointCatalogError),
     #[error(transparent)]
     Carrier(#[from] crate::browser_carrier::BrowserCarrierError),
     #[error("the application stream ended before its hello")]
@@ -85,6 +93,31 @@ pub enum AppHostMessage {
     Failure { message: String },
 }
 
+/// The resident endpoint registrations available to first-party routes.
+///
+/// The mutex protects only factory selection. A session takes ownership of
+/// the endpoint it opens, so product traffic never serializes on the catalog.
+#[derive(Clone, Default)]
+pub struct AppEndpointCatalog {
+    inner: Arc<tokio::sync::Mutex<ResidentEndpointCatalog>>,
+}
+
+impl AppEndpointCatalog {
+    pub fn new(catalog: ResidentEndpointCatalog) -> Self {
+        Self {
+            inner: Arc::new(tokio::sync::Mutex::new(catalog)),
+        }
+    }
+
+    async fn open(
+        &self,
+        id: &str,
+        context: &crate::lifecycle::AdmittedEndpointContext,
+    ) -> Result<ResidentEndpointSession, ResidentEndpointCatalogError> {
+        self.inner.lock().await.open(id, context)
+    }
+}
+
 /// Open a connection to the resident host as `app`.
 ///
 /// The application side of the door, for a first-party client that lives in
@@ -98,13 +131,25 @@ pub async fn connect_as_app(
     Ok(stream)
 }
 
+/// Open a route-aware connection to the resident host as `app`.
+pub async fn connect_as_app_route(
+    endpoint: &str,
+    app: AppId,
+    route: AppRouteId,
+) -> Result<Box<dyn LocalStream>, AppBrokerError> {
+    let mut stream = connect_local(endpoint).await?;
+    write_native_message_async(&mut stream, &AppHello::for_route(app, route)).await?;
+    Ok(stream)
+}
+
 /// Serve first-party applications from the resident authority.
 pub async fn serve_app_broker<S>(
     endpoint: &str,
     personae: Arc<PersonaeHost<S>>,
-    allowed: AllowedApps,
+    allowed: AllowedAppRoutes,
     session_duration_ms: u64,
     surface: Option<DeviceSurfaceHandle>,
+    catalog: AppEndpointCatalog,
 ) -> Result<(), AppBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -116,6 +161,7 @@ where
             let personae = Arc::clone(&personae);
             let allowed = allowed.clone();
             let surface = surface.clone();
+            let catalog = catalog.clone();
             async move {
                 let (mut reader, mut writer) = tokio::io::split(stream);
                 if let Err(error) = serve_app_connection(
@@ -125,6 +171,7 @@ where
                     &allowed,
                     session_duration_ms,
                     surface,
+                    catalog,
                 )
                 .await
                 {
@@ -144,9 +191,10 @@ pub(crate) async fn serve_app_connection<S, R, W>(
     reader: &mut R,
     writer: &mut W,
     personae: Arc<PersonaeHost<S>>,
-    allowed: &AllowedApps,
+    allowed: &AllowedAppRoutes,
     session_duration_ms: u64,
     surface: Option<DeviceSurfaceHandle>,
+    catalog: AppEndpointCatalog,
 ) -> Result<Option<SessionSummary>, AppBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -156,8 +204,8 @@ where
     let hello = read_native_message_async::<_, AppHello>(reader)
         .await?
         .ok_or(AppBrokerError::MissingHello)?;
-    let app = hello.accept()?;
-    allowed.admit(&app)?;
+    let request = hello.accept()?;
+    let route = allowed.admit(&request)?;
     // Read once, at session start, exactly as the browser door does: a
     // transfer accepted while an application is already connected becomes
     // visible on its next session rather than mid-stream.
@@ -165,7 +213,17 @@ where
         Some(surface) => surface.read().await.clone(),
         None => DeviceSurface::default(),
     };
-    serve_admitted_app(reader, writer, personae, app, session_duration_ms, surface).await
+    serve_admitted_app(
+        reader,
+        writer,
+        personae,
+        request.app,
+        route,
+        session_duration_ms,
+        surface,
+        catalog,
+    )
+    .await
 }
 
 async fn serve_admitted_app<S, R, W>(
@@ -173,8 +231,10 @@ async fn serve_admitted_app<S, R, W>(
     writer: &mut W,
     personae: Arc<PersonaeHost<S>>,
     app: AppId,
+    route: crate::native::endpoint_catalog::ResidentEndpointRoute,
     session_duration_ms: u64,
     surface: DeviceSurface,
+    catalog: AppEndpointCatalog,
 ) -> Result<Option<SessionSummary>, AppBrokerError>
 where
     S: IdentityStorage + 'static,
@@ -216,23 +276,48 @@ where
     } = admit_local_client(identity.as_ref(), &link, session_duration_ms).await?;
 
     let authority = SessionAuthority::retain_admitted(&admitted);
-    let session = authority.endpoint_context().session().0.clone();
-    let mut endpoint = identity_endpoint_for(Arc::clone(&personae), &authority, surface);
-    let server = tokio::spawn(async move {
-        let revocations = StdRwLock::new(revocations);
-        let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {
-            Err("identity resume is not implemented".to_string())
-        };
-        serve_admitted_session(
-            &mut admitted,
-            &authority,
-            &revocations,
-            &mut endpoint,
-            &mut resume,
-            crate::native::browser_host::now_ms,
-        )
-        .await
-    });
+    let endpoint_context = authority.endpoint_context();
+    let session = endpoint_context.session().0.clone();
+    let server = if route.id() == APP_IDENTITY_ROUTE {
+        let mut endpoint = identity_endpoint_for(Arc::clone(&personae), &authority, surface);
+        tokio::spawn(async move {
+            let revocations = StdRwLock::new(revocations);
+            let mut resume = |_: &mut IdentityEndpoint<S>, _: ResumeRequest| {
+                Err("identity resume is not implemented".to_string())
+            };
+            serve_admitted_session(
+                &mut admitted,
+                &authority,
+                &revocations,
+                &mut endpoint,
+                &mut resume,
+                crate::native::browser_host::now_ms,
+            )
+            .await
+        })
+    } else {
+        // Grant selection happened before the Graphshell challenge, but the
+        // product factory opens only after Graphshell admission has produced
+        // this narrow context.
+        let mut endpoint = catalog.open(route.id(), &endpoint_context).await?;
+        let notice_poll_interval = route.notice_poll_interval();
+        tokio::spawn(async move {
+            let revocations = StdRwLock::new(revocations);
+            let mut resume = |endpoint: &mut ResidentEndpointSession, request: ResumeRequest| {
+                endpoint.resume(request)
+            };
+            serve_admitted_session_notifying(
+                &mut admitted,
+                &authority,
+                &revocations,
+                &mut endpoint,
+                &mut resume,
+                crate::native::browser_host::now_ms,
+                notice_poll_interval,
+            )
+            .await
+        })
+    };
     write_native_message_async(
         writer,
         &AppHostMessage::Connected {
@@ -318,7 +403,7 @@ mod tests {
     #[test]
     fn an_unadmitted_application_is_refused_at_the_hello() {
         let hello = AppHello::new(AppId::new("not-ours"));
-        let app = hello.accept().unwrap();
-        assert!(AllowedApps::default().admit(&app).is_err());
+        let request = hello.accept().unwrap();
+        assert!(AllowedAppRoutes::default().admit(&request).is_err());
     }
 }

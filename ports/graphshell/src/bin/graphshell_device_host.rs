@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
-use graphshell::native::app_admission::{AllowedApps, configured_app_endpoint};
-use graphshell::native::app_broker::serve_app_broker;
+use graphshell::native::app_admission::{AllowedAppRoutes, configured_app_endpoint};
+use graphshell::native::app_broker::{AppEndpointCatalog, serve_app_broker};
 #[cfg(feature = "personal-sync")]
 use graphshell::native::device_broker::serve_browser_broker_with_cards;
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
@@ -633,9 +633,10 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let apps = serve_app_broker(
         &args.app_endpoint,
         Arc::clone(&personae),
-        AllowedApps::default(),
+        AllowedAppRoutes::default(),
         session_duration_ms(),
         app_surface,
+        AppEndpointCatalog::default(),
     );
     #[cfg(feature = "personal-sync")]
     let browser = async {
