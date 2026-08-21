@@ -2835,7 +2835,9 @@ mod tests {
 
         let saved = fs::read_to_string(path).unwrap();
         assert!(saved.contains(r#""schema":"knot.clip.insert/v2""#));
-        assert!(saved.contains(&format!("urn:blake3:{digest}")));
+        assert!(saved.contains(&chirograph::Sha256NamedInformation::of(&bytes).to_string()));
+        assert!(saved.contains(&format!("blake3:{digest}")));
+        assert!(!saved.contains("urn:blake3:"));
         assert!(saved.contains(r#""class":"arrangement-unchecked""#));
         assert!(saved.contains(r#""relation":"link""#));
         assert!(!saved.contains("<article>"));

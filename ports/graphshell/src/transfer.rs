@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::LazyLock;
 
 use chartulary::{AcceptAll, FacetId};
+use chirograph::Sha256NamedInformation;
 use eidetic::{
     BlobSource, Engram, Hash, ManifestId, MereNativeFieldSpec, MereNativeSchemaBuilder,
     ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaDefinition, SchemaRef,
@@ -816,7 +817,25 @@ fn verify_content_facet(
             ),
         });
     }
-    if let Some(expected) = content.get("sha256").and_then(serde_json::Value::as_str) {
+    if let Some(expected) = content
+        .get("portable_id")
+        .and_then(serde_json::Value::as_str)
+    {
+        let portable = expected
+            .parse::<Sha256NamedInformation>()
+            .map_err(|error| TransferError::ContentMismatch {
+                node_id: input.node_id,
+                reason: format!("portable content identity is malformed: {error}"),
+            })?;
+        portable
+            .verify(&input.bytes)
+            .map_err(|_| TransferError::ContentMismatch {
+                node_id: input.node_id,
+                reason: "RFC 6920 SHA-256 does not match the graph content facet".to_string(),
+            })?;
+    } else if let Some(expected) = content.get("sha256").and_then(serde_json::Value::as_str) {
+        // Compatibility for graph content facets authored before C1 moved new
+        // records to RFC 6920 names.
         let actual = hex_digest(&input.bytes);
         if !expected.eq_ignore_ascii_case(&actual) {
             return Err(TransferError::ContentMismatch {
@@ -1330,13 +1349,7 @@ mod tests {
             assert_eq!(
                 destination
                     .facet_value(
-                        &format!(
-                            "urn:sha256:{}",
-                            Sha256::digest(&source.file_bytes)
-                                .iter()
-                                .map(|byte| format!("{byte:02x}"))
-                                .collect::<String>()
-                        ),
+                        &Sha256NamedInformation::of(&source.file_bytes).to_string(),
                         TRANSFER_CONTENT_FACET
                     )
                     .unwrap()[0]["content_hash"],

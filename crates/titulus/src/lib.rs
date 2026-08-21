@@ -24,8 +24,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::str::FromStr;
 
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
+use sha2::Digest as _;
 
 /// A content address for a separately transferred resource.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -36,6 +39,18 @@ impl ContentHash {
     pub fn of(bytes: &[u8]) -> Self {
         Self(*blake3::hash(bytes).as_bytes())
     }
+
+    /// Parse the lowercase hexadecimal digest used by iroh's BLAKE3 address.
+    pub fn from_hex(value: &str) -> Result<Self, ContentReferenceError> {
+        parse_lower_hex_32(value)
+            .map(Self)
+            .ok_or(ContentReferenceError::InvalidBlake3)
+    }
+
+    /// The raw BLAKE3 digest bytes.
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
 }
 
 impl fmt::Display for ContentHash {
@@ -44,6 +59,204 @@ impl fmt::Display for ContentHash {
             write!(formatter, "{byte:02x}")?;
         }
         Ok(())
+    }
+}
+
+/// RFC 6920 Named Information URI carrying one full SHA-256 digest.
+///
+/// The canonical form is `ni:///sha-256;<base64url>` with no authority,
+/// query, or padding. Restricting emission to that mandatory algorithm and
+/// spelling gives Graphshell and Knot one interoperable portable identifier.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Sha256NamedInformation([u8; 32]);
+
+impl Sha256NamedInformation {
+    /// Canonical prefix for the supported RFC 6920 form.
+    pub const PREFIX: &'static str = "ni:///sha-256;";
+
+    /// Name these bytes portably.
+    pub fn of(bytes: &[u8]) -> Self {
+        Self(sha2::Sha256::digest(bytes).into())
+    }
+
+    /// Construct from the lowercase hexadecimal SHA-256 representation used
+    /// by existing browser-file metadata.
+    pub fn from_hex(value: &str) -> Result<Self, ContentReferenceError> {
+        parse_lower_hex_32(value)
+            .map(Self)
+            .ok_or(ContentReferenceError::InvalidSha256Hex)
+    }
+
+    /// The named digest bytes.
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Verify bytes against the portable identity.
+    pub fn verify(&self, bytes: &[u8]) -> Result<(), ContentReferenceError> {
+        (Self::of(bytes) == *self)
+            .then_some(())
+            .ok_or(ContentReferenceError::Sha256Mismatch)
+    }
+}
+
+impl fmt::Display for Sha256NamedInformation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(Self::PREFIX)?;
+        formatter.write_str(&base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(self.0))
+    }
+}
+
+impl FromStr for Sha256NamedInformation {
+    type Err = ContentReferenceError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let encoded = value
+            .strip_prefix(Self::PREFIX)
+            .ok_or(ContentReferenceError::InvalidNamedInformation)?;
+        if encoded.len() != 43 || encoded.contains('=') {
+            return Err(ContentReferenceError::InvalidNamedInformation);
+        }
+        let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|_| ContentReferenceError::InvalidNamedInformation)?;
+        let digest: [u8; 32] = decoded
+            .try_into()
+            .map_err(|_| ContentReferenceError::InvalidNamedInformation)?;
+        Ok(Self(digest))
+    }
+}
+
+impl Serialize for Sha256NamedInformation {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for Sha256NamedInformation {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+/// One portable byte identity beside the BLAKE3 address used for transfer.
+///
+/// Media type, source URI, and artifact role deliberately live outside this
+/// type: they describe provenance and use, while these three fields identify
+/// and bound the bytes themselves.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PortableContentRefV1 {
+    /// RFC 6920 portable identity.
+    pub portable_id: Sha256NamedInformation,
+    /// BLAKE3 address used by the local and iroh content stores.
+    #[serde(with = "blake3_transport_serde")]
+    pub transport: ContentHash,
+    /// Exact byte length, checked before either digest is trusted.
+    pub byte_size: u64,
+}
+
+impl PortableContentRefV1 {
+    /// Name bytes in both portable and transport domains.
+    pub fn of(bytes: &[u8]) -> Self {
+        Self {
+            portable_id: Sha256NamedInformation::of(bytes),
+            transport: ContentHash::of(bytes),
+            byte_size: u64::try_from(bytes.len()).expect("slice length fits u64"),
+        }
+    }
+
+    /// Verify length, iroh/BLAKE3 address, then portable SHA-256 identity.
+    pub fn verify_bytes(&self, bytes: &[u8]) -> Result<(), ContentReferenceError> {
+        if u64::try_from(bytes.len()).ok() != Some(self.byte_size) {
+            return Err(ContentReferenceError::ByteSizeMismatch);
+        }
+        if ContentHash::of(bytes) != self.transport {
+            return Err(ContentReferenceError::Blake3Mismatch);
+        }
+        self.portable_id.verify(bytes)
+    }
+}
+
+/// A malformed or conflicting portable content reference.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContentReferenceError {
+    /// The URI was not the canonical mandatory SHA-256 NI form.
+    InvalidNamedInformation,
+    /// An existing browser SHA-256 digest was not lowercase 32-byte hex.
+    InvalidSha256Hex,
+    /// A BLAKE3 transport address was not lowercase 32-byte hex.
+    InvalidBlake3,
+    /// The declared byte length differed.
+    ByteSizeMismatch,
+    /// The BLAKE3 transport address differed.
+    Blake3Mismatch,
+    /// The RFC 6920 SHA-256 identity differed.
+    Sha256Mismatch,
+}
+
+impl fmt::Display for ContentReferenceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidNamedInformation => {
+                "content name is not canonical ni:///sha-256;<base64url>"
+            }
+            Self::InvalidSha256Hex => "SHA-256 digest is not 64 lowercase hexadecimal characters",
+            Self::InvalidBlake3 => {
+                "BLAKE3 transport address is not blake3:<64 lowercase hexadecimal characters>"
+            }
+            Self::ByteSizeMismatch => "content byte length does not match its reference",
+            Self::Blake3Mismatch => "content bytes do not match their BLAKE3 transport address",
+            Self::Sha256Mismatch => "content bytes do not match their RFC 6920 SHA-256 identity",
+        })
+    }
+}
+
+impl std::error::Error for ContentReferenceError {}
+
+fn parse_lower_hex_32(value: &str) -> Option<[u8; 32]> {
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return None;
+    }
+    let mut digest = [0u8; 32];
+    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+        let hex = std::str::from_utf8(pair).ok()?;
+        digest[index] = u8::from_str_radix(hex, 16).ok()?;
+    }
+    Some(digest)
+}
+
+mod blake3_transport_serde {
+    use super::{ContentHash, ContentReferenceError};
+    use serde::{Deserialize, Serializer};
+
+    pub fn serialize<S>(hash: &ContentHash, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("blake3:{hash}"))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<ContentHash, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        let hex = value
+            .strip_prefix("blake3:")
+            .ok_or_else(|| serde::de::Error::custom(ContentReferenceError::InvalidBlake3))?;
+        ContentHash::from_hex(hex).map_err(serde::de::Error::custom)
     }
 }
 
@@ -479,6 +692,66 @@ mod tests {
         let rendered = hash.to_string();
         assert_eq!(rendered.len(), 64);
         assert!(rendered.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn portable_content_reference_uses_canonical_ni_and_blake3_spellings() {
+        let reference = PortableContentRefV1::of(b"portable bytes");
+        reference.verify_bytes(b"portable bytes").unwrap();
+        let json = serde_json::to_value(&reference).unwrap();
+        let portable = json["portable_id"].as_str().unwrap();
+        assert!(portable.starts_with(Sha256NamedInformation::PREFIX));
+        assert!(!portable.contains('='));
+        assert!(json["transport"].as_str().unwrap().starts_with("blake3:"));
+        assert_eq!(
+            serde_json::from_value::<PortableContentRefV1>(json).unwrap(),
+            reference,
+        );
+    }
+
+    #[test]
+    fn portable_and_transport_conflicts_fail_closed() {
+        let bytes = b"portable bytes";
+        let mut wrong_portable = PortableContentRefV1::of(bytes);
+        wrong_portable.portable_id = Sha256NamedInformation::of(b"different");
+        assert_eq!(
+            wrong_portable.verify_bytes(bytes),
+            Err(ContentReferenceError::Sha256Mismatch),
+        );
+
+        let mut wrong_transport = PortableContentRefV1::of(bytes);
+        wrong_transport.transport = ContentHash::of(b"different");
+        assert_eq!(
+            wrong_transport.verify_bytes(bytes),
+            Err(ContentReferenceError::Blake3Mismatch),
+        );
+    }
+
+    #[test]
+    fn named_information_parser_rejects_private_or_noncanonical_spellings() {
+        let named = Sha256NamedInformation::of(b"named bytes");
+        assert_eq!(
+            named.to_string().parse::<Sha256NamedInformation>(),
+            Ok(named)
+        );
+        assert!(
+            "urn:sha256:abababababababababababababababababababababababababababababababab"
+                .parse::<Sha256NamedInformation>()
+                .is_err()
+        );
+        assert!(
+            format!("{}{}=", Sha256NamedInformation::PREFIX, "a".repeat(43))
+                .parse::<Sha256NamedInformation>()
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn named_information_matches_the_rfc_6920_hello_world_vector() {
+        const RFC_URI: &str = "ni:///sha-256;f4OxZX_x_FO5LcGBSKHWXfwtSx-j1ncoSt3SABJtkGk";
+        let named = Sha256NamedInformation::of(b"Hello World!");
+        assert_eq!(named.to_string(), RFC_URI);
+        assert_eq!(RFC_URI.parse::<Sha256NamedInformation>(), Ok(named));
     }
 
     #[test]

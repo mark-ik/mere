@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 // so the protocol's own surface stays whole.
 pub use titulus::{
     ActionFormChoiceV1, ActionFormError, ActionFormFieldV1, ActionFormV1, CardValueV1, ContentHash,
-    PortableCardV1,
+    ContentReferenceError, PortableCardV1, PortableContentRefV1, Sha256NamedInformation,
 };
 
 pub use scenotime::{Revision, SceneDiff, SceneEpoch, SceneSnapshot};

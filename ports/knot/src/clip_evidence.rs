@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1};
+use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1, PortableContentRefV1};
 use serde::{Deserialize, Serialize};
 use transport::{BlobHash, BlobStore};
 
@@ -15,9 +15,11 @@ static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
 /// Portable content identity written into clip provenance.
 ///
-/// Locations are intentionally absent. `urn:blake3:` remains valid if a local
-/// file is later offered over iroh, HTTPS, removable media, or another carrier.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// New references serialize a shared [`PortableContentRefV1`]: RFC 6920
+/// SHA-256 identity beside the BLAKE3 address iroh uses. The public normalized
+/// fields preserve the established Knot API, while deserialization also
+/// accepts the legacy `urn:blake3` record.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct KnotClipEvidenceRef {
     pub content_uri: String,
     pub digest: String,
@@ -25,17 +27,45 @@ pub struct KnotClipEvidenceRef {
     pub media_type: String,
     pub canonical_uri: String,
     pub role: KnotClipArtifactRoleV1,
+    portable: Option<PortableContentRefV1>,
 }
 
 impl KnotClipEvidenceRef {
+    fn portable(artifact: &KnotClipArtifactV1) -> Self {
+        let content = PortableContentRefV1::of(&artifact.bytes);
+        Self {
+            content_uri: content.portable_id.to_string(),
+            digest: content.transport.to_string(),
+            byte_size: content.byte_size,
+            media_type: artifact.media_type.clone(),
+            canonical_uri: artifact.canonical_uri.clone(),
+            role: artifact.role,
+            portable: Some(content),
+        }
+    }
+
+    /// The shared portable reference, absent only for a decoded legacy clip.
+    pub fn portable_content(&self) -> Option<&PortableContentRefV1> {
+        self.portable.as_ref()
+    }
+
     /// Resolve the portable URI into the transport blob hash it names.
     pub fn blob_hash(&self) -> Result<BlobHash, String> {
+        if let Some(content) = &self.portable {
+            if self.content_uri != content.portable_id.to_string()
+                || self.digest != content.transport.to_string()
+                || self.byte_size != content.byte_size
+            {
+                return Err("clip evidence portable and normalized fields disagree".into());
+            }
+            return Ok(BlobHash::from_bytes(*content.transport.as_bytes()));
+        }
         let named = self
             .content_uri
             .strip_prefix("urn:blake3:")
-            .ok_or_else(|| "clip evidence URI is not a urn:blake3 reference".to_string())?;
+            .ok_or_else(|| "legacy clip evidence URI is not a urn:blake3 reference".to_string())?;
         if named != self.digest {
-            return Err("clip evidence URI and digest disagree".into());
+            return Err("legacy clip evidence URI and digest disagree".into());
         }
         parse_digest(&self.digest).map(BlobHash::from_bytes)
     }
@@ -49,7 +79,114 @@ impl KnotClipEvidenceRef {
         if actual.as_bytes() != self.blob_hash()?.as_bytes() {
             return Err("clip evidence bytes do not match their BLAKE3 reference".into());
         }
+        if let Some(content) = &self.portable {
+            content
+                .verify_bytes(bytes)
+                .map_err(|error| error.to_string())?;
+        }
         Ok(())
+    }
+}
+
+#[derive(Serialize)]
+struct PortableEvidenceWire<'a> {
+    content: &'a PortableContentRefV1,
+    media_type: &'a str,
+    canonical_uri: &'a str,
+    role: KnotClipArtifactRoleV1,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum EvidenceWire {
+    Portable {
+        content: PortableContentRefV1,
+        media_type: String,
+        canonical_uri: String,
+        role: KnotClipArtifactRoleV1,
+    },
+    Legacy {
+        content_uri: String,
+        digest: String,
+        byte_size: u64,
+        media_type: String,
+        canonical_uri: String,
+        role: KnotClipArtifactRoleV1,
+    },
+}
+
+impl Serialize for KnotClipEvidenceRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if let Some(content) = &self.portable {
+            if self.content_uri != content.portable_id.to_string()
+                || self.digest != content.transport.to_string()
+                || self.byte_size != content.byte_size
+            {
+                return Err(serde::ser::Error::custom(
+                    "clip evidence portable and normalized fields disagree",
+                ));
+            }
+            PortableEvidenceWire {
+                content,
+                media_type: &self.media_type,
+                canonical_uri: &self.canonical_uri,
+                role: self.role,
+            }
+            .serialize(serializer)
+        } else {
+            serde_json::json!({
+                "content_uri": self.content_uri,
+                "digest": self.digest,
+                "byte_size": self.byte_size,
+                "media_type": self.media_type,
+                "canonical_uri": self.canonical_uri,
+                "role": self.role,
+            })
+            .serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for KnotClipEvidenceRef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(match EvidenceWire::deserialize(deserializer)? {
+            EvidenceWire::Portable {
+                content,
+                media_type,
+                canonical_uri,
+                role,
+            } => Self {
+                content_uri: content.portable_id.to_string(),
+                digest: content.transport.to_string(),
+                byte_size: content.byte_size,
+                media_type,
+                canonical_uri,
+                role,
+                portable: Some(content),
+            },
+            EvidenceWire::Legacy {
+                content_uri,
+                digest,
+                byte_size,
+                media_type,
+                canonical_uri,
+                role,
+            } => Self {
+                content_uri,
+                digest,
+                byte_size,
+                media_type,
+                canonical_uri,
+                role,
+                portable: None,
+            },
+        })
     }
 }
 
@@ -179,14 +316,10 @@ impl KnotClipEvidenceStore for FileClipEvidenceStore {
                 }
             }
         }
-        Ok(KnotClipEvidenceRef {
-            content_uri: format!("urn:blake3:{digest}"),
-            digest,
-            byte_size,
-            media_type: artifact.media_type.clone(),
-            canonical_uri: artifact.canonical_uri.clone(),
-            role: artifact.role,
-        })
+        let reference = KnotClipEvidenceRef::portable(artifact);
+        debug_assert_eq!(reference.digest, digest);
+        debug_assert_eq!(reference.byte_size, byte_size);
+        Ok(reference)
     }
 }
 
@@ -289,14 +422,15 @@ async fn retain_blob_artifact(
     if stored.as_bytes() != digest.as_bytes() {
         return Err("transport blob store returned the wrong clip evidence digest".into());
     }
-    Ok(KnotClipEvidenceRef {
-        content_uri: format!("urn:blake3:{digest_hex}"),
-        digest: digest_hex,
-        byte_size,
-        media_type: artifact.media_type.clone(),
-        canonical_uri: artifact.canonical_uri.clone(),
-        role: artifact.role,
-    })
+    blobs
+        .flush()
+        .await
+        .map_err(|error| format!("could not flush retained clip evidence: {error}"))?;
+    let reference = KnotClipEvidenceRef::portable(artifact);
+    if reference.digest != digest_hex || reference.byte_size != byte_size {
+        return Err("portable clip evidence disagrees with its retained transport bytes".into());
+    }
+    Ok(reference)
 }
 
 fn evidence_runtime() -> Result<tokio::runtime::Runtime, String> {
@@ -351,7 +485,15 @@ mod tests {
             fs::read(store.artifact_path(&first.digest)).unwrap(),
             artifact.bytes
         );
-        assert_eq!(first.content_uri, format!("urn:blake3:{}", first.digest));
+        assert!(
+            first
+                .content_uri
+                .starts_with(chirograph::Sha256NamedInformation::PREFIX)
+        );
+        assert_eq!(
+            first.portable_content().unwrap().transport.to_string(),
+            first.digest
+        );
     }
 
     #[test]
@@ -400,6 +542,7 @@ mod tests {
             media_type: "text/plain".into(),
             canonical_uri: "https://example.test/evidence".into(),
             role: KnotClipArtifactRoleV1::SourceResponse,
+            portable: None,
         };
         let provenance = serde_json::json!({
             "schema": "knot.clip.insert/v2",
@@ -409,9 +552,33 @@ mod tests {
             "# Note\n\n```knot.clip.provenance\n{}\n```\n",
             serde_json::to_string(&provenance).unwrap()
         );
-        assert_eq!(
-            clip_evidence_references(source.as_bytes()).unwrap(),
-            vec![reference]
+        let decoded = clip_evidence_references(source.as_bytes()).unwrap();
+        assert_eq!(decoded, vec![reference]);
+        assert!(decoded[0].portable_content().is_none());
+        decoded[0].verify_bytes(bytes).unwrap();
+    }
+
+    #[test]
+    fn portable_and_transport_hashes_must_both_match() {
+        let artifact = KnotClipArtifactV1 {
+            role: KnotClipArtifactRoleV1::SourceResponse,
+            media_type: "text/plain".into(),
+            canonical_uri: "https://example.test/evidence".into(),
+            bytes: b"portable evidence".to_vec(),
+        };
+        let reference = KnotClipEvidenceRef::portable(&artifact);
+        let mut value = serde_json::to_value(&reference).unwrap();
+        value["content"]["portable_id"] =
+            serde_json::to_value(chirograph::Sha256NamedInformation::of(b"different bytes"))
+                .unwrap();
+        let conflicting: KnotClipEvidenceRef = serde_json::from_value(value).unwrap();
+        assert!(
+            conflicting.blob_hash().is_ok(),
+            "the transport hash is valid"
+        );
+        assert!(
+            conflicting.verify_bytes(&artifact.bytes).is_err(),
+            "the conflicting portable identity fails closed",
         );
     }
 }

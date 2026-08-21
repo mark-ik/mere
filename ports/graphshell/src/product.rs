@@ -3,7 +3,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use chartulary::AcceptAll;
-use chirograph::PortableCardV1;
+use chirograph::{PortableCardV1, Sha256NamedInformation};
 use mere::canvas::CartographyGeometry;
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
@@ -274,6 +274,7 @@ pub enum ProductError {
     InvalidFacetJson(String),
     EmptySelection,
     InvalidEngram(String),
+    InvalidContentReference(String),
 }
 
 impl std::fmt::Display for ProductError {
@@ -285,6 +286,9 @@ impl std::fmt::Display for ProductError {
             Self::InvalidFacetJson(error) => write!(formatter, "invalid facet JSON: {error}"),
             Self::EmptySelection => write!(formatter, "the transfer scope contains no objects"),
             Self::InvalidEngram(error) => write!(formatter, "invalid graph engram: {error}"),
+            Self::InvalidContentReference(error) => {
+                write!(formatter, "invalid portable content reference: {error}")
+            }
         }
     }
 }
@@ -327,7 +331,9 @@ impl<B: Backend> MereHost<B> {
         &mut self,
         metadata: LocalFileMetadata,
     ) -> Result<Uuid, ProductError> {
-        let address = format!("urn:sha256:{}", metadata.content_hash);
+        let portable_id = Sha256NamedInformation::from_hex(&metadata.content_hash)
+            .map_err(|error| ProductError::InvalidContentReference(error.to_string()))?;
+        let address = portable_id.to_string();
         let id = self.create_address(&address, &metadata.name)?;
         let key = self
             .graph()
@@ -347,7 +353,7 @@ impl<B: Backend> MereHost<B> {
             key,
             CONTENT_FACET,
             serde_json::json!({
-                "sha256": metadata.content_hash,
+                "portable_id": portable_id,
                 "byte_len": metadata.byte_len,
                 "media_type": metadata.media_type,
             }),
@@ -898,15 +904,19 @@ mod tests {
                 "{id} survived"
             );
         }
+        let portable_file = Sha256NamedInformation::from_hex(&"ab".repeat(32))
+            .unwrap()
+            .to_string();
+        let content = reopened.facet_value(&portable_file, CONTENT_FACET).unwrap();
         assert_eq!(
-            reopened
-                .facet_value(
-                    "urn:sha256:abababababababababababababababababababababababababababababababab",
-                    CONTENT_FACET
-                )
-                .unwrap()["byte_len"],
-            413
+            content["portable_id"].as_str(),
+            Some(portable_file.as_str())
         );
+        assert!(
+            content.get("sha256").is_none(),
+            "new content facets do not repeat the NI digest as private hex",
+        );
+        assert_eq!(content["byte_len"], 413);
         assert!(
             reopened
                 .graph()
