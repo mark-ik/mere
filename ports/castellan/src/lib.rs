@@ -61,6 +61,9 @@ pub mod authority;
 pub mod otp;
 #[cfg(feature = "keeper")]
 pub mod projection;
+pub mod resident;
 pub mod reticulum;
+#[cfg(feature = "secret-service")]
+pub mod secret_service;
 #[cfg(feature = "keeper")]
 pub mod view;
