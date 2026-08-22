@@ -19,8 +19,8 @@
 //! finger / spartan / nex / guppy / titan run through the [`errand`] transport
 //! crate. Either way the result is the same [`Fetched`] (decoded body +
 //! content-type), so the render side (nematic engines) is unchanged.
-//! Subresources stay http-only: smolweb documents reference links but do not
-//! inline fetched media.
+//! Subresources use the same scheme routing and Gemini trust store as pages,
+//! while retaining raw bytes for images and other binary media.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -158,11 +158,13 @@ pub struct SubmissionOutcome {
 
 /// A fetched subresource: raw bytes for an absolute URL (page CSS via
 /// `<link>`, an `<img>`, ...). Carried as bytes, not text, since media is
-/// binary. Only successful fetches are delivered; a failure simply never
-/// arrives (the demand loader keeps treating the resource as absent).
+/// binary. Failures are delivered too so a host can clear pending state and
+/// retain its fallback presentation.
 pub struct SubresourceOutcome {
     pub url: String,
-    pub bytes: Vec<u8>,
+    /// The actor always completes a requested subresource so hosts can clear
+    /// their correlation state even when transport or decoding fails.
+    pub result: Result<Vec<u8>, String>,
 }
 
 /// One Gemini client certificate, assigned to exactly one capsule origin.
@@ -369,12 +371,8 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                 FetchCommand::Subresource(url) => {
                     let out = out.clone();
                     runtime.spawn(async move {
-                        // A failed / empty subresource fetch is dropped silently:
-                        // the demand loader keeps the resource absent and the
-                        // host's requested-set stops it being re-spawned.
-                        if let Some(bytes) = fetch_bytes(&url).await {
-                            out.emit(FetchUpdate::Subresource(SubresourceOutcome { url, bytes }));
-                        }
+                        let result = fetch_bytes(&url).await;
+                        out.emit(FetchUpdate::Subresource(SubresourceOutcome { url, result }));
                     });
                 }
                 FetchCommand::Favicon { owner_url, url } => {
@@ -382,7 +380,7 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                     runtime.spawn(async move {
                         // Best-effort: a missing / undecodable favicon simply never
                         // arrives, and the node keeps its colored tile.
-                        if let Some(bytes) = fetch_bytes(&url).await {
+                        if let Ok(bytes) = fetch_bytes(&url).await {
                             out.emit(FetchUpdate::Favicon { owner_url, bytes });
                         }
                     });
@@ -628,6 +626,22 @@ async fn smolweb_fetch(
     url: &str,
     identity: Option<&GeminiClientIdentity>,
 ) -> Result<Fetched, FetchFailure> {
+    let (current, response) = smolweb_fetch_response(url, identity).await?;
+    let content_type = smolweb_content_type(&current, &response);
+    let body = String::from_utf8_lossy(&response.body).into_owned();
+    Ok(Fetched {
+        content_type: Some(content_type),
+        body,
+    })
+}
+
+/// Fetch a successful smolweb response without decoding its body. Page loads
+/// and binary subresources share redirect, timeout, certificate, and protocol
+/// status handling through this one path.
+async fn smolweb_fetch_response(
+    url: &str,
+    identity: Option<&GeminiClientIdentity>,
+) -> Result<(url::Url, errand::Response), FetchFailure> {
     let mut current =
         url::Url::parse(url).map_err(|error| FetchFailure::Failed(format!("bad URL: {error}")))?;
     for _ in 0..MAX_REDIRECTS {
@@ -645,12 +659,7 @@ async fn smolweb_fetch(
         .map_err(|error| smolweb_transport_failure(&current, error))?;
         match response.status {
             errand::Status::Success => {
-                let content_type = smolweb_content_type(&current, &response);
-                let body = String::from_utf8_lossy(&response.body).into_owned();
-                return Ok(Fetched {
-                    content_type: Some(content_type),
-                    body,
-                });
+                return Ok((current, response));
             }
             errand::Status::Redirect => {
                 current = current.join(&response.meta).map_err(|error| {
@@ -797,17 +806,28 @@ async fn do_fetch_ua_with_context(
     Ok(Fetched { content_type, body })
 }
 
-/// Run one WHATWG-Fetch GET and collect the raw response bytes, or `None` on any
-/// network / HTTP / read / over-cap error. The subresource counterpart to
-/// [`do_fetch`], bounded by [`SUBRESOURCE_BODY_CAP`].
-async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
-    let parsed = url::Url::parse(url).ok()?;
+/// Fetch raw response bytes through the same scheme and trust routing as a page,
+/// bounded by [`SUBRESOURCE_BODY_CAP`].
+async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
+    if scheme_of(url).and_then(errand::Scheme::parse).is_some() {
+        let (_final_url, response) = smolweb_fetch_response(url, None)
+            .await
+            .map_err(|error| error.to_string())?;
+        if response.body.len() > SUBRESOURCE_BODY_CAP {
+            return Err(format!(
+                "response exceeds the {SUBRESOURCE_BODY_CAP}-byte cap"
+            ));
+        }
+        return Ok(response.body);
+    }
+
+    let parsed = url::Url::parse(url).map_err(|error| format!("bad URL: {error}"))?;
     let cx = session_context();
     let response = netfetcher::fetch(netfetcher::Request::get(parsed), &cx).await;
     if response.is_network_error() || !(200..300).contains(&response.status) {
-        return None;
+        return Err(format!("subresource request failed ({})", response.status));
     }
-    read_capped(response.body, SUBRESOURCE_BODY_CAP).await.ok()
+    read_capped(response.body, SUBRESOURCE_BODY_CAP).await
 }
 
 #[cfg(test)]
