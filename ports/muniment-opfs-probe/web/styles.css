@@ -1,0 +1,30 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  background: #121316;
+  color: #e6e6ea;
+}
+
+body { margin: 0; }
+main { width: min(960px, calc(100% - 32px)); margin: 32px auto 80px; }
+header, form, section { border: 1px solid #3b3f4a; background: #1a1c21; padding: 20px; margin-bottom: 16px; }
+.eyebrow { color: #a7b0c4; text-transform: uppercase; letter-spacing: .08em; }
+h1, h2 { margin-top: 0; }
+label { display: grid; gap: 6px; margin: 12px 0; color: #c3c8d4; }
+input, button { font: inherit; }
+input { box-sizing: border-box; width: 100%; border: 1px solid #586074; background: #0d0e11; color: #f3f4f7; padding: 9px; }
+.row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.check { display: flex; align-items: center; gap: 8px; }
+.check input { width: auto; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+button { border: 1px solid #8b95ad; background: #2b3040; color: #f5f6f9; padding: 10px 14px; cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+pre { overflow: auto; max-height: 640px; white-space: pre-wrap; word-break: break-word; }
+#state-log { max-height: 260px; overflow: auto; }
+body[data-probe-state="failed"] #status { color: #ff9f98; }
+body[data-probe-state="complete"] #status { color: #9de1b0; }
+body[data-probe-state="stop"] #status { color: #ffb347; }
+
+@media (max-width: 680px) {
+  .row { grid-template-columns: 1fr; }
+}

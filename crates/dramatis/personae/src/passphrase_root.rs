@@ -76,7 +76,9 @@ pub fn wrap_vault_root(
     let salt = random_bytes(ARGON2_SALT_LEN);
     let kek = derive_kek(passphrase, &salt)?;
     let nonce = random_bytes(NONCE_LEN);
-    let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
+    let cipher = ChaCha20Poly1305::new(
+        &Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"),
+    );
     let wrapped_root = cipher
         .encrypt(
             &Nonce::try_from(&nonce[..]).expect("fixed-length key material"),
@@ -115,7 +117,9 @@ pub fn unwrap_vault_root(
         )));
     }
     let kek = derive_kek(passphrase, &file.salt)?;
-    let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
+    let cipher = ChaCha20Poly1305::new(
+        &Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"),
+    );
     let plaintext = Zeroizing::new(
         cipher
             .decrypt(

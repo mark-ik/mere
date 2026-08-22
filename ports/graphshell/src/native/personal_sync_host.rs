@@ -385,7 +385,9 @@ impl PersonalSyncHost {
     /// The endpoint and gossip handles a sibling lane joins with, as owned
     /// clones. What lets carriage ride this same bound endpoint instead of
     /// opening a second one per device.
-    pub fn sync_parts(&self) -> Option<(transport::p2panda_transport::Endpoint, transport::p2panda_transport::Gossip)> {
+    pub fn sync_parts(
+        &self,
+    ) -> Option<(transport::p2panda_transport::Endpoint, transport::p2panda_transport::Gossip)> {
         self.network.transport().sync_parts()
     }
 

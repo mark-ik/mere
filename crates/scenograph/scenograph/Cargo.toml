@@ -14,3 +14,7 @@ categories = ["visualization", "gui"]
 sceno = { version = "0.0.4", path = "../sceno" }
 scenomise = { version = "0.0.4", path = "../scenomise" }
 scenotime = { version = "0.0.4", path = "../scenotime" }
+# The registry's capability records serialize, and a custom arrangement's
+# config is the opaque `serde_json::Value` the score already carries.
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"

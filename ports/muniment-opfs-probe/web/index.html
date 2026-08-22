@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>muniment OPFS probe</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body data-probe-state="idle">
+    <main>
+      <header>
+        <p class="eyebrow">muniment · redb 4.2 over OPFS · feasibility evidence surface</p>
+        <h1>redb on an OPFS sync-access handle</h1>
+        <p>Five lanes: wasm viability, the storage device, recovery under faults and termination, ownership across workers and tabs, portability and performance against IndexedDB.</p>
+      </header>
+
+      <form id="probe-controls">
+        <div class="row">
+          <label>OPFS directory
+            <input id="opfs-prefix" value="muniment-probe">
+          </label>
+          <label>Keys per commit
+            <input id="keys-per-commit" type="number" min="1" value="16">
+          </label>
+          <label>Value bytes
+            <input id="value-bytes" type="number" min="1" value="4096">
+          </label>
+        </div>
+        <div class="row">
+          <label>Termination trials
+            <input id="termination-trials" type="number" min="1" value="20">
+          </label>
+          <label>Kill delay bound, ms
+            <input id="kill-delay-bound" type="number" min="0" value="30">
+          </label>
+          <label>Fault-sweep commits
+            <input id="fault-commits" type="number" min="1" value="8">
+          </label>
+        </div>
+        <label class="check">
+          <input id="request-persistence" type="checkbox" checked>
+          Ask the browser for persistent storage and record its answer
+        </label>
+        <label class="check">
+          <input id="two-phase" type="checkbox">
+          Use two-phase commit in the termination trials
+        </label>
+        <div class="actions">
+          <button id="run-all" type="submit">Run every lane</button>
+          <button type="button" data-lane="1">Lane 1 · wasm</button>
+          <button type="button" data-lane="2">Lane 2 · OPFS device</button>
+          <button type="button" data-lane="3">Lane 3 · recovery</button>
+          <button type="button" data-lane="4">Lane 4 · ownership</button>
+          <button type="button" data-lane="5">Lane 5 · portability + bench</button>
+          <button type="button" data-lane="6">Lane 6 · staged creation</button>
+          <button id="download-receipt" type="button" disabled>Download JSON</button>
+        </div>
+      </form>
+
+      <section aria-live="polite">
+        <h2>State</h2>
+        <p id="status">Idle.</p>
+        <ol id="state-log"></ol>
+      </section>
+
+      <section>
+        <h2>Receipt</h2>
+        <pre id="receipt">No run yet.</pre>
+      </section>
+    </main>
+    <script type="module" src="./probe.js"></script>
+  </body>
+</html>

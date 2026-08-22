@@ -30,3 +30,7 @@ serde = { version = "1.0", features = ["derive"] }
 [dev-dependencies]
 serde_json = "1.0"
 uuid = { version = "1.10", features = ["v4"] }
+# The parity goldens build graphs through the raw mutators, which are
+# `pub(crate)` on the kernel and reachable only through the `GraphFixtures`
+# extension trait behind this feature. Dev-only, as the feature requires.
+kernel = { workspace = true, features = ["fixtures"] }

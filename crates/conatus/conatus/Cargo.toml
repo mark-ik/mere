@@ -1,0 +1,14 @@
+[package]
+name = "conatus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92.0"
+license = "MIT OR Apache-2.0"
+description = "Host-neutral 3D body, collision, query, and fixed-step runtime for Merely spatial applications and games."
+repository = "https://github.com/merely-made/mere"
+keywords = ["game-engine", "physics", "voxel", "spatial", "simulation"]
+categories = ["game-engines", "simulation"]
+
+[dependencies]
+rapier3d = "0.33"
+serde = { version = "1", features = ["derive"] }

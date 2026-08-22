@@ -496,10 +496,7 @@ mod attached {
     }
 
     fn slot() -> BlindedSlotId {
-        pandect::blinded_slot_id(
-            personae::delegation::DelegationId([0xB3; 32]),
-            [0xB4; 32],
-        )
+        pandect::blinded_slot_id(personae::delegation::DelegationId([0xB3; 32]), [0xB4; 32])
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -606,7 +603,10 @@ mod attached {
         let mut graph_converged = false;
         for _ in 0..100 {
             let cards = sibling_sync.supplemental_cards().await.unwrap();
-            if cards.iter().any(|card| card.card.title == "Folded-lane node") {
+            if cards
+                .iter()
+                .any(|card| card.card.title == "Folded-lane node")
+            {
                 graph_converged = true;
                 break;
             }

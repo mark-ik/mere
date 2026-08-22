@@ -102,7 +102,9 @@ pub fn wrap_private_epoch_material(
 ) -> Result<WrappedEpochMaterial, WrappedEpochError> {
     let mut nonce_bytes = [0u8; 24];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let cipher = XChaCha20Poly1305::new(&Key::try_from(&wrapping_key[..]).expect("fixed-length key material"));
+    let cipher = XChaCha20Poly1305::new(
+        &Key::try_from(&wrapping_key[..]).expect("fixed-length key material"),
+    );
     let ciphertext = cipher
         .encrypt(
             &XNonce::try_from(&nonce_bytes[..]).expect("fixed-length key material"),
@@ -146,7 +148,9 @@ pub fn unwrap_private_epoch_material(
         return Err(WrappedEpochError::InvalidWrappedKeyLength);
     }
     let (nonce_bytes, ciphertext) = material.wrapped_key.split_at(24);
-    let cipher = XChaCha20Poly1305::new(&Key::try_from(&wrapping_key[..]).expect("fixed-length key material"));
+    let cipher = XChaCha20Poly1305::new(
+        &Key::try_from(&wrapping_key[..]).expect("fixed-length key material"),
+    );
     cipher
         .decrypt(
             &XNonce::try_from(&nonce_bytes[..]).expect("fixed-length key material"),

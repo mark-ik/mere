@@ -33,7 +33,6 @@ kernel.workspace = true
 # dispatch + the layout-strategy catalog + the coupling paint pass, over forme
 # arrangements.
 cartography.workspace = true
-arrangements.workspace = true
 sceno.workspace = true
 scenomise.workspace = true
 quint.workspace = true

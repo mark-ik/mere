@@ -59,6 +59,9 @@ pub use scene::{
     SourceRef, Space, SpaceId,
 };
 pub use score::{
-    Arrangement, Geographic, Grid, HeldPlacement, Hold, HonoredHold, Hulls, Placement,
-    SCORE_VERSION, Score, ScoreItem, Spiral, SpiralCurve,
+    Arrangement, AxisValue, Embedded, EmbeddingFallback, Geographic, Grid, HeldPlacement, Hold,
+    HonoredHold, Hulls, IterationDepth, Kanban, LSystem, LSystemGrammar, Penrose, PenroseVariant,
+    Placement, Radial, RadialAngularPolicy, RadialUnreachablePolicy, SCORE_VERSION, Score,
+    ScoreItem, Spiral, SpiralCurve, Stack, SubdivisionCount, Timeline, TimelineFallback,
+    UnusedVertexPolicy,
 };

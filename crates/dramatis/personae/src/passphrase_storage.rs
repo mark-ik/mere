@@ -145,7 +145,9 @@ impl PassphraseEncryptedStorage {
             let kek = derive_kek(passphrase, &file.salt)?;
             // Verify against an existing profile if any.
             if let Some((_, p)) = file.profiles.iter().next() {
-                let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
+                let cipher = ChaCha20Poly1305::new(
+                    &Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"),
+                );
                 let nonce = &Nonce::try_from(&p.nonce[..]).expect("fixed-length key material");
                 cipher
                     .decrypt(nonce, p.ciphertext.as_slice())
@@ -223,7 +225,9 @@ impl IdentityStorage for PassphraseEncryptedStorage {
             .get(&id.0)
             .ok_or_else(|| IdentityError::Backend(format!("profile not found: {:?}", id)))?;
         let kek = self.inner.lock().unwrap().kek.clone();
-        let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
+        let cipher = ChaCha20Poly1305::new(
+            &Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"),
+        );
         let nonce = &Nonce::try_from(&entry.nonce[..]).expect("fixed-length key material");
         let plaintext_bytes = cipher
             .decrypt(nonce, entry.ciphertext.as_slice())
@@ -258,7 +262,9 @@ impl IdentityStorage for PassphraseEncryptedStorage {
             .map_err(|e| IdentityError::Backend(format!("encode plaintext: {e}")))?;
 
         let kek = self.inner.lock().unwrap().kek.clone();
-        let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
+        let cipher = ChaCha20Poly1305::new(
+            &Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"),
+        );
         let nonce_bytes = random_bytes(NONCE_LEN);
         let nonce = &Nonce::try_from(&nonce_bytes[..]).expect("fixed-length key material");
         let ciphertext = cipher
@@ -285,7 +291,9 @@ impl IdentityStorage for PassphraseEncryptedStorage {
     fn list_profiles(&self) -> Result<Vec<ProfileSummary>, IdentityError> {
         let file = self.load_file()?;
         let kek = self.inner.lock().unwrap().kek.clone();
-        let cipher = ChaCha20Poly1305::new(&Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"));
+        let cipher = ChaCha20Poly1305::new(
+            &Key::try_from(&kek.as_ref()[..]).expect("fixed-length key material"),
+        );
         let mut out = Vec::with_capacity(file.profiles.len());
         for (id_str, entry) in &file.profiles {
             // Decrypt to get display_name + slot count. This is N

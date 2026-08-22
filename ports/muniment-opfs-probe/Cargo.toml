@@ -1,0 +1,80 @@
+# muniment OPFS feasibility probe. Standalone, like ports/distillery/probe: an
+# evidence surface must not widen mere's ordinary product graph, and it pins
+# wasm-bindgen to the CLI installed on this machine (0.2.126). Production
+# muniment stays on redb 2 and is untouched; this crate pins redb 4.2.0 and
+# never enables muniment's own `redb` feature, so the two majors never meet.
+[package]
+name = "muniment-opfs-probe"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/merely-made/mere"
+publish = false
+description = "Feasibility probe: redb 4.2 over an OPFS sync-access handle as a muniment backend, inside a dedicated browser worker, with no unsafe thread claim."
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# Native only: writes and verifies the portability fixture (lane 5). Built with
+# `cargo run --bin fixture`; the wasm build is `--lib`.
+[[bin]]
+name = "fixture"
+path = "src/bin/fixture.rs"
+
+[dependencies]
+async-trait = "0.1"
+blake3 = "1.5"
+# The storage seam under test, for the apples-to-apples workloads (lane 5).
+# `json` only: the probe never enables muniment's `redb` (2.x) feature.
+muniment = { path = "../../crates/eidetic/muniment", default-features = false, features = ["json"] }
+# The redb under test.
+redb = "=4.2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# The fair-baseline IndexedDB backend needs the same JS bridge muniment's own
+# does; muniment declares these for wasm32 only, so the probe restates them.
+async-trait = "0.1"
+futures-channel = "0.3"
+js-sys = "=0.3.103"
+# The browser realization muniment already ships, so the benchmark compares
+# redb-on-OPFS against the production IndexedDB backend through one trait.
+muniment = { path = "../../crates/eidetic/muniment", default-features = false, features = ["json", "indexeddb"] }
+wasm-bindgen = "=0.2.126"
+wasm-bindgen-futures = "=0.4.76"
+web-sys = { version = "=0.3.103", features = [
+    "DedicatedWorkerGlobalScope",
+    "DomException",
+    "Event",
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbKeyRange",
+    "IdbObjectStore",
+    "IdbOpenDbRequest",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+    "FileSystemDirectoryHandle",
+    "FileSystemFileHandle",
+    "FileSystemGetDirectoryOptions",
+    "FileSystemGetFileOptions",
+    "FileSystemReadWriteOptions",
+    "FileSystemRemoveOptions",
+    "FileSystemSyncAccessHandle",
+    "Performance",
+    "Response",
+    "StorageManager",
+    "DomStringList",
+    "WorkerGlobalScope",
+    "WorkerNavigator",
+] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4"
+
+[dev-dependencies]
+pollster = "0.4"
+tempfile = "3"

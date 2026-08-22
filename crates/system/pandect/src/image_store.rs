@@ -188,6 +188,9 @@ mod tests {
             derivations: Vec::new(),
             last_session_visited: 0,
             nested: None,
+            // A pre-externalization snapshot predates content addressing, so
+            // this fixture is exactly the shape that carries no hash.
+            content_hash: None,
         }
     }
 

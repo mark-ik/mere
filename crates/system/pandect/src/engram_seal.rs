@@ -105,7 +105,8 @@ impl PayloadSealer for WalletEpochSealer {
         let key = self.keys.get(&self.current).ok_or_else(|| {
             eidetic::Error::new("wallet epoch sealer is missing its current epoch key")
         })?;
-        let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
+        let cipher =
+            XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
         let mut nonce = [0u8; 24];
         OsRng.fill_bytes(&mut nonce);
         let ciphertext = cipher
@@ -149,7 +150,8 @@ impl PayloadSealer for WalletEpochSealer {
             eidetic::Error::new(format!("no epoch key for {}", marker.epoch.to_hex()))
         })?;
         let (nonce, ciphertext) = sealed.split_at(24);
-        let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
+        let cipher =
+            XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
         cipher
             .decrypt(
                 &XNonce::try_from(&nonce[..]).expect("fixed-length key material"),

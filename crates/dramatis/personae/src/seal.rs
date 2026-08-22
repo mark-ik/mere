@@ -18,7 +18,8 @@ const NONCE_LEN: usize = 24;
 /// A fresh random nonce is generated and prepended to the ciphertext. Recover
 /// with [`unseal_bytes`] using the same `key` and `aad`.
 pub fn seal_bytes(key: &[u8; 32], aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, IdentityError> {
-    let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
+    let cipher =
+        XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
     let mut nonce = [0u8; NONCE_LEN];
     getrandom::fill(&mut nonce).expect("OS randomness available");
     let ciphertext = cipher
@@ -46,7 +47,8 @@ pub fn unseal_bytes(key: &[u8; 32], aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>
         ));
     }
     let (nonce, ciphertext) = sealed.split_at(NONCE_LEN);
-    let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
+    let cipher =
+        XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
     cipher
         .decrypt(
             &XNonce::try_from(&nonce[..]).expect("fixed-length key material"),
@@ -124,7 +126,8 @@ mod tests {
         let aad = b"ctx";
         let plaintext = b"a private payload";
 
-        let cipher = XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
+        let cipher =
+            XChaCha20Poly1305::new(&Key::try_from(&key[..]).expect("fixed-length key material"));
         let ciphertext = cipher
             .encrypt(
                 &XNonce::try_from(&nonce[..]).expect("fixed-length key material"),

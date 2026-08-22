@@ -112,6 +112,12 @@ pub fn project_spiral_score_for_view(
             placement: Placement::Ordinal,
             layer: 0,
             visible: true,
+            // A spiral places by ordinal alone. The disclosure fields exist for
+            // the arrangements that read them; this adapter has nothing to
+            // disclose, and `None` says so rather than guessing a zero.
+            axis: None,
+            embedding: None,
+            weight: None,
         });
     }
 

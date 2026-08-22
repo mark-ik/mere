@@ -52,9 +52,9 @@ use iroh::endpoint::{Connection, RecvStream, SendStream};
 use iroh::protocol::{AcceptError, ProtocolHandler};
 use iroh_tickets::endpoint::EndpointTicket;
 use p2panda_core::{SigningKey, Topic, VerifyingKey};
+pub use p2panda_net::Endpoint;
 use p2panda_net::addrs::NodeInfo;
 use p2panda_net::discovery::DiscoveryConfig;
-pub use p2panda_net::Endpoint;
 pub use p2panda_net::gossip::Gossip;
 
 use p2panda_net::gossip::GossipHandle;

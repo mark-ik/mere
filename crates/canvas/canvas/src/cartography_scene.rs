@@ -191,7 +191,7 @@ fn project_canvas_dispatch(
     extents: Option<&HashMap<NodeKey, (f32, f32)>>,
     recent_first: bool,
 ) -> cartography::Projection {
-    use arrangements::adapters::{
+    use cartography::adapters::{
         GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, RadialAdapter, SpectralAdapter,
         TimelineAdapter,
     };

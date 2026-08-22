@@ -13,7 +13,18 @@
 //!
 //! Products with tight dependency budgets depend on the members directly;
 //! `sceno` alone is the pure-types option.
+//!
+//! The facade also owns the one thing no single member can: the [`registry`]
+//! behind [`sceno::Arrangement::Custom`]. A registry needs the score contract
+//! and the solver contract at once, and lives above both so `scenomise` never
+//! learns what a registry is.
 
+pub mod registry;
+
+pub use registry::{
+    ArrangementId, Disclosure, RegisterError, SolveError, Solver, SolverCapability,
+    SolverRegistry, solve,
+};
 pub use sceno;
 pub use scenomise;
 pub use scenotime;

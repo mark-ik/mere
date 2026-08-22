@@ -1,0 +1,12 @@
+{
+  "schema": "muniment.opfs-probe.fixture/v1",
+  "redb": "4.2.0",
+  "shape": {
+    "keys_per_commit": 16,
+    "value_bytes": 4096
+  },
+  "generation": 5,
+  "muniment_digest": "a74b7476f2387aa996cf3f4d8c11c7edadd7ef5d5b1b17808f0a5002c452f7ea",
+  "muniment_keys": 1200,
+  "file_len": 761856
+}

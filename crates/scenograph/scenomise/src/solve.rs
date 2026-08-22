@@ -1,5 +1,6 @@
 //! Product-free analytic score realization.
 
+use crate::families;
 use sceno::{
     Arrangement, Footprint, Geographic, Grid, Hold, HonoredHold, Hulls, InstanceId, Placement,
     ProjectedItem, Rect, Region, Scene, Score, ScoreItem, Spiral, SpiralCurve, Transform2, Vec2,
@@ -12,7 +13,30 @@ const SPACING_PER_EXTENT: f32 = 1.6;
 
 /// Realize a persisted score into a scene. The solver only sees the score's
 /// opaque refs, footprints, placements, and selected representations.
+///
+/// An [`Arrangement::Custom`] score realizes nothing here; use
+/// [`solve_with`] with a planner that can resolve it.
 pub fn solve(score: &Score) -> Scene {
+    solve_with(score, |_| None)
+}
+
+/// [`solve`], with a planner consulted for [`Arrangement::Custom`].
+///
+/// The planner receives the items in arrangement order and returns one position
+/// per item, in that same order. It exists so a registry living above this crate
+/// — `scenograph`'s — can supply a solver without this crate learning what a
+/// registry is, and without anyone re-implementing scene construction: interning,
+/// bounds, the hold report and the Hulls partition all stay here, where the
+/// built-in families already exercise them.
+///
+/// A planner that returns the wrong number of positions is refused rather than
+/// indexed into. Placing three items from a five-item plan would be an arbitrary
+/// mismatch resolved silently, and a solver that miscounts is a solver whose
+/// positions should not be trusted anyway.
+pub fn solve_with(
+    score: &Score,
+    plan_custom: impl FnOnce(&[&ScoreItem]) -> Option<Vec<Vec2>>,
+) -> Scene {
     let mut scene = Scene::new();
     scene.generation = score.generation;
 
@@ -31,6 +55,25 @@ pub fn solve(score: &Score) -> Scene {
         _ => 0.0,
     };
 
+    // Families that need to see the whole score at once — a ring has to know
+    // who else is on it, a column has to know the column exists, a tiling has to
+    // be grown large enough — plan every position up front. The per-item
+    // families keep their original closed form below.
+    let ordered: Vec<&ScoreItem> = order.iter().map(|(_, item)| *item).collect();
+    let planned = match families::arrange(&score.arrangement, &ordered) {
+        Some(planned) => Some(planned),
+        // The four closed-form per-item families keep their original path below.
+        None if families::is_per_item(&score.arrangement) => None,
+        // `Arrangement::Custom`. Without a planner that resolves it, inventing
+        // positions for an arrangement this crate cannot name would place every
+        // item somewhere wrong without saying so. The holds still report, so the
+        // caller learns what was asked for even though nothing was placed.
+        None => match plan_custom(&ordered) {
+            Some(planned) if planned.len() == ordered.len() => Some(planned),
+            _ => return report_holds(score, scene),
+        },
+    };
+
     let mut bounds: Option<Rect> = None;
     for (rank, (_, item)) in order.into_iter().enumerate() {
         // An authored hold outranks the arrangement, in every family. Without
@@ -40,11 +83,20 @@ pub fn solve(score: &Score) -> Scene {
         // somewhere else without saying so.
         let position = match score.hold_for(&item.source) {
             Some(held) => held.at,
-            None => match &score.arrangement {
-                Arrangement::Spiral(spiral) => spiral_position(spiral, effective_spacing, rank),
-                Arrangement::Grid(grid) => grid_position(grid, item, rank),
-                Arrangement::Geographic(geographic) => geographic_position(geographic, item),
-                Arrangement::Hulls(hulls) => hulls_position(hulls, item),
+            None => match &planned {
+                Some(planned) => planned[rank],
+                None => match &score.arrangement {
+                    Arrangement::Spiral(spiral) => spiral_position(spiral, effective_spacing, rank),
+                    Arrangement::Grid(grid) => grid_position(grid, item, rank),
+                    Arrangement::Geographic(geographic) => geographic_position(geographic, item),
+                    Arrangement::Hulls(hulls) => hulls_position(hulls, item),
+                    // Unreachable: `arrange` returns `Some` for every family
+                    // that is not one of the four above, and `Custom` returned
+                    // early. Spelled out rather than caught by a wildcard so a
+                    // twelfth family fails to compile here instead of silently
+                    // landing at the origin.
+                    other => unreachable!("{other:?} has no per-item placement"),
+                },
             },
         };
         let source = scene.intern_source(item.source.clone());
@@ -79,10 +131,18 @@ pub fn solve(score: &Score) -> Scene {
         });
     }
 
-    // A hold naming a source this score never placed is an unmet pin. Before
-    // this it was dropped in silence, which is the same failure as moving a pin
-    // and saying nothing. Encourage-class holds are excluded on purpose: an
-    // anchored home that goes unplaced is best effort behaving as designed.
+    let mut scene = report_holds(score, scene);
+    scene.bounds = bounds.unwrap_or_default();
+    scene
+}
+
+/// Record both halves of the hold story on a scene.
+///
+/// Shared by the placed path and the early return, so an arrangement this crate
+/// cannot solve still tells the caller which pins were asked for. A scene that
+/// placed nothing *and* reported nothing would be indistinguishable from an
+/// empty score.
+fn report_holds(score: &Score, mut scene: Scene) -> Scene {
     // The positive half, bound to instances. Recorded for every instance a
     // held source reached, because a source may be placed more than once and
     // each placement is equally held.
@@ -100,15 +160,18 @@ pub fn solve(score: &Score) -> Scene {
         })
         .collect();
 
+    // A hold naming a source this score never placed is an unmet pin. Before
+    // this it was dropped in silence, which is the same failure as moving a pin
+    // and saying nothing. Encourage-class holds are excluded on purpose: an
+    // anchored home that goes unplaced is best effort behaving as designed.
     scene.unmet_holds = score
         .holds
         .iter()
         .filter(|held| matches!(held.hold, Hold::Pinned))
-        .filter(|held| !score.items.iter().any(|item| item.source == held.source))
+        .filter(|held| !scene.sources.iter().any(|source| *source == held.source))
         .cloned()
         .collect();
 
-    scene.bounds = bounds.unwrap_or_default();
     scene
 }
 
@@ -296,6 +359,9 @@ mod tests {
             placement: Placement::Ordinal,
             layer: 0,
             visible: true,
+            axis: None,
+            embedding: None,
+            weight: None,
         }
     }
 
@@ -303,13 +369,22 @@ mod tests {
     fn a_hold_outranks_the_arrangement_in_every_family() {
         // The audit that opened A6: Coordinate was honored by Geographic and
         // Hulls and silently dropped by Spiral and Grid. A hold is honored by
-        // all four or it is not a hold.
+        // every family or it is not a hold — so this list is every family, and
+        // absorbing the `arrangements` catalog extended it rather than leaving
+        // seven new ways to quietly move a pin.
         let at = Vec2::new(140.0, -60.0);
         for arrangement in [
             Arrangement::Spiral(Spiral::default()),
             Arrangement::Grid(Grid::default()),
             Arrangement::Geographic(Geographic::default()),
             Arrangement::Hulls(Hulls::default()),
+            Arrangement::Stack(sceno::Stack::default()),
+            Arrangement::Penrose(sceno::Penrose::default()),
+            Arrangement::LSystem(sceno::LSystem::default()),
+            Arrangement::Timeline(sceno::Timeline::default()),
+            Arrangement::Kanban(sceno::Kanban::default()),
+            Arrangement::Embedded(sceno::Embedded::default()),
+            Arrangement::Radial(sceno::Radial::default()),
         ] {
             let mut score = Score::new(arrangement.clone());
             score.items.push(card(0, 0));
@@ -329,6 +404,55 @@ mod tests {
                 "{arrangement:?} ignored an authored hold"
             );
         }
+    }
+
+    #[test]
+    fn every_family_places_every_item() {
+        // Absorbing seven families is only done if each one actually places.
+        // A family that silently returned an empty plan would pass every
+        // hold test above and still lose the whole score.
+        for arrangement in [
+            Arrangement::Stack(sceno::Stack::default()),
+            Arrangement::Penrose(sceno::Penrose::default()),
+            Arrangement::LSystem(sceno::LSystem::default()),
+            Arrangement::Timeline(sceno::Timeline::default()),
+            Arrangement::Kanban(sceno::Kanban::default()),
+            Arrangement::Embedded(sceno::Embedded::default()),
+            Arrangement::Radial(sceno::Radial::default()),
+        ] {
+            let mut score = Score::new(arrangement.clone());
+            for id in 0..6 {
+                score.items.push(card(id, id));
+            }
+            let scene = solve(&score);
+            assert_eq!(scene.items.len(), 6, "{arrangement:?} lost items");
+            for item in &scene.items {
+                let at = item.transform.translate;
+                assert!(at.x.is_finite() && at.y.is_finite(), "{arrangement:?} -> {at:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_custom_arrangement_places_nothing_here_and_says_which_pins_went_unmet() {
+        // Custom dispatches through the scenograph registry. This crate cannot
+        // name the solver, so it places nothing rather than inventing positions
+        // — and still reports the pins, so "I could not solve this" is
+        // distinguishable from "the score was empty".
+        let mut score = Score::new(Arrangement::Custom {
+            id: "nobody.registered.this".to_string(),
+            config: serde_json::json!({}),
+        });
+        score.items.push(card(0, 0));
+        score.holds.push(HeldPlacement::pinned(
+            SourceRef::new("fixture", "0"),
+            Vec2::new(1.0, 2.0),
+        ));
+
+        let scene = solve(&score);
+        assert!(scene.items.is_empty(), "an unknown solver places nothing");
+        assert_eq!(scene.unmet_holds.len(), 1, "but the pin is still reported");
+        assert_eq!(scene.unmet_holds[0].source.id, "0");
     }
 
     #[test]
@@ -481,6 +605,9 @@ mod tests {
             placement: Placement::Coordinate(Vec2::new(x, y)),
             layer: 0,
             visible: true,
+            axis: None,
+            embedding: None,
+            weight: None,
         }
     }
 

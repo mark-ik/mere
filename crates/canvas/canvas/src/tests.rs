@@ -3067,6 +3067,9 @@ fn persisted_spiral_score_reinstates_the_local_strategy_positions() {
             placement: sceno::Placement::Ordinal,
             layer: 0,
             visible: true,
+            axis: None,
+            embedding: None,
+            weight: None,
         })
         .collect();
     assert!(canvas.restore_projection_score(score));
@@ -3085,6 +3088,9 @@ fn one_item_score(id: uuid::Uuid, representation: sceno::Representation) -> scen
         placement: sceno::Placement::Ordinal,
         layer: 0,
         visible: true,
+        axis: None,
+        embedding: None,
+        weight: None,
     });
     score
 }
@@ -3237,6 +3243,9 @@ fn a_restored_score_survives_the_hosts_next_recompute_check() {
             placement: sceno::Placement::Ordinal,
             layer: 0,
             visible: true,
+            axis: None,
+            embedding: None,
+            weight: None,
         })
         .collect();
     assert!(canvas.restore_projection_score(score));
