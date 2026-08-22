@@ -24,6 +24,12 @@ const SPACE_ID_CONTEXT: &str = "mere.knot.persona-vault.space.v1";
 const KNOT_VAULT_DIR: &str = "vault";
 const KNOT_SYNC_FILE: &str = "knot/sync.redb";
 
+struct StartupPersonalKeys {
+    vault_key: Zeroizing<[u8; 32]>,
+    signing_seed: Zeroizing<[u8; 32]>,
+    legacy_writer: [u8; 32],
+}
+
 /// Unlocked authority held only long enough to seed or launch one endpoint.
 pub struct StartupUnlockedPersonalVault {
     vault: KnotVault,
@@ -52,46 +58,31 @@ impl StartupUnlockedPersonalVault {
         admitted: impl IntoIterator<Item = [u8; 32]>,
     ) -> Result<Self, String> {
         let data_root = data_root.as_ref();
-        let mut epoch = wallet_store::load_current_private_epoch(data_root, persona)
-            .map_err(|error| format!("could not load Knot persona epoch: {error}"))?
-            .ok_or_else(|| {
-                "Knot persona vault is locked or has no current private epoch".to_string()
-            })?;
-        let vault_key = Zeroizing::new(blake3::derive_key(VAULT_KEY_CONTEXT, &epoch.epoch_secret));
-        // The pre-device-scoped writer. Admitted, never authored with, so
-        // operations written before this derivation existed still fold rather
-        // than becoming an unreadable log signed by nobody admitted.
-        let legacy_writer = *SigningKey::from_bytes(&blake3::derive_key(
-            SIGNING_KEY_CONTEXT,
-            &epoch.epoch_secret,
-        ))
-        .verifying_key()
-        .as_bytes();
-        let mut material = Zeroizing::new(Vec::with_capacity(64));
-        material.extend_from_slice(&epoch.epoch_secret);
-        material.extend_from_slice(&device_root);
-        let signing_seed = Zeroizing::new(blake3::derive_key(SIGNING_KEY_CONTEXT, &material));
-        epoch.epoch_secret.zeroize();
+        let keys = unlock_personal_keys(data_root, persona, device_root)?;
 
         let vault_root = persona_vault_root(data_root, persona);
         fs::create_dir_all(vault_root.join("knot"))
             .map_err(|error| format!("could not create Knot persona vault: {error}"))?;
-        let vault = KnotVault::open(&vault_root, *vault_key)?;
+        let vault = KnotVault::open(&vault_root, *keys.vault_key)?;
         let space_id = blake3::derive_key(SPACE_ID_CONTEXT, persona.as_uuid().as_bytes());
-        let writer = *SigningKey::from_bytes(&signing_seed)
+        let writer = *SigningKey::from_bytes(&keys.signing_seed)
             .verifying_key()
             .as_bytes();
-        let mut writers = vec![writer, legacy_writer];
+        let mut writers = vec![writer, keys.legacy_writer];
         writers.extend(admitted);
         writers.sort_unstable();
         writers.dedup();
         let store = KnotSyncFileStore::open(vault_root.join(KNOT_SYNC_FILE), space_id, writers)
-            .map_err(|error| format!("could not open Knot persona sync store: {error}"))?;
+            .map_err(|error| {
+                format!(
+                    "could not open Knot persona sync store; another resident may already own this persona: {error}"
+                )
+            })?;
 
         let authority = Self {
             vault,
             store,
-            signing_seed,
+            signing_seed: keys.signing_seed,
         };
         authority.migrate_unsynced_vault()?;
         Ok(authority)
@@ -182,6 +173,56 @@ impl StartupUnlockedPersonalVault {
     }
 }
 
+/// Derive this device's Knot writer identity without opening the Knot vault or
+/// signed-operation store.
+///
+/// Pairing tools may run while the resident owns those files. Personae still
+/// performs the configured startup unlock because the writer is derived from
+/// the current persona epoch, but the management read cannot become a second
+/// Knot store owner.
+pub fn personal_vault_writer(
+    data_root: impl AsRef<Path>,
+    persona: PersonaId,
+    device_root: [u8; 32],
+) -> Result<[u8; 32], String> {
+    let keys = unlock_personal_keys(data_root.as_ref(), persona, device_root)?;
+    Ok(*SigningKey::from_bytes(&keys.signing_seed)
+        .verifying_key()
+        .as_bytes())
+}
+
+fn unlock_personal_keys(
+    data_root: &Path,
+    persona: PersonaId,
+    device_root: [u8; 32],
+) -> Result<StartupPersonalKeys, String> {
+    let mut epoch = wallet_store::load_current_private_epoch(data_root, persona)
+        .map_err(|error| format!("could not load Knot persona epoch: {error}"))?
+        .ok_or_else(|| {
+            "Knot persona vault is locked or has no current private epoch".to_string()
+        })?;
+    let vault_key = Zeroizing::new(blake3::derive_key(VAULT_KEY_CONTEXT, &epoch.epoch_secret));
+    // The pre-device-scoped writer. Admitted, never authored with, so
+    // operations written before this derivation existed still fold rather
+    // than becoming an unreadable log signed by nobody admitted.
+    let legacy_writer = *SigningKey::from_bytes(&blake3::derive_key(
+        SIGNING_KEY_CONTEXT,
+        &epoch.epoch_secret,
+    ))
+    .verifying_key()
+    .as_bytes();
+    let mut material = Zeroizing::new(Vec::with_capacity(64));
+    material.extend_from_slice(&epoch.epoch_secret);
+    material.extend_from_slice(&device_root);
+    let signing_seed = Zeroizing::new(blake3::derive_key(SIGNING_KEY_CONTEXT, &material));
+    epoch.epoch_secret.zeroize();
+    Ok(StartupPersonalKeys {
+        vault_key,
+        signing_seed,
+        legacy_writer,
+    })
+}
+
 /// This machine's public device key, minted once and reused thereafter.
 ///
 /// The device component of the writer derivation. It is public on purpose: it
@@ -229,6 +270,26 @@ mod tests {
             [],
         )
         .unwrap();
+        let duplicate = match StartupUnlockedPersonalVault::open(
+            root.path(),
+            persona,
+            local_device_root(root.path(), "knot receipt").unwrap(),
+            [],
+        ) {
+            Ok(_) => panic!("a second persona owner must be refused promptly"),
+            Err(error) => error,
+        };
+        assert!(duplicate.contains("another resident may already own this persona"));
+        assert_eq!(
+            personal_vault_writer(
+                root.path(),
+                persona,
+                local_device_root(root.path(), "knot receipt").unwrap(),
+            )
+            .unwrap(),
+            authority.writer(),
+            "pairing facts derive beside the resident without reopening its stores",
+        );
         authority
             .author_document(VaultDocument {
                 id: "field-note".into(),

@@ -14,7 +14,10 @@ use stickleback::DataKeyring;
 use tokio::sync::{Mutex, RwLock};
 use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::p2panda_transport::{KnownPeer, RelayUrl};
-use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID, Transport, sync_overlay_topic};
+use transport::{
+    BlobHash, BlobLease, BlobReadAuthorizer, BlobScope, BlobStore, P2pandaTransport, PeerID,
+    Transport, sync_overlay_topic,
+};
 use uuid::Uuid;
 
 use crate::native::browser_host::now_ms;
@@ -89,7 +92,9 @@ pub struct PersonalSyncHost {
     /// a transfer in flight, so a host restart between "fetched" and "applied"
     /// must not send the bytes back over the wire. It is also why a device can
     /// still answer for a blob after the session that received it ended.
-    blobs: BlobStore,
+    blobs: Arc<BlobStore>,
+    blob_authority: BlobReadAuthorizer,
+    blob_scope: BlobScope,
     /// This device's Personae root, which is how the graph names it as a
     /// reader. Distinct from the per-graph node id, which names reachability.
     own_root: [u8; 32],
@@ -108,6 +113,34 @@ impl PersonalSyncHost {
     pub async fn open<P: IdentityProvider + ?Sized>(
         identity: &P,
         config: PersonalSyncHostConfig,
+    ) -> Result<Self, PersonalSyncHostError> {
+        let blob_root = config.store_path.with_extension("blobs");
+        let blobs = Arc::new(
+            BlobStore::open(&blob_root)
+                .await
+                .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?,
+        );
+        let authority = BlobReadAuthorizer::new();
+        let scope = BlobScope::new(config.graph);
+        // Compatibility for isolated callers reopening the former dedicated
+        // store. The resident path imports these tags into scoped leases
+        // before it calls `open_with_blob_custody`.
+        for hash in blobs
+            .retained_hashes()
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?
+        {
+            authority.retain(scope, hash);
+        }
+        Self::open_with_blob_custody(identity, config, blobs, authority).await
+    }
+
+    /// Open personal sync against the process owner's shared physical store.
+    pub async fn open_with_blob_custody<P: IdentityProvider + ?Sized>(
+        identity: &P,
+        config: PersonalSyncHostConfig,
+        blobs: Arc<BlobStore>,
+        blob_authority: BlobReadAuthorizer,
     ) -> Result<Self, PersonalSyncHostError> {
         let parent = config
             .store_path
@@ -172,10 +205,15 @@ impl PersonalSyncHost {
             tracing::info!(graph = %hex(&config.graph), "this device holds the graph's key");
         }
         let keys = Arc::new(RwLock::new(keyring));
-        let blob_root = config.store_path.with_extension("blobs");
-        let blobs = BlobStore::open(&blob_root)
+        let blob_scope = BlobScope::new(config.graph);
+        blob_authority.replace_readers(blob_scope, config.paired_nodes.iter().copied());
+        for hash in blobs
+            .leased_hashes(blob_scope)
             .await
-            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?
+        {
+            blob_authority.retain(blob_scope, hash);
+        }
         // Active mDNS is what makes a paired node id dialable without a stored
         // ticket: it populates the address book, so tagging a known peer with
         // the overlay topic is enough to bootstrap gossip. g5_peer proved this
@@ -188,7 +226,7 @@ impl PersonalSyncHost {
         let mut builder = P2pandaTransport::builder(&transport_key)
             .gossip()
             .mdns(MdnsDiscoveryMode::Active)
-            .blobs(&blobs);
+            .scoped_blobs(&blobs, blob_scope, blob_authority.clone());
         for url in config.relay_urls.clone() {
             builder = builder.relay_url(url);
         }
@@ -305,6 +343,8 @@ impl PersonalSyncHost {
             joined,
             transport,
             blobs,
+            blob_authority,
+            blob_scope,
             own_root: identity.master_public_key().to_bytes(),
             key_group: Mutex::new(key_group),
             keys,
@@ -385,12 +425,23 @@ impl PersonalSyncHost {
         blob: [u8; 32],
     ) -> Result<(), PersonalSyncHostError> {
         let hash = BlobHash::from_bytes(blob);
+        let lease = BlobLease::new(
+            self.blob_scope,
+            super::resident_blobs::PERSONAL_FETCH_LEASE,
+            hash.as_bytes(),
+        )
+        .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         if self
             .blobs
             .has(hash)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?
         {
+            self.blobs
+                .lease(&lease, hash)
+                .await
+                .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+            self.blob_authority.retain(self.blob_scope, hash);
             return Ok(());
         }
         let peer = PeerID::from_bytes(&node)
@@ -406,9 +457,14 @@ impl PersonalSyncHost {
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         self.blobs
+            .lease(&lease, hash)
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blobs
             .flush()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blob_authority.retain(self.blob_scope, hash);
         tracing::info!(
             peer = %short_hex(&node),
             blob = %short_hex(&blob),
@@ -447,15 +503,22 @@ impl PersonalSyncHost {
         container: Uuid,
         bytes: Vec<u8>,
     ) -> Result<[u8; 32], PersonalSyncHostError> {
+        let lease = BlobLease::new(
+            self.blob_scope,
+            super::resident_blobs::PERSONAL_STAGE_LEASE,
+            container.as_bytes(),
+        )
+        .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         let hash = self
             .blobs
-            .put_bytes(bytes)
+            .put_bytes_leased(bytes, &lease)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         self.blobs
             .flush()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blob_authority.retain(self.blob_scope, hash);
         let blob = hash.to_bytes();
         self.author(vec![PersonalGraphEvent::ObserveBlobAvailability {
             observation: crate::personal_sync::BlobAvailabilityObservation {
@@ -586,7 +649,9 @@ impl PersonalSyncHost {
         self.transport
             .set_topics(peer, &[sync_overlay_topic(self.graph)])
             .await
-            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blob_authority.allow_reader(self.blob_scope, node_id);
+        Ok(())
     }
 
     /// Drop a device from this graph's overlay on the live transport.
@@ -600,7 +665,9 @@ impl PersonalSyncHost {
         self.transport
             .remove_topic(peer, sync_overlay_topic(self.graph))
             .await
-            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        self.blob_authority.deny_reader(self.blob_scope, &node_id);
+        Ok(())
     }
 
     /// Which devices the transport currently associates with this graph.

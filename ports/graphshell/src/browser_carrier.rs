@@ -10,11 +10,11 @@
 //! stream for the existing Notochord handshake and Graphshell session loop.
 //! Application requests cannot enter that stream until the handshake accepts.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 use std::io::{Read, Write};
 
 use base64::Engine;
-use chirograph::{CarrierRequest, CarrierResponse};
+use chirograph::{CarrierNotice, CarrierOutput, CarrierRequest, CarrierResponse};
 use notochord::{
     AdmittedSession, CarrierKind, DenyReason, IoHandshakeError, LocalNetworkPolicy, NetworkId,
     ProfileRef, ProofBinding, RevocationLedger, SessionFacts, SessionReply, TrafficClass,
@@ -404,6 +404,8 @@ pub enum BrowserCarrierError {
     AdmissionMismatch,
     #[error("browser application stream ended before its response")]
     ApplicationEnded,
+    #[error("browser application stream sent an unexpected carrier output: {0}")]
+    UnexpectedApplicationOutput(String),
 }
 
 /// Read one browser native-messaging JSON frame.
@@ -617,6 +619,7 @@ pub async fn admit_local_session<P: IdentityProvider>(
 pub struct BrowserSessionClient {
     reader: tokio::io::Lines<BufReader<tokio::io::ReadHalf<DuplexStream>>>,
     writer: tokio::io::WriteHalf<DuplexStream>,
+    notices: VecDeque<CarrierNotice>,
 }
 
 impl BrowserSessionClient {
@@ -625,6 +628,7 @@ impl BrowserSessionClient {
         Self {
             reader: BufReader::new(reader).lines(),
             writer,
+            notices: VecDeque::new(),
         }
     }
 
@@ -636,6 +640,42 @@ impl BrowserSessionClient {
         line.push(b'\n');
         self.writer.write_all(&line).await?;
         self.writer.flush().await?;
+        loop {
+            match self.read_output().await? {
+                CarrierOutput::Notice(notice) => self.notices.push_back(notice),
+                CarrierOutput::Response(response) if response.id == request.id => {
+                    return Ok(response);
+                }
+                CarrierOutput::Response(response) => {
+                    return Err(BrowserCarrierError::UnexpectedApplicationOutput(format!(
+                        "response {} arrived while waiting for {}",
+                        response.id, request.id
+                    )));
+                }
+            }
+        }
+    }
+
+    pub fn take_notice(&mut self) -> Option<CarrierNotice> {
+        self.notices.pop_front()
+    }
+
+    pub async fn wait_for_notice(&mut self) -> Result<CarrierNotice, BrowserCarrierError> {
+        if let Some(notice) = self.take_notice() {
+            return Ok(notice);
+        }
+        match self.read_output().await? {
+            CarrierOutput::Notice(notice) => Ok(notice),
+            CarrierOutput::Response(response) => {
+                Err(BrowserCarrierError::UnexpectedApplicationOutput(format!(
+                    "response {} arrived while waiting for a notice",
+                    response.id
+                )))
+            }
+        }
+    }
+
+    async fn read_output(&mut self) -> Result<CarrierOutput, BrowserCarrierError> {
         let line = self
             .reader
             .next_line()
@@ -669,6 +709,51 @@ mod tests {
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
     };
     use std::io::Cursor;
+
+    #[tokio::test]
+    async fn admitted_client_queues_a_notice_that_precedes_its_response() {
+        let (client_stream, server_stream) = tokio::io::duplex(4096);
+        let mut client = BrowserSessionClient::new(client_stream);
+        let notice = chirograph::CarrierNotice {
+            session: chirograph::ProjectionSession("resident:knot".into()),
+            epoch: chirograph::SceneEpoch(3),
+            revision: chirograph::Revision(7),
+        };
+        let expected = notice.clone();
+        let server = tokio::spawn(async move {
+            let (reader, mut writer) = tokio::io::split(server_stream);
+            let mut lines = BufReader::new(reader).lines();
+            let request: CarrierRequest =
+                serde_json::from_str(&lines.next_line().await.unwrap().expect("one request"))
+                    .unwrap();
+            for output in [
+                CarrierOutput::Notice(notice),
+                CarrierOutput::Response(CarrierResponse {
+                    id: request.id,
+                    body: Ok(chirograph::CarrierResponseBody::Closed),
+                }),
+            ] {
+                let mut line = serde_json::to_vec(&output).unwrap();
+                line.push(b'\n');
+                writer.write_all(&line).await.unwrap();
+            }
+            writer.flush().await.unwrap();
+        });
+
+        let response = client
+            .request(&CarrierRequest {
+                id: 41,
+                body: chirograph::CarrierRequestBody::Close,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            response.body,
+            Ok(chirograph::CarrierResponseBody::Closed)
+        ));
+        assert_eq!(client.take_notice(), Some(expected));
+        server.await.unwrap();
+    }
 
     const NETWORK: NetworkId = NetworkId([0x41; 32]);
     const ROOT: [u8; 32] = [0x42; 32];

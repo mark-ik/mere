@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use knot::{
     KnotSettings, KnotSyncHost, KnotSyncHostConfig, KnotSyncSettings, StartupUnlockedPersonalVault,
-    knot_settings_path, local_device_root,
+    knot_settings_path, local_device_root, personal_vault_writer,
 };
 
 const PAIRING_POLL: std::time::Duration = std::time::Duration::from_secs(5);
@@ -51,8 +51,8 @@ async fn main() {
             std::process::exit(2);
         }
     };
-    // Management verbs edit settings and report; they never open the vault, so
-    // they run while the resident host holds it.
+    // Management verbs edit settings or derive public pairing facts. They do
+    // not open Knot's vault or operation store, so they run beside a resident.
     if let Some(result) = management(&args) {
         match result {
             Ok(message) => {
@@ -113,18 +113,16 @@ fn pair(args: &Args, writer: &str, add: bool) -> Result<String, String> {
 
 /// What the persona's other devices need in order to admit and reach this one.
 ///
-/// Opens the vault, because the writer key is epoch-derived. Unlike
-/// Graphshell's equivalent this cannot avoid that, so it will not run while
-/// the resident host holds the store.
+/// The writer is epoch-derived, but derivation needs Personae startup unlock,
+/// not a second Knot store owner. This remains usable while the resident runs.
 fn pairing_facts(args: &Args) -> Result<String, String> {
     let device_root = local_device_root(&args.data_root, &args.label)?;
-    let authority =
-        StartupUnlockedPersonalVault::open(&args.data_root, args.persona, device_root, [])?;
+    let writer = personal_vault_writer(&args.data_root, args.persona, device_root)?;
     Ok(format!(
         "writer {}\n\nOn each other device, run:\n  knot_sync_host <data-root> {} --pair-writer {}",
-        knot::hex32(&authority.writer()),
+        knot::hex32(&writer),
         args.persona.as_uuid(),
-        knot::hex32(&authority.writer()),
+        knot::hex32(&writer),
     ))
 }
 

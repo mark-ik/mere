@@ -106,6 +106,34 @@ pub struct OwnerSettings {
     pub sync: Option<SyncSettings>,
     /// Absent means this device host does not compose a resident Knot route.
     pub knot: Option<KnotResidentSettings>,
+    /// Physical content custody shared by every lane in this resident.
+    #[serde(skip_serializing_if = "ResidentContentSettings::is_default")]
+    pub content: ResidentContentSettings,
+}
+
+/// Owner-configurable backing for resident content-addressed bytes.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ResidentContentSettings {
+    /// Override the physical iroh store root. Normally left unset.
+    pub root: Option<PathBuf>,
+    /// How often unleased bytes are considered for collection.
+    pub gc_interval_seconds: u64,
+}
+
+impl ResidentContentSettings {
+    pub fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+impl Default for ResidentContentSettings {
+    fn default() -> Self {
+        Self {
+            root: None,
+            gc_interval_seconds: 300,
+        }
+    }
 }
 
 /// Device-host selection for one startup-unlocked personal Knot vault.
@@ -120,7 +148,8 @@ pub struct KnotResidentSettings {
     pub persona: String,
     /// Stable label used when this machine first records its device identity.
     pub device_label: String,
-    /// Override for the local iroh blob store. Normally left unset.
+    /// Previous per-Knot evidence root to import. Normally left unset because
+    /// the historical default is derived from the persona vault.
     pub evidence_root: Option<PathBuf>,
     /// Largest retained clip artifact.
     pub max_artifact_bytes: u64,
@@ -678,6 +707,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            content: ResidentContentSettings::default(),
         };
         settings.save(&path).unwrap();
         assert_eq!(OwnerSettings::load(&path).unwrap(), settings);

@@ -10,7 +10,7 @@ use std::thread::{self, JoinHandle};
 
 use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1, PortableContentRefV1};
 use serde::{Deserialize, Serialize};
-use transport::{BlobHash, BlobReadAuthorizer, BlobScope, BlobStore};
+use transport::{BlobHash, BlobLease, BlobReadAuthorizer, BlobScope, BlobStore};
 
 static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
@@ -374,8 +374,9 @@ impl BlobClipEvidenceStore {
         &self,
         artifact: &KnotClipArtifactV1,
     ) -> Result<KnotClipEvidenceRef, String> {
+        let scope = self.custody.as_ref().map(|(_, scope)| *scope);
         let reference =
-            retain_blob_artifact(&self.blobs, self.max_artifact_bytes, artifact).await?;
+            retain_blob_artifact(&self.blobs, self.max_artifact_bytes, artifact, scope).await?;
         if let Some((authority, scope)) = &self.custody {
             authority.retain(*scope, reference.blob_hash()?);
         }
@@ -424,7 +425,11 @@ pub struct KnotContentRetentionPort {
 impl KnotContentRetentionPort {
     /// Open one persistent actor-backed retention service.
     pub fn open(root: impl AsRef<Path>, max_artifact_bytes: u64) -> Result<Self, String> {
-        Self::open_inner(root.as_ref(), max_artifact_bytes, None)
+        Self::open_inner(
+            RetentionBacking::Open(root.as_ref().to_path_buf()),
+            max_artifact_bytes,
+            None,
+        )
     }
 
     /// Open retention with serving custody bound to one domain scope.
@@ -437,15 +442,36 @@ impl KnotContentRetentionPort {
         authority: BlobReadAuthorizer,
         scope: BlobScope,
     ) -> Result<Self, String> {
-        Self::open_inner(root.as_ref(), max_artifact_bytes, Some((authority, scope)))
+        Self::open_inner(
+            RetentionBacking::Open(root.as_ref().to_path_buf()),
+            max_artifact_bytes,
+            Some((authority, scope)),
+        )
+    }
+
+    /// Borrow the resident's physical blob store while retaining Knot's own
+    /// scoped custody and serving authority.
+    ///
+    /// Dropping the port flushes this lane's writes but does not shut down the
+    /// resident store. The process owner remains its sole lifetime authority.
+    pub fn borrow_scoped(
+        blobs: Arc<BlobStore>,
+        max_artifact_bytes: u64,
+        authority: BlobReadAuthorizer,
+        scope: BlobScope,
+    ) -> Result<Self, String> {
+        Self::open_inner(
+            RetentionBacking::Borrowed(blobs),
+            max_artifact_bytes,
+            Some((authority, scope)),
+        )
     }
 
     fn open_inner(
-        root: &Path,
+        backing: RetentionBacking,
         max_artifact_bytes: u64,
         custody: Option<(BlobReadAuthorizer, BlobScope)>,
     ) -> Result<Self, String> {
-        let root = root.to_path_buf();
         let (commands, receiver) = mpsc::channel();
         let (ready, opened) = mpsc::sync_channel(1);
         let join = thread::Builder::new()
@@ -463,14 +489,17 @@ impl KnotContentRetentionPort {
                         return;
                     }
                 };
-                let blobs = match runtime.block_on(BlobStore::open(root)) {
-                    Ok(blobs) => Arc::new(blobs),
-                    Err(error) => {
-                        let _ = ready.send(Err(format!(
-                            "could not open clip evidence blob store: {error}"
-                        )));
-                        return;
-                    }
+                let (blobs, owns_store) = match backing {
+                    RetentionBacking::Open(root) => match runtime.block_on(BlobStore::open(root)) {
+                        Ok(blobs) => (Arc::new(blobs), true),
+                        Err(error) => {
+                            let _ = ready.send(Err(format!(
+                                "could not open clip evidence blob store: {error}"
+                            )));
+                            return;
+                        }
+                    },
+                    RetentionBacking::Borrowed(blobs) => (blobs, false),
                 };
                 let store = BlobClipEvidenceStore {
                     blobs: Arc::clone(&blobs),
@@ -478,7 +507,11 @@ impl KnotContentRetentionPort {
                     custody,
                 };
                 if ready.send(Ok(blobs)).is_err() {
-                    let _ = runtime.block_on(store.blobs.shutdown());
+                    if owns_store {
+                        let _ = runtime.block_on(store.blobs.shutdown());
+                    } else {
+                        let _ = runtime.block_on(store.blobs.flush());
+                    }
                     return;
                 }
                 while let Ok(command) = receiver.recv() {
@@ -490,7 +523,11 @@ impl KnotContentRetentionPort {
                         RetentionCommand::Close => break,
                     }
                 }
-                let _ = runtime.block_on(store.blobs.shutdown());
+                if owns_store {
+                    let _ = runtime.block_on(store.blobs.shutdown());
+                } else {
+                    let _ = runtime.block_on(store.blobs.flush());
+                }
             })
             .map_err(|error| format!("could not start content-retention actor: {error}"))?;
         let blobs = match opened.recv() {
@@ -537,6 +574,11 @@ impl KnotContentRetentionPort {
     }
 }
 
+enum RetentionBacking {
+    Open(PathBuf),
+    Borrowed(Arc<BlobStore>),
+}
+
 impl KnotClipEvidenceStore for KnotContentRetentionPort {
     fn retain(&mut self, artifact: &KnotClipArtifactV1) -> Result<KnotClipEvidenceRef, String> {
         pollster::block_on(self.retain_async(artifact))
@@ -547,6 +589,7 @@ async fn retain_blob_artifact(
     blobs: &BlobStore,
     max_artifact_bytes: u64,
     artifact: &KnotClipArtifactV1,
+    scope: Option<BlobScope>,
 ) -> Result<KnotClipEvidenceRef, String> {
     let byte_size = u64::try_from(artifact.bytes.len())
         .map_err(|_| "clip artifact byte length does not fit u64".to_string())?;
@@ -557,11 +600,20 @@ async fn retain_blob_artifact(
     }
     let digest = blake3::hash(&artifact.bytes);
     let digest_hex = digest.to_hex().to_string();
-    let tag = format!("knot/clip-evidence/{digest_hex}");
-    let stored = blobs
-        .put_bytes_named(artifact.bytes.clone(), tag.as_bytes())
-        .await
-        .map_err(|error| format!("could not retain clip evidence in blob store: {error}"))?;
+    let stored = match scope {
+        Some(scope) => {
+            let lease = BlobLease::new(scope, "knot.evidence", digest.as_bytes())
+                .map_err(|error| format!("could not name clip evidence custody: {error}"))?;
+            blobs.put_bytes_leased(artifact.bytes.clone(), &lease).await
+        }
+        None => {
+            let tag = format!("knot/clip-evidence/{digest_hex}");
+            blobs
+                .put_bytes_named(artifact.bytes.clone(), tag.as_bytes())
+                .await
+        }
+    }
+    .map_err(|error| format!("could not retain clip evidence in blob store: {error}"))?;
     if stored.as_bytes() != digest.as_bytes() {
         return Err("transport blob store returned the wrong clip evidence digest".into());
     }

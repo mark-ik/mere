@@ -213,6 +213,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            content: Default::default(),
         }
         .save(&path)
         .unwrap();
@@ -282,6 +283,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            content: Default::default(),
         }
         .save(&path)
         .unwrap();

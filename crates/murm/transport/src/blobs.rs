@@ -38,7 +38,10 @@ use iroh_blobs::store::GcConfig;
 use iroh_blobs::store::fs::{FsStore, options::Options as FsOptions};
 use iroh_blobs::store::mem::{MemStore, Options as MemOptions};
 use iroh_blobs::{Hash, api::Store};
+use n0_future::StreamExt;
 use thiserror::Error;
+
+const BLOB_LEASE_PREFIX: &[u8] = b"mere/blob-lease/v1\0";
 
 /// A content-addressed blob hash (BLAKE3-256).
 ///
@@ -162,6 +165,61 @@ impl BlobScope {
     /// Raw scope identity for receipts and durable projections.
     pub const fn to_bytes(self) -> [u8; 32] {
         self.0
+    }
+}
+
+/// Durable, domain-scoped custody of one resident blob.
+///
+/// The tag names the owner independently of the content hash. Several lanes
+/// can therefore lease identical bytes while iroh stores them only once, and
+/// releasing one lane cannot collect bytes another lane still retains.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct BlobLease(Vec<u8>);
+
+impl BlobLease {
+    /// Name one custody claim inside a domain scope.
+    ///
+    /// `namespace` is a stable lane name such as `knot.evidence`; `subject`
+    /// distinguishes that lane's individual claims without imposing meaning
+    /// on transport.
+    pub fn new(
+        scope: BlobScope,
+        namespace: &str,
+        subject: impl AsRef<[u8]>,
+    ) -> Result<Self, BlobError> {
+        let namespace = namespace.as_bytes();
+        let namespace_len = u16::try_from(namespace.len())
+            .map_err(|_| BlobError::InvalidLease("namespace is longer than 65535 bytes".into()))?;
+        if namespace.is_empty()
+            || !namespace
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+        {
+            return Err(BlobError::InvalidLease(
+                "namespace must contain only ASCII letters, digits, '.', '-' or '_'".into(),
+            ));
+        }
+        let mut tag = Vec::with_capacity(
+            BLOB_LEASE_PREFIX.len() + 32 + 2 + namespace.len() + subject.as_ref().len(),
+        );
+        tag.extend_from_slice(BLOB_LEASE_PREFIX);
+        tag.extend_from_slice(&scope.to_bytes());
+        tag.extend_from_slice(&namespace_len.to_be_bytes());
+        tag.extend_from_slice(namespace);
+        tag.extend_from_slice(subject.as_ref());
+        Ok(Self(tag))
+    }
+
+    /// Encoded iroh tag name.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn scope_prefix(scope: BlobScope) -> Vec<u8> {
+        let mut prefix = Vec::with_capacity(BLOB_LEASE_PREFIX.len() + 32);
+        prefix.extend_from_slice(BLOB_LEASE_PREFIX);
+        prefix.extend_from_slice(&scope.to_bytes());
+        prefix
     }
 }
 
@@ -296,6 +354,10 @@ pub enum BlobError {
     /// Underlying iroh-blobs error.
     #[error("blob store backend: {0}")]
     Backend(String),
+
+    /// A caller supplied a lease name that cannot be encoded stably.
+    #[error("invalid blob lease: {0}")]
+    InvalidLease(String),
 }
 
 /// Which store holds the bytes. Both variants deref to the same
@@ -477,6 +539,74 @@ impl BlobStore {
         let hash = BlobHash(hash);
         tracing::debug!(byte_count, ?hash, "named blob stored");
         Ok(hash)
+    }
+
+    /// Put bytes and retain them under one scoped resident lease.
+    pub async fn put_bytes_leased(
+        &self,
+        bytes: impl Into<Bytes>,
+        lease: &BlobLease,
+    ) -> Result<BlobHash, BlobError> {
+        self.put_bytes_named(bytes, lease.as_bytes()).await
+    }
+
+    /// Add or replace a scoped lease for bytes already present.
+    pub async fn lease(&self, lease: &BlobLease, hash: BlobHash) -> Result<(), BlobError> {
+        self.pin(lease.as_bytes(), hash).await
+    }
+
+    /// Release one scoped lease. Other leases naming the same hash survive.
+    pub async fn release_lease(&self, lease: &BlobLease) -> Result<bool, BlobError> {
+        self.release(lease.as_bytes()).await
+    }
+
+    /// Hash currently named by one exact lease, if that lease exists.
+    pub async fn lease_hash(&self, lease: &BlobLease) -> Result<Option<BlobHash>, BlobError> {
+        self.store()
+            .tags()
+            .get(lease.as_bytes())
+            .await
+            .map(|tag| tag.map(|tag| BlobHash(tag.hash)))
+            .map_err(|error| BlobError::Backend(format!("read blob lease: {error:?}")))
+    }
+
+    /// Hashes retained by any lease in one domain scope.
+    pub async fn leased_hashes(&self, scope: BlobScope) -> Result<Vec<BlobHash>, BlobError> {
+        let mut tags = self
+            .store()
+            .tags()
+            .list_prefix(BlobLease::scope_prefix(scope))
+            .await
+            .map_err(|error| BlobError::Backend(format!("list scoped blob leases: {error:?}")))?;
+        let mut hashes = BTreeSet::new();
+        while let Some(tag) = tags.next().await {
+            let tag = tag.map_err(|error| {
+                BlobError::Backend(format!("read scoped blob lease: {error:?}"))
+            })?;
+            hashes.insert(BlobHash(tag.hash));
+        }
+        Ok(hashes.into_iter().collect())
+    }
+
+    /// Unique hashes named by any persistent tag.
+    ///
+    /// Resident migration uses this to copy old stores without interpreting
+    /// their lane-specific tag vocabulary. Anonymous tags are included.
+    pub async fn retained_hashes(&self) -> Result<Vec<BlobHash>, BlobError> {
+        let mut tags = self
+            .store()
+            .tags()
+            .list()
+            .await
+            .map_err(|error| BlobError::Backend(format!("list retained blobs: {error:?}")))?;
+        let mut hashes = BTreeSet::new();
+        while let Some(tag) = tags.next().await {
+            let tag = tag.map_err(|error| {
+                BlobError::Backend(format!("read retained blob tag: {error:?}"))
+            })?;
+            hashes.insert(BlobHash(tag.hash));
+        }
+        Ok(hashes.into_iter().collect())
     }
 
     /// Add or replace a stable custody tag for bytes already present.
@@ -713,6 +843,66 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         panic!("untagged bytes were not garbage-collected");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn scoped_leases_share_bytes_and_survive_independent_release() {
+        let store = BlobStore::new_collecting(Duration::from_millis(10));
+        let scope_a = BlobScope::new([0xa1; 32]);
+        let scope_b = BlobScope::new([0xb1; 32]);
+        let lease_a = BlobLease::new(scope_a, "graphshell.transfer", b"receipt-a").unwrap();
+        let lease_b = BlobLease::new(scope_b, "knot.evidence", b"clip-b").unwrap();
+        let payload = Bytes::from_static(b"one physical resident blob");
+        let hash = store
+            .put_bytes_leased(payload.clone(), &lease_a)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.put_bytes_leased(payload, &lease_b).await.unwrap(),
+            hash
+        );
+        assert_eq!(store.leased_hashes(scope_a).await.unwrap(), vec![hash]);
+        assert_eq!(store.leased_hashes(scope_b).await.unwrap(), vec![hash]);
+
+        assert!(store.release_lease(&lease_a).await.unwrap());
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(store.has(hash).await.unwrap());
+        assert!(store.leased_hashes(scope_a).await.unwrap().is_empty());
+        assert_eq!(store.leased_hashes(scope_b).await.unwrap(), vec![hash]);
+
+        assert!(store.release_lease(&lease_b).await.unwrap());
+        for _ in 0..50 {
+            if !store.has(hash).await.unwrap() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("the final released lease did not permit collection");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn scoped_leases_reopen_with_their_custody_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("resident");
+        let scope = BlobScope::new([0xc1; 32]);
+        let lease = BlobLease::new(scope, "knot.evidence", b"clip").unwrap();
+        let hash = {
+            let store = BlobStore::open_collecting(&root, Duration::from_secs(60))
+                .await
+                .unwrap();
+            let hash = store
+                .put_bytes_leased(Bytes::from_static(b"restart custody"), &lease)
+                .await
+                .unwrap();
+            store.shutdown().await.unwrap();
+            hash
+        };
+        let reopened = BlobStore::open_collecting(&root, Duration::from_secs(60))
+            .await
+            .unwrap();
+        assert_eq!(reopened.leased_hashes(scope).await.unwrap(), vec![hash]);
+        assert!(reopened.has(hash).await.unwrap());
+        reopened.shutdown().await.unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

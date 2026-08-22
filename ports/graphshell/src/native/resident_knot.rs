@@ -14,12 +14,13 @@ use knot::{
     KnotSyncHostConfig, KnotWriteGrant, StartupUnlockedPersonalVault, knot_settings_path,
     local_device_root, persona_vault_root,
 };
-use transport::{BlobReadAuthorizer, BlobScope};
+use transport::BlobScope;
 
 use super::endpoint_catalog::{
     ResidentEndpointCatalog, ResidentEndpointCatalogError, ResidentEndpointRoute,
 };
 use super::owner_settings::KnotResidentSettings;
+use super::resident_blobs::{LEGACY_KNOT_LEASE, LegacyBlobMigration, ResidentBlobCustody};
 
 /// Stable first-party route for the resident Djot vault.
 pub const RESIDENT_KNOT_ROUTE: &str = "knot";
@@ -38,7 +39,11 @@ pub struct ResidentKnot {
 
 impl ResidentKnot {
     /// Open the selected persona once and keep its source resident.
-    pub async fn open(data_root: &Path, config: KnotResidentSettings) -> Result<Self, String> {
+    pub async fn open(
+        data_root: &Path,
+        config: KnotResidentSettings,
+        blob_custody: ResidentBlobCustody,
+    ) -> Result<Self, String> {
         let persona_uuid = uuid::Uuid::parse_str(config.persona.trim())
             .map_err(|error| format!("invalid resident Knot persona UUID: {error}"))?;
         let persona = personae::PersonaId::from_uuid(persona_uuid);
@@ -73,19 +78,36 @@ impl ResidentKnot {
         let source = startup.into_resident_source()?;
 
         let scope = BlobScope::new(store.space_id());
-        let readers = BlobReadAuthorizer::new();
+        let readers = blob_custody.authorizer();
         readers.replace_readers(scope, paired_writers.iter().copied());
         let max_artifact_bytes = config.max_artifact_bytes;
         let evidence_root = config
             .evidence_root
             .unwrap_or_else(|| persona_vault_root(data_root, persona).join("evidence"));
-        let retention = KnotContentRetentionPort::open_scoped(
-            evidence_root,
+        match blob_custody
+            .migrate_legacy_store(&evidence_root, scope, LEGACY_KNOT_LEASE)
+            .await?
+        {
+            LegacyBlobMigration::Copied { blobs } => tracing::info!(
+                source = %evidence_root.display(),
+                blobs,
+                "imported Knot's old evidence store into resident custody"
+            ),
+            LegacyBlobMigration::AlreadyComplete { blobs } => tracing::debug!(
+                source = %evidence_root.display(),
+                blobs,
+                "Knot evidence migration remains verified"
+            ),
+            LegacyBlobMigration::SourceAbsent | LegacyBlobMigration::AlreadyShared => {}
+        }
+        blob_custody.bind_scope(scope).await?;
+        let blobs = blob_custody.blobs();
+        let retention = KnotContentRetentionPort::borrow_scoped(
+            blobs.clone(),
             max_artifact_bytes,
             readers.clone(),
             scope,
         )?;
-        let blobs = retention.blob_store();
         source.grant_content_retention(retention);
 
         // Restore authority from the resident Djot projection. A reference
@@ -260,6 +282,7 @@ mod tests {
     use knot::{KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument};
     use p2panda_core::SigningKey;
     use sceno::InstanceId;
+    use transport::BlobReadAuthorizer;
 
     use crate::lifecycle::AdmittedEndpointContext;
 

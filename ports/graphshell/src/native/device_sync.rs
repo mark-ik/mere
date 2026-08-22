@@ -17,6 +17,9 @@ use crate::native::owner_settings::{
 use crate::native::personal_sync_host::{
     PersonalSyncHost, PersonalSyncHostConfig, PersonalSyncHostError,
 };
+use crate::native::resident_blobs::{
+    LEGACY_PERSONAL_LEASE, LegacyBlobMigration, ResidentBlobCustody,
+};
 use crate::native::transfer_staging::{receive_transfer, released_blobs_for};
 use crate::personal_sync::{PersonalGraphEvent, SyncRoster, SyncSelection};
 
@@ -118,6 +121,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     peer_tickets: Vec<String>,
     seed_notes: Vec<SeedNote>,
     blob_actions: Vec<BlobAction>,
+    blob_custody: ResidentBlobCustody,
 ) -> Result<Option<DeviceSurfaceHandle>, DeviceSyncError> {
     let settings_file = owner_settings::settings_path(app_dir, profile);
     let stored = OwnerSettings::load(&settings_file)?;
@@ -137,6 +141,29 @@ pub async fn start<P: IdentityProvider + ?Sized>(
             .join("personal-sync")
             .join(format!("{}.redb", owner_settings::hex32(&graph)))
     });
+    let blob_scope = transport::BlobScope::new(graph);
+    let legacy_blob_root = store_path.with_extension("blobs");
+    match blob_custody
+        .migrate_legacy_store(&legacy_blob_root, blob_scope, LEGACY_PERSONAL_LEASE)
+        .await
+        .map_err(|error| DeviceSyncError::Host(PersonalSyncHostError::Transport(error)))?
+    {
+        LegacyBlobMigration::Copied { blobs } => tracing::info!(
+            source = %legacy_blob_root.display(),
+            blobs,
+            "imported the personal graph's old blob store into resident custody"
+        ),
+        LegacyBlobMigration::AlreadyComplete { blobs } => tracing::debug!(
+            source = %legacy_blob_root.display(),
+            blobs,
+            "personal graph blob migration remains verified"
+        ),
+        LegacyBlobMigration::SourceAbsent | LegacyBlobMigration::AlreadyShared => {}
+    }
+    blob_custody
+        .bind_scope(blob_scope)
+        .await
+        .map_err(|error| PersonalSyncHostError::Transport(error))?;
     let mut roots = sync.roster_root_keys()?;
     roots.push(identity.master_public_key().to_bytes());
     roots.sort_unstable();
@@ -201,7 +228,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         tracing::info!(hints = peer_hints.len(), "seeding stored dial hints");
     }
     let host = Arc::new(
-        PersonalSyncHost::open(
+        PersonalSyncHost::open_with_blob_custody(
             identity,
             PersonalSyncHostConfig {
                 graph,
@@ -213,6 +240,8 @@ pub async fn start<P: IdentityProvider + ?Sized>(
                 paired_nodes: paired_nodes.clone(),
                 relay_urls: relays,
             },
+            blob_custody.blobs(),
+            blob_custody.authorizer(),
         )
         .await?,
     );

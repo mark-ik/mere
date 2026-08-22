@@ -21,7 +21,9 @@
 use std::sync::Arc;
 use std::sync::RwLock as StdRwLock;
 
-use chirograph::{CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody};
+use chirograph::{
+    CarrierNotice, CarrierRequest, CarrierRequestBody, CarrierResponse, CarrierResponseBody,
+};
 use personae::IdentityStorage;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -81,6 +83,10 @@ pub enum AppMessage {
     },
     /// One carrier request against the admitted endpoint.
     Request { request: CarrierRequest },
+    /// Take one notice the session already received, without waiting.
+    TakeNotice,
+    /// Wait until the admitted endpoint rings with a revision notice.
+    WaitNotice,
 }
 
 /// Host-to-application messages.
@@ -90,6 +96,7 @@ pub enum AppHostMessage {
     Challenge { challenge: BrowserChallenge },
     Connected { app: AppId, session: String },
     Response { response: CarrierResponse },
+    Notice { notice: Option<CarrierNotice> },
     Failure { message: String },
 }
 
@@ -343,6 +350,20 @@ where
                 if terminal || ended {
                     break;
                 }
+            }
+            AppMessage::TakeNotice => {
+                let notice = carrier.take_notice();
+                write_native_message_async(writer, &AppHostMessage::Notice { notice }).await?;
+            }
+            AppMessage::WaitNotice => {
+                let notice = carrier.wait_for_notice().await?;
+                write_native_message_async(
+                    writer,
+                    &AppHostMessage::Notice {
+                        notice: Some(notice),
+                    },
+                )
+                .await?;
             }
             AppMessage::Connect { .. } => {
                 write_native_message_async(

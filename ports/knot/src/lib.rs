@@ -87,7 +87,9 @@ pub use search::{KnotSearch, SearchConfig, SearchHit, SearchLane};
 pub use settings::{
     KnotSettings, KnotSettingsError, KnotSyncSettings, hex32, knot_settings_path, parse_hex32,
 };
-pub use startup::{StartupUnlockedPersonalVault, local_device_root, persona_vault_root};
+pub use startup::{
+    StartupUnlockedPersonalVault, local_device_root, persona_vault_root, personal_vault_writer,
+};
 pub use sync::{
     KNOT_COMMONS_ENCRYPTION_PROFILE, KnotAutomaticTextMerge, KnotCheckpointSnapshot,
     KnotDocumentConflict, KnotDocumentProjection, KnotDocumentVersion, KnotEncryptionProfile,

@@ -12,9 +12,9 @@
 //! pipelining, that pressure should reshape the wire, not hide in a client.
 
 use chirograph::{
-    CapabilityProfile, CarrierRequest, CarrierRequestBody, CarrierResponseBody, ContentHash,
-    PortableCardV1, PresentationCodec, ProjectionRequest, ProjectionSnapshot, ProtocolVersion,
-    ResourceRequest, SessionOpen, SessionOpened,
+    CapabilityProfile, Carrier, CarrierError, CarrierNotice, CarrierRequest, CarrierRequestBody,
+    CarrierResponseBody, ContentHash, PortableCardV1, PresentationCodec, ProjectionRequest,
+    ProjectionSnapshot, ProtocolVersion, ResourceRequest, SessionOpen, SessionOpened,
 };
 use rand_core::{OsRng, RngCore};
 
@@ -38,6 +38,8 @@ pub enum AppClientError {
         expected: &'static str,
         got: &'static str,
     },
+    #[error("resident response {got} does not answer request {expected}")]
+    MismatchedResponse { expected: u64, got: u64 },
     #[error("a card resource was not valid PortableCardV1 JSON: {0}")]
     MalformedCard(#[from] serde_json::Error),
     #[error("transport failed: {0}")]
@@ -139,7 +141,7 @@ impl AppBrokerClient {
     /// Open the endpoint session and learn what it projects.
     pub async fn open_session(&mut self) -> Result<SessionOpened, AppClientError> {
         let body = self
-            .request(CarrierRequestBody::Open(Box::new(SessionOpen {
+            .request_body(CarrierRequestBody::Open(Box::new(SessionOpen {
                 version: ProtocolVersion { major: 1, minor: 0 },
                 capabilities: CapabilityProfile::default(),
             })))
@@ -155,7 +157,9 @@ impl AppBrokerClient {
         &mut self,
         request: ProjectionRequest,
     ) -> Result<ProjectionSnapshot, AppClientError> {
-        let body = self.request(CarrierRequestBody::Snapshot(request)).await?;
+        let body = self
+            .request_body(CarrierRequestBody::Snapshot(request))
+            .await?;
         match body {
             CarrierResponseBody::Snapshot(snapshot) => Ok(*snapshot),
             other => Err(unexpected_body("a snapshot", &other)),
@@ -169,7 +173,7 @@ impl AppBrokerClient {
         resource: ContentHash,
     ) -> Result<Vec<u8>, AppClientError> {
         let body = self
-            .request(CarrierRequestBody::Resource(ResourceRequest {
+            .request_body(CarrierRequestBody::Resource(ResourceRequest {
                 session,
                 resource,
             }))
@@ -210,11 +214,11 @@ impl AppBrokerClient {
 
     /// Close the session. Consumes the client; the stream is done either way.
     pub async fn close(mut self) -> Result<(), AppClientError> {
-        let _ = self.request(CarrierRequestBody::Close).await?;
+        let _ = self.request_body(CarrierRequestBody::Close).await?;
         Ok(())
     }
 
-    async fn request(
+    pub async fn request_body(
         &mut self,
         body: CarrierRequestBody,
     ) -> Result<CarrierResponseBody, AppClientError> {
@@ -228,11 +232,112 @@ impl AppBrokerClient {
         )
         .await?;
         match read_host(&mut self.stream).await? {
-            AppHostMessage::Response { response } => response
+            AppHostMessage::Response { response } if response.id == id => response
                 .body
                 .map_err(|error| AppClientError::Refused(error.message)),
+            AppHostMessage::Response { response } => Err(AppClientError::MismatchedResponse {
+                expected: id,
+                got: response.id,
+            }),
             other => Err(unexpected("a carrier response", &other)),
         }
+    }
+
+    /// Take one already-received resident notice.
+    pub async fn take_notice(&mut self) -> Result<Option<CarrierNotice>, AppClientError> {
+        write_native_message_async(&mut self.stream, &AppMessage::TakeNotice).await?;
+        match read_host(&mut self.stream).await? {
+            AppHostMessage::Notice { notice } => Ok(notice),
+            other => Err(unexpected("a carrier notice", &other)),
+        }
+    }
+
+    /// Wait until the resident endpoint reports a new revision.
+    pub async fn wait_for_notice(&mut self) -> Result<CarrierNotice, AppClientError> {
+        write_native_message_async(&mut self.stream, &AppMessage::WaitNotice).await?;
+        match read_host(&mut self.stream).await? {
+            AppHostMessage::Notice {
+                notice: Some(notice),
+            } => Ok(notice),
+            AppHostMessage::Notice { notice: None } => Err(AppClientError::Closed),
+            other => Err(unexpected("a carrier notice", &other)),
+        }
+    }
+}
+
+/// Blocking carrier over the owner-only first-party application door.
+///
+/// A desktop application uses this exactly like an in-process or stdio
+/// carrier, while the resident process remains the only owner of persona
+/// files and network hosts.
+pub struct AppRouteCarrier {
+    runtime: tokio::runtime::Runtime,
+    client: Option<AppBrokerClient>,
+}
+
+impl AppRouteCarrier {
+    pub fn open(app: AppId, route: AppRouteId) -> Result<Self, AppClientError> {
+        Self::open_at(&configured_app_endpoint(), app, route)
+    }
+
+    pub fn open_at(endpoint: &str, app: AppId, route: AppRouteId) -> Result<Self, AppClientError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(AppClientError::Io)?;
+        let client = runtime.block_on(AppBrokerClient::open_route_at(endpoint, app, route))?;
+        Ok(Self {
+            runtime,
+            client: Some(client),
+        })
+    }
+}
+
+impl Carrier for AppRouteCarrier {
+    fn request(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, CarrierError> {
+        let Self { runtime, client } = self;
+        let client = client.as_mut().ok_or_else(|| {
+            CarrierError::Disconnected("resident application route is closed".into())
+        })?;
+        runtime
+            .block_on(client.request_body(body))
+            .map_err(carrier_error)
+    }
+
+    fn take_notice(&mut self) -> Option<CarrierNotice> {
+        let result = {
+            let client = self.client.as_mut()?;
+            self.runtime.block_on(client.take_notice())
+        };
+        match result {
+            Ok(notice) => notice,
+            Err(_) => {
+                self.client = None;
+                None
+            }
+        }
+    }
+
+    fn wait_for_notice(&mut self) -> Result<CarrierNotice, CarrierError> {
+        let Self { runtime, client } = self;
+        let client = client.as_mut().ok_or_else(|| {
+            CarrierError::Disconnected("resident application route is closed".into())
+        })?;
+        runtime
+            .block_on(client.wait_for_notice())
+            .map_err(carrier_error)
+    }
+
+    fn shutdown(&mut self) -> Result<(), CarrierError> {
+        self.client.take();
+        Ok(())
+    }
+}
+
+fn carrier_error(error: AppClientError) -> CarrierError {
+    match error {
+        AppClientError::Refused(message) => CarrierError::Refused(message),
+        other => CarrierError::Disconnected(other.to_string()),
     }
 }
 
@@ -247,6 +352,7 @@ fn unexpected(expected: &'static str, got: &AppHostMessage) -> AppClientError {
         AppHostMessage::Challenge { .. } => "a challenge",
         AppHostMessage::Connected { .. } => "connected",
         AppHostMessage::Response { .. } => "a carrier response",
+        AppHostMessage::Notice { .. } => "a carrier notice",
         AppHostMessage::Failure { .. } => "a failure",
     };
     AppClientError::UnexpectedAnswer { expected, got }

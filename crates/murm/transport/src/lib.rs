@@ -59,7 +59,7 @@ mod transport;
 pub use crate::accepted::{AcceptedSession, IngressContext, IngressInterfaceId, TransportKind};
 pub use crate::alpn::Alpn;
 pub use crate::blobs::{
-    BlobError, BlobHash, BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore,
+    BlobError, BlobHash, BlobLease, BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore,
 };
 pub use crate::error::TransportError;
 pub use crate::p2panda_transport::{P2pandaStream, P2pandaTransport, sync_overlay_topic};

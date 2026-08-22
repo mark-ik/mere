@@ -31,6 +31,8 @@ use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
 #[cfg(feature = "personal-sync")]
+use graphshell::native::resident_blobs::ResidentBlobCustody;
+#[cfg(feature = "personal-sync")]
 use graphshell::native::resident_knot::ResidentKnot;
 use graphshell::profile::{default_vault_dir, resolve_selected_profile};
 use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
@@ -605,9 +607,11 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let owner =
         owner_settings::OwnerSettings::load(&owner_settings::settings_path(&app_dir, &profile_id))?;
     #[cfg(feature = "personal-sync")]
+    let blob_custody = ResidentBlobCustody::open(&data_root, &owner.content).await?;
+    #[cfg(feature = "personal-sync")]
     let mut resident_knot = match owner.knot {
         Some(config) => {
-            let resident = ResidentKnot::open(&data_root, config).await?;
+            let resident = ResidentKnot::open(&data_root, config, blob_custody.clone()).await?;
             tracing::info!(
                 sync = resident.sync_enabled(),
                 node = resident.node_id().map(|node| owner_settings::hex32(&node)),
@@ -655,6 +659,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         args.sync_peer_tickets,
         args.seed_notes,
         args.blob_actions,
+        blob_custody,
     )
     .await?;
     // Both doors are served from the same surface handle, so an application
