@@ -197,7 +197,7 @@ fn vault_host(root: std::path::PathBuf) -> ResidentProjectionHost {
             // identified by the vault it serves, not by who is looking at it.
             // Authority is the holder's under Option A, so the write grant is
             // the holder's own rather than anything a visitor presented.
-            knot::KnotEndpoint::open_writable(&root, knot::KnotWriteGrant::new(4096))
+            knot_editor::KnotEndpoint::open_writable(&root, knot_editor::KnotWriteGrant::new(4096))
                 .map_err(|error| error.to_string())
         })
         .expect("register the vault route");
@@ -370,9 +370,9 @@ async fn a_visitor_whose_holder_goes_away_is_told_rather_than_shown_a_stale_copy
     let authority = SessionAuthority::retain_admitted(&admitted);
     let revocations = std::sync::RwLock::new(RevocationLedger::new());
     let mut endpoint =
-        knot::KnotEndpoint::open_writable(vault.path(), knot::KnotWriteGrant::new(4096))
+        knot_editor::KnotEndpoint::open_writable(vault.path(), knot_editor::KnotWriteGrant::new(4096))
             .expect("open the vault");
-    let mut resume = |endpoint: &mut knot::KnotEndpoint, request: ResumeRequest| {
+    let mut resume = |endpoint: &mut knot_editor::KnotEndpoint, request: ResumeRequest| {
         ResumableProjectionSource::resume(endpoint, request).map_err(|error| error.to_string())
     };
     let waiting = tokio::task::spawn_blocking(move || mounted_rx.recv().unwrap());

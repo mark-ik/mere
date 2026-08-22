@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use djinn::settings::{KnotResidentSettings, OwnerSettings, settings_path};
-use knot::{StartupUnlockedPersonalVault, VaultDocument, local_device_root};
+use knot_editor::{StartupUnlockedPersonalVault, VaultDocument, local_device_root};
 use personae::{PersonaId, ProfileId};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

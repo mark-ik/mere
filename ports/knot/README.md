@@ -1,10 +1,14 @@
-# Knot
+# Knot Editor
 
-Knot is Mere's files-in-place authoring port. It serves a Graphshell
+Knot Editor is Mere's files-in-place authoring port. It serves a Graphshell
 projection over a real directory or a sealed personal vault, so a host can
 mount documents without owning the source files or the vault keys. File bytes
 stay on disk; containers carry `file:` references, titles, media types, and
 facets.
+
+The Cargo package is `knot-editor` and the Rust crate is `knot_editor`.
+The resident route and existing document addresses remain `knot` because they
+name the content and protocol, rather than this package.
 
 ## Modules
 
@@ -31,7 +35,7 @@ facets.
 |---|---|
 | `knot_endpoint` | Serves over stdio with `graphshell_stdio::serve_resumable_notifying`. Modes: no argument (the deterministic K0 fixture), `[directory]`, `directory <root>`, `directory-write <root> <max-source-bytes>`, `directory-write-effects <root> <max-source-bytes> <resolve-mode> <run-mode> <schemes> <languages> <max-depth> <max-ops>`, `persona-vault <data-root> <persona-id> <max-source-bytes>`, `persona-vault-effects ...`, `communal-fixture-effects ...`. Effect modes are `auto`, `ask`, `never`. |
 | `knot_sync_host` | `knot_sync_host <data-root> <persona-uuid> [--label <name>] [--log-file <path>]`. Management verbs exit after reporting: `--pair-writer <64-hex>`, `--unpair-writer <64-hex>`, `--pairing-facts`. |
-| `examples/k2_peer.rs` | Two-machine rehearsal for a place-held document. `cargo run -p knot --example k2_peer -- hold --root <vault-dir>` on the holder; `visit --peer <ticket>` or `visit --discover` on the visitor. Env: `K2_OWNER`, `K2_SEED`, `K2_NETWORK`, and `K2_PEER` for `--discover`. It is an example rather than a bin because it uses the `graphshell` dev-dependency. |
+| `examples/k2_peer.rs` | Two-machine rehearsal for a place-held document. `cargo run -p knot-editor --example k2_peer -- hold --root <vault-dir>` on the holder; `visit --peer <ticket>` or `visit --discover` on the visitor. Env: `K2_OWNER`, `K2_SEED`, `K2_NETWORK`, and `K2_PEER` for `--discover`. It is an example rather than a bin because it uses the `graphshell` dev-dependency. |
 
 Integration tests: `tests/place_projection.rs`, `tests/revision_bell.rs`,
 `tests/send_probe.rs`.

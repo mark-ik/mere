@@ -1,6 +1,6 @@
 #![cfg(windows)]
 
-use knot::{StartupUnlockedPersonalVault, local_device_root, personal_vault_writer};
+use knot_editor::{StartupUnlockedPersonalVault, local_device_root, personal_vault_writer};
 use pandect::{DeviceSettings, save_device_settings, wallet_store};
 use personae::PersonaId;
 use tempfile::tempdir;

@@ -9,19 +9,19 @@ use stickleback::DataKeyring;
 fn main() {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
     let mut endpoint = match args.as_slice() {
-        [] => knot::KnotEndpoint::fixture(),
-        [root] => knot::KnotEndpoint::open(PathBuf::from(root))
+        [] => knot_editor::KnotEndpoint::fixture(),
+        [root] => knot_editor::KnotEndpoint::open(PathBuf::from(root))
             .expect("Knot could not open the requested directory"),
-        [mode, root] if mode == "directory" => knot::KnotEndpoint::open(PathBuf::from(root))
+        [mode, root] if mode == "directory" => knot_editor::KnotEndpoint::open(PathBuf::from(root))
             .expect("Knot could not open the requested directory"),
         [mode, root, max_source_bytes] if mode == "directory-write" => {
             let max_source_bytes = max_source_bytes
                 .to_string_lossy()
                 .parse::<u64>()
                 .expect("directory-write byte limit must be an integer");
-            knot::KnotEndpoint::open_writable(
+            knot_editor::KnotEndpoint::open_writable(
                 PathBuf::from(root),
-                knot::KnotWriteGrant::new(max_source_bytes),
+                knot_editor::KnotWriteGrant::new(max_source_bytes),
             )
             .expect("Knot could not open the requested writable directory")
         }
@@ -32,16 +32,16 @@ fn main() {
             evidence_root,
             max_evidence_bytes,
         ] if mode == "directory-write-evidence" => {
-            let mut endpoint = knot::KnotEndpoint::open_writable(
+            let mut endpoint = knot_editor::KnotEndpoint::open_writable(
                 PathBuf::from(root),
-                knot::KnotWriteGrant::new(parse_u64(
+                knot_editor::KnotWriteGrant::new(parse_u64(
                     max_source_bytes,
                     "directory-write byte limit",
                 )),
             )
             .expect("Knot could not open the requested writable directory");
             endpoint.grant_clip_evidence(
-                knot::BlobClipEvidenceStore::open(
+                knot_editor::BlobClipEvidenceStore::open(
                     PathBuf::from(evidence_root),
                     parse_u64(max_evidence_bytes, "clip evidence byte limit"),
                 )
@@ -61,9 +61,9 @@ fn main() {
             max_ops,
         ] if mode == "directory-write-effects" => {
             let root = PathBuf::from(root);
-            let mut endpoint = knot::KnotEndpoint::open_writable(
+            let mut endpoint = knot_editor::KnotEndpoint::open_writable(
                 &root,
-                knot::KnotWriteGrant::new(parse_u64(
+                knot_editor::KnotWriteGrant::new(parse_u64(
                     max_source_bytes,
                     "directory-write byte limit",
                 )),
@@ -95,9 +95,9 @@ fn main() {
             max_evidence_bytes,
         ] if mode == "directory-write-effects-evidence" => {
             let root = PathBuf::from(root);
-            let mut endpoint = knot::KnotEndpoint::open_writable(
+            let mut endpoint = knot_editor::KnotEndpoint::open_writable(
                 &root,
-                knot::KnotWriteGrant::new(parse_u64(
+                knot_editor::KnotWriteGrant::new(parse_u64(
                     max_source_bytes,
                     "directory-write byte limit",
                 )),
@@ -114,7 +114,7 @@ fn main() {
                 Some(&root),
             ));
             endpoint.grant_clip_evidence(
-                knot::BlobClipEvidenceStore::open(
+                knot_editor::BlobClipEvidenceStore::open(
                     PathBuf::from(evidence_root),
                     parse_u64(max_evidence_bytes, "clip evidence byte limit"),
                 )
@@ -132,15 +132,15 @@ fn main() {
                 .to_string_lossy()
                 .parse::<u64>()
                 .expect("persona-vault byte limit must be an integer");
-            knot::StartupUnlockedPersonalVault::open(
+            knot_editor::StartupUnlockedPersonalVault::open(
                 PathBuf::from(data_root),
                 persona,
-                knot::local_device_root(Path::new(data_root), "knot")
+                knot_editor::local_device_root(Path::new(data_root), "knot")
                     .expect("Knot could not open this device identity"),
                 [],
             )
             .and_then(|authority| {
-                authority.into_endpoint(knot::KnotWriteGrant::new(max_source_bytes))
+                authority.into_endpoint(knot_editor::KnotWriteGrant::new(max_source_bytes))
             })
             .expect("Knot could not startup-unlock the requested persona vault")
         }
@@ -157,22 +157,22 @@ fn main() {
                 .parse::<uuid::Uuid>()
                 .map(personae::PersonaId::from_uuid)
                 .expect("persona-vault persona must be a UUID");
-            let mut endpoint = knot::StartupUnlockedPersonalVault::open(
+            let mut endpoint = knot_editor::StartupUnlockedPersonalVault::open(
                 PathBuf::from(data_root),
                 persona,
-                knot::local_device_root(Path::new(data_root), "knot")
+                knot_editor::local_device_root(Path::new(data_root), "knot")
                     .expect("Knot could not open this device identity"),
                 [],
             )
             .and_then(|authority| {
-                authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
+                authority.into_endpoint(knot_editor::KnotWriteGrant::new(parse_u64(
                     max_source_bytes,
                     "persona-vault byte limit",
                 )))
             })
             .expect("Knot could not startup-unlock the requested persona vault");
             endpoint.grant_clip_evidence(
-                knot::BlobClipEvidenceStore::open(
+                knot_editor::BlobClipEvidenceStore::open(
                     PathBuf::from(evidence_root),
                     parse_u64(max_evidence_bytes, "clip evidence byte limit"),
                 )
@@ -197,15 +197,15 @@ fn main() {
                 .parse::<uuid::Uuid>()
                 .map(personae::PersonaId::from_uuid)
                 .expect("persona-vault persona must be a UUID");
-            let mut endpoint = knot::StartupUnlockedPersonalVault::open(
+            let mut endpoint = knot_editor::StartupUnlockedPersonalVault::open(
                 PathBuf::from(data_root),
                 persona,
-                knot::local_device_root(Path::new(data_root), "knot")
+                knot_editor::local_device_root(Path::new(data_root), "knot")
                     .expect("Knot could not open this device identity"),
                 [],
             )
             .and_then(|authority| {
-                authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
+                authority.into_endpoint(knot_editor::KnotWriteGrant::new(parse_u64(
                     max_source_bytes,
                     "persona-vault byte limit",
                 )))
@@ -242,15 +242,15 @@ fn main() {
                 .parse::<uuid::Uuid>()
                 .map(personae::PersonaId::from_uuid)
                 .expect("persona-vault persona must be a UUID");
-            let mut endpoint = knot::StartupUnlockedPersonalVault::open(
+            let mut endpoint = knot_editor::StartupUnlockedPersonalVault::open(
                 PathBuf::from(data_root),
                 persona,
-                knot::local_device_root(Path::new(data_root), "knot")
+                knot_editor::local_device_root(Path::new(data_root), "knot")
                     .expect("Knot could not open this device identity"),
                 [],
             )
             .and_then(|authority| {
-                authority.into_endpoint(knot::KnotWriteGrant::new(parse_u64(
+                authority.into_endpoint(knot_editor::KnotWriteGrant::new(parse_u64(
                     max_source_bytes,
                     "persona-vault byte limit",
                 )))
@@ -267,7 +267,7 @@ fn main() {
                 None,
             ));
             endpoint.grant_clip_evidence(
-                knot::BlobClipEvidenceStore::open(
+                knot_editor::BlobClipEvidenceStore::open(
                     PathBuf::from(evidence_root),
                     parse_u64(max_evidence_bytes, "clip evidence byte limit"),
                 )
@@ -335,8 +335,8 @@ fn main() {
 fn communal_fixture_endpoint(
     root: PathBuf,
     max_source_bytes: u64,
-    effects: knot::KnotEffectAuthority,
-) -> knot::KnotEndpoint {
+    effects: knot_editor::KnotEffectAuthority,
+) -> knot_editor::KnotEndpoint {
     const SPACE: [u8; 32] = [0xC1; 32];
     const RECEIVED_SEED: [u8; 32] = [0xC2; 32];
     const LOCAL_SEED: [u8; 32] = [0xC3; 32];
@@ -349,7 +349,7 @@ fn communal_fixture_endpoint(
     let local_writer = *SigningKey::from_bytes(&LOCAL_SEED)
         .verifying_key()
         .as_bytes();
-    let store = knot::KnotSyncFileStore::open_commons(
+    let store = knot_editor::KnotSyncFileStore::open_commons(
         root.join("commons.redb"),
         SPACE,
         [received_writer, local_writer],
@@ -368,7 +368,7 @@ fn communal_fixture_endpoint(
     pollster::block_on(store.author_communal(
         RECEIVED_SEED,
         &keys,
-        &knot::KnotSyncEvent::Put(knot::VaultDocument {
+        &knot_editor::KnotSyncEvent::Put(knot_editor::VaultDocument {
             id: "received".into(),
             title: "Received calculation".into(),
             body: source.as_bytes().to_vec(),
@@ -377,13 +377,13 @@ fn communal_fixture_endpoint(
     ))
     .expect("could not author received communal fixture document");
     let vault =
-        knot::KnotVault::open(root.join("vault"), VAULT_KEY).expect("could not open fixture vault");
-    let mut endpoint = knot::KnotEndpoint::from_communal_vault(
+        knot_editor::KnotVault::open(root.join("vault"), VAULT_KEY).expect("could not open fixture vault");
+    let mut endpoint = knot_editor::KnotEndpoint::from_communal_vault(
         vault,
         store,
         LOCAL_SEED,
         keys,
-        knot::KnotWriteGrant::new(max_source_bytes),
+        knot_editor::KnotWriteGrant::new(max_source_bytes),
     )
     .expect("could not open communal fixture endpoint");
     endpoint.grant_effects(effects);
@@ -397,11 +397,11 @@ fn parse_u64(value: &OsStr, label: &str) -> u64 {
         .unwrap_or_else(|_| panic!("{label} must be an integer"))
 }
 
-fn parse_effect_mode(value: &OsStr) -> knot::KnotEffectMode {
+fn parse_effect_mode(value: &OsStr) -> knot_editor::KnotEffectMode {
     match value.to_string_lossy().as_ref() {
-        "auto" => knot::KnotEffectMode::Auto,
-        "ask" => knot::KnotEffectMode::Ask,
-        "never" => knot::KnotEffectMode::Never,
+        "auto" => knot_editor::KnotEffectMode::Auto,
+        "ask" => knot_editor::KnotEffectMode::Ask,
+        "never" => knot_editor::KnotEffectMode::Never,
         other => panic!("effect mode must be auto, ask, or never; got {other}"),
     }
 }
@@ -426,8 +426,8 @@ fn effect_authority(
     max_ops: &OsStr,
     max_fetch_bytes: &OsStr,
     file_root: Option<&Path>,
-) -> knot::KnotEffectAuthority {
-    let policy = knot::KnotEffectPolicy {
+) -> knot_editor::KnotEffectAuthority {
+    let policy = knot_editor::KnotEffectPolicy {
         resolve: parse_effect_mode(resolve),
         run: parse_effect_mode(run),
         allowed_schemes: parse_csv(schemes),
@@ -453,7 +453,7 @@ fn effect_authority(
         .allowed_languages
         .iter()
         .any(|language| language == "rhai");
-    let mut authority = knot::KnotEffectAuthority::new(policy);
+    let mut authority = knot_editor::KnotEffectAuthority::new(policy);
     if has_file || has_network {
         let file = has_file.then(|| {
             RootedFileFetcher::new(
@@ -489,7 +489,7 @@ struct RoutedEffectFetcher {
     network: Option<NetworkEffectFetcher>,
 }
 
-impl knot::KnotEffectFetcher for RoutedEffectFetcher {
+impl knot_editor::KnotEffectFetcher for RoutedEffectFetcher {
     fn fetch(&mut self, address: &str) -> Result<inker::Fetched, String> {
         let scheme = url::Url::parse(address)
             .map_err(|error| format!("could not parse effect address {address}: {error}"))?
@@ -514,7 +514,7 @@ impl knot::KnotEffectFetcher for RoutedEffectFetcher {
         let network = self
             .network
             .as_ref()
-            .map(knot::KnotEffectFetcher::cache_version)
+            .map(knot_editor::KnotEffectFetcher::cache_version)
             .unwrap_or_else(|| "none".into());
         format!(
             "knot.routed-effect-fetcher/v1;file={};network={network}",
@@ -539,7 +539,7 @@ impl NetworkEffectFetcher {
     }
 }
 
-impl knot::KnotEffectFetcher for NetworkEffectFetcher {
+impl knot_editor::KnotEffectFetcher for NetworkEffectFetcher {
     fn fetch(&mut self, address: &str) -> Result<inker::Fetched, String> {
         let fetched = self
             .runtime
@@ -571,7 +571,7 @@ impl RootedFileFetcher {
     }
 }
 
-impl knot::KnotEffectFetcher for RootedFileFetcher {
+impl knot_editor::KnotEffectFetcher for RootedFileFetcher {
     fn fetch(&mut self, address: &str) -> Result<inker::Fetched, String> {
         let url = url::Url::parse(address)
             .map_err(|error| format!("could not parse effect address {address}: {error}"))?;
@@ -672,7 +672,7 @@ mod tests {
             .block_on(fetch::fetch_page_capped(&url, 1024))
             .expect("seed browser session cookie");
         let fetched =
-            knot::KnotEffectFetcher::fetch(&mut fetcher, &url).expect("fetch HTTP effect");
+            knot_editor::KnotEffectFetcher::fetch(&mut fetcher, &url).expect("fetch HTTP effect");
 
         assert_eq!(fetched.content_type.as_deref(), Some("text/markdown"));
         assert_eq!(fetched.body, "# from HTTP\n");
@@ -691,7 +691,7 @@ mod tests {
         let (url, server) = serve_gopher_once("from Gopher\r\n");
         let mut fetcher = NetworkEffectFetcher::new(1024).expect("start fetcher");
         let fetched =
-            knot::KnotEffectFetcher::fetch(&mut fetcher, &url).expect("fetch Gopher effect");
+            knot_editor::KnotEffectFetcher::fetch(&mut fetcher, &url).expect("fetch Gopher effect");
 
         assert_eq!(fetched.content_type.as_deref(), Some("text/plain"));
         assert_eq!(fetched.body, "from Gopher\r\n");
@@ -710,8 +710,8 @@ mod tests {
         };
 
         assert_ne!(
-            knot::KnotEffectFetcher::cache_version(&small),
-            knot::KnotEffectFetcher::cache_version(&large)
+            knot_editor::KnotEffectFetcher::cache_version(&small),
+            knot_editor::KnotEffectFetcher::cache_version(&large)
         );
     }
 

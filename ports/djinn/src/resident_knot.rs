@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use knot::{
+use knot_editor::{
     KnotContentRetentionPort, KnotResidentSource, KnotRosetteConfig, KnotSettings,
     KnotSpaceAuthoritySnapshot, KnotSyncHost, KnotSyncHostConfig, KnotWriteGrant,
     StartupUnlockedPersonalVault, knot_settings_path, local_device_root, persona_vault_root,
@@ -221,7 +221,7 @@ impl ResidentKnot {
     }
 }
 
-fn sync_host_config(sync: &knot::KnotSyncSettings) -> Result<KnotSyncHostConfig, String> {
+fn sync_host_config(sync: &knot_editor::KnotSyncSettings) -> Result<KnotSyncHostConfig, String> {
     let relay_urls =
         transport::P2pandaHostPolicy::parse_relay_urls(sync.relay_urls.iter().map(String::as_str))
             .map_err(|error| format!("resident Knot {error}"))?;
@@ -241,7 +241,7 @@ mod tests {
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
     };
-    use knot::{KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument};
+    use knot_editor::{KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument};
     use p2panda_core::SigningKey;
     use sceno::InstanceId;
     use transport::BlobReadAuthorizer;
@@ -379,7 +379,7 @@ mod tests {
         };
         let empty_authority_revision = resident.sync.as_ref().unwrap().authority_revision();
         assert!(!readers.allows(scope, &peer, hash));
-        let mut sync_settings = knot::KnotSyncSettings::default();
+        let mut sync_settings = knot_editor::KnotSyncSettings::default();
         assert!(sync_settings.pair(peer));
         KnotSettings {
             sync: Some(sync_settings.clone()),

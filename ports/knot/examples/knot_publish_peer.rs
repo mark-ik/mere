@@ -2,22 +2,22 @@
 //!
 //! ```text
 //! # On the reader device, make a public key from its private local seed:
-//! KNOT_PUBLISH_READER_SEED=<64 hex> cargo run -p knot --example knot_publish_peer -- reader-key
+//! KNOT_PUBLISH_READER_SEED=<64 hex> cargo run -p knot-editor --example knot_publish_peer -- reader-key
 //!
 //! # On the holder, issue a ticket only to that public key and print it:
 //! KNOT_PUBLISH_HOLDER_SEED=<64 hex> KNOT_PUBLISH_READER_PUBLIC=<64 hex> \
-//!   cargo run -p knot --example knot_publish_peer -- hold
+//!   cargo run -p knot-editor --example knot_publish_peer -- hold
 //!
 //! # Paste the printed ticket on the reader. The reader never receives the
 //! # holder's seed, vault key, paired-writer key, or sync store:
 //! KNOT_PUBLISH_READER_SEED=<same 64 hex> \
-//!   cargo run -p knot --example knot_publish_peer -- visit <ticket>
+//!   cargo run -p knot-editor --example knot_publish_peer -- visit <ticket>
 //!
 //! # On the same LAN, prove mDNS discovery without adding the endpoint ticket
 //! # to the address book. The ticket still supplies the holder identity and
 //! # signed publication delegation, but never a dial address:
 //! KNOT_PUBLISH_READER_SEED=<same 64 hex> \
-//!   cargo run -p knot --example knot_publish_peer -- visit-mdns <ticket>
+//!   cargo run -p knot-editor --example knot_publish_peer -- visit-mdns <ticket>
 //! ```
 //!
 //! `KNOT_PUBLISH_SOURCE` may set the holder's fixture source. The runner is a
@@ -27,7 +27,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use knot::{
+use knot_editor::{
     KnotPublishCatalog, KnotPublishHost, KnotPublishHostLimits, KnotPublishRead,
     KnotShareRecipient, KnotSyncEvent, KnotSyncStore, KnotVault, decode_share_ticket,
     encode_share_ticket, fetch_published_document, publish_alpn, publish_policy, revoke_share,
@@ -65,7 +65,7 @@ async fn run() -> Result<(), String> {
     match args.next().as_deref() {
         Some("reader-key") => {
             let reader = reader_identity()?;
-            println!("{}", knot::hex32(&reader.master_public_key().to_bytes()));
+            println!("{}", knot_editor::hex32(&reader.master_public_key().to_bytes()));
             Ok(())
         }
         Some("hold") => hold(false).await,
@@ -115,7 +115,7 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
         .author(
             holder.master_keypair().to_seed(),
             &vault,
-            &KnotSyncEvent::Put(knot::VaultDocument {
+            &KnotSyncEvent::Put(knot_editor::VaultDocument {
                 id: "receipt-source".into(),
                 title: "Private receipt source".into(),
                 body: source.into_bytes(),
@@ -173,10 +173,10 @@ async fn hold(revoke_after_first_fetch: bool) -> Result<(), String> {
     println!("  publication: {}", publication.as_uuid());
     println!("  ticket: {encoded_ticket}");
     println!(
-        "  same LAN (preferred): cargo run -p knot --example knot_publish_peer -- visit-mdns <ticket>"
+        "  same LAN (preferred): cargo run -p knot-editor --example knot_publish_peer -- visit-mdns <ticket>"
     );
     println!(
-        "  ticket endpoint fallback: cargo run -p knot --example knot_publish_peer -- visit <ticket>"
+        "  ticket endpoint fallback: cargo run -p knot-editor --example knot_publish_peer -- visit <ticket>"
     );
     println!("  waiting for one distinct reader identity...");
     let outcome = host
@@ -306,7 +306,7 @@ fn reader_identity() -> Result<InMemoryProvider, String> {
 
 fn env_key(name: &str) -> Result<[u8; 32], String> {
     let value = std::env::var(name).map_err(|_| format!("set {name} to 64 hex characters"))?;
-    knot::parse_hex32(&value).map_err(|error| error.to_string())
+    knot_editor::parse_hex32(&value).map_err(|error| error.to_string())
 }
 
 fn network() -> Result<NetworkId, String> {

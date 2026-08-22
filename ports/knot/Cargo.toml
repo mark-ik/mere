@@ -1,10 +1,10 @@
 [package]
-name = "knot"
-version.workspace = true
+name = "knot-editor"
+version = "0.0.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Files-in-place authoring endpoint for Mere."
+description = "Knot Editor, Mere's files-in-place local-first Djot editor."
 
 [[bin]]
 name = "knot_endpoint"

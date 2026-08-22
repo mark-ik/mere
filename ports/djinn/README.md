@@ -22,10 +22,10 @@ pairing records, and content-store migrations, not an additional resident.
 ## Publishing
 
 `0.0.2` is the source version of this workspace resident, not a crates.io
-release. `cargo package` correctly refuses it: its Graphshell/Knot composition
-still uses workspace-only dependencies, and the registry's `knot` name belongs
-to an unrelated package. A public Djinn release needs an installable package
-boundary and a staged release of the Mere dependencies it exposes.
+release. `cargo package` correctly refuses it because its Graphshell and Knot
+Editor composition still uses workspace-only dependencies. A public Djinn
+release needs an installable package boundary and a staged release of the Mere
+dependencies it exposes.
 
 ## Security boundary
 

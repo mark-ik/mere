@@ -3,7 +3,7 @@ use graphshell::client::RetainedEndpointSession;
 use graphshell::view::{ProjectionLayoutView, ProjectionReceiptView, render_projection_receipt};
 use graphshell_endpoint::ResumableProjectionSource;
 use graphshell_local::LocalCarrier;
-use knot::{KnotEndpoint, KnotRosetteConfig, RosetteConfig};
+use knot_editor::{KnotEndpoint, KnotRosetteConfig, RosetteConfig};
 use tempfile::tempdir;
 
 const POEM: &str = "Morning gathers light\nBranches answer night\n\nFootsteps cross the hill\nEvening settles still\n";
