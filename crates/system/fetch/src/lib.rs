@@ -55,12 +55,28 @@ const PAGE_BODY_CAP: usize = 64 * 1024 * 1024;
 /// The subresource counterpart (a page's images / CSS): generous but bounded.
 const SUBRESOURCE_BODY_CAP: usize = 32 * 1024 * 1024;
 
-/// Successfully fetched content: the response content-type (if any) and the
-/// decoded body as text.
+/// Successfully fetched content. Rendering uses the decoded text while hosts
+/// that retain or download a response use the original bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fetched {
     pub content_type: Option<String>,
+    pub content_disposition: Option<String>,
+    pub bytes: Vec<u8>,
     pub body: String,
+}
+
+impl Fetched {
+    /// Build a text fixture while keeping the byte and decoded views coherent.
+    pub fn text(content_type: Option<String>, body: impl Into<String>) -> Self {
+        let body = body.into();
+        let bytes = body.as_bytes().to_vec();
+        Self {
+            content_type,
+            content_disposition: None,
+            bytes,
+            body,
+        }
+    }
 }
 
 /// A page request that needs host participation rather than being reducible
@@ -479,10 +495,17 @@ fn smolweb_submission_answer(
     response: errand::Response,
 ) -> Result<SubmissionAnswer, FetchFailure> {
     match response.status {
-        errand::Status::Success => Ok(SubmissionAnswer::Success(Fetched {
-            content_type: Some(smolweb_content_type(request_url, &response)),
-            body: String::from_utf8_lossy(&response.body).into_owned(),
-        })),
+        errand::Status::Success => {
+            let content_type = smolweb_content_type(request_url, &response);
+            let bytes = response.body;
+            let body = String::from_utf8_lossy(&bytes).into_owned();
+            Ok(SubmissionAnswer::Success(Fetched {
+                content_type: Some(content_type),
+                content_disposition: None,
+                bytes,
+                body,
+            }))
+        }
         errand::Status::Redirect => {
             let target = request_url
                 .join(&response.meta)
@@ -542,7 +565,7 @@ async fn fetch_page_interactive_capped(
             let log_url = url_without_query(url);
             tracing::info!(url = %log_url, ?scheme, "smolweb fetch");
             let result = smolweb_fetch(url, identity).await.and_then(|fetched| {
-                if fetched.body.len() > max_bytes {
+                if fetched.bytes.len() > max_bytes {
                     Err(FetchFailure::Failed(format!(
                         "response exceeds the {max_bytes}-byte cap"
                     )))
@@ -554,7 +577,7 @@ async fn fetch_page_interactive_capped(
                 Ok(fetched) => tracing::info!(
                     url = %log_url,
                     content_type = ?fetched.content_type,
-                    bytes = fetched.body.len(),
+                    bytes = fetched.bytes.len(),
                     "smolweb ok",
                 ),
                 Err(error) => tracing::warn!(url = %log_url, %error, "smolweb failed"),
@@ -628,9 +651,12 @@ async fn smolweb_fetch(
 ) -> Result<Fetched, FetchFailure> {
     let (current, response) = smolweb_fetch_response(url, identity).await?;
     let content_type = smolweb_content_type(&current, &response);
-    let body = String::from_utf8_lossy(&response.body).into_owned();
+    let bytes = response.body;
+    let body = String::from_utf8_lossy(&bytes).into_owned();
     Ok(Fetched {
         content_type: Some(content_type),
+        content_disposition: None,
+        bytes,
         body,
     })
 }
@@ -801,9 +827,19 @@ async fn do_fetch_ua_with_context(
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
         .map(|(_, v)| v.clone());
+    let content_disposition = response
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("content-disposition"))
+        .map(|(_, v)| v.clone());
     let bytes = read_capped(response.body, max_bytes).await?;
     let body = String::from_utf8_lossy(&bytes).into_owned();
-    Ok(Fetched { content_type, body })
+    Ok(Fetched {
+        content_type,
+        content_disposition,
+        bytes,
+        body,
+    })
 }
 
 /// Fetch raw response bytes through the same scheme and trust routing as a page,

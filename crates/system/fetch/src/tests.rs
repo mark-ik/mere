@@ -180,10 +180,7 @@ fn certificate_change_keeps_the_target_and_both_fingerprints_typed() {
 
 #[test]
 fn state_tag_distinguishes_transitions() {
-    let ready = ContentState::Ready(Fetched {
-        content_type: None,
-        body: String::new(),
-    });
+    let ready = ContentState::Ready(Fetched::text(None, ""));
     assert_eq!(ContentState::tag(None), 0);
     assert_eq!(ContentState::tag(Some(&ContentState::Loading)), 1);
     assert_ne!(
