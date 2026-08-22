@@ -132,6 +132,19 @@ pub struct FetchOutcome {
     pub result: Result<Fetched, FetchFailure>,
 }
 
+/// One exact page-body fragment observed before the terminal fetch outcome.
+/// Only Gemini currently exposes transport reads incrementally; the final
+/// [`FetchOutcome`] remains authoritative and retains the complete bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PageProgress {
+    /// Original address used to correlate the actor request.
+    pub url: String,
+    /// Address of the successful response after any redirects.
+    pub response_url: String,
+    pub content_type: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
 /// One explicit small-web mutation. Kept separate from page fetches so the
 /// actor cannot deduplicate, redirect-follow, or retry a write as if it were a
 /// read.
@@ -347,6 +360,7 @@ pub enum FetchCommand {
 
 /// An update from the fetch actor: one completed page, subresource, or favicon fetch.
 pub enum FetchUpdate {
+    PageProgress(PageProgress),
     Page(FetchOutcome),
     Subresource(SubresourceOutcome),
     /// Raw favicon bytes (only on success) plus the page they belong to; the host
@@ -378,9 +392,22 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                 FetchCommand::Page { url, identity } => {
                     let out = out.clone();
                     runtime.spawn(async move {
-                        let result =
-                            fetch_page_interactive_capped(&url, PAGE_BODY_CAP, identity.as_ref())
-                                .await;
+                        let progress_out = out.clone();
+                        let request_url = url.clone();
+                        let result = fetch_page_interactive_capped(
+                            &url,
+                            PAGE_BODY_CAP,
+                            identity.as_ref(),
+                            move |response_url, content_type, bytes| {
+                                progress_out.emit(FetchUpdate::PageProgress(PageProgress {
+                                    url: request_url.clone(),
+                                    response_url: response_url.to_string(),
+                                    content_type: content_type.map(str::to_string),
+                                    bytes: bytes.to_vec(),
+                                }));
+                            },
+                        )
+                        .await;
                         out.emit(FetchUpdate::Page(FetchOutcome { url, result }));
                     });
                 }
@@ -547,7 +574,7 @@ pub async fn fetch_page(url: &str) -> Result<Fetched, String> {
 /// body (§A5): the http path enforces it *while streaming* (no OOM); smolweb is
 /// already buffered by errand, so it is checked post-hoc (errand bounds its own read).
 pub async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fetched, String> {
-    fetch_page_interactive_capped(url, max_bytes, None)
+    fetch_page_interactive_capped(url, max_bytes, None, |_, _, _| {})
         .await
         .map_err(|error| error.to_string())
 }
@@ -555,16 +582,28 @@ pub async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fetched, S
 /// Fetch one page while preserving protocol responses that require host
 /// participation. This is actor-facing: ordinary utility callers retain the
 /// terminal `Result<Fetched, String>` contract above.
-async fn fetch_page_interactive_capped(
+async fn fetch_page_interactive_capped<F>(
     url: &str,
     max_bytes: usize,
     identity: Option<&GeminiClientIdentity>,
-) -> Result<Fetched, FetchFailure> {
+    mut on_progress: F,
+) -> Result<Fetched, FetchFailure>
+where
+    F: FnMut(&url::Url, Option<&str>, &[u8]),
+{
     match scheme_of(url).and_then(errand::Scheme::parse) {
         Some(scheme) => {
             let log_url = url_without_query(url);
             tracing::info!(url = %log_url, ?scheme, "smolweb fetch");
-            let result = smolweb_fetch(url, identity).await.and_then(|fetched| {
+            let mut streamed_bytes = 0_usize;
+            let result = smolweb_fetch(url, identity, |response_url, content_type, bytes| {
+                streamed_bytes = streamed_bytes.saturating_add(bytes.len());
+                if streamed_bytes <= max_bytes {
+                    on_progress(response_url, content_type, bytes);
+                }
+            })
+            .await
+            .and_then(|fetched| {
                 if fetched.bytes.len() > max_bytes {
                     Err(FetchFailure::Failed(format!(
                         "response exceeds the {max_bytes}-byte cap"
@@ -645,11 +684,15 @@ pub async fn fetch_page_crawler(url: &str) -> Result<Fetched, String> {
 /// [`MAX_REDIRECTS`], and fold the response into a [`Fetched`] the nematic engines
 /// render. Input and certificate statuses stay typed so the host can continue
 /// the protocol conversation; terminal failures remain displayable prose.
-async fn smolweb_fetch(
+async fn smolweb_fetch<F>(
     url: &str,
     identity: Option<&GeminiClientIdentity>,
-) -> Result<Fetched, FetchFailure> {
-    let (current, response) = smolweb_fetch_response(url, identity).await?;
+    mut on_progress: F,
+) -> Result<Fetched, FetchFailure>
+where
+    F: FnMut(&url::Url, Option<&str>, &[u8]),
+{
+    let (current, response) = smolweb_fetch_response(url, identity, &mut on_progress).await?;
     let content_type = smolweb_content_type(&current, &response);
     let bytes = response.body;
     let body = String::from_utf8_lossy(&bytes).into_owned();
@@ -664,23 +707,48 @@ async fn smolweb_fetch(
 /// Fetch a successful smolweb response without decoding its body. Page loads
 /// and binary subresources share redirect, timeout, certificate, and protocol
 /// status handling through this one path.
-async fn smolweb_fetch_response(
+async fn smolweb_fetch_response<F>(
     url: &str,
     identity: Option<&GeminiClientIdentity>,
-) -> Result<(url::Url, errand::Response), FetchFailure> {
+    on_progress: &mut F,
+) -> Result<(url::Url, errand::Response), FetchFailure>
+where
+    F: FnMut(&url::Url, Option<&str>, &[u8]),
+{
     let mut current =
         url::Url::parse(url).map_err(|error| FetchFailure::Failed(format!("bad URL: {error}")))?;
     for _ in 0..MAX_REDIRECTS {
-        let response = match identity.filter(|identity| identity.applies_to(&current)) {
-            Some(identity) => {
-                errand::fetch_url_timeout_with_identity(
-                    &current,
-                    identity.errand_view(),
-                    SMOLWEB_TIMEOUT,
-                )
-                .await
+        let response_url = current.clone();
+        let response = if current.scheme() == "gemini" {
+            match identity.filter(|identity| identity.applies_to(&current)) {
+                Some(identity) => {
+                    errand::fetch_gemini_url_streaming_timeout_with_identity(
+                        &current,
+                        identity.errand_view(),
+                        SMOLWEB_TIMEOUT,
+                        |chunk| on_progress(&response_url, chunk.content_type, chunk.bytes),
+                    )
+                    .await
+                }
+                None => {
+                    errand::fetch_gemini_url_streaming_timeout(&current, SMOLWEB_TIMEOUT, |chunk| {
+                        on_progress(&response_url, chunk.content_type, chunk.bytes)
+                    })
+                    .await
+                }
             }
-            None => errand::fetch_url_timeout(&current, SMOLWEB_TIMEOUT).await,
+        } else {
+            match identity.filter(|identity| identity.applies_to(&current)) {
+                Some(identity) => {
+                    errand::fetch_url_timeout_with_identity(
+                        &current,
+                        identity.errand_view(),
+                        SMOLWEB_TIMEOUT,
+                    )
+                    .await
+                }
+                None => errand::fetch_url_timeout(&current, SMOLWEB_TIMEOUT).await,
+            }
         }
         .map_err(|error| smolweb_transport_failure(&current, error))?;
         match response.status {
@@ -846,7 +914,7 @@ async fn do_fetch_ua_with_context(
 /// bounded by [`SUBRESOURCE_BODY_CAP`].
 async fn fetch_bytes(url: &str) -> Result<Vec<u8>, String> {
     if scheme_of(url).and_then(errand::Scheme::parse).is_some() {
-        let (_final_url, response) = smolweb_fetch_response(url, None)
+        let (_final_url, response) = smolweb_fetch_response(url, None, &mut |_, _, _| {})
             .await
             .map_err(|error| error.to_string())?;
         if response.body.len() > SUBRESOURCE_BODY_CAP {
