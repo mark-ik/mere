@@ -2,12 +2,13 @@
 
 **Date**: 2026-08-09
 
-**Status**: D2a, the MiniLM D2b embedding row, and D2c's configured embedding
-matrix are complete. Headed Chromium passes four cold/cancel/warm rows from a
-34.8 MB F16 BGE artifact through a 438.0 MB F32 E5-base artifact. The upper
-embedding boundary is unmeasured above that matrix. Decoder streaming,
-cooperative ESP cancellation, and GPU-memory release remain unmeasured. This
-track remains independent of the personal mesh and Burn Remote.
+**Status**: D2a, the MiniLM D2b embedding row, D2c's configured embedding
+matrix, and one exact D2c decoder row are complete. Headed Chromium passes four
+cold/cancel/warm embedding rows from a 34.8 MB F16 BGE artifact through a
+438.0 MB F32 E5-base artifact, plus cold/warm streamed SmolLM2 generation from
+a 269.1 MB BF16 artifact. The upper model boundaries, cooperative ESP decoder
+cancellation, and GPU-memory release remain unmeasured. This track remains
+independent of the personal mesh and Burn Remote.
 
 **Related**:
 [`2026-07-05_inference_provider_plan.md`](2026-07-05_inference_provider_plan.md),
@@ -42,15 +43,21 @@ Established now:
   PyTorch/Transformers reference.
 - Worker termination at `executing` yields no late message in the configured
   300 ms quiet window for every row.
-- Frame p95 stays below 33.4 ms in every sampled phase. Forty-one isolated
-  over-bound intervals remain visible, with a 175.8 ms maximum.
+- A clean headed SmolLM2 row reopens the stored decoder in a fresh worker,
+  streams every fragment to the page, repeats within and across workers, and
+  exactly matches Transformers CPU and ESP NdArray token ids and text.
+- The decoder row records first-token latency, post-first-token throughput,
+  frame impact, integrity, and WebGPU error scopes.
+- Frame p95 stays below 33.4 ms in every sampled phase. The embedding matrix
+  retains 41 isolated over-bound intervals with a 175.8 ms maximum; the
+  decoder row adds four intervals with a 60.7 ms maximum.
 
 Still unproven:
 
-- decoder streaming and cooperative ESP cancellation;
+- cooperative ESP cancellation during decoder generation;
 - GPU-memory release after worker termination;
 - a first failing embedding row above the 438 MB E5-base artifact;
-- a decoder artifact/first-token/throughput matrix; and
+- a larger or failing decoder row beyond the first 269.1 MB success; and
 - whether isolated frame spikes remain acceptable under a configured product
   workload.
 
@@ -183,9 +190,11 @@ The result is a capability table, not one universal number. Artifact format,
 quantization, browser, adapter, available storage, and copy strategy all affect
 the ceiling.
 
-The embedding phase is complete through the configured E5-base row. The
-decoder phase remains open and must use the decoder provider rather than infer
-decoder behavior from embedding throughput.
+The embedding phase is complete through the configured E5-base row. The first
+decoder row is complete through pinned SmolLM2-135M-Instruct and uses the ESP
+decoder provider directly. The decoder phase remains open for cooperative
+cancellation, teardown, and a larger row only when a forcing consumer needs an
+upper capability bound.
 
 ---
 
@@ -339,3 +348,24 @@ product default is a later decision informed by these receipts.
   intervals and a 175.8 ms maximum. The upper embedding boundary is unmeasured
   above the matrix. Decoder streaming, cooperative ESP cancellation, and GPU
   memory release remain open as the decoder phase.
+- **2026-08-22, D2c first decoder row**: pinned
+  `HuggingFaceTB/SmolLM2-135M-Instruct` at revision
+  `12fd25f77366fa6b3b4b768ec3050bf629380bac`. The 269,060,552-byte BF16
+  checkpoint is promoted to f32 by ESP and loaded through the same eager
+  artifact corridor. Independent Transformers 5.15.1 / PyTorch 2.13 CPU and
+  ESP NdArray controls generate ids `[198, 198, 504, 1743, 314, 253, 216, 35]`.
+
+  The first comparison exposed ESP's use of adjacent-pair rotary encoding;
+  Llama requires split-half `rotate_half` pairing. After that correction, the
+  first browser run reached token selection and exposed Burn's synchronous
+  readback trap on wasm. ESP now provides async token readback with native
+  sync/async parity coverage.
+
+  A clean `dd215ebd` Chromium 151 build then passed cold and warm artifact
+  reopen, exact token and text reference, two repeat generations per worker,
+  stream reconstruction at the page, and all WebGPU error scopes. First-token
+  latency ranged from 67 ms to 364 ms; post-first-token throughput ranged from
+  18.47 to 26.22 tok/s. Frame p95 stayed at or below 6.2 ms, with four isolated
+  over-bound intervals and a 60.7 ms maximum. Persistent storage remained best
+  effort. Cooperative ESP cancellation and GPU-memory release remain open; a
+  larger decoder row is consumer-gated.

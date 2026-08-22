@@ -7,7 +7,8 @@ amendments remain authoritative: corrected knot consumer graph, restored
 mesh/scheduler boundaries, host-side device policy, narrowed servitor
 language, and separate portability and repository-promotion gates. Supersedes
 the first draft written in `repos/esp/design_docs/`; that file is now a pointer
-here.
+here. D2's configured embedding matrix and first exact browser decoder row now
+pass; cooperative decoder cancellation and GPU teardown remain open.
 **Scope**: fold `vates` and `sibylla` into one crate named `esp` inside mere,
 retire the two names, and connect the crate to the intention corpus it serves.
 The lanes themselves keep their own plans; this doc consolidates the code and
@@ -167,7 +168,10 @@ up, per the burn brief's own rule.
   memory, cancellation, UI frame impact, worker restart. Model artifacts ride
   the existing muniment IndexedDB store and its headed-proven persistence
   status UX (graphshell's 2026-08-06 browser-storage receipt); esp does not
-  grow its own cache.
+  grow its own cache. The configured embedding matrix and first real decoder
+  row now pass in headed Chromium. The remaining D2 wasm tail is cooperative
+  decoder cancellation, GPU teardown evidence, and larger capability bounds
+  only when a consumer forces them.
 - **The harness's missing trait**: `AdapterLoader` was specified in the harness
   brief §2 and never built. Load/stack LoRA-adapter engrams against a base,
   honouring the geist compatibility envelope; a mismatch is a rejection, never
@@ -353,3 +357,13 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   This closes the embedding phase through the configured matrix; decoder
   streaming, cooperative cancellation, GPU-memory release, and the upper
   embedding boundary remain open.
+- **2026-08-22, D2 first decoder row**: Distillery pinned a real
+  SmolLM2-135M-Instruct checkpoint and an independent Transformers reference.
+  That comparison corrected ESP's rotary pairing to Llama's split-half rule;
+  the headed wasm run then forced an async token-readback path because browser
+  WebGPU cannot block on Burn tensor data. Transformers CPU, ESP NdArray, and
+  a clean Chromium 151 BrowserWebGpu build now emit the same eight ids and
+  text. Cold/warm integrity reopen, repeatability, stream delivery, first-token
+  and steady-token timing, frame sampling, and WebGPU error gates pass.
+  Cooperative ESP cancellation, GPU-memory release, and larger decoder bounds
+  remain open.

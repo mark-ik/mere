@@ -2,8 +2,9 @@
 
 **Date**: 2026-08-12  
 **Status**: D0 complete; D1 resident authority lifecycle implemented; D2's
-configured browser embedding matrix complete. The installed-port authority and
-browser decoder phase remain open.
+configured browser embedding matrix and first exact decoder row complete. The
+installed-port authority, cooperative decoder cancellation, and GPU teardown
+remain open.
 
 ## 1. Purpose
 
@@ -169,11 +170,14 @@ reference, repeatability, GPU-error, and worker-cutoff gates. The persistent
 storage request resolved `false`, so the 698 MB IndexedDB corpus remains a
 reconstructible best-effort cache rather than durable product storage.
 
-The next D2 measurement is one real decoder row: streaming, first-token
-latency, token throughput, cooperative ESP cancellation, worker restart, UI
-frame impact, and GPU teardown. The upper embedding boundary above E5-base is
-explicitly unmeasured and does not need another row until a consumer asks for a
-larger embedding model.
+The first D2 decoder row now passes a pinned 269,060,552-byte BF16 SmolLM2
+artifact in headed Chromium. Cold and warm workers reproduce the independent
+Transformers and ESP NdArray token sequence exactly, stream every fragment to
+the page, reopen matching IndexedDB content, stay below the configured frame
+p95 bound, and report no WebGPU validation errors. The row forced Llama's
+split-half rotary rule and async browser token readback into ESP. Cooperative
+ESP cancellation and GPU teardown remain unmeasured. The upper embedding and
+decoder boundaries do not need larger rows until a consumer asks for them.
 
 Cambium views should follow `ResidentReceipt` after the installed authority
 selects its Personae profile and settings location. The prerelease Burn 0.22

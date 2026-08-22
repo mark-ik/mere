@@ -81,7 +81,14 @@ termination, message cutoff, and warm reopen through the 438 MB embedding row.
 The browser denied persistent-storage promotion, so the stored rows remained
 best effort even though same-origin warm reopen passed.
 
-This completes D2c's configured embedding phase. The upper embedding boundary
-is unmeasured above E5-base. Decoder streaming, first-token and token-throughput
-bounds, cooperative ESP cancellation, GPU-memory release, and a product default
-remain open. Trainers remain outside this ceiling probe.
+The first configured decoder row also passes in clean headed Chromium. Pinned
+SmolLM2-135M-Instruct reopens from IndexedDB, streams eight fragments across
+both cold and warm worker boundaries, and matches the independent Transformers
+and ESP NdArray ids exactly. First-token and post-first-token timing, frame
+impact, and GPU-error scopes are recorded in the
+[decoder receipt](receipts/2026-08-22_d2c_browser_decoder.json).
+
+This completes D2c's configured embedding phase and establishes one decoder
+success. The upper embedding and decoder boundaries are unmeasured.
+Cooperative ESP cancellation, GPU-memory release, and a product default remain
+open. Trainers remain outside this ceiling probe.

@@ -63,7 +63,9 @@ identified. A larger row such as E5-large-v2 would be useful only if a measured
 failure is needed; with the current eager five-copy ladder it is also likely to
 probe host linear-memory pressure before model quality matters.
 
-This receipt does not cover decoder streaming, first-token or steady-token
-throughput, cooperative ESP cancellation, or GPU-memory release after worker
-termination. Those belong to the D2c decoder phase. Trainers do not answer this
-browser ceiling question.
+The first separate decoder row now covers exact streaming, first-token and
+steady-token throughput, integrity reopen, worker restart, and frame impact for
+SmolLM2-135M-Instruct; see
+[`2026-08-22_browser_decoder_receipt.md`](2026-08-22_browser_decoder_receipt.md).
+Cooperative ESP cancellation and GPU-memory release after worker termination
+remain open. Trainers do not answer this browser ceiling question.
