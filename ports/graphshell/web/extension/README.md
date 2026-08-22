@@ -54,7 +54,7 @@ device-roster entry.
 
 The extension and `graphshell_native_host` hold presentation and connection
 state. The selected Personae profile, vault, SSH keys, delegation issuer, and
-`SessionHello` signer stay in `graphshell_device_host`.
+`SessionHello` signer stay in the Djinn resident.
 
 Installing the native-host manifest pairs one exact extension id with the relay
 binary. The relay connects to the per-user device broker, and each connection:
@@ -81,17 +81,16 @@ with the selected values.
 
 ## Building
 
-Build both hosts. `graphshell_device_host` requires `personal-sync`, which
-includes `native`:
+Build the Graphshell relay and Djinn resident:
 
 ```text
-cargo build -p graphshell --features personal-sync \
-  --bin graphshell_device_host --bin graphshell_native_host
+cargo build -p graphshell --bin graphshell_native_host
+cargo build -p djinn --bin djinn
 ```
 
-Start `graphshell_device_host` under the platform's resident lifecycle before
+Start `djinn` under the platform's resident lifecycle before
 opening the extension. On Windows,
-[`../../install-device-host-windows.ps1`](../../install-device-host-windows.ps1)
+[`../../djinn/install-windows.ps1`](../../djinn/install-windows.ps1)
 performs the reversible standard-agent cutover; it requires the expected live
 fingerprint and preserves the previous Personae task.
 

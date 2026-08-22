@@ -1,0 +1,10 @@
+[package]
+name = "mere-resident"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Internal lifecycle primitives shared by long-lived Mere residents."
+publish = false
+
+[dependencies]

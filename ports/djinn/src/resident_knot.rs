@@ -1,6 +1,6 @@
-//! Resident Knot composition inside the Graphshell device host.
+//! Resident Knot composition inside Djinn.
 //!
-//! Graphshell owns process topology. Knot still owns document semantics,
+//! Djinn owns process topology. Knot still owns document semantics,
 //! Personae owns startup unlock, Murm owns transport, and iroh-blobs owns the
 //! physical content store. This module only keeps those authorities alive in
 //! one resident and registers the stable local route.
@@ -15,11 +15,11 @@ use knot::{
 };
 use transport::BlobScope;
 
-use super::endpoint_catalog::{
+use crate::resident_blobs::{LEGACY_KNOT_LEASE, LegacyBlobMigration, ResidentBlobCustody};
+use crate::settings::KnotResidentSettings;
+use graphshell::native::endpoint_catalog::{
     ResidentEndpointCatalog, ResidentEndpointCatalogError, ResidentEndpointRoute,
 };
-use super::owner_settings::KnotResidentSettings;
-use super::resident_blobs::{LEGACY_KNOT_LEASE, LegacyBlobMigration, ResidentBlobCustody};
 
 /// Stable first-party route for the resident Djot vault.
 pub const RESIDENT_KNOT_ROUTE: &str = "knot";
@@ -246,12 +246,12 @@ mod tests {
     use sceno::InstanceId;
     use transport::BlobReadAuthorizer;
 
-    use crate::lifecycle::AdmittedEndpointContext;
+    use graphshell::lifecycle::AdmittedEndpointContext;
 
     use super::*;
 
     fn editable_resource(
-        endpoint: &mut super::super::endpoint_catalog::ResidentEndpointSession,
+        endpoint: &mut graphshell::native::endpoint_catalog::ResidentEndpointSession,
         snapshot: &chirograph::ProjectionSnapshot,
         address_suffix: &str,
     ) -> (InstanceId, EditableTextV1, AdvertisedAction) {

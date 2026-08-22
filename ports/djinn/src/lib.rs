@@ -1,8 +1,16 @@
-//! Name reservation for **Djinn**, a possible public package name for Knot,
-//! Mere's Djot editor.
+//! **Djinn**, the local desktop resident for the Mere stack.
 //!
-//! The editor remains implemented and packaged as `knot` while the name is
-//! being considered. This crate contains no editor code and does not make a
-//! rename decision.
+//! Djinn owns process lifetime, profile-scoped settings, physical content
+//! custody, and local endpoint assembly. Product ports retain their own
+//! semantics: Graphshell provides admitted session surfaces, Knot provides
+//! Djot source, sync, and evidence rules, Personae provides identity, and
+//! Castellan provides credential custody.
 
 #![doc(html_no_source)]
+
+pub mod pairing;
+pub mod personal_sync;
+pub mod resident_blobs;
+pub mod resident_knot;
+pub mod resident;
+pub mod settings;

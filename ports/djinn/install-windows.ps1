@@ -1,13 +1,15 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$DeviceHostBinary,
+    [Alias("DeviceHostBinary")]
+    [string]$DjinnBinary,
     [Parameter(Mandatory = $true)]
     [string]$NativeHostBinary,
     [Parameter(Mandatory = $true)]
     [string]$ExpectedFingerprint,
-    [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Graphshell\bin"),
-    [string]$TaskName = "graphshell-device-host",
+    [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "Djinn\bin"),
+    [string]$TaskName = "djinn-resident",
+    [string]$LegacyTaskName = "graphshell-device-host",
     [string]$PreviousTaskName = "personae-agent",
     [string]$DataRoot,
     [string]$SshProbeTarget,
@@ -70,17 +72,22 @@ function Find-DeviceHost([string]$ExecutablePath, [int]$ExceptPid = 0) {
         Select-Object -First 1
 }
 
-$deviceSource = Resolve-Binary $DeviceHostBinary "device host"
+$deviceSource = Resolve-Binary $DjinnBinary "Djinn resident"
 $nativeSource = Resolve-Binary $NativeHostBinary "native relay"
 New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
-$installedDevice = Join-Path $InstallRoot "graphshell-device-host.exe"
+$installedDevice = Join-Path $InstallRoot "djinn.exe"
 $installedNative = Join-Path $InstallRoot "graphshell-native-host.exe"
-$launcher = Join-Path $InstallRoot "graphshell-device-host.vbs"
-$logFile = Join-Path (Split-Path -Parent $InstallRoot) "device-host.log"
+$launcher = Join-Path $InstallRoot "djinn.vbs"
+$logFile = Join-Path (Split-Path -Parent $InstallRoot) "djinn.log"
 
 $previousTask = Get-ScheduledTask -TaskName $PreviousTaskName -ErrorAction SilentlyContinue
 $previousWasRunning = $previousTask -and $previousTask.State -eq "Running"
 $previousWasEnabled = $previousTask -and $previousTask.State -ne "Disabled"
+$legacyTask = if ($LegacyTaskName -ne $TaskName) {
+    Get-ScheduledTask -TaskName $LegacyTaskName -ErrorAction SilentlyContinue
+}
+$legacyWasRunning = $legacyTask -and $legacyTask.State -eq "Running"
+$legacyWasEnabled = $legacyTask -and $legacyTask.State -ne "Disabled"
 $newTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 $newTaskWasRunning = $newTask -and $newTask.State -eq "Running"
 if ($newTask) {
@@ -102,12 +109,13 @@ if ($DataRoot) {
 $deviceCommand = """$installedDevice"" $deviceArguments"
 $escapedDeviceCommand = $deviceCommand.Replace("""", """""")
 $vbs = @"
-' Graphshell resident host recovery loop. Task Scheduler owns this launcher;
-' the launcher restarts the device host after a crash.
+' Djinn resident recovery loop. Task Scheduler owns this launcher; Djinn
+' restarts after a crash.
 '
 ' Personal sync is not configured here. Which graph, which lanes and which
 ' paired devices are owner settings, stored per Personae profile under
-' %LOCALAPPDATA%\Graphshell\settings. Editing this launcher is not how you
+' %LOCALAPPDATA%\Graphshell\settings. Djinn retains this location while it
+' migrates existing profiles. Editing this launcher is not how you
 ' change what the device synchronises.
 '
 ' Arguments still override the settings file for a one-off run. Peer tickets
@@ -137,13 +145,17 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "Graphshell resident Personae authority and OpenSSH agent" `
+    -Description "Djinn resident Personae authority and OpenSSH agent" `
     -Force | Out-Null
 
 try {
     if ($previousTask) {
         Disable-ScheduledTask -TaskName $PreviousTaskName | Out-Null
         Stop-ScheduledTask -TaskName $PreviousTaskName -ErrorAction SilentlyContinue
+    }
+    if ($legacyTask) {
+        Disable-ScheduledTask -TaskName $LegacyTaskName | Out-Null
+        Stop-ScheduledTask -TaskName $LegacyTaskName -ErrorAction SilentlyContinue
     }
     $personaeExecutable = Join-Path $env:LOCALAPPDATA "personae\bin\personae-agent.exe"
     if (Test-Path -LiteralPath $personaeExecutable) {
@@ -154,7 +166,7 @@ try {
     $before = Wait-Agent $ExpectedFingerprint
     $first = Find-DeviceHost $installedDevice
     if (-not $first) {
-        throw "the scheduled task did not launch Graphshell's device host"
+        throw "the scheduled task did not launch Djinn"
     }
 
     Stop-Process -Id $first.ProcessId -Force -ErrorAction Stop
@@ -167,7 +179,7 @@ try {
         }
     }
     if (-not $replacement) {
-        throw "the recovery launcher did not replace the killed device host"
+        throw "the recovery launcher did not replace Djinn"
     }
 
     if ($SshProbeTarget) {
@@ -178,7 +190,7 @@ try {
             -o PreferredAuthentications=publickey `
             -o ConnectTimeout=5 `
             $SshProbeTarget `
-            "printf graphshell-h4f"
+            "printf djinn-resident"
         if ($LASTEXITCODE -ne 0) {
             throw "the real SSH login probe failed"
         }
@@ -189,7 +201,7 @@ try {
     }
 
     [pscustomobject]@{
-        schema = "graphshell.h4f.windows-cutover/v1"
+        schema = "mere.djinn.windows-cutover/v1"
         task = $TaskName
         first_pid = $first.ProcessId
         replacement_pid = $replacement.ProcessId
@@ -200,6 +212,7 @@ try {
         data_root = $resolvedDataRoot
         previous_task_disabled = [bool]($previousTask -and -not $RetirePreviousTask)
         previous_task_retired = [bool]$RetirePreviousTask
+        legacy_task_disabled = [bool]$legacyTask
         native_relay = $installedNative
     }
 } catch {
@@ -214,6 +227,12 @@ try {
         Enable-ScheduledTask -TaskName $PreviousTaskName | Out-Null
         if ($previousWasRunning -or $newTaskWasRunning) {
             Start-ScheduledTask -TaskName $PreviousTaskName
+        }
+    }
+    if ($legacyTask -and $legacyWasEnabled) {
+        Enable-ScheduledTask -TaskName $LegacyTaskName | Out-Null
+        if ($legacyWasRunning) {
+            Start-ScheduledTask -TaskName $LegacyTaskName
         }
     }
     throw

@@ -60,7 +60,6 @@ personal-sync = [
     "dep:p2panda-core",
     "dep:p2panda-store",
     "dep:stickleback",
-    "dep:knot",
 ]
 
 [dependencies]
@@ -102,7 +101,6 @@ signature = { version = "2", optional = true }
 ssh-agent-lib = { version = "0.6", optional = true }
 ssh-key = { version = "0.6", features = ["ed25519", "encryption"], optional = true }
 stickleback = { workspace = true, optional = true }
-knot = { path = "../knot", optional = true }
 thiserror = { version = "1", optional = true }
 tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"], optional = true }
 tracing = { workspace = true, optional = true }
@@ -165,16 +163,6 @@ required-features = ["native"]
 name = "graphshell_native_host"
 path = "src/bin/graphshell_native_host.rs"
 required-features = ["native"]
-
-[[bin]]
-name = "graphshell_device_host"
-path = "src/bin/graphshell_device_host.rs"
-# Not `native`: the resident host is gated on `personal-sync` throughout, so a
-# `native`-only build compiles clean and silently omits sync, pairing, and the
-# settings file, while still installing under the same name and passing the
-# installer's fingerprint check. Requiring the feature makes a default build
-# skip this binary rather than produce a hollow one.
-required-features = ["personal-sync"]
 
 [[bin]]
 name = "receipt_ingest"

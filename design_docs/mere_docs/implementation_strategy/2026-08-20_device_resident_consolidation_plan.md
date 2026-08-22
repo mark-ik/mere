@@ -1,9 +1,10 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1 through R5, C1 through C4, V1 automated, and the Turnstone headed
-edit/close/restart slice are complete. Physical two-device and the remaining
-standalone/evidence-headed receipts remain open.
+**Status:** R1 through R5, C1 through C4, V1 automated, the Turnstone headed
+edit/close/restart slice, and the product-neutral resident extraction are
+complete. Physical two-device and the remaining standalone/evidence-headed
+receipts remain open.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -34,12 +35,18 @@ clients of that resident when they use persona-held state. An application may
 still embed the same resident implementation when the platform has no useful
 daemon lifecycle.
 
-The existing `graphshell_device_host` is the first desktop composition root.
-It already owns the selected Personae profile, local application door,
-personal graph sync, iroh blob store, and store-backed Graphshell resources.
-Knot is the second real consumer that earns a product-neutral resident
-composition. A binary or crate rename is not an entrance gate; first make the
-shared composition true.
+`djinn` is now the desktop composition root. It owns the selected Personae
+profile, local application door, personal graph sync, Knot source/sync and
+evidence custody, per-profile Castellan record custody, and the shared iroh
+blob store. Graphshell remains the local-session and admission layer under
+that composition. The old Graphshell application settings directory is still
+read deliberately so a rename does not strand a selected profile or pairing.
+
+Knot was the second real consumer that earned a product-neutral lifecycle
+mechanic. That mechanic is now `mere-resident`: ordered lazy closes that try
+every owned resource and retain every failure. Djinn and Distillery use it;
+their resource policies and receipts remain their own. A third user must add
+another observed lifecycle rule before the shared crate grows.
 
 The p2panda reference is a topology donor, not a dependency ruling. Mere keeps
 its narrow authenticated-stream transport seam and its Stickleback domains.
@@ -51,10 +58,10 @@ This plan does not adopt aquadoggo's GraphQL API or decide that
 ```text
 Knot UI         Turnstone         other first-party clients
     \               |                         /
-             Graphshell local session
+             Graphshell local sessions
               owner-only pipe/socket
                        |
-                 device resident
+                 Djinn device resident
                  |- Personae authority
                  |- endpoint catalog
                  |- Knot resident source
@@ -80,7 +87,7 @@ Knot vault into one observable node identity.
 
 | Concern | Owner |
 |---|---|
-| Process lifetime, store locks, route catalog, orderly shutdown | Device resident |
+| Process lifetime, store locks, route catalog, orderly shutdown | Djinn desktop resident or embedded product composition |
 | Local and remote interactive session grammar | Graphshell |
 | Djot, document revisions, clips, evidence meaning, merge | Knot |
 | Authenticated streams, discovery, relay configuration, blob transfer | Murm |
@@ -595,3 +602,18 @@ This plan does not:
   `RESULT ok`. This closes Turnstone edit/close/restart only. Physical devices,
   standalone status and authoring, evidence-open, and resident-stopped
   directory editing remain explicit acceptance work.
+- **2026-08-22, resident composition:** `djinn 0.0.2` replaces
+  `graphshell_device_host` as the desktop binary and takes ownership of the
+  Personae-backed Castellan record/freshness roots, shared blob custody, Knot
+  source/sync/evidence, personal sync, and local browser/application brokers.
+  Record and freshness keys are independently derived from the unlocked
+  Personae identity and the profile name is constrained before becoming a path
+  component. Graphshell no longer depends on Knot. The V1 seed fixture moved
+  with Djinn, and the legacy Graphshell settings location remains a deliberate
+  compatibility read.
+- **2026-08-22, proved common lifecycle:** `mere-resident` contains only
+  ordered lazy close attempts and complete failure reporting. Djinn closes
+  Knot, Castellan, then blob custody; Distillery closes transport, authority,
+  then storage. Its focused library tests and both consumer checks pass.
+  No common service framework, policy object, or resident configuration was
+  extracted.

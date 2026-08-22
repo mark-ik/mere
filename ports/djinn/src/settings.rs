@@ -1,4 +1,4 @@
-//! Persisted owner settings for the resident Graphshell host.
+//! Persisted owner settings for the Djinn resident.
 //!
 //! Durable configuration used to live only in the launcher's argument list,
 //! which made every lasting choice (which graph, which lanes, which paired
@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use personae::ProfileId;
 use serde::{Deserialize, Serialize};
 
-/// Graphshell's own application directory.
+/// Djinn's own application directory.
 ///
 /// Mirrors the platform choice personae makes for its vault, but deliberately
 /// does not nest under it.
@@ -39,9 +39,8 @@ pub fn default_app_dir() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")))
         .unwrap_or_else(|| PathBuf::from("."));
-    // The installed Windows layout is already `%LOCALAPPDATA%\Graphshell`
-    // (bin, NativeMessagingHosts, the host log), so match it rather than
-    // introduce a second spelling beside it.
+    // Preserve Graphshell's existing data root during the rename. The desktop
+    // resident is a new owner name, not a migration that strands profiles.
     #[cfg(windows)]
     let name = "Graphshell";
     #[cfg(not(windows))]

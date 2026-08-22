@@ -1,4 +1,4 @@
-//! Resident-owned physical blob custody.
+//! Djinn-owned physical blob custody.
 //!
 //! Personal graph transfers and Knot evidence have distinct domain leases and
 //! serving authority, but they borrow one iroh store from the process owner.
@@ -11,7 +11,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use transport::{BlobHash, BlobLease, BlobReadAuthorizer, BlobScope, BlobStore};
 
-use super::owner_settings::{ResidentContentSettings, hex32, parse_hex32};
+use crate::settings::{ResidentContentSettings, hex32, parse_hex32};
 
 /// Lease namespace for personal-graph bytes staged on this device.
 pub const PERSONAL_STAGE_LEASE: &str = "graphshell.transfer";

@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use mere_resident::{CloseAction, CloseFuture, close_all};
 use mesh_host::{MeshHost, Step, TransportBlobSpace};
 use muniment::Backend;
 use tokio::time::{Instant, MissedTickBehavior, interval, interval_at};
@@ -315,18 +316,39 @@ impl<B: Backend + Clone + Send + Sync + 'static> ResidentAuthority<B> {
             storage,
             ..
         } = self;
-        let transport_error = transport.close().await.err().map(|error| error.to_string());
-        let authority_error = authority
-            .shutdown()
-            .await
-            .err()
-            .map(|error| error.to_string());
-        drop(transport);
-        let storage_error = storage
-            .shutdown()
-            .await
-            .err()
-            .map(|error| error.to_string());
+        let report = close_all(vec![
+            (
+                "transport",
+                Box::new(move || {
+                    Box::pin(
+                        async move { transport.close().await.map_err(|error| error.to_string()) },
+                    ) as CloseFuture<'static>
+                }) as CloseAction<'static>,
+            ),
+            (
+                "authority",
+                Box::new(move || {
+                    Box::pin(async move {
+                        authority
+                            .shutdown()
+                            .await
+                            .map_err(|error| error.to_string())
+                    }) as CloseFuture<'static>
+                }) as CloseAction<'static>,
+            ),
+            (
+                "storage",
+                Box::new(move || {
+                    Box::pin(
+                        async move { storage.shutdown().await.map_err(|error| error.to_string()) },
+                    ) as CloseFuture<'static>
+                }) as CloseAction<'static>,
+            ),
+        ])
+        .await;
+        let transport_error = report.failure("transport").map(str::to_owned);
+        let authority_error = report.failure("authority").map(str::to_owned);
+        let storage_error = report.failure("storage").map(str::to_owned);
         if transport_error.is_none() && authority_error.is_none() && storage_error.is_none() {
             Ok(())
         } else {

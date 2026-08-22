@@ -2,19 +2,19 @@
 //!
 //! This is a receipt fixture, not an alternate authoring path. The document is
 //! authored through `StartupUnlockedPersonalVault`, the same signed operation
-//! store the resident opens, and Graphshell's ordinary owner settings select
-//! that persona for the first-party `knot` route.
+//! store the resident opens, and Djinn's ordinary owner settings select that
+//! persona for the first-party `knot` route.
 
 use std::path::PathBuf;
 
-use graphshell::native::owner_settings::{KnotResidentSettings, OwnerSettings, settings_path};
+use djinn::settings::{KnotResidentSettings, OwnerSettings, settings_path};
 use knot::{StartupUnlockedPersonalVault, VaultDocument, local_device_root};
 use personae::{PersonaId, ProfileId};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let app_dir = PathBuf::from(args.next().ok_or(
-        "usage: resident_v1_fixture <graphshell-app-dir> <data-root> <profile> <persona-uuid>",
+        "usage: resident_v1_fixture <djinn-app-dir> <data-root> <profile> <persona-uuid>",
     )?);
     let data_root = PathBuf::from(args.next().ok_or("missing data root")?);
     let profile = ProfileId(

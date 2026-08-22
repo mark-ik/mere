@@ -3,8 +3,10 @@
 **Date:** 2026-08-10
 **Status:** C1 and C2 complete 2026-08-20, hardened and extended 2026-08-21
 (resident lock and freshness ledger, Linux Secret Service, Steam Guard).
-Library-complete; product hosting of `CastellanResident`, credential
-replication between persona devices, and CXF import are follow-on slices
+Library-complete. Djinn now claims per-profile `CastellanResident` record and
+freshness custody; code presentation, admitted approval, Secret Service
+policy, credential replication between persona devices, and CXF import remain
+follow-on slices.
 **Anchors:** [credential port + gazette brief](../research/2026-08-10_credential_port_gazette_brief.md)
 (Part I), [dramatis tier plan](2026-08-10_dramatis_tier_plan.md) D4,
 [wallet carry fold-in plan](2026-08-10_wallet_carry_foldin_plan.md) (the
@@ -218,3 +220,13 @@ exercising it. C1 builds the exercising; C2 builds the item.
   recovery codes, and Valve API integration are out of scope; current Steam
   support imports a `shared_secret` and generates codes. The crate is still
   0.0.2; no release followed C2.
+
+- 2026-08-22: Djinn now opens and closes `CastellanResident` beside the
+  selected Personae profile. It derives separate record and freshness keys
+  from that unlocked identity, stores both under a profile-constrained Djinn
+  root, and keeps that custody alive with the other resident resources. It
+  does **not** start `secret_service::serve`: Castellan's service needs a
+  concrete `PersonaId` selection and executable/caller policy, neither of
+  which may be guessed from a profile string. Likewise Djinn does not yet
+  render `OtpCodeTile` or host an admitted approval surface. Those are the
+  forcing consumers for the next product slice, not optional daemon defaults.
