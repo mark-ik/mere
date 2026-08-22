@@ -45,8 +45,9 @@ The eager path still names five full host-side weight copies before per-tensor
 GPU upload. E5-base therefore proves this copy strategy at 437,955,512 bytes;
 it does not turn structural copy accounting into peak-memory telemetry.
 
-Persistent storage was requested and denied. The final best-effort IndexedDB
-usage was 698,078,734 bytes against a reported 11,435,496,974-byte quota.
+The persistent-storage request resolved `false`; Chromium did not promote the
+origin beyond best effort. Final IndexedDB usage was 698,078,734 bytes against
+a reported 11,435,496,974-byte quota.
 
 ## Frame boundary
 

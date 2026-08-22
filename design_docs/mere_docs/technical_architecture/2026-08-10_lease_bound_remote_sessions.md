@@ -3,9 +3,11 @@
 **Date**: 2026-08-10
 
 **Status**: Design. Nothing here is implemented; the remote adapter is the last
-gate of the [mesh host lanes plan](../implementation_strategy/2026-08-09_mesh_host_lanes_plan.md)
-and sits behind the [Burn 0.22 migration](../implementation_strategy/2026-08-09_burn_0_22_migration_plan.md),
-which is release-gated upstream.
+gate of the [mesh host lanes plan](../implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
+The Burn 0.22.0-pre.2 production migration executed on 2026-08-20, while the
+stable repin remains release-gated. Before implementation, this design must be
+re-audited against pre.2 and the targeted session-close seam must be exposed
+upstream or through a narrow documented patch.
 
 **Related**:
 [`../testing/2026-08-10_burn_0_21_baseline.md`](../testing/2026-08-10_burn_0_21_baseline.md),
@@ -16,8 +18,9 @@ hardware back, and the work stops. Burn Remote authorizes a compute session
 **once, at admission**. Those two facts do not compose, and this is how to make
 them.
 
-Everything below is read from `burn-remote 0.22.0-pre.1` source in the local
-registry cache, not from release notes.
+Everything below was read from `burn-remote 0.22.0-pre.1` source in the local
+registry cache, not from release notes. It is the design baseline, not evidence
+for the selected pre.2 row.
 
 ---
 

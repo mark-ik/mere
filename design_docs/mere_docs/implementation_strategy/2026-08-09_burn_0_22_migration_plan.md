@@ -60,9 +60,11 @@ The same closure passed `cargo package -p esp` from a detached clean worktree;
 Cargo built and verified the extracted package. Repeat that receipt after the
 stable repin because dependency packaging is part of the release gate.
 
-Stable Burn 0.22 is still unpublished as of this recheck. Publication and the
-Burn Remote adapter therefore remain closed even though the chosen prerelease
-implementation and portability evidence are green.
+Stable Burn 0.22 is still unpublished as of the 2026-08-22 crates.io recheck.
+Stable publication closure and remote-adapter acceptance therefore remain
+closed even though the chosen prerelease implementation and portability
+evidence are green. Re-auditing the pre.2 remote source and preparing the
+targeted session-close patch can proceed without claiming either closure.
 
 Original doc follows.
 

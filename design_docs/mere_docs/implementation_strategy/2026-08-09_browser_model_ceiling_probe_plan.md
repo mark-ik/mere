@@ -333,8 +333,8 @@ product default is a later decision informed by these receipts.
   cold, cancellation, and warm row. The 437,955,512-byte E5-base artifact is
   the largest success. Every output is finite, unit norm, repeatable across
   executions and workers, and within `1.416e-7` of its independent reference;
-  integrity reopen and all GPU error scopes pass. Persistent storage was
-  requested and denied, leaving the 698 MB IndexedDB corpus best effort.
+  integrity reopen and all GPU error scopes pass. The persistent-storage
+  request resolved `false`, leaving the 698 MB IndexedDB corpus best effort.
   Frame p95 remained below 33.4 ms in every phase, with 41 isolated over-bound
   intervals and a 175.8 ms maximum. The upper embedding boundary is unmeasured
   above the matrix. Decoder streaming, cooperative ESP cancellation, and GPU
