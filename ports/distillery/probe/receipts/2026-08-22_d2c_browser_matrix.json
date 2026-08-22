@@ -1,0 +1,185 @@
+{
+  "schema": "distillery.browser-model-matrix-decision/v1",
+  "source_schema": "distillery.browser-model-matrix-receipt/v1",
+  "generated_at": "2026-08-22T17:34:56.470Z",
+  "configuration": {
+    "input": "query: Mere keeps a model local.",
+    "configured_rows": 4,
+    "attempted_rows": 4,
+    "run_count": 3,
+    "frame_bound_ms": 33.4,
+    "diagnostic_trace": false,
+    "known_full_weight_copies": 5
+  },
+  "environment": {
+    "browser": "Chromium 151.0.0.0",
+    "platform": "Windows",
+    "hardware_concurrency": 16,
+    "device_memory_gib": 32,
+    "adapter_vendor": "nvidia",
+    "adapter_architecture": "lovelace",
+    "wasm_bundle_bytes": 28034102,
+    "build_base_commit": "3bdb66fce2e17aa36882b5f7327869f650cfd544",
+    "build_worktree_dirty": false
+  },
+  "rows": [
+    {
+      "model_id": "TaylorAI/bge-micro-v2",
+      "revision": "3edf6d7de0faa426b09780416fe61009f26ae589",
+      "weight_bytes": 34785664,
+      "weight_dtype": "F16",
+      "manifest_id": "blake3:2609a9b489c94360983252a59da2020570acf5c1c99f9b1251866a5ab23f5b7b",
+      "storage": {
+        "state": "best_effort",
+        "persistence_requested": true,
+        "persistence_granted": false,
+        "usage_before_bytes": 0,
+        "usage_after_bytes": 35124385,
+        "quota_after_bytes": 10772542625
+      },
+      "cold_timings_ms": { "acquisition": 132, "indexeddb_write": 194, "resolve": 129, "model_load": 275, "first_execution": 218, "repeats": [36, 35] },
+      "warm_timings_ms": { "resolve": 126, "model_load": 298, "first_execution": 188, "repeats": [23, 25] },
+      "execution": {
+        "dimensions": 384,
+        "all_finite": true,
+        "l2_norm": 1.0,
+        "first_8": [-0.039409973, 0.0031016571, -0.009310944, -0.0029467333, -0.029707242, -0.04187755, -0.01068282, 0.043254808],
+        "reference_max_abs_error": 9.383075e-8,
+        "reference_within_tolerance": true,
+        "output_hash": "84b877a1cfb6378e2f8eece38baae5c7890b489f2cee4d70cfd982d386d6cb5f",
+        "repeat_and_worker_match": true,
+        "gpu_error_count": 0
+      },
+      "cancellation": { "state": "executing", "termination_call_ms": 0.0, "quiet_window_ms": 300, "late_messages": 0 },
+      "frames": {
+        "idle": { "p95_ms": 6.3, "max_ms": 12.1, "over_bound": 0 },
+        "cold": { "p95_ms": 6.3, "max_ms": 48.5, "over_bound": 3 },
+        "cancellation": { "p95_ms": 12.2, "max_ms": 48.5, "over_bound": 3 },
+        "warm": { "p95_ms": 12.0, "max_ms": 48.6, "over_bound": 3 }
+      },
+      "row_passed": true
+    },
+    {
+      "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "weight_bytes": 90868376,
+      "weight_dtype": "F32",
+      "manifest_id": "blake3:47ddb75d69cea2108e9f248e263593a710a88f9f33bf77ab9307780e56fe94bb",
+      "storage": {
+        "state": "best_effort",
+        "persistence_requested": true,
+        "persistence_granted": false,
+        "usage_before_bytes": 35124385,
+        "usage_after_bytes": 126309009,
+        "quota_after_bytes": 10863727249
+      },
+      "cold_timings_ms": { "acquisition": 255, "indexeddb_write": 503, "resolve": 352, "model_load": 344, "first_execution": 262, "repeats": [98, 35] },
+      "warm_timings_ms": { "resolve": 308, "model_load": 322, "first_execution": 185, "repeats": [34, 36] },
+      "execution": {
+        "dimensions": 384,
+        "all_finite": true,
+        "l2_norm": 1.0,
+        "first_8": [0.045927186, -0.0018069944, 0.028576644, 0.07433598, 0.07189284, 0.05307675, -0.010092407, 0.008586845],
+        "reference_max_abs_error": 1.4156103e-7,
+        "reference_within_tolerance": true,
+        "output_hash": "41af43937a2ca990e5f43c304b4adc96aee932ebbe396c8fd5bf524807780e9b",
+        "repeat_and_worker_match": true,
+        "gpu_error_count": 0
+      },
+      "cancellation": { "state": "executing", "termination_call_ms": 0.1, "quiet_window_ms": 300, "late_messages": 0 },
+      "frames": {
+        "idle": { "p95_ms": 12.0, "max_ms": 30.3, "over_bound": 0 },
+        "cold": { "p95_ms": 6.3, "max_ms": 66.6, "over_bound": 3 },
+        "cancellation": { "p95_ms": 11.8, "max_ms": 48.5, "over_bound": 2 },
+        "warm": { "p95_ms": 6.2, "max_ms": 48.4, "over_bound": 2 }
+      },
+      "row_passed": true
+    },
+    {
+      "model_id": "intfloat/e5-small-v2",
+      "revision": "ffb93f3bd4047442299a41ebb6fa998a38507c52",
+      "weight_bytes": 133466304,
+      "weight_dtype": "F32",
+      "manifest_id": "blake3:cc09ca96f2ee9c0ce30ae06e948e2b10d80f2b52f5ed544c52a5a56d18da4f2b",
+      "storage": {
+        "state": "best_effort",
+        "persistence_requested": true,
+        "persistence_granted": false,
+        "usage_before_bytes": 126309009,
+        "usage_after_bytes": 260112255,
+        "quota_after_bytes": 10997530495
+      },
+      "cold_timings_ms": { "acquisition": 337, "indexeddb_write": 815, "resolve": 508, "model_load": 438, "first_execution": 300, "repeats": [89, 91] },
+      "warm_timings_ms": { "resolve": 445, "model_load": 362, "first_execution": 227, "repeats": [65, 56] },
+      "execution": {
+        "dimensions": 384,
+        "all_finite": true,
+        "l2_norm": 1.0000001,
+        "first_8": [-0.049454916, 0.058722768, 0.035221413, -0.022851232, -0.01610062, 0.0038429867, 0.021561846, -0.06900151],
+        "reference_max_abs_error": 9.685755e-8,
+        "reference_within_tolerance": true,
+        "output_hash": "96ac316ab8ad982a0ea4916ac24f96d64042164d698cad4b67e6c6967cf002db",
+        "repeat_and_worker_match": true,
+        "gpu_error_count": 0
+      },
+      "cancellation": { "state": "executing", "termination_call_ms": 0.0, "quiet_window_ms": 300, "late_messages": 0 },
+      "frames": {
+        "idle": { "p95_ms": 6.4, "max_ms": 48.5, "over_bound": 1 },
+        "cold": { "p95_ms": 11.9, "max_ms": 78.7, "over_bound": 3 },
+        "cancellation": { "p95_ms": 7.1, "max_ms": 48.5, "over_bound": 3 },
+        "warm": { "p95_ms": 12.0, "max_ms": 54.6, "over_bound": 3 }
+      },
+      "row_passed": true
+    },
+    {
+      "model_id": "intfloat/e5-base-v2",
+      "revision": "f52bf8ec8c7124536f0efb74aca902b2995e5bcd",
+      "weight_bytes": 437955512,
+      "weight_dtype": "F32",
+      "manifest_id": "blake3:78db466fcaa171fd5654a2636f2c5a447252ebadde359b5129e8d29bb126d471",
+      "storage": {
+        "state": "best_effort",
+        "persistence_requested": true,
+        "persistence_granted": false,
+        "usage_before_bytes": 260112255,
+        "usage_after_bytes": 698078734,
+        "quota_after_bytes": 11435496974
+      },
+      "cold_timings_ms": { "acquisition": 1017, "indexeddb_write": 2847, "resolve": 1637, "model_load": 549, "first_execution": 193, "repeats": [32, 32] },
+      "warm_timings_ms": { "resolve": 1393, "model_load": 867, "first_execution": 172, "repeats": [33, 31] },
+      "execution": {
+        "dimensions": 768,
+        "all_finite": true,
+        "l2_norm": 0.99999994,
+        "first_8": [-0.005013433, -0.0076039033, -0.00916899, -0.006082594, 0.01770031, -0.034197163, 0.03232457, 0.005402181],
+        "reference_max_abs_error": 4.4703484e-8,
+        "reference_within_tolerance": true,
+        "output_hash": "76057b80cffdc8dac4e4b49e2f87d7c7e3cf4b8d1a82fc43b930ee72b99fdd38",
+        "repeat_and_worker_match": true,
+        "gpu_error_count": 0
+      },
+      "cancellation": { "state": "executing", "termination_call_ms": 0.0, "quiet_window_ms": 300, "late_messages": 0 },
+      "frames": {
+        "idle": { "p95_ms": 6.2, "max_ms": 42.8, "over_bound": 2 },
+        "cold": { "p95_ms": 6.3, "max_ms": 96.9, "over_bound": 2 },
+        "cancellation": { "p95_ms": 9.3, "max_ms": 127.3, "over_bound": 6 },
+        "warm": { "p95_ms": 12.0, "max_ms": 175.8, "over_bound": 5 }
+      },
+      "row_passed": true
+    }
+  ],
+  "conclusions": {
+    "successful_rows": 4,
+    "all_configured_rows_passed": true,
+    "largest_successful_model": "intfloat/e5-base-v2",
+    "largest_successful_weight_bytes": 437955512,
+    "first_limit_row": null,
+    "upper_boundary": "unmeasured above the configured matrix",
+    "p95_frame_bound_passed_for_every_phase": true,
+    "isolated_over_bound_frames_observed": true,
+    "storage_persistence_granted": false,
+    "decoder_streaming_cancel_measured": false,
+    "cooperative_esp_cancel_measured": false,
+    "gpu_memory_release_measured": false
+  }
+}

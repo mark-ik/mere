@@ -344,3 +344,12 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   max-reduction WGSL and the returned vector failed the committed MiniLM
   fixture. This is a measured Burn/CubeCL browser ceiling, not completion of
   ESP's wasm execution tail. D2c and decoder cancellation remain unopened.
+- **2026-08-22, D2 embedding recovery and matrix**: the Cubek infinity
+  materialization and Burn/CubeCL same-allocation binary-input fixes recovered
+  fixture-valid MiniLM. Distillery then ran a four-row headed embedding matrix
+  from 34.8 MB F16 BGE Micro through 438.0 MB F32 E5-base. All cold and warm
+  rows passed integrity, numerical-reference, repeatability, WebGPU-error, and
+  worker-cutoff gates. ESP's loader now promotes F16 safetensors weights to f32.
+  This closes the embedding phase through the configured matrix; decoder
+  streaming, cooperative cancellation, GPU-memory release, and the upper
+  embedding boundary remain open.

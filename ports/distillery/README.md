@@ -57,10 +57,11 @@ real resident run. The job remains terminal and released content stays
 released across that restart boundary.
 
 `probe/` is D2's standalone headed-browser evidence surface. Its first MiniLM
-row proves the Eidetic/Muniment artifact corridor, warm IndexedDB reopen, and
-worker lifecycle. Burn/CubeCL BrowserWebGpu execution currently fails the
-reference-vector gate, so the probe records a measured limit rather than
-claiming a usable browser model.
+row localized and recovered two Burn/CubeCL browser defects. The configured
+D2c embedding matrix now passes BGE Micro, MiniLM, E5-small, and E5-base in
+headed Chromium, including integrity reopen, numerical references, worker
+termination, and frame receipts. The largest success is a 437,955,512-byte F32
+artifact; the upper embedding boundary and the decoder sweep remain open.
 
 There is not yet an installed standalone binary because Distillery still needs
 a product-level choice of Personae profile and persisted settings authority.

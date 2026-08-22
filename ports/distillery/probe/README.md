@@ -1,9 +1,9 @@
 # Distillery browser model probe
 
 This is D2's development surface, homed with the model-works port without
-turning the probe into product chrome. It runs a real MiniLM artifact through
-the Eidetic `ModelLibrary`, Muniment IndexedDB, ESP's BERT loader, and Burn
-WGPU inside a dedicated browser worker.
+turning the probe into product chrome. It runs a pinned real-model matrix
+through the Eidetic `ModelLibrary`, Muniment IndexedDB, ESP's BERT loader, and
+Burn WGPU inside dedicated browser workers.
 
 The probe is a standalone Cargo workspace. This keeps an evidence-only browser
 surface from widening Mere's ordinary product graph and lets it build while
@@ -13,29 +13,43 @@ From the Mere root:
 
 ```powershell
 cargo binstall wasm-bindgen-cli@0.2.122 --root C:\path\to\wasm-bindgen-0.2.122
+ports/distillery/probe/fetch-model-matrix.ps1
 ports/distillery/probe/run-probe.ps1 `
   -WasmBindgen C:\path\to\wasm-bindgen-0.2.122\bin\wasm-bindgen.exe
 ```
 
-Then open the printed URL in a headed Chromium browser and select **Run cold,
-cancel, and warm**. `window.distilleryModelProbe.runSuite()` is the stable
-automation entry point; `window.distilleryModelProbe.receipt()` returns the
-machine-readable result. Generated wasm and model artifacts stay out of Git;
-selected dated receipts may be checked in when they substantiate a boundary.
+The fetch command verifies every configured byte count and SHA-256 before
+installing the ignored local artifacts. The standalone lockfile pins selected
+versions, but `run-probe.ps1` cannot use Cargo's `--locked` flag: inherited
+path-workspace patch tables make Cargo reorder semantically identical
+`patch.unused` entries. The checked-in package selections and exact
+wasm-bindgen CLI pin remain the reproducibility boundary.
 
-The first configured row is the checked-out
-`models/all-MiniLM-L6-v2` artifact. The server exposes the Mere root so the
-page can fetch those local files without copying 90 MB into the probe tree.
+Open the printed URL in a headed Chromium browser and select **Run configured
+matrix**. `window.distilleryModelProbe.runSuite(modelId)` runs one configured
+row, `runMatrix()` runs in ascending artifact size, and `receipt()` returns the
+machine-readable result. Generated wasm and model artifacts stay out of Git;
+selected dated decision receipts are checked in when they substantiate a
+boundary.
 
 ## Claim boundary
 
-The 2026-08-22 MiniLM row now passes its numerical gate. Cold and warm workers
-produce the same finite, unit-norm 384-float embedding, within
-`8.940697e-8` of ESP's committed native fixture. The stored 90,868,376-byte
-weight artifact reopens with matching integrity, worker termination emits no
-late message in the 300 ms quiet window, and all WebGPU error scopes are empty.
-See the
-[recovered MiniLM receipt](receipts/2026-08-22_minilm_after_binary_alias_patch.json).
+The 2026-08-22 D2c embedding matrix passes all four configured rows in a clean
+headed Chromium 151 build: [BGE Micro v2](https://huggingface.co/TaylorAI/bge-micro-v2),
+MiniLM-L6-v2, [E5-small-v2](https://huggingface.co/intfloat/e5-small-v2), and
+[E5-base-v2](https://huggingface.co/intfloat/e5-base-v2). Their weight
+artifacts range from 34,785,664-byte F16 through 437,955,512-byte F32. Every
+cold and warm output is finite, unit norm, stable within and across workers,
+and within `1.416e-7` of its independent PyTorch/Transformers reference.
+IndexedDB integrity reopen, termination at `executing`, the 300 ms quiet
+window, and WebGPU error scopes pass for every row. See the
+[browser matrix receipt](receipts/2026-08-22_d2c_browser_matrix.json) and
+[native control](receipts/2026-08-22_d2c_native_matrix.json).
+
+BGE's published F16 artifact forced one narrow ESP extension: the safetensors
+loader now accepts F16 weights and promotes them to Burn f32 tensors. Other
+published dtypes still fail explicitly. This is loader-format support, not a
+new model adapter.
 
 The root defect is a same-allocation binary launch in Burn/CubeCL. The published
 `burn-cubecl 0.22.0-pre.2` path binds one allocation twice when evaluating a
@@ -52,18 +66,19 @@ records the unpatched failure, two rejected fix hypotheses, and the passing
 backport. The existing Cubek extrema materialization patch remains independently
 required.
 
-Frame p95 stayed below the configured 33.4 ms bound in idle, cold,
-cancellation, and warm phases. There were seven isolated over-bound intervals:
-three cold, two during cancellation, and two warm; the cold maximum was 218.2
-ms. The receipt reports those spikes rather than treating p95 as a complete UI
+Frame p95 stayed below the configured 33.4 ms bound in every idle, cold,
+cancellation, and warm phase. The clean matrix still recorded 41 isolated
+over-bound intervals; the largest was 175.8 ms during E5-base warm reopen. The
+receipt keeps those spikes visible rather than treating p95 as a complete UI
 smoothness claim.
 
-This row proves artifact/copy-ladder viability, worker-owned IndexedDB, WGPU
-model construction, numerical execution, worker termination, message cutoff,
-and warm reopen for one MiniLM embedding artifact. It does not prove decoder
-streaming, cooperative ESP cancellation, GPU-memory release, an upper model-size
-ceiling, or a product default.
+This matrix proves the eager five-copy artifact ladder, worker-owned IndexedDB,
+F16/F32 BERT construction, numerical BrowserWebGpu execution, worker
+termination, message cutoff, and warm reopen through the 438 MB embedding row.
+The browser denied persistent-storage promotion, so the stored rows remained
+best effort even though same-origin warm reopen passed.
 
-D2c can now open. More models are useful only as a configured size and format
-sweep with the same cold/warm, fixture, frame, and cancellation receipts.
-Trainers remain outside this ceiling probe.
+This completes D2c's configured embedding phase. The upper embedding boundary
+is unmeasured above E5-base. Decoder streaming, first-token and token-throughput
+bounds, cooperative ESP cancellation, GPU-memory release, and a product default
+remain open. Trainers remain outside this ceiling probe.

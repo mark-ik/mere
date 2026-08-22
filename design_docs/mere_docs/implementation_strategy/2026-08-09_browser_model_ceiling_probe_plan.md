@@ -2,12 +2,12 @@
 
 **Date**: 2026-08-09
 
-**Status**: D2a and the configured MiniLM D2b row are complete. A narrow
-Burn/CubeCL same-allocation binary-input backport restores fixture-valid cold
-and warm BrowserWebGpu embeddings after the independent Cubek reduction fix.
-Worker termination and message cutoff pass; cooperative decoder cancellation
-remains unmeasured. D2c is ready for a configured multi-model sweep. This
-remains independent of the personal mesh and Burn Remote.
+**Status**: D2a, the MiniLM D2b embedding row, and D2c's configured embedding
+matrix are complete. Headed Chromium passes four cold/cancel/warm rows from a
+34.8 MB F16 BGE artifact through a 438.0 MB F32 E5-base artifact. The upper
+embedding boundary is unmeasured above that matrix. Decoder streaming,
+cooperative ESP cancellation, and GPU-memory release remain unmeasured. This
+track remains independent of the personal mesh and Burn Remote.
 
 **Related**:
 [`2026-07-05_inference_provider_plan.md`](2026-07-05_inference_provider_plan.md),
@@ -34,21 +34,25 @@ Established now:
 - `muniment` has an IndexedDB backend.
 - Graphshell has reopened IndexedDB in a headed browser and reports the
   browser's persistence answer honestly.
-- Distillery stores, reopens, verifies, loads, and executes the 90.9 MB MiniLM
-  artifact inside a dedicated browser worker.
-- Cold and warm BrowserWebGpu embeddings are finite, unit norm, stable across
-  workers, and within `8.940697e-8` of ESP's native fixture.
+- Distillery stores, reopens, verifies, loads, and executes four pinned BERT
+  embedding artifacts from 34,785,664-byte F16 BGE Micro through
+  437,955,512-byte F32 E5-base inside dedicated browser workers.
+- Every cold and warm BrowserWebGpu embedding is finite, unit norm, stable
+  across workers, and within `1.416e-7` of an independent
+  PyTorch/Transformers reference.
 - Worker termination at `executing` yields no late message in the configured
-  300 ms quiet window.
+  300 ms quiet window for every row.
+- Frame p95 stays below 33.4 ms in every sampled phase. Forty-one isolated
+  over-bound intervals remain visible, with a 175.8 ms maximum.
 
 Still unproven:
 
 - decoder streaming and cooperative ESP cancellation;
 - GPU-memory release after worker termination;
-- a first failing model-size or artifact-format row above MiniLM; and
+- a first failing embedding row above the 438 MB E5-base artifact;
+- a decoder artifact/first-token/throughput matrix; and
 - whether isolated frame spikes remain acceptable under a configured product
-  workload. MiniLM p95 stays below 33.4 ms, but cold execution includes a
-  218.2 ms maximum interval.
+  workload.
 
 The existing Armillary actor compiling for wasm does not prove a browser thread
 or worker runtime. This plan requires a headed execution receipt.
@@ -152,9 +156,15 @@ what the browser exposes and what the UI pays.
 
 ## 6. D2c: configurable size sweep
 
-Run an escalating configured model set. Begin with the smallest real decoder
-artifact that exercises the complete loader, then increase artifact and tensor
-size until one of the following occurs:
+Run an escalating configured model set. D2c has two workload phases because an
+embedding graph and an autoregressive decoder expose different limits:
+
+1. an embedding phase for artifact size, format, tensor construction, complete
+   execution, and worker restart; and
+2. a decoder phase for first token, steady token throughput, streaming, and
+   cooperative cancellation.
+
+Increase artifact and tensor size until one of the following occurs:
 
 - storage quota or persistence prevents a trustworthy warm reopen;
 - integrity or artifact loading fails;
@@ -172,6 +182,10 @@ unsupported is a recorded capability fact.
 The result is a capability table, not one universal number. Artifact format,
 quantization, browser, adapter, available storage, and copy strategy all affect
 the ceiling.
+
+The embedding phase is complete through the configured E5-base row. The
+decoder phase remains open and must use the decoder provider rather than infer
+decoder behavior from embedding throughput.
 
 ---
 
@@ -308,3 +322,20 @@ product default is a later decision informed by these receipts.
   Frame p95 stays below the configured 33.4 ms bound, with seven isolated
   over-bound intervals and a 218.2 ms cold maximum. D2c may now open with more
   configured artifacts. Trainers still do not answer the ceiling question.
+- **2026-08-22, D2c embedding matrix**: pinned and hash-verified BGE Micro v2,
+  MiniLM-L6-v2, E5-small-v2, and E5-base-v2 at exact upstream revisions. BGE's
+  34.8 MB F16 weights forced explicit F16-to-f32 promotion in ESP's
+  safetensors loader; BF16 and other unimplemented dtypes remain rejected.
+  Independent PyTorch 2.11 / Transformers 5.8 CPU references and an ESP
+  NdArray harness pass every row.
+
+  A clean `3bdb66fc` headed Chromium 151 build then passed every configured
+  cold, cancellation, and warm row. The 437,955,512-byte E5-base artifact is
+  the largest success. Every output is finite, unit norm, repeatable across
+  executions and workers, and within `1.416e-7` of its independent reference;
+  integrity reopen and all GPU error scopes pass. Persistent storage was
+  requested and denied, leaving the 698 MB IndexedDB corpus best effort.
+  Frame p95 remained below 33.4 ms in every phase, with 41 isolated over-bound
+  intervals and a 175.8 ms maximum. The upper embedding boundary is unmeasured
+  above the matrix. Decoder streaming, cooperative ESP cancellation, and GPU
+  memory release remain open as the decoder phase.
