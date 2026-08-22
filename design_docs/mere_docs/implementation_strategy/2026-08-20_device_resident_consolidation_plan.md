@@ -1,8 +1,8 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1 and C1 complete; R2 is the next resident slice. C2 remains the
-gate before any physical store consolidation in C3.
+**Status:** R1, R2, and C1 complete; R3 is the next resident slice. C2 remains
+the gate before any physical store consolidation in C3.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -451,3 +451,14 @@ This plan does not:
   retired Genet path patches reject the local Mere metadata, while a disposable
   resolution advances 101 same-source packages. That dependency update is not
   part of C1.
+- **2026-08-21, R2:** `f13ebf09` added `KnotResidentSource`, which owns one
+  unlocked vault, signed operation store, signing material, and source-owned
+  content-retention actor. Each `KnotEndpoint` now has its own Graphshell
+  session, disclosure caches, derived state, and notice cursor over that shared
+  authority. Vault saves recheck their base token and serialize authoring plus
+  rematerialization under the source lock. The receipt alternates valid edits
+  between two sessions, rejects the stale intervening invocation, observes two
+  independent bells in both sessions, and reopens the vault, redb store, and
+  evidence store after final resident drop. The actor replaces the former
+  private Tokio runtime and joins after flushing iroh-blobs. All 98 Knot library
+  tests pass, and `cargo check -p knot --all-targets --locked --offline` passes.
