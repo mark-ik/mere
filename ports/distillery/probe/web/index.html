@@ -11,10 +11,16 @@
       <header>
         <p class="eyebrow">Distillery · D2 evidence surface</p>
         <h1>Browser model corridor</h1>
-        <p>Cold store, worker termination, warm reopen, and WGPU execution for one real model.</p>
+        <p>Cold store, worker termination, warm reopen, and WGPU execution across a pinned model matrix.</p>
       </header>
 
       <form id="probe-controls">
+        <label>Configured model
+          <select id="model-selection" disabled>
+            <option>Loading model matrix…</option>
+          </select>
+        </label>
+        <p id="model-metadata">Loading pinned artifact metadata.</p>
         <label>Model base URL
           <input id="model-base-url" value="/models/all-MiniLM-L6-v2">
         </label>
@@ -40,7 +46,8 @@
           Ask the browser for persistent storage and record its answer
         </label>
         <div class="actions">
-          <button id="run-suite" type="submit">Run cold, cancel, and warm</button>
+          <button id="run-suite" type="submit">Run selected row</button>
+          <button id="run-matrix" type="button" disabled>Run configured matrix</button>
           <button id="cancel-active" type="button">Terminate active worker</button>
           <button id="download-receipt" type="button" disabled>Download JSON</button>
         </div>

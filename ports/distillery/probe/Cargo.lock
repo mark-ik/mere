@@ -854,9 +854,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.4.3"
+version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "509591b7bcd67f4ef775afad7662703b4935daaa6ec0e5605cfb1090b32a2b6d"
+checksum = "0ad534f4357a5264cce5019c989cf66a4f0dc4e0d1b1d15f8aacec0ff7360273"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -2082,6 +2082,7 @@ version = "0.1.0"
 dependencies = [
  "burn",
  "getrandom 0.4.3",
+ "half",
  "safetensors 0.4.5",
  "serde",
  "serde_json",
@@ -3185,9 +3186,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.33"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "loop9"
@@ -3387,9 +3388,9 @@ checksum = "bc0287524726960e07b119cebd01678f852f147742ae0d925e6a520dca956126"
 
 [[package]]
 name = "naga"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23bf0a141a9ab6f07dbb492db53245e464bc9db42f407772d9ae03d83a2c1033"
+checksum = "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -3413,9 +3414,9 @@ dependencies = [
 
 [[package]]
 name = "naga-types"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "658200ddc25c6c7b860747516d132d1b284c0fafb7a380233acee9a72fb30e11"
+checksum = "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
 dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
@@ -3778,9 +3779,9 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "ordered-float"
-version = "5.3.0"
+version = "5.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7d950ca161dc355eaf28f82b11345ed76c6e1f6eb1f4f4479e0323b9e2fbd0e"
+checksum = "8c7c9e0d9b23589f26070720bac724174bfec1083e82f7854cdd0267518343c0"
 dependencies = [
  "num-traits",
 ]
@@ -4554,9 +4555,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.14"
+version = "0.103.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0527518605e68109d875e248ea259b6758801cf165e4b2c2733ae3b51f12535a"
+checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -5529,9 +5530,9 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "uuid"
-version = "1.24.1"
+version = "1.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cefc03fd367c0c6d4305de1b312cf00248c4114f4a0418ce6a6af769e3b0bd9"
+checksum = "f053576934f05a761a402421fbbe3d425d9366f75f978806a037b3ca481abecc"
 
 [[package]]
 name = "v_frame"
@@ -5749,9 +5750,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08763620e76fc980bca7bf84de82568614487a53172dd968d89187282eb87fa2"
+checksum = "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
 dependencies = [
  "arrayvec",
  "bit-set 0.10.0",
@@ -5783,27 +5784,27 @@ dependencies = [
 
 [[package]]
 name = "wgpu-core-deps-apple"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3283b6da70d7fc892de95840215aa36381b5d0cbc479e88ee2b173c7b992b225"
+checksum = "061f3d319a40d39d00b1ecc2c33b89fe21d4e6fe01859df3500a3a8ecccd6b68"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-emscripten"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85dcf2b2e5c2afb9eda64c570a87a4e570304bf39e52eddbaaf222d655b656ad"
+checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
 dependencies = [
  "wgpu-hal",
 ]
 
 [[package]]
 name = "wgpu-core-deps-windows-linux-android"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f76bc9c1c186ff3d9054e0d224c93c8c1c79d6653907c5249a5c1ea1a2cb1e43"
+checksum = "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
 dependencies = [
  "wgpu-hal",
 ]
@@ -5866,9 +5867,9 @@ dependencies = [
 
 [[package]]
 name = "wgpu-naga-bridge"
-version = "30.0.0"
+version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9eaac644e5008925c78567d272b9d66ef83da55a53cc17fc7daade7bb6e66e5"
+checksum = "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
 dependencies = [
  "naga",
  "wgpu-types",
@@ -6340,3 +6341,195 @@ checksum = "27bc9d5b815bc103f142aa054f561d9187d191692ec7c2d1e2b4737f8dbd7296"
 dependencies = [
  "zune-core",
 ]
+
+[[patch.unused]]
+name = "netrender"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "netrender_device"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "netrender_text"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "paint_list_api"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "paint_list_render"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "postilion"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "retinue"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "tulle"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "scrying"
+version = "0.5.0"
+
+[[patch.unused]]
+name = "cambium"
+version = "0.3.3"
+
+[[patch.unused]]
+name = "cambium-winit"
+version = "0.3.0"
+
+[[patch.unused]]
+name = "genet-scripted-dom"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "illume"
+version = "0.0.2"
+
+[[patch.unused]]
+name = "layout-dom-api"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "p2panda-auth"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-core"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-discovery"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-encryption"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-net"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-store"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-stream"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-sync"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "sprigging"
+version = "0.2.1"
+
+[[patch.unused]]
+name = "tinct"
+version = "0.1.2"
+
+[[patch.unused]]
+name = "grafting"
+version = "0.5.0"
+
+[[patch.unused]]
+name = "cambium"
+version = "0.3.3"
+
+[[patch.unused]]
+name = "document-canvas"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "engine-observables-api"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "errand"
+version = "0.3.4"
+
+[[patch.unused]]
+name = "genet-documents"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "genet-extract"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "genet-host-api"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "genet-livery"
+version = "0.0.2"
+
+[[patch.unused]]
+name = "genet-render-host"
+version = "0.2.0"
+
+[[patch.unused]]
+name = "genet-scripted-dom"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "genet-static-dom"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "genet-winit-host"
+version = "0.2.0"
+
+[[patch.unused]]
+name = "graft-engine"
+version = "0.2.0"
+
+[[patch.unused]]
+name = "inker"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "layout-dom-api"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "nematic"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "netfetcher"
+version = "0.1.1"
+
+[[patch.unused]]
+name = "script-engine-api"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "script-engine-boa"
+version = "0.0.0"
+
+[[patch.unused]]
+name = "scrying-engine"
+version = "0.2.0"
+
+[[patch.unused]]
+name = "sprigging"
+version = "0.2.1"
+
+[[patch.unused]]
+name = "verso-tile"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "weld-engine"
+version = "0.2.0"

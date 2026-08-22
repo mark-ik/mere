@@ -23,7 +23,11 @@ if ($bindgenVersion -ne 'wasm-bindgen 0.2.122') {
 }
 Push-Location $TargetDir
 try {
-    cargo build --locked --manifest-path (Join-Path $probeRoot 'Cargo.toml') --release --target wasm32-unknown-unknown
+    # This nested workspace inherits several path-workspace patch tables. Cargo
+    # rewrites their unused entries in nondeterministic order, so --locked
+    # rejects an otherwise unchanged package graph. The checked-in lockfile
+    # still pins the selected package versions.
+    cargo build --manifest-path (Join-Path $probeRoot 'Cargo.toml') --release --target wasm32-unknown-unknown
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } finally {
     Pop-Location

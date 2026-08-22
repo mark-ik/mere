@@ -1,0 +1,106 @@
+{
+  "schema": "distillery.browser-model-matrix/v1",
+  "input": "query: Mere keeps a model local.",
+  "run_count": 3,
+  "idle_sample_ms": 1500,
+  "frame_bound_ms": 33.4,
+  "diagnostic_trace": false,
+  "models": [
+    {
+      "model_id": "TaylorAI/bge-micro-v2",
+      "revision": "3edf6d7de0faa426b09780416fe61009f26ae589",
+      "model_base_url": "/models/bge-micro-v2",
+      "architecture": "bert",
+      "license": "MIT",
+      "pooling": "mean",
+      "expected_dimensions": 384,
+      "artifacts": {
+        "config": { "bytes": 745, "sha256": "86d7047bf568a9263c7020fb4950741b19b1df3de3539385d83d9e3df1e56c5b" },
+        "tokenizer": { "bytes": 711661, "sha256": "cb374d6bc042c22455946f4e09a89d29882a199fdaf8fb25be00dc8b8857a448" },
+        "weights": {
+          "bytes": 34785664,
+          "dtype": "F16",
+          "sha256": "792472b64c3ca1c725e55f6a9d2a58143d4ce6b3ffde05bf55bc8427cb3733c8"
+        }
+      },
+      "reference": {
+        "source": "PyTorch 2.11.0+cpu / Transformers 5.8.0",
+        "tolerance": 0.0001,
+        "first_8": [-0.039409954, 0.0031015954, -0.009310905, -0.002946827, -0.029707221, -0.041877568, -0.0106828185, 0.043254782],
+        "output_f32le_sha256": "3dbc656d858a2aeb5ad998dfa95d9ef435f4d1d17e844523932346285eb66a92"
+      }
+    },
+    {
+      "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "model_base_url": "/models/all-MiniLM-L6-v2",
+      "architecture": "bert",
+      "license": "Apache-2.0",
+      "pooling": "mean",
+      "expected_dimensions": 384,
+      "artifacts": {
+        "config": { "bytes": 612, "sha256": "953f9c0d463486b10a6871cc2fd59f223b2c70184f49815e7efbcab5d8908b41" },
+        "tokenizer": { "bytes": 466247, "sha256": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037" },
+        "weights": {
+          "bytes": 90868376,
+          "dtype": "F32",
+          "sha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
+        }
+      },
+      "reference": {
+        "source": "PyTorch 2.11.0+cpu / Transformers 5.8.0",
+        "tolerance": 0.0001,
+        "first_8": [0.045927152, -0.0018069973, 0.02857656, 0.07433602, 0.0718927, 0.053076733, -0.010092336, 0.0085868575],
+        "output_f32le_sha256": "ecc38f6d55d5c8891f652ea0cf1cbabc62b819ffaf32e007826be22fcca477f9"
+      }
+    },
+    {
+      "model_id": "intfloat/e5-small-v2",
+      "revision": "ffb93f3bd4047442299a41ebb6fa998a38507c52",
+      "model_base_url": "/models/e5-small-v2",
+      "architecture": "bert",
+      "license": "MIT",
+      "pooling": "mean",
+      "expected_dimensions": 384,
+      "artifacts": {
+        "config": { "bytes": 615, "sha256": "5dfb0363cd0243be179c03bcaafd1542d0fbb95e8cbcf575fff3e229342adc2f" },
+        "tokenizer": { "bytes": 711396, "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66" },
+        "weights": {
+          "bytes": 133466304,
+          "dtype": "F32",
+          "sha256": "45bfa60070649aae2244fbc9d508537779b93b6f353c17b0f95ceccb1c5116c1"
+        }
+      },
+      "reference": {
+        "source": "PyTorch 2.11.0+cpu / Transformers 5.8.0",
+        "tolerance": 0.0001,
+        "first_8": [-0.04945486, 0.058722805, 0.035221446, -0.022851136, -0.016100664, 0.0038429382, 0.021561896, -0.06900158],
+        "output_f32le_sha256": "68226deb012e3ef68b5f55fac98a75abc8dfcb4087b047386caf0a8c639abbc0"
+      }
+    },
+    {
+      "model_id": "intfloat/e5-base-v2",
+      "revision": "f52bf8ec8c7124536f0efb74aca902b2995e5bcd",
+      "model_base_url": "/models/e5-base-v2",
+      "architecture": "bert",
+      "license": "MIT",
+      "pooling": "mean",
+      "expected_dimensions": 768,
+      "artifacts": {
+        "config": { "bytes": 650, "sha256": "01cc39aa39538a8179aa131c8a16adc03b506c92009f091502e4eb0c702f5f78" },
+        "tokenizer": { "bytes": 711396, "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66" },
+        "weights": {
+          "bytes": 437955512,
+          "dtype": "F32",
+          "sha256": "d0d559c47d5f71b1d280b13b62a2657f3e3bc70c0786f9ab91a36545e6a8f693"
+        }
+      },
+      "reference": {
+        "source": "PyTorch 2.11.0+cpu / Transformers 5.8.0",
+        "tolerance": 0.0001,
+        "first_8": [-0.0050134505, -0.0076038735, -0.009168949, -0.0060825762, 0.017700266, -0.03419712, 0.032324564, 0.0054021548],
+        "output_f32le_sha256": "7a37dfb001e72f7ccebf67b74c43148668b295b424ede02bb161bd9937d30544"
+      }
+    }
+  ]
+}

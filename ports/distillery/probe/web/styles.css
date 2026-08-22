@@ -11,9 +11,10 @@ header, form, section { border: 1px solid #38443e; background: #171d1a; padding:
 .eyebrow { color: #9fb8a8; text-transform: uppercase; letter-spacing: .08em; }
 h1, h2 { margin-top: 0; }
 label { display: grid; gap: 6px; margin: 12px 0; color: #bdc9c1; }
-input, textarea, button { font: inherit; }
-input, textarea { box-sizing: border-box; width: 100%; border: 1px solid #536359; background: #0c100e; color: #f2f5f2; padding: 9px; }
+input, textarea, select, button { font: inherit; }
+input, textarea, select { box-sizing: border-box; width: 100%; border: 1px solid #536359; background: #0c100e; color: #f2f5f2; padding: 9px; }
 textarea { min-height: 76px; resize: vertical; }
+#model-metadata { color: #9fb8a8; margin: 4px 0 16px; }
 .row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .check { display: flex; align-items: center; grid-template-columns: auto 1fr; }
 .check input { width: auto; }

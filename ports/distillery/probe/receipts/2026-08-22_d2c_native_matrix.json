@@ -1,0 +1,59 @@
+{
+  "schema": "distillery.native-bert-matrix-receipt/v1",
+  "generated_at": "2026-08-22",
+  "input": "query: Mere keeps a model local.",
+  "reference": {
+    "engine": "PyTorch 2.11.0+cpu / Transformers 5.8.0",
+    "pooling": "attention-mask-aware mean plus L2 normalization",
+    "tolerance": 0.0001
+  },
+  "esp_engine": "esp::embed::bert on Burn NdArray CPU",
+  "rows": [
+    {
+      "model_id": "TaylorAI/bge-micro-v2",
+      "revision": "3edf6d7de0faa426b09780416fe61009f26ae589",
+      "dimensions": 384,
+      "all_finite": true,
+      "l2_norm": 1.0000001,
+      "first_8": [-0.039409947, 0.0031015887, -0.00931092, -0.0029468175, -0.02970724, -0.04187756, -0.010682834, 0.043254763],
+      "reference_max_abs_error_first_8": 1.91e-8,
+      "timings_ms": { "load": 85.6475, "execution": 16.6571 }
+    },
+    {
+      "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+      "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "dimensions": 384,
+      "all_finite": true,
+      "l2_norm": 1.0000001,
+      "first_8": [0.045927186, -0.0018070425, 0.028576586, 0.074335955, 0.07189278, 0.053076744, -0.010092349, 0.008586888],
+      "reference_max_abs_error_first_8": 8.30e-8,
+      "timings_ms": { "load": 98.6906, "execution": 25.6802 }
+    },
+    {
+      "model_id": "intfloat/e5-small-v2",
+      "revision": "ffb93f3bd4047442299a41ebb6fa998a38507c52",
+      "dimensions": 384,
+      "all_finite": true,
+      "l2_norm": 1.0000001,
+      "first_8": [-0.049454894, 0.058722813, 0.03522141, -0.022851158, -0.016100602, 0.0038429692, 0.021561941, -0.06900153],
+      "reference_max_abs_error_first_8": 6.18e-8,
+      "timings_ms": { "load": 147.3948, "execution": 52.1642 }
+    },
+    {
+      "model_id": "intfloat/e5-base-v2",
+      "revision": "f52bf8ec8c7124536f0efb74aca902b2995e5bcd",
+      "dimensions": 768,
+      "all_finite": true,
+      "l2_norm": 1.0,
+      "first_8": [-0.0050134617, -0.0076038647, -0.009168953, -0.006082568, 0.01770023, -0.0341971, 0.032324586, 0.005402126],
+      "reference_max_abs_error_first_8": 3.53e-8,
+      "timings_ms": { "load": 581.3595, "execution": 425.8813 }
+    }
+  ],
+  "conclusions": {
+    "all_rows_passed": true,
+    "dimensions_match": true,
+    "all_outputs_finite_and_unit_norm": true,
+    "all_references_within_tolerance": true
+  }
+}

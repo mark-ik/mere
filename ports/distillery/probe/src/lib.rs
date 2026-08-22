@@ -19,7 +19,7 @@ pub enum RunMode {
 }
 
 /// Exact input to one worker run.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProbeConfig {
     /// Cold acquisition or warm reopen.
@@ -37,6 +37,18 @@ pub struct ProbeConfig {
     pub input: String,
     /// Number of embeddings in this run, including the first.
     pub run_count: usize,
+    /// Expected output width for this configured matrix row.
+    #[serde(default)]
+    pub expected_dimensions: Option<usize>,
+    /// Independent reference prefix for this exact model and input.
+    #[serde(default)]
+    pub reference_first_8: Option<Vec<f32>>,
+    /// Maximum accepted absolute error for the configured reference prefix.
+    #[serde(default)]
+    pub reference_tolerance: Option<f32>,
+    /// Whether to force diagnostic readbacks after BERT graph prefixes.
+    #[serde(default)]
+    pub diagnostic_trace: bool,
     /// Required for a warm run.
     #[serde(default)]
     pub manifest_id: Option<String>,
@@ -62,6 +74,22 @@ impl ProbeConfig {
         }
         if self.run_count == 0 {
             return Err("run_count must be greater than zero");
+        }
+        if self.expected_dimensions == Some(0) {
+            return Err("expected_dimensions must be greater than zero");
+        }
+        if self
+            .reference_first_8
+            .as_ref()
+            .is_some_and(|reference| reference.len() != 8)
+        {
+            return Err("reference_first_8 must contain exactly eight floats");
+        }
+        if self
+            .reference_tolerance
+            .is_some_and(|tolerance| !tolerance.is_finite() || tolerance <= 0.0)
+        {
+            return Err("reference_tolerance must be finite and greater than zero");
         }
         if self.mode == RunMode::Warm && self.manifest_id.is_none() {
             return Err("a warm run requires manifest_id");
@@ -135,6 +163,10 @@ pub struct ExecutionReceipt {
     pub backend: String,
     /// Output vector width.
     pub dimensions: usize,
+    /// Configured output width, when the matrix supplies one.
+    pub expected_dimensions: Option<usize>,
+    /// Whether the output width matched the configured row.
+    pub dimensions_match: Option<bool>,
     /// Whether every output component is finite.
     pub all_finite: bool,
     /// Norm after the model's configured L2-normalization.
@@ -442,7 +474,7 @@ mod worker {
 
         post_state(
             "loading",
-            "parsing safetensors and uploading MiniLM to WGPU",
+            "parsing safetensors and uploading the configured BERT model to WGPU",
         )?;
         let load_started = Date::now();
         // Burn's synchronous WGPU constructor is appropriate on native hosts,
@@ -473,17 +505,22 @@ mod worker {
         let all_finite = first.iter().all(|value| value.is_finite());
         let l2_norm = first.iter().map(|value| value * value).sum::<f32>().sqrt();
         let first_8 = first.iter().take(8).copied().collect::<Vec<_>>();
-        let reference_max_abs_error = FIXTURES
+        let fallback_reference = FIXTURES
             .iter()
             .find(|fixture| fixture.text == config.input)
-            .map(|fixture| {
-                first_8
-                    .iter()
-                    .zip(fixture.first_8)
-                    .map(|(actual, expected)| (actual - expected).abs())
-                    .fold(0.0_f32, f32::max)
-            });
-        let reference_within_tolerance = reference_max_abs_error.map(|error| error < TOLERANCE);
+            .map(|fixture| fixture.first_8.as_slice());
+        let reference = config.reference_first_8.as_deref().or(fallback_reference);
+        let reference_tolerance = config.reference_tolerance.unwrap_or(TOLERANCE);
+        let reference_max_abs_error = reference.map(|reference| {
+            first_8
+                .iter()
+                .zip(reference)
+                .map(|(actual, expected)| (actual - expected).abs())
+                .fold(0.0_f32, f32::max)
+        });
+        let reference_within_tolerance =
+            reference_max_abs_error.map(|error| error < reference_tolerance);
+        let expected_dimensions = config.expected_dimensions;
 
         let mut repeats = Vec::with_capacity(config.run_count.saturating_sub(1));
         let mut repeat_outputs_match = true;
@@ -502,19 +539,25 @@ mod worker {
         } else {
             f64::INFINITY
         };
-        post_state(
-            "tracing",
-            "forcing fresh readback after input and each BERT graph prefix",
-        )?;
-        let diagnostic_trace = provider
-            .trace_one_async(&config.input)
-            .await
-            .map_err(|error| format!("staged embedding trace: {error}"))?;
-        let diagnostic_trace = serde_json::to_value(diagnostic_trace)
-            .map_err(|error| format!("serialize staged embedding trace: {error}"))?;
+        let diagnostic_trace = if config.diagnostic_trace {
+            post_state(
+                "tracing",
+                "forcing fresh readback after input and each BERT graph prefix",
+            )?;
+            let trace = provider
+                .trace_one_async(&config.input)
+                .await
+                .map_err(|error| format!("staged embedding trace: {error}"))?;
+            Some(
+                serde_json::to_value(trace)
+                    .map_err(|error| format!("serialize staged embedding trace: {error}"))?,
+            )
+        } else {
+            None
+        };
 
         let report = WorkerRunReport {
-            schema: "distillery.browser-model-worker/v1".into(),
+            schema: "distillery.browser-model-worker/v2".into(),
             build_base_commit: option_env!("DISTILLERY_PROBE_COMMIT")
                 .unwrap_or("unknown")
                 .into(),
@@ -540,6 +583,8 @@ mod worker {
                 kind: "sentence_embedding".into(),
                 backend: "burn-wgpu/dedicated-worker".into(),
                 dimensions: first.len(),
+                expected_dimensions,
+                dimensions_match: expected_dimensions.map(|expected| expected == first.len()),
                 all_finite,
                 l2_norm,
                 first_8,
@@ -552,7 +597,7 @@ mod worker {
                     .as_ref()
                     .map(|expected| expected == &first_hash),
                 embeddings_per_second,
-                diagnostic_trace: Some(diagnostic_trace),
+                diagnostic_trace,
             },
         };
         post_state("finished", "the worker report is complete")?;
@@ -589,6 +634,10 @@ mod tests {
             license: "Apache-2.0".into(),
             input: "Mere keeps a model local.".into(),
             run_count: 3,
+            expected_dimensions: Some(384),
+            reference_first_8: None,
+            reference_tolerance: None,
+            diagnostic_trace: false,
             manifest_id: (mode == RunMode::Warm).then(|| "blake3:00".into()),
             expected_hashes: None,
             expected_output_hash: None,
@@ -626,5 +675,25 @@ mod tests {
         let mut value = serde_json::to_value(config(RunMode::Cold)).unwrap();
         value["product_default"] = serde_json::Value::Bool(true);
         assert!(serde_json::from_value::<ProbeConfig>(value).is_err());
+    }
+
+    #[test]
+    fn configured_reference_requires_exactly_eight_values() {
+        let mut input = config(RunMode::Cold);
+        input.reference_first_8 = Some(vec![0.0; 7]);
+        assert_eq!(
+            input.validate(),
+            Err("reference_first_8 must contain exactly eight floats")
+        );
+    }
+
+    #[test]
+    fn configured_tolerance_must_be_positive_and_finite() {
+        let mut input = config(RunMode::Cold);
+        input.reference_tolerance = Some(f32::INFINITY);
+        assert_eq!(
+            input.validate(),
+            Err("reference_tolerance must be finite and greater than zero")
+        );
     }
 }

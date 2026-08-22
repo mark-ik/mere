@@ -1,0 +1,13 @@
+[package]
+name = "distillery-native-fixture"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Native numerical control for Distillery's browser model matrix."
+
+[workspace]
+
+[dependencies]
+esp = { path = "../../../../crates/intel/esp", features = ["bert"] }
+serde_json = "1"
