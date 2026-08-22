@@ -5,6 +5,7 @@
 //! discloses those containers through Graphshell. The directory remains source
 //! truth.
 
+mod authority;
 mod clip_evidence;
 mod content_classes;
 mod directory;
@@ -27,6 +28,7 @@ mod vault;
 mod watcher;
 mod writer;
 
+pub use authority::{KnotAuthoritySource, KnotSpaceAuthoritySnapshot};
 pub use clip_evidence::{
     BlobClipEvidenceStore, FileClipEvidenceStore, KnotClipEvidenceRef, KnotClipEvidenceStore,
     KnotContentRetentionPort, clip_evidence_references,
@@ -75,8 +77,8 @@ pub use publish_wire::{
     encode_request, encode_response,
 };
 pub use resident::{
-    KnotCommunalPeerAuthority, KnotEvidenceFetchReceipt, KnotEvidenceFetchStatus, KnotSyncHost,
-    KnotSyncHostConfig, KnotSyncHostError,
+    KnotEvidenceFetchReceipt, KnotEvidenceFetchStatus, KnotSyncHost, KnotSyncHostConfig,
+    KnotSyncHostError,
 };
 pub use rosette::{
     CmudictPronunciations, LexiconCoverage, LineMeter, MetricalBeat, MetricalFoot,

@@ -12,11 +12,10 @@ use stickleback::{JoinError, JoinedSpace, SyncStatus};
 
 use stickleback::DataKeyring;
 use tokio::sync::{Mutex, RwLock};
-use transport::p2panda_transport::MdnsDiscoveryMode;
 use transport::p2panda_transport::{KnownPeer, RelayUrl};
 use transport::{
-    BlobHash, BlobLease, BlobReadAuthorizer, BlobScope, BlobStore, P2pandaTransport, PeerID,
-    Transport, sync_overlay_topic,
+    BlobHash, BlobLease, BlobReadAuthorizer, BlobScope, BlobStore, P2pandaHostPolicy,
+    P2pandaOverlayHost, P2pandaTransport, PeerID, sync_overlay_topic,
 };
 use uuid::Uuid;
 
@@ -84,7 +83,7 @@ pub struct PersonalSyncHost {
     roster: Arc<RwLock<SyncRoster>>,
     replica: Mutex<PersonalGraphReplica<RedbBackend>>,
     joined: JoinedSpace<PersonalGraphExt>,
-    transport: P2pandaTransport,
+    network: P2pandaOverlayHost,
     /// Bytes this device serves to its paired siblings, and the bytes it has
     /// fetched from them.
     ///
@@ -223,44 +222,37 @@ impl PersonalSyncHost {
         // sibling reaches bytes through the pairing it already has. Without it
         // the lane replicated `ObserveBlobAvailability` records saying which
         // device held which blob, and offered no way to ask for one.
-        let mut builder = P2pandaTransport::builder(&transport_key)
+        let builder = P2pandaTransport::builder(&transport_key)
             .gossip()
-            .mdns(MdnsDiscoveryMode::Active)
             .scoped_blobs(&blobs, blob_scope, blob_authority.clone());
-        for url in config.relay_urls.clone() {
-            builder = builder.relay_url(url);
-        }
-        let transport = builder
-            .bind()
-            .await
-            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        let overlay = sync_overlay_topic(config.graph);
+        let network = P2pandaOverlayHost::bind(
+            builder,
+            overlay,
+            &P2pandaHostPolicy {
+                relay_urls: config.relay_urls.clone(),
+                ..P2pandaHostPolicy::default()
+            },
+        )
+        .await
+        .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         // The selection above was stamped with a device key derived before the
         // bind. If the transport ever named itself differently, offers would be
         // filtered against an identity no peer addresses, and the symptom would
         // be an empty inbox rather than an error.
-        if transport.local_peer_id().to_bytes() != transport_key.public_key().to_bytes() {
+        if network.local_peer_id().to_bytes() != transport_key.public_key().to_bytes() {
             return Err(PersonalSyncHostError::Transport(format!(
                 "transport bound as {} but this device addresses itself as {device}",
-                hex(&transport.local_peer_id().to_bytes())
+                hex(&network.local_peer_id().to_bytes())
             )));
         }
-        let overlay = sync_overlay_topic(config.graph);
-        for node in &config.paired_nodes {
-            let peer = PeerID::from_bytes(node).map_err(|error| {
-                PersonalSyncHostError::Transport(format!("paired node id: {error}"))
-            })?;
-            transport
-                .set_topics(peer, &[overlay])
-                .await
-                .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
-        }
+        network
+            .seed_peers(config.paired_nodes.iter().copied())
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         for ticket in &config.peer_tickets {
-            let peer = transport
+            network
                 .add_peer_ticket(ticket)
-                .await
-                .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
-            transport
-                .set_topics(peer, &[overlay])
                 .await
                 .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         }
@@ -269,17 +261,11 @@ impl PersonalSyncHost {
         // fail loudly, a hint recorded weeks ago must degrade. A device whose
         // stored hint has rotted still opens, still serves, and still reaches
         // anything discovery can find; it has only lost the shortcut.
-        for hint in &config.peer_hints {
-            match transport.add_peer_ticket(hint).await {
-                Ok(peer) => {
-                    if let Err(error) = transport.set_topics(peer, &[overlay]).await {
-                        tracing::warn!(%error, "could not tag a stored dial hint onto the overlay");
-                    }
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "a stored dial hint did not parse; skipping it");
-                }
-            }
+        for rejected in network.seed_peer_hints(config.peer_hints.clone()).await {
+            tracing::warn!(
+                error = %rejected.error,
+                "a stored dial hint did not parse; skipping it"
+            );
         }
         let store = replica.sync_store();
         let accepted = store.clone();
@@ -291,7 +277,8 @@ impl PersonalSyncHost {
         let admitting = Arc::clone(&roster);
         let intake_keys = Arc::clone(&keys);
         let graph = config.graph;
-        let (endpoint, gossip) = transport
+        let (endpoint, gossip) = network
+            .transport()
             .sync_parts()
             .ok_or_else(|| PersonalSyncHostError::Transport("gossip is unavailable".into()))?;
         let joined = JoinedSpace::join::<_, u64, _, _>(
@@ -341,7 +328,7 @@ impl PersonalSyncHost {
             roster,
             replica: Mutex::new(replica),
             joined,
-            transport,
+            network,
             blobs,
             blob_authority,
             blob_scope,
@@ -383,7 +370,7 @@ impl PersonalSyncHost {
     /// clones. What lets carriage ride this same bound endpoint instead of
     /// opening a second one per device.
     pub fn sync_parts(&self) -> Option<(transport::p2panda_transport::Endpoint, transport::p2panda_transport::Gossip)> {
-        self.transport.sync_parts()
+        self.network.transport().sync_parts()
     }
 
     /// Tag a peer with additional overlay topics, keeping its existing tags.
@@ -397,7 +384,8 @@ impl PersonalSyncHost {
     ) -> Result<(), PersonalSyncHostError> {
         let peer = PeerID::from_bytes(&node)
             .map_err(|error| PersonalSyncHostError::Transport(format!("peer node id: {error}")))?;
-        self.transport
+        self.network
+            .transport()
             .add_topics(peer, topics)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
@@ -453,7 +441,7 @@ impl PersonalSyncHost {
             )));
         }
         self.blobs
-            .fetch_from(&self.transport, peer, hash)
+            .fetch_from(self.network.transport(), peer, hash)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         self.blobs
@@ -637,17 +625,14 @@ impl PersonalSyncHost {
     /// This device's stable per-graph node id: what a peer stores to pair with
     /// it. Survives restarts, unlike [`ticket`](Self::ticket).
     pub fn node_id(&self) -> [u8; 32] {
-        self.transport.local_peer_id().to_bytes()
+        self.network.local_peer_id().to_bytes()
     }
 
     /// Tag another device onto this graph's overlay on the live transport, so
     /// pairing takes effect without restarting the resident host.
     pub async fn pair_node(&self, node_id: [u8; 32]) -> Result<(), PersonalSyncHostError> {
-        let peer = PeerID::from_bytes(&node_id).map_err(|error| {
-            PersonalSyncHostError::Transport(format!("paired node id: {error}"))
-        })?;
-        self.transport
-            .set_topics(peer, &[sync_overlay_topic(self.graph)])
+        self.network
+            .add_peer(node_id)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         self.blob_authority.allow_reader(self.blob_scope, node_id);
@@ -659,11 +644,8 @@ impl PersonalSyncHost {
     /// The peer stays in the address book, so re-pairing later does not have
     /// to rediscover it. Only its membership of this graph goes.
     pub async fn unpair_node(&self, node_id: [u8; 32]) -> Result<(), PersonalSyncHostError> {
-        let peer = PeerID::from_bytes(&node_id).map_err(|error| {
-            PersonalSyncHostError::Transport(format!("paired node id: {error}"))
-        })?;
-        self.transport
-            .remove_topic(peer, sync_overlay_topic(self.graph))
+        self.network
+            .remove_peer(node_id)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         self.blob_authority.deny_reader(self.blob_scope, &node_id);
@@ -675,14 +657,14 @@ impl PersonalSyncHost {
     /// Pairing records identity; this reports reachability, which is the fact
     /// a peer id cannot carry on its own.
     pub async fn known_peers(&self) -> Result<Vec<KnownPeer>, PersonalSyncHostError> {
-        self.transport
-            .peers_for_topic(sync_overlay_topic(self.graph))
+        self.network
+            .known_peers()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
     }
 
     pub async fn ticket(&self) -> Result<String, PersonalSyncHostError> {
-        self.transport
+        self.network
             .ticket()
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
@@ -694,10 +676,8 @@ impl PersonalSyncHost {
         &self,
         node: [u8; 32],
     ) -> Result<Option<String>, PersonalSyncHostError> {
-        let peer = PeerID::from_bytes(&node)
-            .map_err(|error| PersonalSyncHostError::Transport(format!("peer node id: {error}")))?;
-        self.transport
-            .peer_ticket(peer)
+        self.network
+            .peer_ticket(node)
             .await
             .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))
     }
@@ -1014,7 +994,11 @@ impl PersonalSyncHost {
     pub async fn close(self) -> Result<(), PersonalSyncHostError> {
         let store_path = self.store_path.clone();
         drop(self.joined);
-        drop(self.transport);
+        self.network
+            .close()
+            .await
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        drop(self.network);
         drop(self.replica);
 
         let mut last_error = None;

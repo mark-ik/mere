@@ -50,6 +50,7 @@ pub mod memory;
 pub mod noise;
 #[cfg(feature = "notochord")]
 pub mod notochord;
+mod p2panda_host;
 pub mod p2panda_transport;
 mod peer_id;
 #[cfg(feature = "reticulum")]
@@ -62,6 +63,7 @@ pub use crate::blobs::{
     BlobError, BlobHash, BlobLease, BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore,
 };
 pub use crate::error::TransportError;
+pub use crate::p2panda_host::{P2pandaHostPolicy, P2pandaOverlayHost, RejectedPeerHint};
 pub use crate::p2panda_transport::{P2pandaStream, P2pandaTransport, sync_overlay_topic};
 // The gossip handle returned by `P2pandaTransport::subscribe` (space live-sync):
 // `publish(bytes)` to broadcast, `subscribe()` for the received-bytes stream.

@@ -143,30 +143,23 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let device_root = local_device_root(&args.data_root, &args.label)?;
-    let admitted = sync.paired_writer_keys()?;
+    let snapshot = knot::KnotSpaceAuthoritySnapshot::from_personal_settings(&sync)?;
     let authority = StartupUnlockedPersonalVault::open(
         &args.data_root,
         args.persona,
         device_root,
-        admitted.clone(),
+        snapshot.writers(),
     )?;
 
-    let relays = sync
-        .relay_urls
-        .iter()
-        .map(|url| {
-            url.parse::<transport::p2panda_transport::RelayUrl>()
-                .map_err(|error| format!("relay url {url:?}: {error}"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let relays =
+        transport::P2pandaHostPolicy::parse_relay_urls(sync.relay_urls.iter().map(String::as_str))?;
 
-    let host = KnotSyncHost::open(
+    let mut host = KnotSyncHost::open(
         authority.store(),
         authority.signing_seed(),
         KnotSyncHostConfig {
-            paired_writers: admitted,
+            authority: snapshot,
             relay_urls: relays,
-            peer_hints: sync.dial_hints(),
         },
     )
     .await?;
@@ -190,8 +183,6 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // Reconcile pairing live. Writer admission and evidence access are shared
     // mutable Personae materializations, while the address-book topic is only
     // the route used to reach that admitted identity.
-    let mut applied: std::collections::HashSet<[u8; 32]> =
-        sync.paired_writer_keys()?.into_iter().collect();
     loop {
         tokio::time::sleep(PAIRING_POLL).await;
         let reloaded = match KnotSettings::load(&settings_file) {
@@ -202,45 +193,25 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         let Some(sync) = reloaded.sync else { continue };
-        let desired = match sync.paired_writer_keys() {
-            Ok(keys) => keys.into_iter().collect::<std::collections::HashSet<_>>(),
+        let desired = match knot::KnotSpaceAuthoritySnapshot::from_personal_settings(&sync) {
+            Ok(snapshot) => snapshot,
             Err(error) => {
                 tracing::warn!(%error, "knot sync settings hold an unusable writer key");
                 continue;
             }
         };
-        for writer in desired.iter().copied() {
-            if !applied.insert(writer) {
+        match host.apply_authority(desired).await {
+            Ok(true) => tracing::info!(
+                revision = %knot::hex32(&host.authority_revision()),
+                "applied a new Knot space-authority revision"
+            ),
+            Ok(false) => {}
+            Err(error) => {
+                tracing::warn!(%error, "could not apply Knot space authority");
                 continue;
             }
-            match host.pair_writer(writer).await {
-                Ok(()) => tracing::info!(
-                    writer = %knot::hex32(&writer),
-                    "reaching a newly paired device without a restart"
-                ),
-                Err(error) => {
-                    applied.remove(&writer);
-                    tracing::warn!(%error, writer = %knot::hex32(&writer), "could not reach a paired device");
-                }
-            }
         }
-        for writer in applied.difference(&desired).copied().collect::<Vec<_>>() {
-            match host.unpair_writer(writer).await {
-                Ok(()) => {
-                    applied.remove(&writer);
-                    tracing::info!(
-                        writer = %knot::hex32(&writer),
-                        "revoked an unpaired device without a restart"
-                    );
-                }
-                Err(error) => tracing::warn!(
-                    %error,
-                    writer = %knot::hex32(&writer),
-                    "revoked an unpaired device but could not remove its route"
-                ),
-            }
-        }
-        host.refresh_dial_hints(&sync, &settings_file).await;
+        host.refresh_dial_hints(&settings_file).await;
     }
 }
 

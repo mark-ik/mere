@@ -5,14 +5,13 @@
 //! physical content store. This module only keeps those authorities alive in
 //! one resident and registers the stable local route.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use knot::{
-    KnotContentRetentionPort, KnotResidentSource, KnotRosetteConfig, KnotSettings, KnotSyncHost,
-    KnotSyncHostConfig, KnotWriteGrant, StartupUnlockedPersonalVault, knot_settings_path,
-    local_device_root, persona_vault_root,
+    KnotContentRetentionPort, KnotResidentSource, KnotRosetteConfig, KnotSettings,
+    KnotSpaceAuthoritySnapshot, KnotSyncHost, KnotSyncHostConfig, KnotWriteGrant,
+    StartupUnlockedPersonalVault, knot_settings_path, local_device_root, persona_vault_root,
 };
 use transport::BlobScope;
 
@@ -33,7 +32,6 @@ pub struct ResidentKnot {
     source: KnotResidentSource,
     sync: Option<KnotSyncHost>,
     settings_file: PathBuf,
-    paired_writers: BTreeSet<[u8; 32]>,
     rosette: KnotRosetteConfig,
 }
 
@@ -50,10 +48,10 @@ impl ResidentKnot {
         let settings_file = knot_settings_path(data_root, persona);
         let settings = KnotSettings::load(&settings_file)
             .map_err(|error| format!("could not load resident Knot settings: {error}"))?;
-        let paired_writers = settings
+        let authority = settings
             .sync
             .as_ref()
-            .map(|sync| sync.paired_writer_keys())
+            .map(KnotSpaceAuthoritySnapshot::from_personal_settings)
             .transpose()
             .map_err(|error| format!("could not read resident Knot pairing: {error}"))?
             .unwrap_or_default();
@@ -71,7 +69,7 @@ impl ResidentKnot {
             data_root,
             persona,
             device_root,
-            paired_writers.iter().copied(),
+            authority.writers(),
         )?;
         let signing_seed = startup.signing_seed();
         let store = startup.store().clone();
@@ -79,7 +77,7 @@ impl ResidentKnot {
 
         let scope = BlobScope::new(store.space_id());
         let readers = blob_custody.authorizer();
-        readers.replace_readers(scope, paired_writers.iter().copied());
+        readers.replace_readers(scope, authority.evidence_readers());
         let max_artifact_bytes = config.max_artifact_bytes;
         let evidence_root = config
             .evidence_root
@@ -148,7 +146,6 @@ impl ResidentKnot {
             source,
             sync,
             settings_file,
-            paired_writers: paired_writers.into_iter().collect(),
             rosette,
         })
     }
@@ -176,7 +173,7 @@ impl ResidentKnot {
 
     /// Reconcile pairing, evidence readers, and newly learned dial hints.
     pub async fn refresh_settings(&mut self) -> Result<bool, String> {
-        let Some(host) = self.sync.as_ref() else {
+        let Some(host) = self.sync.as_mut() else {
             return Ok(false);
         };
         let latest = KnotSettings::load(&self.settings_file)
@@ -184,45 +181,17 @@ impl ResidentKnot {
         let next = latest
             .sync
             .as_ref()
-            .map(|sync| sync.paired_writer_keys())
+            .map(KnotSpaceAuthoritySnapshot::from_personal_settings)
             .transpose()
             .map_err(|error| format!("could not read resident Knot pairing: {error}"))?
-            .unwrap_or_default()
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-        let mut changed = false;
-        for writer in self.paired_writers.difference(&next).copied() {
-            host.unpair_writer(writer)
-                .await
-                .map_err(|error| format!("could not unpair resident Knot writer: {error}"))?;
-            changed = true;
+            .unwrap_or_default();
+        let changed = host
+            .apply_authority(next)
+            .await
+            .map_err(|error| format!("could not apply resident Knot authority: {error}"))?;
+        if latest.sync.is_some() {
+            host.refresh_dial_hints(&self.settings_file).await;
         }
-        for writer in next.difference(&self.paired_writers).copied() {
-            host.pair_writer(writer)
-                .await
-                .map_err(|error| format!("could not pair resident Knot writer: {error}"))?;
-            changed = true;
-        }
-        if let Some(sync) = latest.sync.as_ref() {
-            for writer in next.iter().copied() {
-                let Some(ticket) = sync.endpoint_for(&writer) else {
-                    continue;
-                };
-                let ticket_peer = host
-                    .add_peer_hint(ticket)
-                    .await
-                    .map_err(|error| format!("could not apply resident Knot dial hint: {error}"))?;
-                if ticket_peer != writer {
-                    return Err(format!(
-                        "resident Knot dial hint names {}, expected {}",
-                        knot::hex32(&ticket_peer),
-                        knot::hex32(&writer)
-                    ));
-                }
-            }
-            host.refresh_dial_hints(sync, &self.settings_file).await;
-        }
-        self.paired_writers = next;
         Ok(changed)
     }
 
@@ -253,20 +222,13 @@ impl ResidentKnot {
 }
 
 fn sync_host_config(sync: &knot::KnotSyncSettings) -> Result<KnotSyncHostConfig, String> {
-    let relay_urls = sync
-        .relay_urls
-        .iter()
-        .map(|url| {
-            url.parse()
-                .map_err(|error| format!("resident Knot relay URL {url:?}: {error}"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let relay_urls =
+        transport::P2pandaHostPolicy::parse_relay_urls(sync.relay_urls.iter().map(String::as_str))
+            .map_err(|error| format!("resident Knot {error}"))?;
     Ok(KnotSyncHostConfig {
-        paired_writers: sync
-            .paired_writer_keys()
+        authority: KnotSpaceAuthoritySnapshot::from_personal_settings(sync)
             .map_err(|error| format!("could not read resident Knot pairing: {error}"))?,
         relay_urls,
-        peer_hints: sync.dial_hints(),
     })
 }
 
@@ -410,12 +372,12 @@ mod tests {
             source,
             sync: Some(host),
             settings_file: settings_file.clone(),
-            paired_writers: BTreeSet::new(),
             rosette: KnotRosetteConfig {
                 max_source_bytes: 4096,
                 ..KnotRosetteConfig::default()
             },
         };
+        let empty_authority_revision = resident.sync.as_ref().unwrap().authority_revision();
         assert!(!readers.allows(scope, &peer, hash));
         let mut sync_settings = knot::KnotSyncSettings::default();
         assert!(sync_settings.pair(peer));
@@ -425,6 +387,8 @@ mod tests {
         .save(&settings_file)
         .unwrap();
         assert!(resident.refresh_settings().await.unwrap());
+        let paired_authority_revision = resident.sync.as_ref().unwrap().authority_revision();
+        assert_ne!(paired_authority_revision, empty_authority_revision);
         assert!(store.admitted_writers().contains(&peer));
         assert!(readers.allows(scope, &peer, hash));
 
@@ -435,6 +399,10 @@ mod tests {
         .save(&settings_file)
         .unwrap();
         assert!(resident.refresh_settings().await.unwrap());
+        assert_eq!(
+            resident.sync.as_ref().unwrap().authority_revision(),
+            empty_authority_revision
+        );
         assert!(!store.admitted_writers().contains(&peer));
         assert!(!readers.allows(scope, &peer, hash));
         assert!(blobs.has(hash).await.unwrap());

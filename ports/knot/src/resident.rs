@@ -19,85 +19,29 @@
 //! resolves that by mixing the device's own Personae root into the writer
 //! derivation only.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use servitor::cap::{Cap, Mode};
-use servitor::{AuthorityProvider, Subject};
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
-use transport::p2panda_transport::{KnownPeer, MdnsDiscoveryMode, RelayUrl};
+use transport::p2panda_transport::{KnownPeer, RelayUrl};
 use transport::{
-    BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore, P2pandaTransport, PeerID,
-    Transport, sync_overlay_topic,
+    BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore, P2pandaHostPolicy,
+    P2pandaOverlayHost, P2pandaTransport, PeerID, sync_overlay_topic,
 };
 
 use crate::VaultDocument;
+use crate::authority::{KnotAuthoritySource, KnotSpaceAuthoritySnapshot};
 use crate::clip_evidence::{KnotClipEvidenceRef, clip_evidence_references};
 use crate::sync::{KnotEncryptionProfile, KnotSyncExt, KnotSyncFileStore};
 
 /// How this device reaches the persona's other devices.
 #[derive(Clone, Debug, Default)]
 pub struct KnotSyncHostConfig {
-    /// Writer keys of this persona's other devices. Each doubles as that
-    /// device's transport node id, so one value serves both reachability and
-    /// admission; unlike the personal graph, Knot does not need them recorded
-    /// separately.
-    pub paired_writers: Vec<[u8; 32]>,
+    /// One materialization consumed by operation, evidence, and route policy.
+    pub authority: KnotSpaceAuthoritySnapshot,
     /// iroh relays. Empty leaves this device LAN-only: p2panda registers no
     /// relay by default.
     pub relay_urls: Vec<RelayUrl>,
-    /// Endpoint tickets recorded from previous runs, seeded at open as
-    /// best-effort dial candidates.
-    ///
-    /// Hints, not arguments: a ticket that fails to parse or dial is logged
-    /// and skipped, because a route learned last week must degrade quietly
-    /// where a value the owner just typed should fail loudly. Identity stays
-    /// the writer key; this only turns a paired record into a route.
-    pub peer_hints: Vec<String>,
-}
-
-/// Gemot/Servitor materialization for one communal Knot space.
-///
-/// The provider is expected to be a `gemot::moot::MootAuthority` built only
-/// from retained constitution and delegation facts. Transport/session identity
-/// supplies the subject being checked, never the authority answer.
-#[derive(Clone, Debug)]
-pub struct KnotCommunalPeerAuthority {
-    /// Peers currently allowed to contribute document operations.
-    pub writers: Vec<[u8; 32]>,
-    /// Peers currently allowed to fetch evidence bytes for this space.
-    pub evidence_readers: BlobPeerAuthorizer,
-}
-
-impl KnotCommunalPeerAuthority {
-    /// Materialize document and evidence permissions for known candidate peers.
-    pub fn from_authority(
-        authority: &impl AuthorityProvider,
-        space_id: [u8; 32],
-        candidates: impl IntoIterator<Item = [u8; 32]>,
-    ) -> Result<Self, String> {
-        let scope = format!("knot/{}", crate::hex32(&space_id));
-        let document = Cap::scope(&format!("{scope}/document"))
-            .map_err(|error| format!("invalid Knot document capability: {error}"))?;
-        let evidence = Cap::scope(&format!("{scope}/evidence"))
-            .map_err(|error| format!("invalid Knot evidence capability: {error}"))?;
-        let candidates = candidates.into_iter().collect::<Vec<_>>();
-        let mut writers = candidates
-            .iter()
-            .copied()
-            .filter(|peer| authority.covers(Subject(*peer), &document, Mode::Write))
-            .collect::<Vec<_>>();
-        writers.sort_unstable();
-        writers.dedup();
-        let evidence_readers = BlobPeerAuthorizer::from_peers(
-            candidates
-                .into_iter()
-                .filter(|peer| authority.covers(Subject(*peer), &evidence, Mode::Read)),
-        );
-        Ok(Self {
-            writers,
-            evidence_readers,
-        })
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -162,10 +106,11 @@ fn writers_to_refresh(peers: &[KnownPeer]) -> Vec<[u8; 32]> {
 /// A bound transport and live LogSync session over one Knot space.
 pub struct KnotSyncHost {
     joined: JoinedSpace<KnotSyncExt>,
-    transport: P2pandaTransport,
+    network: P2pandaOverlayHost,
     store: KnotSyncFileStore,
     space_id: [u8; 32],
     evidence: Option<KnotEvidenceHost>,
+    authority: KnotSpaceAuthoritySnapshot,
 }
 
 impl KnotSyncHost {
@@ -227,8 +172,8 @@ impl KnotSyncHost {
             ));
         }
         let scope = BlobScope::new(store.space_id());
-        readers.replace_readers(scope, config.paired_writers.iter().copied());
-        let sources = BlobPeerAuthorizer::from_peers(config.paired_writers.iter().copied());
+        readers.replace_readers(scope, config.authority.evidence_readers());
+        let sources = BlobPeerAuthorizer::from_peers(config.authority.evidence_sources());
         Self::open_inner(
             store,
             signing_seed,
@@ -251,22 +196,26 @@ impl KnotSyncHost {
         config: KnotSyncHostConfig,
         blobs: Arc<BlobStore>,
         max_artifact_bytes: u64,
-        authority: KnotCommunalPeerAuthority,
     ) -> Result<Self, KnotSyncHostError> {
         if store.encryption_profile() != KnotEncryptionProfile::CommonsDataV1 {
             return Err(KnotSyncHostError::Authority(
                 "Gemot authority requires a communal Knot space".into(),
             ));
         }
-        if store.admitted_writers() != authority.writers {
+        if config.authority.source() != KnotAuthoritySource::GemotCapabilities {
+            return Err(KnotSyncHostError::Authority(
+                "communal Knot host requires Gemot capability authority".into(),
+            ));
+        }
+        if store.admitted_writers() != config.authority.writers().collect::<Vec<_>>() {
             return Err(KnotSyncHostError::Authority(
                 "communal store writers do not match materialized Gemot authority".into(),
             ));
         }
-        let sources = BlobPeerAuthorizer::from_peers(authority.writers.iter().copied());
+        let sources = BlobPeerAuthorizer::from_peers(config.authority.evidence_sources());
         let scope = BlobScope::new(store.space_id());
         let readers = BlobReadAuthorizer::new();
-        readers.replace_readers(scope, authority.evidence_readers.peers());
+        readers.replace_readers(scope, config.authority.evidence_readers());
         Self::open_inner(
             store,
             signing_seed,
@@ -288,62 +237,64 @@ impl KnotSyncHost {
         config: KnotSyncHostConfig,
         evidence: Option<KnotEvidenceHost>,
     ) -> Result<Self, KnotSyncHostError> {
-        let mut builder = P2pandaTransport::builder_from_seed(signing_seed)
-            .gossip()
-            .mdns(MdnsDiscoveryMode::Active);
+        validate_authority_source(store.encryption_profile(), config.authority.source())?;
+        let mut builder = P2pandaTransport::builder_from_seed(signing_seed).gossip();
         if let Some(evidence) = &evidence {
             builder =
                 builder.scoped_blobs(&evidence.blobs, evidence.scope, evidence.readers.clone());
         }
-        for url in config.relay_urls {
-            builder = builder.relay_url(url);
-        }
-        let transport = builder
-            .bind()
+        let network = P2pandaOverlayHost::bind(
+            builder,
+            sync_overlay_topic(store.space_id()),
+            &P2pandaHostPolicy {
+                relay_urls: config.relay_urls,
+                ..P2pandaHostPolicy::default()
+            },
+        )
+        .await
+        .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
+        network
+            .seed_peers(config.authority.writers())
             .await
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
-
-        let overlay = sync_overlay_topic(store.space_id());
-        for writer in &config.paired_writers {
-            let peer = PeerID::from_bytes(writer)
-                .map_err(|error| KnotSyncHostError::Transport(format!("paired writer {error}")))?;
-            transport
-                .set_topics(peer, &[overlay])
-                .await
-                .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
-        }
 
         // The cached-address rung, as Graphshell has it: a device that has
         // connected once can redial after both ends restart with no discovery
         // working at all.
-        for hint in &config.peer_hints {
-            match transport.add_peer_ticket(hint).await {
-                Ok(peer) => {
-                    tracing::debug!(peer = %crate::hex32(&peer.to_bytes()), "seeded a stored dial hint")
-                }
-                Err(error) => {
-                    tracing::warn!(%error, "a stored dial hint was unusable; skipping it")
-                }
+        for (expected, hint) in config.authority.route_hints() {
+            match network.add_peer_ticket(hint).await {
+                Ok(peer) if peer.to_bytes() == *expected => {}
+                Ok(peer) => tracing::warn!(
+                    expected = %crate::hex32(expected),
+                    actual = %crate::hex32(&peer.to_bytes()),
+                    "a stored dial hint named another peer; skipping it"
+                ),
+                Err(error) => tracing::warn!(
+                    %error,
+                    "a stored dial hint was unusable; skipping it"
+                ),
             }
         }
 
-        let (endpoint, gossip) = transport
+        let (endpoint, gossip) = network
+            .transport()
             .sync_parts()
             .ok_or_else(|| KnotSyncHostError::Transport("gossip is unavailable".into()))?;
         let joined = store.join(endpoint, gossip).await?;
         Ok(Self {
             joined,
-            transport,
+            network,
             store: store.clone(),
             space_id: store.space_id(),
             evidence,
+            authority: config.authority,
         })
     }
 
     /// This device's node id, which is also its writer key: what the other
     /// devices must admit.
     pub fn node_id(&self) -> [u8; 32] {
-        self.transport.local_peer_id().to_bytes()
+        self.network.local_peer_id().to_bytes()
     }
 
     /// Stable Knot space carried by this host.
@@ -359,10 +310,10 @@ impl KnotSyncHost {
     /// reopened by another resident.
     pub async fn close(self) -> Result<(), KnotSyncHostError> {
         let Self {
-            joined, transport, ..
+            joined, network, ..
         } = self;
         joined.leave_and_wait().await?;
-        transport
+        network
             .close()
             .await
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))
@@ -394,43 +345,78 @@ impl KnotSyncHost {
         Ok(evidence.readers.retain(evidence.scope, hash))
     }
 
-    /// Replace current paired Personae peers. Existing local bytes remain
-    /// retained; use [`Self::refresh_communal_evidence_authority`] for Gemot.
-    pub fn refresh_evidence_authority(&self, readers: impl IntoIterator<Item = [u8; 32]>) -> bool {
-        if self.store.encryption_profile() != KnotEncryptionProfile::PersonalVaultV1 {
-            return false;
-        }
-        self.evidence.as_ref().is_some_and(|evidence| {
-            let readers = readers.into_iter().collect::<Vec<_>>();
-            let serving_changed = evidence
-                .readers
-                .replace_readers(evidence.scope, readers.iter().copied());
-            let source_changed = evidence.sources.replace(readers);
-            serving_changed || source_changed
-        })
+    /// Revision currently applied by operation, evidence, and route policy.
+    pub fn authority_revision(&self) -> [u8; 32] {
+        self.authority.revision()
     }
 
-    /// Replace a communal space's separately materialized readers and writers.
-    pub fn refresh_communal_evidence_authority(
-        &self,
-        authority: KnotCommunalPeerAuthority,
+    /// Apply one new authority materialization to every live consumer.
+    pub async fn apply_authority(
+        &mut self,
+        next: KnotSpaceAuthoritySnapshot,
     ) -> Result<bool, KnotSyncHostError> {
-        if self.store.encryption_profile() != KnotEncryptionProfile::CommonsDataV1 {
-            return Err(KnotSyncHostError::Authority(
-                "Gemot authority cannot be applied to a personal Knot space".into(),
-            ));
+        validate_authority_source(self.store.encryption_profile(), next.source())?;
+        if self.authority.revision() == next.revision() {
+            return Ok(false);
         }
-        let writer_changed = self
-            .store
-            .replace_admitted_writers(authority.writers.iter().copied());
-        let evidence_changed = self.evidence.as_ref().is_some_and(|evidence| {
-            let serving_changed = evidence
+
+        let previous_writers = self.authority.writers().collect::<BTreeSet<_>>();
+        let next_writers = next.writers().collect::<BTreeSet<_>>();
+        match next.source() {
+            KnotAuthoritySource::PersonalPairing => {
+                for writer in previous_writers.difference(&next_writers) {
+                    self.store.deny_writer(writer);
+                }
+                for writer in next_writers.difference(&previous_writers).copied() {
+                    self.store.admit_writer(writer);
+                }
+            }
+            KnotAuthoritySource::GemotCapabilities => {
+                self.store
+                    .replace_admitted_writers(next_writers.iter().copied());
+            }
+        }
+        if let Some(evidence) = &self.evidence {
+            evidence
                 .readers
-                .replace_readers(evidence.scope, authority.evidence_readers.peers());
-            let source_changed = evidence.sources.replace(authority.writers);
-            serving_changed || source_changed
-        });
-        Ok(writer_changed || evidence_changed)
+                .replace_readers(evidence.scope, next.evidence_readers());
+            evidence.sources.replace(next.evidence_sources());
+        }
+
+        for writer in previous_writers.difference(&next_writers).copied() {
+            if let Err(error) = self.network.remove_peer(writer).await {
+                tracing::warn!(
+                    %error,
+                    writer = %crate::hex32(&writer),
+                    "authority was revoked but its stale route could not be detached"
+                );
+            }
+        }
+        for writer in next_writers.difference(&previous_writers).copied() {
+            if let Err(error) = self.network.add_peer(writer).await {
+                tracing::warn!(
+                    %error,
+                    writer = %crate::hex32(&writer),
+                    "authority was granted but its route is not yet available"
+                );
+            }
+        }
+        for (expected, hint) in next.route_hints() {
+            match self.network.add_peer_ticket(hint).await {
+                Ok(peer) if peer.to_bytes() == *expected => {}
+                Ok(peer) => tracing::warn!(
+                    expected = %crate::hex32(expected),
+                    actual = %crate::hex32(&peer.to_bytes()),
+                    "an authority route hint named another peer; ignoring the route"
+                ),
+                Err(error) => tracing::warn!(
+                    %error,
+                    "an authority route hint was unavailable; authority still applied"
+                ),
+            }
+        }
+        self.authority = next;
+        Ok(true)
     }
 
     /// Read and verify local evidence bytes before exposing them to a caller.
@@ -503,7 +489,7 @@ impl KnotSyncHost {
         let tag = evidence_tag(self.space_id, reference);
         evidence
             .blobs
-            .fetch_from_named(&self.transport, peer, hash, tag.as_bytes())
+            .fetch_from_named(self.network.transport(), peer, hash, tag.as_bytes())
             .await
             .map_err(|error| KnotSyncHostError::EvidenceBlob(error.to_string()))?;
         if let Err(error) = self.read_evidence(reference).await {
@@ -536,7 +522,7 @@ impl KnotSyncHost {
     /// A ticket for the across-network case a relay cannot serve. Rebuilt on
     /// every bind, so it is a bootstrap value and never a stored one.
     pub async fn ticket(&self) -> Result<String, KnotSyncHostError> {
-        self.transport
+        self.network
             .ticket()
             .await
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))
@@ -548,8 +534,8 @@ impl KnotSyncHost {
     /// Pairing records identity; this reports reachability, which is the fact
     /// a writer key cannot carry on its own.
     pub async fn known_peers(&self) -> Result<Vec<KnownPeer>, KnotSyncHostError> {
-        self.transport
-            .peers_for_topic(sync_overlay_topic(self.space_id))
+        self.network
+            .known_peers()
             .await
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))
     }
@@ -558,25 +544,10 @@ impl KnotSyncHost {
     /// it holds any addresses for it. The value the cached-address rung
     /// persists back into settings.
     pub async fn peer_ticket(&self, writer: [u8; 32]) -> Result<Option<String>, KnotSyncHostError> {
-        let peer = PeerID::from_bytes(&writer)
-            .map_err(|error| KnotSyncHostError::Transport(format!("paired writer {error}")))?;
-        self.transport
-            .peer_ticket(peer)
+        self.network
+            .peer_ticket(writer)
             .await
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))
-    }
-
-    /// Apply a newly persisted endpoint ticket without restarting the host.
-    ///
-    /// The ticket supplies reachability only. Its peer still needs writer and
-    /// evidence admission through pairing before any Knot data is accepted.
-    pub async fn add_peer_hint(&self, ticket: &str) -> Result<[u8; 32], KnotSyncHostError> {
-        let peer = self
-            .transport
-            .add_peer_ticket(ticket)
-            .await
-            .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
-        Ok(peer.to_bytes())
     }
 
     /// Write back the addresses of devices this host is actually talking to.
@@ -597,11 +568,7 @@ impl KnotSyncHost {
     ///   `--pair-writer` invocation can land between the caller's read and
     ///   this write, so the refresh loads the latest, modifies, and saves
     ///   rather than persisting a snapshot taken seconds ago.
-    pub async fn refresh_dial_hints(
-        &self,
-        sync: &crate::KnotSyncSettings,
-        settings_file: &std::path::Path,
-    ) {
+    pub async fn refresh_dial_hints(&self, settings_file: &std::path::Path) {
         let peers = match self.known_peers().await {
             Ok(peers) => peers,
             Err(error) => {
@@ -619,7 +586,7 @@ impl KnotSyncHost {
                     continue;
                 }
             };
-            if sync.endpoint_for(&writer) == Some(ticket.as_str()) {
+            if self.authority.route_hint(&writer) == Some(ticket.as_str()) {
                 continue;
             }
             let mut latest = match crate::KnotSettings::load(settings_file) {
@@ -646,46 +613,25 @@ impl KnotSyncHost {
             }
         }
     }
+}
 
-    /// Admit and reach another device without a restart.
-    pub async fn pair_writer(&self, writer: [u8; 32]) -> Result<(), KnotSyncHostError> {
-        if self.store.encryption_profile() != KnotEncryptionProfile::PersonalVaultV1 {
-            return Err(KnotSyncHostError::Authority(
-                "Personae pairing cannot admit a writer to a communal Knot space".into(),
-            ));
+fn validate_authority_source(
+    profile: KnotEncryptionProfile,
+    source: KnotAuthoritySource,
+) -> Result<(), KnotSyncHostError> {
+    match (profile, source) {
+        (KnotEncryptionProfile::PersonalVaultV1, KnotAuthoritySource::PersonalPairing)
+        | (KnotEncryptionProfile::CommonsDataV1, KnotAuthoritySource::GemotCapabilities) => Ok(()),
+        (KnotEncryptionProfile::PersonalVaultV1, KnotAuthoritySource::GemotCapabilities) => {
+            Err(KnotSyncHostError::Authority(
+                "Gemot authority cannot alter a personal Knot space".into(),
+            ))
         }
-        let peer = PeerID::from_bytes(&writer)
-            .map_err(|error| KnotSyncHostError::Transport(format!("paired writer {error}")))?;
-        self.transport
-            .set_topics(peer, &[sync_overlay_topic(self.space_id)])
-            .await
-            .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
-        self.store.admit_writer(writer);
-        if let Some(evidence) = &self.evidence {
-            evidence.readers.allow_reader(evidence.scope, writer);
-            evidence.sources.allow(writer);
+        (KnotEncryptionProfile::CommonsDataV1, KnotAuthoritySource::PersonalPairing) => {
+            Err(KnotSyncHostError::Authority(
+                "Personae pairing cannot alter a communal Knot space".into(),
+            ))
         }
-        Ok(())
-    }
-
-    /// Revoke a paired personal device without waiting for a restart.
-    pub async fn unpair_writer(&self, writer: [u8; 32]) -> Result<(), KnotSyncHostError> {
-        if self.store.encryption_profile() != KnotEncryptionProfile::PersonalVaultV1 {
-            return Err(KnotSyncHostError::Authority(
-                "Personae unpairing cannot alter a communal Knot space".into(),
-            ));
-        }
-        let peer = PeerID::from_bytes(&writer)
-            .map_err(|error| KnotSyncHostError::Transport(format!("paired writer {error}")))?;
-        self.store.deny_writer(&writer);
-        if let Some(evidence) = &self.evidence {
-            evidence.readers.deny_reader(evidence.scope, &writer);
-            evidence.sources.deny(&writer);
-        }
-        self.transport
-            .remove_topic(peer, sync_overlay_topic(self.space_id))
-            .await
-            .map_err(|error| KnotSyncHostError::Transport(error.to_string()))
     }
 }
 
@@ -709,6 +655,7 @@ mod tests {
         CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
     };
     use personae::{IdentityProvider, InMemoryProvider};
+    use servitor::cap::Cap;
     use servitor::cap_path;
     use tempfile::tempdir;
 
@@ -770,11 +717,14 @@ mod tests {
         let document_writer = InMemoryProvider::from_seed([62; 32]);
         let evidence_reader = InMemoryProvider::from_seed([63; 32]);
         let outsider = InMemoryProvider::from_seed([64; 32]);
+        let evidence_source = InMemoryProvider::from_seed([65; 32]);
         let space_scope = Cap::scope(&format!("knot/{}", crate::hex32(&SPACE))).unwrap();
         let document_scope =
             Cap::scope(&format!("knot/{}/document", crate::hex32(&SPACE))).unwrap();
-        let evidence_scope =
-            Cap::scope(&format!("knot/{}/evidence", crate::hex32(&SPACE))).unwrap();
+        let evidence_read_scope =
+            Cap::scope(&format!("knot/{}/evidence/read", crate::hex32(&SPACE))).unwrap();
+        let evidence_source_scope =
+            Cap::scope(&format!("knot/{}/evidence/source", crate::hex32(&SPACE))).unwrap();
         let mut rules = ConstitutionRules::founder_only(founder.master_public_key().to_bytes());
         rules.grant(CapabilityGrant {
             id: ROOT_GRANT,
@@ -811,7 +761,18 @@ mod tests {
             .accept_certificate(MOOT, &rules, issue(&document_writer, &document_scope, 1))
             .unwrap();
         delegations
-            .accept_certificate(MOOT, &rules, issue(&evidence_reader, &evidence_scope, 2))
+            .accept_certificate(
+                MOOT,
+                &rules,
+                issue(&evidence_reader, &evidence_read_scope, 2),
+            )
+            .unwrap();
+        delegations
+            .accept_certificate(
+                MOOT,
+                &rules,
+                issue(&evidence_source, &evidence_source_scope, 3),
+            )
             .unwrap();
         let authority = MootAuthority {
             delegations: &delegations,
@@ -819,35 +780,47 @@ mod tests {
             moot_id: MOOT,
             now_ms: 50,
         };
-        let materialized = KnotCommunalPeerAuthority::from_authority(
+        let materialized = KnotSpaceAuthoritySnapshot::from_gemot_authority(
             &authority,
             SPACE,
             [
                 outsider.master_public_key().to_bytes(),
                 evidence_reader.master_public_key().to_bytes(),
                 document_writer.master_public_key().to_bytes(),
+                evidence_source.master_public_key().to_bytes(),
             ],
+            [],
         )
         .unwrap();
 
         assert_eq!(
-            materialized.writers,
+            materialized.writers().collect::<Vec<_>>(),
             vec![document_writer.master_public_key().to_bytes()]
         );
         assert!(
             materialized
-                .evidence_readers
-                .allows(&evidence_reader.master_public_key().to_bytes())
+                .evidence_readers()
+                .any(|peer| peer == evidence_reader.master_public_key().to_bytes())
         );
         assert!(
             !materialized
-                .evidence_readers
-                .allows(&document_writer.master_public_key().to_bytes())
+                .evidence_readers()
+                .any(|peer| peer == document_writer.master_public_key().to_bytes())
         );
         assert!(
             !materialized
-                .evidence_readers
-                .allows(&outsider.master_public_key().to_bytes())
+                .writers()
+                .any(|peer| peer == evidence_reader.master_public_key().to_bytes())
+        );
+        assert!(
+            materialized
+                .evidence_sources()
+                .any(|peer| peer == evidence_source.master_public_key().to_bytes())
+        );
+        assert!(
+            !materialized
+                .evidence_sources()
+                .any(|peer| peer == document_writer.master_public_key().to_bytes())
         );
     }
 
@@ -916,9 +889,14 @@ mod tests {
             &alice_store,
             alice.master_keypair().to_seed(),
             KnotSyncHostConfig {
-                paired_writers: vec![bob_writer],
+                authority: KnotSpaceAuthoritySnapshot::new(
+                    KnotAuthoritySource::PersonalPairing,
+                    [bob_writer],
+                    [bob_writer],
+                    [bob_writer],
+                    [],
+                ),
                 relay_urls: vec![],
-                peer_hints: vec![],
             },
             Arc::clone(&alice_blobs),
             4096,
@@ -931,9 +909,14 @@ mod tests {
             &bob_store,
             bob.master_keypair().to_seed(),
             KnotSyncHostConfig {
-                paired_writers: vec![alice_writer],
+                authority: KnotSpaceAuthoritySnapshot::new(
+                    KnotAuthoritySource::PersonalPairing,
+                    [alice_writer],
+                    [alice_writer],
+                    [alice_writer],
+                    [(alice_writer, alice_ticket)],
+                ),
                 relay_urls: vec![],
-                peer_hints: vec![alice_ticket],
             },
             Arc::clone(&bob_blobs),
             4096,

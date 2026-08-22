@@ -173,18 +173,11 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     // A malformed relay url is refused rather than dropped: silently starting
     // LAN-only when the owner asked for a relay would look like the relay was
     // configured and simply not helping.
-    let relays = sync
-        .relay_urls
-        .iter()
-        .map(|url| {
-            url.parse::<transport::p2panda_transport::RelayUrl>()
-                .map_err(|error| {
-                    DeviceSyncError::Host(PersonalSyncHostError::Transport(format!(
-                        "relay url {url:?}: {error}"
-                    )))
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let relays =
+        transport::P2pandaHostPolicy::parse_relay_urls(sync.relay_urls.iter().map(String::as_str))
+            .map_err(|error| {
+                DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string()))
+            })?;
     if !relays.is_empty() {
         tracing::info!(relays = relays.len(), "personal sync will register relays");
     }
