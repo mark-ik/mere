@@ -1,0 +1,12 @@
+[package]
+name = "knot-editor"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Name reservation for Knot, Mere's standalone-capable local-first Djot editor."
+readme = "README.md"
+keywords = ["djot", "editor", "documents", "local-first"]
+categories = ["text-editors"]
+
+[dependencies]
