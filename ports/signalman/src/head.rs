@@ -10,11 +10,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use outrider::LxmfPayload;
+use pandect::DeviceId;
 use personae::{IdentityError, SealedRecordStorage};
+use postilion::management::ManagementSnapshot;
 use postilion::{Event, Sent, Station, StationConfig};
+use retinue::hash::AddressHash;
 use retinue::identity::{Identity, PrivateIdentity};
 use serde::{Deserialize, Serialize};
-use pandect::DeviceId;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -60,7 +63,7 @@ struct HeadPersistence {
 impl SitedStationHead {
     /// Seal a freshly provisioned delegated station identity and an empty
     /// control receiver before opening any radio port.
-    pub fn provision(
+    pub(crate) fn provision(
         storage: SealedRecordStorage,
         record_path: impl AsRef<Path>,
         device_id: DeviceId,
@@ -283,6 +286,30 @@ impl RunningSitedStationHead {
         &self.head
     }
 
+    /// The delivery destination owned by this running station.
+    ///
+    /// The sealed receiver is rechecked before the address is exposed so an
+    /// expired or revoked head cannot keep presenting a live station handle.
+    pub async fn address(&self) -> Result<AddressHash, SitedStationHeadError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        Ok(station
+            .as_ref()
+            .ok_or(SitedStationHeadError::Stopped)?
+            .address())
+    }
+
+    /// Capture the station's read-only management facts under its sealed
+    /// authority. Retinue's mutable routing state stays private.
+    pub async fn management_snapshot(&self) -> Result<ManagementSnapshot, SitedStationHeadError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        Ok(station
+            .as_ref()
+            .ok_or(SitedStationHeadError::Stopped)?
+            .management_snapshot())
+    }
+
     /// Announce while the sealed receiver remains live.
     pub async fn announce(&self) -> Result<(), SitedStationHeadError> {
         self.authorize_now()?;
@@ -311,6 +338,33 @@ impl RunningSitedStationHead {
             let station = station.as_ref().ok_or(SitedStationHeadError::Stopped)?;
             tokio::select! {
                 result = station.send_text(prefix, body, patience) => Some(result),
+                _ = tokio::time::sleep(remaining_window(now_ms, expires_at_ms)) => None,
+                _ = changed.changed() => None,
+            }
+        };
+        match result {
+            Some(result) => result.map_err(SitedStationHeadError::Station),
+            None => self.stop_after_interruption().await,
+        }
+    }
+
+    /// Carry one complete LXMF payload while the sealed receiver remains live.
+    ///
+    /// A renewal, expiry, or revoke interrupts the in-flight send just as it
+    /// does for text, while application fields retain their LXMF positions.
+    pub async fn send_payload(
+        &self,
+        prefix: &str,
+        payload: &LxmfPayload,
+        patience: Duration,
+    ) -> Result<Sent, SitedStationHeadError> {
+        let (now_ms, expires_at_ms) = self.authorize_now()?;
+        let mut changed = self.head.core.changed.subscribe();
+        let result = {
+            let station = self.station.lock().await;
+            let station = station.as_ref().ok_or(SitedStationHeadError::Stopped)?;
+            tokio::select! {
+                result = station.send_payload(prefix, payload, patience) => Some(result),
                 _ = tokio::time::sleep(remaining_window(now_ms, expires_at_ms)) => None,
                 _ = changed.changed() => None,
             }
@@ -503,8 +557,8 @@ fn remaining_window(now_ms: u64, expires_at_ms: u64) -> Duration {
 
 #[cfg(test)]
 mod tests {
-    use personae::{InMemoryProvider, PersonaId};
     use pandect::ensure_wallet_state;
+    use personae::{InMemoryProvider, PersonaId};
     use tempfile::tempdir;
 
     use super::*;

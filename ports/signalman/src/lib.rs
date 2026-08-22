@@ -16,10 +16,12 @@ use castellan::reticulum::ReticulumStationMaterial;
 use castellan::reticulum::grant::{
     SitedStationGrant, SitedStationGrantError, SitedStationGrantRequest,
 };
-use personae::{IdentityError, IdentityProvider};
-use postilion::{Event, Sent, Station, StationConfig};
-use retinue::identity::{Identity, PrivateIdentity};
+use outrider::LxmfPayload;
 use pandect::{DeviceId, RemoteAuthRevocationOutcome};
+use personae::{IdentityError, IdentityProvider, SealedRecordStorage};
+use postilion::{Event, Sent, Station, StationConfig};
+use retinue::hash::AddressHash;
+use retinue::identity::{Identity, PrivateIdentity};
 use tokio::sync::Mutex;
 use zeroize::Zeroize;
 
@@ -83,6 +85,28 @@ impl SitedStationCredential {
     /// key inside the operator boundary.
     pub fn control_signer(&self) -> &SitedStationControlSigner {
         &self.control_signer
+    }
+
+    /// The durable host-side id this credential was derived for.
+    pub fn device_id(&self) -> DeviceId {
+        self.control_signer.device_id()
+    }
+
+    /// Provision a sealed unattended head without exporting its private identity.
+    ///
+    /// The returned head begins without authority. Deliver a signed grant control
+    /// and verify its acknowledgement before opening the radio port.
+    pub fn provision_head(
+        &self,
+        storage: SealedRecordStorage,
+        record_path: impl AsRef<Path>,
+    ) -> Result<SitedStationHead, SitedStationHeadError> {
+        SitedStationHead::provision(
+            storage,
+            record_path,
+            self.device_id(),
+            self.identity.clone(),
+        )
     }
 
     fn station_config(&self, port: impl Into<String>, name: impl Into<String>) -> StationConfig {
@@ -179,6 +203,19 @@ impl SitedStation {
         &self.lease
     }
 
+    /// The delivery destination owned by this running station.
+    ///
+    /// Reading a public address still rechecks the lease so a caller cannot
+    /// keep presenting a revoked station as live through this handle.
+    pub async fn address(&self) -> Result<AddressHash, SitedStationError> {
+        self.authorize_now()?;
+        let station = self.station.lock().await;
+        Ok(station
+            .as_ref()
+            .ok_or(SitedStationError::Stopped)?
+            .address())
+    }
+
     /// Recheck the host grant before announcing the station.
     pub async fn announce(&self) -> Result<(), SitedStationError> {
         self.authorize_now()?;
@@ -204,6 +241,29 @@ impl SitedStation {
             let station = self.station.lock().await;
             let station = station.as_ref().ok_or(SitedStationError::Stopped)?;
             tokio::time::timeout(window, station.send_text(prefix, body, patience)).await
+        };
+        match result {
+            Ok(result) => result.map_err(SitedStationError::Station),
+            Err(_) => self.stop_after_deadline().await,
+        }
+    }
+
+    /// Carry one complete LXMF payload while the station lease remains live.
+    ///
+    /// Application-owned fields remain in their authenticated LXMF positions;
+    /// this boundary does not copy them into a text body.
+    pub async fn send_payload(
+        &self,
+        prefix: &str,
+        payload: &LxmfPayload,
+        patience: Duration,
+    ) -> Result<Sent, SitedStationError> {
+        let (now_ms, expires_at_ms) = self.authorize_now()?;
+        let window = remaining_window(now_ms, expires_at_ms);
+        let result = {
+            let station = self.station.lock().await;
+            let station = station.as_ref().ok_or(SitedStationError::Stopped)?;
+            tokio::time::timeout(window, station.send_payload(prefix, payload, patience)).await
         };
         match result {
             Ok(result) => result.map_err(SitedStationError::Station),
@@ -439,8 +499,8 @@ async fn watch_station_lease(lease: SitedStationLease, station: Arc<Mutex<Option
 
 #[cfg(test)]
 mod tests {
-    use personae::{InMemoryProvider, PersonaId};
     use pandect::{DeviceId, ensure_wallet_state};
+    use personae::{InMemoryProvider, PersonaId};
     use tempfile::tempdir;
 
     use super::*;
@@ -471,6 +531,24 @@ mod tests {
     }
 
     #[test]
+    fn credential_provisions_a_sealed_head_without_exporting_its_identity() {
+        let storage_root = tempdir().unwrap();
+        let storage = SealedRecordStorage::open_with_key(storage_root.path(), [0x43; 32]);
+        let provider = InMemoryProvider::from_seed([0x44; 32]);
+        let device_id = DeviceId::new();
+        let credential = SitedStationCredential::derive_for_device(&provider, device_id).unwrap();
+
+        let head = credential
+            .provision_head(storage.clone(), "station/ridge-north.json")
+            .unwrap();
+        let restored = SitedStationHead::restore(storage, "station/ridge-north.json").unwrap();
+
+        assert_eq!(head.device_id(), device_id);
+        assert_eq!(restored.device_id(), device_id);
+        assert_eq!(restored.public_identity(), credential.public_identity());
+    }
+
+    #[test]
     fn station_config_is_a_typed_injection_not_an_identity_path() {
         let provider = InMemoryProvider::from_seed([0x44; 32]);
         let credential =
@@ -497,10 +575,18 @@ mod tests {
             .issue_remote_auth_grant(root.path(), device_id, "Ridge north", 100, 200)
             .unwrap();
         let set = grant.signed();
-        assert!(set.personas.is_empty(), "a station gets no persona authority");
+        assert!(
+            set.personas.is_empty(),
+            "a station gets no persona authority"
+        );
         let certificate = set.device.as_ref().expect("a device certificate");
         assert_eq!(
-            certificate.certificate.scope.actions.iter().collect::<Vec<_>>(),
+            certificate
+                .certificate
+                .scope
+                .actions
+                .iter()
+                .collect::<Vec<_>>(),
             ["transport.egress"]
         );
         assert_eq!(certificate.certificate.remaining_delegation_depth, 0);
