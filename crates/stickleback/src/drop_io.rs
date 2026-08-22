@@ -157,7 +157,7 @@ struct AssembledContent {
 /// Encode one p2panda operation as a native-drop record.
 pub fn operation_record<E: Extensions>(operation: &Operation<E>, include_body: bool) -> DropRecord {
     DropRecord::Operation {
-        header: operation.header.to_bytes(),
+        header: operation.header.encode(),
         inline_body: include_body
             .then(|| operation.body.as_ref().map(|body| body.to_bytes()))
             .flatten(),
@@ -175,9 +175,9 @@ pub fn decode_operation_record<E: Extensions>(
     else {
         return Ok(None);
     };
-    let decoded: Header<E> =
-        decode_cbor(&header[..]).map_err(|error| DropIoError::OperationCodec(error.to_string()))?;
-    if decoded.to_bytes() != *header {
+    let decoded: Header<E> = Header::decode(&header[..])
+        .map_err(|error| DropIoError::OperationCodec(error.to_string()))?;
+    if decoded.encode() != *header {
         return Err(DropIoError::OperationCodec(
             "operation header is not canonically encoded".into(),
         ));
@@ -938,18 +938,16 @@ mod tests {
         seq: u32,
         backlink: Option<p2panda_core::Hash>,
     ) -> Operation<Ext> {
-        let body = Body::new(format!("event-{seq}").as_bytes());
-        let mut header = Header {
-            version: 1,
-            verifying_key: key.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num: seq,
-            backlink,
-            extensions: Ext { space: 7 },
-        };
-        header.sign(key);
+        let body = Body::from_bytes(format!("event-{seq}").as_bytes());
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(seq)
+            .backlink(backlink)
+            .build(key, Ext { space: 7 });
         Operation {
             hash: header.hash(),
             header,
@@ -1213,10 +1211,19 @@ mod tests {
             let key = SigningKey::generate();
             let allowed = operation(&key, 0, None);
             let denied_key = SigningKey::generate();
-            let mut denied = operation(&denied_key, 0, None);
-            denied.header.extensions.space = 8;
-            denied.header.sign(&denied_key);
-            denied.hash = denied.header.hash();
+            // A header can no longer be mutated and re-signed, so the operation
+            // is authored with the offending space directly — same end state.
+            let denied_body = Body::from_bytes(b"event-0");
+            let denied_header = Header::builder()
+                .body(denied_body.as_bytes())
+                .seq_num(0)
+                .backlink(None)
+                .build(&denied_key, Ext { space: 8 });
+            let denied = Operation {
+                hash: denied_header.hash(),
+                header: denied_header,
+                body: Some(denied_body),
+            };
             let records = vec![
                 operation_record(&allowed, true),
                 operation_record(&denied, true),

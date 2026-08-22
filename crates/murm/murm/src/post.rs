@@ -186,7 +186,18 @@ pub struct Post {
     /// `timestamp_ms`).
     pub kind: PostKind,
     /// The author's Ed25519 signature over the canonical operation header.
+    ///
+    /// A cached view of the signature inside [`Post::header`]; the header bytes
+    /// are authoritative.
     pub signature: Ed25519Signature,
+    /// The canonical encoded operation header this post was signed as.
+    ///
+    /// p2panda 0.7.1 made `Header`'s CBOR cache, size and digest private, so a
+    /// signed header can no longer be rebuilt from its parts — it can only be
+    /// decoded. Carrying the bytes keeps `operation_id`, `post_to_operation`
+    /// and `encode_post` exact, and decoding them re-verifies the signature as
+    /// a side effect, which is what `verify_post` now rests on.
+    pub header: Vec<u8>,
 }
 
 /// The payload variant of a [`Post`].

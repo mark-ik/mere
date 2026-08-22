@@ -13,6 +13,7 @@
 //! reconciles.
 
 use identity::Ed25519Keypair;
+use p2panda_core::operation::validate_operation;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
@@ -221,21 +222,22 @@ fn to_operation_with_prune(
 ) -> Operation<MeshExt> {
     let signing_key = SigningKey::from_bytes(&keypair.to_seed());
     let body_bytes = encode_cbor(event).expect("a MeshEvent always CBOR-encodes");
-    let body = Body::new(&body_bytes);
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink: backlink.map(Hash::from),
-        extensions: MeshExt {
-            mesh_id,
-            prune_flag: PruneFlag::new(prune),
-        },
-    };
-    header.sign(&signing_key);
+    let body = Body::from_bytes(&body_bytes);
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private and
+    // folded signing into the builder: `build` encodes, signs and caches the
+    // digest in one step, so the struct-literal + `sign` pair has no
+    // equivalent. `body` sets payload_size and payload_hash from the bytes.
+    let header = Header::builder()
+        .body(&body_bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(Hash::from))
+        .build(
+            &signing_key,
+            MeshExt {
+                mesh_id,
+                prune_flag: PruneFlag::new(prune),
+            },
+        );
     let hash = header.hash();
     Operation {
         hash,
@@ -245,7 +247,7 @@ fn to_operation_with_prune(
 }
 
 /// Decode the mesh id + event from an operation. Does *not* check the
-/// signature — call [`verify`] for that.
+/// header or body commitment — call [`verify`] for that.
 pub fn from_operation(op: &Operation<MeshExt>) -> Result<([u8; 32], MeshEvent), WireError> {
     let body = op.body.as_ref().ok_or(WireError::MissingBody)?;
     let event: MeshEvent =
@@ -253,9 +255,16 @@ pub fn from_operation(op: &Operation<MeshExt>) -> Result<([u8; 32], MeshEvent), 
     Ok((op.header.extensions.mesh_id, event))
 }
 
-/// Whether the operation's signature is valid for its author and content.
-pub fn verify(op: &Operation<MeshExt>) -> bool {
-    op.header.verify()
+/// Verify the signed header and body commitment.
+///
+/// The signature itself is no longer re-checked and no longer can be: p2panda
+/// 0.7.1 verifies it inside `Header::decode` and made `Header::verify`
+/// test-only, so any `Operation` that exists was either decoded (verified) or
+/// built locally by the builder (signed). What stays live here is the rest —
+/// the payload hash and size against the actual body, the log's seq_num and
+/// backlink rules, and the cached digest against the header.
+pub fn verify(operation: &Operation<MeshExt>) -> bool {
+    validate_operation(operation).is_ok() && operation.hash == operation.header.hash()
 }
 
 #[cfg(test)]
@@ -301,10 +310,19 @@ mod tests {
     #[test]
     fn tampering_the_mesh_id_breaks_verification() {
         let kp = keypair(7);
-        let mut op = to_operation(&kp, MESH, &posted(), 0, None);
-        op.header.extensions.mesh_id = [0xff; 32];
+        let op = to_operation(&kp, MESH, &posted(), 0, None);
+        // The mesh id is signed, but in-memory tampering no longer shows up:
+        // p2panda 0.7.1 re-encodes a header from the CBOR cache it decoded, so
+        // mutating `extensions` cannot change what was signed. The claim is
+        // therefore tested on the bytes — a different mesh id signs to
+        // different header bytes, and corrupting the encoded extension region
+        // (which `encode_header` appends last) makes the header fail to decode.
+        let elsewhere = to_operation(&kp, [0xff; 32], &posted(), 0, None);
+        assert_ne!(op.header.encode(), elsewhere.header.encode());
+        let mut replayed = op.header.encode();
+        *replayed.last_mut().unwrap() ^= 0xff;
         assert!(
-            !verify(&op),
+            Header::<MeshExt>::decode(&replayed).is_err(),
             "the mesh id is signed, so a cross-mesh replay fails"
         );
     }
@@ -336,21 +354,19 @@ mod tests {
         let kp = keypair(7);
         let signing_key = SigningKey::from_bytes(&kp.to_seed());
         let event = posted();
-        let body = Body::new(&encode_cbor(&event).unwrap());
-        let mut legacy = Header {
-            version: 1,
-            verifying_key: signing_key.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num: 0,
-            backlink: None,
-            extensions: LegacyMeshExt { mesh_id: MESH },
-        };
-        legacy.sign(&signing_key);
+        let body = Body::from_bytes(&encode_cbor(&event).unwrap());
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let legacy = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(0)
+            .backlink(None)
+            .build(&signing_key, LegacyMeshExt { mesh_id: MESH });
         let current = to_operation(&kp, MESH, &event, 0, None);
 
-        assert_eq!(legacy.to_bytes(), current.header.to_bytes());
+        assert_eq!(legacy.encode(), current.header.encode());
         assert_eq!(legacy.hash(), current.header.hash());
         assert_eq!(legacy.signature, current.header.signature);
     }

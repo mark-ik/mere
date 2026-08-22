@@ -31,6 +31,7 @@ blake3 = "1.5"
 hex = "0.4"
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
 # `p2panda-core` supplies the operation and header types murm's own grammar is
 # built on. LogSync (offline catch-up) is no longer assembled here:
 # `stickleback::JoinedSpace` owns that ceremony, so the protocol

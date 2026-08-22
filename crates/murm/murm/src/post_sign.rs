@@ -2,18 +2,21 @@
 //!
 //! A post's signature is the Ed25519 signature its author's per-cabal key
 //! places over the canonical operation header (see [`crate::post_wire`]).
-//! Signing and verification go through p2panda-core's [`Header::sign`] /
-//! [`Header::verify`], so murm posts are authenticated exactly like any other
-//! operation on the substrate.
+//! Signing goes through p2panda-core's header builder and verification through
+//! `Header::decode`, which re-derives the signing bytes and checks the
+//! signature before it will return a header — so murm posts are authenticated
+//! exactly like any other operation on the substrate.
 //!
 //! [`sign_post`] constructs a signed [`Post`] in a cabal from a keypair, its
 //! per-author log position (`seq_num`/`backlink`), links, and payload kind.
 //! [`verify_post`] checks an existing `Post`'s signature against its `author`.
 
 use identity::Ed25519Keypair;
-use p2panda_core::{Signature, SigningKey, VerifyingKey};
+use p2panda_core::{Hash, Header, Signature, SigningKey, VerifyingKey};
 
-use crate::post_wire::{from_p2_sig, to_p2_sig, unsigned_header};
+use crate::post_wire::CabalExt;
+
+use crate::post_wire::{build_header, decompose, from_p2_sig};
 use crate::{Post, PostId, PostKind};
 
 /// Sign a new [`Post`] in the given cabal with the given per-cabal keypair.
@@ -34,16 +37,8 @@ pub fn sign_post(
     kind: PostKind,
 ) -> Post {
     let signing_key = SigningKey::from_bytes(&keypair.to_seed());
-    let (mut header, _body) = unsigned_header(
-        signing_key.verifying_key(),
-        cabal_id,
-        seq_num,
-        backlink,
-        &links,
-        &kind,
-    );
-    header.sign(&signing_key);
-    let signature: Signature = header.signature.expect("header.sign sets the signature");
+    let (header, _body) = build_header(&signing_key, cabal_id, seq_num, backlink, &links, &kind);
+    let signature: Signature = header.signature;
     Post {
         author: keypair.public_key(),
         cabal_id,
@@ -52,6 +47,7 @@ pub fn sign_post(
         links,
         kind,
         signature: from_p2_sig(&signature),
+        header: header.encode(),
     }
 }
 
@@ -67,16 +63,24 @@ pub fn verify_post(post: &Post) -> bool {
     let Ok(verifying_key) = VerifyingKey::from_bytes(&post.author.to_bytes()) else {
         return false;
     };
-    let (mut header, _body) = unsigned_header(
-        verifying_key,
-        post.cabal_id,
-        post.seq_num,
-        post.backlink,
-        &post.links,
-        &post.kind,
-    );
-    header.signature = Some(to_p2_sig(&post.signature));
-    header.verify()
+    // Decoding IS the verification: `Header::decode` re-derives the signing
+    // bytes and checks the signature before returning. What it cannot know is
+    // whether the header agrees with the rest of the `Post`, so the fields the
+    // header signs are compared against it here.
+    let Ok(header) = Header::<CabalExt>::decode(&post.header) else {
+        return false;
+    };
+    // Everything the header signs, recomputed from the post and compared. The
+    // extension covers cabal_id, links, channel, post_type and timestamp; the
+    // payload commitment covers the text or topic body.
+    let (extensions, body) = decompose(post.cabal_id, &post.links, &post.kind);
+    header.verifying_key == verifying_key
+        && header.signature.to_bytes() == post.signature.to_bytes()
+        && header.extensions == extensions
+        && header.seq_num == post.seq_num
+        && header.backlink.map(|h| PostId::new(*h.as_bytes())) == post.backlink
+        && header.payload_size == body.len() as u32
+        && header.payload_hash == (!body.is_empty()).then(|| Hash::digest(&body))
 }
 
 #[cfg(test)]

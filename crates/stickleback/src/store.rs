@@ -208,21 +208,49 @@ fn record_write(writes: &mut BTreeMap<String, Option<Vec<u8>>>, write: WriteOp) 
 
 // ── operation encode / decode ─────────────────────────────────────────────────
 
-/// Encode an operation as the CBOR `(Header, Option<body-bytes>)` blob stored at
-/// its log key.
+/// The `(header-bytes, Option<body-bytes>)` blob stored at a log key.
+///
+/// p2panda 0.7.1 dropped the serde impls on `Header` and made its CBOR cache,
+/// size and digest private, so a header can only be rebuilt through
+/// `Header::decode`. The blob therefore carries the header as its own encoded
+/// byte string instead of inline. The header bytes are byte-identical to 0.7.0
+/// — `Header::encode` emits the same CBOR array the old serde impl did — so
+/// only the nesting changed.
+fn encode_blob<E: Extensions>(
+    header: &Header<E>,
+    body: &Option<Vec<u8>>,
+) -> Result<Vec<u8>, StoreError> {
+    // `serde_bytes` so the header travels as a CBOR byte string. A bare
+    // `Vec<u8>` serialises as an array of integers, which costs roughly two
+    // bytes per byte.
+    encode_cbor(&(serde_bytes::Bytes::new(&header.encode()), body)).map_err(codec)
+}
+
+/// Decode a stored blob into its header and body.
+fn decode_blob<E: Extensions>(bytes: &[u8]) -> Result<(Header<E>, Option<Vec<u8>>), StoreError> {
+    let (header_bytes, body): (serde_bytes::ByteBuf, Option<Vec<u8>>) =
+        decode_cbor(bytes).map_err(stale_blob)?;
+    let header = Header::decode(&header_bytes).map_err(stale_blob)?;
+    Ok((header, body))
+}
+
+/// Every stale-format read funnels through one message.
+fn stale_blob(error: impl std::fmt::Display) -> StoreError {
+    StoreError::Codec(format!(
+        "stored operation is not p2panda 0.7.1 format; export semantic events with the previous build and re-author them into a fresh store: {error}"
+    ))
+}
+
+/// Encode an operation as the blob stored at its log key.
 fn encode_op<E: Extensions>(op: &Operation<E>) -> Result<Vec<u8>, StoreError> {
     let body = op.body.as_ref().map(|b| b.to_bytes());
-    encode_cbor(&(&op.header, &body)).map_err(codec)
+    encode_blob(&op.header, &body)
 }
 
 /// Decode a stored blob back into an operation, recomputing its id from the
 /// header.
 fn decode_op<E: Extensions>(bytes: &[u8]) -> Result<Operation<E>, StoreError> {
-    let (header, body): (Header<E>, Option<Vec<u8>>) = decode_cbor(bytes).map_err(|error| {
-        StoreError::Codec(format!(
-            "stored operation is not p2panda 0.7 format; export semantic events with the 0.6 build and re-author them into a fresh 0.7 store: {error}"
-        ))
-    })?;
+    let (header, body) = decode_blob(bytes)?;
     Ok(Operation {
         hash: header.hash(),
         header,
@@ -413,8 +441,7 @@ where
                         writes.insert(
                             operation.log_key.clone(),
                             Some(
-                                encode_cbor(&(&operation.header, &None::<Vec<u8>>))
-                                    .map_err(codec)?,
+                                encode_blob(&operation.header, &None)?,
                             ),
                         );
                         operation.has_body = false;
@@ -436,15 +463,14 @@ where
                 let Some(payload_blob) = payload_blob else {
                     continue;
                 };
-                let (header, body): (Header<E>, Option<Vec<u8>>) =
-                    decode_cbor(&payload_blob[..]).map_err(codec)?;
+                let (header, body) = decode_blob::<E>(&payload_blob[..])?;
                 if let Some(payload_hash) = header.payload_hash.as_ref() {
                     writes.insert(payload_ref_key(payload_hash, id), None);
                 }
                 if body.is_some() {
                     writes.insert(
                         payload_log_key.clone(),
-                        Some(encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?),
+                        Some(encode_blob(&header, &None)?),
                     );
                 }
             }
@@ -548,8 +574,7 @@ where
             let Some(payload_blob) = self.backend.get(&payload_log_key).await? else {
                 continue;
             };
-            let (header, body): (Header<E>, Option<Vec<u8>>) =
-                decode_cbor(&payload_blob[..]).map_err(codec)?;
+            let (header, body) = decode_blob::<E>(&payload_blob[..])?;
             if let Some(payload_hash) = header.payload_hash.as_ref() {
                 writes.push(WriteOp::Delete {
                     key: payload_ref_key(payload_hash, id),
@@ -558,7 +583,7 @@ where
             if body.is_none() {
                 continue;
             }
-            let stripped = encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?;
+            let stripped = encode_blob(&header, &None)?;
             writes.push(WriteOp::Put {
                 key: payload_log_key.clone(),
                 value: stripped,
@@ -604,8 +629,7 @@ where
                 continue;
             }
             if let Some(blob) = self.backend.get(&key).await? {
-                let (header, _): (Header<E>, Option<Vec<u8>>) =
-                    decode_cbor(&blob[..]).map_err(codec)?;
+                let (header, _) = decode_blob::<E>(&blob[..])?;
                 let operation_hash = header.hash();
                 writes.push(WriteOp::Delete {
                     key: op_ptr(&operation_hash),
@@ -659,8 +683,7 @@ where
             },
         ];
         if let Some(blob) = self.backend.get(&log_key).await? {
-            let (header, _): (Header<E>, Option<Vec<u8>>) =
-                decode_cbor(&blob[..]).map_err(codec)?;
+            let (header, _) = decode_blob::<E>(&blob[..])?;
             if let Some(payload_hash) = header.payload_hash.as_ref() {
                 writes.push(WriteOp::Delete {
                     key: payload_ref_key(payload_hash, id),
@@ -679,9 +702,8 @@ where
         let Some(blob) = self.backend.get(&log_key).await? else {
             return Ok(false);
         };
-        let (header, _body): (Header<E>, Option<Vec<u8>>) =
-            decode_cbor(&blob[..]).map_err(codec)?;
-        let stripped = encode_cbor(&(&header, &None::<Vec<u8>>)).map_err(codec)?;
+        let (header, _body) = decode_blob::<E>(&blob[..])?;
+        let stripped = encode_blob(&header, &None)?;
         let mut writes = vec![WriteOp::Put {
             key: log_key,
             value: stripped,
@@ -728,8 +750,7 @@ where
                 writes.push(WriteOp::Delete { key: reference_key });
                 continue;
             };
-            let (header, body): (Header<E>, Option<Vec<u8>>) =
-                decode_cbor(&blob[..]).map_err(codec)?;
+            let (header, body) = decode_blob::<E>(&blob[..])?;
             if header.payload_hash.as_ref() != Some(payload_hash) {
                 return Err(codec("payload reference points at another digest"));
             }
@@ -739,7 +760,7 @@ where
             if body.is_none() {
                 writes.push(WriteOp::Put {
                     key: log_key,
-                    value: encode_cbor(&(&header, &Some(bytes.to_vec()))).map_err(codec)?,
+                    value: encode_blob(&header, &Some(bytes.to_vec()))?,
                 });
                 attached += 1;
             }
@@ -912,9 +933,8 @@ where
                 continue;
             }
             if let Some(blob) = self.backend.get(key).await? {
-                let (header, _): (Header<E>, Option<Vec<u8>>) =
-                    decode_cbor(&blob[..]).map_err(codec)?;
-                bytes += header.to_bytes().len() as u32 + header.payload_size;
+                let (header, _) = decode_blob::<E>(&blob[..])?;
+                bytes += header.encode().len() as u32 + header.payload_size;
                 count += 1;
             }
         }
@@ -937,7 +957,7 @@ where
             }
             if let Some(blob) = self.backend.get(key).await? {
                 let op = decode_op::<E>(&blob)?;
-                let header = op.header.to_bytes();
+                let header = op.header.encode();
                 entries.push((op, header));
             }
         }
@@ -1052,18 +1072,12 @@ mod tests {
         backlink: Option<Hash>,
         payload: &[u8],
     ) -> Operation<Ext> {
-        let body = Body::new(payload);
-        let mut header = Header::<Ext> {
-            version: 1,
-            verifying_key: sk.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num: seq,
-            backlink,
-            extensions: (),
-        };
-        header.sign(sk);
+        let body = Body::from_bytes(payload);
+        let header = Header::<Ext>::builder()
+            .body(payload)
+            .seq_num(seq)
+            .backlink(backlink)
+            .build(sk, ());
         Operation {
             hash: header.hash(),
             header,
@@ -1085,7 +1099,7 @@ mod tests {
     fn legacy_operation_bytes_report_the_reauthoring_boundary() {
         let error = decode_op::<Ext>(&[0x81, 0x00]).unwrap_err();
         assert!(error.to_string().contains("re-author"));
-        assert!(error.to_string().contains("fresh 0.7 store"));
+        assert!(error.to_string().contains("fresh store"));
     }
 
     #[test]
@@ -1143,7 +1157,7 @@ mod tests {
             assert_eq!(entries[0].0.hash, op0.hash);
             assert_eq!(entries[1].0.hash, op1.hash);
             // The second tuple element is the encoded header.
-            assert_eq!(entries[0].1, op0.header.to_bytes());
+            assert_eq!(entries[0].1, op0.header.encode());
 
             let heights = store
                 .get_log_heights(&author, &[log_id])

@@ -402,19 +402,17 @@ mod tests {
     /// different key from the issuer: the grammar allows a relay to carry
     /// another device's slot, because the lease signature is what authorizes.
     fn operation(ext: CarriageExt) -> Operation<CarriageExt> {
-        let body = Body::new(b"wrapped-epoch-record-stand-in");
+        let body = Body::from_bytes(b"wrapped-epoch-record-stand-in");
         let writer = SigningKey::from_bytes(&[0x77; 32]);
-        let mut header = Header {
-            version: 1,
-            verifying_key: writer.verifying_key(),
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num: 0,
-            backlink: None,
-            extensions: ext,
-        };
-        header.sign(&writer);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(0)
+            .backlink(None)
+            .build(&writer, ext);
         Operation {
             hash: header.hash(),
             header,
@@ -423,7 +421,7 @@ mod tests {
     }
 
     fn signed_ext(issue: u64, expires_at_ms: u64) -> CarriageExt {
-        let payload = Body::new(b"wrapped-epoch-record-stand-in").hash();
+        let payload = Body::from_bytes(b"wrapped-epoch-record-stand-in").hash();
         CarriageExt {
             graph: GRAPH,
             slot: slot(),
@@ -494,7 +492,7 @@ mod tests {
             ),
             ("carriage-untrusted-issuer", {
                 // Signed by a key nobody trusts. The lease facts are fine.
-                let payload = Body::new(b"wrapped-epoch-record-stand-in").hash();
+                let payload = Body::from_bytes(b"wrapped-epoch-record-stand-in").hash();
                 let stranger = Ed25519Keypair::from_seed([0x99; 32]);
                 let mut ext = signed_ext(2, NOW_MS + 60_000);
                 ext.issuer_signature =
@@ -549,12 +547,12 @@ mod tests {
         let ext = signed_ext(2, NOW_MS + 60_000);
         assert!(verify_lease(
             &ext,
-            Body::new(b"wrapped-epoch-record-stand-in").hash(),
+            Body::from_bytes(b"wrapped-epoch-record-stand-in").hash(),
             &[issuer().public_key().to_bytes()],
         ));
         assert!(!verify_lease(
             &ext,
-            Body::new(b"a-different-record").hash(),
+            Body::from_bytes(b"a-different-record").hash(),
             &[issuer().public_key().to_bytes()],
         ));
     }

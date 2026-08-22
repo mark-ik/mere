@@ -374,7 +374,7 @@ impl CarriageHost {
         record: Vec<u8>,
         ceilings: CarriageCeilings,
     ) -> Result<(), CarriageHostError> {
-        let body = Body::new(&record);
+        let body = Body::from_bytes(&record);
         let ext = CarriageExt {
             graph: self.graph,
             slot,
@@ -410,17 +410,15 @@ impl CarriageHost {
             Some(operation) => (operation.header.seq_num + 1, Some(operation.hash)),
             None => (0, None),
         };
-        let mut header = Header {
-            version: 1,
-            verifying_key,
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num,
-            backlink,
-            extensions: ext,
-        };
-        header.sign(&self.writer);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. `body` sets payload_size and payload_hash.
+        let header = Header::builder()
+            .body(body.as_bytes())
+            .seq_num(seq_num)
+            .backlink(backlink)
+            .build(&self.writer, ext);
         let operation = Operation {
             hash: header.hash(),
             header,

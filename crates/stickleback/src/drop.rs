@@ -790,17 +790,23 @@ mod tests {
     }
 
     #[test]
+    // Re-frozen for p2panda 0.7.1: `encode_cbor` moved from ciborium to
+    // cbor-core, which emits canonical CBOR and therefore orders map keys
+    // (shortest first, then bytewise) instead of writing struct fields in
+    // declaration order. `ManifestEntry`'s bytes changed, so the manifest
+    // digest — and with it the `DropId` — changed. The drop format itself is
+    // unchanged; only its canonical byte encoding moved.
     fn golden_vector_freezes_manifest_identity_and_cover() {
         let (bytes, receipt) = encoded();
         assert_eq!(&bytes[0..8], b"MEREDRP\0");
         assert_eq!(receipt.total_bytes as usize, bytes.len());
         assert_eq!(
             hex::encode(receipt.id.0),
-            "06fa9247e8f841ab905b77593fc98b7319023a2599b27ab2dbca1968a7422d3d"
+            "f92cf6cf4dc067f05f14454b9b1cbb618935a02002da9f15b2d37fd6f5452a55"
         );
         assert_eq!(
             hex::encode(&bytes[0..52]),
-            "4d455245445250000100000080010000000000007ae7694c61758cbb93124a67caa9da4c147d1b8f84d65e0385320fff5e48f745"
+            "4d45524544525000010000007d010000000000005d67dd629e91bbcd8e04fd16ba72de402c27ca75bc74fb6f257f5b1f90f47d1b"
         );
     }
 }

@@ -818,23 +818,21 @@ fn to_operation(
         }
         None => (record_bytes, PersonalEncryption::Plaintext),
     };
-    let body = Body::new(&body_bytes);
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink: backlink.map(Hash::from),
-        extensions: PersonalGraphExt {
-            graph,
-            encryption,
-            parents: record.parents.clone(),
-            writer_attestation: record.writer_attestation.clone(),
-        },
-    };
-    header.sign(&signing_key);
+    let body = Body::from_bytes(&body_bytes);
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(&body_bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(Hash::from))
+        .build(&signing_key, PersonalGraphExt {
+                graph,
+                encryption,
+                parents: record.parents.clone(),
+                writer_attestation: record.writer_attestation.clone(),
+            });
     let hash = header.hash();
     Ok(Operation {
         hash,

@@ -155,9 +155,14 @@ pub struct Claimant {
 
 impl JobBoard {
     /// Fold a set of operations into a board. Order-independent: gathers
-    /// everything, then resolves claims and results. Ops that fail signature
-    /// verification, decode, or address a different mesh are skipped (the sync
-    /// drain verifies too; this is defence in depth for direct callers).
+    /// everything, then resolves claims and results. Ops that fail header or
+    /// body-commitment verification, decode, or address a different mesh are
+    /// skipped (the sync drain verifies too; this is defence in depth for
+    /// direct callers).
+    ///
+    /// The signature half of that check is now structural rather than
+    /// re-tested: `Header::decode` verifies before yielding a header, so an
+    /// unverified `Operation` cannot be constructed to pass in.
     pub fn fold<'a, I>(mesh_id: [u8; 32], ops: I) -> Self
     where
         I: IntoIterator<Item = &'a Operation<MeshExt>>,

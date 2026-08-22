@@ -71,18 +71,16 @@ fn header<E>(signing_key: &SigningKey, extensions: E) -> Header<E>
 where
     E: p2panda_core::Extensions,
 {
-    let body = Body::new(b"fixture");
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num: 0,
-        backlink: None,
-        extensions,
-    };
-    header.sign(signing_key);
+    let body = Body::from_bytes(b"fixture");
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(body.as_bytes())
+        .seq_num(0)
+        .backlink(None)
+        .build(signing_key, extensions);
     header
 }
 
@@ -92,21 +90,19 @@ fn operation(
     backlink: Option<Hash>,
     prune: bool,
 ) -> Operation<PrunableExtension> {
-    let body = Body::new(format!("event-{seq_num}").as_bytes());
-    let mut header = Header {
-        version: 1,
-        verifying_key: signing_key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num,
-        backlink,
-        extensions: PrunableExtension {
-            space: SPACE,
-            prune_flag: PruneFlag::new(prune),
-        },
-    };
-    header.sign(signing_key);
+    let body = Body::from_bytes(format!("event-{seq_num}").as_bytes());
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(body.as_bytes())
+        .seq_num(seq_num)
+        .backlink(backlink)
+        .build(signing_key, PrunableExtension {
+                space: SPACE,
+                prune_flag: PruneFlag::new(prune),
+            });
     Operation {
         hash: header.hash(),
         header,
@@ -126,7 +122,7 @@ fn default_prune_flag_preserves_pre_field_header() {
         },
     );
 
-    assert_eq!(legacy.to_bytes(), prunable.to_bytes());
+    assert_eq!(legacy.encode(), prunable.encode());
     assert_eq!(legacy.hash(), prunable.hash());
     assert_eq!(legacy.signature, prunable.signature);
 }

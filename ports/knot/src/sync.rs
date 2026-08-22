@@ -462,22 +462,21 @@ where
         );
         let aad = operation_aad(self.policy.space_id, author.as_bytes(), seq_num);
         let ciphertext = seal_event(cipher, &aad, plaintext.as_slice())?;
-        let body = Body::new(&ciphertext);
-        let mut header = Header {
-            version: 1,
-            verifying_key: author,
-            signature: None,
-            payload_size: body.size(),
-            payload_hash: Some(body.hash()),
-            seq_num,
-            backlink: backlink.map(Hash::from),
-            extensions: KnotSyncExt {
-                space_id: self.policy.space_id,
-                encryption: self.policy.encryption,
-                parents,
-            },
-        };
-        header.sign(&signing_key);
+        let body = Body::from_bytes(&ciphertext);
+        // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+        // and folded signing into the builder: `build` encodes, signs and
+        // caches the digest in one step, so the struct-literal + `sign` pair
+        // has no equivalent. The builder derives verifying_key from the
+        // signing key -- the same value `author` already held.
+        let header = Header::builder()
+            .body(&ciphertext)
+            .seq_num(seq_num)
+            .backlink(backlink.map(Hash::from))
+            .build(&signing_key, KnotSyncExt {
+                    space_id: self.policy.space_id,
+                    encryption: self.policy.encryption,
+                    parents,
+                });
         let operation = Operation {
             hash: header.hash(),
             header,

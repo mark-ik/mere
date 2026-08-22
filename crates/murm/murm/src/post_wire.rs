@@ -28,7 +28,7 @@
 
 use identity::{Ed25519PublicKey, Ed25519Signature};
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
-use p2panda_core::{Body, Hash, Header, Operation, Signature, VerifyingKey};
+use p2panda_core::{Body, Hash, Header, Operation, Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 use crate::{ChannelName, InfoEntry, MurmError, Post, PostId, PostKind};
@@ -63,25 +63,24 @@ pub struct CabalExt {
 
 /// The canonical wire form: a signed header plus its body bytes, CBOR-encoded
 /// as one blob.
+///
+/// The header travels as its own encoded bytes. p2panda 0.7.1 dropped the serde
+/// impls on `Header`, and decoding the bytes back through `Header::decode`
+/// verifies the signature, which serde never did.
 #[derive(Serialize, Deserialize)]
 struct WirePost {
-    header: Header<CabalExt>,
+    // `serde_bytes` so the header travels as a CBOR byte string; a bare
+    // `Vec<u8>` would serialise as an array of integers, roughly doubling it.
+    #[serde(with = "serde_bytes")]
+    header: Vec<u8>,
     body: Vec<u8>,
 }
 
 // ── identity ed25519 ↔ p2panda-core ed25519 ──────────────────────────────────
 // Both are ed25519-dalek underneath; convert through canonical bytes.
 
-fn to_p2_vk(author: &Ed25519PublicKey) -> Result<VerifyingKey, MurmError> {
-    VerifyingKey::from_bytes(&author.to_bytes()).map_err(|_| MurmError::MalformedPost)
-}
-
 fn from_p2_vk(vk: &VerifyingKey) -> Result<Ed25519PublicKey, MurmError> {
     Ed25519PublicKey::from_bytes(vk.as_bytes()).map_err(|_| MurmError::MalformedPost)
-}
-
-pub(crate) fn to_p2_sig(sig: &Ed25519Signature) -> Signature {
-    Signature::from_bytes(&sig.to_bytes())
 }
 
 pub(crate) fn from_p2_sig(sig: &Signature) -> Ed25519Signature {
@@ -89,7 +88,11 @@ pub(crate) fn from_p2_sig(sig: &Signature) -> Ed25519Signature {
 }
 
 /// Split a [`PostKind`] (+ cabal id, links) into the header extension and body.
-fn decompose(cabal_id: [u8; 32], links: &[PostId], kind: &PostKind) -> (CabalExt, Vec<u8>) {
+pub(crate) fn decompose(
+    cabal_id: [u8; 32],
+    links: &[PostId],
+    kind: &PostKind,
+) -> (CabalExt, Vec<u8>) {
     let parents: Vec<[u8; 32]> = links.iter().map(|l| *l.as_bytes()).collect();
     let mut ext = CabalExt {
         cabal_id,
@@ -176,8 +179,8 @@ fn recompose(ext: &CabalExt, body: &[u8]) -> Result<PostKind, MurmError> {
 /// by signing, verification, and encoding so all three reconstruct
 /// byte-identical headers. `seq_num`/`backlink` are the per-author log position
 /// (the p2panda log rule: `backlink.is_some()` iff `seq_num > 0`).
-pub(crate) fn unsigned_header(
-    author: VerifyingKey,
+pub(crate) fn build_header(
+    signing_key: &SigningKey,
     cabal_id: [u8; 32],
     seq_num: u32,
     backlink: Option<PostId>,
@@ -185,38 +188,27 @@ pub(crate) fn unsigned_header(
     kind: &PostKind,
 ) -> (Header<CabalExt>, Vec<u8>) {
     let (extensions, body_bytes) = decompose(cabal_id, links, kind);
-    let body = Body::new(&body_bytes);
-    // Per the operation format, `payload_hash` is present iff the body is
-    // non-empty (channel-less and empty-text posts carry no body).
-    let (payload_size, payload_hash) = if body_bytes.is_empty() {
-        (0, None)
-    } else {
-        (body.size(), Some(body.hash()))
-    };
-    let header = Header {
-        version: 1,
-        verifying_key: author,
-        signature: None,
-        payload_size,
-        payload_hash,
-        seq_num,
-        backlink: backlink.map(|id| Hash::from(*id.as_bytes())),
-        extensions,
-    };
+    // p2panda 0.7.1 has no unsigned `Header`: the builder encodes and signs in
+    // one step, and `body` sets payload_size/payload_hash from the bytes —
+    // including the empty-body case, where both stay zero/None as the operation
+    // format requires (channel-less and empty-text posts carry no body).
+    let header = Header::builder()
+        .body(&body_bytes)
+        .seq_num(seq_num)
+        .backlink(backlink.map(|id| Hash::from(*id.as_bytes())))
+        .build(signing_key, extensions);
     (header, body_bytes)
 }
 
-/// Rebuild the *signed* header (+ body bytes) for an existing [`Post`].
+/// Recover the *signed* header (+ body bytes) for an existing [`Post`].
+///
+/// Decodes the bytes the post carries rather than rebuilding them: since
+/// p2panda 0.7.1 a signed header cannot be reconstructed from its parts, and
+/// `Header::decode` re-verifies the signature on the way through.
 fn signed_header(post: &Post) -> Result<(Header<CabalExt>, Vec<u8>), MurmError> {
-    let (mut header, body) = unsigned_header(
-        to_p2_vk(&post.author)?,
-        post.cabal_id,
-        post.seq_num,
-        post.backlink,
-        &post.links,
-        &post.kind,
-    );
-    header.signature = Some(to_p2_sig(&post.signature));
+    let header =
+        Header::<CabalExt>::decode(&post.header).map_err(|_| MurmError::MalformedPost)?;
+    let (_ext, body) = decompose(post.cabal_id, &post.links, &post.kind);
     Ok((header, body))
 }
 
@@ -244,7 +236,7 @@ pub fn post_to_operation(post: &Post) -> Result<Operation<CabalExt>, MurmError> 
     let body = if body_bytes.is_empty() {
         None
     } else {
-        Some(Body::new(&body_bytes))
+        Some(Body::from_bytes(&body_bytes))
     };
     Ok(Operation { hash, header, body })
 }
@@ -263,11 +255,7 @@ pub fn post_to_operation(post: &Post) -> Result<Operation<CabalExt>, MurmError> 
 pub fn operation_to_post(op: &Operation<CabalExt>) -> Result<Post, MurmError> {
     let header = &op.header;
     let author = from_p2_vk(&header.verifying_key)?;
-    let signature = header
-        .signature
-        .as_ref()
-        .map(from_p2_sig)
-        .ok_or(MurmError::MalformedPost)?;
+    let signature = from_p2_sig(&header.signature);
     let links = header
         .extensions
         .parents
@@ -285,6 +273,7 @@ pub fn operation_to_post(op: &Operation<CabalExt>) -> Result<Post, MurmError> {
         links,
         kind,
         signature,
+        header: header.encode(),
     })
 }
 
@@ -292,10 +281,14 @@ pub fn operation_to_post(op: &Operation<CabalExt>) -> Result<Post, MurmError> {
 pub fn encode_post(post: &Post) -> Vec<u8> {
     // A `Post` whose `author` is not a valid ed25519 point can never have been
     // produced by signing or decoding; fall back to empty rather than panic.
-    let Ok((header, body)) = signed_header(post) else {
+    let Ok((_header, body)) = signed_header(post) else {
         return Vec::new();
     };
-    encode_cbor(&WirePost { header, body }).expect("CBOR encoding of a post never fails")
+    encode_cbor(&WirePost {
+        header: post.header.clone(),
+        body,
+    })
+    .expect("CBOR encoding of a post never fails")
 }
 
 /// Decode a [`Post`] from canonical wire bytes.
@@ -305,30 +298,29 @@ pub fn encode_post(post: &Post) -> Vec<u8> {
 /// bytes, non-UTF-8 in a text/topic field).
 pub fn decode_post(bytes: &[u8]) -> Result<Post, MurmError> {
     let wire: WirePost = decode_cbor(bytes).map_err(|_| MurmError::MalformedPost)?;
-    let author = from_p2_vk(&wire.header.verifying_key)?;
-    let signature = wire
-        .header
-        .signature
-        .as_ref()
-        .map(from_p2_sig)
-        .ok_or(MurmError::MalformedPost)?;
-    let links = wire
-        .header
+    // `Header::decode` verifies the signature before it will return a header,
+    // so a malformed or forged post is rejected right here.
+    let header =
+        Header::<CabalExt>::decode(&wire.header).map_err(|_| MurmError::MalformedPost)?;
+    let author = from_p2_vk(&header.verifying_key)?;
+    let signature = from_p2_sig(&header.signature);
+    let links = header
         .extensions
         .parents
         .iter()
         .map(|p| PostId::new(*p))
         .collect();
-    let kind = recompose(&wire.header.extensions, &wire.body)?;
-    let backlink = wire.header.backlink.map(|h| PostId::new(*h.as_bytes()));
+    let kind = recompose(&header.extensions, &wire.body)?;
+    let backlink = header.backlink.map(|h| PostId::new(*h.as_bytes()));
     Ok(Post {
         author,
-        cabal_id: wire.header.extensions.cabal_id,
-        seq_num: wire.header.seq_num,
+        cabal_id: header.extensions.cabal_id,
+        seq_num: header.seq_num,
         backlink,
         links,
         kind,
         signature,
+        header: wire.header,
     })
 }
 

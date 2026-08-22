@@ -80,18 +80,16 @@ fn entry(
     seq: u32,
     backlink: Option<p2panda_core::Hash>,
 ) -> Operation<LedgerExt> {
-    let body = Body::new(format!("entry-{seq}").as_bytes());
-    let mut header = Header {
-        version: 1,
-        verifying_key: key.verifying_key(),
-        signature: None,
-        payload_size: body.size(),
-        payload_hash: Some(body.hash()),
-        seq_num: seq,
-        backlink,
-        extensions: LedgerExt { space },
-    };
-    header.sign(key);
+    let body = Body::from_bytes(format!("entry-{seq}").as_bytes());
+    // p2panda 0.7.1 made the header's CBOR cache, size and digest private
+    // and folded signing into the builder: `build` encodes, signs and
+    // caches the digest in one step, so the struct-literal + `sign` pair
+    // has no equivalent. `body` sets payload_size and payload_hash.
+    let header = Header::builder()
+        .body(body.as_bytes())
+        .seq_num(seq)
+        .backlink(backlink)
+        .build(key, LedgerExt { space });
     Operation {
         hash: header.hash(),
         header,
