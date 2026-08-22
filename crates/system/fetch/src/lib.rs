@@ -23,7 +23,7 @@
 //! while retaining raw bytes for images and other binary media.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
@@ -55,6 +55,17 @@ const PAGE_BODY_CAP: usize = 64 * 1024 * 1024;
 /// The subresource counterpart (a page's images / CSS): generous but bounded.
 const SUBRESOURCE_BODY_CAP: usize = 32 * 1024 * 1024;
 
+/// Process-local correlation for one page request. The id crosses the actor
+/// boundary unchanged so hosts can cancel one node's load without affecting a
+/// second node fetching the same address.
+pub type FetchRequestId = u64;
+
+static NEXT_FETCH_REQUEST: AtomicU64 = AtomicU64::new(1);
+
+pub fn next_fetch_request_id() -> FetchRequestId {
+    NEXT_FETCH_REQUEST.fetch_add(1, Ordering::Relaxed)
+}
+
 /// Successfully fetched content. Rendering uses the decoded text while hosts
 /// that retain or download a response use the original bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -84,6 +95,8 @@ impl Fetched {
 /// host can continue the protocol conversation without parsing prose.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FetchFailure {
+    /// The host explicitly stopped this request.
+    Cancelled,
     /// A Gemini-style input response. `url` is the final request address after
     /// redirects and is therefore the address the submitted query belongs to.
     InputRequired {
@@ -115,6 +128,7 @@ pub enum FetchFailure {
 impl std::fmt::Display for FetchFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Cancelled => f.write_str("cancelled"),
             Self::InputRequired { prompt, .. } => write!(f, "input required: {prompt}"),
             Self::ClientCertificateRequired { .. } => f.write_str("client certificate required"),
             Self::CertificateChanged { target, .. } => {
@@ -128,6 +142,7 @@ impl std::fmt::Display for FetchFailure {
 /// The result of one fetch, tagged with the requested URL so the host routes it
 /// back to the right node's content slot.
 pub struct FetchOutcome {
+    pub request: FetchRequestId,
     pub url: String,
     pub result: Result<Fetched, FetchFailure>,
 }
@@ -137,6 +152,8 @@ pub struct FetchOutcome {
 /// [`FetchOutcome`] remains authoritative and retains the complete bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PageProgress {
+    /// Exact actor request this fragment belongs to.
+    pub request: FetchRequestId,
     /// Original address used to correlate the actor request.
     pub url: String,
     /// Address of the successful response after any redirects.
@@ -341,9 +358,12 @@ fn scheme_of(url: &str) -> Option<&str> {
 pub enum FetchCommand {
     /// Fetch `url` as a page document (decoded body as text).
     Page {
+        request: FetchRequestId,
         url: String,
         identity: Option<GeminiClientIdentity>,
     },
+    /// Abort one exact page request. Other nodes loading the same URL continue.
+    CancelPage { request: FetchRequestId },
     /// Fetch the subresource at the (already absolute) `url` as raw bytes.
     Subresource(String),
     /// Fetch the favicon at `url` (already absolute) as raw bytes, remembering it
@@ -387,11 +407,19 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
             .enable_all()
             .build()
             .expect("build the fetch runtime");
+        let mut page_tasks: HashMap<FetchRequestId, (String, tokio::task::JoinHandle<()>)> =
+            HashMap::new();
         while let Ok(command) = commands.recv() {
+            page_tasks.retain(|_, (_, task)| !task.is_finished());
             match command {
-                FetchCommand::Page { url, identity } => {
+                FetchCommand::Page {
+                    request,
+                    url,
+                    identity,
+                } => {
                     let out = out.clone();
-                    runtime.spawn(async move {
+                    let task_url = url.clone();
+                    let task = runtime.spawn(async move {
                         let progress_out = out.clone();
                         let request_url = url.clone();
                         let result = fetch_page_interactive_capped(
@@ -400,6 +428,7 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                             identity.as_ref(),
                             move |response_url, content_type, bytes| {
                                 progress_out.emit(FetchUpdate::PageProgress(PageProgress {
+                                    request,
                                     url: request_url.clone(),
                                     response_url: response_url.to_string(),
                                     content_type: content_type.map(str::to_string),
@@ -408,8 +437,25 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                             },
                         )
                         .await;
-                        out.emit(FetchUpdate::Page(FetchOutcome { url, result }));
+                        out.emit(FetchUpdate::Page(FetchOutcome {
+                            request,
+                            url,
+                            result,
+                        }));
                     });
+                    if let Some((_, superseded)) = page_tasks.insert(request, (task_url, task)) {
+                        superseded.abort();
+                    }
+                }
+                FetchCommand::CancelPage { request } => {
+                    if let Some((url, task)) = page_tasks.remove(&request) {
+                        task.abort();
+                        out.emit(FetchUpdate::Page(FetchOutcome {
+                            request,
+                            url,
+                            result: Err(FetchFailure::Cancelled),
+                        }));
+                    }
                 }
                 FetchCommand::Subresource(url) => {
                     let out = out.clone();

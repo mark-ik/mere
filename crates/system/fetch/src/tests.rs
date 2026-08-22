@@ -6,6 +6,14 @@
 use super::*;
 
 #[test]
+fn page_request_ids_are_unique_and_cancellation_is_typed() {
+    let first = next_fetch_request_id();
+    let second = next_fetch_request_id();
+    assert!(second > first);
+    assert_eq!(FetchFailure::Cancelled.to_string(), "cancelled");
+}
+
+#[test]
 fn fetchable_for_http_and_smolweb_schemes() {
     assert!(is_fetchable("http://example.com"));
     assert!(is_fetchable("https://example.com"));
