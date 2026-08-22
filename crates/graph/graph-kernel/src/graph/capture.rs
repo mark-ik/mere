@@ -238,6 +238,11 @@ pub enum CapturedDelta {
     ReplayRetractCouplingById {
         coupling_id: String,
     },
+    /// Appended so existing postcard enum ordinals stay stable.
+    ReplaySetNodeContentById {
+        node_id: String,
+        content: Option<[u8; 32]>,
+    },
 }
 
 impl CapturedDelta {
@@ -313,6 +318,12 @@ impl CapturedDelta {
                 GraphDelta::ReplaySetNodeMimeHintById {
                     node_id: parse_uuid(node_id),
                     mime_hint: mime_hint.clone(),
+                }
+            }
+            Self::ReplaySetNodeContentById { node_id, content } => {
+                GraphDelta::ReplaySetNodeContentById {
+                    node_id: parse_uuid(node_id),
+                    content: content.map(muniment::Hash::from_bytes),
                 }
             }
             Self::ReplaySetNodeNestedById { node_id, nested } => {
@@ -877,9 +888,9 @@ mod tests {
 
     #[test]
     fn node_content_captured_delta_round_trips_through_postcard() {
-        let delta = CapturedDelta::ReplaySetNodeBodyById {
+        let delta = CapturedDelta::ReplaySetNodeContentById {
             node_id: Uuid::from_u128(5).to_string(),
-            body: Some("hello".into()),
+            content: Some([7; 32]),
         };
         let bytes = postcard::to_allocvec(&delta).expect("encode");
         let restored: CapturedDelta = postcard::from_bytes(&bytes).expect("decode");

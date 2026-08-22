@@ -105,6 +105,28 @@ impl Graph {
         true
     }
 
+    /// Attach or clear an out-of-line, content-addressed representation.
+    ///
+    /// The host must deposit the bytes in a muniment `BlobStore` first. The
+    /// kernel carries only the stable hash and never performs storage I/O.
+    pub(crate) fn set_node_content(
+        &mut self,
+        key: NodeKey,
+        content: Option<super::ContentHash>,
+    ) -> bool {
+        let Some(node) = self.inner.node_mut(key) else {
+            return false;
+        };
+        if node.content == content {
+            return false;
+        }
+        node.content = content;
+        if node.content.is_some() {
+            node.body = None;
+        }
+        true
+    }
+
     pub(crate) fn set_node_pinned(&mut self, key: NodeKey, is_pinned: bool) -> bool {
         if self.inner.node(key).is_none() {
             return false;
@@ -229,10 +251,14 @@ impl Graph {
         let Some(node) = self.inner.node_mut(key) else {
             return false;
         };
-        if node.body == body {
+        let clears_content = body.is_some() && node.content.is_some();
+        if node.body == body && !clears_content {
             return false;
         }
         node.body = body;
+        if node.body.is_some() {
+            node.content = None;
+        }
         true
     }
 

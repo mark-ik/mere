@@ -97,6 +97,7 @@ impl Graph {
                 body: node.body.clone(),
                 last_session_visited: 0,
                 nested: node.nested.as_ref().map(|log| log.as_str().to_string()),
+                content_hash: node.content.map(|hash| hash.to_hex()),
             })
             .collect();
 
