@@ -159,7 +159,9 @@ standalone repo waits for a third consumer.
    continue from the new home; `repository` fields update at next publish.
 4. **Licenses unchanged per crate.** Incoming mere-side crates are MIT/Apache
    already; MPL stays genet-side (Servo-derived only), per the founding
-   convention.
+   convention. **Superseded 2026-08-22** by the
+   [license posture brief](../../2026-08-22_license_posture_brief.md): platform
+   code, mere and genet included, is MPL-2.0; consumers license themselves.
 5. **One absorption per change.** Each move lands as one commit pair: subtree
    plus workspace membership in the receiving repo, consumer repoints in the
    same session. Targeted `cargo check -p` per touched consumer, not broad
