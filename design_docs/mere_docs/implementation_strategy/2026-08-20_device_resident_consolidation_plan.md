@@ -1,8 +1,8 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1 through R3 and C1 through C2 complete. R4 is the next resident
-slice. C3 is unblocked but remains a separate physical-custody change.
+**Status:** R1 through R4 and C1 through C3 complete. R5 and C4 are the next
+independent slices; V1 follows their convergence.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -483,3 +483,27 @@ This plan does not:
   both operation intake and exact-hash reads, preserves retained bytes, and
   proves two spaces use distinct endpoint ids. That receipt, all 12 owner
   settings tests, and the feature-gated device-host check pass.
+- **2026-08-22, C3:** `90a1a66d` made the device resident the owner of one
+  configurable collecting iroh store under `content/blobs`. Murm's versioned
+  `BlobLease` tags separate scope, lane, and subject while identical bytes keep
+  one physical hash. Personal transfer staging and fetching plus Knot evidence
+  now borrow that store and rehydrate exact-hash serving custody from durable
+  leases. Old per-graph and per-persona stores are copied without deletion,
+  digest-checked, flushed, and covered by a restart-safe marker that is
+  reverified before it is trusted. The two shared-lease tests and two resident
+  migration tests pass, including independent release, final collection,
+  interrupted-copy replay, and reopen.
+- **2026-08-22, R4:** Mere `90a1a66d` added a blocking first-party
+  `AppRouteCarrier`, carried revision notices across the owner-only application
+  door, and made standalone pairing facts derive from Personae without opening
+  resident-owned Knot files. A Windows integration receipt proves a second
+  store owner is refused promptly while pairing facts remain available. The
+  five application-broker integrations and the notice receipt pass; Graphshell
+  with `personal-sync` and both Knot binaries check clean. Turnstone `d6c4bdc`
+  removes every direct persona-vault open and reaches only the resident `knot`
+  route in persona mode. Directory mode remains an in-process `LocalCarrier`,
+  and a configured `knot_endpoint` remains an explicit isolated fixture. The
+  Turnstone check passes against the local Mere source. Knot's full unit-test
+  cone still stops in unrelated endpoint fixtures at the removed
+  `inker::Fetched::text`; the dedicated ownership receipt bypasses that drift
+  and passes.
