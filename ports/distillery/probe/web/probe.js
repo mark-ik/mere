@@ -4,6 +4,7 @@ const stateLog = document.getElementById("state-log");
 const receiptView = document.getElementById("receipt");
 const downloadButton = document.getElementById("download-receipt");
 const matrixButton = document.getElementById("run-matrix");
+const decoderButton = document.getElementById("run-decoder");
 const runButton = document.getElementById("run-suite");
 const modelSelection = document.getElementById("model-selection");
 const modelMetadata = document.getElementById("model-metadata");
@@ -12,6 +13,7 @@ let activeWorker = null;
 let activeRun = null;
 let receipt = null;
 let matrixConfiguration = null;
+let decoderConfiguration = null;
 let framePhase = null;
 let lastFrame = null;
 const frameSamples = new Map();
@@ -93,6 +95,18 @@ async function loadMatrix() {
   applyModel(preferred);
   modelSelection.disabled = false;
   matrixButton.disabled = false;
+  return parsed;
+}
+
+async function loadDecoder() {
+  const response = await fetch("../decoder-model.json", { cache: "no-store" });
+  if (!response.ok) throw new Error(`decoder row: HTTP ${response.status}`);
+  const parsed = await response.json();
+  if (parsed.schema !== "distillery.browser-decoder-row/v1" || !parsed.model) {
+    throw new Error("decoder row had the wrong schema or no model");
+  }
+  decoderConfiguration = parsed;
+  decoderButton.disabled = false;
   return parsed;
 }
 
@@ -219,6 +233,7 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
     let lastState = "worker_created";
     const stateHistory = [];
     const gpuErrors = [];
+    const streamMessages = [];
 
     const finish = (value, error = null) => {
       if (settled) return;
@@ -236,7 +251,13 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
         };
         reject(error);
       } else {
-        resolve({ ...value, frames, gpu_errors: gpuErrors, state_history: stateHistory });
+        resolve({
+          ...value,
+          frames,
+          gpu_errors: gpuErrors,
+          state_history: stateHistory,
+          stream_messages: streamMessages,
+        });
       }
     };
 
@@ -275,6 +296,11 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
         logState(label, message.error_type, message.error);
         return;
       }
+      if (message.kind === "stream") {
+        streamMessages.push(message);
+        logState(label, `stream-${message.execution_index}:${message.fragment_index}`, JSON.stringify(message.fragment));
+        return;
+      }
       if (message.kind === "result") {
         worker.terminate();
         finish({ report: message.report });
@@ -302,6 +328,153 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
 
     worker.postMessage({ command: "run", config });
   });
+}
+
+function decoderStreamsMatch(workerRun) {
+  const runs = workerRun.report.execution.decoder_runs ?? [];
+  return runs.length > 0 && runs.every((run) => {
+    const streamed = workerRun.stream_messages
+      .filter((message) => message.execution_index === run.execution_index)
+      .sort((left, right) => left.fragment_index - right.fragment_index)
+      .map((message) => message.fragment)
+      .join("");
+    return streamed === run.text && run.fragments.join("") === run.text;
+  });
+}
+
+async function runDecoder() {
+  const configured = await decoderReady;
+  const model = configured.model;
+  const prefix = `decoder:${model.model_id}`;
+  const frameBound = Number(configured.frame_bound_ms);
+  stateLog.replaceChildren();
+  receipt = null;
+  showReceipt();
+
+  setState("sampling_idle", `${prefix}: measuring the idle animation baseline.`);
+  beginFrames(`${prefix}:idle`);
+  await delay(Number(configured.idle_sample_ms));
+  const idleFrames = endFrames(`${prefix}:idle`, frameBound);
+  const storageBefore = await storageSnapshot();
+  let persistenceRequest = { requested: false };
+  if (document.getElementById("request-persistence").checked && navigator.storage?.persist) {
+    persistenceRequest = { requested: true, granted: await navigator.storage.persist() };
+  }
+  const environment = await environmentSnapshot();
+  const input = {
+    workload: "decoder_generation",
+    model_base_url: model.model_base_url,
+    model_id: model.model_id,
+    architecture: model.architecture,
+    license: model.license,
+    input: configured.prompt,
+    run_count: configured.run_count,
+    max_tokens: configured.max_tokens,
+    expected_token_ids: model.reference.generated_token_ids,
+    expected_text: model.reference.generated_text,
+    expected_dimensions: null,
+    reference_first_8: null,
+    reference_tolerance: null,
+    diagnostic_trace: false,
+  };
+  const configuration = {
+    ...input,
+    model_revision: model.revision,
+    expected_artifacts: model.artifacts,
+    reference_source: model.reference.source,
+    idle_sample_ms: configured.idle_sample_ms,
+    frame_bound_ms: frameBound,
+    persistence_request: persistenceRequest,
+  };
+
+  try {
+    const cold = await runWorker(`${prefix}:cold`, {
+      ...input,
+      mode: "cold",
+      manifest_id: null,
+      expected_hashes: null,
+      expected_output_hash: null,
+    }, { frameBound });
+    const warm = await runWorker(`${prefix}:warm`, {
+      ...input,
+      mode: "warm",
+      manifest_id: cold.report.manifest_id,
+      expected_hashes: cold.report.component_hashes,
+      expected_output_hash: cold.report.execution.output_hash,
+    }, { frameBound });
+    const storageAfter = await storageSnapshot();
+    environment.memory_after = await memorySnapshot();
+    const gpuValidationErrorsObserved = cold.gpu_errors.length + warm.gpu_errors.length > 0;
+    const coldStreamsMatch = decoderStreamsMatch(cold);
+    const warmStreamsMatch = decoderStreamsMatch(warm);
+    const rowPassed = cold.report.execution.reference_output_match === true
+      && warm.report.execution.reference_output_match === true
+      && cold.report.execution.repeat_outputs_match
+      && warm.report.execution.repeat_outputs_match
+      && warm.report.execution.matches_prior_worker === true
+      && coldStreamsMatch
+      && warmStreamsMatch
+      && warm.report.integrity_matches
+      && !gpuValidationErrorsObserved;
+    receipt = {
+      schema: "distillery.browser-decoder-probe/v1",
+      generated_at: new Date().toISOString(),
+      configuration,
+      environment,
+      storage: { before: storageBefore, after: storageAfter },
+      frames: { idle: idleFrames, cold: cold.frames, warm: warm.frames },
+      gpu_errors: { cold: cold.gpu_errors, warm: warm.gpu_errors },
+      cold: cold.report,
+      cold_stream_messages: cold.stream_messages,
+      warm: warm.report,
+      warm_stream_messages: warm.stream_messages,
+      conclusions: {
+        row_passed: rowPassed,
+        artifact_reopened: warm.report.manifest_id === cold.report.manifest_id,
+        integrity_reopened: warm.report.integrity_matches,
+        exact_reference_match: cold.report.execution.reference_output_match === true
+          && warm.report.execution.reference_output_match === true,
+        output_repeated_within_workers: cold.report.execution.repeat_outputs_match
+          && warm.report.execution.repeat_outputs_match,
+        output_repeated_across_workers: warm.report.execution.matches_prior_worker,
+        stream_crossed_worker_boundary: coldStreamsMatch && warmStreamsMatch,
+        gpu_validation_errors_observed: gpuValidationErrorsObserved,
+        cooperative_esp_cancel_measured: false,
+        gpu_memory_release_measured: false,
+        limiting_layer: rowPassed
+          ? "cooperative cancellation and GPU teardown remain unmeasured"
+          : "configured BrowserWebGpu decoder row",
+      },
+    };
+  } catch (error) {
+    const probe = error.probe ?? {};
+    receipt = {
+      schema: "distillery.browser-decoder-probe/v1",
+      generated_at: new Date().toISOString(),
+      configuration,
+      environment,
+      failed: true,
+      failure: {
+        run: probe.label ?? prefix,
+        last_state: probe.last_state ?? "unknown",
+        state_history: probe.state_history ?? [],
+        error: String(error),
+      },
+      frames: { idle: idleFrames, failed_run: probe.frames ?? null },
+      gpu_errors: { failed_run: probe.gpu_errors ?? [] },
+      conclusions: {
+        row_passed: false,
+        limiting_layer: classifyFailure(probe.last_state),
+      },
+    };
+  }
+  showReceipt();
+  if (rowPassed(receipt)) {
+    setState("complete", `${model.model_id}: exact cold/warm streamed decoder row passed.`);
+  } else {
+    setState("limited", `${model.model_id}: stopped at ${receipt.conclusions.limiting_layer}.`);
+  }
+  return receipt;
 }
 
 function terminateActive(reason = "owner requested termination") {
@@ -574,6 +747,7 @@ async function runMatrix() {
 function setRunControlsDisabled(disabled) {
   runButton.disabled = disabled;
   matrixButton.disabled = disabled;
+  decoderButton.disabled = disabled;
   modelSelection.disabled = disabled;
 }
 
@@ -614,6 +788,24 @@ matrixButton.addEventListener("click", async () => {
   }
 });
 
+decoderButton.addEventListener("click", async () => {
+  setRunControlsDisabled(true);
+  try {
+    await runDecoder();
+  } catch (error) {
+    receipt = {
+      schema: "distillery.browser-decoder-probe/v1",
+      generated_at: new Date().toISOString(),
+      failed: true,
+      error: String(error),
+    };
+    showReceipt();
+    setState("failed", String(error));
+  } finally {
+    setRunControlsDisabled(false);
+  }
+});
+
 modelSelection.addEventListener("change", () => {
   const model = selectedModel();
   if (model) applyModel(model);
@@ -639,11 +831,16 @@ const matrixReady = loadMatrix().catch((error) => {
   setState("failed", String(error));
   throw error;
 });
+const decoderReady = loadDecoder().catch((error) => {
+  setState("failed", String(error));
+  throw error;
+});
 
 window.distilleryModelProbe = {
   ready: matrixReady,
   runSuite,
   runMatrix,
+  runDecoder,
   terminateActive,
   matrix: async () => structuredClone(await matrixReady),
   receipt: () => structuredClone(receipt),

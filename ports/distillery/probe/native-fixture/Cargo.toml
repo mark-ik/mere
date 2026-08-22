@@ -9,5 +9,10 @@ description = "Native numerical control for Distillery's browser model matrix."
 [workspace]
 
 [dependencies]
-esp = { path = "../../../../crates/intel/esp", features = ["bert"] }
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["ndarray", "std"] }
+esp = { path = "../../../../crates/intel/esp", features = ["bert", "decoder"] }
 serde_json = "1"
+
+[[bin]]
+name = "distillery-decoder-native-fixture"
+path = "src/bin/decoder.rs"

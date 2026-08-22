@@ -2,8 +2,8 @@
 
 This is D2's development surface, homed with the model-works port without
 turning the probe into product chrome. It runs a pinned real-model matrix
-through the Eidetic `ModelLibrary`, Muniment IndexedDB, ESP's BERT loader, and
-Burn WGPU inside dedicated browser workers.
+through the Eidetic `ModelLibrary`, Muniment IndexedDB, ESP's BERT and Llama
+loaders, and Burn WGPU inside dedicated browser workers.
 
 The probe is a standalone Cargo workspace. This keeps an evidence-only browser
 surface from widening Mere's ordinary product graph and lets it build while
@@ -27,10 +27,13 @@ wasm-bindgen CLI pin remain the reproducibility boundary.
 
 Open the printed URL in a headed Chromium browser and select **Run configured
 matrix**. `window.distilleryModelProbe.runSuite(modelId)` runs one configured
-row, `runMatrix()` runs in ascending artifact size, and `receipt()` returns the
-machine-readable result. Generated wasm and model artifacts stay out of Git;
-selected dated decision receipts are checked in when they substantiate a
-boundary.
+embedding row, `runMatrix()` runs those rows in ascending artifact size,
+`runDecoder()` runs the pinned SmolLM2 decoder row, and `receipt()` returns the
+machine-readable result. The decoder row records every generated token and
+fragment, first-token latency, post-first-token throughput, cold/warm output
+identity, and stream messages observed by the page. Generated wasm and model
+artifacts stay out of Git; selected dated decision receipts are checked in when
+they substantiate a boundary.
 
 ## Claim boundary
 
