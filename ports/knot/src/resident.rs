@@ -648,11 +648,12 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1};
+    use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1, PortableContentRefV1};
     use gemot::moot::constitution::{CapabilityGrant, ConstitutionRules};
     use gemot::moot::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN, MootAuthority, MootDelegations};
     use personae::delegation::{
-        CapabilityScope, DelegationCertificate, DelegationParent, SignedDelegationCertificate,
+        CapabilityScope, DelegationCertificate, DelegationParent, DelegationRevocation,
+        SignedDelegationCertificate, SignedDelegationRevocation,
     };
     use personae::{IdentityProvider, InMemoryProvider};
     use servitor::cap::Cap;
@@ -825,6 +826,181 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn signed_gemot_grant_and_revocation_update_every_live_consumer() {
+        let roots = tempdir().unwrap();
+        let founder = InMemoryProvider::from_seed([66; 32]);
+        let peer = InMemoryProvider::from_seed([67; 32]);
+        let resident = InMemoryProvider::from_seed([68; 32]);
+        let peer_id = peer.master_public_key().to_bytes();
+        let space_scope = Cap::scope(&format!("knot/{}", crate::hex32(&SPACE))).unwrap();
+        let document_scope =
+            Cap::scope(&format!("knot/{}/document", crate::hex32(&SPACE))).unwrap();
+        let evidence_read_scope =
+            Cap::scope(&format!("knot/{}/evidence/read", crate::hex32(&SPACE))).unwrap();
+        let evidence_source_scope =
+            Cap::scope(&format!("knot/{}/evidence/source", crate::hex32(&SPACE))).unwrap();
+        let mut rules = ConstitutionRules::founder_only(founder.master_public_key().to_bytes());
+        rules.grant(CapabilityGrant {
+            id: ROOT_GRANT,
+            subject: founder.master_public_key().to_bytes(),
+            path_prefix: cap_path(&space_scope),
+            not_before_ms: 10,
+            expires_at_ms: Some(1_000),
+            delegation_depth: 2,
+        });
+        let issue = |capability: &Cap, nonce: u8| {
+            SignedDelegationCertificate::issue(
+                &founder,
+                DelegationCertificate::new(
+                    DelegationParent::Root(ROOT_GRANT),
+                    founder.master_public_key().to_bytes(),
+                    peer_id,
+                    CapabilityScope {
+                        domain: MOOT_DELEGATION_DOMAIN.into(),
+                        resource: MOOT.to_vec(),
+                        path_prefix: cap_path(capability),
+                        actions: [MOOT_ACT_ACTION.to_string()].into_iter().collect(),
+                    },
+                    15,
+                    20,
+                    Some(900),
+                    0,
+                    [nonce; 32],
+                ),
+            )
+            .unwrap()
+        };
+        let certificates = [
+            issue(&document_scope, 4),
+            issue(&evidence_read_scope, 5),
+            issue(&evidence_source_scope, 6),
+        ];
+        let mut delegations = MootDelegations::new();
+        let empty = KnotSpaceAuthoritySnapshot::from_gemot_authority(
+            &MootAuthority {
+                delegations: &delegations,
+                rules: &rules,
+                moot_id: MOOT,
+                now_ms: 50,
+            },
+            SPACE,
+            [peer_id],
+            [],
+        )
+        .unwrap();
+        let store = KnotSyncFileStore::open_commons(
+            roots.path().join("communal-authority.redb"),
+            SPACE,
+            [],
+        )
+        .unwrap();
+        let blobs = Arc::new(BlobStore::new());
+        let bytes = b"communal evidence remains under owner custody";
+        let portable = PortableContentRefV1::of(bytes);
+        let reference: KnotClipEvidenceRef = serde_json::from_value(serde_json::json!({
+            "content": portable,
+            "media_type": "text/plain",
+            "canonical_uri": "https://example.test/communal-evidence",
+            "role": KnotClipArtifactRoleV1::SourceResponse,
+        }))
+        .unwrap();
+        assert_eq!(
+            blobs.put_bytes(bytes.to_vec()).await.unwrap(),
+            reference.blob_hash().unwrap()
+        );
+        let mut host = KnotSyncHost::open_with_communal_evidence(
+            &store,
+            resident.master_keypair().to_seed(),
+            KnotSyncHostConfig {
+                authority: empty,
+                relay_urls: vec![],
+            },
+            Arc::clone(&blobs),
+            4096,
+        )
+        .await
+        .unwrap();
+        assert!(host.retain_evidence_custody(&reference).unwrap());
+        let scope = BlobScope::new(SPACE);
+        let readers = host.evidence_authorizer().unwrap();
+        let empty_revision = host.authority_revision();
+        assert!(store.admitted_writers().is_empty());
+        assert!(!readers.allows(scope, &peer_id, reference.blob_hash().unwrap()));
+        assert!(matches!(
+            host.fetch_evidence(&reference, peer_id).await,
+            Err(KnotSyncHostError::EvidenceUnauthorized)
+        ));
+
+        for certificate in certificates.iter().cloned() {
+            delegations
+                .accept_certificate(MOOT, &rules, certificate)
+                .unwrap();
+        }
+        let granted = KnotSpaceAuthoritySnapshot::from_gemot_authority(
+            &MootAuthority {
+                delegations: &delegations,
+                rules: &rules,
+                moot_id: MOOT,
+                now_ms: 50,
+            },
+            SPACE,
+            [peer_id],
+            [],
+        )
+        .unwrap();
+        assert!(host.apply_authority(granted).await.unwrap());
+        let granted_revision = host.authority_revision();
+        assert_ne!(granted_revision, empty_revision);
+        assert_eq!(store.admitted_writers(), vec![peer_id]);
+        assert!(readers.allows(scope, &peer_id, reference.blob_hash().unwrap()));
+        assert_eq!(
+            host.fetch_evidence(&reference, peer_id)
+                .await
+                .unwrap()
+                .status,
+            KnotEvidenceFetchStatus::AlreadyPresent
+        );
+
+        for (certificate, nonce) in certificates.iter().zip(7_u8..) {
+            let revocation = DelegationRevocation::new(
+                certificate.certificate.id(),
+                founder.master_public_key().to_bytes(),
+                certificate.certificate.scope.clone(),
+                60,
+                [nonce; 32],
+            );
+            delegations
+                .accept_revocation(SignedDelegationRevocation::issue(&founder, revocation).unwrap())
+                .unwrap();
+        }
+        let revoked = KnotSpaceAuthoritySnapshot::from_gemot_authority(
+            &MootAuthority {
+                delegations: &delegations,
+                rules: &rules,
+                moot_id: MOOT,
+                now_ms: 70,
+            },
+            SPACE,
+            [peer_id],
+            [],
+        )
+        .unwrap();
+        assert!(host.apply_authority(revoked).await.unwrap());
+        assert_ne!(host.authority_revision(), granted_revision);
+        assert_eq!(host.authority_revision(), empty_revision);
+        assert!(store.admitted_writers().is_empty());
+        assert!(!readers.allows(scope, &peer_id, reference.blob_hash().unwrap()));
+        assert!(matches!(
+            host.fetch_evidence(&reference, peer_id).await,
+            Err(KnotSyncHostError::EvidenceUnauthorized)
+        ));
+        assert_eq!(host.read_evidence(&reference).await.unwrap(), bytes);
+
+        host.close().await.unwrap();
+        blobs.shutdown().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn paired_peers_replicate_djot_then_fetch_and_reopen_verified_evidence() {
         let roots = tempdir().unwrap();
         let alice = InMemoryProvider::from_seed([71; 32]);
@@ -885,7 +1061,7 @@ mod tests {
 
         let alice_blobs = alice_evidence.resident_blob_store().unwrap();
         let bob_blobs = bob_evidence.resident_blob_store().unwrap();
-        let alice_host = KnotSyncHost::open_with_evidence(
+        let mut alice_host = KnotSyncHost::open_with_evidence(
             &alice_store,
             alice.master_keypair().to_seed(),
             KnotSyncHostConfig {
@@ -976,6 +1152,46 @@ mod tests {
             bob_host.read_evidence(&false_size).await,
             Err(KnotSyncHostError::EvidenceReference(_))
         ));
+
+        let post_unpair_artifact = KnotClipArtifactV1 {
+            role: KnotClipArtifactRoleV1::SourceResponse,
+            media_type: "text/plain".into(),
+            canonical_uri: "https://example.test/after-unpair".into(),
+            bytes: b"fresh bytes retained after peer revocation".to_vec(),
+        };
+        let post_unpair_reference = alice_evidence
+            .retain_async(&post_unpair_artifact)
+            .await
+            .unwrap();
+        assert!(
+            alice_host
+                .retain_evidence_custody(&post_unpair_reference)
+                .unwrap()
+        );
+        assert!(
+            alice_host
+                .apply_authority(KnotSpaceAuthoritySnapshot::default())
+                .await
+                .unwrap()
+        );
+        assert!(!alice_host.evidence_authorizer().unwrap().allows(
+            BlobScope::new(SPACE),
+            &bob_writer,
+            post_unpair_reference.blob_hash().unwrap()
+        ));
+        assert!(matches!(
+            bob_host
+                .fetch_evidence(&post_unpair_reference, alice_writer)
+                .await,
+            Err(KnotSyncHostError::EvidenceBlob(_))
+        ));
+        assert_eq!(
+            alice_host
+                .read_evidence(&post_unpair_reference)
+                .await
+                .unwrap(),
+            post_unpair_artifact.bytes
+        );
 
         alice_host.close().await.unwrap();
         bob_host.close().await.unwrap();

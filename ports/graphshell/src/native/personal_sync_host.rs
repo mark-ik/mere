@@ -993,7 +993,7 @@ impl PersonalSyncHost {
     /// Leave live sync and wait until the durable store can be reopened.
     pub async fn close(self) -> Result<(), PersonalSyncHostError> {
         let store_path = self.store_path.clone();
-        drop(self.joined);
+        self.joined.leave_and_wait().await?;
         self.network
             .close()
             .await
