@@ -1296,7 +1296,6 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
 async fn run() -> Result<(), String> {
     let document = document()?;
     document.set_title("Graphshell H3 · booting");
-    genet_layout::register_host_font(include_bytes!("../web/GraphshellSans.ttf").to_vec());
     let canvas: HtmlCanvasElement = element(&document, "graphshell-canvas")?
         .dyn_into()
         .map_err(|_| "#graphshell-canvas is not a canvas")?;

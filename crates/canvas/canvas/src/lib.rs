@@ -33,7 +33,7 @@ use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use crate::scene_paint::{Camera, ScenePaintStyle};
 use euclid::default::{Box2D, Point2D};
-use genet_layout::IncrementalLayout;
+use genet_livery::LiveryDocument;
 use genet_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
@@ -263,21 +263,15 @@ pub struct Canvas {
     /// an off-thread physics actor (P6): swap the snapshot source feeding this
     /// view, and the read sites here are untouched.
     view: LayoutView,
-    /// The pre-materialized node-children pool: a persistent genet DOM with one
-    /// `.gnode` per node under a `.stage` container (built once, mutated per
-    /// frame — never rebuilt structurally).
-    node_dom: ScriptedDom,
-    /// Incremental layout over `node_dom`; per-frame transform / class mutations
-    /// go through `apply` (paint-tier → `RepaintOnly`) and paint via
-    /// `emit_paint_list`. `None` until first built (or after a viewport change).
-    node_layout: Option<IncrementalLayout<DomNodeId>>,
-    /// node → its `.gnode` element in `node_dom`.
+    /// The pre-materialized node-children pool: a retained Livery/Buckram
+    /// document with one `.gnode` per node under a `.stage` container. Per-frame
+    /// transform/class mutations stay inside this session, so paint and layout
+    /// identity survive between frames.
+    node_document: LiveryDocument<ScriptedDom>,
+    /// node → its `.gnode` element in the retained document.
     gnode_of: HashMap<NodeKey, DomNodeId>,
     /// The `.stage` container element (carries the camera transform).
     stage_node: DomNodeId,
-    /// Viewport `node_layout` was built at; a change rebuilds it.
-    pool_w: u32,
-    pool_h: u32,
     camera: Camera,
     style: ScenePaintStyle,
     /// The content-surface backdrop color (themed; the host pushes it via

@@ -4,10 +4,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cambium::{AnyView, GenetAppRunner, GenetCtx, GenetElement, View, el, text};
-use genet_layout::{NoImageLoader, ScrollOffsets};
 use genet_scripted_dom::ScriptedDom;
 use netrender::Scene;
-use paint_list_api::PaintList as _;
 
 use graphshell::client::ActionDraftSemantics;
 
@@ -288,13 +286,13 @@ pub(crate) fn build_chrome_scene(
     let dom_ref = dom.borrow();
     let sheet = stylesheet(width, height);
     let sheets = [sheet.as_str()];
-    let layout = genet_layout::lay_out_content(&*dom_ref, &sheets, &NoImageLoader, width, height);
-    let (list, _, _) = layout.emit_band(&*dom_ref, 0, height, &ScrollOffsets::default());
-    Ok(paint_list_render::translate_paint_cmd_stream(
-        list.viewport(),
-        list.commands(),
-        list.fonts(),
-        list.images(),
+    genet_render::scene_from_scripted_dom(
+        &*dom_ref,
+        &sheets,
+        width,
+        height,
+        None,
+        &Default::default(),
     )
-    .scene)
+    .map_err(|error| error.to_string())
 }

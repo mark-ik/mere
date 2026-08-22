@@ -8,7 +8,6 @@ use kernel::graph::fixtures::GraphFixtures;
 use std::collections::{HashMap, HashSet};
 
 use euclid::default::Point2D;
-use genet_layout::IncrementalLayout;
 use kernel::graph::{
     ContainmentSubKind, EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind,
 };
@@ -17,6 +16,20 @@ use layout_dom_api::{LayoutDom, LayoutDomMut};
 use crate::build::*;
 use crate::palette;
 use crate::seiche_bridge::{build_simulation, visible_relation_edges};
+
+fn computed_value(
+    dom: &genet_scripted_dom::ScriptedDom,
+    node: genet_scripted_dom::NodeId,
+    property: &str,
+) -> Option<String> {
+    let styles = genet_livery::resolve_styles(
+        dom,
+        &genet_livery::StyleSet::cambium(&NODE_SHEET),
+        &genet_livery::Device::screen(800.0, 600.0),
+        &genet_livery::InteractionStates::default(),
+    );
+    styles.computed_style(node, property)
+}
 
 #[test]
 fn sample_graph_has_nodes_and_edges() {
@@ -100,17 +113,15 @@ fn gnode_fill_resolves_from_the_palette_custom_properties() {
     let (dom, gnode_of, _stage) = build_pool_dom(&g);
     let gnode = *gnode_of.values().next().expect("the pool has gnodes");
 
-    let layout = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
-
     let idle_bg = palette::rgb(palette::IDLE.bg);
     assert_eq!(
-        layout.computed_value(gnode, "background-color").as_deref(),
+        computed_value(&dom, gnode, "background-color").as_deref(),
         Some(idle_bg.as_str()),
         "the default .gnode must resolve --node-idle-bg through the cascade",
     );
     let idle_fg = palette::rgb(palette::IDLE.fg);
     assert_eq!(
-        layout.computed_value(gnode, "color").as_deref(),
+        computed_value(&dom, gnode, "color").as_deref(),
         Some(idle_fg.as_str()),
         "the default .gnode must resolve --node-idle-fg through the cascade",
     );
@@ -131,16 +142,15 @@ fn each_gnode_state_class_resolves_its_own_palette_entry() {
         ("gnode gnode-selected", palette::SELECTED),
     ] {
         dom.set_attribute(gnode, qual("class"), class);
-        let layout = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
         let want_bg = palette::rgb(expected.bg);
         let want_fg = palette::rgb(expected.fg);
         assert_eq!(
-            layout.computed_value(gnode, "background-color").as_deref(),
+            computed_value(&dom, gnode, "background-color").as_deref(),
             Some(want_bg.as_str()),
             "`{class}` must resolve its own --node-*-bg",
         );
         assert_eq!(
-            layout.computed_value(gnode, "color").as_deref(),
+            computed_value(&dom, gnode, "color").as_deref(),
             Some(want_fg.as_str()),
             "`{class}` must resolve its own --node-*-fg",
         );
@@ -164,22 +174,20 @@ fn representation_classes_change_caption_density_and_live_emphasis() {
         qual("class"),
         "gnode-idle gnode-representation-glyph",
     );
-    let glyph = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
     assert_eq!(
-        glyph.computed_value(caption, "display").as_deref(),
+        computed_value(&dom, caption, "display").as_deref(),
         Some("none"),
         "the glyph rung suppresses the card caption",
     );
     assert_eq!(
-        glyph.computed_value(gnode, "width").as_deref(),
+        computed_value(&dom, gnode, "width").as_deref(),
         Some("36px"),
         "representation styling does not invent a second footprint",
     );
 
     dom.set_attribute(gnode, qual("class"), "gnode-idle gnode-representation-card");
-    let card = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
     assert_eq!(
-        card.computed_value(caption, "display").as_deref(),
+        computed_value(&dom, caption, "display").as_deref(),
         Some("block"),
         "the card rung retains the ordinary labelled face",
     );
@@ -189,9 +197,8 @@ fn representation_classes_change_caption_density_and_live_emphasis() {
         qual("class"),
         "gnode-idle gnode-representation-live-pane",
     );
-    let live = IncrementalLayout::new(&dom, &NODE_SHEET, 800.0, 600.0);
     assert_eq!(
-        live.computed_value(caption, "font-weight").as_deref(),
+        computed_value(&dom, caption, "font-weight").as_deref(),
         Some("700"),
         "the live-capable rung visibly emphasizes its caption",
     );

@@ -36,12 +36,11 @@ python scripts/check_port_boundaries.py
 
 All passed.
 
-The dependency walk contains small Servo-derived utilities used by Genet's
-portable layout stack: `servo-base`, `servo-config`, `servo-config-macro`,
-`servo-malloc-size-of`, `servo-pixels`, and `servo-url`. The reverse path is
-`genet-layout -> mere-canvas -> mere -> graphshell`; it does not include the
-Servo application/runtime. The boundary checker permits those measured utility
-crates and rejects the runtime packages explicitly.
+At receipt time, the dependency walk contained small Servo-derived utilities
+through `genet-layout -> mere-canvas -> mere -> graphshell`; it did not include
+the Servo application/runtime. The 2026-08-21 Livery/Buckram cutover superseded
+that path with `genet-livery -> mere-canvas -> mere -> graphshell`. The boundary
+checker still rejects the runtime packages explicitly.
 
 The web cone contains none of:
 

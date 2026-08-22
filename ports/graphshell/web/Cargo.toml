@@ -21,7 +21,7 @@ sceno = { path = "../../../crates/scenograph/sceno" }
 scenotime = { path = "../../../crates/scenograph/scenotime" }
 serde.workspace = true
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-genet-layout = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-render = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # The present core, shared with every winit host. Booting wgpu, picking a
 # non-sRGB surface format, and rasterizing a Scene are not browser-specific, so
 # this crate no longer hand-rolls them; only the canvas target and the
@@ -31,8 +31,6 @@ genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch 
 js-sys = "0.3"
 netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 netrender_device = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
-paint_list_api = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
-paint_list_render = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 serde_json.workspace = true
 sha2.workspace = true
 uuid.workspace = true

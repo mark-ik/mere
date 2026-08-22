@@ -370,11 +370,9 @@ unsafe_code = "warn"
 [workspace.lints.clippy]
 all = "warn"
 
-# ─── Cross-repo render-stack alignment (meerkat → genet) ────────────────────
-# Turnstone pulls genet-layout for the cascade → layout → paint
-# path. Genet's fork family is published under distinct `genet-stylo*` names,
-# and genet's vendored stylo_taffy adapter consumes those registry packages
-# directly. The only remaining root redirect in this cone is the Taffy fork.
+# ─── Cross-repo render-stack alignment (Mere → Genet) ───────────────────────
+# Livery/Buckram consume Genet's Taffy fork directly. The retired Stylo layout
+# cone has no root patch in this workspace.
 [patch.crates-io]
 # Vello on wgpu 30, from the owned fork. Upstream vello 0.10 still requires
 # wgpu 29 and their own migration PR is stalled, so netrender (and through it
@@ -422,22 +420,9 @@ vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-3
 cubecl-runtime = { path = "support/patches/cubecl-runtime" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
-# genet-layout requires taffy =0.11.0-experimental-cache-fix.3 (genet's vendored
-# float-layout fork, not on crates.io). genet patches it in its own workspace; mere
-# does not inherit that, so redirect taffy to the fork from the owned genet repo by
-# BRANCH, never a rev (owned forks track branches). A fresh checkout anywhere resolves
-# it from git; a local genet checkout is picked up by the gitignored
-# `.cargo/config.toml` override, which lists genet's component/port dirs but NOT
-# support/patches/taffy, so it never collides with this patch. No local paths live in
-# this committed manifest, so it compiles anywhere.
+# Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
+# inherited by consumers, so Mere restates the branch-tracked source here.
 taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-# Same restatement for stylo_taffy: genet-layout deps stylo_taffy 0.3.0-beta.1,
-# whose crates.io copy requires stylo ^0.19 — while our stylo fork is 0.18, and
-# both `links = "servo_style_crate"`, so the registry copy is not merely wrong,
-# it is unresolvable. Genet vendors a stylo_taffy patched onto the fork; mere
-# does not inherit genet's patch table, so it restates it here (same rule as
-# taffy above; the local `.cargo/config.toml` redirects it to a genet checkout).
-stylo_taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # p2panda repointed to the owned fork (branch-tracked, same rule as above) for
 # the dalek-3 unification: the fork's core/encryption are ported to
 # ed25519/x25519-dalek 3 + curve25519-dalek 5, unifying with iroh >=1.0.3 and

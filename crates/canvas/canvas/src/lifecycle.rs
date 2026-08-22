@@ -106,17 +106,19 @@ impl Canvas {
         let view = sim.view();
         let physics = Physics::inline(sim, SETTLE_TICKS);
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&graph);
+        let node_document = genet_livery::LiveryDocument::new(
+            node_dom,
+            genet_livery::StyleSet::cambium(&crate::build::NODE_SHEET),
+            genet_livery::Device::screen(1.0, 1.0),
+        );
         Self {
             graph,
             physics,
             physics_paused: false,
             view,
-            node_dom,
-            node_layout: None,
+            node_document,
             gnode_of,
             stage_node,
-            pool_w: 0,
-            pool_h: 0,
             camera: Camera::default(),
             style: dark_scene_style(),
             backdrop: surface_bg(),
@@ -332,10 +334,13 @@ impl Canvas {
         // (Field regions — rebuild-on-mutation / new-node capture.)
         self.rebuild_coupling_forces();
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&self.graph);
-        self.node_dom = node_dom;
+        self.node_document = genet_livery::LiveryDocument::new(
+            node_dom,
+            genet_livery::StyleSet::cambium(&crate::build::NODE_SHEET),
+            genet_livery::Device::screen(1.0, 1.0),
+        );
         self.gnode_of = gnode_of;
         self.stage_node = stage_node;
-        self.node_layout = None;
         self.resync_view_to_graph();
         // Degree-based sizes shift when the topology changes, so re-push radii (also
         // seeds them for newly-spawned bodies). No re-settle here: the structural

@@ -67,12 +67,11 @@ paint_list_render = { git = "https://github.com/merely-made/netrender.git", bran
 paint_list_api = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 
-# The node-children layer: a persistent genet ScriptedDom (abs-pos node subtrees
-# under the camera-transformed container), driven through IncrementalLayout
-# (apply on the RepaintOnly path + emit_paint_list) from genet-layout and
-# composited with the underlay. layout_dom_api supplies the build traits + names.
+# The node-children layer: a retained Livery document over a persistent Genet
+# ScriptedDom (abs-pos node subtrees under the camera-transformed container),
+# painted through Buckram and composited with the underlay.
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-genet-layout = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-livery = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 layout_dom_api = { package = "layout-dom-api", git = "https://github.com/merely-made/genet.git", branch = "main" }
 
 tracing = { workspace = true }

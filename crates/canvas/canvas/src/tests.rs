@@ -3126,7 +3126,8 @@ fn score_representation_changes_the_class_painted_by_frame() {
         canvas.set_projection_score(Some(one_item_score(id, representation)));
         canvas.frame(800, 600);
         let painted = canvas
-            .node_dom
+            .node_document
+            .dom()
             .attribute(gnode, &ns, &class)
             .expect("frame assigns a gnode class");
         assert!(

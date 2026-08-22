@@ -7,11 +7,9 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::underlay::{canvas_paint_list_demoted_from_arrangement, identity_arrangement};
-use genet_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use genet_scripted_dom::NodeId as DomNodeId;
 use kernel::geometry::PortablePoint;
 use kernel::graph::NodeKey;
-use layout_dom_api::LayoutDomMut;
 use netrender::Scene;
 use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
@@ -24,8 +22,8 @@ use paint_list_render::{CompositeLayer, composite_paint_layers};
 use seiche::NodeCollider;
 
 use super::build::{
-    NODE_SHEET, background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay,
-    marquee_rect_cmds, set_class, set_style,
+    background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay, marquee_rect_cmds,
+    set_class, set_style,
 };
 use super::edge_cells::{
     edge_cell_for_relation, relation_cell_overlay, relation_family_color, selected_edge_overlay,
@@ -277,32 +275,13 @@ impl Canvas {
             underlay.splice_world_overlays(rings);
         }
 
-        // The node-children layer — the pre-materialized pool. Ensure the
-        // incremental layout exists at this viewport, then mutate the `.stage`
-        // camera transform and each gnode's transform + selection class. These are
-        // attribute-only (paint-tier), so `apply` stays on the RepaintOnly path —
-        // no per-frame relayout or DOM rebuild.
-        if self.node_layout.is_none() || self.pool_w != w || self.pool_h != h {
-            let mut discard = Vec::new();
-            self.node_dom.drain_mutations(&mut discard);
-            self.node_layout = Some(IncrementalLayout::new(
-                &self.node_dom,
-                &NODE_SHEET,
-                w as f32,
-                h as f32,
-            ));
-            self.pool_w = w;
-            self.pool_h = h;
-        }
+        // The node-children layer is one retained Livery document. Compute the
+        // host-owned placements first, then publish one DOM mutation batch so
+        // Livery can classify and retain the frame coherently.
         // The gnode pool is positioned as upright billboards (each gnode carries its
         // own screen-space transform via `Camera::to_screen` below), so the `.stage`
         // container is identity: the camera's foreshorten lives in each node's anchor,
         // not a shear on the whole stage. (Isometric camera P1 — billboards.)
-        set_style(
-            &mut self.node_dom,
-            self.stage_node,
-            "transform: translate(0px, 0px) scale(1);",
-        );
         // When the host renders these gnodes as chrome DOM elements (canvas-as-element)
         // the in-scene gnode layer is dropped below, so skip the per-gnode transform/class
         // updates: an empty set makes the loop a no-op, the costliest part of the frame on
@@ -312,11 +291,12 @@ impl Canvas {
         } else {
             self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect()
         };
+        let mut gnode_updates = Vec::with_capacity(gnodes.len());
         for (key, gnode) in gnodes {
             // Scope lens: hide a non-scoped node's DOM child (the underlay already
             // excludes it), so a scoped canvas shows only its subset. (Curated canvas.)
             if !node_visible(key) {
-                set_style(&mut self.node_dom, gnode, "display: none;");
+                gnode_updates.push((gnode, "display: none;".to_string(), None));
                 continue;
             }
             let pos = positions.get(&key).copied().unwrap_or_default();
@@ -346,18 +326,14 @@ impl Canvas {
             // overlap, so it is a harmless no-op there. (Isometric camera P2 — depth.)
             let (s, c) = self.camera.yaw.sin_cos();
             let depth = (pos.x * s + pos.y * c).round() as i32;
-            set_style(
-                &mut self.node_dom,
-                gnode,
-                &format!(
-                    "transform: translate({}px, {}px) scale({}); z-index: {}; width: {}px; height: {}px;",
-                    ax - half,
-                    (ay - lift) - half,
-                    z,
-                    depth,
-                    face,
-                    face
-                ),
+            let style = format!(
+                "transform: translate({}px, {}px) scale({}); z-index: {}; width: {}px; height: {}px;",
+                ax - half,
+                (ay - lift) - half,
+                z,
+                depth,
+                face,
+                face
             );
             // Selection wins (orange); otherwise color by activation state —
             // green open, red closed, blue idle (the default for an unset node).
@@ -389,31 +365,24 @@ impl Canvas {
                 Some(sceno::Representation::LivePane) => " gnode-representation-live-pane",
                 _ => " gnode-representation-card",
             };
-            set_class(
-                &mut self.node_dom,
-                gnode,
-                &format!("{state_class}{shape_class}{representation_class}"),
-            );
+            let class = format!("{state_class}{shape_class}{representation_class}");
+            gnode_updates.push((gnode, style, Some(class)));
         }
-        let mut muts = Vec::new();
-        self.node_dom.drain_mutations(&mut muts);
-        let applied = self
-            .node_layout
-            .as_mut()
-            .unwrap()
-            .apply(&self.node_dom, &NODE_SHEET, &muts);
-        if !matches!(applied, Applied::RepaintOnly | Applied::Unchanged) {
-            tracing::warn!(
-                ?applied,
-                "canvas pool: node layout left the RepaintOnly path"
-            );
-        }
-        let scroll = ScrollOffsets::<DomNodeId>::default();
-        let nodes_plist =
-            self.node_layout
-                .as_ref()
-                .unwrap()
-                .emit_paint_list(&self.node_dom, &scroll, viewport);
+        let stage_node = self.stage_node;
+        let (_, restyle) = self.node_document.mutate_dom(|dom| {
+            set_style(dom, stage_node, "transform: translate(0px, 0px) scale(1);");
+            for (gnode, style, class) in &gnode_updates {
+                set_style(dom, *gnode, style);
+                if let Some(class) = class {
+                    set_class(dom, *gnode, class);
+                }
+            }
+        });
+        tracing::debug!(?restyle, "canvas pool: Livery mutation batch");
+        let nodes_plist = self
+            .node_document
+            .frame(w, h)
+            .expect("canvas Livery/Buckram node frame");
 
         // Favicon layer: a textured quad over each on-screen tile that carries a
         // favicon. This layer is NOT under the `.stage` camera transform (it is a
