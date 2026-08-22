@@ -6,9 +6,13 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+#[cfg(feature = "personal-sync")]
+use std::time::Duration;
 
 use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::app_admission::AppId;
 use graphshell::native::app_admission::{AllowedAppRoutes, configured_app_endpoint};
 use graphshell::native::app_broker::{AppEndpointCatalog, serve_app_broker};
 #[cfg(feature = "personal-sync")]
@@ -16,6 +20,8 @@ use graphshell::native::device_broker::serve_browser_broker_with_cards;
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
 #[cfg(feature = "personal-sync")]
 use graphshell::native::device_sync;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::endpoint_catalog::{ResidentEndpointCatalog, ResidentEndpointRoute};
 use graphshell::native::identity_ui::SystemNativeIdentityUi;
 #[cfg(feature = "personal-sync")]
 use graphshell::native::owner_settings::{self, SyncOverrides};
@@ -24,6 +30,8 @@ use graphshell::native::pairing;
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
+#[cfg(feature = "personal-sync")]
+use graphshell::native::resident_knot::ResidentKnot;
 use graphshell::profile::{default_vault_dir, resolve_selected_profile};
 use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
 use personae::{IdentityVault, ProfileId};
@@ -588,6 +596,31 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         .with_vault_dir(args.vault_dir.clone()),
     );
 
+    #[cfg(feature = "personal-sync")]
+    let app_dir = owner_settings::default_app_dir();
+    #[cfg(feature = "personal-sync")]
+    let data_root =
+        device_sync::resolve_data_root(&app_dir, &args.vault_dir, args.data_root.clone())?;
+    #[cfg(feature = "personal-sync")]
+    let owner =
+        owner_settings::OwnerSettings::load(&owner_settings::settings_path(&app_dir, &profile_id))?;
+    #[cfg(feature = "personal-sync")]
+    let mut resident_knot = match owner.knot {
+        Some(config) => {
+            let resident = ResidentKnot::open(&data_root, config).await?;
+            tracing::info!(
+                sync = resident.sync_enabled(),
+                node = resident.node_id().map(|node| owner_settings::hex32(&node)),
+                space = resident
+                    .space_id()
+                    .map(|space| owner_settings::hex32(&space)),
+                "resident Knot route open"
+            );
+            Some(resident)
+        }
+        None => None,
+    };
+
     #[cfg(not(windows))]
     prepare_unix_agent_endpoint(match &args.agent {
         AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
@@ -614,7 +647,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "personal-sync")]
     let supplemental_cards = device_sync::start(
         personae.as_ref(),
-        &owner_settings::default_app_dir(),
+        &app_dir,
         &args.vault_dir,
         &profile_id,
         args.data_root.clone(),
@@ -630,13 +663,32 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let app_surface = supplemental_cards.clone();
     #[cfg(not(feature = "personal-sync"))]
     let app_surface: Option<graphshell::native::device_broker::DeviceSurfaceHandle> = None;
+    #[cfg(feature = "personal-sync")]
+    let (allowed_app_routes, app_catalog) = {
+        let mut catalog = ResidentEndpointCatalog::new();
+        let mut grants = vec![(
+            AppId::new("turnstone"),
+            ResidentEndpointRoute::new("identity", Duration::from_millis(50))?,
+        )];
+        if let Some(knot) = resident_knot.as_ref() {
+            knot.register(&mut catalog)?;
+            grants.push((AppId::new("turnstone"), ResidentKnot::route()));
+        }
+        (
+            AllowedAppRoutes::new(grants),
+            AppEndpointCatalog::new(catalog),
+        )
+    };
+    #[cfg(not(feature = "personal-sync"))]
+    let (allowed_app_routes, app_catalog) =
+        (AllowedAppRoutes::default(), AppEndpointCatalog::default());
     let apps = serve_app_broker(
         &args.app_endpoint,
         Arc::clone(&personae),
-        AllowedAppRoutes::default(),
+        allowed_app_routes,
         session_duration_ms(),
         app_surface,
-        AppEndpointCatalog::default(),
+        app_catalog,
     );
     #[cfg(feature = "personal-sync")]
     let browser = async {
@@ -675,20 +727,36 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     tokio::pin!(agent);
     tokio::pin!(browser);
     tokio::pin!(apps);
-    tokio::select! {
-        result = &mut agent => {
-            result?;
-            Err("SSH agent listener ended unexpectedly".into())
+    let mut knot_refresh = tokio::time::interval(Duration::from_secs(1));
+    knot_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let outcome = loop {
+        tokio::select! {
+            result = &mut agent => {
+                result?;
+                break Err("SSH agent listener ended unexpectedly".into())
+            }
+            result = &mut browser => {
+                result?;
+                break Err("browser device broker ended unexpectedly".into())
+            }
+            result = &mut apps => {
+                result?;
+                break Err("first-party application broker ended unexpectedly".into())
+            }
+            _ = knot_refresh.tick(), if resident_knot.is_some() => {
+                if let Some(knot) = resident_knot.as_mut()
+                    && let Err(error) = knot.refresh_settings().await
+                {
+                    tracing::warn!(%error, "could not refresh resident Knot authority");
+                }
+            }
         }
-        result = &mut browser => {
-            result?;
-            Err("browser device broker ended unexpectedly".into())
-        }
-        result = &mut apps => {
-            result?;
-            Err("first-party application broker ended unexpectedly".into())
-        }
+    };
+    #[cfg(feature = "personal-sync")]
+    if let Some(knot) = resident_knot {
+        knot.close().await?;
     }
+    outcome
 }
 
 fn session_duration_ms() -> u64 {

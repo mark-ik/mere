@@ -212,6 +212,7 @@ mod tests {
                 graph: "personal".into(),
                 ..SyncSettings::default()
             }),
+            knot: None,
         }
         .save(&path)
         .unwrap();
@@ -280,6 +281,7 @@ mod tests {
                 roster_roots: vec![owner_settings::hex32(&[0xc0; 32])],
                 ..SyncSettings::default()
             }),
+            knot: None,
         }
         .save(&path)
         .unwrap();

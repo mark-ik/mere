@@ -104,6 +104,40 @@ pub enum OwnerSettingsError {
 pub struct OwnerSettings {
     /// Absent means personal sync stays off for this profile.
     pub sync: Option<SyncSettings>,
+    /// Absent means this device host does not compose a resident Knot route.
+    pub knot: Option<KnotResidentSettings>,
+}
+
+/// Device-host selection for one startup-unlocked personal Knot vault.
+///
+/// Pairing, relays, and dial hints remain in Knot's persona-scoped settings.
+/// This profile-scoped record only selects which persona the current host
+/// exposes and configures local resource limits.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct KnotResidentSettings {
+    /// UUID of the Personae wallet whose Knot vault is exposed.
+    pub persona: String,
+    /// Stable label used when this machine first records its device identity.
+    pub device_label: String,
+    /// Override for the local iroh blob store. Normally left unset.
+    pub evidence_root: Option<PathBuf>,
+    /// Largest retained clip artifact.
+    pub max_artifact_bytes: u64,
+    /// Largest Djot source projected into one Rosette.
+    pub max_source_bytes: u64,
+}
+
+impl Default for KnotResidentSettings {
+    fn default() -> Self {
+        Self {
+            persona: String::new(),
+            device_label: "graphshell-device".into(),
+            evidence_root: None,
+            max_artifact_bytes: 64 * 1024 * 1024,
+            max_source_bytes: 8 * 1024 * 1024,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -643,6 +677,7 @@ mod tests {
                 },
                 ..SyncSettings::default()
             }),
+            knot: None,
         };
         settings.save(&path).unwrap();
         assert_eq!(OwnerSettings::load(&path).unwrap(), settings);
