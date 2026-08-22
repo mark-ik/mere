@@ -85,8 +85,22 @@
     "headed_embedding_cases": 11,
     "all_cases_match": true,
     "gpu_errors": [],
-    "new_layer_norm_case_headed_status": "unverified"
+    "new_layer_norm_case_headed_status": "failed_unpatched_passed_with_binary_alias_backport"
   },
   "limiting_layer": "Burn/CubeCL BrowserWebGpu asynchronous graph, task, or buffer lifetime: awaited readback barriers move the first visible corruption from the embedding block to pooling, while the ordinary graph returns tokenizer-id bits instead of the fixture-valid embedding",
-  "remaining_gate": "produce a model-free failing lifetime reproducer or validate a corrected upstream runtime row, then rerun the exact MiniLM fixture in headed Chromium"
+  "remaining_gate": "resolved by the 2026-08-22 same-allocation binary-input backport and headed MiniLM rerun",
+  "resolution": {
+    "status": "resolved",
+    "cause": "burn-cubecl bound one BrowserWebGpu allocation twice when both binary operands were clones of the same tensor",
+    "rejected_hypotheses": [
+      "managed handle mutability count alone",
+      "in-place output aliasing alone"
+    ],
+    "fix": "bind the allocation once, alias the second logical input to input zero, and write to a distinct output",
+    "model_free_receipt": "repros/burn_browser_embedding/receipts/2026-08-22_binary_alias_iab.json",
+    "forcing_consumer_receipt": "2026-08-22_minilm_after_binary_alias_patch.json",
+    "headed_fixture_max_abs_error": 8.940697e-8,
+    "cold_and_warm_unit_norm": true,
+    "gpu_errors": []
+  }
 }

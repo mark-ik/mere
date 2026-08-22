@@ -1,0 +1,111 @@
+{
+  "schema": "distillery.burn-browser-binary-alias/v1",
+  "generated_at": "2026-08-22T09:01:25.112Z",
+  "environment": {
+    "browser": "Chromium 151",
+    "os": "Windows",
+    "adapter_vendor": "nvidia",
+    "adapter_architecture": "lovelace",
+    "backend": "burn-wgpu/browser-webgpu",
+    "burn": "0.22.0-pre.2",
+    "cubecl": "0.11.0-pre.2"
+  },
+  "unpatched": {
+    "build_commit": "28ed6a4f",
+    "passed": false,
+    "embedding_cases": {
+      "count": 11,
+      "all_pass": true
+    },
+    "graph_cases": [
+      {
+        "name": "burn-unit-raw-mul-shared",
+        "shape": [1, 10],
+        "matches_expected": false,
+        "output_matches_input_bits": false,
+        "first_8": [-0.0032800108, 0, 0, 0, 0, 0, 0, 0],
+        "expected_first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "maximum_abs_error": 7.347352
+      },
+      {
+        "name": "burn-unit-raw-mul-independent",
+        "shape": [1, 10],
+        "matches_expected": true,
+        "output_matches_input_bits": false,
+        "first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "expected_first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "maximum_abs_error": 0
+      },
+      {
+        "name": "burn-unit-layer-norm-fresh",
+        "shape": [1, 10],
+        "matches_expected": false,
+        "output_matches_input_bits": true,
+        "first_8": [-0.6897, -2.7106, 2.2222, -1.033, -0.8933, 1.1765, 0.0601, 1.5252],
+        "expected_first_8": [-0.49897105, -1.9679997, 1.6177415, -0.748522, -0.6469716, 0.8576034, 0.046072084, 1.1110797],
+        "maximum_abs_error": 0.7426002
+      },
+      {
+        "name": "bert-width-layer-norm-fresh",
+        "shape": [1, 8, 384],
+        "matches_expected": false,
+        "output_matches_input_bits": true,
+        "first_8": [-2.142857, -2, -1.8571428, -1.7142857, -1.5714285, -1.4285715, -1.2857143, -1.1428572],
+        "expected_first_8": [-1.637678, -1.526295, -1.414912, -1.303529, -1.192146, -1.0807631, -0.96938, -0.8579971],
+        "maximum_abs_error": 0.50517905
+      }
+    ],
+    "gpu_errors": []
+  },
+  "experiments": {
+    "managed_handle_can_mut_at_one": "failed",
+    "distinct_binary_output": "failed",
+    "single_binding_with_second_input_alias": "passed"
+  },
+  "mere_backport": {
+    "passed": true,
+    "embedding_cases": {
+      "count": 11,
+      "all_pass": true
+    },
+    "graph_cases": [
+      {
+        "name": "burn-unit-raw-mul-shared",
+        "shape": [1, 10],
+        "matches_expected": true,
+        "output_matches_input_bits": false,
+        "first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "expected_first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "maximum_abs_error": 0
+      },
+      {
+        "name": "burn-unit-raw-mul-independent",
+        "shape": [1, 10],
+        "matches_expected": true,
+        "output_matches_input_bits": false,
+        "first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "expected_first_8": [0.4756861, 7.347352, 4.9381723, 1.067089, 0.7979849, 1.3841522, 0.00361201, 2.326235],
+        "maximum_abs_error": 0
+      },
+      {
+        "name": "burn-unit-layer-norm-fresh",
+        "shape": [1, 10],
+        "matches_expected": true,
+        "output_matches_input_bits": false,
+        "first_8": [-0.4989711, -1.9679997, 1.6177415, -0.748522, -0.6469716, 0.8576034, 0.046072073, 1.1110797],
+        "expected_first_8": [-0.49897105, -1.9679997, 1.6177415, -0.748522, -0.6469716, 0.8576034, 0.046072084, 1.1110797],
+        "maximum_abs_error": 5.9604645e-8
+      },
+      {
+        "name": "bert-width-layer-norm-fresh",
+        "shape": [1, 8, 384],
+        "matches_expected": true,
+        "output_matches_input_bits": false,
+        "first_8": [-1.6376779, -1.5262948, -1.4149119, -1.3035289, -1.192146, -1.080763, -0.96937996, -0.85799706],
+        "expected_first_8": [-1.637678, -1.526295, -1.414912, -1.303529, -1.192146, -1.0807631, -0.96938, -0.8579971],
+        "maximum_abs_error": 3.5762787e-7
+      }
+    ],
+    "gpu_errors": []
+  }
+}

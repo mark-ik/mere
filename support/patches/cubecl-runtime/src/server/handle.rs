@@ -70,6 +70,15 @@ impl Handle {
         self.memory.can_mut()
     }
 
+    /// Return whether both handles refer to the same logical allocation and view.
+    pub fn is_same_allocation(&self, other: &Self) -> bool {
+        self.memory.is_same_allocation(&other.memory)
+            && self.offset_start == other.offset_start
+            && self.offset_end == other.offset_end
+            && self.stream == other.stream
+            && self.size == other.size
+    }
+
     /// Returns the [`Binding`] corresponding to the current handle.
     pub fn binding(self) -> Binding {
         Binding {

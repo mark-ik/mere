@@ -173,6 +173,11 @@ impl ManagedMemoryHandle {
         Arc::strong_count(&self.handle_count) <= 2
     }
 
+    /// Return whether both handles refer to the same logical allocation.
+    pub fn is_same_allocation(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.descriptor, &other.descriptor)
+    }
+
     /// Return whether the current handle is free.
     pub fn is_free(&self) -> bool {
         Arc::strong_count(&self.descriptor) <= 1
@@ -295,5 +300,15 @@ mod tests {
 
         handle.descriptor().update_slice(42);
         assert_eq!(handle2.descriptor().slice(), 42);
+    }
+
+    #[test]
+    fn cloned_handles_share_logical_allocation_identity() {
+        let handle = ManagedMemoryHandle::new();
+        let clone = handle.clone();
+        let independent = ManagedMemoryHandle::new();
+
+        assert!(handle.is_same_allocation(&clone));
+        assert!(!handle.is_same_allocation(&independent));
     }
 }

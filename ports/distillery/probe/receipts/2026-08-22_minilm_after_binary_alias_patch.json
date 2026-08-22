@@ -1,0 +1,148 @@
+{
+  "schema": "distillery.browser-minilm-binary-alias-patch/v1",
+  "generated_at": "2026-08-22T09:06:57.026Z",
+  "build": {
+    "base_commit": "28ed6a4f55d4c1b735288660edb2f7a02622a863",
+    "worktree_dirty": true,
+    "burn": "0.22.0-pre.2",
+    "cubecl": "0.11.0-pre.2",
+    "patch": "support/patches/burn-cubecl"
+  },
+  "model": {
+    "id": "sentence-transformers/all-MiniLM-L6-v2",
+    "manifest_id": "blake3:47ddb75d69cea2108e9f248e263593a710a88f9f33bf77ab9307780e56fe94bb",
+    "component_sizes": {
+      "fetched_config": 612,
+      "resolved_config": 522,
+      "tokenizer": 466247,
+      "weights": 90868376
+    },
+    "integrity_matches": true
+  },
+  "environment": {
+    "browser": "Chromium 151",
+    "os": "Windows",
+    "adapter": {
+      "state": "available",
+      "vendor": "nvidia",
+      "architecture": "lovelace",
+      "device": null,
+      "description": null,
+      "note": "Browser adapter sample; Burn's worker-internal adapter identity is not exposed."
+    },
+    "wasm_bundle_bytes": 27972083
+  },
+  "storage": {
+    "before": {
+      "state": "best_effort",
+      "quota_bytes": 10737418240,
+      "usage_bytes": 0
+    },
+    "after": {
+      "state": "best_effort",
+      "quota_bytes": 10828604344,
+      "usage_bytes": 91186104
+    }
+  },
+  "gpu_errors": {
+    "cold": [],
+    "cancellation": [],
+    "warm": []
+  },
+  "cold": {
+    "kind": "sentence_embedding",
+    "backend": "burn-wgpu/dedicated-worker",
+    "dimensions": 384,
+    "all_finite": true,
+    "l2_norm": 1.0000002,
+    "first_8": [0.07780637, 0.07646257, 0.03770874, 0.060938977, 0.04880763, 0.0071116113, 0.020636769, 0.0286464],
+    "reference_max_abs_error": 8.940697e-8,
+    "reference_within_tolerance": true,
+    "output_hash": "41e878327af64557e8d14924e46c2fb19700730b27c93887cb9a0de27b308b61",
+    "repeat_outputs_match": true,
+    "matches_prior_worker": null,
+    "embeddings_per_second": 7.614213197969543,
+    "trace_all_finite": {
+      "embeddings": true,
+      "encoded": true,
+      "pooled": true,
+      "normalized": true
+    }
+  },
+  "cancellation": {
+    "canceled": true,
+    "canceled_at_state": "executing",
+    "termination_call_ms": 0.10000002384185791,
+    "quiet_window_ms": 300,
+    "late_messages": 0,
+    "cooperative_model_cancel": false,
+    "note": "This receipt proves worker termination and message cutoff, not ESP decoder cancellation or GPU-memory release.",
+    "gpu_errors": []
+  },
+  "warm": {
+    "kind": "sentence_embedding",
+    "backend": "burn-wgpu/dedicated-worker",
+    "dimensions": 384,
+    "all_finite": true,
+    "l2_norm": 1.0000002,
+    "first_8": [0.07780637, 0.07646257, 0.03770874, 0.060938977, 0.04880763, 0.0071116113, 0.020636769, 0.0286464],
+    "reference_max_abs_error": 8.940697e-8,
+    "reference_within_tolerance": true,
+    "output_hash": "41e878327af64557e8d14924e46c2fb19700730b27c93887cb9a0de27b308b61",
+    "repeat_outputs_match": true,
+    "matches_prior_worker": true,
+    "embeddings_per_second": 14.492753623188406,
+    "trace_all_finite": {
+      "embeddings": true,
+      "encoded": true,
+      "pooled": true,
+      "normalized": true
+    }
+  },
+  "frames": {
+    "idle": {
+      "count": 246,
+      "p50_ms": 6.099999999999454,
+      "p95_ms": 6.300000000000182,
+      "max_ms": 12.199999999999818,
+      "configured_bound_ms": 33.4,
+      "over_bound": 0
+    },
+    "cold": {
+      "count": 326,
+      "p50_ms": 6.099999999999454,
+      "p95_ms": 6.199999999999818,
+      "max_ms": 218.20000000000073,
+      "configured_bound_ms": 33.4,
+      "over_bound": 3
+    },
+    "cancellation": {
+      "count": 169,
+      "p50_ms": 6.099999999998545,
+      "p95_ms": 6.200000000000728,
+      "max_ms": 60.600000000000364,
+      "configured_bound_ms": 33.4,
+      "over_bound": 2
+    },
+    "warm": {
+      "count": 166,
+      "p50_ms": 6.100000000000364,
+      "p95_ms": 6.200000000000728,
+      "max_ms": 54.5,
+      "configured_bound_ms": 33.4,
+      "over_bound": 2
+    }
+  },
+  "conclusions": {
+    "artifact_reopened": true,
+    "integrity_reopened": true,
+    "output_repeated_across_workers": true,
+    "output_numerically_valid": true,
+    "reference_fixture_match": true,
+    "gpu_validation_errors_observed": false,
+    "worker_termination_quiet": true,
+    "execution_kind": "sentence_embedding",
+    "decoder_streaming_cancel_measured": false,
+    "limiting_layer": "unmeasured above this one-model embedding row"
+  }
+}

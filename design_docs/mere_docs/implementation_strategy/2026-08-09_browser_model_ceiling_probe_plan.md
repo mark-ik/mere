@@ -2,13 +2,12 @@
 
 **Date**: 2026-08-09
 
-**Status**: D2a complete for the 90.9 MB MiniLM row. D2b proves worker
-termination and warm restart but remains limited at its numerical/reference
-gate. The Cubek reduction patch now passes headed Chromium. Staged readback
-barriers move the remaining corruption between the embedding block and pooling,
-locating it in Burn/CubeCL BrowserWebGpu graph, task, or buffer lifetime rather
-than one fixed BERT operation. D2c is unopened. This remains independent of the
-personal mesh and Burn Remote.
+**Status**: D2a and the configured MiniLM D2b row are complete. A narrow
+Burn/CubeCL same-allocation binary-input backport restores fixture-valid cold
+and warm BrowserWebGpu embeddings after the independent Cubek reduction fix.
+Worker termination and message cutoff pass; cooperative decoder cancellation
+remains unmeasured. D2c is ready for a configured multi-model sweep. This
+remains independent of the personal mesh and Burn Remote.
 
 **Related**:
 [`2026-07-05_inference_provider_plan.md`](2026-07-05_inference_provider_plan.md),
@@ -27,7 +26,7 @@ render contention, and restart.
 
 ## 1. Current evidence and missing proof
 
-Already established:
+Established now:
 
 - ESP's default and model feature combinations compile for
   `wasm32-unknown-unknown`, including WGPU configurations.
@@ -35,15 +34,21 @@ Already established:
 - `muniment` has an IndexedDB backend.
 - Graphshell has reopened IndexedDB in a headed browser and reports the
   browser's persistence answer honestly.
+- Distillery stores, reopens, verifies, loads, and executes the 90.9 MB MiniLM
+  artifact inside a dedicated browser worker.
+- Cold and warm BrowserWebGpu embeddings are finite, unit norm, stable across
+  workers, and within `8.940697e-8` of ESP's native fixture.
+- Worker termination at `executing` yields no late message in the configured
+  300 ms quiet window.
 
 Still unproven:
 
-- a model artifact stored through the Eidetic model corridor reopens and loads
-  in a browser;
-- Burn WGPU initializes and runs that model in the browser;
-- execution can leave the UI thread, cancel, and restart cleanly;
-- the artifact and tensor copy ladder fits realistic memory; and
-- any particular model size is usable without unacceptable frame impact.
+- decoder streaming and cooperative ESP cancellation;
+- GPU-memory release after worker termination;
+- a first failing model-size or artifact-format row above MiniLM; and
+- whether isolated frame spikes remain acceptable under a configured product
+  workload. MiniLM p95 stays below 33.4 ms, but cold execution includes a
+  218.2 ms maximum interval.
 
 The existing Armillary actor compiling for wasm does not prove a browser thread
 or worker runtime. This plan requires a headed execution receipt.
@@ -280,3 +285,26 @@ product default is a later decision informed by these receipts.
   lifetime reproducer or corrected upstream runtime row makes the browser
   MiniLM vector fixture-valid. More models and D2c stay closed because they
   cannot clarify this lower boundary.
+- **2026-08-22, shared-input binary fix and MiniLM recovery**: the model-free
+  graph reduced the remaining failure to binary operations whose two logical
+  operands name the same GPU allocation. Scalar operations and independently
+  uploaded equal tensors pass. Shared multiply fails without a WebGPU error;
+  Burn's exact LayerNorm unit case and the `8 x 384` BERT-width case return the
+  input unchanged.
+
+  Tightening CubeCL's mutability count did not fix the graph, and forcing a
+  distinct output did not fix it. Binding the allocation once, aliasing the
+  second logical input to input zero, and writing to a distinct output passes
+  every graph and embedding case. Mere carries that narrow guard in vendored
+  `burn-cubecl` plus a logical-allocation identity helper in its existing
+  `cubecl-runtime` patch. Burn and CubeCL main still contain the susceptible
+  source path as of the audited revisions recorded in the upstream issue
+  draft.
+
+  The forcing consumer now passes in headed Chromium 151: cold and warm
+  MiniLM embeddings are finite and unit norm, repeat within and across workers,
+  and match ESP's native fixture within `8.940697e-8`. Integrity reopen,
+  worker termination, the 300 ms quiet window, and all GPU error scopes pass.
+  Frame p95 stays below the configured 33.4 ms bound, with seven isolated
+  over-bound intervals and a 218.2 ms cold maximum. D2c may now open with more
+  configured artifacts. Trainers still do not answer the ceiling question.

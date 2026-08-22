@@ -479,8 +479,6 @@ dependencies = [
 [[package]]
 name = "burn-cubecl"
 version = "0.22.0-pre.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a1db3d0cd0d081e2dd0b8dce41847bc88495cc3e9e89c47c391f8c6940263bd"
 dependencies = [
  "burn-backend",
  "burn-cubecl-fusion",

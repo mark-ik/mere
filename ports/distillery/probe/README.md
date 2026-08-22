@@ -29,42 +29,41 @@ page can fetch those local files without copying 90 MB into the probe tree.
 
 ## Claim boundary
 
-The 2026-08-22 row proves the artifact/copy ladder, worker-capable IndexedDB,
-WGPU model construction, worker termination, message cutoff, and a fresh
-worker's warm reopen. It records browser frame intervals and every unavailable
-memory fact as `unknown`.
+The 2026-08-22 MiniLM row now passes its numerical gate. Cold and warm workers
+produce the same finite, unit-norm 384-float embedding, within
+`8.940697e-8` of ESP's committed native fixture. The stored 90,868,376-byte
+weight artifact reopens with matching integrity, worker termination emits no
+late message in the 300 ms quiet window, and all WebGPU error scopes are empty.
+See the
+[recovered MiniLM receipt](receipts/2026-08-22_minilm_after_binary_alias_patch.json).
 
-It does not prove a correct WGPU embedding. The patched reduction is accepted
-without GPU validation errors, but the output still fails both unit norm and
-ESP's committed MiniLM fixture. Its first eight float bit patterns are exactly
-the input token ids. The page therefore ends in `limited`. See the checked-in
-[`patched receipt`](receipts/2026-08-22_minilm_after_cubek_patch.json) and the
-[`staged trace`](receipts/2026-08-22_minilm_stage_trace.json). The staged trace
-is sensitive to awaited readback barriers: a shorter trace first produces NaNs
-after embedding row zero, while a trace with more barriers keeps embeddings and
-the encoder finite before pooling produces NaNs. That moves the boundary from a
-specific BERT operation to BrowserWebGpu graph, task, or buffer lifetime.
+The root defect is a same-allocation binary launch in Burn/CubeCL. The published
+`burn-cubecl 0.22.0-pre.2` path binds one allocation twice when evaluating a
+graph such as `x.clone() * x`. Chromium executes that shape without a
+validation error but returns stale storage. Scalar operations and two
+independently uploaded operands pass. Burn LayerNorm uses the shared-input shape
+for its variance and therefore returned the input unchanged.
 
-The model-free
-[`embedding control`](repros/burn_browser_embedding/README.md) covers MiniLM's
-word-table geometry, model-sized upload pressure, queued consumers, `Param`,
-grouped word/position/token-type lookups, and the three-way sum. Its eleven
-headed cases pass with empty GPU error scopes. A BERT-width LayerNorm case has
-also been added and compiled; its headed receipt remains open.
+Mere carries a narrow `burn-cubecl` backport: detect equal logical allocation
+and view identity, bind the storage once, alias the second logical input to the
+first binding, and write to a distinct output. The
+[model-free receipt](repros/burn_browser_embedding/receipts/2026-08-22_binary_alias_iab.json)
+records the unpatched failure, two rejected fix hypotheses, and the passing
+backport. The existing Cubek extrema materialization patch remains independently
+required.
 
-See also the earlier
-[`interpretation`](../../../design_docs/mere_docs/testing/2026-08-21_browser_model_ceiling_receipt.md).
+Frame p95 stayed below the configured 33.4 ms bound in idle, cold,
+cancellation, and warm phases. There were seven isolated over-bound intervals:
+three cold, two during cancellation, and two warm; the cold maximum was 218.2
+ms. The receipt reports those spikes rather than treating p95 as a complete UI
+smoothness claim.
 
-The reduction failure now has a four-case standalone
-[`reproducer`](repros/cubek_browser_extrema/README.md) and a validated
-runtime-materialization patch. All four cases pass in headed Chromium with
-empty GPU error scopes; the
-[`reduction receipt`](repros/cubek_browser_extrema/receipts/2026-08-22_patched_iab.json)
-records the result. The remaining failure is downstream or independent of the
-extrema identity shader. Another model or a trainer would add variables before
-this lower execution-lifetime boundary is fixed. The useful next harness is a
-small graph whose result changes when an awaited readback barrier is inserted.
+This row proves artifact/copy-ladder viability, worker-owned IndexedDB, WGPU
+model construction, numerical execution, worker termination, message cutoff,
+and warm reopen for one MiniLM embedding artifact. It does not prove decoder
+streaming, cooperative ESP cancellation, GPU-memory release, an upper model-size
+ceiling, or a product default.
 
-It does not prove decoder streaming, cooperative ESP cancellation, GPU-memory
-release, a model-size ceiling, or a product default. Those require the decoder
-artifact and configurable size sweep retained by the D2 plan.
+D2c can now open. More models are useful only as a configured size and format
+sweep with the same cold/warm, fixture, frame, and cancellation receipts.
+Trainers remain outside this ceiling probe.

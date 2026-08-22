@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
-description = "Minimal headed BrowserWebGpu reproducer for Burn embedding lookup."
+description = "Headed BrowserWebGpu reproducer for Burn shared-input binary graphs."
 
 [workspace]
 
@@ -23,6 +23,10 @@ wasm-bindgen = "=0.2.122"
 wasm-bindgen-futures = "=0.4.72"
 web-sys = "=0.3.99"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["std", "wgpu"] }
+
 [patch.crates-io]
+burn-cubecl = { path = "../../../../../support/patches/burn-cubecl" }
 cubecl-runtime = { path = "../../../../../support/patches/cubecl-runtime" }
 cubek-reduce = { path = "../../../../../support/patches/cubek-reduce" }

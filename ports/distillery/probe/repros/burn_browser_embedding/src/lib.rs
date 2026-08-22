@@ -1,7 +1,7 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Minimal BrowserWebGpu reproducer for Burn's embedding/select path.
+//! Headed BrowserWebGpu reproducer for Burn embedding and shared-input binary graphs.
 
 use serde::{Deserialize, Serialize};
 
@@ -38,15 +38,20 @@ pub struct EmbeddingReceipt {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GraphCaseReceipt {
     pub name: String,
-    pub shape: [usize; 3],
+    pub shape: Vec<usize>,
+    pub input_barrier: bool,
+    pub input_round_trip_matches: Option<bool>,
     pub output_len: usize,
+    pub expected_len: usize,
     pub all_finite: bool,
     pub nan_count: usize,
     pub first_non_finite_index: Option<usize>,
     pub first_8: Vec<f32>,
     pub first_8_bits: Vec<u32>,
-    pub maximum_row_mean_abs: f32,
-    pub maximum_row_variance_error: f32,
+    pub expected_first_8: Vec<f32>,
+    pub output_matches_input_bits: bool,
+    pub first_mismatch_index: Option<usize>,
+    pub maximum_abs_error: f32,
     pub matches_expected: bool,
 }
 
@@ -57,6 +62,11 @@ mod browser {
     use wasm_bindgen::prelude::*;
 
     use super::{EmbeddingCaseReceipt, EmbeddingReceipt, GraphCaseReceipt};
+
+    const LAYER_NORM_EPSILON: f32 = 1.0e-5;
+    const BURN_LAYER_NORM_INPUT: [f32; 10] = [
+        -0.6897, -2.7106, 2.2222, -1.0330, -0.8933, 1.1765, 0.0601, 1.5252, -0.3630, 0.6728,
+    ];
 
     struct PendingEmbeddingCase {
         name: &'static str,
@@ -289,63 +299,251 @@ mod browser {
         })
     }
 
-    async fn run_layer_norm_case(device: &Device) -> Result<GraphCaseReceipt, JsValue> {
-        const ROWS: usize = 8;
-        const WIDTH: usize = 384;
-        let values = (0..ROWS * WIDTH)
-            .map(|index| ((index % 31) as f32 - 15.0) / 7.0)
-            .collect::<Vec<_>>();
-        let input: Tensor<3> = Tensor::from_data(TensorData::new(values, [1, ROWS, WIDTH]), device);
-        let output = LayerNormConfig::new(WIDTH)
-            .init(device)
-            .forward(input)
+    fn host_layer_norm(values: &[f32], width: usize) -> Vec<f32> {
+        values
+            .chunks_exact(width)
+            .flat_map(|row| {
+                let mean = row.iter().sum::<f32>() / width as f32;
+                let variance = row
+                    .iter()
+                    .map(|value| {
+                        let centered = *value - mean;
+                        centered * centered
+                    })
+                    .sum::<f32>()
+                    / width as f32;
+                let denominator = (variance + LAYER_NORM_EPSILON).sqrt();
+                row.iter().map(move |value| (*value - mean) / denominator)
+            })
+            .collect()
+    }
+
+    async fn finish_graph_case<const D: usize>(
+        name: &str,
+        input_values: &[f32],
+        expected: &[f32],
+        input_barrier: bool,
+        input_round_trip_matches: Option<bool>,
+        output: Tensor<D>,
+    ) -> Result<GraphCaseReceipt, JsValue> {
+        let shape = output.dims().to_vec();
+        let output = output
             .into_data_async()
             .await
-            .map_err(|error| JsValue::from_str(&format!("layer norm readback: {error:?}")))?
+            .map_err(|error| JsValue::from_str(&format!("{name} readback: {error:?}")))?
             .to_vec::<f32>()
-            .map_err(|error| JsValue::from_str(&format!("layer norm to Vec<f32>: {error:?}")))?;
+            .map_err(|error| JsValue::from_str(&format!("{name} to Vec<f32>: {error:?}")))?;
         let first_8 = output.iter().take(8).copied().collect::<Vec<_>>();
         let first_8_bits = first_8.iter().map(|value| value.to_bits()).collect();
+        let expected_first_8 = expected.iter().take(8).copied().collect::<Vec<_>>();
         let all_finite = output.iter().all(|value| value.is_finite());
         let nan_count = output.iter().filter(|value| value.is_nan()).count();
         let first_non_finite_index = output.iter().position(|value| !value.is_finite());
-        let mut maximum_row_mean_abs = 0.0_f32;
-        let mut maximum_row_variance_error = 0.0_f32;
-        for row in output.chunks_exact(WIDTH) {
-            let mean = row.iter().sum::<f32>() / WIDTH as f32;
-            let variance = row
+        let first_mismatch_index = output.iter().zip(expected).position(|(actual, expected)| {
+            !actual.is_finite() || (actual - expected).abs() > 1.0e-3
+        });
+        let maximum_abs_error = output
+            .iter()
+            .zip(expected)
+            .map(|(actual, expected)| (actual - expected).abs())
+            .fold(0.0_f32, f32::max);
+        let output_matches_input_bits = output.len() == input_values.len()
+            && output
                 .iter()
-                .map(|value| {
-                    let centered = *value - mean;
-                    centered * centered
-                })
-                .sum::<f32>()
-                / WIDTH as f32;
-            maximum_row_mean_abs = maximum_row_mean_abs.max(mean.abs());
-            maximum_row_variance_error = maximum_row_variance_error.max((variance - 1.0).abs());
-        }
-        let matches_expected = output.len() == ROWS * WIDTH
-            && all_finite
-            && maximum_row_mean_abs < 1.0e-4
-            && maximum_row_variance_error < 1.0e-3;
+                .zip(input_values)
+                .all(|(actual, input)| actual.to_bits() == input.to_bits());
+        let matches_expected =
+            output.len() == expected.len() && all_finite && first_mismatch_index.is_none();
         Ok(GraphCaseReceipt {
-            name: "bert-width-layer-norm".into(),
-            shape: [1, ROWS, WIDTH],
+            name: name.into(),
+            shape,
+            input_barrier,
+            input_round_trip_matches,
             output_len: output.len(),
+            expected_len: expected.len(),
             all_finite,
             nan_count,
             first_non_finite_index,
             first_8,
             first_8_bits,
-            maximum_row_mean_abs,
-            maximum_row_variance_error,
+            expected_first_8,
+            output_matches_input_bits,
+            first_mismatch_index,
+            maximum_abs_error,
             matches_expected,
         })
+    }
+
+    fn burn_unit_input(device: &Device) -> Tensor<2> {
+        Tensor::from_data(
+            TensorData::new(BURN_LAYER_NORM_INPUT.to_vec(), [1, 10]),
+            device,
+        )
+    }
+
+    fn burn_unit_centered(device: &Device) -> Tensor<2> {
+        let input = burn_unit_input(device);
+        let mean = input.clone().mean_dim(1);
+        input - mean
+    }
+
+    fn burn_unit_variance(device: &Device) -> Tensor<2> {
+        let centered = burn_unit_centered(device);
+        (centered.clone() * centered).mean_dim(1)
+    }
+
+    fn burn_unit_raw_squared(device: &Device) -> Tensor<2> {
+        let input = burn_unit_input(device);
+        input.clone() * input
+    }
+
+    fn burn_unit_raw_squared_independent(device: &Device) -> Tensor<2> {
+        burn_unit_input(device) * burn_unit_input(device)
+    }
+
+    fn burn_unit_centered_squared_independent(device: &Device) -> Tensor<2> {
+        burn_unit_centered(device) * burn_unit_centered(device)
+    }
+
+    fn burn_unit_variance_independent(device: &Device) -> Tensor<2> {
+        burn_unit_centered_squared_independent(device).mean_dim(1)
+    }
+
+    async fn run_layer_norm_graph_cases(device: &Device) -> Result<Vec<GraphCaseReceipt>, JsValue> {
+        let input = BURN_LAYER_NORM_INPUT.to_vec();
+        let mean = input.iter().sum::<f32>() / input.len() as f32;
+        let centered = input.iter().map(|value| *value - mean).collect::<Vec<_>>();
+        let variance =
+            centered.iter().map(|value| value * value).sum::<f32>() / centered.len() as f32;
+        let denominator = (variance + LAYER_NORM_EPSILON).sqrt();
+        let normalized = centered
+            .iter()
+            .map(|value| *value / denominator)
+            .collect::<Vec<_>>();
+        let raw_squared = input.iter().map(|value| value * value).collect::<Vec<_>>();
+        let raw_doubled = input.iter().map(|value| value + value).collect::<Vec<_>>();
+        let raw_times_two = input.iter().map(|value| value * 2.0).collect::<Vec<_>>();
+        let mut cases = vec![
+            finish_graph_case(
+                "burn-unit-mean-dim",
+                &input,
+                &[mean],
+                false,
+                None,
+                burn_unit_input(device).mean_dim(1),
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-centered",
+                &input,
+                &centered,
+                false,
+                None,
+                burn_unit_centered(device),
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-raw-add-shared",
+                &input,
+                &raw_doubled,
+                false,
+                None,
+                {
+                    let tensor = burn_unit_input(device);
+                    tensor.clone() + tensor
+                },
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-raw-mul-scalar",
+                &input,
+                &raw_times_two,
+                false,
+                None,
+                burn_unit_input(device) * 2.0,
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-raw-mul-shared",
+                &input,
+                &raw_squared,
+                false,
+                None,
+                burn_unit_raw_squared(device),
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-raw-mul-independent",
+                &input,
+                &raw_squared,
+                false,
+                None,
+                burn_unit_raw_squared_independent(device),
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-variance",
+                &input,
+                &[variance],
+                false,
+                None,
+                burn_unit_variance(device),
+            )
+            .await?,
+            finish_graph_case(
+                "burn-unit-variance-independent",
+                &input,
+                &[variance],
+                false,
+                None,
+                burn_unit_variance_independent(device),
+            )
+            .await?,
+        ];
+
+        let module = LayerNormConfig::new(10).init(device);
+        cases.push(
+            finish_graph_case(
+                "burn-unit-layer-norm-fresh",
+                &input,
+                &normalized,
+                false,
+                None,
+                module.forward(burn_unit_input(device)),
+            )
+            .await?,
+        );
+
+        const ROWS: usize = 8;
+        const WIDTH: usize = 384;
+        let wide_input = (0..ROWS * WIDTH)
+            .map(|index| ((index % 31) as f32 - 15.0) / 7.0)
+            .collect::<Vec<_>>();
+        let wide_expected = host_layer_norm(&wide_input, WIDTH);
+        let wide_tensor: Tensor<3> = Tensor::from_data(
+            TensorData::new(wide_input.clone(), [1, ROWS, WIDTH]),
+            device,
+        );
+        cases.push(
+            finish_graph_case(
+                "bert-width-layer-norm-fresh",
+                &wide_input,
+                &wide_expected,
+                false,
+                None,
+                LayerNormConfig::new(WIDTH)
+                    .init(device)
+                    .forward(wide_tensor),
+            )
+            .await?,
+        );
+        Ok(cases)
     }
 
     #[wasm_bindgen]
     pub async fn run_embedding_repro() -> Result<String, JsValue> {
         let device = Device::wgpu_async(DeviceKind::default()).await;
+        let graph_cases = run_layer_norm_graph_cases(&device).await?;
         let mut cases = vec![
             run_case("tiny-mixed", 4, 3, &[2, 0, 3, 1], 0, 0, 0, false, &device).await?,
             run_case(
@@ -434,11 +632,10 @@ mod browser {
             .await?,
         ];
         cases.extend(run_grouped_lookups(&device).await?);
-        let graph_cases = vec![run_layer_norm_case(&device).await?];
         let all_cases_match = cases.iter().all(|case| case.matches_expected)
             && graph_cases.iter().all(|case| case.matches_expected);
         let receipt = EmbeddingReceipt {
-            schema: "distillery.burn-browser-embedding-repro/v2".into(),
+            schema: "distillery.burn-browser-embedding-repro/v3".into(),
             backend: "burn-wgpu/browser-webgpu".into(),
             cases,
             graph_cases,
@@ -456,7 +653,7 @@ mod tests {
     #[test]
     fn receipt_contract_round_trips() {
         let receipt = EmbeddingReceipt {
-            schema: "distillery.burn-browser-embedding-repro/v2".into(),
+            schema: "distillery.burn-browser-embedding-repro/v3".into(),
             backend: "test".into(),
             cases: Vec::new(),
             graph_cases: Vec::new(),
@@ -466,6 +663,64 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<EmbeddingReceipt>(&json).unwrap(),
             receipt
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn shared_binary_and_layer_norm_pass_native_wgpu() {
+        use burn::nn::LayerNormConfig;
+        use burn::tensor::{Device, DeviceKind, Tensor, TensorData};
+
+        let device = Device::wgpu(DeviceKind::DiscreteGpu(0));
+        let input = [
+            -0.6897_f32,
+            -2.7106,
+            2.2222,
+            -1.0330,
+            -0.8933,
+            1.1765,
+            0.0601,
+            1.5252,
+            -0.3630,
+            0.6728,
+        ];
+        let tensor: Tensor<2> =
+            Tensor::from_data(TensorData::new(input.to_vec(), [1, 10]), &device);
+        let squared = (tensor.clone() * tensor.clone())
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
+        let expected_squared = input.map(|value| value * value);
+        assert!(
+            squared
+                .iter()
+                .zip(expected_squared)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-6)
+        );
+
+        let mean = input.iter().sum::<f32>() / input.len() as f32;
+        let variance = input
+            .iter()
+            .map(|value| {
+                let centered = *value - mean;
+                centered * centered
+            })
+            .sum::<f32>()
+            / input.len() as f32;
+        let denominator = (variance + 1.0e-5).sqrt();
+        let expected = input.map(|value| (value - mean) / denominator);
+        let normalized = LayerNormConfig::new(10)
+            .init(&device)
+            .forward(tensor)
+            .into_data()
+            .to_vec::<f32>()
+            .unwrap();
+        assert!(
+            normalized
+                .iter()
+                .zip(expected)
+                .all(|(actual, expected)| (actual - expected).abs() < 1.0e-3)
         );
     }
 }

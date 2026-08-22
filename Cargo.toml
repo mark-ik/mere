@@ -418,6 +418,13 @@ vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-3
 # upstream fixes bce4e489 and 7a2ee1c3. Delete this patch when a Burn/CubeCL
 # release containing those fixes replaces the prerelease row.
 cubecl-runtime = { path = "support/patches/cubecl-runtime" }
+# burn-cubecl 0.22.0-pre.2 binds a shared tensor allocation twice for binary
+# operations such as `x.clone() * x`. BrowserWebGpu silently returns stale
+# storage for that launch shape, breaking LayerNorm. The vendored launcher
+# binds the allocation once and aliases the second logical input. Delete with
+# the runtime identity helper when an upstream release passes Distillery's
+# headed same-allocation and BERT-width LayerNorm receipts.
+burn-cubecl = { path = "support/patches/burn-cubecl" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not

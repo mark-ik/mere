@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Burn Browser Embedding Reproducer</title>
+  <title>Burn Browser Binary-Graph Reproducer</title>
   <style>
     body { max-width: 64rem; margin: 3rem auto; padding: 0 1rem; font: 16px/1.5 system-ui; }
     button { font: inherit; padding: .55rem .9rem; }
@@ -11,9 +11,9 @@
   </style>
 </head>
 <body>
-  <h1>Burn Browser Embedding Reproducer</h1>
-  <p>Deterministic tiny and BERT-width embedding lookups through BrowserWebGpu.</p>
-  <button id="run" type="button">Run embedding cases</button>
+  <h1>Burn Browser Binary-Graph Reproducer</h1>
+  <p>Shared-input binary operations, LayerNorm, and embedding controls through BrowserWebGpu.</p>
+  <button id="run" type="button">Run graph cases</button>
   <p id="status">idle</p>
   <pre id="output">{}</pre>
   <script type="module">
