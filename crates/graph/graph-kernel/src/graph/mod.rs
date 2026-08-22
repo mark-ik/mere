@@ -24,6 +24,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use uuid::Uuid;
 
 pub use chartulary::stemma::TransitionKind as NodeHistoryTransitionKind;
+/// The stable address of a node's out-of-line representation.
+pub use muniment::Hash as ContentHash;
 
 use crate::address::{Address, AddressKind, address_from_url, cached_host_from_url, detect_mime};
 use crate::persistence::{

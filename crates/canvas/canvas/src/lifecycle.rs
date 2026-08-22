@@ -681,6 +681,26 @@ impl Canvas {
         )
     }
 
+    /// Attach or clear a content-addressed representation on `member`.
+    /// Bytes are deposited by the host before this call; Canvas carries and
+    /// journals only their muniment address.
+    pub fn set_node_content_for(
+        &mut self,
+        member: uuid::Uuid,
+        content: Option<kernel::graph::ContentHash>,
+    ) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
+            return false;
+        };
+        matches!(
+            kernel::graph::apply::apply_graph_delta(
+                &mut self.graph,
+                kernel::graph::apply::GraphDelta::SetNodeContent { key, content },
+            ),
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+        )
+    }
+
     /// Stamp a preview thumbnail PNG onto the node `member`, if it exists. This mirrors
     /// [`set_node_favicon`](Self::set_node_favicon): metadata-only, no reconcile, no layout
     /// disturbance. Used when the host already rendered a snapshot preview and wants to persist

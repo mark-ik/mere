@@ -217,6 +217,10 @@ pub struct PersistedNode {
     /// written before containment load with `None`.
     #[serde(default)]
     pub nested: Option<String>,
+    /// Content-addressed out-of-line representation. Hex keeps graph.json
+    /// inspectable and lets snapshots written before this field load as None.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_hash: Option<String>,
 }
 
 /// Full graph snapshot for periodic saves.

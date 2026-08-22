@@ -507,6 +507,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             derivations: Vec::new(),
             last_session_visited: 0,
             nested: None,
+            content_hash: None,
         }],
         edges: vec![PersistedEdge {
             from_node_id: Uuid::new_v4().to_string(),
@@ -572,6 +573,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 derivations: Vec::new(),
                 last_session_visited: 0,
                 nested: None,
+                content_hash: None,
             },
             PersistedNode {
                 node_id: Uuid::new_v4().to_string(),
@@ -600,6 +602,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 derivations: Vec::new(),
                 last_session_visited: 0,
                 nested: None,
+                content_hash: None,
             },
         ],
         edges: vec![],

@@ -53,6 +53,7 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         body: None,
         last_session_visited: 0,
         nested: None,
+        content_hash: None,
     }
 }
 
@@ -70,6 +71,72 @@ fn node_body_round_trips() {
         graph.to_snapshot().nodes[0].body.as_deref(),
         Some("# Notes\n\nbody"),
     );
+}
+
+#[test]
+fn node_content_round_trips_and_excludes_inline_body() {
+    let mut graph = Graph::new();
+    let key = graph.add_node(
+        "smolweb://example.test/file.bin".to_string(),
+        Point2D::new(0.0, 0.0),
+    );
+    let content = ContentHash::of(b"downloaded bytes");
+
+    let _ = apply::apply_graph_delta(
+        &mut graph,
+        apply::GraphDelta::SetNodeBody {
+            key,
+            body: Some("legacy inline body".to_string()),
+        },
+    );
+    let _ = apply::apply_graph_delta(
+        &mut graph,
+        apply::GraphDelta::SetNodeContent {
+            key,
+            content: Some(content),
+        },
+    );
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+    let (_, node) = restored
+        .get_node_by_url("smolweb://example.test/file.bin")
+        .expect("restored download node");
+    assert_eq!(node.content, Some(content));
+    assert_eq!(node.body, None);
+
+    let restored_key = restored
+        .get_node_by_url("smolweb://example.test/file.bin")
+        .expect("restored download node")
+        .0;
+    let mut restored = restored;
+    let _ = apply::apply_graph_delta(
+        &mut restored,
+        apply::GraphDelta::SetNodeBody {
+            key: restored_key,
+            body: Some("authored replacement".to_string()),
+        },
+    );
+    let node = restored.get_node(restored_key).expect("updated node");
+    assert_eq!(node.body.as_deref(), Some("authored replacement"));
+    assert_eq!(node.content, None);
+}
+
+#[test]
+fn snapshot_without_content_hash_stays_readable() {
+    let snapshot = snapshot_with(
+        persisted_node(Uuid::new_v4(), "https://legacy.example/"),
+        SharedNavigationMemory::empty(),
+    );
+    let mut json = serde_json::to_value(snapshot).expect("serialize snapshot");
+    json["nodes"][0]
+        .as_object_mut()
+        .expect("persisted node object")
+        .remove("content_hash");
+
+    let legacy: crate::persistence::GraphSnapshot =
+        serde_json::from_value(json).expect("load legacy snapshot");
+    let graph = Graph::from_snapshot(&legacy);
+    assert_eq!(graph.nodes().next().expect("restored node").1.content, None);
 }
 
 #[test]

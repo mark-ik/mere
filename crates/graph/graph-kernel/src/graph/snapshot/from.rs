@@ -80,6 +80,13 @@ impl Graph {
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
                 node.body = pnode.body.clone();
                 node.nested = pnode.nested.clone().map(codicil::LogId::new);
+                node.content = pnode
+                    .content_hash
+                    .as_deref()
+                    .and_then(muniment::Hash::from_hex);
+                if node.content.is_some() {
+                    node.body = None;
+                }
             }
             // One-time legacy-column import. Canonical saves put these records
             // in `facets.json`; the old graph fields are written empty.
