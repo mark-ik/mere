@@ -40,6 +40,12 @@ ESP's committed MiniLM fixture. The page therefore ends in `limited`. See the
 checked-in [`receipt`](receipts/2026-08-21_minilm_browser_ceiling.json) and the
 [`interpretation`](../../../design_docs/mere_docs/testing/2026-08-21_browser_model_ceiling_receipt.md).
 
+The reduction failure now has a four-case standalone
+[`reproducer`](repros/cubek_browser_extrema/README.md) and a candidate
+runtime-materialization patch. The main probe is wired to that candidate for
+the next headed run. The checked-in MiniLM receipt remains the authority until
+that run passes the numerical fixture; a patched wasm build is not a receipt.
+
 It does not prove decoder streaming, cooperative ESP cancellation, GPU-memory
 release, a model-size ceiling, or a product default. Those require the decoder
 artifact and configurable size sweep retained by the D2 plan.

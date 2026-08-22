@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cubek Browser Extrema Reproducer</title>
+  <style>
+    body { max-width: 64rem; margin: 3rem auto; padding: 0 1rem; font: 16px/1.5 system-ui; }
+    button { font: inherit; padding: .55rem .9rem; }
+    pre { padding: 1rem; overflow: auto; background: #111; color: #eee; }
+  </style>
+</head>
+<body>
+  <h1>Cubek Browser Extrema Reproducer</h1>
+  <p>One Burn tensor reduction, including finite, infinity, and NaN cases.</p>
+  <button id="run" type="button">Run reduction cases</button>
+  <p id="status">idle</p>
+  <pre id="output">{}</pre>
+  <script type="module">
+    const runButton = document.querySelector("#run");
+    const status = document.querySelector("#status");
+    const output = document.querySelector("#output");
+
+    async function run() {
+      runButton.disabled = true;
+      status.textContent = "running";
+      const receipt = await new Promise((resolve) => {
+        const worker = new Worker("./worker.js", { type: "module" });
+        const finish = (result) => {
+          clearTimeout(timeout);
+          worker.terminate();
+          resolve(result);
+        };
+        const timeout = setTimeout(() => finish({
+          kind: "timeout",
+          error: "worker produced no result within 60 seconds",
+          gpu_errors: [],
+        }), 60_000);
+        worker.addEventListener("message", (event) => {
+          finish(event.data);
+        }, { once: true });
+        worker.addEventListener("error", (event) => finish({
+          kind: "worker_error",
+          error: event.message,
+          gpu_errors: [],
+        }), { once: true });
+        worker.postMessage({ command: "run" });
+      });
+      const passed = receipt.kind === "result"
+        && receipt.result.all_cases_match
+        && receipt.gpu_errors.length === 0;
+      receipt.passed = passed;
+      output.textContent = JSON.stringify(receipt, null, 2);
+      status.textContent = passed ? "passed" : "failed";
+      runButton.disabled = false;
+      return receipt;
+    }
+
+    runButton.addEventListener("click", run);
+    window.cubekExtremaRepro = { run };
+  </script>
+</body>
+</html>

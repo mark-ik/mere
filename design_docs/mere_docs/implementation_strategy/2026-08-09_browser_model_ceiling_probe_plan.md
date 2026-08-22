@@ -243,3 +243,14 @@ product default is a later decision informed by these receipts.
   fix it. D2b resumes when an upstream or narrowly justified patch produces a
   fixture-valid vector. Decoder cancellation and the size sweep stay closed
   until then.
+- **2026-08-21, reduction extraction**: reduced the BrowserWebGpu failure to a
+  standalone four-case Burn extrema harness without model, tokenizer, storage,
+  or ESP dependencies. The released Cubek identity bitcasts literal infinity
+  bits; Chromium evaluates the expression as a constant and rejects its
+  non-finite `f32`. This is the WGSL half missing from CubeCL's already-landed
+  constant-bitcast materialization fix for C++ dialects. A probe-local
+  `cubek-reduce` patch now preserves infinity and NaN semantics by passing the
+  bits through a mutable kernel local. Its native WGPU infinity and NaN suites,
+  wasm build, generated-WGSL inspection, and strict Clippy gates pass. The
+  post-patch headed browser and MiniLM fixture receipts remain open, so D2b's
+  status has not advanced.

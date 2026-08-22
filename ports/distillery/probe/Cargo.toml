@@ -35,3 +35,4 @@ web-sys = { version = "=0.3.99", features = [
 
 [patch.crates-io]
 cubecl-runtime = { path = "../../../support/patches/cubecl-runtime" }
+cubek-reduce = { path = "../../../support/patches/cubek-reduce" }
