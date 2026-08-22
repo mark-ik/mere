@@ -29,7 +29,7 @@ mod writer;
 
 pub use clip_evidence::{
     BlobClipEvidenceStore, FileClipEvidenceStore, KnotClipEvidenceRef, KnotClipEvidenceStore,
-    clip_evidence_references,
+    KnotContentRetentionPort, clip_evidence_references,
 };
 pub use content_classes::{
     FILE_CLASS, FILE_DOCUMENT_FACET, KnotContentClasses, NOTE_CLASS, NOTE_DOCUMENT_FACET,
@@ -38,7 +38,7 @@ pub use directory::{DirectorySource, DiskDocument, IgnorePolicy};
 pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::{
     KnotEffectAuthority, KnotEffectFetcher, KnotEffectMode, KnotEffectPolicy, KnotEndpoint,
-    KnotRosetteConfig, KnotWriteGrant,
+    KnotResidentSource, KnotRosetteConfig, KnotWriteGrant,
 };
 pub use mark::{
     MARK_ALPN, MARK_DEFAULT_PORT, MARK_MAX_DOCUMENT_BYTES, MARK_MAX_METADATA_BYTES,

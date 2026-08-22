@@ -14,8 +14,8 @@ use personae::{Ed25519Keypair, PersonaId};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
-    KnotEndpoint, KnotPublishSource, KnotSyncEvent, KnotSyncFileStore, KnotVault, KnotWriteGrant,
-    VaultDocument,
+    KnotEndpoint, KnotPublishSource, KnotResidentSource, KnotSyncEvent, KnotSyncFileStore,
+    KnotVault, KnotWriteGrant, VaultDocument,
 };
 
 const VAULT_KEY_CONTEXT: &str = "mere.knot.persona-vault.root.v1";
@@ -129,7 +129,12 @@ impl StartupUnlockedPersonalVault {
 
     /// Consume the recovered authority into a writable Graphshell endpoint.
     pub fn into_endpoint(self, grant: KnotWriteGrant) -> Result<KnotEndpoint, String> {
-        KnotEndpoint::from_synced_vault(self.vault, self.store, *self.signing_seed, grant)
+        Ok(self.into_resident_source()?.session(Some(grant)))
+    }
+
+    /// Consume the startup unlock into one cloneable resident source.
+    pub fn into_resident_source(self) -> Result<KnotResidentSource, String> {
+        KnotResidentSource::from_synced_vault(self.vault, self.store, *self.signing_seed)
     }
 
     /// Split one startup unlock between the mutable Graphshell editor endpoint
@@ -140,13 +145,22 @@ impl StartupUnlockedPersonalVault {
         self,
         grant: KnotWriteGrant,
     ) -> Result<(KnotEndpoint, KnotPublishSource), String> {
+        let (source, publish) = self.into_resident_source_and_publish_source()?;
+        Ok((source.session(Some(grant)), publish))
+    }
+
+    /// Split one startup unlock between a cloneable authoring source and the
+    /// independently retained read-only publishing source.
+    pub fn into_resident_source_and_publish_source(
+        self,
+    ) -> Result<(KnotResidentSource, KnotPublishSource), String> {
         let publish_vault = Arc::new(self.vault.fork_read_handle()?);
         let publish_store = self.store.clone();
         let publish_identity = Ed25519Keypair::from_seed(*self.signing_seed);
-        let endpoint =
-            KnotEndpoint::from_synced_vault(self.vault, self.store, *self.signing_seed, grant)?;
+        let source =
+            KnotResidentSource::from_synced_vault(self.vault, self.store, *self.signing_seed)?;
         Ok((
-            endpoint,
+            source,
             KnotPublishSource::from_unlocked(publish_identity, publish_store, publish_vault),
         ))
     }

@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use chartulary::{Addressed, Labeled};
 use chirograph::{
@@ -39,8 +41,8 @@ use zeroize::Zeroizing;
 
 use crate::{
     CmudictPronunciations, DirectorySource, DirectoryWatcher, DiskDocument, DocumentFormat,
-    KnotClipEvidenceRef, KnotClipEvidenceStore, KnotDocumentProjection, KnotSyncEvent,
-    KnotSyncFileStore, KnotVault, RosetteConfig, RosetteInteriorKind, VaultDocument,
+    KnotClipEvidenceRef, KnotClipEvidenceStore, KnotContentRetentionPort, KnotDocumentProjection,
+    KnotSyncEvent, KnotSyncFileStore, KnotVault, RosetteConfig, RosetteInteriorKind, VaultDocument,
     project_rosette,
 };
 
@@ -159,7 +161,24 @@ enum Source {
         watcher: Box<DirectoryWatcher>,
     },
     Fixture(Vec<DiskDocument>),
-    Vault(VaultSource),
+    Vault(KnotResidentSource),
+}
+
+/// One opened Knot vault authority shared by every admitted local session.
+///
+/// The resident owns source truth and serializes its mutations. Each
+/// [`KnotEndpoint`] created from it keeps its own disclosure caches, revision
+/// cursor, effects, and Graphshell session id.
+#[derive(Clone)]
+pub struct KnotResidentSource {
+    inner: Arc<ResidentVault>,
+}
+
+struct ResidentVault {
+    retention: Mutex<Option<KnotContentRetentionPort>>,
+    state: Mutex<VaultSource>,
+    session_prefix: String,
+    next_session: AtomicU64,
 }
 
 struct VaultSource {
@@ -180,6 +199,170 @@ enum VaultSyncAuthority {
         signing_seed: Zeroizing<[u8; 32]>,
         keys: DataKeyring,
     },
+}
+
+impl KnotResidentSource {
+    fn new(state: VaultSource) -> Self {
+        let digest = blake3::hash(state.vault.root().to_string_lossy().as_bytes());
+        Self {
+            inner: Arc::new(ResidentVault {
+                retention: Mutex::new(None),
+                state: Mutex::new(state),
+                session_prefix: format!("knot:vault:{}", &digest.to_hex()[..16]),
+                next_session: AtomicU64::new(1),
+            }),
+        }
+    }
+
+    /// Open one read-only resident source around an already-unlocked vault.
+    pub fn from_vault(vault: KnotVault) -> Self {
+        Self::new(VaultSource {
+            vault,
+            sync: None,
+            conflicts: BTreeSet::new(),
+            document_heads: BTreeMap::new(),
+            pending_history: false,
+        })
+    }
+
+    /// Open one personal signed source authority.
+    pub fn from_synced_vault(
+        vault: KnotVault,
+        store: KnotSyncFileStore,
+        signing_seed: [u8; 32],
+    ) -> Result<Self, String> {
+        let projection = pollster::block_on(store.projection(&vault))
+            .map_err(|error| format!("could not project Knot sync store: {error}"))?;
+        let mut state = VaultSource {
+            vault,
+            sync: Some(VaultSyncAuthority::Personal {
+                store,
+                signing_seed: Zeroizing::new(signing_seed),
+            }),
+            conflicts: BTreeSet::new(),
+            document_heads: BTreeMap::new(),
+            pending_history: false,
+        };
+        state.install_projection(projection)?;
+        Ok(Self::new(state))
+    }
+
+    /// Open one Commons signed source authority.
+    pub fn from_communal_vault(
+        vault: KnotVault,
+        store: KnotSyncFileStore,
+        signing_seed: [u8; 32],
+        keys: DataKeyring,
+    ) -> Result<Self, String> {
+        let projection = pollster::block_on(store.communal_projection(&keys))
+            .map_err(|error| format!("could not project Commons Knot store: {error}"))?;
+        let mut state = VaultSource {
+            vault,
+            sync: Some(VaultSyncAuthority::Commons {
+                store,
+                signing_seed: Zeroizing::new(signing_seed),
+                keys,
+            }),
+            conflicts: BTreeSet::new(),
+            document_heads: BTreeMap::new(),
+            pending_history: false,
+        };
+        state.install_projection(projection)?;
+        Ok(Self::new(state))
+    }
+
+    /// Create an independently revisioned Graphshell session over this source.
+    pub fn session(&self, write_grant: Option<KnotWriteGrant>) -> KnotEndpoint {
+        let sequence = self.inner.next_session.fetch_add(1, Ordering::Relaxed);
+        KnotEndpoint::from_resident_source(
+            self.clone(),
+            ProjectionSession(format!("{}:session:{sequence}", self.inner.session_prefix)),
+            write_grant,
+        )
+    }
+
+    /// Clone the one signed operation store for a resident sync host.
+    pub fn sync_store(&self) -> Option<KnotSyncFileStore> {
+        let state = self.state();
+        match &state.sync {
+            Some(VaultSyncAuthority::Personal { store, .. })
+            | Some(VaultSyncAuthority::Commons { store, .. }) => Some(store.clone()),
+            None => None,
+        }
+    }
+
+    /// Install the one source-owned evidence service cloned into later
+    /// sessions and shared with the resident sync host.
+    pub fn grant_content_retention(&self, port: KnotContentRetentionPort) {
+        *self
+            .inner
+            .retention
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(port);
+    }
+
+    /// Remove source-owned evidence authority for later sessions.
+    pub fn revoke_content_retention(&self) -> bool {
+        self.inner
+            .retention
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take()
+            .is_some()
+    }
+
+    /// Shared Murm blob handle for the resident sync host.
+    pub fn content_blob_store(&self) -> Option<Arc<transport::BlobStore>> {
+        self.content_retention()
+            .map(|retention| retention.blob_store())
+    }
+
+    fn content_retention(&self) -> Option<KnotContentRetentionPort> {
+        self.inner
+            .retention
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn state(&self) -> MutexGuard<'_, VaultSource> {
+        self.inner
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+impl VaultSource {
+    fn install_projection(&mut self, projection: KnotDocumentProjection) -> Result<(), String> {
+        self.conflicts = projection
+            .conflicts
+            .iter()
+            .map(|conflict| conflict.id.clone())
+            .collect();
+        self.document_heads = projection.document_heads;
+        self.pending_history = !projection.pending.is_empty();
+        self.vault.replace_projection(projection.documents)?;
+        Ok(())
+    }
+
+    fn refresh_projection(&mut self) -> Result<(), String> {
+        let projection = match &self.sync {
+            Some(VaultSyncAuthority::Personal { store, .. }) => Some(
+                pollster::block_on(store.projection(&self.vault))
+                    .map_err(|error| format!("could not project Knot sync store: {error}"))?,
+            ),
+            Some(VaultSyncAuthority::Commons { store, keys, .. }) => Some(
+                pollster::block_on(store.communal_projection(keys))
+                    .map_err(|error| format!("could not project Commons Knot store: {error}"))?,
+            ),
+            None => None,
+        };
+        if let Some(projection) = projection {
+            self.install_projection(projection)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -222,6 +405,9 @@ const DERIVED_CACHE_RECORD_VERSION: u64 = 1;
 
 /// Knot's read-only Graphshell endpoint.
 pub struct KnotEndpoint {
+    // Drop the session's retention handle before its resident source clone so
+    // the source can join the final blob actor before dropping vault stores.
+    clip_evidence: Option<Box<dyn KnotClipEvidenceStore>>,
     source: Source,
     session: ProjectionSession,
     write_grant: Option<KnotWriteGrant>,
@@ -233,7 +419,6 @@ pub struct KnotEndpoint {
     observed_source_revision: Option<u64>,
     scene_revision: Revision,
     effects: Option<KnotEffectAuthority>,
-    clip_evidence: Option<Box<dyn KnotClipEvidenceStore>>,
     derived: BTreeMap<String, DerivedDocument>,
     rosette_config: KnotRosetteConfig,
     rosette_snapshots: BTreeMap<ProjectionSession, ProjectionSnapshot>,
@@ -367,17 +552,21 @@ impl KnotEndpoint {
 
     /// Serve one unlocked sealed vault read-only.
     pub fn from_vault(vault: KnotVault) -> Self {
-        let digest = blake3::hash(vault.root().to_string_lossy().as_bytes());
+        KnotResidentSource::from_vault(vault).session(None)
+    }
+
+    fn from_resident_source(
+        source: KnotResidentSource,
+        session: ProjectionSession,
+        write_grant: Option<KnotWriteGrant>,
+    ) -> Self {
+        let clip_evidence = source
+            .content_retention()
+            .map(|retention| Box::new(retention) as Box<dyn KnotClipEvidenceStore>);
         Self {
-            source: Source::Vault(VaultSource {
-                vault,
-                sync: None,
-                conflicts: BTreeSet::new(),
-                document_heads: BTreeMap::new(),
-                pending_history: false,
-            }),
-            session: ProjectionSession(format!("knot:vault:{}", &digest.to_hex()[..16])),
-            write_grant: None,
+            source: Source::Vault(source),
+            session,
+            write_grant,
             snapshot: None,
             resources: BTreeMap::new(),
             bindings: BTreeMap::new(),
@@ -386,7 +575,7 @@ impl KnotEndpoint {
             observed_source_revision: None,
             scene_revision: Revision(0),
             effects: None,
-            clip_evidence: None,
+            clip_evidence,
             derived: BTreeMap::new(),
             rosette_config: KnotRosetteConfig::default(),
             rosette_snapshots: BTreeMap::new(),
@@ -404,19 +593,7 @@ impl KnotEndpoint {
         signing_seed: [u8; 32],
         grant: KnotWriteGrant,
     ) -> Result<Self, String> {
-        let projection = pollster::block_on(store.projection(&vault))
-            .map_err(|error| format!("could not project Knot sync store: {error}"))?;
-        let mut endpoint = Self::from_vault(vault);
-        endpoint.install_projection(projection)?;
-        let Source::Vault(source) = &mut endpoint.source else {
-            unreachable!()
-        };
-        source.sync = Some(VaultSyncAuthority::Personal {
-            store,
-            signing_seed: Zeroizing::new(signing_seed),
-        });
-        endpoint.write_grant = Some(grant);
-        Ok(endpoint)
+        Ok(KnotResidentSource::from_synced_vault(vault, store, signing_seed)?.session(Some(grant)))
     }
 
     /// Serve a Commons-backed vault using the group's retained data epochs.
@@ -427,20 +604,10 @@ impl KnotEndpoint {
         keys: DataKeyring,
         grant: KnotWriteGrant,
     ) -> Result<Self, String> {
-        let projection = pollster::block_on(store.communal_projection(&keys))
-            .map_err(|error| format!("could not project Commons Knot store: {error}"))?;
-        let mut endpoint = Self::from_vault(vault);
-        endpoint.install_projection(projection)?;
-        let Source::Vault(source) = &mut endpoint.source else {
-            unreachable!()
-        };
-        source.sync = Some(VaultSyncAuthority::Commons {
-            store,
-            signing_seed: Zeroizing::new(signing_seed),
-            keys,
-        });
-        endpoint.write_grant = Some(grant);
-        Ok(endpoint)
+        Ok(
+            KnotResidentSource::from_communal_vault(vault, store, signing_seed, keys)?
+                .session(Some(grant)),
+        )
     }
 
     /// The opaque Graphshell session.
@@ -545,10 +712,10 @@ impl KnotEndpoint {
 
     /// Lock a vault endpoint, dropping its key and decrypted documents.
     pub fn lock_vault(&mut self) -> bool {
-        let Source::Vault(source) = &mut self.source else {
+        let Source::Vault(resident) = &self.source else {
             return false;
         };
-        source.vault.lock();
+        resident.state().vault.lock();
         self.derived.clear();
         self.snapshot = None;
         self.resources.clear();
@@ -559,11 +726,14 @@ impl KnotEndpoint {
 
     /// Unlock a vault endpoint with a recovered root key.
     pub fn unlock_vault(&mut self, key: [u8; 32]) -> Result<bool, String> {
-        let Source::Vault(source) = &mut self.source else {
+        let Source::Vault(resident) = &self.source else {
             return Ok(false);
         };
-        source.vault.unlock(key)?;
-        self.refresh_vault_projection()?;
+        {
+            let mut source = resident.state();
+            source.vault.unlock(key)?;
+            source.refresh_projection()?;
+        }
         if self.effects.is_some() && self.restore_derived_caches().is_err() {
             self.derived.clear();
         }
@@ -575,11 +745,11 @@ impl KnotEndpoint {
     /// every disclosed/derived resource before re-projecting under them.
     pub fn replace_communal_keys(&mut self, keys: DataKeyring) -> Result<bool, String> {
         let changed = {
-            let Source::Vault(VaultSource {
-                sync: Some(VaultSyncAuthority::Commons { keys: current, .. }),
-                ..
-            }) = &mut self.source
-            else {
+            let Source::Vault(resident) = &self.source else {
+                return Ok(false);
+            };
+            let mut source = resident.state();
+            let Some(VaultSyncAuthority::Commons { keys: current, .. }) = &mut source.sync else {
                 return Ok(false);
             };
             let changed = current.epoch_ids() != keys.epoch_ids()
@@ -609,12 +779,11 @@ impl KnotEndpoint {
                 .refresh()
                 .map_err(|error| format!("directory refresh failed: {error}"))?;
         }
-        let refresh_vault = matches!(
-            &self.source,
-            Source::Vault(source) if source.sync.is_some() && !source.vault.is_locked()
-        );
-        if refresh_vault {
-            self.refresh_vault_projection()?;
+        if let Source::Vault(resident) = &self.source {
+            let mut source = resident.state();
+            if source.sync.is_some() && !source.vault.is_locked() {
+                source.refresh_projection()?;
+            }
         }
         self.sync_source_revision();
         Ok(())
@@ -639,6 +808,7 @@ impl KnotEndpoint {
                 })
                 .collect(),
             Source::Vault(source) => {
+                let source = source.state();
                 let mut documents = source
                     .vault
                     .documents()
@@ -708,6 +878,7 @@ impl KnotEndpoint {
                         .is_some_and(is_rosette_media_type)
                     && match &self.source {
                         Source::Vault(source) => {
+                            let source = source.state();
                             let id = document
                                 .id
                                 .strip_prefix("knot:vault:")
@@ -744,6 +915,7 @@ impl KnotEndpoint {
                 fs::read(path).map_err(|error| format!("could not read Rosette source: {error}"))?
             }
             Source::Vault(source) => {
+                let source = source.state();
                 let id = document
                     .id
                     .strip_prefix("knot:vault:")
@@ -778,7 +950,7 @@ impl KnotEndpoint {
         match &self.source {
             Source::Directory { source, .. } => source.revision(),
             Source::Fixture(_) => 1,
-            Source::Vault(source) => source.vault.revision(),
+            Source::Vault(source) => source.state().vault.revision(),
         }
     }
 
@@ -803,42 +975,17 @@ impl KnotEndpoint {
     }
 
     fn install_projection(&mut self, projection: KnotDocumentProjection) -> Result<(), String> {
-        let Source::Vault(source) = &mut self.source else {
+        let Source::Vault(source) = &self.source else {
             return Err("Knot sync projection requires a vault source".into());
         };
-        source.conflicts = projection
-            .conflicts
-            .iter()
-            .map(|conflict| conflict.id.clone())
-            .collect();
-        source.document_heads = projection.document_heads;
-        source.pending_history = !projection.pending.is_empty();
-        source.vault.replace_projection(projection.documents)?;
-        Ok(())
+        source.state().install_projection(projection)
     }
 
     fn refresh_vault_projection(&mut self) -> Result<(), String> {
-        let projection = {
-            let Source::Vault(source) = &self.source else {
-                return Ok(());
-            };
-            match &source.sync {
-                Some(VaultSyncAuthority::Personal { store, .. }) => Some(
-                    pollster::block_on(store.projection(&source.vault))
-                        .map_err(|error| format!("could not project Knot sync store: {error}"))?,
-                ),
-                Some(VaultSyncAuthority::Commons { store, keys, .. }) => Some(
-                    pollster::block_on(store.communal_projection(keys)).map_err(|error| {
-                        format!("could not project Commons Knot store: {error}")
-                    })?,
-                ),
-                None => None,
-            }
+        let Source::Vault(source) = &self.source else {
+            return Ok(());
         };
-        if let Some(projection) = projection {
-            self.install_projection(projection)?;
-        }
-        Ok(())
+        source.state().refresh_projection()
     }
 
     fn editable_text(&self, document: &PresentedDocument) -> Option<EditableTextV1> {
@@ -868,21 +1015,26 @@ impl KnotEndpoint {
                 })
             }
             Source::Vault(source) => {
-                let id = document
-                    .id
-                    .strip_prefix("knot:vault:")
-                    .unwrap_or(&document.id);
-                if source.sync.is_none() || source.pending_history || source.conflicts.contains(id)
-                {
-                    return None;
-                }
-                let body = source.vault.body(id)?;
-                if body.len() as u64 > grant.max_source_bytes {
-                    return None;
-                }
-                let text = String::from_utf8(body.to_vec()).ok()?;
-                let head = source.document_heads.get(id)?;
-                let base_token = vault_base_token(id, head);
+                let (text, base_token) = {
+                    let source = source.state();
+                    let id = document
+                        .id
+                        .strip_prefix("knot:vault:")
+                        .unwrap_or(&document.id);
+                    if source.sync.is_none()
+                        || source.pending_history
+                        || source.conflicts.contains(id)
+                    {
+                        return None;
+                    }
+                    let body = source.vault.body(id)?;
+                    if body.len() as u64 > grant.max_source_bytes {
+                        return None;
+                    }
+                    let text = String::from_utf8(body.to_vec()).ok()?;
+                    let head = source.document_heads.get(id)?;
+                    (text, vault_base_token(id, head))
+                };
                 Some(EditableTextV1 {
                     address,
                     media_type,
@@ -919,10 +1071,10 @@ impl KnotEndpoint {
 
     fn current_commons_epoch(&self) -> Option<GroupSecretId> {
         match &self.source {
-            Source::Vault(VaultSource {
-                sync: Some(VaultSyncAuthority::Commons { keys, .. }),
-                ..
-            }) => keys.current_epoch(),
+            Source::Vault(source) => match &source.state().sync {
+                Some(VaultSyncAuthority::Commons { keys, .. }) => keys.current_epoch(),
+                _ => None,
+            },
             _ => None,
         }
     }
@@ -953,6 +1105,7 @@ impl KnotEndpoint {
         let Source::Vault(source) = &self.source else {
             return Ok(());
         };
+        let source = source.state();
         for (id, base_token) in candidates {
             let Some(stored) = source.vault.load_derived_cache::<StoredDerivedCache>(&id)? else {
                 continue;
@@ -1012,6 +1165,7 @@ impl KnotEndpoint {
             // in-memory projection.
             return Ok(());
         };
+        let source = source.state();
         let stored = match &source.sync {
             Some(VaultSyncAuthority::Commons { keys, .. }) => {
                 let plaintext = serde_json::to_vec(record)
@@ -1069,7 +1223,7 @@ impl KnotEndpoint {
                 .then(|| self.editable_text(document))
                 .flatten();
             let conflicted = match &self.source {
-                Source::Vault(source) => source.conflicts.contains(
+                Source::Vault(source) => source.state().conflicts.contains(
                     document
                         .id
                         .strip_prefix("knot:vault:")
@@ -1446,6 +1600,7 @@ impl KnotEndpoint {
             .ok_or_else(|| "document format is not authorable".to_string())?;
         format.validate_source(&current.address, &payload.source)?;
 
+        let stale_result = self.stale_result();
         let vault_projection = match &mut self.source {
             Source::Directory { source, .. } => {
                 let path = source
@@ -1462,8 +1617,15 @@ impl KnotEndpoint {
                     .map_err(|error| format!("directory refresh failed after save: {error}"))?;
                 None
             }
-            Source::Vault(source) => {
+            Source::Vault(resident) => {
+                let mut source = resident.state();
                 let native_id = id.strip_prefix("knot:vault:").unwrap_or(id);
+                let Some(head) = source.document_heads.get(native_id) else {
+                    return Ok(stale_result);
+                };
+                if vault_base_token(native_id, head) != payload.base_token {
+                    return Ok(stale_result);
+                }
                 let Some(previous) = source
                     .vault
                     .documents()
@@ -1506,7 +1668,8 @@ impl KnotEndpoint {
                         })?
                     }
                 };
-                Some(projection)
+                source.install_projection(projection)?;
+                None
             }
             Source::Fixture(_) => {
                 return Ok(IntentResult::Rejected {
@@ -1884,13 +2047,13 @@ impl KnotEndpoint {
                 reason: "this effect is disabled by Knot policy".into(),
             });
         }
-        let received = matches!(
-            &self.source,
-            Source::Vault(VaultSource {
-                sync: Some(VaultSyncAuthority::Commons { .. }),
-                ..
-            })
-        );
+        let received = match &self.source {
+            Source::Vault(source) => matches!(
+                &source.state().sync,
+                Some(VaultSyncAuthority::Commons { .. })
+            ),
+            _ => false,
+        };
         if !confirmed && (mode == KnotEffectMode::Ask || received) {
             return Some(IntentResult::Rejected {
                 reason: if received {
@@ -3411,13 +3574,17 @@ Fallback.
         let Source::Vault(source) = &endpoint.source else {
             unreachable!()
         };
-        let projection = pollster::block_on(inspection_store.projection(&source.vault)).unwrap();
-        assert_eq!(projection.documents[0].body, b"# Private revised\n");
-        assert_ne!(projection.document_heads["field-note"], initial_head);
-        assert_eq!(
-            source.vault.body("field-note"),
-            Some(&b"# Private revised\n"[..])
-        );
+        {
+            let source = source.state();
+            let projection =
+                pollster::block_on(inspection_store.projection(&source.vault)).unwrap();
+            assert_eq!(projection.documents[0].body, b"# Private revised\n");
+            assert_ne!(projection.document_heads["field-note"], initial_head);
+            assert_eq!(
+                source.vault.body("field-note"),
+                Some(&b"# Private revised\n"[..])
+            );
+        }
         let sealed = fs::read(vault_dir.path().join("knot/documents.json")).unwrap();
         assert!(
             !sealed
@@ -3442,6 +3609,151 @@ Fallback.
             reopened.body("field-note"),
             Some(&b"# Private revised\n"[..])
         );
+    }
+
+    #[test]
+    fn resident_vault_sessions_share_truth_without_sharing_notice_cursors() {
+        let vault_dir = tempdir().unwrap();
+        let sync_dir = tempdir().unwrap();
+        let evidence_dir = tempdir().unwrap();
+        let database = sync_dir.path().join("knot.redb");
+        let key = [0xa1; 32];
+        let seed = [0x51; 32];
+        let writer = *SigningKey::from_bytes(&seed).verifying_key().as_bytes();
+        let space = [0x61; 32];
+        let vault = KnotVault::open(vault_dir.path(), key).unwrap();
+        let store = KnotSyncFileStore::open(&database, space, [writer]).unwrap();
+        pollster::block_on(store.author(
+            seed,
+            &vault,
+            &KnotSyncEvent::Put(VaultDocument {
+                id: "field-note".into(),
+                title: "Field note".into(),
+                body: b"# Shared\n".to_vec(),
+                media_type: "text/vnd.knot".into(),
+            }),
+        ))
+        .unwrap();
+
+        let resident = KnotResidentSource::from_synced_vault(vault, store, seed).unwrap();
+        resident.grant_content_retention(
+            crate::BlobClipEvidenceStore::open(evidence_dir.path(), 4096).unwrap(),
+        );
+        assert!(resident.content_blob_store().is_some());
+        let sync_handle = resident.sync_store().expect("resident owns one sync store");
+        assert_eq!(sync_handle.space_id(), space);
+        let mut ada = resident.session(Some(KnotWriteGrant::new(4096)));
+        let mut bo = resident.session(Some(KnotWriteGrant::new(4096)));
+        assert_ne!(ada.session(), bo.session());
+        assert!(ada.clip_evidence.is_some());
+        assert!(bo.clip_evidence.is_some());
+
+        let ada_request = ada.describe().projections.remove(0).request;
+        let bo_request = bo.describe().projections.remove(0).request;
+        let ada_snapshot = ada.snapshot(ada_request).unwrap();
+        let bo_snapshot = bo.snapshot(bo_request.clone()).unwrap();
+        let (ada_target, ada_editable, ada_action) =
+            editable_resource(&mut ada, &ada_snapshot, "field-note");
+        let (bo_target, bo_editable, bo_action) =
+            editable_resource(&mut bo, &bo_snapshot, "field-note");
+        assert_eq!(ada_editable.base_token, bo_editable.base_token);
+
+        assert_eq!(
+            ada.invoke(save_invocation(
+                &ada_snapshot,
+                ada_target,
+                &ada_action,
+                &SaveTextV1 {
+                    base_token: ada_editable.base_token,
+                    source: "# Ada revised\n".into(),
+                },
+            ))
+            .unwrap(),
+            IntentResult::Accepted
+        );
+
+        let ada_notice = ada.poll_notice().unwrap().expect("Ada hears her save");
+        let bo_notice = bo.poll_notice().unwrap().expect("Bo hears Ada's save");
+        assert_eq!(ada_notice.session, *ada.session());
+        assert_eq!(bo_notice.session, *bo.session());
+        assert_eq!(ada.poll_notice().unwrap(), None);
+        assert_eq!(bo.poll_notice().unwrap(), None);
+
+        let refreshed = match bo
+            .resume(ResumeRequest {
+                session: bo_request.session,
+                epoch: bo_snapshot.scene.epoch,
+                revision: bo_snapshot.scene.revision,
+            })
+            .unwrap()
+        {
+            ResumeReply::Snapshot(snapshot) => *snapshot,
+            ResumeReply::Current(_) => panic!("Bo's old revision must refresh"),
+            ResumeReply::Diffs(_) => panic!("Knot currently refreshes with a snapshot"),
+        };
+        let (bo_current_target, current, bo_current_action) =
+            editable_resource(&mut bo, &refreshed, "field-note");
+        assert_eq!(current.source, "# Ada revised\n");
+        assert_ne!(current.base_token, bo_editable.base_token);
+        assert!(matches!(
+            bo.invoke(save_invocation(
+                &bo_snapshot,
+                bo_target,
+                &bo_action,
+                &SaveTextV1 {
+                    base_token: bo_editable.base_token,
+                    source: "# Bo stale\n".into(),
+                },
+            ))
+            .unwrap(),
+            IntentResult::Stale { .. }
+        ));
+
+        assert_eq!(
+            bo.invoke(save_invocation(
+                &refreshed,
+                bo_current_target,
+                &bo_current_action,
+                &SaveTextV1 {
+                    base_token: current.base_token,
+                    source: "# Bo revised\n".into(),
+                },
+            ))
+            .unwrap(),
+            IntentResult::Accepted
+        );
+        let ada_notice = ada.poll_notice().unwrap().expect("Ada hears Bo's save");
+        let bo_notice = bo.poll_notice().unwrap().expect("Bo hears his save");
+        assert_eq!(ada_notice.session, *ada.session());
+        assert_eq!(bo_notice.session, *bo.session());
+        assert_eq!(ada.poll_notice().unwrap(), None);
+        assert_eq!(bo.poll_notice().unwrap(), None);
+
+        let ada_refreshed = match ada
+            .resume(ResumeRequest {
+                session: ada_snapshot.session.clone(),
+                epoch: ada_snapshot.scene.epoch,
+                revision: ada_snapshot.scene.revision,
+            })
+            .unwrap()
+        {
+            ResumeReply::Snapshot(snapshot) => *snapshot,
+            ResumeReply::Current(_) => panic!("Ada's old revision must refresh"),
+            ResumeReply::Diffs(_) => panic!("Knot currently refreshes with a snapshot"),
+        };
+        let (_, current, _) = editable_resource(&mut ada, &ada_refreshed, "field-note");
+        assert_eq!(current.source, "# Bo revised\n");
+
+        drop(ada);
+        drop(bo);
+        drop(sync_handle);
+        drop(resident);
+
+        let reopened_vault = KnotVault::open(vault_dir.path(), key).unwrap();
+        let reopened_store = KnotSyncFileStore::open(&database, space, [writer]).unwrap();
+        let projection = pollster::block_on(reopened_store.projection(&reopened_vault)).unwrap();
+        assert_eq!(projection.documents[0].body, b"# Bo revised\n");
+        drop(crate::BlobClipEvidenceStore::open(evidence_dir.path(), 4096).unwrap());
     }
 
     #[test]
