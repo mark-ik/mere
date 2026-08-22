@@ -225,10 +225,10 @@ fn breadth_first_order() {
 fn process_page_enqueues_links_and_emits_a_contribution() {
     let mut f = Frontier::new("https://s.test/", CrawlPolicy::default());
     let _ = f.next(); // consume the seed @0
-    let fetched = Fetched {
-        content_type: Some("text/html".to_string()),
-        body: "<a href='/a'>A</a><a href='/b'>B</a>".to_string(),
-    };
+    let fetched = Fetched::text(
+        Some("text/html".to_string()),
+        "<a href='/a'>A</a><a href='/b'>B</a>",
+    );
     let contributions = test_process_page(&mut f, "https://s.test/", 0, &fetched);
     assert!(!contributions.is_empty(), "a link contribution is produced");
     // The two same-host targets are now queued at depth 1.
@@ -253,12 +253,7 @@ fn run_crawl_visits_a_small_site_within_the_depth_cap() {
     .collect();
     let fetch = move |url: String| {
         let body = site.get(&url).copied().unwrap_or("").to_string();
-        async move {
-            Ok::<_, String>(Fetched {
-                content_type: Some("text/html".to_string()),
-                body,
-            })
-        }
+        async move { Ok::<_, String>(Fetched::text(Some("text/html".to_string()), body)) }
     };
 
     let mut visited: Vec<String> = Vec::new();
@@ -314,12 +309,7 @@ fn run_crawl_stops_at_the_page_cap() {
     }
     let fetch = move |url: String| {
         let body = site.get(&url).cloned().unwrap_or_default();
-        async move {
-            Ok::<_, String>(Fetched {
-                content_type: Some("text/html".to_string()),
-                body,
-            })
-        }
+        async move { Ok::<_, String>(Fetched::text(Some("text/html".to_string()), body)) }
     };
     let rt = Builder::new_current_thread().enable_all().build().unwrap();
     let total = rt.block_on(run_crawl(
@@ -363,12 +353,7 @@ fn run_crawl_honors_robots_disallow() {
     .collect();
     let fetch = move |url: String| {
         let body = site.get(&url).copied().unwrap_or("").to_string();
-        async move {
-            Ok::<_, String>(Fetched {
-                content_type: Some("text/html".to_string()),
-                body,
-            })
-        }
+        async move { Ok::<_, String>(Fetched::text(Some("text/html".to_string()), body)) }
     };
     let mut visited: Vec<String> = Vec::new();
     let rt = Builder::new_current_thread().enable_all().build().unwrap();
@@ -420,12 +405,7 @@ fn run_crawl_cancels_mid_crawl() {
     }
     let fetch = move |url: String| {
         let body = site.get(&url).cloned().unwrap_or_default();
-        async move {
-            Ok::<_, String>(Fetched {
-                content_type: Some("text/html".to_string()),
-                body,
-            })
-        }
+        async move { Ok::<_, String>(Fetched::text(Some("text/html".to_string()), body)) }
     };
     // Let the first page through, then cancel before the second.
     let mut allow_one = true;
@@ -482,12 +462,7 @@ fn run_crawl_seeds_from_the_sitemap() {
     .collect();
     let fetch = move |url: String| {
         let body = site.get(&url).copied().unwrap_or("").to_string();
-        async move {
-            Ok::<_, String>(Fetched {
-                content_type: Some("text/html".to_string()),
-                body,
-            })
-        }
+        async move { Ok::<_, String>(Fetched::text(Some("text/html".to_string()), body)) }
     };
     let mut visited: Vec<String> = Vec::new();
     let rt = Builder::new_current_thread().enable_all().build().unwrap();

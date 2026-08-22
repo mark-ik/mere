@@ -2508,10 +2508,10 @@ mod tests {
     impl KnotEffectFetcher for StubFetcher {
         fn fetch(&mut self, address: &str) -> Result<Fetched, String> {
             if address == "file://fixture/included.md" {
-                Ok(Fetched {
-                    content_type: Some("text/markdown".into()),
-                    body: "## Included\n\nFetched text.\n".into(),
-                })
+                Ok(Fetched::text(
+                    Some("text/markdown".into()),
+                    "## Included\n\nFetched text.\n",
+                ))
             } else {
                 Err(format!("unexpected fetch: {address}"))
             }
@@ -2535,16 +2535,15 @@ mod tests {
     impl KnotEffectFetcher for StubHtmlFetcher {
         fn fetch(&mut self, address: &str) -> Result<Fetched, String> {
             if address == "https://fixture.test/article" {
-                Ok(Fetched {
-                    content_type: Some("text/html".into()),
-                    body: r#"<article>
+                Ok(Fetched::text(
+                    Some("text/html".into()),
+                    r#"<article>
                         <h2 onclick="steal()" style="display:none">Visible HTML</h2>
                         <p>A <a href="/safe">safe link</a>.</p>
                         <script>SECRET_SCRIPT()</script>
                         <iframe srcdoc="SECRET_FRAME"></iframe>
-                    </article>"#
-                        .into(),
-                })
+                    </article>"#,
+                ))
             } else {
                 Err(format!("unexpected fetch: {address}"))
             }
