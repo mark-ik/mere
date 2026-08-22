@@ -126,15 +126,15 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
     pandect::save_device_settings(root.path(), &settings).unwrap();
     pandect::wallet_store::ensure_wallet_state(root.path(), persona, "Knot process receipt")
         .unwrap();
-    let authority = knot::StartupUnlockedPersonalVault::open(
+    let authority = knot_editor::StartupUnlockedPersonalVault::open(
         root.path(),
         persona,
-        knot::local_device_root(root.path(), "knot receipt").unwrap(),
+        knot_editor::local_device_root(root.path(), "knot receipt").unwrap(),
         [],
     )
     .unwrap();
     authority
-        .author_document(knot::VaultDocument {
+        .author_document(knot_editor::VaultDocument {
             id: "field-note".into(),
             title: "Field note".into(),
             body: b"# Private\n".to_vec(),

@@ -14,6 +14,7 @@ members = [
     "crates/incipit",
     "crates/capability",
     "crates/system/pandect",
+    "crates/system/resident",
     "crates/system/luggage",
     "crates/system/fetch",
     "crates/system/content-contract",
@@ -97,7 +98,6 @@ members = [
     "ports/graphshell",
     "ports/graphshell/web",
     "ports/knot",
-    "ports/knot-editor",
     "ports/djinn",
     "ports/castellan",
     "ports/distillery",
@@ -186,7 +186,7 @@ graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { path = "crates/graphshell/graphshell-network" }
-knot = { path = "ports/knot" }
+knot-editor = { version = "0.0.2", path = "ports/knot" }
 # The credential-keeper port; reservation, no implementation (dramatis plan D4).
 castellan = { version = "0.0.2", path = "ports/castellan" }
 # The model-works port; first real consumer of the mesh host supervisor.
@@ -204,6 +204,7 @@ incipit = { version = "0.2.0", path = "crates/incipit" }
 chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
 comms = { package = "mere-comms", path = "crates/shell/comms" }
 pandect = { version = "0.1.0", path = "crates/system/pandect" }
+mere-resident = { path = "crates/system/resident" }
 # Self-update over signed manifests (the cargo-packager-updater fork; ruled
 # 2026-07-24: name luggage, home mere). Apps consume it via git dep like the
 # rest of the family; mere itself will when its own packaging lands.

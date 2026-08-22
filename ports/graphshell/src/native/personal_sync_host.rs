@@ -21,7 +21,6 @@ use uuid::Uuid;
 
 use crate::native::browser_host::now_ms;
 use crate::native::graph_keys::{GraphKeyError, GraphKeyGroup};
-use crate::native::owner_settings::parse_hex32;
 use crate::transfer_offer::{TransferOfferV1, offers_in, transfer_offer_rule};
 
 use crate::identity_endpoint::{SupplementalCard, TRANSFER_ACCEPT_INTENT, TRANSFER_ACCEPT_SCHEMA};
@@ -32,6 +31,23 @@ use crate::personal_sync::{
 };
 
 const MAX_NODE_CARDS: usize = 128;
+// Lease names are durable ownership labels. Keep the historical spelling so
+// existing personal-graph bytes remain discoverable after the Djinn rename.
+const PERSONAL_STAGE_LEASE: &str = "graphshell.transfer";
+const PERSONAL_FETCH_LEASE: &str = "graphshell.fetch";
+
+fn parse_node_id(value: &str) -> Result<[u8; 32], ()> {
+    let value = value.trim();
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(());
+    }
+    let mut node = [0_u8; 32];
+    for (slot, pair) in node.iter_mut().zip(value.as_bytes().chunks_exact(2)) {
+        let pair = std::str::from_utf8(pair).map_err(|_| ())?;
+        *slot = u8::from_str_radix(pair, 16).map_err(|_| ())?;
+    }
+    Ok(node)
+}
 
 #[derive(Clone, Debug)]
 pub struct PersonalSyncHostConfig {
@@ -415,7 +431,7 @@ impl PersonalSyncHost {
         let hash = BlobHash::from_bytes(blob);
         let lease = BlobLease::new(
             self.blob_scope,
-            super::resident_blobs::PERSONAL_FETCH_LEASE,
+            PERSONAL_FETCH_LEASE,
             hash.as_bytes(),
         )
         .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
@@ -493,7 +509,7 @@ impl PersonalSyncHost {
     ) -> Result<[u8; 32], PersonalSyncHostError> {
         let lease = BlobLease::new(
             self.blob_scope,
-            super::resident_blobs::PERSONAL_STAGE_LEASE,
+            PERSONAL_STAGE_LEASE,
             container.as_bytes(),
         )
         .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
@@ -546,7 +562,7 @@ impl PersonalSyncHost {
         observations.sort_by_key(|observation| std::cmp::Reverse(observation.at_ms));
         let mut holders = Vec::new();
         for observation in observations {
-            let Ok(node) = parse_hex32(&observation.device) else {
+            let Ok(node) = parse_node_id(&observation.device) else {
                 continue;
             };
             if node != self.node_id() && !holders.contains(&node) {

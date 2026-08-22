@@ -32,7 +32,7 @@ async fn turnstone_opens_the_in_memory_knot_route() {
         .register(
             "knot",
             "Knot fixture",
-            |_| Ok(knot::KnotEndpoint::fixture()),
+            |_| Ok(knot_editor::KnotEndpoint::fixture()),
         )
         .unwrap();
     let route = ResidentEndpointRoute::new("knot", Duration::from_millis(10)).unwrap();

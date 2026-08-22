@@ -2,7 +2,7 @@
 //!
 //! These edit the settings file and compute public key material; none of them
 //! open the personal-graph store. That separation is deliberate, and it is why
-//! they live apart from [`crate::native::device_sync`], which brings the store
+//! they live apart from [`crate::personal_sync`], which brings the store
 //! and the transport up: the store is single-writer and the resident host
 //! holds its lock, so a management verb that needed it could not run while the
 //! host was up. Everything here works with the host running, which is when you
@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 
 use personae::{IdentityProvider, ProfileId};
 
-use crate::native::device_sync::{DeviceSyncError, personal_graph_id};
-use crate::native::owner_settings::{self, OwnerSettings, SyncSettings};
-use crate::native::personal_sync_host::PersonalSyncHostError;
+use crate::personal_sync::{DeviceSyncError, personal_graph_id};
+use crate::settings::{self as owner_settings, OwnerSettings, SyncSettings};
+use graphshell::native::personal_sync_host::PersonalSyncHostError;
 
 /// What a pairing attempt did.
 #[derive(Debug, PartialEq, Eq)]
@@ -145,7 +145,9 @@ pub fn pairing_facts<P: IdentityProvider + ?Sized>(
     };
     let graph = personal_graph_id(&sync.graph);
     let transport_key = identity
-        .derive_keypair(&crate::personal_sync::personal_graph_identity_salt(graph))
+        .derive_keypair(&graphshell::personal_sync::personal_graph_identity_salt(
+            graph,
+        ))
         .map_err(|error| {
             DeviceSyncError::Host(PersonalSyncHostError::Transport(error.to_string()))
         })?;
@@ -155,7 +157,7 @@ pub fn pairing_facts<P: IdentityProvider + ?Sized>(
     let prekey = match data_root {
         Some(root) => {
             let key_root = key_group_root(root, &sync, graph);
-            match crate::native::graph_keys::GraphKeyGroup::open(identity, graph, &key_root) {
+            match graphshell::native::graph_keys::GraphKeyGroup::open(identity, graph, &key_root) {
                 Ok(opened) => hex(opened.group.published_bundle()),
                 Err(error) => {
                     tracing::warn!(

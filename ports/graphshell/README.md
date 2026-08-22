@@ -96,7 +96,6 @@ Turnstone, Genet host packages, and Servo runtime packages.
 | `graphshell_native_host` | `native` |
 | `h6_transfer_peer` | `native`, `web` |
 | `h7_sync_peer` | `personal-sync` |
-| `graphshell_device_host` | `personal-sync` |
 
 ## Browser surfaces
 
@@ -117,6 +116,10 @@ cargo check -p graphshell-web --target wasm32-unknown-unknown
 
 [`web/extension`](web/extension) holds the Chromium and Firefox extension and
 the `org.mere.graphshell` native-messaging registration.
+
+The desktop resident is [`djinn`](../djinn), not a Graphshell binary. Djinn
+owns persona-held stores and exposes these Graphshell session brokers; this
+port stays independently usable for local session and admission composition.
 
 ## Where to look next
 

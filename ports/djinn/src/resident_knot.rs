@@ -1,6 +1,6 @@
-//! Resident Knot composition inside the Graphshell device host.
+//! Resident Knot composition inside Djinn.
 //!
-//! Graphshell owns process topology. Knot still owns document semantics,
+//! Djinn owns process topology. Knot still owns document semantics,
 //! Personae owns startup unlock, Murm owns transport, and iroh-blobs owns the
 //! physical content store. This module only keeps those authorities alive in
 //! one resident and registers the stable local route.
@@ -8,18 +8,18 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use knot::{
+use knot_editor::{
     KnotContentRetentionPort, KnotResidentSource, KnotRosetteConfig, KnotSettings,
     KnotSpaceAuthoritySnapshot, KnotSyncHost, KnotSyncHostConfig, KnotWriteGrant,
     StartupUnlockedPersonalVault, knot_settings_path, local_device_root, persona_vault_root,
 };
 use transport::BlobScope;
 
-use super::endpoint_catalog::{
+use crate::resident_blobs::{LEGACY_KNOT_LEASE, LegacyBlobMigration, ResidentBlobCustody};
+use crate::settings::KnotResidentSettings;
+use graphshell::native::endpoint_catalog::{
     ResidentEndpointCatalog, ResidentEndpointCatalogError, ResidentEndpointRoute,
 };
-use super::owner_settings::KnotResidentSettings;
-use super::resident_blobs::{LEGACY_KNOT_LEASE, LegacyBlobMigration, ResidentBlobCustody};
 
 /// Stable first-party route for the resident Djot vault.
 pub const RESIDENT_KNOT_ROUTE: &str = "knot";
@@ -221,7 +221,7 @@ impl ResidentKnot {
     }
 }
 
-fn sync_host_config(sync: &knot::KnotSyncSettings) -> Result<KnotSyncHostConfig, String> {
+fn sync_host_config(sync: &knot_editor::KnotSyncSettings) -> Result<KnotSyncHostConfig, String> {
     let relay_urls =
         transport::P2pandaHostPolicy::parse_relay_urls(sync.relay_urls.iter().map(String::as_str))
             .map_err(|error| format!("resident Knot {error}"))?;
@@ -241,17 +241,17 @@ mod tests {
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource,
     };
-    use knot::{KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument};
+    use knot_editor::{KnotSyncEvent, KnotSyncFileStore, KnotVault, VaultDocument};
     use p2panda_core::SigningKey;
     use sceno::InstanceId;
     use transport::BlobReadAuthorizer;
 
-    use crate::lifecycle::AdmittedEndpointContext;
+    use graphshell::lifecycle::AdmittedEndpointContext;
 
     use super::*;
 
     fn editable_resource(
-        endpoint: &mut super::super::endpoint_catalog::ResidentEndpointSession,
+        endpoint: &mut graphshell::native::endpoint_catalog::ResidentEndpointSession,
         snapshot: &chirograph::ProjectionSnapshot,
         address_suffix: &str,
     ) -> (InstanceId, EditableTextV1, AdvertisedAction) {
@@ -379,7 +379,7 @@ mod tests {
         };
         let empty_authority_revision = resident.sync.as_ref().unwrap().authority_revision();
         assert!(!readers.allows(scope, &peer, hash));
-        let mut sync_settings = knot::KnotSyncSettings::default();
+        let mut sync_settings = knot_editor::KnotSyncSettings::default();
         assert!(sync_settings.pair(peer));
         KnotSettings {
             sync: Some(sync_settings.clone()),

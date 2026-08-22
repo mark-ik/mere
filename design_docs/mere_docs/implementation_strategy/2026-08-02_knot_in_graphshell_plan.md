@@ -32,8 +32,8 @@ graphshell only as a dev-dependency, and examples get dev-dependencies where
 bins do not, so the rehearsal costs the crate graph nothing.
 
 ```
-cargo run -p knot --example k2_peer -- hold  --root <vault-dir>
-cargo run -p knot --example k2_peer -- visit --peer <ticket>
+cargo run -p knot-editor --example k2_peer -- hold  --root <vault-dir>
+cargo run -p knot-editor --example k2_peer -- visit --peer <ticket>
 ```
 
 Both devices set `K2_OWNER` and `K2_NETWORK` to the same value and `K2_SEED` to

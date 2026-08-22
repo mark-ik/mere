@@ -24,7 +24,7 @@
 
 use std::path::{Path, PathBuf};
 
-use knot::{
+use knot_editor::{
     KnotSettings, KnotSyncHost, KnotSyncHostConfig, KnotSyncSettings, StartupUnlockedPersonalVault,
     knot_settings_path, local_device_root, personal_vault_writer,
 };
@@ -88,7 +88,7 @@ fn management(args: &Args) -> Option<Result<String, String>> {
 }
 
 fn pair(args: &Args, writer: &str, add: bool) -> Result<String, String> {
-    let key = knot::parse_hex32(writer).map_err(|error| error.to_string())?;
+    let key = knot_editor::parse_hex32(writer).map_err(|error| error.to_string())?;
     let path = knot_settings_path(&args.data_root, args.persona);
     let mut settings = KnotSettings::load(&path).map_err(|error| error.to_string())?;
     let sync = settings.sync.get_or_insert_with(KnotSyncSettings::default);
@@ -120,9 +120,9 @@ fn pairing_facts(args: &Args) -> Result<String, String> {
     let writer = personal_vault_writer(&args.data_root, args.persona, device_root)?;
     Ok(format!(
         "writer {}\n\nOn each other device, run:\n  knot_sync_host <data-root> {} --pair-writer {}",
-        knot::hex32(&writer),
+        knot_editor::hex32(&writer),
         args.persona.as_uuid(),
-        knot::hex32(&writer),
+        knot_editor::hex32(&writer),
     ))
 }
 
@@ -143,7 +143,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let device_root = local_device_root(&args.data_root, &args.label)?;
-    let snapshot = knot::KnotSpaceAuthoritySnapshot::from_personal_settings(&sync)?;
+    let snapshot = knot_editor::KnotSpaceAuthoritySnapshot::from_personal_settings(&sync)?;
     let authority = StartupUnlockedPersonalVault::open(
         &args.data_root,
         args.persona,
@@ -168,7 +168,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // line is the whole of what a peer needs.
     tracing::info!(
         persona = %args.persona.as_uuid(),
-        writer = %knot::hex32(&host.node_id()),
+        writer = %knot_editor::hex32(&host.node_id()),
         paired = sync.paired_writers.len(),
         relays = sync.relay_urls.len(),
         "knot vault sync listening"
@@ -193,7 +193,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         let Some(sync) = reloaded.sync else { continue };
-        let desired = match knot::KnotSpaceAuthoritySnapshot::from_personal_settings(&sync) {
+        let desired = match knot_editor::KnotSpaceAuthoritySnapshot::from_personal_settings(&sync) {
             Ok(snapshot) => snapshot,
             Err(error) => {
                 tracing::warn!(%error, "knot sync settings hold an unusable writer key");
@@ -202,7 +202,7 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         };
         match host.apply_authority(desired).await {
             Ok(true) => tracing::info!(
-                revision = %knot::hex32(&host.authority_revision()),
+                revision = %knot_editor::hex32(&host.authority_revision()),
                 "applied a new Knot space-authority revision"
             ),
             Ok(false) => {}

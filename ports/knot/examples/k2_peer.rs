@@ -16,9 +16,9 @@
 //! not, so this rehearsal costs the crate graph nothing.
 //!
 //! ```text
-//! cargo run -p knot --example k2_peer -- hold  --root <vault-dir>
-//! cargo run -p knot --example k2_peer -- visit --peer <ticket>
-//! cargo run -p knot --example k2_peer -- visit --discover
+//! cargo run -p knot-editor --example k2_peer -- hold  --root <vault-dir>
+//! cargo run -p knot-editor --example k2_peer -- visit --peer <ticket>
+//! cargo run -p knot-editor --example k2_peer -- visit --discover
 //!
 //! env:
 //!   K2_OWNER    shared secret naming the owner that grants projections;
@@ -173,7 +173,7 @@ async fn hold(
     println!("  vault:  {}", root.display());
     println!("  ticket: {ticket}");
     println!("  run on the other device:");
-    println!("    cargo run -p knot --example k2_peer -- visit --peer {ticket}");
+    println!("    cargo run -p knot-editor --example k2_peer -- visit --peer {ticket}");
 
     let policy = projection_policy(
         network,
@@ -195,7 +195,7 @@ async fn hold(
             // Resumable *and* notifying: a visitor recovering after a bell asks
             // for a resume, and the typed silent registration would answer that
             // refusal-shaped, which is what K2 found the hard way.
-            knot::KnotEndpoint::open_writable(&vault, knot::KnotWriteGrant::new(64 * 1024))
+            knot_editor::KnotEndpoint::open_writable(&vault, knot_editor::KnotWriteGrant::new(64 * 1024))
                 .map_err(|error| error.to_string())
         })
         .map_err(|e| format!("register: {e}"))?;

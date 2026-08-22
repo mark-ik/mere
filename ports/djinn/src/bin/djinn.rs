@@ -1,4 +1,4 @@
-//! Resident Graphshell authority.
+//! Resident Djinn authority.
 //!
 //! One process owns the selected Personae profile, OpenSSH agent endpoint, and
 //! private browser-session broker. The browser-launched executable is only a
@@ -9,6 +9,13 @@ use std::sync::Arc;
 #[cfg(feature = "personal-sync")]
 use std::time::Duration;
 
+#[cfg(feature = "personal-sync")]
+use djinn::pairing;
+#[cfg(feature = "personal-sync")]
+use djinn::personal_sync as device_sync;
+use djinn::resident::DjinnResident;
+#[cfg(feature = "personal-sync")]
+use djinn::settings::{self as owner_settings, SyncOverrides};
 use graphshell::browser_carrier::AllowedExtensions;
 use graphshell::identity::VaultProtectionView;
 #[cfg(feature = "personal-sync")]
@@ -19,29 +26,19 @@ use graphshell::native::app_broker::{AppEndpointCatalog, serve_app_broker};
 use graphshell::native::device_broker::serve_browser_broker_with_cards;
 use graphshell::native::device_broker::{configured_device_endpoint, serve_browser_broker};
 #[cfg(feature = "personal-sync")]
-use graphshell::native::device_sync;
-#[cfg(feature = "personal-sync")]
 use graphshell::native::endpoint_catalog::{ResidentEndpointCatalog, ResidentEndpointRoute};
 use graphshell::native::identity_ui::SystemNativeIdentityUi;
-#[cfg(feature = "personal-sync")]
-use graphshell::native::owner_settings::{self, SyncOverrides};
-#[cfg(feature = "personal-sync")]
-use graphshell::native::pairing;
 use graphshell::native::personae_host::PersonaeHost;
 #[cfg(windows)]
 use graphshell::native::personae_host::STANDARD_WINDOWS_AGENT_ENDPOINT;
-#[cfg(feature = "personal-sync")]
-use graphshell::native::resident_blobs::ResidentBlobCustody;
-#[cfg(feature = "personal-sync")]
-use graphshell::native::resident_knot::ResidentKnot;
 use graphshell::profile::{default_vault_dir, resolve_selected_profile};
 use personae::bootstrap::{self, PASSPHRASE_ENV, Unlock};
 use personae::{IdentityVault, ProfileId};
 use ssh_agent_lib::agent::listen;
 
-const EXTRA_EXTENSIONS_ENV: &str = "GRAPHSHELL_EXTENSION_IDS";
-const DATA_ROOT_ENV: &str = "GRAPHSHELL_DATA_ROOT";
-const SESSION_SECONDS_ENV: &str = "GRAPHSHELL_BROWSER_SESSION_SECONDS";
+const EXTRA_EXTENSIONS_ENV: &str = "DJINN_EXTENSION_IDS";
+const DATA_ROOT_ENV: &str = "DJINN_DATA_ROOT";
+const SESSION_SECONDS_ENV: &str = "DJINN_BROWSER_SESSION_SECONDS";
 
 enum AgentEndpoint {
     Standard(String),
@@ -113,9 +110,7 @@ async fn main() {
     {
         let management = match (&args.pair, &args.unpair, args.pairing_facts) {
             (Some(_), Some(_), _) => {
-                eprintln!(
-                    "graphshell device host: --pair-node and --unpair-node are mutually exclusive"
-                );
+                eprintln!("djinn: --pair-node and --unpair-node are mutually exclusive");
                 std::process::exit(2);
             }
             (Some(request), None, _) => Some(pair_device(&args, request)),
@@ -130,14 +125,14 @@ async fn main() {
                     return;
                 }
                 Err(error) => {
-                    eprintln!("graphshell device host: {error}");
+                    eprintln!("djinn: {error}");
                     std::process::exit(1);
                 }
             }
         }
     }
     if let Err(error) = init_logging(args.log_file.as_deref()) {
-        eprintln!("graphshell device host: initialize logging: {error}");
+        eprintln!("djinn: initialize logging: {error}");
         std::process::exit(1);
     }
     if let Err(error) = run(args).await {
@@ -419,7 +414,7 @@ fn report_pairing_facts(args: &Args) -> Result<String, String> {
     };
     Ok(format!(
         "graph   {}\nnode_id {}\nroot    {}\n\nOn the other device, run:\n  \
-         graphshell_device_host --pair-node {} --pair-root {} --pair-label <name>",
+         djinn --pair-node {} --pair-root {} --pair-label <name>",
         owner_settings::hex32(&facts.graph),
         owner_settings::hex32(&facts.node_id),
         owner_settings::hex32(&facts.root),
@@ -504,7 +499,7 @@ fn now_ms() -> u64 {
 
 #[cfg(feature = "personal-sync")]
 fn usage() -> &'static str {
-    "usage: graphshell_device_host [--dir <vault-dir>] [--profile <name>] \
+    "usage: djinn [--dir <vault-dir>] [--profile <name>] \
      [--agent-endpoint <standard-endpoint>] \
      [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
      [--log-file <path>]\n\
@@ -524,7 +519,7 @@ fn usage() -> &'static str {
 
 #[cfg(not(feature = "personal-sync"))]
 fn usage() -> &'static str {
-    "usage: graphshell_device_host [--dir <vault-dir>] [--profile <name>] \
+    "usage: djinn [--dir <vault-dir>] [--profile <name>] \
      [--agent-endpoint <standard-endpoint>] \
      [--browser-endpoint <private-endpoint>] [--data-root <dir>] \
      [--log-file <path>]\n\
@@ -542,12 +537,7 @@ fn default_agent_endpoint(vault_dir: &Path) -> String {
         std::env::var("SSH_AUTH_SOCK")
             .ok()
             .filter(|endpoint| !endpoint.trim().is_empty())
-            .unwrap_or_else(|| {
-                vault_dir
-                    .join("graphshell-agent.sock")
-                    .display()
-                    .to_string()
-            })
+            .unwrap_or_else(|| vault_dir.join("djinn-agent.sock").display().to_string())
     }
 }
 
@@ -607,161 +597,175 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let owner =
         owner_settings::OwnerSettings::load(&owner_settings::settings_path(&app_dir, &profile_id))?;
     #[cfg(feature = "personal-sync")]
-    let blob_custody = ResidentBlobCustody::open(&data_root, &owner.content).await?;
+    let mut resident =
+        DjinnResident::open(personae.as_ref(), &data_root, &profile_id, owner).await?;
     #[cfg(feature = "personal-sync")]
-    let mut resident_knot = match owner.knot {
-        Some(config) => {
-            let resident = ResidentKnot::open(&data_root, config, blob_custody.clone()).await?;
+    if resident.knot_enabled() {
+        if let Some((node, space)) = resident.knot_network_facts() {
             tracing::info!(
-                sync = resident.sync_enabled(),
-                node = resident.node_id().map(|node| owner_settings::hex32(&node)),
-                space = resident
-                    .space_id()
-                    .map(|space| owner_settings::hex32(&space)),
+                sync = true,
+                node = owner_settings::hex32(&node),
+                space = owner_settings::hex32(&space),
                 "resident Knot route open"
             );
-            Some(resident)
+        } else {
+            tracing::info!(sync = false, "resident Knot route open");
         }
-        None => None,
-    };
-
-    #[cfg(not(windows))]
-    prepare_unix_agent_endpoint(match &args.agent {
-        AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
-    })
-    .await?;
-
-    let agent_listener = match &args.agent {
-        AgentEndpoint::Standard(endpoint) => personae.bind_standard_listener(endpoint)?,
-        AgentEndpoint::Receipt(endpoint) => personae.bind_receipt_listener(endpoint)?,
-    };
-    let agent_endpoint = match &args.agent {
-        AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
-    };
-    #[cfg(not(windows))]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(agent_endpoint, std::fs::Permissions::from_mode(0o600))?;
     }
-    tracing::info!(endpoint = agent_endpoint, "SSH agent listening");
 
-    let allowlist = AllowedExtensions::default()
-        .with_additional(&std::env::var(EXTRA_EXTENSIONS_ENV).unwrap_or_default());
-    let agent = listen(agent_listener, personae.agent_session());
-    #[cfg(feature = "personal-sync")]
-    let supplemental_cards = device_sync::start(
-        personae.as_ref(),
-        &app_dir,
-        &args.vault_dir,
-        &profile_id,
-        args.data_root.clone(),
-        args.sync_overrides,
-        args.sync_peer_tickets,
-        args.seed_notes,
-        args.blob_actions,
-        blob_custody,
-    )
-    .await?;
-    // Both doors are served from the same surface handle, so an application
-    // and a browser on this device see one set of cards rather than two.
-    #[cfg(feature = "personal-sync")]
-    let app_surface = supplemental_cards.clone();
-    #[cfg(not(feature = "personal-sync"))]
-    let app_surface: Option<graphshell::native::device_broker::DeviceSurfaceHandle> = None;
-    #[cfg(feature = "personal-sync")]
-    let (allowed_app_routes, app_catalog) = {
-        let mut catalog = ResidentEndpointCatalog::new();
-        let mut grants = vec![(
-            AppId::new("turnstone"),
-            ResidentEndpointRoute::new("identity", Duration::from_millis(50))?,
-        )];
-        if let Some(knot) = resident_knot.as_ref() {
-            knot.register(&mut catalog)?;
-            grants.push((AppId::new("turnstone"), ResidentKnot::route()));
+    // Keep every broker future inside this async block.  Its captures, most
+    // notably the blob-store clones held by personal sync, are dropped before
+    // the resident begins its ordered shutdown.
+    let outcome: Result<(), Box<dyn std::error::Error>> = async {
+        #[cfg(not(windows))]
+        prepare_unix_agent_endpoint(match &args.agent {
+            AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
+        })
+        .await?;
+
+        let agent_listener = match &args.agent {
+            AgentEndpoint::Standard(endpoint) => personae.bind_standard_listener(endpoint)?,
+            AgentEndpoint::Receipt(endpoint) => personae.bind_receipt_listener(endpoint)?,
+        };
+        let agent_endpoint = match &args.agent {
+            AgentEndpoint::Standard(endpoint) | AgentEndpoint::Receipt(endpoint) => endpoint,
+        };
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(agent_endpoint, std::fs::Permissions::from_mode(0o600))?;
         }
-        (
-            AllowedAppRoutes::new(grants),
-            AppEndpointCatalog::new(catalog),
+        tracing::info!(endpoint = agent_endpoint, "SSH agent listening");
+
+        let allowlist = AllowedExtensions::default()
+            .with_additional(&std::env::var(EXTRA_EXTENSIONS_ENV).unwrap_or_default());
+        let agent = listen(agent_listener, personae.agent_session());
+        #[cfg(feature = "personal-sync")]
+        let supplemental_cards = device_sync::start(
+            personae.as_ref(),
+            &app_dir,
+            &args.vault_dir,
+            &profile_id,
+            args.data_root.clone(),
+            args.sync_overrides,
+            args.sync_peer_tickets,
+            args.seed_notes,
+            args.blob_actions,
+            resident.blobs(),
         )
-    };
-    #[cfg(not(feature = "personal-sync"))]
-    let (allowed_app_routes, app_catalog) =
-        (AllowedAppRoutes::default(), AppEndpointCatalog::default());
-    let apps = serve_app_broker(
-        &args.app_endpoint,
-        Arc::clone(&personae),
-        allowed_app_routes,
-        session_duration_ms(),
-        app_surface,
-        app_catalog,
-    );
-    #[cfg(feature = "personal-sync")]
-    let browser = async {
-        match supplemental_cards {
-            Some(cards) => {
-                serve_browser_broker_with_cards(
-                    &args.browser_endpoint,
-                    Arc::clone(&personae),
-                    Arc::new(SystemNativeIdentityUi::default()),
-                    allowlist,
-                    session_duration_ms(),
-                    cards,
-                )
-                .await
+        .await?;
+        // Both doors are served from the same surface handle, so an application
+        // and a browser on this device see one set of cards rather than two.
+        #[cfg(feature = "personal-sync")]
+        let app_surface = supplemental_cards.clone();
+        #[cfg(not(feature = "personal-sync"))]
+        let app_surface: Option<graphshell::native::device_broker::DeviceSurfaceHandle> = None;
+        #[cfg(feature = "personal-sync")]
+        let (allowed_app_routes, app_catalog) = {
+            let mut catalog = ResidentEndpointCatalog::new();
+            let mut grants = vec![(
+                AppId::new("turnstone"),
+                ResidentEndpointRoute::new("identity", Duration::from_millis(50))?,
+            )];
+            if let Some(route) = resident.register_knot_route(&mut catalog)? {
+                grants.push((AppId::new("turnstone"), route));
             }
-            None => {
-                serve_browser_broker(
-                    &args.browser_endpoint,
-                    Arc::clone(&personae),
-                    Arc::new(SystemNativeIdentityUi::default()),
-                    allowlist,
-                    session_duration_ms(),
-                )
-                .await
+            (
+                AllowedAppRoutes::new(grants),
+                AppEndpointCatalog::new(catalog),
+            )
+        };
+        #[cfg(not(feature = "personal-sync"))]
+        let (allowed_app_routes, app_catalog) =
+            (AllowedAppRoutes::default(), AppEndpointCatalog::default());
+        let apps = serve_app_broker(
+            &args.app_endpoint,
+            Arc::clone(&personae),
+            allowed_app_routes,
+            session_duration_ms(),
+            app_surface,
+            app_catalog,
+        );
+        #[cfg(feature = "personal-sync")]
+        let browser = async {
+            match supplemental_cards {
+                Some(cards) => {
+                    serve_browser_broker_with_cards(
+                        &args.browser_endpoint,
+                        Arc::clone(&personae),
+                        Arc::new(SystemNativeIdentityUi::default()),
+                        allowlist,
+                        session_duration_ms(),
+                        cards,
+                    )
+                    .await
+                }
+                None => {
+                    serve_browser_broker(
+                        &args.browser_endpoint,
+                        Arc::clone(&personae),
+                        Arc::new(SystemNativeIdentityUi::default()),
+                        allowlist,
+                        session_duration_ms(),
+                    )
+                    .await
+                }
             }
-        }
-    };
-    #[cfg(not(feature = "personal-sync"))]
-    let browser = serve_browser_broker(
-        &args.browser_endpoint,
-        Arc::clone(&personae),
-        Arc::new(SystemNativeIdentityUi::default()),
-        allowlist,
-        session_duration_ms(),
-    );
-    tokio::pin!(agent);
-    tokio::pin!(browser);
-    tokio::pin!(apps);
-    let mut knot_refresh = tokio::time::interval(Duration::from_secs(1));
-    knot_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let outcome = loop {
-        tokio::select! {
-            result = &mut agent => {
-                result?;
-                break Err("SSH agent listener ended unexpectedly".into())
-            }
-            result = &mut browser => {
-                result?;
-                break Err("browser device broker ended unexpectedly".into())
-            }
-            result = &mut apps => {
-                result?;
-                break Err("first-party application broker ended unexpectedly".into())
-            }
-            _ = knot_refresh.tick(), if resident_knot.is_some() => {
-                if let Some(knot) = resident_knot.as_mut()
-                    && let Err(error) = knot.refresh_settings().await
-                {
-                    tracing::warn!(%error, "could not refresh resident Knot authority");
+        };
+        #[cfg(not(feature = "personal-sync"))]
+        let browser = serve_browser_broker(
+            &args.browser_endpoint,
+            Arc::clone(&personae),
+            Arc::new(SystemNativeIdentityUi::default()),
+            allowlist,
+            session_duration_ms(),
+        );
+        tokio::pin!(agent);
+        tokio::pin!(browser);
+        tokio::pin!(apps);
+        let mut knot_refresh = tokio::time::interval(Duration::from_secs(1));
+        knot_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                result = &mut agent => {
+                    match result {
+                        Ok(()) => break Err("SSH agent listener ended unexpectedly".into()),
+                        Err(error) => break Err(error.into()),
+                    }
+                }
+                result = &mut browser => {
+                    match result {
+                        Ok(()) => break Err("browser device broker ended unexpectedly".into()),
+                        Err(error) => break Err(error.into()),
+                    }
+                }
+                result = &mut apps => {
+                    match result {
+                        Ok(()) => break Err("first-party application broker ended unexpectedly".into()),
+                        Err(error) => break Err(error.into()),
+                    }
+                }
+                _ = knot_refresh.tick(), if resident.knot_enabled() => {
+                    if let Err(error) = resident.refresh().await {
+                        tracing::warn!(%error, "could not refresh resident Knot authority");
+                    }
                 }
             }
         }
-    };
-    #[cfg(feature = "personal-sync")]
-    if let Some(knot) = resident_knot {
-        knot.close().await?;
     }
-    outcome
+    .await;
+
+    // A listener failure is not permission to leave sealed credentials or
+    // content custody open. Preserve the listener outcome, but make the
+    // closure failure visible when it is the only failure.
+    match (outcome, resident.shutdown().await) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(error.into()),
+        (Err(outcome), Err(shutdown)) => {
+            Err(format!("{outcome}; resident shutdown: {shutdown}").into())
+        }
+    }
 }
 
 fn session_duration_ms() -> u64 {

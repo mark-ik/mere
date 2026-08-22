@@ -1,4 +1,4 @@
-//! Bring-up and pairing for the resident host's personal-graph sync.
+//! Djinn bring-up for the resident's personal-graph sync.
 //!
 //! Split out of the device-host binary so the settings resolution, the data
 //! root migration and the pairing write are ordinary library code with tests,
@@ -9,19 +9,17 @@ use std::sync::Arc;
 
 use personae::{IdentityProvider, ProfileId};
 
-use crate::identity_endpoint::TransferDecision;
-use crate::native::device_broker::{DeviceSurface, DeviceSurfaceHandle};
-use crate::native::owner_settings::{
-    self, DataRootMigration, OwnerSettings, OwnerSettingsError, SyncOverrides,
+use crate::resident_blobs::{LEGACY_PERSONAL_LEASE, LegacyBlobMigration, ResidentBlobCustody};
+use crate::settings::{
+    self as owner_settings, DataRootMigration, OwnerSettings, OwnerSettingsError, SyncOverrides,
 };
-use crate::native::personal_sync_host::{
+use graphshell::identity_endpoint::TransferDecision;
+use graphshell::native::device_broker::{DeviceSurface, DeviceSurfaceHandle};
+use graphshell::native::personal_sync_host::{
     PersonalSyncHost, PersonalSyncHostConfig, PersonalSyncHostError,
 };
-use crate::native::resident_blobs::{
-    LEGACY_PERSONAL_LEASE, LegacyBlobMigration, ResidentBlobCustody,
-};
-use crate::native::transfer_staging::{receive_transfer, released_blobs_for};
-use crate::personal_sync::{PersonalGraphEvent, SyncRoster, SyncSelection};
+use graphshell::native::transfer_staging::{receive_transfer, released_blobs_for};
+use graphshell::personal_sync::{PersonalGraphEvent, SyncRoster, SyncSelection};
 
 const PERSONAL_GRAPH_DOMAIN: &[u8] = b"mere.graphshell/personal-graph/v1";
 
@@ -188,7 +186,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     // exists to prevent. Blob availability comes on with it, since a receipt
     // without its captures is half a fact.
     let mut facets = sync.lanes.facets.clone();
-    for facet in crate::receipts::sync_facets() {
+    for facet in graphshell::receipts::sync_facets() {
         if !facets.iter().any(|selected| selected == facet) {
             facets.push(facet.to_string());
         }
@@ -206,7 +204,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         // The only synthetic rule the resident host installs today. If a
         // second lane ever needs one, extend this list rather than calling
         // the setter twice: it replaces rather than appends.
-        .with_synthetic_addresses([crate::receipts::sync_address_rule()]);
+        .with_synthetic_addresses([graphshell::receipts::sync_address_rule()]);
 
     // The cached-address rung: every hint recorded by a previous run rides in
     // as a best-effort address, so a device that has connected once can redial
@@ -404,7 +402,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     // uses, so the blocking call moves off the async worker rather than
     // stalling it.
     let reader_host = Arc::clone(&host);
-    let blob_reader: Arc<crate::native::device_broker::BlobReader> =
+    let blob_reader: Arc<graphshell::native::device_broker::BlobReader> =
         Arc::new(move |resource: &chirograph::ContentHash| {
             let host = Arc::clone(&reader_host);
             let hash = transport::BlobHash::from_bytes(resource.0);
@@ -422,7 +420,10 @@ pub async fn start<P: IdentityProvider + ?Sized>(
         blob_reader: Some(blob_reader),
     }));
     spawn_card_refresh(Arc::clone(&host), Arc::clone(&surface));
-    spawn_receipt_intake(Arc::clone(&host), crate::receipts::inbox_dir(&data_root));
+    spawn_receipt_intake(
+        Arc::clone(&host),
+        graphshell::receipts::inbox_dir(&data_root),
+    );
     spawn_accept_watch(host, Arc::clone(&surface));
     Ok(Some(surface))
 }
@@ -917,9 +918,9 @@ fn spawn_card_refresh(host: Arc<PersonalSyncHost>, surface: DeviceSurfaceHandle)
 /// so a receipt cannot advertise a blob whose bytes say something else.
 async fn stage_captures(
     host: &PersonalSyncHost,
-    receipt: &crate::receipts::PendingReceipt,
+    receipt: &graphshell::receipts::PendingReceipt,
 ) -> Result<usize, String> {
-    let captures = crate::receipts::captures_in(&receipt.events);
+    let captures = graphshell::receipts::captures_in(&receipt.events);
     let mut staged = 0;
     for (name, expected) in captures {
         // Already staged (a re-poll, or the same capture from another run):
@@ -970,7 +971,7 @@ fn spawn_receipt_intake(host: Arc<PersonalSyncHost>, inbox: PathBuf) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(RECEIPT_POLL).await;
-            let waiting = match crate::receipts::pending(&inbox) {
+            let waiting = match graphshell::receipts::pending(&inbox) {
                 Ok(waiting) if waiting.is_empty() => continue,
                 Ok(waiting) => waiting,
                 Err(error) => {
@@ -1008,7 +1009,7 @@ fn spawn_receipt_intake(host: Arc<PersonalSyncHost>, inbox: PathBuf) {
                         // Only now: a file cleared before the turn succeeded
                         // would lose the receipt entirely, whereas one cleared
                         // after a failure simply gets retried next poll.
-                        if let Err(error) = crate::receipts::mark_applied(&receipt.path) {
+                        if let Err(error) = graphshell::receipts::mark_applied(&receipt.path) {
                             tracing::warn!(
                                 %error,
                                 path = %receipt.path.display(),

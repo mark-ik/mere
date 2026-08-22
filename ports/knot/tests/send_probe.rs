@@ -16,5 +16,5 @@ fn assert_send<T: Send>() {}
 
 #[test]
 fn a_knot_endpoint_can_be_scheduled_by_a_resident_host() {
-    assert_send::<knot::KnotEndpoint>();
+    assert_send::<knot_editor::KnotEndpoint>();
 }
