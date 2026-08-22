@@ -221,7 +221,12 @@ function parseWorkerMessage(data) {
   return data;
 }
 
-function runWorker(label, config, { cancelAtState = null, frameBound }) {
+function runWorker(label, config, {
+  cancelAtState = null,
+  cooperativeCancelAfterFragments = null,
+  destroyDevicesAfterResult = false,
+  frameBound,
+}) {
   if (activeWorker) throw new Error("another probe worker is active");
   return new Promise((resolve, reject) => {
     const worker = new Worker("./worker.js", { type: "module", name: `distillery-${label}` });
@@ -229,11 +234,16 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
     activeRun = label;
     beginFrames(label);
     let settled = false;
+    let cutoffStarted = false;
     let lateMessages = 0;
     let lastState = "worker_created";
     const stateHistory = [];
     const gpuErrors = [];
     const streamMessages = [];
+    let cancelRequestedAt = null;
+    let cancelAcknowledgedAt = null;
+    let streamMessagesAtCancel = null;
+    let pendingReport = null;
 
     const finish = (value, error = null) => {
       if (settled) return;
@@ -263,7 +273,7 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
 
     worker.addEventListener("message", async (event) => {
       const message = parseWorkerMessage(event.data);
-      if (settled) {
+      if (settled || cutoffStarted) {
         lateMessages += 1;
         return;
       }
@@ -274,6 +284,7 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
         setState(message.state, `${label}: ${message.detail}`);
         if (cancelAtState === message.state) {
           const terminationRequestedAt = performance.now();
+          cutoffStarted = true;
           worker.terminate();
           const terminationCallMs = performance.now() - terminationRequestedAt;
           activeWorker = null;
@@ -299,11 +310,60 @@ function runWorker(label, config, { cancelAtState = null, frameBound }) {
       if (message.kind === "stream") {
         streamMessages.push(message);
         logState(label, `stream-${message.execution_index}:${message.fragment_index}`, JSON.stringify(message.fragment));
+        if (cooperativeCancelAfterFragments !== null
+          && cancelRequestedAt === null
+          && streamMessages.length >= cooperativeCancelAfterFragments) {
+          streamMessagesAtCancel = streamMessages.length;
+          cancelRequestedAt = performance.now();
+          worker.postMessage({ command: "cancel" });
+        }
+        return;
+      }
+      if (message.kind === "cancel_ack") {
+        cancelAcknowledgedAt = performance.now();
         return;
       }
       if (message.kind === "result") {
+        if (destroyDevicesAfterResult) {
+          pendingReport = message.report;
+          worker.postMessage({ command: "destroy_devices" });
+        } else {
+          worker.terminate();
+          finish({ report: message.report });
+        }
+        return;
+      }
+      if (message.kind === "device_teardown") {
+        const terminatedAt = performance.now();
+        cutoffStarted = true;
         worker.terminate();
-        finish({ report: message.report });
+        const terminationCallMs = performance.now() - terminatedAt;
+        activeWorker = null;
+        activeRun = null;
+        await delay(300);
+        finish({
+          report: pendingReport,
+          cooperative_cancel: {
+            requested_after_fragments: cooperativeCancelAfterFragments,
+            acknowledged: cancelAcknowledgedAt !== null,
+            request_to_ack_ms: cancelRequestedAt !== null && cancelAcknowledgedAt !== null
+              ? cancelAcknowledgedAt - cancelRequestedAt
+              : null,
+            stream_messages_at_request: streamMessagesAtCancel,
+            stream_messages_after_request: streamMessagesAtCancel === null
+              ? null
+              : streamMessages.length - streamMessagesAtCancel,
+          },
+          device_teardown: {
+            destroy_called: true,
+            tracked_device_count: message.count,
+            errors: message.errors,
+            worker_terminated: true,
+            termination_call_ms: terminationCallMs,
+            quiet_window_ms: 300,
+            late_messages: lateMessages,
+          },
+        });
         return;
       }
       if (message.kind === "error") {
@@ -395,6 +455,18 @@ async function runDecoder() {
       expected_hashes: null,
       expected_output_hash: null,
     }, { frameBound });
+    const cancellation = await runWorker(`${prefix}:cancel`, {
+      ...input,
+      mode: "warm",
+      run_count: 1,
+      manifest_id: cold.report.manifest_id,
+      expected_hashes: cold.report.component_hashes,
+      expected_output_hash: null,
+    }, {
+      cooperativeCancelAfterFragments: 1,
+      destroyDevicesAfterResult: true,
+      frameBound,
+    });
     const warm = await runWorker(`${prefix}:warm`, {
       ...input,
       mode: "warm",
@@ -404,9 +476,24 @@ async function runDecoder() {
     }, { frameBound });
     const storageAfter = await storageSnapshot();
     environment.memory_after = await memorySnapshot();
-    const gpuValidationErrorsObserved = cold.gpu_errors.length + warm.gpu_errors.length > 0;
+    const gpuValidationErrorsObserved = cold.gpu_errors.length
+      + cancellation.gpu_errors.length
+      + warm.gpu_errors.length > 0;
     const coldStreamsMatch = decoderStreamsMatch(cold);
+    const cancellationStreamsMatch = decoderStreamsMatch(cancellation);
     const warmStreamsMatch = decoderStreamsMatch(warm);
+    const cancellationRuns = cancellation.report.execution.decoder_runs ?? [];
+    const cooperativeCancellationPassed = cancellationRuns.length === 1
+      && cancellationRuns[0].cooperatively_cancelled === true
+      && cancellation.cooperative_cancel.acknowledged
+      && cancellation.cooperative_cancel.stream_messages_at_request === 1
+      && cancellation.cooperative_cancel.stream_messages_after_request === 0
+      && cancellationStreamsMatch;
+    const deviceTeardownPassed = cancellation.device_teardown.destroy_called
+      && cancellation.device_teardown.tracked_device_count > 0
+      && cancellation.device_teardown.errors.length === 0
+      && cancellation.device_teardown.worker_terminated
+      && cancellation.device_teardown.late_messages === 0;
     const rowPassed = cold.report.execution.reference_output_match === true
       && warm.report.execution.reference_output_match === true
       && cold.report.execution.repeat_outputs_match
@@ -414,18 +501,35 @@ async function runDecoder() {
       && warm.report.execution.matches_prior_worker === true
       && coldStreamsMatch
       && warmStreamsMatch
+      && cooperativeCancellationPassed
+      && deviceTeardownPassed
       && warm.report.integrity_matches
       && !gpuValidationErrorsObserved;
     receipt = {
-      schema: "distillery.browser-decoder-probe/v1",
+      schema: "distillery.browser-decoder-probe/v2",
       generated_at: new Date().toISOString(),
       configuration,
       environment,
       storage: { before: storageBefore, after: storageAfter },
-      frames: { idle: idleFrames, cold: cold.frames, warm: warm.frames },
-      gpu_errors: { cold: cold.gpu_errors, warm: warm.gpu_errors },
+      frames: {
+        idle: idleFrames,
+        cold: cold.frames,
+        cancellation: cancellation.frames,
+        warm: warm.frames,
+      },
+      gpu_errors: {
+        cold: cold.gpu_errors,
+        cancellation: cancellation.gpu_errors,
+        warm: warm.gpu_errors,
+      },
       cold: cold.report,
       cold_stream_messages: cold.stream_messages,
+      cancellation: {
+        report: cancellation.report,
+        stream_messages: cancellation.stream_messages,
+        cooperative_cancel: cancellation.cooperative_cancel,
+        device_teardown: cancellation.device_teardown,
+      },
       warm: warm.report,
       warm_stream_messages: warm.stream_messages,
       conclusions: {
@@ -439,17 +543,22 @@ async function runDecoder() {
         output_repeated_across_workers: warm.report.execution.matches_prior_worker,
         stream_crossed_worker_boundary: coldStreamsMatch && warmStreamsMatch,
         gpu_validation_errors_observed: gpuValidationErrorsObserved,
-        cooperative_esp_cancel_measured: false,
+        cooperative_esp_cancel_measured: cooperativeCancellationPassed,
+        cancellation_stopped_before_next_fragment:
+          cancellation.cooperative_cancel.stream_messages_after_request === 0,
+        gpu_device_destroy_measured: deviceTeardownPassed,
+        exact_recovery_after_teardown: warm.report.execution.reference_output_match === true
+          && warm.report.execution.matches_prior_worker === true,
         gpu_memory_release_measured: false,
         limiting_layer: rowPassed
-          ? "cooperative cancellation and GPU teardown remain unmeasured"
+          ? "browser GPU allocation telemetry remains unavailable after explicit device teardown"
           : "configured BrowserWebGpu decoder row",
       },
     };
   } catch (error) {
     const probe = error.probe ?? {};
     receipt = {
-      schema: "distillery.browser-decoder-probe/v1",
+      schema: "distillery.browser-decoder-probe/v2",
       generated_at: new Date().toISOString(),
       configuration,
       environment,
@@ -470,7 +579,7 @@ async function runDecoder() {
   }
   showReceipt();
   if (rowPassed(receipt)) {
-    setState("complete", `${model.model_id}: exact cold/warm streamed decoder row passed.`);
+    setState("complete", `${model.model_id}: exact output, cooperative cancellation, and device teardown passed.`);
   } else {
     setState("limited", `${model.model_id}: stopped at ${receipt.conclusions.limiting_layer}.`);
   }

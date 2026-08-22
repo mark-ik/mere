@@ -267,6 +267,9 @@ pub struct DecoderRunReceipt {
     pub token_completion_ms: Vec<f64>,
     /// Both token ids and text matched the independent reference.
     pub reference_output_match: bool,
+    /// The worker accepted a cooperative cancellation request before the next
+    /// generated token crossed ESP's observer boundary.
+    pub cooperatively_cancelled: bool,
 }
 
 /// One cold or warm model-worker receipt.
@@ -351,6 +354,7 @@ fn copy_ladder(sizes: &ComponentSizes) -> Vec<CopyStep> {
 
 #[cfg(target_arch = "wasm32")]
 mod worker {
+    use std::cell::Cell;
     use std::ops::ControlFlow;
 
     use burn::tensor::{Device, DeviceKind};
@@ -377,6 +381,18 @@ mod worker {
 
     const DATABASE: &str = "distillery-browser-model-probe-v1";
     const STORE: &str = "muniment";
+
+    thread_local! {
+        static CANCELLATION_REQUESTED: Cell<bool> = const { Cell::new(false) };
+    }
+
+    fn cancellation_requested() -> bool {
+        CANCELLATION_REQUESTED.with(Cell::get)
+    }
+
+    fn reset_cancellation() {
+        CANCELLATION_REQUESTED.with(|requested| requested.set(false));
+    }
 
     #[derive(Serialize)]
     struct StateMessage<'a> {
@@ -514,7 +530,7 @@ mod worker {
         let mut fragments = Vec::new();
         let mut post_error = None;
         let generation = provider
-            .generate_streaming_observed_async(
+            .generate_streaming_observed_async_controlled(
                 &request,
                 &mut |fragment| {
                     let elapsed_ms = Date::now() - started;
@@ -530,6 +546,7 @@ mod worker {
                     }
                 },
                 &mut |_| token_completion_ms.push(Date::now() - started),
+                &mut cancellation_requested,
             )
             .await
             .map_err(|error| format!("decoder generation: {error}"))?;
@@ -556,6 +573,7 @@ mod worker {
             steady_tokens_per_second,
             token_completion_ms,
             reference_output_match,
+            cooperatively_cancelled: generation.cooperatively_cancelled,
         })
     }
 
@@ -884,10 +902,18 @@ mod worker {
         Ok(report)
     }
 
+    /// Ask the active decoder generation to stop before its next token is
+    /// delivered to the observer.
+    #[wasm_bindgen]
+    pub fn request_cancel() {
+        CANCELLATION_REQUESTED.with(|requested| requested.set(true));
+    }
+
     /// Run one cold acquisition or warm reopen inside a dedicated worker.
     #[wasm_bindgen]
     pub async fn run_probe(config_json: String) -> Result<String, JsValue> {
         install_panic_hook();
+        reset_cancellation();
         let config: ProbeConfig = serde_json::from_str(&config_json)
             .map_err(|error| JsValue::from_str(&format!("probe config: {error}")))?;
         match execute(config).await {
