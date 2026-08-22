@@ -26,7 +26,8 @@ use servitor::{AuthorityProvider, Subject};
 use stickleback::{JoinError, JoinedSpace, SyncStatus};
 use transport::p2panda_transport::{KnownPeer, MdnsDiscoveryMode, RelayUrl};
 use transport::{
-    BlobPeerAuthorizer, BlobStore, P2pandaTransport, PeerID, Transport, sync_overlay_topic,
+    BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore, P2pandaTransport, PeerID,
+    Transport, sync_overlay_topic,
 };
 
 use crate::VaultDocument;
@@ -135,7 +136,8 @@ pub struct KnotEvidenceFetchReceipt {
 
 struct KnotEvidenceHost {
     blobs: Arc<BlobStore>,
-    readers: BlobPeerAuthorizer,
+    readers: BlobReadAuthorizer,
+    scope: BlobScope,
     sources: BlobPeerAuthorizer,
     max_artifact_bytes: u64,
 }
@@ -194,15 +196,48 @@ impl KnotSyncHost {
                 "personal pairing cannot authorize a communal Knot space".into(),
             ));
         }
-        let authorizer = BlobPeerAuthorizer::from_peers(config.paired_writers.iter().copied());
+        let readers = BlobReadAuthorizer::new();
+        Self::open_with_scoped_evidence(
+            store,
+            signing_seed,
+            config,
+            blobs,
+            readers,
+            max_artifact_bytes,
+        )
+        .await
+    }
+
+    /// Bind personal-device sync against a caller-shared serving authorizer.
+    ///
+    /// The content-retention actor receives the same handle and binds each
+    /// retained hash to this space. This keeps one custody truth across local
+    /// authoring and remote serving.
+    pub async fn open_with_scoped_evidence(
+        store: &KnotSyncFileStore,
+        signing_seed: [u8; 32],
+        config: KnotSyncHostConfig,
+        blobs: Arc<BlobStore>,
+        readers: BlobReadAuthorizer,
+        max_artifact_bytes: u64,
+    ) -> Result<Self, KnotSyncHostError> {
+        if store.encryption_profile() != KnotEncryptionProfile::PersonalVaultV1 {
+            return Err(KnotSyncHostError::Authority(
+                "personal pairing cannot authorize a communal Knot space".into(),
+            ));
+        }
+        let scope = BlobScope::new(store.space_id());
+        readers.replace_readers(scope, config.paired_writers.iter().copied());
+        let sources = BlobPeerAuthorizer::from_peers(config.paired_writers.iter().copied());
         Self::open_inner(
             store,
             signing_seed,
             config,
             Some(KnotEvidenceHost {
                 blobs,
-                readers: authorizer.clone(),
-                sources: authorizer,
+                readers,
+                scope,
+                sources,
                 max_artifact_bytes,
             }),
         )
@@ -229,13 +264,17 @@ impl KnotSyncHost {
             ));
         }
         let sources = BlobPeerAuthorizer::from_peers(authority.writers.iter().copied());
+        let scope = BlobScope::new(store.space_id());
+        let readers = BlobReadAuthorizer::new();
+        readers.replace_readers(scope, authority.evidence_readers.peers());
         Self::open_inner(
             store,
             signing_seed,
             config,
             Some(KnotEvidenceHost {
                 blobs,
-                readers: authority.evidence_readers,
+                readers,
+                scope,
                 sources,
                 max_artifact_bytes,
             }),
@@ -253,7 +292,8 @@ impl KnotSyncHost {
             .gossip()
             .mdns(MdnsDiscoveryMode::Active);
         if let Some(evidence) = &evidence {
-            builder = builder.authorized_blobs(&evidence.blobs, evidence.readers.clone());
+            builder =
+                builder.scoped_blobs(&evidence.blobs, evidence.scope, evidence.readers.clone());
         }
         for url in config.relay_urls {
             builder = builder.relay_url(url);
@@ -306,6 +346,11 @@ impl KnotSyncHost {
         self.transport.local_peer_id().to_bytes()
     }
 
+    /// Stable Knot space carried by this host.
+    pub fn space_id(&self) -> [u8; 32] {
+        self.space_id
+    }
+
     pub fn sync_status(&self) -> SyncStatus {
         self.joined.sync_status()
     }
@@ -316,7 +361,7 @@ impl KnotSyncHost {
         let Self {
             joined, transport, ..
         } = self;
-        joined.leave_and_wait().await;
+        joined.leave_and_wait().await?;
         transport
             .close()
             .await
@@ -324,10 +369,29 @@ impl KnotSyncHost {
     }
 
     /// Current evidence-fetch admission handle, when this host serves blobs.
-    pub fn evidence_authorizer(&self) -> Option<BlobPeerAuthorizer> {
+    pub fn evidence_authorizer(&self) -> Option<BlobReadAuthorizer> {
         self.evidence
             .as_ref()
             .map(|evidence| evidence.readers.clone())
+    }
+
+    /// Bind an already-retained reference to this host's serving scope.
+    ///
+    /// Startup uses this while replaying resident documents whose evidence was
+    /// retained on an earlier run. It changes authority only; bytes are not
+    /// copied or opened a second time.
+    pub fn retain_evidence_custody(
+        &self,
+        reference: &KnotClipEvidenceRef,
+    ) -> Result<bool, KnotSyncHostError> {
+        let evidence = self
+            .evidence
+            .as_ref()
+            .ok_or_else(|| KnotSyncHostError::EvidenceBlob("blob serving is disabled".into()))?;
+        let hash = reference
+            .blob_hash()
+            .map_err(KnotSyncHostError::EvidenceReference)?;
+        Ok(evidence.readers.retain(evidence.scope, hash))
     }
 
     /// Replace current paired Personae peers. Existing local bytes remain
@@ -338,7 +402,9 @@ impl KnotSyncHost {
         }
         self.evidence.as_ref().is_some_and(|evidence| {
             let readers = readers.into_iter().collect::<Vec<_>>();
-            let serving_changed = evidence.readers.replace(readers.iter().copied());
+            let serving_changed = evidence
+                .readers
+                .replace_readers(evidence.scope, readers.iter().copied());
             let source_changed = evidence.sources.replace(readers);
             serving_changed || source_changed
         })
@@ -358,7 +424,9 @@ impl KnotSyncHost {
             .store
             .replace_admitted_writers(authority.writers.iter().copied());
         let evidence_changed = self.evidence.as_ref().is_some_and(|evidence| {
-            let serving_changed = evidence.readers.replace(authority.evidence_readers.peers());
+            let serving_changed = evidence
+                .readers
+                .replace_readers(evidence.scope, authority.evidence_readers.peers());
             let source_changed = evidence.sources.replace(authority.writers);
             serving_changed || source_changed
         });
@@ -424,6 +492,7 @@ impl KnotSyncHost {
             .map_err(|error| KnotSyncHostError::EvidenceBlob(error.to_string()))?
         {
             self.read_evidence(reference).await?;
+            evidence.readers.retain(evidence.scope, hash);
             return Ok(KnotEvidenceFetchReceipt {
                 reference: reference.clone(),
                 status: KnotEvidenceFetchStatus::AlreadyPresent,
@@ -441,6 +510,7 @@ impl KnotSyncHost {
             let _ = evidence.blobs.release(tag.as_bytes()).await;
             return Err(error);
         }
+        evidence.readers.retain(evidence.scope, hash);
         Ok(KnotEvidenceFetchReceipt {
             reference: reference.clone(),
             status: KnotEvidenceFetchStatus::Fetched,
@@ -494,6 +564,19 @@ impl KnotSyncHost {
             .peer_ticket(peer)
             .await
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))
+    }
+
+    /// Apply a newly persisted endpoint ticket without restarting the host.
+    ///
+    /// The ticket supplies reachability only. Its peer still needs writer and
+    /// evidence admission through pairing before any Knot data is accepted.
+    pub async fn add_peer_hint(&self, ticket: &str) -> Result<[u8; 32], KnotSyncHostError> {
+        let peer = self
+            .transport
+            .add_peer_ticket(ticket)
+            .await
+            .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
+        Ok(peer.to_bytes())
     }
 
     /// Write back the addresses of devices this host is actually talking to.
@@ -579,7 +662,7 @@ impl KnotSyncHost {
             .map_err(|error| KnotSyncHostError::Transport(error.to_string()))?;
         self.store.admit_writer(writer);
         if let Some(evidence) = &self.evidence {
-            evidence.readers.allow(writer);
+            evidence.readers.allow_reader(evidence.scope, writer);
             evidence.sources.allow(writer);
         }
         Ok(())
@@ -596,7 +679,7 @@ impl KnotSyncHost {
             .map_err(|error| KnotSyncHostError::Transport(format!("paired writer {error}")))?;
         self.store.deny_writer(&writer);
         if let Some(evidence) = &self.evidence {
-            evidence.readers.deny(&writer);
+            evidence.readers.deny_reader(evidence.scope, &writer);
             evidence.sources.deny(&writer);
         }
         self.transport
@@ -842,6 +925,7 @@ mod tests {
         )
         .await
         .unwrap();
+        assert!(alice_host.retain_evidence_custody(&reference).unwrap());
         let alice_ticket = alice_host.ticket().await.unwrap();
         let bob_host = KnotSyncHost::open_with_evidence(
             &bob_store,

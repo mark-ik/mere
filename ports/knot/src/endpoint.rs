@@ -317,6 +317,22 @@ impl KnotResidentSource {
             .map(|retention| retention.blob_store())
     }
 
+    /// Portable evidence references currently named by resident documents.
+    ///
+    /// A sync host replays this at startup to restore serving custody for
+    /// bytes retained on an earlier run. The Djot source remains the authority
+    /// for which hashes belong to the Knot space.
+    pub fn retained_evidence_references(&self) -> Result<Vec<KnotClipEvidenceRef>, String> {
+        let state = self.state();
+        let mut references = Vec::new();
+        for document in state.vault.documents() {
+            references.extend(crate::clip_evidence_references(&document.body)?);
+        }
+        references.sort_by(|left, right| left.digest.cmp(&right.digest));
+        references.dedup_by(|left, right| left.digest == right.digest);
+        Ok(references)
+    }
+
     fn content_retention(&self) -> Option<KnotContentRetentionPort> {
         self.inner
             .retention

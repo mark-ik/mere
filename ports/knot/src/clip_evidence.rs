@@ -10,7 +10,7 @@ use std::thread::{self, JoinHandle};
 
 use chirograph::{KnotClipArtifactRoleV1, KnotClipArtifactV1, PortableContentRefV1};
 use serde::{Deserialize, Serialize};
-use transport::{BlobHash, BlobStore};
+use transport::{BlobHash, BlobReadAuthorizer, BlobScope, BlobStore};
 
 static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
@@ -328,6 +328,7 @@ impl KnotClipEvidenceStore for FileClipEvidenceStore {
 pub struct BlobClipEvidenceStore {
     blobs: Arc<BlobStore>,
     max_artifact_bytes: u64,
+    custody: Option<(BlobReadAuthorizer, BlobScope)>,
 }
 
 impl BlobClipEvidenceStore {
@@ -355,6 +356,7 @@ impl BlobClipEvidenceStore {
         Ok(Self {
             blobs,
             max_artifact_bytes,
+            custody: None,
         })
     }
 
@@ -372,7 +374,12 @@ impl BlobClipEvidenceStore {
         &self,
         artifact: &KnotClipArtifactV1,
     ) -> Result<KnotClipEvidenceRef, String> {
-        retain_blob_artifact(&self.blobs, self.max_artifact_bytes, artifact).await
+        let reference =
+            retain_blob_artifact(&self.blobs, self.max_artifact_bytes, artifact).await?;
+        if let Some((authority, scope)) = &self.custody {
+            authority.retain(*scope, reference.blob_hash()?);
+        }
+        Ok(reference)
     }
 }
 
@@ -417,7 +424,28 @@ pub struct KnotContentRetentionPort {
 impl KnotContentRetentionPort {
     /// Open one persistent actor-backed retention service.
     pub fn open(root: impl AsRef<Path>, max_artifact_bytes: u64) -> Result<Self, String> {
-        let root = root.as_ref().to_path_buf();
+        Self::open_inner(root.as_ref(), max_artifact_bytes, None)
+    }
+
+    /// Open retention with serving custody bound to one domain scope.
+    ///
+    /// The binding lands only after the bytes have been retained and flushed,
+    /// so an authorized reader is never pointed at content the store lacks.
+    pub fn open_scoped(
+        root: impl AsRef<Path>,
+        max_artifact_bytes: u64,
+        authority: BlobReadAuthorizer,
+        scope: BlobScope,
+    ) -> Result<Self, String> {
+        Self::open_inner(root.as_ref(), max_artifact_bytes, Some((authority, scope)))
+    }
+
+    fn open_inner(
+        root: &Path,
+        max_artifact_bytes: u64,
+        custody: Option<(BlobReadAuthorizer, BlobScope)>,
+    ) -> Result<Self, String> {
+        let root = root.to_path_buf();
         let (commands, receiver) = mpsc::channel();
         let (ready, opened) = mpsc::sync_channel(1);
         let join = thread::Builder::new()
@@ -447,6 +475,7 @@ impl KnotContentRetentionPort {
                 let store = BlobClipEvidenceStore {
                     blobs: Arc::clone(&blobs),
                     max_artifact_bytes,
+                    custody,
                 };
                 if ready.send(Ok(blobs)).is_err() {
                     let _ = runtime.block_on(store.blobs.shutdown());

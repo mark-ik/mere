@@ -71,7 +71,7 @@ use stickleback::MunimentAddressBook;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
-use crate::blobs::{BlobPeerAuthorizer, BlobStore};
+use crate::blobs::{BlobHash, BlobPeerAuthorizer, BlobReadAuthorizer, BlobScope, BlobStore};
 use crate::{AcceptedSession, Alpn, IngressContext, PeerID, Transport, TransportError};
 
 /// A bidirectional p2panda-net QUIC stream presented as `AsyncRead + AsyncWrite`.
@@ -210,6 +210,117 @@ struct AuthorizedBlobsProtocol {
     authorizer: BlobPeerAuthorizer,
 }
 
+/// Hash-scoped wrapper around the ordinary iroh-blobs request handlers.
+///
+/// iroh authenticates the remote endpoint and parses each request. Murm asks
+/// the domain authorizer about every named hash before delegating the allowed
+/// request to iroh-blobs' public provider implementation.
+struct ScopedBlobsProtocol {
+    store: iroh_blobs::api::Store,
+    scope: BlobScope,
+    authorizer: BlobReadAuthorizer,
+}
+
+impl std::fmt::Debug for ScopedBlobsProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScopedBlobsProtocol")
+            .field("scope", &self.scope)
+            .field("readers", &self.authorizer.readers(self.scope).len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl ProtocolHandler for ScopedBlobsProtocol {
+    async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        let peer = *connection.remote_id().as_bytes();
+        while let Ok(mut pair) = iroh_blobs::provider::StreamPair::accept(
+            &connection,
+            iroh_blobs::provider::events::EventSender::DEFAULT,
+        )
+        .await
+        {
+            let request = match pair.read_request().await {
+                Ok(request) => request,
+                Err(_) => continue,
+            };
+            if !scoped_request_allowed(&self.store, &self.authorizer, self.scope, &peer, &request)
+                .await
+            {
+                connection.close(
+                    iroh_blobs::protocol::ERR_PERMISSION,
+                    b"hash is not authorized in this blob scope",
+                );
+                break;
+            }
+            let store = self.store.clone();
+            tokio::spawn(async move {
+                match request {
+                    iroh_blobs::protocol::Request::Get(request) => {
+                        let _ = iroh_blobs::provider::handle_get(pair, store, request).await;
+                    }
+                    iroh_blobs::protocol::Request::GetMany(request) => {
+                        let _ = iroh_blobs::provider::handle_get_many(pair, store, request).await;
+                    }
+                    iroh_blobs::protocol::Request::Observe(request) => {
+                        let _ = iroh_blobs::provider::handle_observe(pair, store, request).await;
+                    }
+                    _ => {}
+                }
+            });
+        }
+        Ok(())
+    }
+}
+
+async fn scoped_request_allowed(
+    store: &iroh_blobs::api::Store,
+    authorizer: &BlobReadAuthorizer,
+    scope: BlobScope,
+    peer: &[u8; 32],
+    request: &iroh_blobs::protocol::Request,
+) -> bool {
+    use iroh_blobs::protocol::Request;
+
+    match request {
+        Request::Get(request) => {
+            if !authorizer.allows(scope, peer, BlobHash::from(request.hash)) {
+                return false;
+            }
+            if request.ranges.is_blob() {
+                return true;
+            }
+            let Ok(bytes) = store.get_bytes(request.hash).await else {
+                return false;
+            };
+            let Ok(children) = iroh_blobs::hashseq::HashSeq::try_from(bytes) else {
+                return false;
+            };
+            request
+                .ranges
+                .iter_infinite()
+                .take(children.len() + 1)
+                .enumerate()
+                .skip(1)
+                .filter(|(_, ranges)| !ranges.is_empty())
+                .all(|(offset, _)| {
+                    children
+                        .get(offset - 1)
+                        .map(|hash| authorizer.allows(scope, peer, BlobHash::from(hash)))
+                        .unwrap_or(false)
+                })
+        }
+        Request::GetMany(request) => request
+            .hashes
+            .iter()
+            .zip(request.ranges.iter_infinite())
+            .filter(|(_, ranges)| !ranges.is_empty())
+            .all(|(hash, _)| authorizer.allows(scope, peer, BlobHash::from(*hash))),
+        Request::Observe(request) => authorizer.allows(scope, peer, BlobHash::from(request.hash)),
+        // Scoped serving is read-only. Unknown slots and pushes are refused.
+        _ => false,
+    }
+}
+
 impl std::fmt::Debug for AuthorizedBlobsProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AuthorizedBlobsProtocol")
@@ -273,6 +384,7 @@ pub struct P2pandaTransportBuilder<'a> {
     alpns: Vec<Alpn>,
     blobs: Option<&'a BlobStore>,
     blob_authorizer: Option<BlobPeerAuthorizer>,
+    scoped_blob_authorizer: Option<(BlobScope, BlobReadAuthorizer)>,
     mdns: Option<MdnsDiscoveryMode>,
     discovery: Option<DiscoveryConfig>,
     gossip: bool,
@@ -294,6 +406,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
             alpns: self.alpns,
             blobs: Some(store),
             blob_authorizer: None,
+            scoped_blob_authorizer: None,
             mdns: self.mdns,
             discovery: self.discovery,
             gossip: self.gossip,
@@ -315,6 +428,27 @@ impl<'a> P2pandaTransportBuilder<'a> {
             alpns: self.alpns,
             blobs: Some(store),
             blob_authorizer: Some(authorizer),
+            scoped_blob_authorizer: None,
+            mdns: self.mdns,
+            discovery: self.discovery,
+            gossip: self.gossip,
+            relay_urls: self.relay_urls,
+        }
+    }
+
+    /// Serve only hashes retained by `scope` to that scope's current readers.
+    pub fn scoped_blobs<'b>(
+        self,
+        store: &'b BlobStore,
+        scope: BlobScope,
+        authorizer: BlobReadAuthorizer,
+    ) -> P2pandaTransportBuilder<'b> {
+        P2pandaTransportBuilder {
+            signing_seed: self.signing_seed,
+            alpns: self.alpns,
+            blobs: Some(store),
+            blob_authorizer: None,
+            scoped_blob_authorizer: Some((scope, authorizer)),
             mdns: self.mdns,
             discovery: self.discovery,
             gossip: self.gossip,
@@ -381,6 +515,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
             self.alpns,
             self.blobs,
             self.blob_authorizer,
+            self.scoped_blob_authorizer,
             self.mdns,
             self.discovery,
             self.gossip,
@@ -416,6 +551,7 @@ impl P2pandaTransport {
             alpns: Vec::new(),
             blobs: None,
             blob_authorizer: None,
+            scoped_blob_authorizer: None,
             mdns: None,
             discovery: None,
             relay_urls: Vec::new(),
@@ -434,6 +570,7 @@ impl P2pandaTransport {
             alpns: Vec::new(),
             blobs: None,
             blob_authorizer: None,
+            scoped_blob_authorizer: None,
             mdns: None,
             discovery: None,
             relay_urls: Vec::new(),
@@ -458,6 +595,7 @@ impl P2pandaTransport {
             None,
             None,
             None,
+            None,
             false,
             Vec::new(),
         )
@@ -474,6 +612,7 @@ impl P2pandaTransport {
             master.to_seed(),
             alpns,
             blobs,
+            None,
             None,
             None,
             None,
@@ -497,6 +636,7 @@ impl P2pandaTransport {
             Some(authorizer),
             None,
             None,
+            None,
             false,
             Vec::new(),
         )
@@ -508,6 +648,7 @@ impl P2pandaTransport {
         alpns: Vec<Alpn>,
         blobs: Option<&BlobStore>,
         blob_authorizer: Option<BlobPeerAuthorizer>,
+        scoped_blob_authorizer: Option<(BlobScope, BlobReadAuthorizer)>,
         mdns: Option<MdnsDiscoveryMode>,
         discovery: Option<DiscoveryConfig>,
         gossip: bool,
@@ -551,7 +692,19 @@ impl P2pandaTransport {
 
         if let Some(store) = blobs {
             let blobs_protocol = iroh_blobs::BlobsProtocol::new(store.store(), None);
-            if let Some(authorizer) = blob_authorizer {
+            if let Some((scope, authorizer)) = scoped_blob_authorizer {
+                endpoint
+                    .accept(
+                        iroh_blobs::ALPN,
+                        ScopedBlobsProtocol {
+                            store: store.store().clone(),
+                            scope,
+                            authorizer,
+                        },
+                    )
+                    .await
+                    .map_err(|e| TransportError::Backend(format!("scoped blobs register: {e}")))?;
+            } else if let Some(authorizer) = blob_authorizer {
                 endpoint
                     .accept(
                         iroh_blobs::ALPN,
