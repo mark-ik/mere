@@ -5,9 +5,10 @@
 **Status**: D2a, the MiniLM D2b embedding row, D2c's configured embedding
 matrix, and one exact D2c decoder row are complete. Headed Chromium passes four
 cold/cancel/warm embedding rows from a 34.8 MB F16 BGE artifact through a
-438.0 MB F32 E5-base artifact, plus cold/warm streamed SmolLM2 generation from
-a 269.1 MB BF16 artifact. The upper model boundaries, cooperative ESP decoder
-cancellation, and GPU-memory release remain unmeasured. This track remains
+438.0 MB F32 E5-base artifact, plus streamed SmolLM2 generation, cooperative
+token-boundary cancellation, explicit `GPUDevice.destroy()`, and exact recovery
+in a fresh worker from a 269.1 MB BF16 artifact. The upper model boundaries and
+physical GPU-allocation release remain unmeasured. This track remains
 independent of the personal mesh and Burn Remote.
 
 **Related**:
@@ -54,8 +55,8 @@ Established now:
 
 Still unproven:
 
-- cooperative ESP cancellation during decoder generation;
-- GPU-memory release after worker termination;
+- physical GPU-memory release after explicit device destruction, because the
+  browser exposes no allocation telemetry;
 - a first failing embedding row above the 438 MB E5-base artifact;
 - a larger or failing decoder row beyond the first 269.1 MB success; and
 - whether isolated frame spikes remain acceptable under a configured product
@@ -192,9 +193,10 @@ the ceiling.
 
 The embedding phase is complete through the configured E5-base row. The first
 decoder row is complete through pinned SmolLM2-135M-Instruct and uses the ESP
-decoder provider directly. The decoder phase remains open for cooperative
-cancellation, teardown, and a larger row only when a forcing consumer needs an
-upper capability bound.
+decoder provider directly. Its cooperative cancellation, explicit device
+teardown, and fresh-worker recovery gates pass. A larger row remains useful
+only when a forcing consumer needs an upper capability bound; physical GPU
+allocation release cannot be measured with the available browser APIs.
 
 ---
 
@@ -367,5 +369,13 @@ product default is a later decision informed by these receipts.
   latency ranged from 67 ms to 364 ms; post-first-token throughput ranged from
   18.47 to 26.22 tok/s. Frame p95 stayed at or below 6.2 ms, with four isolated
   over-bound intervals and a 60.7 ms maximum. Persistent storage remained best
-  effort. Cooperative ESP cancellation and GPU-memory release remain open; a
-  larger decoder row is consumer-gated.
+  effort. A larger decoder row is consumer-gated.
+- **2026-08-22, D2c decoder lifecycle**: added a host cancellation check after
+  async token readback and before observer delivery. In clean Chromium 151 at
+  `45327c30`, the cancellation worker emitted one fragment, acknowledged the
+  request, emitted zero later fragments, and returned a one-token partial
+  generation marked cooperatively cancelled. The page then observed one
+  tracked `GPUDevice`, called `destroy()` without error, terminated the worker,
+  saw no late messages in 300 ms, and started a fresh worker that reopened the
+  same manifest and exactly reproduced all eight reference tokens. GPU error
+  scopes stayed empty. Physical allocation release remains explicitly unknown.

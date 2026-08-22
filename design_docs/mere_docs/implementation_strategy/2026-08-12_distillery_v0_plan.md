@@ -2,9 +2,10 @@
 
 **Date**: 2026-08-12  
 **Status**: D0 complete; D1 resident authority lifecycle implemented; D2's
-configured browser embedding matrix and first exact decoder row complete. The
-installed-port authority, cooperative decoder cancellation, and GPU teardown
-remain open.
+configured browser embedding matrix and first exact decoder row complete,
+including cooperative cancellation, explicit browser device teardown, and
+fresh-worker recovery. The installed-port authority and physical GPU-allocation
+telemetry remain open.
 
 ## 1. Purpose
 
@@ -175,9 +176,12 @@ artifact in headed Chromium. Cold and warm workers reproduce the independent
 Transformers and ESP NdArray token sequence exactly, stream every fragment to
 the page, reopen matching IndexedDB content, stay below the configured frame
 p95 bound, and report no WebGPU validation errors. The row forced Llama's
-split-half rotary rule and async browser token readback into ESP. Cooperative
-ESP cancellation and GPU teardown remain unmeasured. The upper embedding and
-decoder boundaries do not need larger rows until a consumer asks for them.
+split-half rotary rule and async browser token readback into ESP. The lifecycle
+receipt now cancels before the next token crosses ESP's observer boundary,
+destroys the worker's tracked `GPUDevice`, terminates cleanly, and reproduces
+the exact output in a fresh worker. Physical GPU-allocation release remains
+unobservable. The upper embedding and decoder boundaries do not need larger
+rows until a consumer asks for them.
 
 Cambium views should follow `ResidentReceipt` after the installed authority
 selects its Personae profile and settings location. The prerelease Burn 0.22

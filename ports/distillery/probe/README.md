@@ -31,8 +31,9 @@ embedding row, `runMatrix()` runs those rows in ascending artifact size,
 `runDecoder()` runs the pinned SmolLM2 decoder row, and `receipt()` returns the
 machine-readable result. The decoder row records every generated token and
 fragment, first-token latency, post-first-token throughput, cold/warm output
-identity, and stream messages observed by the page. Generated wasm and model
-artifacts stay out of Git; selected dated decision receipts are checked in when
+identity, cooperative token-boundary cancellation, explicit device teardown,
+and stream messages observed by the page. Generated wasm and model artifacts
+stay out of Git; selected dated decision receipts are checked in when
 they substantiate a boundary.
 
 ## Claim boundary
@@ -86,9 +87,15 @@ SmolLM2-135M-Instruct reopens from IndexedDB, streams eight fragments across
 both cold and warm worker boundaries, and matches the independent Transformers
 and ESP NdArray ids exactly. First-token and post-first-token timing, frame
 impact, and GPU-error scopes are recorded in the
-[decoder receipt](receipts/2026-08-22_d2c_browser_decoder.json).
+[decoder receipt](receipts/2026-08-22_d2c_browser_decoder.json). A second clean
+[lifecycle receipt](receipts/2026-08-22_d2c_browser_decoder_lifecycle.json)
+emits one fragment before cancellation, acknowledges the request, emits zero
+later fragments, and records a one-token partial ESP result. It then destroys
+the worker's one tracked `GPUDevice` without error, terminates with no late
+messages in the 300 ms quiet window, and exactly reproduces all eight tokens in
+a fresh worker.
 
 This completes D2c's configured embedding phase and establishes one decoder
-success. The upper embedding and decoder boundaries are unmeasured.
-Cooperative ESP cancellation, GPU-memory release, and a product default remain
-open. Trainers remain outside this ceiling probe.
+Physical GPU-memory release remains unobservable because the browser exposes no
+allocation telemetry; host-controlled device teardown is proven. A product
+default remains open. Trainers remain outside this ceiling probe.

@@ -2,9 +2,12 @@
 
 **Date**: 2026-08-22
 
-**Result**: Distillery's first D2c decoder row passed in a clean headed browser
-build. The same pinned SmolLM2 generation matches Transformers CPU, ESP
-NdArray, and ESP BrowserWebGpu exactly.
+**Result**: Distillery's first D2c decoder row and its lifecycle follow-up
+passed in clean headed browser builds. The same pinned SmolLM2 generation
+matches Transformers CPU, ESP NdArray, and ESP BrowserWebGpu exactly; a
+cooperative cancellation stops before the next fragment crosses the worker
+boundary, explicit device teardown completes, and a fresh worker recovers the
+exact output.
 
 ## Configuration
 
@@ -20,6 +23,8 @@ NdArray, and ESP BrowserWebGpu exactly.
 - Executions per cold or warm worker: 2
 - Browser receipt:
   [`2026-08-22_d2c_browser_decoder.json`](../../../ports/distillery/probe/receipts/2026-08-22_d2c_browser_decoder.json)
+- Browser lifecycle receipt:
+  [`2026-08-22_d2c_browser_decoder_lifecycle.json`](../../../ports/distillery/probe/receipts/2026-08-22_d2c_browser_decoder_lifecycle.json)
 - ESP NdArray control:
   [`2026-08-22_d2c_native_decoder.json`](../../../ports/distillery/probe/receipts/2026-08-22_d2c_native_decoder.json)
 - Independent Transformers control:
@@ -65,8 +70,15 @@ denied persistent-storage promotion, so this remains a reconstructible
 best-effort cache. Browser and GPU memory were not exposed by the available
 APIs.
 
-This is one successful decoder row, not a decoder ceiling. Cooperative ESP
-cancellation during generation and GPU-memory release after worker termination
-remain unmeasured. A larger decoder row is useful when a forcing consumer needs
-a higher capability bound; cancellation and teardown are the next structural
-proofs.
+This is one successful decoder row, not a decoder ceiling. In the clean
+`45327c30` lifecycle run, the page requested cancellation after one fragment;
+the worker acknowledged it, ESP emitted no later fragment, and the partial
+generation was marked cooperatively cancelled. The host then called
+`GPUDevice.destroy()` on one tracked device without error, terminated the
+worker, observed no late messages for 300 ms, and a fresh worker reopened the
+same manifest and reproduced the eight-token reference exactly. All WebGPU
+error scopes were empty.
+
+Physical GPU-allocation release remains unmeasured because Chromium exposes no
+allocation telemetry. A larger decoder row is useful only when a forcing
+consumer needs a higher capability bound.
