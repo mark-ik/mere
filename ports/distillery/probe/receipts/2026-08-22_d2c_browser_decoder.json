@@ -1,0 +1,717 @@
+{
+  "schema": "distillery.browser-decoder-probe/v1",
+  "generated_at": "2026-08-22T20:34:34.264Z",
+  "configuration": {
+    "workload": "decoder_generation",
+    "model_base_url": "/models/smollm2-135m-instruct",
+    "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "architecture": "llama",
+    "license": "Apache-2.0",
+    "input": "Mere keeps a model local.",
+    "run_count": 2,
+    "max_tokens": 8,
+    "expected_token_ids": [
+      198,
+      198,
+      504,
+      1743,
+      314,
+      253,
+      216,
+      35
+    ],
+    "expected_text": "\n\nThe model is a 3",
+    "expected_dimensions": null,
+    "reference_first_8": null,
+    "reference_tolerance": null,
+    "diagnostic_trace": false,
+    "model_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "expected_artifacts": {
+      "config": {
+        "bytes": 861,
+        "sha256": "8eb740e8bbe4cff95ea7b4588d17a2432deb16e8075bc5828ff7ba9be94d982a"
+      },
+      "tokenizer": {
+        "bytes": 2104556,
+        "sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+      },
+      "weights": {
+        "bytes": 269060552,
+        "dtype": "BF16",
+        "resident_dtype": "F32",
+        "sha256": "5af571cbf074e6d21a03528d2330792e532ca608f24ac70a143f6b369968ab8c"
+      }
+    },
+    "reference_source": "PyTorch 2.13.0+cpu / Transformers 5.15.1",
+    "idle_sample_ms": 1500,
+    "frame_bound_ms": 33.4,
+    "persistence_request": {
+      "requested": true,
+      "granted": false
+    }
+  },
+  "environment": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "platform": "Windows",
+    "hardware_concurrency": 16,
+    "device_memory_gib": 32,
+    "cross_origin_isolated": false,
+    "adapter": {
+      "state": "available",
+      "vendor": "nvidia",
+      "architecture": "lovelace",
+      "device": null,
+      "description": null,
+      "note": "Browser adapter sample; Burn's worker-internal adapter identity is not exposed."
+    },
+    "wasm_bundle": {
+      "url": "http://localhost:8733/ports/distillery/probe/web/pkg/distillery_model_probe_bg.wasm",
+      "bytes": 30072286
+    },
+    "memory_before": {
+      "state": "unknown",
+      "reason": "measureUserAgentSpecificMemory unavailable"
+    },
+    "memory_after": {
+      "state": "unknown",
+      "reason": "measureUserAgentSpecificMemory unavailable"
+    }
+  },
+  "storage": {
+    "before": {
+      "state": "best_effort",
+      "quota_bytes": 11007430216,
+      "usage_bytes": 270011976
+    },
+    "after": {
+      "state": "best_effort",
+      "quota_bytes": 11007444272,
+      "usage_bytes": 270026032
+    }
+  },
+  "frames": {
+    "idle": {
+      "count": 248,
+      "p50_ms": 6.099999999999454,
+      "p95_ms": 6.200000000000728,
+      "max_ms": 6.399999999999636,
+      "configured_bound_ms": 33.4,
+      "over_bound": 0
+    },
+    "cold": {
+      "count": 685,
+      "p50_ms": 6.099999999999454,
+      "p95_ms": 6.199999999999818,
+      "max_ms": 42.399999999999636,
+      "configured_bound_ms": 33.4,
+      "over_bound": 2
+    },
+    "warm": {
+      "count": 414,
+      "p50_ms": 6.099999999998545,
+      "p95_ms": 6.200000000000728,
+      "max_ms": 60.70000000000073,
+      "configured_bound_ms": 33.4,
+      "over_bound": 2
+    }
+  },
+  "gpu_errors": {
+    "cold": [],
+    "warm": []
+  },
+  "cold": {
+    "schema": "distillery.browser-model-worker/v2",
+    "build_base_commit": "dd215ebdbd335d37a60042a51b2eeb1e070369a3",
+    "build_worktree_dirty": false,
+    "mode": "cold",
+    "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "manifest_id": "blake3:02461cc18fed48a5f319a177e860972df5c1d3ca04b8f0757f3a4883e51c3f62",
+    "model_base_url": "/models/smollm2-135m-instruct",
+    "component_sizes": {
+      "fetched_config": 861,
+      "resolved_config": 711,
+      "tokenizer": 2104556,
+      "weights": 269060552
+    },
+    "component_hashes": {
+      "config": "ea7ca9a06fe607c47c9e8aaccc1614a75bf660e69cfe5a0f8fddf93df5f2b350",
+      "tokenizer": "944d1262d516abd56a8156dd3058a73a1bf3dc19419527592d854d162f288073",
+      "weights": "12d2cd8a877ef2cdcf785b3d4d1f373e0419074cc884aeaff06fc059686a5ba5"
+    },
+    "integrity_matches": true,
+    "copy_ladder": [
+      {
+        "stage": "fetch-array-buffer",
+        "owner": "browser",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "Response.arrayBuffer materializes the fetched weights in JS"
+      },
+      {
+        "stage": "worker-rust-vec",
+        "owner": "probe worker",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "Uint8Array copies the complete weights into Rust linear memory"
+      },
+      {
+        "stage": "eidetic-opaque-blob",
+        "owner": "eidetic",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "save_model_with_components currently clones the opaque payload"
+      },
+      {
+        "stage": "indexeddb-put-array",
+        "owner": "muniment/browser",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "IndexedDbBackend creates a Uint8Array for the transaction"
+      },
+      {
+        "stage": "indexeddb-resolve-vec",
+        "owner": "muniment/eidetic",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "warm resolution copies the stored Uint8Array into a Rust Vec"
+      },
+      {
+        "stage": "safetensors-to-burn",
+        "owner": "esp/burn-wgpu",
+        "bytes": 269060552,
+        "full_copy": false,
+        "note": "individual tensors are decoded and uploaded; aggregate GPU allocation is not exposed"
+      }
+    ],
+    "timings": {
+      "acquisition_ms": 309,
+      "indexeddb_write_ms": 925,
+      "resolve_ms": 599,
+      "model_load_ms": 401,
+      "first_execution_ms": 743,
+      "repeat_execution_ms": [
+        339
+      ]
+    },
+    "execution": {
+      "kind": "decoder_generation",
+      "backend": "burn-wgpu/dedicated-worker",
+      "expected_dimensions": null,
+      "dimensions_match": null,
+      "reference_max_abs_error": null,
+      "reference_within_tolerance": null,
+      "output_hash": "d2615c6ef5e44ec7ed75e5297a6c7a0a0ae1f138e91ff782ed253cfeca3020e2",
+      "repeat_outputs_match": true,
+      "matches_prior_worker": null,
+      "generated_text": "\n\nThe model is a 3",
+      "generated_token_ids": [
+        198,
+        198,
+        504,
+        1743,
+        314,
+        253,
+        216,
+        35
+      ],
+      "reference_output_match": true,
+      "decoder_runs": [
+        {
+          "execution_index": 0,
+          "token_ids": [
+            198,
+            198,
+            504,
+            1743,
+            314,
+            253,
+            216,
+            35
+          ],
+          "fragments": [
+            "\n",
+            "\n",
+            "The",
+            " model",
+            " is",
+            " a",
+            " ",
+            "3"
+          ],
+          "text": "\n\nThe model is a 3",
+          "first_token_ms": 364,
+          "total_generation_ms": 743,
+          "steady_tokens_per_second": 18.46965699208443,
+          "token_completion_ms": [
+            364,
+            463,
+            516,
+            566,
+            608,
+            646,
+            682,
+            717
+          ],
+          "reference_output_match": true
+        },
+        {
+          "execution_index": 1,
+          "token_ids": [
+            198,
+            198,
+            504,
+            1743,
+            314,
+            253,
+            216,
+            35
+          ],
+          "fragments": [
+            "\n",
+            "\n",
+            "The",
+            " model",
+            " is",
+            " a",
+            " ",
+            "3"
+          ],
+          "text": "\n\nThe model is a 3",
+          "first_token_ms": 72,
+          "total_generation_ms": 339,
+          "steady_tokens_per_second": 26.217228464419474,
+          "token_completion_ms": [
+            72,
+            107,
+            143,
+            177,
+            212,
+            246,
+            282,
+            318
+          ],
+          "reference_output_match": true
+        }
+      ],
+      "diagnostic_trace": null
+    }
+  },
+  "cold_stream_messages": [
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 0,
+      "elapsed_ms": 365,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 1,
+      "elapsed_ms": 463,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 2,
+      "elapsed_ms": 516,
+      "fragment": "The"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 3,
+      "elapsed_ms": 566,
+      "fragment": " model"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 4,
+      "elapsed_ms": 608,
+      "fragment": " is"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 5,
+      "elapsed_ms": 646,
+      "fragment": " a"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 6,
+      "elapsed_ms": 682,
+      "fragment": " "
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 7,
+      "elapsed_ms": 717,
+      "fragment": "3"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 0,
+      "elapsed_ms": 72,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 1,
+      "elapsed_ms": 107,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 2,
+      "elapsed_ms": 143,
+      "fragment": "The"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 3,
+      "elapsed_ms": 177,
+      "fragment": " model"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 4,
+      "elapsed_ms": 212,
+      "fragment": " is"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 5,
+      "elapsed_ms": 246,
+      "fragment": " a"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 6,
+      "elapsed_ms": 282,
+      "fragment": " "
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 7,
+      "elapsed_ms": 318,
+      "fragment": "3"
+    }
+  ],
+  "warm": {
+    "schema": "distillery.browser-model-worker/v2",
+    "build_base_commit": "dd215ebdbd335d37a60042a51b2eeb1e070369a3",
+    "build_worktree_dirty": false,
+    "mode": "warm",
+    "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "manifest_id": "blake3:02461cc18fed48a5f319a177e860972df5c1d3ca04b8f0757f3a4883e51c3f62",
+    "model_base_url": "/models/smollm2-135m-instruct",
+    "component_sizes": {
+      "fetched_config": 0,
+      "resolved_config": 711,
+      "tokenizer": 2104556,
+      "weights": 269060552
+    },
+    "component_hashes": {
+      "config": "ea7ca9a06fe607c47c9e8aaccc1614a75bf660e69cfe5a0f8fddf93df5f2b350",
+      "tokenizer": "944d1262d516abd56a8156dd3058a73a1bf3dc19419527592d854d162f288073",
+      "weights": "12d2cd8a877ef2cdcf785b3d4d1f373e0419074cc884aeaff06fc059686a5ba5"
+    },
+    "integrity_matches": true,
+    "copy_ladder": [
+      {
+        "stage": "fetch-array-buffer",
+        "owner": "browser",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "Response.arrayBuffer materializes the fetched weights in JS"
+      },
+      {
+        "stage": "worker-rust-vec",
+        "owner": "probe worker",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "Uint8Array copies the complete weights into Rust linear memory"
+      },
+      {
+        "stage": "eidetic-opaque-blob",
+        "owner": "eidetic",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "save_model_with_components currently clones the opaque payload"
+      },
+      {
+        "stage": "indexeddb-put-array",
+        "owner": "muniment/browser",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "IndexedDbBackend creates a Uint8Array for the transaction"
+      },
+      {
+        "stage": "indexeddb-resolve-vec",
+        "owner": "muniment/eidetic",
+        "bytes": 269060552,
+        "full_copy": true,
+        "note": "warm resolution copies the stored Uint8Array into a Rust Vec"
+      },
+      {
+        "stage": "safetensors-to-burn",
+        "owner": "esp/burn-wgpu",
+        "bytes": 269060552,
+        "full_copy": false,
+        "note": "individual tensors are decoded and uploaded; aggregate GPU allocation is not exposed"
+      }
+    ],
+    "timings": {
+      "acquisition_ms": null,
+      "indexeddb_write_ms": null,
+      "resolve_ms": 576,
+      "model_load_ms": 516,
+      "first_execution_ms": 642,
+      "repeat_execution_ms": [
+        341
+      ]
+    },
+    "execution": {
+      "kind": "decoder_generation",
+      "backend": "burn-wgpu/dedicated-worker",
+      "expected_dimensions": null,
+      "dimensions_match": null,
+      "reference_max_abs_error": null,
+      "reference_within_tolerance": null,
+      "output_hash": "d2615c6ef5e44ec7ed75e5297a6c7a0a0ae1f138e91ff782ed253cfeca3020e2",
+      "repeat_outputs_match": true,
+      "matches_prior_worker": true,
+      "generated_text": "\n\nThe model is a 3",
+      "generated_token_ids": [
+        198,
+        198,
+        504,
+        1743,
+        314,
+        253,
+        216,
+        35
+      ],
+      "reference_output_match": true,
+      "decoder_runs": [
+        {
+          "execution_index": 0,
+          "token_ids": [
+            198,
+            198,
+            504,
+            1743,
+            314,
+            253,
+            216,
+            35
+          ],
+          "fragments": [
+            "\n",
+            "\n",
+            "The",
+            " model",
+            " is",
+            " a",
+            " ",
+            "3"
+          ],
+          "text": "\n\nThe model is a 3",
+          "first_token_ms": 279,
+          "total_generation_ms": 642,
+          "steady_tokens_per_second": 19.28374655647383,
+          "token_completion_ms": [
+            279,
+            355,
+            405,
+            457,
+            497,
+            535,
+            577,
+            614
+          ],
+          "reference_output_match": true
+        },
+        {
+          "execution_index": 1,
+          "token_ids": [
+            198,
+            198,
+            504,
+            1743,
+            314,
+            253,
+            216,
+            35
+          ],
+          "fragments": [
+            "\n",
+            "\n",
+            "The",
+            " model",
+            " is",
+            " a",
+            " ",
+            "3"
+          ],
+          "text": "\n\nThe model is a 3",
+          "first_token_ms": 67,
+          "total_generation_ms": 341,
+          "steady_tokens_per_second": 25.547445255474454,
+          "token_completion_ms": [
+            67,
+            103,
+            141,
+            176,
+            212,
+            249,
+            284,
+            320
+          ],
+          "reference_output_match": true
+        }
+      ],
+      "diagnostic_trace": null
+    }
+  },
+  "warm_stream_messages": [
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 0,
+      "elapsed_ms": 280,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 1,
+      "elapsed_ms": 355,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 2,
+      "elapsed_ms": 405,
+      "fragment": "The"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 3,
+      "elapsed_ms": 457,
+      "fragment": " model"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 4,
+      "elapsed_ms": 497,
+      "fragment": " is"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 5,
+      "elapsed_ms": 535,
+      "fragment": " a"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 6,
+      "elapsed_ms": 577,
+      "fragment": " "
+    },
+    {
+      "kind": "stream",
+      "execution_index": 0,
+      "fragment_index": 7,
+      "elapsed_ms": 614,
+      "fragment": "3"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 0,
+      "elapsed_ms": 67,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 1,
+      "elapsed_ms": 103,
+      "fragment": "\n"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 2,
+      "elapsed_ms": 141,
+      "fragment": "The"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 3,
+      "elapsed_ms": 176,
+      "fragment": " model"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 4,
+      "elapsed_ms": 212,
+      "fragment": " is"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 5,
+      "elapsed_ms": 249,
+      "fragment": " a"
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 6,
+      "elapsed_ms": 284,
+      "fragment": " "
+    },
+    {
+      "kind": "stream",
+      "execution_index": 1,
+      "fragment_index": 7,
+      "elapsed_ms": 320,
+      "fragment": "3"
+    }
+  ],
+  "conclusions": {
+    "row_passed": true,
+    "artifact_reopened": true,
+    "integrity_reopened": true,
+    "exact_reference_match": true,
+    "output_repeated_within_workers": true,
+    "output_repeated_across_workers": true,
+    "stream_crossed_worker_boundary": true,
+    "gpu_validation_errors_observed": false,
+    "cooperative_esp_cancel_measured": false,
+    "gpu_memory_release_measured": false,
+    "limiting_layer": "cooperative cancellation and GPU teardown remain unmeasured"
+  }
+}

@@ -1,5 +1,6 @@
 param(
-    [string]$Matrix = (Join-Path $PSScriptRoot 'model-matrix.json')
+    [string]$Matrix = (Join-Path $PSScriptRoot 'model-matrix.json'),
+    [string]$Decoder = (Join-Path $PSScriptRoot 'decoder-model.json')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -7,8 +8,10 @@ $probeRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $mereRoot = (Resolve-Path (Join-Path $probeRoot '..\..\..')).Path
 $modelsRoot = Join-Path $mereRoot 'models'
 $configuration = Get-Content -Raw $Matrix | ConvertFrom-Json
+$decoderConfiguration = Get-Content -Raw $Decoder | ConvertFrom-Json
+$models = @($configuration.models) + @($decoderConfiguration.model)
 
-foreach ($model in $configuration.models) {
+foreach ($model in $models) {
     $relativeDirectory = $model.model_base_url -replace '^/models/', ''
     if (-not $relativeDirectory -or $relativeDirectory -match '[\\/:*?"<>|]') {
         throw "Unsafe model directory from '$($model.model_base_url)'"

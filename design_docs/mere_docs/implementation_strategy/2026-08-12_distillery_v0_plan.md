@@ -1,7 +1,11 @@
 # Distillery v0 Plan
 
 **Date**: 2026-08-12  
-**Status**: D0 complete; D1 resident authority lifecycle implemented.
+**Status**: D0 complete; D1 resident authority lifecycle implemented; D2's
+configured browser embedding matrix and first exact decoder row complete,
+including cooperative cancellation, explicit browser device teardown, and
+fresh-worker recovery. The installed-port authority and physical GPU-allocation
+telemetry remain open.
 
 ## 1. Purpose
 
@@ -160,16 +164,29 @@ author and where its persisted settings live; an environment seed would be a
 bad substitute for that authority.
 
 Distillery now also homes D2's standalone browser development probe without
-making it product chrome. Its first headed MiniLM row passes artifact storage,
-integrity, warm reopen, worker termination, and restart, but stops at
-Burn/CubeCL BrowserWebGpu execution: the generated reduction WGSL is invalid
-and the returned vector fails ESP's numerical reference. This does not resolve
-the installed-binary authority decision and does not open model-size sweep or
-decoder cancellation work.
+making it product chrome. The recovered BrowserWebGpu path now passes four
+pinned embedding artifacts from 34.8 MB F16 BGE Micro through 438.0 MB F32
+E5-base. Cold and warm execution pass integrity, independent numerical
+reference, repeatability, GPU-error, and worker-cutoff gates. The persistent
+storage request resolved `false`, so the 698 MB IndexedDB corpus remains a
+reconstructible best-effort cache rather than durable product storage.
 
-Cambium views should now follow `ResidentReceipt`. The stable Burn migration is
-the next serial compute gate, migrating ESP before Quint with the planned
-native, wasm, CPU, WGPU, real-device, and package receipts. The lease-bound Burn
-Remote adapter follows that migration. Model manifest browsing, streaming
-console, portable remote checkpoints, tolerant comparators, and training remain
-separate slices.
+The first D2 decoder row now passes a pinned 269,060,552-byte BF16 SmolLM2
+artifact in headed Chromium. Cold and warm workers reproduce the independent
+Transformers and ESP NdArray token sequence exactly, stream every fragment to
+the page, reopen matching IndexedDB content, stay below the configured frame
+p95 bound, and report no WebGPU validation errors. The row forced Llama's
+split-half rotary rule and async browser token readback into ESP. The lifecycle
+receipt now cancels before the next token crosses ESP's observer boundary,
+destroys the worker's tracked `GPUDevice`, terminates cleanly, and reproduces
+the exact output in a fresh worker. Physical GPU-allocation release remains
+unobservable. The upper embedding and decoder boundaries do not need larger
+rows until a consumer asks for them.
+
+Cambium views should follow `ResidentReceipt` after the installed authority
+selects its Personae profile and settings location. The prerelease Burn 0.22
+migration has executed for ESP and Quint; stable repinning and package closure
+remain release-gated. The lease-bound Burn Remote adapter still owes a
+`0.22.0-pre.2` source re-audit and targeted session-close seam. Model manifest
+browsing, streaming console, portable remote checkpoints, tolerant
+comparators, and training remain separate slices.

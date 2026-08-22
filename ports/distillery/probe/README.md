@@ -2,8 +2,8 @@
 
 This is D2's development surface, homed with the model-works port without
 turning the probe into product chrome. It runs a pinned real-model matrix
-through the Eidetic `ModelLibrary`, Muniment IndexedDB, ESP's BERT loader, and
-Burn WGPU inside dedicated browser workers.
+through the Eidetic `ModelLibrary`, Muniment IndexedDB, ESP's BERT and Llama
+loaders, and Burn WGPU inside dedicated browser workers.
 
 The probe is a standalone Cargo workspace. This keeps an evidence-only browser
 surface from widening Mere's ordinary product graph and lets it build while
@@ -27,10 +27,14 @@ wasm-bindgen CLI pin remain the reproducibility boundary.
 
 Open the printed URL in a headed Chromium browser and select **Run configured
 matrix**. `window.distilleryModelProbe.runSuite(modelId)` runs one configured
-row, `runMatrix()` runs in ascending artifact size, and `receipt()` returns the
-machine-readable result. Generated wasm and model artifacts stay out of Git;
-selected dated decision receipts are checked in when they substantiate a
-boundary.
+embedding row, `runMatrix()` runs those rows in ascending artifact size,
+`runDecoder()` runs the pinned SmolLM2 decoder row, and `receipt()` returns the
+machine-readable result. The decoder row records every generated token and
+fragment, first-token latency, post-first-token throughput, cold/warm output
+identity, cooperative token-boundary cancellation, explicit device teardown,
+and stream messages observed by the page. Generated wasm and model artifacts
+stay out of Git; selected dated decision receipts are checked in when
+they substantiate a boundary.
 
 ## Claim boundary
 
@@ -78,7 +82,20 @@ termination, message cutoff, and warm reopen through the 438 MB embedding row.
 The browser denied persistent-storage promotion, so the stored rows remained
 best effort even though same-origin warm reopen passed.
 
-This completes D2c's configured embedding phase. The upper embedding boundary
-is unmeasured above E5-base. Decoder streaming, first-token and token-throughput
-bounds, cooperative ESP cancellation, GPU-memory release, and a product default
-remain open. Trainers remain outside this ceiling probe.
+The first configured decoder row also passes in clean headed Chromium. Pinned
+SmolLM2-135M-Instruct reopens from IndexedDB, streams eight fragments across
+both cold and warm worker boundaries, and matches the independent Transformers
+and ESP NdArray ids exactly. First-token and post-first-token timing, frame
+impact, and GPU-error scopes are recorded in the
+[decoder receipt](receipts/2026-08-22_d2c_browser_decoder.json). A second clean
+[lifecycle receipt](receipts/2026-08-22_d2c_browser_decoder_lifecycle.json)
+emits one fragment before cancellation, acknowledges the request, emits zero
+later fragments, and records a one-token partial ESP result. It then destroys
+the worker's one tracked `GPUDevice` without error, terminates with no late
+messages in the 300 ms quiet window, and exactly reproduces all eight tokens in
+a fresh worker.
+
+This completes D2c's configured embedding phase and establishes one decoder
+Physical GPU-memory release remains unobservable because the browser exposes no
+allocation telemetry; host-controlled device teardown is proven. A product
+default remains open. Trainers remain outside this ceiling probe.

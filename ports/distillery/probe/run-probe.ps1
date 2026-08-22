@@ -13,7 +13,8 @@ $ownedStatus = git -C $mereRoot status --porcelain -- `
     ports/distillery/probe `
     crates/eidetic/muniment/Cargo.toml `
     crates/eidetic/muniment/src/indexeddb_backend.rs `
-    crates/intel/esp/src/embed/bert/provider.rs
+    crates/intel/esp/src/embed/bert/provider.rs `
+    crates/intel/esp/src/infer/decoder
 $env:DISTILLERY_PROBE_DIRTY = if ($ownedStatus) { 'true' } else { 'false' }
 
 New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null

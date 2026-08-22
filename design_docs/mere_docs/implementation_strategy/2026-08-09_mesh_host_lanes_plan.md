@@ -4,8 +4,10 @@
 
 **Status**: Open. Re-cut 2026-08-09 after review, around a supervisor gate the
 first draft was missing entirely. **H0, H1 and H2 have landed. H2's physical
-sweep and first host consumption landed in Distillery on 2026-08-12.** The Burn
-migration is the next gate and is release-gated upstream.
+sweep and first host consumption landed in Distillery on 2026-08-12.** The
+Burn 0.22.0-pre.2 migration executed on 2026-08-20; stable repinning remains
+release-gated. The remote adapter is the next executable lane, beginning with
+a pre.2 source re-audit and the targeted session-close seam.
 
 **Related**:
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md),
@@ -37,7 +39,7 @@ supervises running work.
 | ~~**H0: Host supervisor**~~ | **Done 2026-08-09** — `mere-mesh-host`. Non-blocking in-flight jobs, real heartbeat state, cancellation before revoke, correct leased completion |
 | ~~**H1: Blob location and delivery**~~ | **Done 2026-08-10** — `DeviceAttested` + `TransportCourier`. Mesh author resolves to a transport endpoint through an existing master-signed attestation; disjoint-store two-host receipt passes |
 | ~~**H2: Retention safety**~~ | **Done 2026-08-12** — fail-closed checkpoint rules plus Distillery's owner-controlled sweep; shared hashes and cross-subsystem custody remain protected |
-| **Burn migration** | Stable 0.22 dependency migration and existing backend baselines |
+| **Burn stable closure** | **Prerelease row executed 2026-08-20**; repeat dependency, backend, and package closure on stable 0.22 when published |
 | **Remote adapter** | Lease-bound authorization plus targeted session revocation |
 
 Serial. H0 first, because H1 and H2 are both things a supervisor does.
@@ -265,14 +267,15 @@ only after the last custody tag is gone.
 
 ## 5. Burn migration
 
-Release-gated, not toolchain-gated: the published line advanced to
-`v0.22.0-pre.2` on 2026-08-12, but stable 0.22 is still unavailable. Owned by the
+The chosen `v0.22.0-pre.2` row migrated ESP and Quint on 2026-08-20, retired the
+old `cubecl-wgpu` compatibility patch, and re-proved the native, wasm, WGPU,
+real-device, and ESP package boundaries. Stable 0.22 is still unavailable, so
+the final repin and clean package receipt remain release-gated. Owned by the
 [Burn 0.22 migration plan](2026-08-09_burn_0_22_migration_plan.md).
 
-What can proceed now without waiting: baseline capture against the existing
-backends, and B1 feature-fanout cleanup. A detached prerelease integration probe
-is also fine — `crates/probes` is excluded from the workspace, so it cannot
-widen production dependencies.
+Remote-adapter source work can now use the exact production prerelease row.
+Stable publication closure must still repeat the dependency and receipt matrix;
+the prerelease success is not that receipt.
 
 ---
 
@@ -391,3 +394,9 @@ classes, and remote tensor transport beyond the adapter gate above.
   production-migration gate stays closed. The remote-session design was read
   against pre.1 and must be revalidated against the chosen release before its
   adapter starts.
+- **2026-08-20 (prerelease migration)**: Mark reopened the production gate for
+  the chosen prerelease row. ESP migrated first and Quint second. The workspace
+  now resolves one wgpu 30.0.0 and one libsqlite3-sys 0.38.2, the old
+  `cubecl-wgpu` backport retired, and the native, wasm, WGPU, real-device, and
+  ESP package receipts passed. Stable repinning remains open. The remote
+  session design still needs its pre.2 source re-audit before implementation.

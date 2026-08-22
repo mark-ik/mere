@@ -1,0 +1,32 @@
+{
+  "schema": "distillery.transformers-decoder-reference/v1",
+  "model_dir": "C:\\t\\distillery-smollm2-135m",
+  "prompt": "Mere keeps a model local.",
+  "max_tokens": 8,
+  "prompt_token_ids": [
+    61,
+    518,
+    8211,
+    253,
+    1743,
+    1679,
+    30
+  ],
+  "generated_token_ids": [
+    198,
+    198,
+    504,
+    1743,
+    314,
+    253,
+    216,
+    35
+  ],
+  "generated_text": "\n\nThe model is a 3",
+  "reference_engine": {
+    "torch": "2.13.0+cpu",
+    "transformers": "5.15.1",
+    "dtype": "float32",
+    "device": "cpu"
+  }
+}

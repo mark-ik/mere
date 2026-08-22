@@ -1,0 +1,46 @@
+{
+  "emitted_fragments": 8,
+  "fragments": [
+    "\n",
+    "\n",
+    "The",
+    " model",
+    " is",
+    " a",
+    " ",
+    "3"
+  ],
+  "generated_text": "\n\nThe model is a 3",
+  "generated_token_ids": [
+    198,
+    198,
+    504,
+    1743,
+    314,
+    253,
+    216,
+    35
+  ],
+  "max_tokens": 8,
+  "model_dir": "C:\\t\\distillery-smollm2-135m",
+  "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+  "prompt": "Mere keeps a model local.",
+  "schema": "distillery.native-decoder-fixture/v1",
+  "stopped_by_callback": false,
+  "timings": {
+    "first_token_ms": 509.33709999999996,
+    "load_ms": 195.5174,
+    "steady_tokens_per_second": 1.7418817857493367,
+    "token_completion_ms": [
+      509.33709999999996,
+      1006.5964,
+      1504.5022000000001,
+      2013.0423999999998,
+      2515.3271,
+      3012.8968999999997,
+      3509.7839,
+      4030.0545999999995
+    ],
+    "total_generation_ms": 4527.9794999999995
+  }
+}

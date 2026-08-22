@@ -61,7 +61,11 @@ row localized and recovered two Burn/CubeCL browser defects. The configured
 D2c embedding matrix now passes BGE Micro, MiniLM, E5-small, and E5-base in
 headed Chromium, including integrity reopen, numerical references, worker
 termination, and frame receipts. The largest success is a 437,955,512-byte F32
-artifact; the upper embedding boundary and the decoder sweep remain open.
+artifact. A first 269,060,552-byte BF16 SmolLM2 decoder row also passes exact
+Transformers and ESP NdArray token references, cold/warm worker streaming,
+cooperative token-boundary cancellation, explicit `GPUDevice.destroy()`, and
+exact recovery in a fresh worker. The upper model boundaries and physical GPU
+allocation release remain unmeasured.
 
 There is not yet an installed standalone binary because Distillery still needs
 a product-level choice of Personae profile and persisted settings authority.
