@@ -1,8 +1,7 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1 through R4 and C1 through C3 complete. R5 and C4 are the next
-independent slices; V1 follows their convergence.
+**Status:** R1 through R5 and C1 through C4 complete. V1 is next.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -471,8 +470,10 @@ This plan does not:
   and resident startup replays references from Djot only when the bytes exist.
   All 42 `mere-transport` library tests pass, including the real-iroh
   cross-scope and live-revocation receipt; `cargo check -p knot --lib` also
-  passes. The full Knot lib-test build remains blocked in its endpoint fixtures
-  by the local Genet/Inker removal of `Fetched::text`, outside this slice.
+  passes. The full Knot lib-test build was not counted here because two endpoint
+  fixtures called a nonexistent `inker::Fetched::text` constructor. The later
+  R5/C4 audit established that this was a Mere test-only cross-type edit, not a
+  Genet/Inker API removal.
 - **2026-08-21, R3:** `71a4b81f` composed one startup-unlocked
   `KnotResidentSource` and its `KnotSyncHost` into
   `graphshell_device_host`. The process registers the stable `knot` application
@@ -503,7 +504,31 @@ This plan does not:
   removes every direct persona-vault open and reaches only the resident `knot`
   route in persona mode. Directory mode remains an in-process `LocalCarrier`,
   and a configured `knot_endpoint` remains an explicit isolated fixture. The
-  Turnstone check passes against the local Mere source. Knot's full unit-test
-  cone still stops in unrelated endpoint fixtures at the removed
-  `inker::Fetched::text`; the dedicated ownership receipt bypasses that drift
-  and passes.
+  Turnstone check passes against the local Mere source. The dedicated ownership
+  receipt passes. The later R5/C4 audit repaired the two unrelated endpoint
+  fixtures and restored the full Knot unit-test cone.
+- **2026-08-22, R5:** `0f0a8006` added Murm's `P2pandaOverlayHost` and one
+  owner-selected transport policy. Graphshell personal sync and Knot now share
+  relay parsing, mDNS policy, route seeding, overlay reporting, and clean
+  endpoint shutdown while supplying separate signing identities, topics,
+  protocol joins, and authority. Route discovery and ticket production are
+  shared; each product still persists refreshed tickets into its own settings
+  schema. The identity receipt proves separate caller seeds remain unlinkable
+  and only explicit seed reuse produces the same node id. All 45
+  `mere-transport` library tests pass.
+- **2026-08-22, C4:** `0f0a8006` added one content-revisioned
+  `KnotSpaceAuthoritySnapshot` for document writers, evidence readers,
+  evidence sources, and keyed route hints. Personal snapshots derive from
+  Personae pairing. Communal snapshots derive independent rights from Gemot
+  capability paths for `document`, `evidence/read`, and `evidence/source`.
+  Knot applies one revision to operation intake, blob serving, source
+  selection, and reachability, and Graphshell no longer keeps a copied writer
+  set. The focused `personal-sync` receipt proves pair and unpair advance the
+  applied revision and change both operation and exact-hash access. All 100
+  Knot library tests and the focused Graphshell test pass.
+- **2026-08-22, drift audit:** Genet's live `inker::Fetched` is a struct with
+  `content_type` and `body`; its history contains no `Fetched::text`
+  constructor. Two Knot test fixtures had confused it with Mere fetch's
+  separate helper during an exact-byte edit. `0f0a8006` changes only those
+  fixtures to the live struct form. No Genet compatibility layer or production
+  API change was needed.
