@@ -2,8 +2,9 @@
 
 **Date:** 2026-08-22
 **Code:** `228213fe`
-**Status:** Automated cone complete. Physical two-device and headed receipts
-remain open.
+**Status:** Automated cone and Turnstone headed edit/close/restart complete.
+Physical two-device and the remaining standalone/evidence-headed receipts stay
+open.
 
 ## What this closes
 
@@ -62,6 +63,44 @@ Stickleback fail to compile because the new `Header` no longer supplies the
 serialization and `to_bytes` API the current adapter expects. That integration
 drift is outside this V1 change and is not counted as a test failure.
 
+## Headed Turnstone evidence
+
+The headed lane now has a real first-party composition receipt rather than a
+sample-graph launch. Mere `4565d040` adds a receipt fixture that authors
+`knot://vault/field-note` through `StartupUnlockedPersonalVault` and selects
+that persona through Graphshell's ordinary owner settings. Turnstone
+`02772e0`, `952f0df`, and `8637abe` add the scenario key/IME routing and the two
+checked-in edit and reopen scenarios. Genet `9d3f2bd3031` makes the shared Probe
+selector recognize a textarea's native `textbox` role.
+
+The final run used fresh persona `00000000-0000-0000-0000-00000000a502`, fresh
+stores, and a private first-party named pipe. One hidden
+`graphshell_device_host` process logged `resident Knot route open` and
+`door="first-party"`. A headed Turnstone process then:
+
+1. opened the resident `knot` route;
+2. focused the painted editor through Turnstone's ordinary pointer path;
+3. inserted `headed edit` through the same IME seam as native input;
+4. saved with the same `Ctrl+S` key seam as native input;
+5. captured the saved editor;
+6. closed the live content pane and asserted that its surface was absent.
+
+Its app-authored sentinel reported `RESULT ok`. Graphshell's original resident
+process was still live after Turnstone exited. A second, fresh Turnstone process
+then reopened `field-note`, asserted `Resident V1 headed edit` and `saved`, and
+wrote a second `RESULT ok` sentinel. The app-authored frames are
+`01_resident_edit.png`, `02_resident_after_close.png`, and
+`03_resident_reopened.png` in the isolated receipt archive at
+`C:\t\knot-v1-headed-run-20260822-a502`.
+
+The shared semantic selector exposed one bounded drift. Genet Probe re-derives
+layout and aimed the textarea role at x621, outside the narrower textarea that
+Turnstone actually painted. The receipt therefore records its fixed 1024 x 600
+painted point, x480/y65, and still routes that point through the ordinary
+pointer lifecycle. Moving selector resolution onto Turnstone's retained,
+painted layout is a separate Genet/Turnstone automation contract change. It is
+not resident authority work.
+
 ## Remaining evidence
 
 The Rust receipt simulates two device identities, two stores, real endpoints,
@@ -69,15 +108,13 @@ document-before-artifact delivery, verified fetch, restart, offline read, and
 post-unpair refusal. It does not substitute for the plan's physical two-device
 run.
 
-The headed receipt also remains distinct. Turnstone's checked-in lockfile is
-behind the source that introduced `AppRouteCarrier`: `--locked` refuses a lock
-update, and resolving the old Git graph leaves that type absent. A disposable
-Turnstone worktree redirects the Git dependencies to the live Mere checkout and
-passes `cargo check --offline`. A normal debug link then failed with an invalid
-Turnstone rlib, while a fresh build with development debug information disabled
-linked and launched successfully. That headed run used Turnstone's sample graph,
-not the resident Knot route, so the plan's headed edit, restart, and
-evidence-open composition remains required for acceptance.
+The remaining headed work is narrower now. There is no standalone Knot
+executable yet, only the reserved `knot-editor` package name, so standalone sync
+status, the standalone edit/restart/evidence-open flow, and directory-only
+editing with the desktop resident stopped are not runnable claims. Turnstone's
+resident route also has no evidence-open scenario yet. Those are product/UI
+composition lanes, not reasons to reopen the resident document authority that
+this receipt exercised.
 
 ## Command-palette lag
 

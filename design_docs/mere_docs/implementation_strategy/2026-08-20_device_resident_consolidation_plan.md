@@ -1,8 +1,9 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1 through R5 and C1 through C4 complete. V1 automated is
-complete; the physical two-device and headed receipts remain open.
+**Status:** R1 through R5, C1 through C4, V1 automated, and the Turnstone headed
+edit/close/restart slice are complete. Physical two-device and the remaining
+standalone/evidence-headed receipts remain open.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -412,6 +413,17 @@ Done when:
 - A directory-only document remains editable with the desktop resident
   stopped.
 
+Headed status, 2026-08-22: Turnstone now edits and saves through Graphshell's
+first-party resident route, closes the pane while the resident stays live, and
+reopens the saved Djot in a fresh Turnstone process. The standalone sync-status
+part of the first bullet remains open because the repository has no standalone
+Knot executable yet. The standalone edit/restart/evidence-open flow, a
+Turnstone evidence-open action, and the resident-stopped directory-only flow
+also remain open. The receipt uses a fixed point in its declared 1024 x 600
+viewport because Probe's re-derived selector layout disagrees with Turnstone's
+painted textarea; moving automation targeting onto the retained painted layout
+is scoped to the Genet/Turnstone automation contract.
+
 #### Command-palette performance observation
 
 Reported 2026-08-22: interaction lags while Turnstone's command palette is
@@ -572,4 +584,14 @@ This plan does not:
   `mere-transport` tests, 12 Titulus tests, and 236 feature-gated Graphshell
   tests. The last run used the committed p2panda 0.7.0 source in a detached
   worktree because the adjacent local fork advanced to incompatible 0.7.1
-  during verification. Physical two-device and headed receipts remain open.
+  during verification. Physical two-device and headed receipts were left open
+  at this point.
+- **2026-08-22, Turnstone headed resident slice:** Mere `4565d040`, Turnstone
+  `02772e0`, `952f0df`, and `8637abe`, plus Genet `9d3f2bd3031`, produce the
+  first real headed first-party composition receipt. A fresh Turnstone process
+  edits and saves `knot://vault/field-note`, closes its live pane, and exits;
+  the same Graphshell resident remains live; a second Turnstone process reopens
+  the saved `Resident V1 headed edit`. Both app-authored sentinels report
+  `RESULT ok`. This closes Turnstone edit/close/restart only. Physical devices,
+  standalone status and authoring, evidence-open, and resident-stopped
+  directory editing remain explicit acceptance work.
