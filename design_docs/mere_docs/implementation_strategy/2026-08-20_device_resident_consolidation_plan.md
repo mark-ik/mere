@@ -1,8 +1,8 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1, R2, and C1 complete; R3 is the next resident slice. C2 remains
-the gate before any physical store consolidation in C3.
+**Status:** R1 through R3 and C1 through C2 complete. R4 is the next resident
+slice. C3 is unblocked but remains a separate physical-custody change.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -462,3 +462,24 @@ This plan does not:
   evidence store after final resident drop. The actor replaces the former
   private Tokio runtime and joins after flushing iroh-blobs. All 98 Knot library
   tests pass, and `cargo check -p knot --all-targets --locked --offline` passes.
+- **2026-08-21, C2:** `72b7fdb2` added serving-side
+  `(scope, authenticated peer, hash, read)` authorization around the public
+  iroh-blobs request handlers. A hash can be retained by several scopes in one
+  physical store without widening either reader set. Releasing custody or a
+  reader grant refuses the next request while the owner's bytes remain. Knot
+  evidence retention and fetch verification now bind custody to the space,
+  and resident startup replays references from Djot only when the bytes exist.
+  All 42 `mere-transport` library tests pass, including the real-iroh
+  cross-scope and live-revocation receipt; `cargo check -p knot --lib` also
+  passes. The full Knot lib-test build remains blocked in its endpoint fixtures
+  by the local Genet/Inker removal of `Fetched::text`, outside this slice.
+- **2026-08-21, R3:** `71a4b81f` composed one startup-unlocked
+  `KnotResidentSource` and its `KnotSyncHost` into
+  `graphshell_device_host`. The process registers the stable `knot` application
+  route, grants it to Turnstone, shares one evidence actor between authoring
+  and serving, stays joined across UI close and reopen, and reconciles Knot
+  pairing settings live. The focused receipt edits Djot through the Graphshell
+  route, reopens it while sync remains resident, applies pair and unpair to
+  both operation intake and exact-hash reads, preserves retained bytes, and
+  proves two spaces use distinct endpoint ids. That receipt, all 12 owner
+  settings tests, and the feature-gated device-host check pass.
