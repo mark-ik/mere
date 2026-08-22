@@ -29,22 +29,41 @@ page can fetch those local files without copying 90 MB into the probe tree.
 
 ## Claim boundary
 
-The 2026-08-21 row proves the artifact/copy ladder, worker-capable IndexedDB,
+The 2026-08-22 row proves the artifact/copy ladder, worker-capable IndexedDB,
 WGPU model construction, worker termination, message cutoff, and a fresh
 worker's warm reopen. It records browser frame intervals and every unavailable
 memory fact as `unknown`.
 
-It does not prove a correct WGPU embedding. CubeCL's max-reduction WGSL is
-rejected by BrowserWebGpu, and the repeatable output fails both unit norm and
-ESP's committed MiniLM fixture. The page therefore ends in `limited`. See the
-checked-in [`receipt`](receipts/2026-08-21_minilm_browser_ceiling.json) and the
+It does not prove a correct WGPU embedding. The patched reduction is accepted
+without GPU validation errors, but the output still fails both unit norm and
+ESP's committed MiniLM fixture. Its first eight float bit patterns are exactly
+the input token ids. The page therefore ends in `limited`. See the checked-in
+[`patched receipt`](receipts/2026-08-22_minilm_after_cubek_patch.json) and the
+[`staged trace`](receipts/2026-08-22_minilm_stage_trace.json). The staged trace
+is sensitive to awaited readback barriers: a shorter trace first produces NaNs
+after embedding row zero, while a trace with more barriers keeps embeddings and
+the encoder finite before pooling produces NaNs. That moves the boundary from a
+specific BERT operation to BrowserWebGpu graph, task, or buffer lifetime.
+
+The model-free
+[`embedding control`](repros/burn_browser_embedding/README.md) covers MiniLM's
+word-table geometry, model-sized upload pressure, queued consumers, `Param`,
+grouped word/position/token-type lookups, and the three-way sum. Its eleven
+headed cases pass with empty GPU error scopes. A BERT-width LayerNorm case has
+also been added and compiled; its headed receipt remains open.
+
+See also the earlier
 [`interpretation`](../../../design_docs/mere_docs/testing/2026-08-21_browser_model_ceiling_receipt.md).
 
 The reduction failure now has a four-case standalone
-[`reproducer`](repros/cubek_browser_extrema/README.md) and a candidate
-runtime-materialization patch. The main probe is wired to that candidate for
-the next headed run. The checked-in MiniLM receipt remains the authority until
-that run passes the numerical fixture; a patched wasm build is not a receipt.
+[`reproducer`](repros/cubek_browser_extrema/README.md) and a validated
+runtime-materialization patch. All four cases pass in headed Chromium with
+empty GPU error scopes; the
+[`reduction receipt`](repros/cubek_browser_extrema/receipts/2026-08-22_patched_iab.json)
+records the result. The remaining failure is downstream or independent of the
+extrema identity shader. Another model or a trainer would add variables before
+this lower execution-lifetime boundary is fixed. The useful next harness is a
+small graph whose result changes when an awaited readback barrier is inserted.
 
 It does not prove decoder streaming, cooperative ESP cancellation, GPU-memory
 release, a model-size ceiling, or a product default. Those require the decoder

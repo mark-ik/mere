@@ -1,0 +1,92 @@
+{
+  "schema": "distillery.browser-minilm-stage-trace/v1",
+  "generated_at": "2026-08-22T07:12:19.564Z",
+  "build_base_commit": "16ac98f02ba93ec840cfd72d86dc23e28266d7c4",
+  "build_worktree_dirty": true,
+  "model": {
+    "id": "sentence-transformers/all-MiniLM-L6-v2",
+    "input": "This is a sample sentence.",
+    "dimensions": 384
+  },
+  "environment": {
+    "browser": "Chromium 151",
+    "os": "Windows",
+    "adapter_vendor": "nvidia",
+    "adapter_architecture": "lovelace",
+    "backend": "burn-wgpu/dedicated-worker"
+  },
+  "gpu_errors": {
+    "cold": [],
+    "cancellation": [],
+    "warm": []
+  },
+  "ordinary_execution": {
+    "cold_and_warm_match": true,
+    "intra_worker_repeats_match": false,
+    "all_finite": true,
+    "l2_norm": 0.0,
+    "first_8": [1.42e-43, 2.835e-42, 2.807e-42, 1.453e-42, 9.948e-42, 8.76e-42, 1.418e-42, 1.43e-43],
+    "first_8_bits": [101, 2023, 2003, 1037, 7099, 6251, 1012, 102],
+    "reference_max_abs_error": 0.077806376,
+    "reference_within_tolerance": false
+  },
+  "readback_barrier_profiles": {
+    "v6_fewer_barriers": {
+      "generated_at": "2026-08-22T06:53:50.842Z",
+      "schema": "esp.bert-sentence-trace/v6",
+      "input_round_trip_matches": true,
+      "word_embedding_immediate": {
+        "all_finite": true,
+        "nan_count": 0,
+        "l2_norm": 3.236006021499634
+      },
+      "embedding_block_immediate": {
+        "all_finite": false,
+        "first_non_finite_index": 384,
+        "nan_count": 2688,
+        "first_8": [-4.116016387939453, -1.073181390762329, -0.8839407563209534, 0.8869614601135254, -1.9307470321655273, 0.33374470472335815, 0.3231000304222107, -0.4909636080265045]
+      },
+      "encoder_immediate": {
+        "all_finite": false,
+        "first_non_finite_index": 0,
+        "nan_count": 2696
+      },
+      "pooling_immediate": {
+        "all_finite": false,
+        "nan_count": 384
+      }
+    },
+    "v8_more_barriers": {
+      "generated_at": "2026-08-22T07:12:19.564Z",
+      "schema": "esp.bert-sentence-trace/v8",
+      "trace_contract_excludes_shallow_clone_snapshots": true,
+      "input_round_trip_matches": true,
+      "position_ids": [0, 1, 2, 3, 4, 5, 6, 7],
+      "token_type_ids": [0, 0, 0, 0, 0, 0, 0, 0],
+      "word_embedding_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 3.236006021499634},
+      "position_embedding_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 2.634822368621826},
+      "token_type_embedding_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 1.3647091388702393},
+      "word_position_sum_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 4.576368808746338},
+      "full_embedding_sum_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 4.9494218826293945},
+      "embedding_block_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 4.9494218826293945},
+      "encoder_immediate": {"all_finite": true, "nan_count": 0, "l2_norm": 45.52944564819336},
+      "pooling_immediate": {"all_finite": false, "first_non_finite_index": 0, "nan_count": 384},
+      "normalization_immediate": {"all_finite": false, "first_non_finite_index": 0, "nan_count": 384}
+    }
+  },
+  "native_control": {
+    "test": "embed::bert::wgpu_parity::real_minilm_fixture_wgpu",
+    "features": ["bert-validation", "bert-wgpu"],
+    "profile": "release",
+    "passed": true
+  },
+  "model_free_control": {
+    "path": "repros/burn_browser_embedding",
+    "headed_embedding_cases": 11,
+    "all_cases_match": true,
+    "gpu_errors": [],
+    "new_layer_norm_case_headed_status": "unverified"
+  },
+  "limiting_layer": "Burn/CubeCL BrowserWebGpu asynchronous graph, task, or buffer lifetime: awaited readback barriers move the first visible corruption from the embedding block to pooling, while the ordinary graph returns tokenizer-id bits instead of the fixture-valid embedding",
+  "remaining_gate": "produce a model-free failing lifetime reproducer or validate a corrected upstream runtime row, then rerun the exact MiniLM fixture in headed Chromium"
+}

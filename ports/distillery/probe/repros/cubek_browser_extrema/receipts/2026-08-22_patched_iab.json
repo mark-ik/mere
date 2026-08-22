@@ -1,0 +1,30 @@
+{
+  "kind": "result",
+  "result": {
+    "schema": "distillery.cubek-browser-extrema-repro/v1",
+    "backend": "burn-wgpu/browser-webgpu",
+    "finite_max": {
+      "class": "finite",
+      "bits": 1073741824,
+      "matches_expected": true
+    },
+    "negative_infinity_max": {
+      "class": "negative_infinity",
+      "bits": 4286578688,
+      "matches_expected": true
+    },
+    "positive_infinity_min": {
+      "class": "positive_infinity",
+      "bits": 2139095040,
+      "matches_expected": true
+    },
+    "nan_max": {
+      "class": "nan",
+      "bits": 2143289344,
+      "matches_expected": true
+    },
+    "all_cases_match": true
+  },
+  "gpu_errors": [],
+  "passed": true
+}

@@ -2,10 +2,13 @@
 
 **Date**: 2026-08-09
 
-**Status**: D2a complete for the 90.9 MB MiniLM row on 2026-08-21. D2b proves
-worker termination and warm restart but fails its numerical/reference gate in
-Burn/CubeCL BrowserWebGpu execution. D2c is unopened. This remains independent
-of the personal mesh and Burn Remote.
+**Status**: D2a complete for the 90.9 MB MiniLM row. D2b proves worker
+termination and warm restart but remains limited at its numerical/reference
+gate. The Cubek reduction patch now passes headed Chromium. Staged readback
+barriers move the remaining corruption between the embedding block and pooling,
+locating it in Burn/CubeCL BrowserWebGpu graph, task, or buffer lifetime rather
+than one fixed BERT operation. D2c is unopened. This remains independent of the
+personal mesh and Burn Remote.
 
 **Related**:
 [`2026-07-05_inference_provider_plan.md`](2026-07-05_inference_provider_plan.md),
@@ -254,3 +257,26 @@ product default is a later decision informed by these receipts.
   wasm build, generated-WGSL inspection, and strict Clippy gates pass. The
   post-patch headed browser and MiniLM fixture receipts remain open, so D2b's
   status has not advanced.
+- **2026-08-22, post-patch headed localization**: the four-case extrema
+  harness passes in Chromium 151 with finite, infinity, and NaN semantics intact
+  and empty GPU error scopes. The same browser still returns tokenizer-id bits
+  for the ordinary MiniLM graph, with norm zero and a 0.077806376 fixture error.
+  Native release WGPU passes the exact 90.9 MB artifact and fixture.
+
+  Feature-gated ESP traces then forced readback at fresh graph prefixes. With a
+  short trace, the word lookup is finite and the embedding block becomes NaN
+  after its first 384-float row. Adding awaited readbacks for position ids,
+  word/position/token-type lookups, and their sums changes the result: the full
+  embedding block and encoder remain finite, then pooling becomes entirely NaN.
+  Empty GPU error scopes accompany both profiles. The failure moving when
+  observation barriers are added rules out a stable operator-local diagnosis
+  and identifies asynchronous BrowserWebGpu graph, task, or buffer lifetime as
+  the current limit.
+
+  A model-free embedding control now covers exact MiniLM table geometry, bulk
+  upload pressure, queued consumers, `Embedding`/`Param`, grouped lookups, and
+  their sum; all eleven headed cases pass. A BERT-width LayerNorm case is built
+  but still needs its headed receipt. D2b remains open until a minimal failing
+  lifetime reproducer or corrected upstream runtime row makes the browser
+  MiniLM vector fixture-valid. More models and D2c stay closed because they
+  cannot clarify this lower boundary.

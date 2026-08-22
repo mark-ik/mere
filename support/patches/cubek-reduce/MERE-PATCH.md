@@ -15,8 +15,10 @@ The triggering identity code arrived in
 [`tracel-ai/cubek#457`](https://github.com/tracel-ai/cubek/pull/457).
 CubeCL previously fixed constant-bitcast materialization for its C++ dialects
 in [`tracel-ai/cubecl#1477`](https://github.com/tracel-ai/cubecl/pull/1477),
-but the associated issue stated that WGSL was unaffected. Distillery's headed
-Chromium receipt demonstrates the missing WGSL half.
+but the associated issue stated that WGSL was unaffected. Distillery's
+[`headed Chromium receipt`](../../../ports/distillery/probe/repros/cubek_browser_extrema/receipts/2026-08-22_patched_iab.json)
+demonstrates the missing WGSL half and validates this backport across finite,
+infinity, and NaN cases.
 
 The normalized manifest also carries an empty workspace so its upstream test
 suite can be run directly while the vendored directory remains outside Mere's

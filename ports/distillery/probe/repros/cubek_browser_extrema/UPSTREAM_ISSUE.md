@@ -100,5 +100,11 @@ than requiring each caller to add a mutable local.
 - The logged patched WGSL contains a runtime load between the literal bits and
   `bitcast<f32>`.
 - Strict Clippy passes for the patched Cubek library and reproducer source.
-- A post-patch headed Chromium run remains required before claiming the browser
-  fix; wasm compilation and native WGPU validation are not substitutes.
+- A post-patch headed Chromium 151 run passes all four finite, infinity, and NaN
+  cases with empty GPU error scopes. The machine-readable result is committed
+  as
+  [`2026-08-22_patched_iab.json`](receipts/2026-08-22_patched_iab.json).
+
+This validates the narrow backport against the released prerelease row. Current
+Cubek main still needs the same reduced harness before an upstream report can
+claim that the defect survives its Pliron lowering rewrite.

@@ -153,6 +153,8 @@ pub struct ExecutionReceipt {
     pub matches_prior_worker: Option<bool>,
     /// Complete embeddings per second, excluding model load.
     pub embeddings_per_second: f64,
+    /// Feature-gated staged readbacks used to locate plausible wrong buffers.
+    pub diagnostic_trace: Option<serde_json::Value>,
 }
 
 /// One cold or warm model-worker receipt.
@@ -500,6 +502,16 @@ mod worker {
         } else {
             f64::INFINITY
         };
+        post_state(
+            "tracing",
+            "forcing fresh readback after input and each BERT graph prefix",
+        )?;
+        let diagnostic_trace = provider
+            .trace_one_async(&config.input)
+            .await
+            .map_err(|error| format!("staged embedding trace: {error}"))?;
+        let diagnostic_trace = serde_json::to_value(diagnostic_trace)
+            .map_err(|error| format!("serialize staged embedding trace: {error}"))?;
 
         let report = WorkerRunReport {
             schema: "distillery.browser-model-worker/v1".into(),
@@ -540,6 +552,7 @@ mod worker {
                     .as_ref()
                     .map(|expected| expected == &first_hash),
                 embeddings_per_second,
+                diagnostic_trace: Some(diagnostic_trace),
             },
         };
         post_state("finished", "the worker report is complete")?;
