@@ -1,7 +1,8 @@
 # Device Resident Consolidation Plan
 
 **Date:** 2026-08-20
-**Status:** R1 through R5 and C1 through C4 complete. V1 is next.
+**Status:** R1 through R5 and C1 through C4 complete. V1 automated is
+complete; the physical two-device and headed receipts remain open.
 **Scope:** Put Knot's personal-vault authoring, replication, and referenced
 artifacts under the existing device-resident authority; replace private
 content identifiers with a standards-oriented portable reference; remove the
@@ -411,6 +412,33 @@ Done when:
 - A directory-only document remains editable with the desktop resident
   stopped.
 
+#### Command-palette performance observation
+
+Reported 2026-08-22: interaction lags while Turnstone's command palette is
+open. Scope this first as a Turnstone chrome regression, not as resident or
+Knot work. The palette adds a larger chrome subtree and the current render path
+re-synchronizes that subtree before producing its scene; that is a code-reading
+hypothesis, not a causal finding.
+
+A 2026-08-22 disposable unoptimized build reproduced the whole-frame gap at
+1024 x 600: two controlled closed redraws took 25.9 ms and 26.7 ms; four
+open-palette redraws took 239.3 ms through 250.7 ms. The sample graph was in
+use, so this is diagnostic evidence for the Turnstone chrome lane, not evidence
+against the resident topology.
+
+The follow-up receipt must:
+
+- compare the same release-build scene and profile with the palette closed and
+  open, publishing median and p95 frame time plus input-to-present latency;
+- separate suggestion recomputation from chrome cascade, layout, paint, and
+  unrelated background resident activity;
+- identify and remove repeated work that occurs merely because the palette is
+  open, then retain a regression check at the stage that actually caused the
+  lag.
+
+Until that comparison is recorded, the observation does not widen this plan's
+resident scope or count as a V1 resident failure.
+
 ## 7. Stop line
 
 This plan does not:
@@ -532,3 +560,16 @@ This plan does not:
   separate helper during an exact-byte edit. `0f0a8006` changes only those
   fixtures to the live struct form. No Genet compatibility layer or production
   API change was needed.
+- **2026-08-22, V1 automated:** `228213fe` closes the two authority gaps in
+  the final cone. A signed communal grant and signed revocation now flow
+  through a live Knot host and change document writing, exact-hash serving, and
+  source fetch together. The personal two-device receipt now unpairs the
+  destination before attempting a new evidence fetch, proves the fetch is
+  refused, and proves the source's retained bytes remain readable. The audit
+  also found `PersonalSyncHost::close` dropping its `JoinedSpace` without
+  waiting for the sync actor to release redb; it now uses the existing waited
+  shutdown boundary. The compatible-source gates pass: 101 Knot tests, 45
+  `mere-transport` tests, 12 Titulus tests, and 236 feature-gated Graphshell
+  tests. The last run used the committed p2panda 0.7.0 source in a detached
+  worktree because the adjacent local fork advanced to incompatible 0.7.1
+  during verification. Physical two-device and headed receipts remain open.
