@@ -997,11 +997,18 @@ mod tests {
         use scenotime::{Revision, SceneEpoch, SceneSnapshot};
 
         let mut scene = coastal();
+        // Read the held position off the instance rather than naming a
+        // coordinate. A snapshot validates that an honored hold agrees with
+        // where its instance actually sits, so an invented coordinate makes
+        // `from_dense` reject the scene and this test never reaches the
+        // counting it exists to check. What is under test is that both halves
+        // of satisfaction survive the wire, not where the harbor is.
+        let harbor = scene.items[1].transform.translate;
         scene.honored_holds.push(sceno::HonoredHold {
             instance: InstanceId(1),
             placement: sceno::HeldPlacement::pinned(
                 SourceRef::new("fixture.map", "harbor"),
-                Vec2::new(1.0, 1.0),
+                harbor,
             ),
         });
         scene.unmet_holds.push(sceno::HeldPlacement::pinned(

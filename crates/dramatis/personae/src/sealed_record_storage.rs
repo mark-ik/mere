@@ -42,6 +42,24 @@ struct SealedRecordEnvelope {
     ciphertext: Vec<u8>,
 }
 
+/// Whether `bytes` are *shaped* like a sealed envelope, whatever their contents.
+///
+/// Structural rather than a successful parse, so a damaged envelope is still
+/// recognized as one and never mistaken for a pre-sealing record. The three
+/// keys are the same discriminator pandect's `looks_like_sealed_record` uses,
+/// so both sides of the migration agree on what "sealed" looks like.
+fn is_sealed_envelope_shape(bytes: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(bytes)
+        .ok()
+        .as_ref()
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|object| {
+            object.contains_key("version")
+                && object.contains_key("nonce")
+                && object.contains_key("ciphertext")
+        })
+}
+
 struct AuthoritativeStore {
     _lease: File,
     freshness: FileFreshnessLedger,
@@ -354,9 +372,30 @@ impl SealedRecordStorage {
                 )));
             }
         };
-        let envelope: SealedRecordEnvelope = serde_json::from_slice(&bytes).map_err(|error| {
-            IdentityError::Backend(format!("parse sealed record {path:?}: {error}"))
-        })?;
+        let envelope: SealedRecordEnvelope = match serde_json::from_slice(&bytes) {
+            Ok(envelope) => envelope,
+            Err(error) => {
+                // A record written before sealing sits on disk as plain JSON —
+                // or, for a raw seed, as no JSON at all. It is neither absent
+                // nor an envelope, and this function had no third case: the
+                // parse failed, the save that would have replaced it aborted,
+                // and so the migration that rewrites it sealed could never run.
+                // Nothing carrying a sealed generation is on disk, so it
+                // reconciles exactly as an absent record does.
+                //
+                // Only when the bytes are not a sealed record at all. A damaged
+                // envelope still errors: treating one as absent would let a
+                // rollback overwrite it unnoticed, which is the failure this
+                // freshness check exists to catch.
+                if is_sealed_envelope_shape(&bytes) {
+                    return Err(IdentityError::Backend(format!(
+                        "parse sealed record {path:?}: {error}"
+                    )));
+                }
+                let unsealed = revision(None, 0, true);
+                return self.reconcile_freshness(aad, unsealed, true);
+            }
+        };
         let legacy = envelope.version == LEGACY_SEALED_RECORD_FORMAT_VERSION;
         if !legacy && envelope.version != SEALED_RECORD_FORMAT_VERSION {
             return Err(IdentityError::Backend(format!(

@@ -270,3 +270,88 @@ fn authoritative_tombstone_rejects_resurrection_after_delete() {
     let error = store.load_record::<SampleRecord>(relative).unwrap_err();
     assert!(error.to_string().contains("rollback detected"));
 }
+
+/// A record written before sealing existed is plain JSON on disk. Saving over
+/// it has to work, or the migration that seals it can never run: the save reads
+/// the current revision first, and that read used to reject anything that was
+/// not already an envelope.
+#[test]
+fn a_pre_sealing_plaintext_record_can_be_sealed_over() {
+    let dir = tempdir().unwrap();
+    let store = SealedRecordStorage::open_with_key(dir.path(), [0x44; 32]);
+    let path = dir.path().join("identity/legacy.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let legacy = SampleRecord {
+        label: "Tablet".into(),
+        bytes: vec![4, 5, 6],
+    };
+    std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+
+    store.save_record("identity/legacy.json", &legacy).unwrap();
+
+    let restored = store
+        .load_record::<SampleRecord>("identity/legacy.json")
+        .unwrap()
+        .unwrap();
+    assert_eq!(restored, legacy);
+    // And what is on disk is now sealed, not the plaintext it started as.
+    let sealed = std::fs::read_to_string(&path).unwrap();
+    assert!(!sealed.contains("Tablet"), "the label is still in the clear");
+}
+
+/// A seed written before sealing is not JSON at all. It must take the same path
+/// as plaintext JSON rather than being mistaken for a damaged envelope.
+#[test]
+fn a_pre_sealing_raw_record_can_be_sealed_over() {
+    let dir = tempdir().unwrap();
+    let store = SealedRecordStorage::open_with_key(dir.path(), [0x55; 32]);
+    let path = dir.path().join("identity/master.seed");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, [0xde, 0xad, 0xbe, 0xef]).unwrap();
+
+    let value = SampleRecord {
+        label: "Seed".into(),
+        bytes: vec![0xde, 0xad],
+    };
+    store.save_record("identity/master.seed", &value).unwrap();
+    assert!(
+        store
+            .load_record::<SampleRecord>("identity/master.seed")
+            .unwrap()
+            .is_some()
+    );
+}
+
+/// The other half of that leniency, and the reason it is shaped as it is: a
+/// sealed record that is damaged rather than absent must still refuse to be
+/// written over. Treating it as "nothing is here" would let a rollback replace
+/// a real record unnoticed, which is precisely what the freshness ledger
+/// exists to catch.
+#[test]
+fn a_damaged_sealed_record_is_not_mistaken_for_a_pre_sealing_one() {
+    let dir = tempdir().unwrap();
+    let store = SealedRecordStorage::open_with_key(dir.path(), [0x66; 32]);
+    let value = SampleRecord {
+        label: "Real".into(),
+        bytes: vec![1],
+    };
+    store.save_record("identity/real.json", &value).unwrap();
+
+    // Envelope-shaped — version, nonce, ciphertext all present — but the
+    // version is the wrong type, so it parses as a value and not as an
+    // envelope. Exactly the shape a truncated or tampered record takes.
+    let path = dir.path().join("identity/real.json");
+    std::fs::write(
+        &path,
+        br#"{"version":"two","nonce":[1,2,3],"ciphertext":[4,5,6]}"#,
+    )
+    .unwrap();
+
+    let error = store
+        .save_record("identity/real.json", &value)
+        .expect_err("a damaged envelope must not be silently replaced");
+    assert!(
+        format!("{error}").contains("parse sealed record"),
+        "unexpected error: {error}"
+    );
+}
