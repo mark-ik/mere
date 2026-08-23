@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-22
 **Status:** complete — S1–S7 landed; `arrangements` is deleted and `mer3ly`
-names one engine. Not committed.
+names one engine. Committed and pushed as mere `cc40c24f`, with `mer3ly`
+`54fd8e2` repinned to mere `330eee98`.
 **Supersedes:** the half-finished `arrangements` → `scenomise` migration begun
 2026-05-18 (see `crates/canvas/cartography/src/adapters.rs` header and the
 `scenomise` crate doc: "The first consumer proof moves the generic Spiral,
@@ -396,13 +397,40 @@ graph directly into a score, and `mer3ly`, their only other consumer, does the
 same. Moving them would have preserved a shape whose only purpose was the
 interface being retired.
 
-One caveat on the workspace gate: `cargo check --workspace` reports one error
-in `crates/system/pandect/src/image_store.rs` (`missing field content_hash in
-initializer of PersistedNode`). It is **pre-existing and unrelated** — that
-file is at committed state, `content_hash` is committed on `PersistedNode`,
-and nothing in this migration touches `pandect` or `graph-kernel`. The
-migration's own lane is green: 356 tests across `sceno`, `scenomise`,
-`scenotime`, `scenograph`, `mere-cartography`, and `mere-canvas`.
+**The workspace gate is green: 3,347 library tests, zero failures.** Getting
+there turned up two latent failures that had nothing to do with this
+migration, recorded here because the sequence is worth knowing.
+
+`cargo check --workspace` reported one error in
+`crates/system/pandect/src/image_store.rs` — `missing field content_hash in
+initializer of PersistedNode` — in a test fixture that predated the field.
+It was pre-existing: the file was at committed state and nothing here touches
+`pandect` or `graph-kernel`. Repairing it made pandect's tests compile for
+the first time, and that **un-masked three failures that had been unrunnable
+rather than passing**, all of them `#[cfg(windows)]` legacy-record
+migrations.
+
+Their cause was in `personae`, not `pandect`. `current_revision` reads a
+record before saving it, to check freshness against rollback, and handled
+exactly two cases: absent, or a parseable sealed envelope. A record written
+before sealing existed is neither — plain JSON, or for a raw seed, not JSON
+at all. The parse failed, so the save aborted, so the migration that would
+have sealed it could never run: sealing a legacy record required it to
+already be sealed. It now reconciles as an absent record does, which is what
+`reconcile_freshness` already called the case, its parameter being named
+`legacy_or_absent`. Deliberately narrow — a file *shaped* like an envelope
+that still fails to parse keeps erroring, because treating a damaged sealed
+record as absent would let a rollback overwrite it unnoticed.
+
+A fourth surfaced the same way in `graphshell-client`:
+`satisfaction_reads_both_halves_off_the_wire` invented a held position that
+could never match its instance, so the snapshot was rejected and the test
+never reached the counting it exists for.
+
+Both were proven pre-existing by checking out `4bbbceeb` — the commit before
+this migration — and running them there, not by inference. Both are fixed in
+mere `330eee98`. The lesson worth carrying: a crate whose test binary does
+not compile reports no failures, which reads exactly like passing.
 
 ### S7 — downstream
 

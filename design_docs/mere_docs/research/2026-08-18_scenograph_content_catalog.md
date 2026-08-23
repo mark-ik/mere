@@ -13,6 +13,12 @@ candidates for that role, not work already ordered.
 scenes proper, reusable total projection regimes; the archetypes survive
 inside the entries as founding and transfer datasets.
 
+**Reviewed 2026-08-23 (Mark):** [Projection Scenes and the Graph-Native Application Platform](../../2026-08-23_projection_scenes_and_graph_native_platform.md)
+re-evaluates deck 2 after testing fifty candidate scenes against the grammar.
+This catalog remains the implementation and design history, including
+Rosette's landed Knot evidence. The follow-on owns the current categorization,
+collapses, Matrix ruling, and platform consequences.
+
 **Related**:
 [projection_grammar_catalog](2026-08-15_projection_grammar_catalog.md)
 (the governing primitive grammar; every scene below is composed from it),

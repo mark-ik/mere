@@ -7,6 +7,12 @@ Governs: the primitive vocabulary and promotion rules used to construct scenes
 Consumed by: [`2026-08-18_scenograph_content_catalog.md`](2026-08-18_scenograph_content_catalog.md), the collection of complete scene recipes  
 Incorporates: the projection-engine, graph-projections, Scenograph expansion, node-representation, and field-region research listed under [Related Mere research](#related-mere-research)
 
+**2026-08-23 follow-on:** [Projection Scenes and the Graph-Native Application Platform](../../2026-08-23_projection_scenes_and_graph_native_platform.md)
+records the later scene-catalog cuts, the Matrix and repeated-instance rulings,
+and their consequences for Mere, Scenograph, Cambium, and Genet. This catalog
+remains the grammar and boundary map; the follow-on owns the revised scene
+judgments.
+
 ## Ruling
 
 Mere should not define a graph as a node-link picture.

@@ -1,7 +1,11 @@
 # Turnstone Suite Composition and Capability Census
 
 **Date:** 2026-08-22  
-**Status:** direction, discussed with Mark 2026-08-22; no code task opened here.  
+**Status:** direction, discussed with Mark 2026-08-22; no code task opened
+here. Amended same day (with Mark): the single Moot port ruling (§7.1–7.2),
+the gazette port ruling (§7.3), the Alembic workshop ruling (§7.4, §8), the
+place-ruling reversal recorded (§3), and the pane-registry cross-reference
+(§6).  
 **Scope:** State the current suite as sovereign, embeddable ports; correct the
 Graphshell, Castellan, and device-resident split; define the browser taxonomy
 that lets Turnstone compose the suite; and distinguish missing ports from
@@ -101,6 +105,18 @@ host. Turnstone consumes their shared models and surfaces. It does not spawn a
 desktop application merely to draw one of its panes, and it does not fork a
 private version of the UI.
 
+### The place ruling is reversed (amended 2026-08-22, with Mark)
+
+The [Turnstone place port plan](../../turnstone/design_docs/2026-07-28_turnstone_place_port_plan.md)
+ruled that a place is "a Turnstone product composition over reusable
+Mere-side domains … not another application or authority layer." Founding the
+Moot port (§7.1–7.2) reverses the *application* half of that ruling: the
+first-party composition of gemot, commons, murm, and stickleback into a
+places surface now lives in a port, which Turnstone composes like any other.
+The *authority* half stands unchanged — gemot decides governance, commons
+owns the shared graph, murm owns conversation exchange, stickleback owns
+retained-operation processing; the port owns no new authority.
+
 ## 4. What earns a port
 
 A capability warrants a port when most of these are true:
@@ -173,6 +189,15 @@ still closed:
 This permits a clean internal pane inventory but does not yet let a port offer
 one reusable surface to its standalone host and Turnstone.
 
+This seam is half-planned already (cross-reference added 2026-08-22): the
+[pane registry and graph panes plan](../../turnstone/design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md)
+(lane A2 open) removes `System` and replaces `Custom(String)` with a
+namespaced `External` pane source, which covers source identity. What A2 does
+not yet carry is the rest of the record below — the provider's retained
+component or admitted-session factory, command and settings contributions,
+and capability/unavailability facts. The contract here extends that lane
+rather than starting beside it.
+
 The missing seam is a narrow surface contribution record containing:
 
 - provider and stable surface id;
@@ -196,6 +221,22 @@ contract is not secretly a Knot interface.
 ## 7. Missing ports
 
 ### 7.1 Communications: earned now
+
+**Ruled 2026-08-22 (with Mark), amending this section and 7.2:** one port,
+**Moot**, carries both. The package is `mere-moot` with `[lib] name = "moot"`
+— the `mere-signalman` / `mere-gloss` pattern — because crates.io `moot` is
+held by an unrelated crate with real code (Battle-Creek-LLC's meeting bot,
+0.1.0, 2026-04-29; crates.io does not reassign names for inactivity, and the
+owner has not responded to a public ask) and `murmur` is likewise taken. The
+port exposes two surfaces: **murmur**, the conversation surface this section
+describes, and **moot**, the community surface of 7.2. The granularity
+constraint is load-bearing: murmur must mount alone, because Signalman wants
+messages and voice drops without governance UI. `mere-comms`
+(`crates/shell/comms`) is the murmur surface's model rather than mere
+substrate — a WASM-clean inbox (`Conversation`, `Message`, `Draft`,
+`ProtocolAdapter` with murm and misfin adapters) that the leverage census had
+marked "fold or retire." Domain authority is unchanged: murm owns exchange,
+gemot owns governance; the port composes both and owns neither.
 
 The substrate already exists in Murm, Stickleback, `mere-comms`, Gaz, and the
 smolweb exchange lanes. Turnstone already registers a Comms pane, but its live
@@ -221,6 +262,9 @@ conversation Mere; Castellan and Gaz supply identity and contacts; Djinn keeps
 the services alive.
 
 ### 7.2 Community and governance: earned as a distinct surface
+
+**Ruled 2026-08-22:** this is the moot half of the single Moot port (see
+7.1). "A distinct surface" stands; a distinct *port* does not.
 
 Moot, Moothold, and Gemot already own governed spaces, membership,
 constitutions, moderation, recognition, tessera, and federation. The missing
@@ -257,6 +301,18 @@ It becomes a separate port only if the standalone address-book workflow and
 authority boundary prove useful. Until then it can remain a shared surface
 consumed by Castellan and the communications port.
 
+**Ruled 2026-08-22 (with Mark):** this is the **gazette port**, founded on
+the dramatis tier beside castellan (`crates/dramatis/gaz` + `gazette` +
+feeds, with `mere-crawl` as the feed engine per the
+[leverage census](2026-08-10_leverage_census_brief.md)). The two readings in
+this section are the port law's two halves rather than alternatives: the
+shared Dramatis-facing surface — contact cards and the recipient picker — is
+the port's embeddable half, and resolution, feed polling, and trust state
+are its authority half, hosted by Djinn (see the
+[Djinn family resident services plan](mere_docs/implementation_strategy/2026-08-22_djinn_family_resident_services_plan.md)).
+The boundary proof asked for above is the second-host test already: the
+picker consumed by Knot, Moot, and Signalman.
+
 ### 7.4 Granted agent and automation workshop: probable
 
 Servitor, packs and mods, Genet Probe, typed petitions, watches, transcripts,
@@ -279,6 +335,24 @@ A first surface needs:
 The port is earned when one bounded agent completes a useful workflow in two
 hosts through the same grant and observation surface. Before that receipt,
 keep the capability in Servitor, Castellan, Distillery, and host automation.
+
+**Ruled 2026-08-22 (with Mark):** the workshop is **Alembic**. What makes
+this one port rather than a bundle: Athanor was always an agent — "the
+steady background furnace that consolidates memory and mints distillates
+while you work" is a bounded background actor under a grant — so the
+workshop generalizes the furnace, admitting more actors under Servitor
+grants, with agent continuity supplied by the same engram and tulpa
+machinery. The split follows the castellan mold: the embeddable half is the
+recall and memory surfaces of section 8, behind a `recall` feature so a host
+can take memory without the workshop; the authority half (Athanor, agent
+grants, runs, petitions, revocation) lives with Djinn, whose
+[resident services plan](mere_docs/implementation_strategy/2026-08-22_djinn_family_resident_services_plan.md)
+already names Athanor jobs. Distinct from Distillery exactly as stated
+above: Distillery runs models, Alembic runs work. The package is
+`mere-alembic` with `[lib] name = "alembic"` (crates.io `alembic` is the
+Linux Foundation's VFX-format binding and will not free). The two-host
+receipt above stands as the founding gate, not a reason to defer founding
+the stub.
 
 ## 8. Capabilities that need exposure, not another port
 
@@ -308,7 +382,9 @@ Turnstone's Alembic pane remains a placeholder even though Eidetic traces,
 lexical recall, embeddings, graph engrams, memory levels, and Athanor plans
 exist. This belongs in Graphshell and Turnstone as a recall and memory
 surface. It does not need a sovereign port unless it gains an independent
-workflow and authority.
+workflow and authority. **Amended 2026-08-22:** it gained one — the workshop
+ruling in 7.4 makes these surfaces Alembic's embeddable half; the hosting
+here (Graphshell and Turnstone as consumers) is unchanged.
 
 ### Readability and extraction
 
@@ -386,12 +462,16 @@ incumbent application.
    standalone plus Turnstone receipt.
 4. Extract the smallest surface-contribution seam proven by Knot; use a second
    current port before freezing it.
-5. Found the communications port over Murm and `mere-comms`, with Turnstone's
-   placeholder Comms pane and Signalman as consumers.
-6. Plan the Moot/Gemot community surface separately from messaging.
-7. Prototype the shared contact surface before deciding whether it warrants a
-   sovereign Dramatis-facing port.
-8. Keep the agent workshop behind one bounded two-host workflow receipt.
+5. Found the Moot port (`mere-moot`, lib `moot`) over Murm, Gemot, and
+   `mere-comms`, with the murmur surface mountable alone; Turnstone's
+   placeholder Comms pane and Signalman are its consumers. *(Amended
+   2026-08-22: one port, two surfaces, per 7.1.)*
+6. Plan the moot community surface as that port's second surface, separate
+   from the murmur surface. *(Amended 2026-08-22.)*
+7. Found the gazette port; its picker consumed by Knot, Moot, and Signalman
+   is the boundary proof 7.3 asked for. *(Amended 2026-08-22.)*
+8. Keep the Alembic workshop behind one bounded two-host workflow receipt;
+   the receipt is its founding gate, per 7.4. *(Amended 2026-08-22.)*
 
 ## 11. Done conditions for the composition thesis
 

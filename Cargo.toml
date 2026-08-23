@@ -423,6 +423,13 @@ cubecl-runtime = { path = "support/patches/cubecl-runtime" }
 # the runtime identity helper when an upstream release passes Distillery's
 # headed same-allocation and BERT-width LayerNorm receipts.
 burn-cubecl = { path = "support/patches/burn-cubecl" }
+# burn-remote 0.22.0-pre.2 can authorize an Iroh session only when it opens.
+# Its internal `SessionManager::close` does not stop the live session pump, so
+# owner reclaim cannot end one admitted lease without dropping the whole
+# protocol. This vendored crate adds pump-observed targeted close plus a
+# read-only active-session receipt. Delete it when an upstream release exposes
+# equivalent control and passes the lease-reclaim receipt.
+burn-remote = { path = "support/patches/burn-remote" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
