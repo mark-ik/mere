@@ -1,7 +1,7 @@
 //! User-configurable offers for handing an address to another application.
 
 use chirograph::{AdvertisedAction, IntentEffect, IntentReference, PresentationSemantics};
-use mere::kernel::address::AddressKind;
+use kernel::address::AddressKind;
 use serde::{Deserialize, Serialize};
 
 pub const OPEN_ADDRESS_INTENT: &str = "graphshell.address.open";

@@ -1,6 +1,6 @@
 [package]
 name = "graphshell"
-version.workspace = true
+version = "0.0.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -44,7 +44,8 @@ web = [
     "dep:async-trait",
     "dep:chartulary",
     "dep:eidetic",
-    "dep:mere",
+    "dep:canvas",
+    "dep:kernel",
     "dep:muniment",
     "dep:serde",
     "dep:sha2",
@@ -67,10 +68,11 @@ async-trait = { version = "0.1", optional = true }
 base64.workspace = true
 chartulary = { workspace = true, optional = true }
 eidetic = { workspace = true, optional = true }
-graphshell-client = { path = "../../crates/graphshell/graphshell-client" }
-graphshell-endpoint = { path = "../../crates/graphshell/graphshell-endpoint" }
+graphshell-client = { version = "0.0.2", path = "../../crates/graphshell/graphshell-client" }
+graphshell-endpoint = { version = "0.0.2", path = "../../crates/graphshell/graphshell-endpoint" }
 chirograph.workspace = true
-mere = { path = "../../crates/mere", default-features = false, features = ["graph", "canvas"], optional = true }
+canvas = { workspace = true, optional = true }
+kernel = { workspace = true, optional = true }
 muniment = { workspace = true, optional = true }
 sceno.workspace = true
 scenotime.workspace = true
@@ -82,8 +84,8 @@ url = { version = "2", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 blake3 = { workspace = true, optional = true }
-graphshell-network = { path = "../../crates/graphshell/graphshell-network", optional = true }
-graphshell-stdio = { path = "../../crates/graphshell/graphshell-stdio", optional = true }
+graphshell-network = { version = "0.0.1", path = "../../crates/graphshell/graphshell-network", optional = true }
+graphshell-stdio = { version = "0.0.2", path = "../../crates/graphshell/graphshell-stdio", optional = true }
 light-file-dialog = { version = "3.21.3", optional = true }
 # The application composes Personae: the profile Graphshell speaks as. The
 # protocol and client crates deliberately do not depend on it.

@@ -7,8 +7,8 @@ use eidetic::{
     SchemaRef, Timestamp, TrustEnvelope, TrustLevel, TypedPayload, list_typed, load_typed_sealed,
     save_schema, save_typed_sealed,
 };
-use mere::kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
-use mere::kernel::graph::{Graph, NodeKey};
+use kernel::graph::apply::{GraphDelta, GraphDeltaResult, apply_graph_delta};
+use kernel::graph::{Graph, NodeKey};
 use muniment::Backend;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

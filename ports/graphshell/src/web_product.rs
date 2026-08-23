@@ -6,7 +6,7 @@ use graphshell::product::{
     EditableRelation, ExportRequest, LocalFileMetadata, RelationFamilyFilter, SavedSceneV1,
     TransferScope,
 };
-use mere::canvas::{CameraView, Face, project_canvas_strategy_with_score_for_view};
+use canvas::{CameraView, Face, project_canvas_strategy_with_score_for_view};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use wasm_bindgen::JsCast;
@@ -135,7 +135,7 @@ impl BrowserHost {
                     .graph()
                     .get_node(key)
                     .and_then(|node| old_positions.get(&node.id))
-                    .map(|(x, y)| mere::kernel::geometry::PortablePoint::new(*x, *y))
+                    .map(|(x, y)| kernel::geometry::PortablePoint::new(*x, *y))
                     .unwrap_or(position);
                 (key, restored)
             })
@@ -187,7 +187,7 @@ impl BrowserHost {
                 self.canvas
                     .graph()
                     .get_node_key_by_id(id)
-                    .map(|key| (key, mere::kernel::geometry::PortablePoint::new(x, y)))
+                    .map(|key| (key, kernel::geometry::PortablePoint::new(x, y)))
             })
             .collect();
         self.canvas.apply_strategy_positions(&positions);

@@ -29,9 +29,9 @@ use graphshell::endpoint::{IntentSink, ProjectionSource};
 use graphshell::protocol::{
     CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession,
 };
-use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
-use mere::kernel::geometry::PortablePoint;
-use mere::kernel::graph::NodeKey;
+use canvas::{Canvas, PointerButton, project_canvas_strategy};
+use kernel::geometry::PortablePoint;
+use kernel::graph::NodeKey;
 use netrender::Scene;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
@@ -168,7 +168,7 @@ impl CanvasTransition {
                 .map(|(x, y)| PortablePoint::new(*x, *y))
                 .unwrap_or(target);
             let source = scene.intern_source(sceno::SourceRef::new(
-                mere::canvas::MERE_GRAPH_ADAPTER,
+                canvas::MERE_GRAPH_ADAPTER,
                 node.id.to_string(),
             ));
             let (width, height) = extents.get(&key).copied().unwrap_or((36.0, 36.0));

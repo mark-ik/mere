@@ -3,7 +3,7 @@ name = "chartulary"
 # 0.2.0: `EdgeId` becomes `(writer, counter)`. Breaking, and deliberately taken
 # before any shared container carries data; 0.1.x journals still load, since a
 # bare counter reads back as `WriterId::LOCAL`.
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "The generic content-addressed container graph (aka chart). Graph<N, E> on petgraph with capability traits (Identified, Addressed, ContentBearing, Labeled, Classified, Predicated) and default Container/Relation payloads. The substrate that binds muniment's blobs and codicil's log into an app-agnostic graph. Carries the lineage layer (`chartulary::stemma`): owner-scoped descent of content through branching visits."

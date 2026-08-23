@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+publish = true
 description = "Rhai backend for the knot block-evaluator lane: an inker BlockEvaluator over the Rhai scripting engine (pure Rust, sandboxed, native operation budget)."
 
 [lib]

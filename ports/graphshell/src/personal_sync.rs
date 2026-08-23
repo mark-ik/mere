@@ -8,9 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use eidetic::PrivacyClass;
-use mere::kernel::geometry::PortablePoint;
-use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta};
-use mere::kernel::graph::{EdgeAssertion, Graph, RelationSelector};
+use kernel::geometry::PortablePoint;
+use kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta};
+use kernel::graph::{EdgeAssertion, Graph, RelationSelector};
 use muniment::Backend;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
@@ -1606,8 +1606,8 @@ fn relation_key(assertion: &EdgeAssertion) -> String {
 mod tests {
     use super::*;
     use crate::access::{AccessAction, AccessTransition};
-    use mere::canvas::CartographyGeometry;
-    use mere::kernel::graph::{EdgeFamily, RelationKind, SemanticSubKind};
+    use canvas::CartographyGeometry;
+    use kernel::graph::{EdgeFamily, RelationKind, SemanticSubKind};
     use muniment::{MemoryBackend, RedbBackend};
     use personae::{IdentityProvider, InMemoryProvider};
     use std::sync::Arc;

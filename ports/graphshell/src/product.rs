@@ -4,14 +4,14 @@ use std::collections::{BTreeSet, HashSet};
 
 use chartulary::AcceptAll;
 use chirograph::{PortableCardV1, Sha256NamedInformation};
-use mere::canvas::CartographyGeometry;
-use mere::kernel::geometry::PortablePoint;
-use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
-use mere::kernel::graph::{
+use canvas::CartographyGeometry;
+use kernel::geometry::PortablePoint;
+use kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
+use kernel::graph::{
     ArrangementSubKind, ContainmentSubKind, EdgeAssertion, EdgeFamily, Graph, NodeFacetStore,
     RelationKind, SemanticSubKind,
 };
-use mere::kernel::persistence::GraphSnapshot;
+use kernel::persistence::GraphSnapshot;
 use muniment::Backend;
 use sceno::SourceRef;
 use serde::{Deserialize, Serialize};
@@ -757,7 +757,7 @@ pub(crate) fn decode_engram(bytes: &[u8]) -> Result<ProductEngramV1, ProductErro
 
 #[cfg(test)]
 mod tests {
-    use mere::kernel::graph::{ProvenanceSubKind, RelationKind};
+    use kernel::graph::{ProvenanceSubKind, RelationKind};
     use muniment::MemoryBackend;
 
     use super::*;

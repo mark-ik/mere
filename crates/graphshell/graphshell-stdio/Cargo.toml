@@ -1,13 +1,13 @@
 [package]
 name = "graphshell-stdio"
-version.workspace = true
+version = "0.0.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Native newline-delimited stdio carrier for local Graphshell endpoints."
 
 [dependencies]
-graphshell-endpoint = { path = "../graphshell-endpoint" }
+graphshell-endpoint = { version = "0.0.2", path = "../graphshell-endpoint" }
 chirograph.workspace = true
 serde_json.workspace = true
 

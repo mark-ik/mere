@@ -11,13 +11,13 @@ use chirograph::{
     ProjectionSnapshot, ProtocolVersion, ResourceRequest, ResourceResponse, SemanticRole,
 };
 use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionCatalog, ProjectionSource};
-use mere::kernel::geometry::PortablePoint;
-use mere::kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
-use mere::kernel::graph::{
+use kernel::geometry::PortablePoint;
+use kernel::graph::apply::{GraphDelta, add_node, apply_graph_delta, assert_relation};
+use kernel::graph::{
     ArrangementSubKind, ContainmentSubKind, EdgeAssertion, Graph, NodeFacetStore, NodeKey,
     ProvenanceSubKind, RelationKind, SemanticSubKind,
 };
-use mere::kernel::persistence::GraphSnapshot;
+use kernel::persistence::GraphSnapshot;
 use muniment::{Backend, JsonSlots, StoreError};
 use sceno::{
     Arrangement, Footprint, InstanceId, ProjectedItem, Rect, Representation, RoutedRelation, Scene,
@@ -296,7 +296,7 @@ impl<B: Backend> MereHost<B> {
     }
 
     fn score(&self) -> Score {
-        mere::canvas::project_canvas_strategy_with_score(
+        canvas::project_canvas_strategy_with_score(
             "phyllotaxis.default",
             &self.graph,
             None,
@@ -326,7 +326,7 @@ impl<B: Backend> MereHost<B> {
                     value,
                 },
             ),
-            mere::kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
+            kernel::graph::apply::GraphDeltaResult::NodeMetadataUpdated(true)
         );
         if updated {
             self.projection_revision = self.projection_revision.wrapping_add(1);
@@ -353,7 +353,7 @@ impl<B: Backend> MereHost<B> {
     }
 
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, MereHostError> {
-        let layout = mere::canvas::project_canvas_strategy_with_score(
+        let layout = canvas::project_canvas_strategy_with_score(
             "phyllotaxis.default",
             &self.graph,
             None,
@@ -939,8 +939,8 @@ fn add_fixture_node(
     key
 }
 
-fn address_kind_label(kind: mere::kernel::address::AddressKind) -> &'static str {
-    use mere::kernel::address::AddressKind;
+fn address_kind_label(kind: kernel::address::AddressKind) -> &'static str {
+    use kernel::address::AddressKind;
     match kind {
         AddressKind::Http => "web",
         AddressKind::File => "file",
@@ -964,7 +964,7 @@ fn relation_kind_label(kind: RelationKind) -> &'static str {
 
 /// The H1 fixture's two explicit handler choices.
 pub fn fixture_handlers() -> HandlerRegistry {
-    use mere::kernel::address::AddressKind;
+    use kernel::address::AddressKind;
     HandlerRegistry::new(vec![
         HandlerOffer {
             id: "graphshell.inspect".to_string(),

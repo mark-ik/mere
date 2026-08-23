@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Trail domain vocabulary for Mere: the recently-visited / node-history / removed-nodes projection a host renders as the Trail pane."
-publish = false
+publish = true
 
 [lib]
 name = "trail"

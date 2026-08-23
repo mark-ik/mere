@@ -348,9 +348,9 @@ mod tests {
     use graphshell_endpoint::{
         IntentSink, PresentationSource, ProjectionSource, ResumableProjectionSource,
     };
-    use mere::kernel::geometry::PortablePoint;
-    use mere::kernel::graph::apply::add_node;
-    use mere::kernel::graph::{Graph, NodeFacetStore};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::apply::add_node;
+    use kernel::graph::{Graph, NodeFacetStore};
 
     use super::*;
     use crate::product::{PRODUCT_ENGRAM_SCHEMA, ProductEngramV1, TransferScope};

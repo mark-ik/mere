@@ -13,8 +13,8 @@ use eidetic::browsing::{
     BrowsingMemory, PageRef, TraceEvent, TraceTransition, bootstrap_browsing_schema,
 };
 use eidetic::{NoFetcher, PrivacyClass, list_typed, load_typed, manifest::delete_manifest};
-use mere::kernel::graph::apply::{GraphDelta, apply_graph_delta};
-use mere::kernel::graph::{EdgeFamily, NavigationTrigger, RelationKind, RelationSelector};
+use kernel::graph::apply::{GraphDelta, apply_graph_delta};
+use kernel::graph::{EdgeFamily, NavigationTrigger, RelationKind, RelationSelector};
 use muniment::{Backend, StoreError, WriteOp};
 use serde::{Deserialize, Serialize};
 use url::Url;

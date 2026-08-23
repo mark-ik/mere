@@ -272,8 +272,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use chirograph::IntentResult;
-    use mere::kernel::address::AddressKind;
-    use mere::kernel::graph::{EdgeFamily, RelationKind};
+    use kernel::address::AddressKind;
+    use kernel::graph::{EdgeFamily, RelationKind};
     use muniment::{Backend, MemoryBackend};
     use serde_json::json;
 
@@ -490,7 +490,7 @@ mod tests {
     #[tokio::test]
     async fn h4_exportable_identity_cards_and_access_survive_scene_reopen_as_projections() {
         use graphshell_endpoint::{IntentSink, PresentationSource, ProjectionSource};
-        use mere::canvas::CartographyGeometry;
+        use canvas::CartographyGeometry;
         use pandect::{
             DeviceExposure, DeviceId, DevicePublicKey, PersonaId, RemoteAuthGrantSpec,
             ensure_wallet_state, issue_remote_auth_device_grant, load_device_roster,

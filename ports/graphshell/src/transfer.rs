@@ -16,12 +16,12 @@ use eidetic::{
     TimeBounds, Timestamp, TrustEnvelope, TrustLevel, TypedPayload, save_schema, save_typed,
     validate_payload,
 };
-use mere::kernel::geometry::PortablePoint;
-use mere::kernel::graph::node_facets::{
+use kernel::geometry::PortablePoint;
+use kernel::graph::node_facets::{
     ARRANGEMENT_FRAME_LAYOUT, ARRANGEMENT_PIN, ARRANGEMENT_SPLIT_OFFER_SUPPRESSED,
     PROVENANCE_DERIVATIONS, PROVENANCE_IMPORT, VISIT_HISTORY,
 };
-use mere::kernel::graph::{Graph, NodeFacetStore};
+use kernel::graph::{Graph, NodeFacetStore};
 use muniment::{Backend, BlobStore};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -976,7 +976,7 @@ fn remap_scene(scene: &SavedSceneV1, ids: &HashMap<Uuid, Uuid>) -> SavedSceneV1 
         camera_offset: scene.camera_offset,
         camera_zoom: scene.camera_zoom,
         default_handler: scene.default_handler.clone(),
-        cartography: mere::canvas::CartographyGeometry::from_positions(
+        cartography: canvas::CartographyGeometry::from_positions(
             scene
                 .cartography
                 .iter()
@@ -1098,7 +1098,7 @@ mod tests {
     use std::fs;
 
     use eidetic::{NoFetcher, load_typed};
-    use mere::kernel::graph::{ProvenanceSubKind, RelationKind, SemanticSubKind};
+    use kernel::graph::{ProvenanceSubKind, RelationKind, SemanticSubKind};
     use muniment::MemoryBackend;
 
     use super::*;
