@@ -99,10 +99,13 @@ fn operation(
         .body(body.as_bytes())
         .seq_num(seq_num)
         .backlink(backlink)
-        .build(signing_key, PrunableExtension {
+        .build(
+            signing_key,
+            PrunableExtension {
                 space: SPACE,
                 prune_flag: PruneFlag::new(prune),
-            });
+            },
+        );
     Operation {
         hash: header.hash(),
         header,

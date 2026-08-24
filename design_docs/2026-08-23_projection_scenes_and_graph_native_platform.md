@@ -9,11 +9,18 @@ web platform with graph-native application behavior.
 **Related:**
 
 - [projection grammar catalog](mere_docs/research/2026-08-15_projection_grammar_catalog.md)
+- [Scenograph content catalog](mere_docs/research/2026-08-18_scenograph_content_catalog.md)
+- [shelfmark format note](mere_docs/technical_architecture/2026-08-16_shelfmark_format_note.md)
 - [family composition thesis](2026-08-12_family_composition_thesis_brief.md)
 - [Turnstone suite composition and capability census](2026-08-22_turnstone_suite_composition_and_capability_census.md)
 - Genet `components/cambium/ARCHITECTURE.md`
 - Genet `docs/2026-08-12_meristem_scope_cut_and_component_contract_brief.md`
 - Genet `docs/2026-08-14_web_platform_host_contract_plan.md`
+
+**2026-08-23 follow-on:** the §8 receipts are scheduled in the
+[projection receipts plan](mere_docs/implementation_strategy/2026-08-23_projection_receipts_plan.md):
+wave 1 is Matrix and coordination with mer3ly as first consumer and the
+gazette Ledger as heterogeneous second; the field receipts stay gated there.
 
 ## 1. Ruling
 
@@ -29,7 +36,14 @@ fifty scenes. The useful work is to find the smaller set of representations in
 which source entities and relations become categorically different projected
 objects.
 
-For every candidate, answer:
+Before applying the scene test, identify which projection layer owns the
+candidate's novelty: authority, reading, encoding, arrangement, relation form,
+guide or backdrop, composition, interaction, realization, or the total scene
+recipe. If the novelty is exhausted by one lower layer, the candidate belongs
+there even when the resulting application surface is distinctive. This
+pre-filter rejects readings and composition capabilities wearing scene names.
+
+For every candidate that survives the layer pre-filter, answer:
 
 1. Which authority elements and values does it read?
 2. Which selection, grouping, aggregation, traversal, temporal, spatial, or
@@ -49,48 +63,54 @@ alters the representation's governing purpose and source-to-scene mapping.
 
 ## 2. Current scene cut
 
-This is a catalog judgment, not a portable-contract commitment.
+This is a catalog judgment, not a portable-contract commitment. Two statuses
+must remain independent:
 
-### Strong scene families
+1. **Categorical status:** whether a recipe is a distinct scene family.
+2. **Contract evidence:** whether a consumer has forced its portable meaning
+   and the required promotion receipts have landed.
 
-| Scene | Governing representation |
-| --- | --- |
-| **Orrery** | Entities become spatial bodies; relations become selectable routes; topology governs the view. |
-| **Mosaic** | Entities become adjacent media tiles; adjacency carries kinship and the collection becomes the ground. |
-| **Atlas** | Entities become markers in a referenced coordinate system; routes, ranges, regions, and geographic context retain real-world meaning. |
-| **Tabletop** | Entities become tangible pieces on an authored, collidable ground; placement and zones carry the composition. |
-| **Timeline** | Entities become events, spans, samples, or trails on a temporal axis; order, interval, concurrency, and change govern the reading. |
-| **Matrix** | Two readings become axes; relations, values, similarities, or deltas become addressable cells. |
-| **Partition** | A hierarchy becomes nested, value-bearing area; an entity is an enclosure or share of a whole. |
-| **Matryoshka** | Nested spaces remain independently navigable coordinate and authority scopes; an entity becomes a shell, room, or portal into another scene. |
-| **Delta** | Stable identities are compared across epochs; descent, membership change, additions, removals, moves, and reconciliation become the scene. |
-| **Calendar** | Temporal facts are grouped by recurring units on a semantic temporal backdrop; entries or aggregates inhabit the cells. |
-| **Scatter** | One source entity may produce several marks; quantitative values determine position while other facets determine size, color, form, labels, or uncertainty. |
-| **Profile** | Selected facets become comparable axes or panels; an entity becomes a multi-value profile. Gazette is a likely forcing consumer. |
-| **Setscape** | Membership becomes containment and overlap; sets become regions and entities inhabit intersections. |
-| **Tag lattice** | Entity-tag incidence derives maximal shared tag groups ordered by inclusion; the groups remain derived rather than authoritative nodes. |
-| **Deck** | One graphlet is repeated across configurable facet or metadata panels, with linked identity and declared shared or independent scales. |
-| **Territory** | Positioned sites and a winner rule partition a space; an entity becomes a site with a categorical region. |
-| **Contour** | A scalar field becomes bands, isolines, extrema, or raster; entities act as samples, anchors, or sources. |
-| **Cartogram** | Named regions deform by quantitative values while preserving selected adjacency or recognizability constraints. |
-| **Volume** | Values and entities inhabit a three-dimensional space through slices, voxels, isosurfaces, landmarks, or nested volumes. |
-| **Diff** | Stable identities align across two epochs while additions, removals, moves, and value changes become derived marks. |
-| **Provenance** | Sources, transformations, confidence, authorship, and freshness become an inspectable derivation structure. |
-| **Document** | Entities become passages, figures, annotations, or embedded surfaces in narrative order; relations become references, quotations, and transclusions. |
+This direction note may change categorical status without advancing a contract
+gate. In the table, **no promotion asserted** means exactly that: the row makes
+no new claim about implementation, consumer proof, or portability.
 
-### Candidates needing a clearer product thesis
+### Categorically distinct scene families
+
+| Scene | Governing representation | Contract evidence named here |
+| --- | --- | --- |
+| **Orrery** | Entities become spatial bodies; relations become selectable routes; topology governs the view. | No promotion asserted. |
+| **Mosaic** | Entities become adjacent media tiles; adjacency carries kinship and the collection becomes the ground. | No promotion asserted. |
+| **Atlas** | Entities become markers in a referenced coordinate system; routes, ranges, regions, and geographic context retain real-world meaning. | No promotion asserted. |
+| **Tabletop** | Entities become tangible pieces on an authored, collidable ground; placement and zones carry the composition. | No promotion asserted. |
+| **Timeline** | Entities become events, spans, samples, or trails on a temporal axis; order, interval, concurrency, and change govern the reading. | No promotion asserted. |
+| **Matrix** | Two readings become axes; relations, values, similarities, or deltas become addressable cells. | Two-reading receipts are proposed below. |
+| **Partition** | A hierarchy becomes nested, value-bearing area; an entity is an enclosure or share of a whole. | No promotion asserted. |
+| **Delta** | Descent topology governs the scene: stable identities become version, branch, membership, and reconciliation structures across epochs. If a retained base scene merely acquires change marks, that is the Diff operator below. | No promotion asserted. |
+| **Calendar** | Temporal facts are grouped by recurring units on a semantic temporal backdrop; entries or aggregates inhabit the cells. | No promotion asserted. |
+| **Scatter** | One source entity may produce several marks; quantitative values determine position while other facets determine size, color, form, labels, or uncertainty. | No promotion asserted. |
+| **Profile** | Selected facets become comparable axes or panels; an entity becomes a multi-value profile. | Gazette is a candidate consumer; no promotion asserted. |
+| **Setscape** | Membership becomes containment and overlap; sets become regions and entities inhabit intersections. | No promotion asserted. |
+| **Deck** | One graphlet is repeated across configurable facet or metadata panels, with linked identity and declared shared or independent scales. | No promotion asserted. |
+| **Territory** | Positioned sites and a winner rule partition a space; an entity becomes a site with a categorical region. | No promotion asserted. |
+| **Contour** | A scalar field becomes bands, isolines, extrema, or raster; entities act as samples, anchors, or sources. | No promotion asserted. |
+| **Current** | A vector field becomes arrows, streamlines, sources, sinks, and vortices. | A simulator, radio model, or system emulator is only a candidate consumer. |
+| **Cartogram** | Named regions deform by quantitative values while preserving selected adjacency or recognizability constraints. | No forcing consumer is cited here. |
+| **Volume** | Values and entities inhabit a three-dimensional space through slices, voxels, isosurfaces, landmarks, or nested volumes. | Portable depth semantics remain unproven here. |
+| **Distribution** | Samples become contributor-aware bins, densities, quantiles, outliers, or intervals governed by a statistical distribution. | No named consumer is cited here. |
+| **Simplex** | Values constrained to one total place an entity in a simplex; barycentric position carries the composition. | No forcing dataset is cited here. |
+| **Provenance** | Sources, transformations, confidence, authorship, and freshness become an inspectable derivation structure. | No promotion asserted. |
+| **Document** | Entities become passages, figures, annotations, or embedded surfaces in narrative order; relations become references, quotations, and transclusions. | No promotion asserted. |
+
+### Candidates whose categorical status remains unresolved
 
 | Candidate | Current judgment |
 | --- | --- |
-| **Topological network** | The abstract counterpart to Atlas. It arranges a real network by connectivity, bearer, capacity, and route rather than geography. Mesh management may force it. |
+| **Topological network** | It may be Orrery over typed network facts rather than a separate total regime. Bearer, capacity, and route constraints must change more than the dataset vocabulary to separate it. |
 | **Streams** | Earns separation from Timeline only if its shared axis may be ordinal, quantitative, or procedural; stream membership sets one axis and cross-stream relations remain explicit. |
 | **Rosette** | Knot has landed poem and lyric proofs, but the 2026-08-23 review reopens whether the recipe is categorically more than polar placement plus chord encoding. A non-prosodic transfer would sharpen that judgment. |
-| **Distribution** | Samples derive bins, density, quantiles, and outliers with contributor provenance. It is a valid projection family; a named product scene has not yet been forced. |
-| **Simplex** | Three values constrained to one total place an entity inside a triangle. The representation is sound, but the stack has no forcing composition dataset yet. |
-| **Current** | A vector field becomes arrows, streamlines, sources, sinks, and vortices. A simulator, radio model, or system emulator may force it. |
-| **Phase** | Two or three state variables form a state space and epoch history becomes a trajectory. It can be rendered in 2D or 3D, but its product use remains unclear. |
-| **Incidence** | An n-ary relation becomes an addressable hub, region, or connector object rather than invented pairwise edges. The product thesis is missing. |
-| **Alignment** | Ordered sequences become parallel rows with correspondence columns, gaps, substitutions, and repeats. Knot or Woodshed may force it through version or performance comparison. |
+| **Phase** | It may be Scatter plus a temporal trajectory. It earns scene status only if state-space navigation and dynamical structure govern the entire representation. |
+| **Incidence** | An n-ary relation becoming a hub, region, or connector may be a relation form rather than a scene. A complete regime must be shown. |
+| **Alignment** | Ordered sequences become parallel rows with correspondence columns, gaps, substitutions, and repeats. It remains unclear whether this is a total scene or a Matrix or Streams configuration. |
 
 ### Collapsed or reclassified proposals
 
@@ -114,6 +134,16 @@ This is a catalog judgment, not a portable-contract commitment.
 - **Pulse** and **Feed** are promising entity representations. They enrich a
   node with recent or live data rather than defining a scene.
 - **Comparison** is a Matrix flavor at another scope.
+- **Diff** is a comparison operator over a retained base scene. It aligns stable
+  identities across two epochs and produces addition, removal, move, and value
+  marks without replacing the base scene's governing representation.
+- **Tag lattice** is a maximal-shared-tag derivation followed by a layered-DAG
+  arrangement. Its derived groups may be projected through Setscape,
+  Partition, Matrix, or another scene without becoming authoritative nodes.
+- **Matryoshka** names nested scene composition: portals, coordinate spaces,
+  and authority scopes. A product may use the name for a complete recipe, but
+  the reusable novelty belongs to platform composition until such a recipe
+  survives the scene test.
 - **Neighborhood** is a semantically inferred graphlet. The embedding that
   produces it is a reading or arrangement, not scene identity.
 - Node-level, graphlet-level, mere-level, and moot-level lineage are Delta at
@@ -162,8 +192,8 @@ Required behavior:
 - remote and frozen realizations preserve the same source mapping;
 - disappearance of one instance does not imply removal of source authority.
 
-This rule is load-bearing for Matrix, Scatter, Deck, Diff, comparison, and
-Document scenes.
+This rule is load-bearing for Matrix, Scatter, Deck, comparison and Diff marks,
+and Document scenes.
 
 ## 5. Graph utilities and enriched graph elements
 
@@ -172,9 +202,9 @@ Several rejected scenes are useful capabilities at a different layer.
 ### Scope-producing utilities
 
 Search, N-order traversal, lasso, box selection, ordered selection, path
-selection, brushing, tag intersection, and set operations should produce a
-stable graphlet or equivalent derived scope with provenance. A scene consumes
-that scope without caring how it was produced.
+selection, brushing, tag intersection, maximal-shared-tag derivation, and set
+operations should produce a stable graphlet or equivalent derived scope with
+provenance. A scene consumes that scope without caring how it was produced.
 
 The useful split is:
 
@@ -196,6 +226,22 @@ An enriched representation may cite several facets and expose several derived
 marks while retaining the entity's source identity. High-frequency rendering
 may use a Sprigging leaf; semantic structure, values, and available actions
 must remain available to DOM, accessibility, and automation paths.
+
+### Nested scene composition
+
+A scene may contain, link to, or open another scene without nested composition
+becoming the outer scene's identity. The reusable capability must carry:
+
+- portal and nested-space identity;
+- the inner scene's coordinate, focus, and navigation boundary;
+- explicit authority scope and authorization at the crossing;
+- source-to-instance mapping across the boundary;
+- accessible entry, exit, naming, and alternate realization;
+- deterministic remote and frozen behavior.
+
+This capability supports Deck, Document, Matrix drill-through, and a possible
+Matryoshka product recipe. It belongs to the platform rather than to one named
+scene.
 
 ## 6. Field scenes remain distinct
 
@@ -228,8 +274,10 @@ Mere should own graph-browser-specific orchestration:
   grouping, tags, paths, and epoch scopes;
 - source-to-instance and source-to-derived-object bindings;
 - contributor and derivation provenance;
-- linked selection and comparison state across scenes;
+- linked selection facts and comparison state across scenes, while preserving
+  the producing view for every selection;
 - temporal metadata, epoch queries, lineage, and diff scopes;
+- authority-scope transitions for nested scenes and portals;
 - field providers and mappings from graph facts into field samples;
 - saved scene recipes and active `ViewIntent`, separate from graph truth;
 - intent routing that distinguishes source, reading, projection, and view-state
@@ -239,6 +287,12 @@ Mere does not need one universal scene implementation. It needs the graph-aware
 bindings and coordination that let several realizations remain views of the
 same authority.
 
+The current portable selection noun is `chirograph::Selection`, which carries
+only `source` and `targets`. The coordinated-view direction here identifies the
+forcing condition for a future resolution strategy, but does not advance A2's
+gate by itself. Union, intersection, and crossfilter remain unadopted until two
+coordinated views actually require and prove them.
+
 ### Scenograph
 
 Scenograph remains product-free. The scene exercise identifies contract
@@ -247,10 +301,12 @@ pressure rather than an implementation queue:
 - several instances may cite one source;
 - derived marks need identity, values, contributor provenance, and semantic
   descriptions;
-- scales, axes, legends, annotations, and missing-value behavior need portable
-  meaning when a proof forces them;
+- scales, axes, legends, annotations, units, thresholds, and missing-value
+  behavior need portable meaning when a proof forces them;
 - Matrix needs two independent readings and addressable cells;
 - Deck needs nested spaces with declared shared or independent scales;
+- nested scenes need portable portal, space, source-mapping, and authority-scope
+  semantics;
 - relation identity must survive routes, cells, adjacency, containment,
   ribbons, order, and alignment;
 - backdrops and fields need explicit visibility, hit, collision, extent, and
@@ -260,6 +316,10 @@ pressure rather than an implementation queue:
 
 Each addition still requires a forcing consumer, a heterogeneous second
 consumer, deterministic carriage, and an accessible frozen realization.
+Scenograph owns the portable structural meaning of a guide or nested-space
+declaration as supplied by an adapter; the application still owns domain
+meaning and authority. Scenograph does not own widgets, input behavior, focus
+policy, or platform accessibility objects.
 
 ### Cambium
 
@@ -271,9 +331,12 @@ elements and custom leaves:
 - a virtualized, keyboard-navigable Matrix with semantic row, column, and cell
   targets;
 - Deck or panel composition with shared selection and declared scale sharing;
-- accessible scales, axes, legends, thresholds, unit displays, and filters;
+- interactive and accessible realizations of Scenograph-provided scales, axes,
+  legends, thresholds, units, and filters;
 - timeline scrubbers and before/after comparison controls;
 - scene hosting with unified focus, pointer capture, overlays, and typed events;
+- portal entry and exit, focus restoration, navigation, and announcements across
+  nested scene boundaries;
 - keyboard equivalents and announcements for direct manipulation, pinning,
   region selection, and cell activation;
 - accessible table, tree, or long-form alternates for dense or spatial scenes.
@@ -305,6 +368,21 @@ Backend-specific behavior remains behind the web-platform host contract.
 Graph-native semantics do not become pseudo-web standards merely because Genet
 realizes them.
 
+### Shelfmarks and composed projections
+
+Shelfmark v1 names one authority and one projection. Matrix introduces a
+declared contract gap: its two readings may come from different authorities,
+and repeated source instances may require authored delta sections to address a
+particular projected instance. This direction note does not alter the v1
+envelope. The [shelfmark format note](mere_docs/technical_architecture/2026-08-16_shelfmark_format_note.md)
+owns the eventual citation shape after a forcing proof determines it.
+
+Catalog collapse also cannot silently reinterpret an identifier already
+written to a citation. If a former scene name was emitted as a reading,
+arrangement, or other registry id, a resolver must either preserve its meaning
+through a versioned alias or report the incompatibility. A catalog judgment by
+itself neither proves wire exposure nor authorizes an alias.
+
 ## 8. Acceptance receipts
 
 The following receipts would prove the platform shape without requiring every
@@ -332,6 +410,16 @@ scene in the catalog:
 7. **View-state authority:** scope, filters, selected facets, arrangement
    constraints, backdrop, and camera save and restore without entering graph
    truth; an authorized source edit still travels through the application.
+8. **Coordinated-view selection:** two views over one authority contribute
+   selections whose combination rule is explicit, deterministic, serialized,
+   and removable. This is the receipt that may open A2's resolution half; the
+   direction note alone does not.
+9. **Composed citation and compatibility:** a two-reading Matrix whose axes use
+   different authorities round-trips through a shelfmark-compatible citation,
+   preserves any instance-scoped authored delta, and retains checkability for
+   every required input. A previously emitted registry id for a collapsed name
+   either reconstitutes with its original meaning or produces an explicit
+   incompatibility report rather than silently selecting a newer recipe.
 
 These receipts would demonstrate a graph-native application platform extending
 the web platform while preserving the authority and ownership boundaries of

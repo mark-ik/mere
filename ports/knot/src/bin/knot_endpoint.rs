@@ -376,8 +376,8 @@ fn communal_fixture_endpoint(
         }),
     ))
     .expect("could not author received communal fixture document");
-    let vault =
-        knot_editor::KnotVault::open(root.join("vault"), VAULT_KEY).expect("could not open fixture vault");
+    let vault = knot_editor::KnotVault::open(root.join("vault"), VAULT_KEY)
+        .expect("could not open fixture vault");
     let mut endpoint = knot_editor::KnotEndpoint::from_communal_vault(
         vault,
         store,

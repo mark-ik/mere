@@ -8,10 +8,11 @@ Consumed by: [`2026-08-18_scenograph_content_catalog.md`](2026-08-18_scenograph_
 Incorporates: the projection-engine, graph-projections, Scenograph expansion, node-representation, and field-region research listed under [Related Mere research](#related-mere-research)
 
 **2026-08-23 follow-on:** [Projection Scenes and the Graph-Native Application Platform](../../2026-08-23_projection_scenes_and_graph_native_platform.md)
-records the later scene-catalog cuts, the Matrix and repeated-instance rulings,
-and their consequences for Mere, Scenograph, Cambium, and Genet. This catalog
-remains the grammar and boundary map; the follow-on owns the revised scene
-judgments.
+adds a layer-ownership pre-filter before the scene test, separates categorical
+status from contract evidence, records the Matrix and repeated-instance
+rulings, and derives consequences for Mere, Scenograph, Cambium, and Genet.
+This catalog remains the grammar and boundary map; the follow-on owns the
+revised scene judgments.
 
 ## Ruling
 
@@ -302,7 +303,7 @@ This reclassification keeps the evocative scene names available to Turnstone and
 2. **Relation endpoints and routing constraints.** Schematics need ports, endpoint anchors, labels, and orthogonal routing while preserving relation identity.
 3. **Backdrop and underlay data.** Atlas, Tabletop, field rasters, and remote viewing need portable scene context with explicit visibility, collision, hit, and provenance policies.
 4. **Facet and shared-scale composition.** Small multiples need nested scenes with declared shared or independent domains.
-5. **Headed accessibility receipt.** Graphshell now produces semantic structure, HTML, an AccessKit tree, a long-form table, and honored/unmet placement reporting. A headed Genet host and real OS screen-reader traversal remain.
+5. **Headed accessibility receipt — closed.** Graphshell produces semantic structure, HTML, an AccessKit tree, a long-form table, and honored/unmet placement reporting. Turnstone `648bf19` supplies the definitive headed OS screen-reader traversal and routed-interaction receipt.
 
 These are research findings, not an instruction to enlarge Scenograph immediately. Each addition needs a projection proof that fails cleanly without it.
 
@@ -392,7 +393,7 @@ Eleven systems reviewed against this catalog in the projection grammar report (2
 - [`2026-06-13_scriptable_field_regions_plan.md`](../implementation_strategy/2026-06-13_scriptable_field_regions_plan.md): field and region model.
 - [`2026-07-21_projection_proofs_plan.md`](../implementation_strategy/2026-07-21_projection_proofs_plan.md): proof sequence and portable projection discipline.
 - [`2026-08-15_projection_grammar_adoption_plan.md`](../implementation_strategy/2026-08-15_projection_grammar_adoption_plan.md): gated targets carrying the projection grammar report's transfers into mere, genet, and cambium.
-- [`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md): scene ownership contract.
+- [`design_docs/scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md`](../../scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md): scene ownership contract.
 - [`2026-07-24_scenograph_0_0_3_release_plan.md`](../implementation_strategy/2026-07-24_scenograph_0_0_3_release_plan.md): historical 0.0.3 release boundary.
 
 ## Closing thesis

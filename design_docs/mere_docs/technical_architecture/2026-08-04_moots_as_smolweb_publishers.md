@@ -2,9 +2,9 @@
 
 **Date:** 2026-08-04
 **Status:** analysis, answering Mark's questions. Nothing scheduled.
-**Companion to:** [carrier independence](../../nematic_docs/technical_architecture/2026-08-04_protocol_carrier_independence.md)
+**Companion to:** carrier independence (`smolweb/design_docs/research/2026-08-04_protocol_carrier_independence.md`)
 (which handles the client direction) and the
-[smolweb home decision](../../nematic_docs/technical_architecture/2026-08-03_smolweb_home_decision.md).
+smolweb home decision (`smolweb/design_docs/technical_architecture/2026-08-03_smolweb_home_decision.md`).
 
 Two questions arrived together and turn out to have one answer, so they are
 answered together: *could knot become a smolweb protocol and format?* and
@@ -47,8 +47,8 @@ bundled before publication are fine, because they cost no request.
 
 That is the same move made twice already and it is a good sign for it:
 `gemini-protocol` separates the dependency-free grammar from the active
-machinery behind a feature, and the [home
-decision](../../nematic_docs/technical_architecture/2026-08-03_smolweb_home_decision.md)
+machinery behind a feature, and the home
+decision (`smolweb/design_docs/technical_architecture/2026-08-03_smolweb_home_decision.md`)
 separates spec-accurate implementations from our enrichment. Knot-inert is
 that same cut, applied to a format we own.
 
@@ -158,7 +158,7 @@ Same shape. The solo case stays lighter.
 
 ### And formats we own versus formats we do not
 
-The [home rule](../../nematic_docs/technical_architecture/2026-08-03_smolweb_home_decision.md)
+The home rule (`smolweb/design_docs/technical_architecture/2026-08-03_smolweb_home_decision.md`)
 applies to publishing exactly as it does to parsing:
 
 - **Formats we own** (knot): we may innovate — assembly, caching, revisions —

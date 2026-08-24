@@ -195,8 +195,11 @@ async fn hold(
             // Resumable *and* notifying: a visitor recovering after a bell asks
             // for a resume, and the typed silent registration would answer that
             // refusal-shaped, which is what K2 found the hard way.
-            knot_editor::KnotEndpoint::open_writable(&vault, knot_editor::KnotWriteGrant::new(64 * 1024))
-                .map_err(|error| error.to_string())
+            knot_editor::KnotEndpoint::open_writable(
+                &vault,
+                knot_editor::KnotWriteGrant::new(64 * 1024),
+            )
+            .map_err(|error| error.to_string())
         })
         .map_err(|e| format!("register: {e}"))?;
     let mut host = ResidentProjectionHost::new(

@@ -14,7 +14,7 @@ surface does not ship.
 (the content pass this brief prepared for, 2026-08-18),
 [scenograph_0_0_3_release_plan](../implementation_strategy/2026-07-24_scenograph_0_0_3_release_plan.md)
 (0.0.3 published 2026-07-24), the scene contract note
-(`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),
+(`design_docs/scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md`),
 [projection_proofs_plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md),
 woodshed's stage/set/tools plan
 (`woodshed/design_docs/2026-07-11_stage_set_tools_plan.md`),

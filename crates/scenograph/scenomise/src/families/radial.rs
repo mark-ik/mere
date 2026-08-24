@@ -172,7 +172,11 @@ mod tests {
         };
         let owned = vec![ring(0, 1.0), ring(1, 1.0), ring(2, 1.0), ring(3, 1.0)];
         let placed = place(&config, &items(&owned));
-        assert!((placed[0].x - config.ring_spacing).abs() < 1e-3, "{:?}", placed[0]);
+        assert!(
+            (placed[0].x - config.ring_spacing).abs() < 1e-3,
+            "{:?}",
+            placed[0]
+        );
         assert!(placed[0].y.abs() < 1e-3, "{:?}", placed[0]);
     }
 

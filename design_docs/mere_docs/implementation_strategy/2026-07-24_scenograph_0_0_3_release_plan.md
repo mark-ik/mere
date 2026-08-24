@@ -4,7 +4,7 @@
 published 0.0.3 artifacts remain a release baseline. Development on `main`
 continues through explicit score and crate versions.
 
-The [scene contract note](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md)
+The [scene contract note](../../scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md)
 ended with four items standing between the family and its 0.0.3 release, and the
 [projection proofs plan](2026-07-21_projection_proofs_plan.md) has finished
 the proving half. Woodshed gated its own scene-contract work on a published

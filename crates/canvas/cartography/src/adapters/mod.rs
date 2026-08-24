@@ -297,8 +297,7 @@ impl LayoutStrategy for SpectralAdapter {
                 fallback: sceno::EmbeddingFallback::RingOutside,
                 ..self.config.clone()
             }),
-            &Disclosures::default()
-                .with_embedding(spectral_coords(request.graph, self.iterations)),
+            &Disclosures::default().with_embedding(spectral_coords(request.graph, self.iterations)),
         );
         if keys.is_empty() {
             return empty_projection(Self::PROJECTION_ID);

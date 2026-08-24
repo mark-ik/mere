@@ -66,10 +66,10 @@ measured, not what they were meant to measure.
 
 **The withdrawn adoption recommendation is in §7.**
 
-Receipts: [`2026-08-22_chromium_full.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-22_chromium_full.json),
-[`2026-08-22_firefox.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-22_firefox.json).
+Receipts: [`2026-08-22_chromium_full.json`](../../../ports/muniment-opfs-probe/receipts/2026-08-22_chromium_full.json),
+[`2026-08-22_firefox.json`](../../../ports/muniment-opfs-probe/receipts/2026-08-22_firefox.json).
 The superseded first receipt
-([`2026-08-22_redb_opfs_probe.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-22_redb_opfs_probe.json))
+([`2026-08-22_redb_opfs_probe.json`](../../../ports/muniment-opfs-probe/receipts/2026-08-22_redb_opfs_probe.json))
 is kept as history and **should not be cited**: it predates the harness in the
 tree and its `browser_to_native` field still reads "pending native verify".
 
@@ -89,7 +89,7 @@ satisfied honestly; if it cannot, the probe stops there.
 
 - `crates/eidetic/muniment/src/` is not touched. Production `RedbBackend`
   stays on redb 2; production `IndexedDbBackend` is the browser store today.
-- The executable harness lives in [`ports/muniment-opfs-probe/`](../../../../ports/muniment-opfs-probe/README.md),
+- The executable harness lives in [`ports/muniment-opfs-probe/`](../../../ports/muniment-opfs-probe/README.md),
   a standalone Cargo workspace (the `ports/distillery/probe` posture), so its
   redb 4.2 pin and wasm-bindgen pin never enter mere's product graph. It
   consumes muniment as a path dependency with muniment's own `redb` feature
@@ -97,7 +97,7 @@ satisfied honestly; if it cannot, the probe stops there.
 - Target: `wasm32-unknown-unknown`, wasm-bindgen, **no `atomics` feature**.
   The open-web lane cannot use SharedArrayBuffer (COOP/COEP versus
   third-party content; see the
-  [cross-platform parallelism strategy](../../../../design_docs/mere_docs/research/2026-06-19_cross_platform_parallelism_strategy.md)),
+  [cross-platform parallelism strategy](../../mere_docs/research/2026-06-19_cross_platform_parallelism_strategy.md)),
   so the worker is single-threaded by construction.
 
 ## 3. Decisions taken while founding the probe (for Mark's review)
@@ -731,7 +731,7 @@ from atomic to best-effort. Nothing here should be read as "browsers do X".
 Playwright Firefox 153, headless, **byte-identical harness**: its
 `probe_source_sha256` and `wasm_sha256` match the Chromium receipt's, so the two
 receipts differ only by engine. Results in
-[`2026-08-22_firefox.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-22_firefox.json).
+[`2026-08-22_firefox.json`](../../../ports/muniment-opfs-probe/receipts/2026-08-22_firefox.json).
 
 Capabilities from inside a Firefox dedicated worker: `sync_access_handle`,
 `storage_manager`, `web_locks`, and — a vendor extension outside the core
@@ -800,7 +800,7 @@ resolve.
 **Run 2026-08-23, and it refutes the reason for running it.** The argument for
 trying Playwright's WebKit was that it would cover much of the untested
 Safari/WKWebView surface cheaply. It does not, and the receipt
-([`2026-08-23_webkit_unsupported.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-23_webkit_unsupported.json))
+([`2026-08-23_webkit_unsupported.json`](../../../ports/muniment-opfs-probe/receipts/2026-08-23_webkit_unsupported.json))
 records why.
 
 Playwright WebKit 26.5 on Windows, secure context, in both page and worker:
@@ -1118,7 +1118,7 @@ Two things follow:
   operator-opened holder tab (§5.8). Lane 5: portability round-trips both ways
   with matching digests (§5.9), and the IndexedDB benchmark gives redb-on-OPFS
   at 1.6–5.2× IndexedDB (§5.10). Receipt at
-  [`receipts/2026-08-22_redb_opfs_probe.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-22_redb_opfs_probe.json)
+  [`receipts/2026-08-22_redb_opfs_probe.json`](../../../ports/muniment-opfs-probe/receipts/2026-08-22_redb_opfs_probe.json)
   (the full run) and the browser-written fixture verified natively at
   generation 8. **Probe complete; the decision is §7.**
 - **2026-08-22, review pass.** A review found six problems and every one held

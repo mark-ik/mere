@@ -44,7 +44,7 @@ plan.
 The entire table was re-run after the Burn `0.22.0-pre.2` migration, one row at
 a time. The WGPU rows initially exposed an upstream `cubecl-runtime` wasm
 manifest defect; the narrow workspace patch recorded in the
-[Burn closure receipt](../../../../design_docs/mere_docs/testing/2026-08-20_burn_0_22_prerelease_closure.md)
+[Burn closure receipt](../../mere_docs/testing/2026-08-20_burn_0_22_prerelease_closure.md)
 applies upstream's published corrections without changing CubeCL source. All
 eleven ESP rows then passed. This remains a compile receipt, not a headed
 browser execution claim.

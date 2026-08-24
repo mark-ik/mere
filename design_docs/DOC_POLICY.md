@@ -1,96 +1,182 @@
 # Documentation Policy
 
-Governs all documentation under `mere/design_docs/`. Mirrors the spirit of the inherited [`graphshell/design_docs/DOC_POLICY.md`](../../graphshell/design_docs/DOC_POLICY.md), simplified for the smaller current state.
-
-## Directory structure
-
-Per-component subdirectory under `design_docs/` for each major architectural area:
-
-```
-mere/design_docs/
-├── DOC_README.md                  ← canonical index
-├── DOC_POLICY.md                  ← this file
-├── TERMINOLOGY.md                 ← canonical terms (skeleton)
-├── YYYY-MM-DD_<keyword>_brief.md  ← cross-cutting briefs
-├── mere_docs/                     ← product-level concerns
-├── verso_docs/                    ← rendering-surface management
-├── inker_docs/                    ← engine controller
-├── platen_docs/                   ← composition surface
-├── nematic_docs/                  ← smolweb engine
-├── murm_docs/                     ← bilateral comms
-├── moothold_docs/                 ← community/federation
-└── archive_docs/                  ← superseded checkpoints
-```
-
-Within each area-root:
-
-```
-<area>_docs/
-├── implementation_strategy/   ← dated plans, feature targets
-├── technical_architecture/    ← canonical architecture decisions
-├── research/                  ← briefs, surveys, design probes
-├── design/                    ← UI/UX docs (where applicable)
-└── testing/                   ← test plans, harness docs
-```
+> **Canonical core v1 (2026-08-24).** Everything from "## Core principles" down
+> to the end of §10 is the shared core, copied verbatim into every repository
+> under `Code` that keeps a `design_docs/`. It is not owned by any one repo:
+> change it in all of them or not at all, so that `diff` between any two copies
+> shows only local addenda. Repo-specific rules belong under
+> **Local addendum** at the foot of this file, never inside the core.
 
 ## Core principles
 
-### 1. Control documentation growth
+### 1. Control doc growth
 
-Prefer adding to existing docs over creating new ones. Create a new doc only when material is substantial (>500 words), covers multiple sub-topics, and is unrelated to existing docs. Do not create files for one-time analyses.
+Add to an existing doc unless the material is substantial (>500 words), covers
+a distinct topic, and is unrelated to any current document. Keep the total doc
+count low. Do not create a file for a one-time analysis.
 
 ### 2. Eliminate redundancy
 
-Periodic audits before any major change. Newer documents are generally more authoritative. Move superseded material to `archive_docs/` checkpoint folders rather than editing in place.
+Audit before commits and after substantial changes. Newer documents are
+generally more authoritative. If two docs disagree, reconcile them — do not let
+drift accumulate. Material shared across several repos lives once, in a named
+home, and is cited by path from the others; never copied.
 
 ### 3. No legacy friction
 
-When a new architecture path is chosen, optimize for clean fit rather than preserving legacy. Replace, don't half-migrate. Keep fallbacks only when they provide architectural safety, not to keep obsolete parallel systems alive.
+When a path changes, optimize for clean fit with the new path. Do not preserve
+obsolete parallel systems or migration shims unless they are needed for real
+user data. Tests track current semantics only.
 
-### 4. Archival
+### 4. Location and archival
 
-`archive_docs/` contains superseded material in dated checkpoint folders. When archiving, check for an existing checkpoint folder first; create a new one if needed (named by date of last edit of any file in the checkpoint).
+- **Active docs** live directly in `design_docs/`. Flat is fine, and is the
+  right default. When one domain accumulates enough material to justify it,
+  promote that domain to an area root, `design_docs/<area>_docs/`.
+- **Area roots**, once a repo has them, take a consistent set of category
+  subdirectories. Use only the ones a given area needs:
+
+  | Category | Holds |
+  |---|---|
+  | `research/` | briefs, surveys, reports, critiques, design probes |
+  | `technical_architecture/` | component definitions, boundaries, interfaces, decisions |
+  | `implementation_strategy/` | dated plans, development approaches, roadmaps |
+  | `design/` | UI/UX, interaction design, accessibility |
+  | `testing/` | test plans, harness docs, manual checklists |
+
+- **Docs live with the repo that owns the subject, at that repo's doc root.**
+  Do not scatter `design_docs/` into member crates of a workspace: a doc in a
+  member crate is invisible to the canonical index, which is a violation of §6
+  rather than a matter of taste.
+- **Archive**: `design_docs/archive_docs/<YYYY-MM-DD>/` for retired plans and
+  superseded notes. Check for an existing checkpoint folder before creating a
+  new one. Move rather than delete; delete only with rationale and
+  confirmation.
 
 ### 5. Cross-referencing
 
-- Within `mere/design_docs/`: relative links
-- Across to inherited `graphshell/design_docs/`: explicit relative paths up two levels (`../../graphshell/design_docs/<file>`)
-- Crates: link to crates.io when referring to public API (`https://crates.io/crates/<name>`)
+- Within a repo: relative links.
+- Across repos: cite by path (`isometry/design_docs/...`), since relative links
+  do not cross repository boundaries reliably and rot silently when the
+  neighbour moves or is archived.
+- Crates: link to crates.io when referring to a public API
+  (`https://crates.io/crates/<name>`).
+- When a doc moves, repair the links that pointed at it in the same session.
 
-### 6. Categories
+### 6. DOC_README authority
 
-Standard subdirectory categories within an area-root:
+`design_docs/DOC_README.md` is the sole canonical index. It must contain:
 
-1. **research**: briefs, reports, critiques, reviews. General/technical-architecture resources.
-2. **technical_architecture**: core component definitions, boundaries, interfaces, integration points. General/implementation-strategy resources.
-3. **implementation_strategy**: dated plans, development approaches, feature-gated roadmaps. General/design resources.
-4. **design**: UI/UX docs, interaction design, accessibility. General/testing resources.
-5. **testing**: automated tests, manual checklists, performance targets.
+- AI-assistant working principles for this project
+- An index of all active docs with one-line descriptions
+- Pointers to `DOC_POLICY.md` and `PROJECT_DESCRIPTION.md`
 
-### 7. DOC_README authority
+Any doc added, moved, or removed requires a `DOC_README.md` update in the same
+session. If any other index disagrees with `DOC_README.md`, `DOC_README.md`
+wins.
 
-`DOC_README.md` is the sole canonical index. Any doc add/move/remove must include a same-session `DOC_README.md` update.
+### 7. PROJECT_DESCRIPTION.md ownership
+
+`design_docs/PROJECT_DESCRIPTION.md` — inside the doc root, not at the
+repository root — is reserved for the maintainer. Do not edit it without
+explicit instruction. Treat it as authoritative and surface contradictions for
+discussion rather than resolving them silently.
+
+The root `README.md` is derived from `PROJECT_DESCRIPTION.md` and the current
+authoritative docs. Speculative features without plans appear only in
+`PROJECT_DESCRIPTION.md`.
 
 ### 8. Plan documents
 
-Tasks that change code (not just docs) get a dated plan file:
+Work that changes code — not doc-only work — gets a dated plan named
+`<YYYY-MM-DD>_<keyword>_plan.md`, in `design_docs/` or, where the repo has area
+roots, in `<area>_docs/implementation_strategy/`. Each plan carries:
 
-```
-mere/design_docs/<area>_docs/implementation_strategy/YYYY-MM-DD_<keyword>_plan.md
-```
+- A dated **Status** line, kept current: plan, in progress, landed, superseded
+  by X.
+- **Phases** organised by feature target and validation criteria, each with
+  **done-conditions**. Never calendar labels — no "Day 1", no "Week 2" — and
+  never time estimates.
+- A **Findings** section for facts verified during the work, dated, with code
+  references.
+- A **Progress** log, dated, appended as phases land.
 
-Plan structure:
-- **<Keyword> Plan**: phases and progress
-- **Findings**: research and findings
-- **Progress**: session log and test results
+Code samples in a plan state whether they are illustrative or compile-ready.
 
-Update the plan every two prompts on the project, or every two completed tasks. Move to `archive_docs/` upon completion.
+Update the plan every two prompts on the project, or every two completed tasks.
+Re-read it before resuming work rather than working from memory of it. On
+completion, extract any deferred or still-open points into a new or existing
+plan *before* moving it to `archive_docs/<date>/`.
 
 ### 9. Implementation feedback loop
 
-Every implementation pass is also a design probe. After each implementation pass, disseminate structural learnings to the relevant plans/docs in the same session. Surface architectural problems explicitly in the plan even if the fix is deferred.
+Every implementation pass is also a design probe. After each pass, disseminate
+structural learnings to the relevant plans and docs in the same session.
+Surface architectural problems explicitly in the plan even when the fix is
+deferred.
 
-## Inheritance and migration
+### 10. Workflow rule for AI assistants
+
+Read `DOC_README.md` first, then this policy, before starting work. Any durable
+working principle learned during a session is promoted into `DOC_README.md`'s
+working-principles section in that same session.
+
+## Local addendum — Mere
+
+Mere is the largest doc tree in the workspace and the only one with area roots,
+so §4's promotion rule is fully exercised here.
+
+### Area roots
+
+Corrected 2026-08-24. The previous list named `platen_docs/`, which has never
+existed, and omitted `eidetic_docs/`, which does.
+
+```
+mere/design_docs/
+├── DOC_README.md                  ← canonical index (§6)
+├── DOC_POLICY.md                  ← this file
+├── TERMINOLOGY.md                 ← canonical terms
+├── YYYY-MM-DD_<keyword>_brief.md  ← cross-cutting briefs
+├── mere_docs/                     ← product-level concerns
+├── armillary_docs/                ← the armillary crate
+├── dramatis_docs/                 ← identity and contacts (personae, gaz)
+├── eidetic_docs/                  ← the memory stack (chartulary, codicil,
+│                                     muniment, scholia)
+├── intel_docs/                    ← embedding and inference (esp)
+├── moothold_docs/                 ← community / federation
+├── murm_docs/                     ← bilateral comms
+├── scenograph_docs/               ← the scene contract
+└── archive_docs/                  ← superseded checkpoints
+```
+
+Every root above corresponds to code that lives in this repository. That is an
+invariant now, not a coincidence — see below.
+
+**Three roots left on 2026-08-24.** `inker_docs/`, `nematic_docs/` and
+`verso_docs/` described `components/{inker,nematic,verso-tile}`, which have
+lived in genet since the adoption; the docs had been orphaned here ever since.
+All eight documents now live in `genet/design_docs/` and are indexed by
+`genet/design_docs/DOC_README.md`. Two further documents — the smolweb home
+decision and the carrier-independence analysis — went to
+`smolweb/design_docs/` in the same pass, being spec-level rather than
+implementation-level.
+
+**The rule this leaves behind:** when code moves out of this repository, its
+docs move with it in the same session. An area root describing code that lives
+elsewhere is the failure this pass cleaned up, and core §4's "docs live with
+the repo that owns the subject" is the general form of it. Track the work in
+the [doc policy consolidation plan](mere_docs/implementation_strategy/2026-08-24_doc_policy_consolidation_plan.md).
+
+**Member-crate scatter was collapsed 2026-08-24.** Nine `crates/*/design_docs/`
+directories held 20 documents, 18 of which `DOC_README.md` did not index. They
+now live under the area roots above. Core §4 forbids reintroducing them.
+
+### PROJECT_DESCRIPTION.md
+
+Mere has no `design_docs/PROJECT_DESCRIPTION.md`. Core §7's derivation rule is
+therefore inert here rather than violated; founding one is open work.
+
+### Inheritance and migration (graphshell donor)
 
 The donor graphshell repo was **GitHub-archived on 2026-05-27** (read-only at <https://github.com/mark-ik/graphshell>; local clone deleted). Its design docs are no longer a local sibling. Before archiving, all 633 donor docs were swept into two curated indexes that are now the entry points for any remaining pull: the [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md) (what to pull, where it lives in the donor, which mere domain wants it) and the [concept brief](mere_docs/research/2026-05-17_graphshell_harvest_brief.md). Treat those indexes as canonical; fetch detail from the GitHub archive when a slice needs it.
 
@@ -110,7 +196,7 @@ When pulling a donor doc's content into a mere doc:
 3. Add the new file to `DOC_README.md` index
 4. Cite the donor source by its GitHub-archive path (the original is read-only; it cannot be edited or deleted)
 
-## Trademark / brand notes
+### Trademark and brand notes
 
 - **Mere** — product name (humble; "merely a browser!")
 - **Merely** — parent brand layer (adopted 2026-07-09, was Strophos; confirmed 2026-07-10 after a challenge round, see the lexicon brief's naming history). GitHub org **merely-made**, registered 2026-07-10 (bare `merely` taken).

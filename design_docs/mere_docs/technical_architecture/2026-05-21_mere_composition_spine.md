@@ -24,7 +24,7 @@ host/realization rows (§1, §7, §9, §12) are pre-flip; read them through the
 > "TileManager survives as Verso runtime" never happened. Verso's disposition
 > was decided and executed 2026-06-10: the crates are deleted (topology §9)
 > and the name is designated for the compatibility-view / engine-flip charter
-> ([verso_docs charter](../../verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md)).
+> (verso_docs charter (`genet/design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`)).
 > The model→plan layers
 > (forme, platen) and the arrangement ontology are unaffected. A full
 > §1/§7/§9/§12 refresh is still owed (topology doc, staleness flag).

@@ -387,7 +387,10 @@ impl PersonalSyncHost {
     /// opening a second one per device.
     pub fn sync_parts(
         &self,
-    ) -> Option<(transport::p2panda_transport::Endpoint, transport::p2panda_transport::Gossip)> {
+    ) -> Option<(
+        transport::p2panda_transport::Endpoint,
+        transport::p2panda_transport::Gossip,
+    )> {
         self.network.transport().sync_parts()
     }
 
@@ -431,12 +434,8 @@ impl PersonalSyncHost {
         blob: [u8; 32],
     ) -> Result<(), PersonalSyncHostError> {
         let hash = BlobHash::from_bytes(blob);
-        let lease = BlobLease::new(
-            self.blob_scope,
-            PERSONAL_FETCH_LEASE,
-            hash.as_bytes(),
-        )
-        .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        let lease = BlobLease::new(self.blob_scope, PERSONAL_FETCH_LEASE, hash.as_bytes())
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         if self
             .blobs
             .has(hash)
@@ -509,12 +508,8 @@ impl PersonalSyncHost {
         container: Uuid,
         bytes: Vec<u8>,
     ) -> Result<[u8; 32], PersonalSyncHostError> {
-        let lease = BlobLease::new(
-            self.blob_scope,
-            PERSONAL_STAGE_LEASE,
-            container.as_bytes(),
-        )
-        .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
+        let lease = BlobLease::new(self.blob_scope, PERSONAL_STAGE_LEASE, container.as_bytes())
+            .map_err(|error| PersonalSyncHostError::Transport(error.to_string()))?;
         let hash = self
             .blobs
             .put_bytes_leased(bytes, &lease)

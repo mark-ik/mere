@@ -428,7 +428,10 @@ mod tests {
             assert_eq!(scene.items.len(), 6, "{arrangement:?} lost items");
             for item in &scene.items {
                 let at = item.transform.translate;
-                assert!(at.x.is_finite() && at.y.is_finite(), "{arrangement:?} -> {at:?}");
+                assert!(
+                    at.x.is_finite() && at.y.is_finite(),
+                    "{arrangement:?} -> {at:?}"
+                );
             }
         }
     }

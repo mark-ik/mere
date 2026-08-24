@@ -10,10 +10,12 @@ use super::{categorical_axis, disclosed_position, numeric_axis};
 pub(super) fn timeline(config: &Timeline, items: &[&ScoreItem]) -> Vec<Vec2> {
     let disclosed: Vec<Option<f64>> = items.iter().map(|item| numeric_axis(item)).collect();
 
-    let (min, max) = disclosed.iter().flatten().fold(
-        (f64::INFINITY, f64::NEG_INFINITY),
-        |(lo, hi), value| (lo.min(*value), hi.max(*value)),
-    );
+    let (min, max) = disclosed
+        .iter()
+        .flatten()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), value| {
+            (lo.min(*value), hi.max(*value))
+        });
     // A single disclosed coordinate — or many identical ones — has no span to
     // normalize against. Everything sits at the axis origin rather than being
     // divided by zero into NaN, which would place items nowhere at all.
@@ -56,7 +58,10 @@ pub(super) fn timeline(config: &Timeline, items: &[&ScoreItem]) -> Vec<Vec2> {
                 TimelineFallback::LeaveInPlace => disclosed_position(item, config.origin),
                 TimelineFallback::StackBelowOrigin => {
                     let x = config.origin.x;
-                    Vec2::new(x, config.origin.y - (row_for(x) + 1) as f32 * config.row_gap)
+                    Vec2::new(
+                        x,
+                        config.origin.y - (row_for(x) + 1) as f32 * config.row_gap,
+                    )
                 }
                 TimelineFallback::StackPastEnd => {
                     let x = config.origin.x + config.axis_length;
@@ -186,7 +191,11 @@ mod tests {
             column_order: vec!["todo".into()],
             ..Kanban::default()
         };
-        let owned = vec![tagged(0, "todo"), tagged(1, "surprise"), item_with_axis(2, None)];
+        let owned = vec![
+            tagged(0, "todo"),
+            tagged(1, "surprise"),
+            item_with_axis(2, None),
+        ];
         let placed = kanban(&config, &items(&owned));
         assert_eq!(placed[0].x, config.origin.x);
         // "surprise" is a tag, so it gets a column rather than joining the pile.
@@ -221,7 +230,13 @@ mod tests {
         let placed = kanban(&config, &items(&owned));
         let done_x = config.origin.x + config.column_gap;
         assert_eq!(placed[0].x, done_x);
-        assert_eq!(placed[1].x, done_x, "the untagged item joined the final column");
-        assert_ne!(placed[0].y, placed[1].y, "and stacked rather than overprinted");
+        assert_eq!(
+            placed[1].x, done_x,
+            "the untagged item joined the final column"
+        );
+        assert_ne!(
+            placed[0].y, placed[1].y,
+            "and stacked rather than overprinted"
+        );
     }
 }

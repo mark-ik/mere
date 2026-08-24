@@ -440,9 +440,7 @@ where
                     if operation.has_body {
                         writes.insert(
                             operation.log_key.clone(),
-                            Some(
-                                encode_blob(&operation.header, &None)?,
-                            ),
+                            Some(encode_blob(&operation.header, &None)?),
                         );
                         operation.has_body = false;
                     }
@@ -468,10 +466,7 @@ where
                     writes.insert(payload_ref_key(payload_hash, id), None);
                 }
                 if body.is_some() {
-                    writes.insert(
-                        payload_log_key.clone(),
-                        Some(encode_blob(&header, &None)?),
-                    );
+                    writes.insert(payload_log_key.clone(), Some(encode_blob(&header, &None)?));
                 }
             }
 

@@ -369,9 +369,11 @@ async fn a_visitor_whose_holder_goes_away_is_told_rather_than_shown_a_stale_copy
     .expect("admitted");
     let authority = SessionAuthority::retain_admitted(&admitted);
     let revocations = std::sync::RwLock::new(RevocationLedger::new());
-    let mut endpoint =
-        knot_editor::KnotEndpoint::open_writable(vault.path(), knot_editor::KnotWriteGrant::new(4096))
-            .expect("open the vault");
+    let mut endpoint = knot_editor::KnotEndpoint::open_writable(
+        vault.path(),
+        knot_editor::KnotWriteGrant::new(4096),
+    )
+    .expect("open the vault");
     let mut resume = |endpoint: &mut knot_editor::KnotEndpoint, request: ResumeRequest| {
         ResumableProjectionSource::resume(endpoint, request).map_err(|error| error.to_string())
     };

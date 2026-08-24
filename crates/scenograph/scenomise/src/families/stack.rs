@@ -36,7 +36,9 @@ pub(super) fn place(config: &Stack, items: &[&ScoreItem]) -> Vec<Vec2> {
 }
 
 fn layer_of(item: &ScoreItem) -> i64 {
-    numeric_axis(item).map(|value| value.round() as i64).unwrap_or(0)
+    numeric_axis(item)
+        .map(|value| value.round() as i64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

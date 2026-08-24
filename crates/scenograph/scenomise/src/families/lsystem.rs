@@ -119,7 +119,14 @@ fn walk(grammar: &GrammarDef, depth: u8) -> Vec<Vec2> {
 /// items. Capped at 10 to bound memory (Hilbert reaches ~1M steps there).
 fn choose_auto_depth(grammar: &GrammarDef, item_count: usize) -> u8 {
     (0u8..=10)
-        .find(|depth| expand(grammar, *depth).chars().filter(|c| *c == 'F').count() + 1 >= item_count)
+        .find(|depth| {
+            expand(grammar, *depth)
+                .chars()
+                .filter(|c| *c == 'F')
+                .count()
+                + 1
+                >= item_count
+        })
         .unwrap_or(10)
 }
 
@@ -204,7 +211,10 @@ mod tests {
         };
         let owned = plain(16);
         for point in place(&config, &items(&owned)) {
-            assert!(point.x.abs() <= 200.001 && point.y.abs() <= 200.001, "{point:?}");
+            assert!(
+                point.x.abs() <= 200.001 && point.y.abs() <= 200.001,
+                "{point:?}"
+            );
         }
     }
 

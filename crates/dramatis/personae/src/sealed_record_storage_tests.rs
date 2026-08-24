@@ -296,7 +296,10 @@ fn a_pre_sealing_plaintext_record_can_be_sealed_over() {
     assert_eq!(restored, legacy);
     // And what is on disk is now sealed, not the plaintext it started as.
     let sealed = std::fs::read_to_string(&path).unwrap();
-    assert!(!sealed.contains("Tablet"), "the label is still in the clear");
+    assert!(
+        !sealed.contains("Tablet"),
+        "the label is still in the clear"
+    );
 }
 
 /// A seed written before sealing is not JSON at all. It must take the same path

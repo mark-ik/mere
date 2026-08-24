@@ -546,6 +546,6 @@ ProjectionLens), `crates/forme/forme/src/tree/layout.rs` (SplitPanes), numen
   projection-graph half of §5. Flagged the matching blind spot in §9 — the five proofs are a
   scene-contract done, not a projection-graph done. Sequencing unchanged: woodshed's typed
   relations proceed on its own plan; its scene-contract consumption waits on the freeze list
-  in the [scene contract note](../../../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md),
+  in the [scene contract note](../../scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md),
   whose open questions were themselves re-checked against the consumers the same day
   (`measure` has no consumer; intents shipped in graphshell's protocol instead).

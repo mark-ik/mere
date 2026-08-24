@@ -29,11 +29,9 @@ fn resident_host() -> Arc<PersonaeHost<InMemoryStorage>> {
 async fn turnstone_opens_the_in_memory_knot_route() {
     let mut catalog = ResidentEndpointCatalog::new();
     catalog
-        .register(
-            "knot",
-            "Knot fixture",
-            |_| Ok(knot_editor::KnotEndpoint::fixture()),
-        )
+        .register("knot", "Knot fixture", |_| {
+            Ok(knot_editor::KnotEndpoint::fixture())
+        })
         .unwrap();
     let route = ResidentEndpointRoute::new("knot", Duration::from_millis(10)).unwrap();
     let grants = AllowedAppRoutes::new([(AppId::new("turnstone"), route)]);

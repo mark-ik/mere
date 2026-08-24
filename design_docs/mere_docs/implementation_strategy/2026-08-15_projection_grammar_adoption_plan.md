@@ -1,12 +1,13 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status (reconciled 2026-08-19)**: A0, A6, A1, C1, and B3 are closed. A2's
-serialization half is landed; resolution still waits for two coordinated
-views. B1 has semantic structure, HTML, AccessKit, a tabular alternate, and
-placement satisfaction; the headed Genet and OS screen-reader receipt remains.
+**Status (reconciled 2026-08-23)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
+one, A4+C2, and A2 are closed. Turnstone `648bf19` is B1's definitive close,
+including routed screen-reader interaction. The Projection Receipts Plan's
+coordinated spatial/Matrix views close A2's resolution half. A3 stage two and
+A5 retain their entrance gates.
 The Scenograph family is now on an unpublished 0.0.4 development line with
-Score v3. Mer3ly ruled an authority-grade consumer 2026-08-16. This plan turns the projection grammar report's
+Score v4. Mer3ly ruled an authority-grade consumer 2026-08-16. This plan turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
 passes, sources verified 2026-08-15) into gated feature targets across mere,
 genet, and cambium. Sequenced against the
@@ -19,7 +20,7 @@ promotion rules.
 (historical 0.0.3 release; rulings D1-D4),
 [projection_proofs_plan](2026-07-21_projection_proofs_plan.md) (P1-P5 landed),
 scene contract note
-(`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`),
+(`design_docs/scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md`),
 [multi_window_plan](2026-06-10_multi_window_plan.md),
 [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md),
 [accesskit_screen_reader_verification](2026-06-09_accesskit_screen_reader_verification.md).
@@ -159,7 +160,7 @@ silently best-efforted; the record crosses the graphshell wire.
 Done when: a remote viewer can distinguish "placed as pinned" from "pin
 unmet" without source access.
 
-**A2. Selection clauses: coordination as data.**
+**A2. Selection clauses: coordination as data — CLOSED 2026-08-23.**
 Context: release ruling D1 stands (sceno ships no intent vocabulary; the
 protocol owns the triple). What the report adds is the *coordination* record
 between views: Mosaic's clause (source, client set, predicate, value) with
@@ -172,17 +173,12 @@ Tasks: with the forcing consumer, define the clause record and resolution
 declaration; decide its home with evidence (chirograph beside the intent
 triple, or mere host state that graphshell serializes); wire two views over
 one authority through it.
-Forcing consumer: L3's entrance gate is met. Mer3ly shares a scene by URL
-hash, and a second person opening that link asks for the same arrangement,
-reading, and selection on a second device. What is still unforced is the clause
-shape: the site carries one selected id with no resolution strategy, so union,
-intersect, and crossfilter have no consumer yet. Treat the serialization
-question as open now and the resolution question as still gated on a genuine
-two-view ask. The two-view ask is now scheduled: the
-[projection receipts plan](2026-08-23_projection_receipts_plan.md) FT3 builds
-the sandbox's spatial view and a two-reading Matrix as coordinated views over
-one authority (the direction note's receipt 8). Evidence lands against this
-entry; this entry still rules the gate.
+Forcing consumer: L3's entrance gate is met. Mer3ly shares a scene by URL hash,
+and Wave 1 of the [projection receipts plan](2026-08-23_projection_receipts_plan.md)
+supplies the genuine two-view ask: its spatial view and two-reading Matrix
+contribute named clauses over the same source identities. The proof forced
+crossfilter only; union and intersection remain absent until their behavior is
+distinctly required.
 Validation: brush in view one filters view two; crossfilter resolution
 honored (the brushing view is unfiltered by its own clause); serialized round
 trip is deterministic; clause removal restores the unfiltered reading.
@@ -404,15 +400,13 @@ consumers.
 
 ### Sequence
 
-Closed: **A0**, **A6**, **A1**, **C1**, **B2**, **B3**, **C3**, **A3 stage one**,
-**A4 + C2**, and P3b's local selection-to-renderer proof. **A2's serialization half** is
-landed; its resolution half still waits on a genuine two-view ask. **B1's**
-implementation and driven probe are closed; only the manual OS screen-reader
-pass remains.
+Closed: **A0**, **A6**, **A1**, **C1**, **B1**, **B2**, **B3**, **C3**, **A2**,
+**A3 stage one**, **A4 + C2**, and P3b's local selection-to-renderer proof.
+Turnstone `648bf19` closes B1's readable and routed-interaction receipts.
 
-The remaining implementation targets keep their entrance gates. **A2's
-resolution half** waits for a genuine two-view ask. **A3 stage two** waits for
-a remote re-selection consumer. **A5** stays behind the promotion suite.
+The remaining implementation targets keep their entrance gates. **A3 stage
+two** waits for a remote re-selection consumer. **A5** stays behind the
+promotion suite.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -763,8 +757,9 @@ not settled without it.
   harbor-notes and beacon-notes by name.
   All three automated verification legs are now done: renderer proven by
   parsing, AccessKit tree driven through a real host, probe scenario driven.
-  What remains is only the manual OS screen-reader pass, which no automated
-  receipt can substitute for.
+  At this checkpoint the manual OS screen-reader pass was still open. Turnstone
+  `648bf19` later supplied the definitive routed receipt and supersedes this
+  historical remainder.
 - 2026-08-19: **A3 stage one landed; P3b selection is declarative.**
   `mere.graph-representation-registry/v2` puts ordered representation rungs
   on each class profile. A rung names its selected `sceno::Representation`
@@ -882,5 +877,13 @@ not settled without it.
   the livery cutover had shipped a second AccessKit platform stack beside the
   bridge's (two UIA providers in one process, deduped), and the grown graph
   crossed the preview MSVC linker's PDB limit. Both fixed and recorded in the
-  turnstone receipt (648bf19). Still manual-pending: Enter on a read node
-  observed selecting on the canvas, with Mark at the machine.
+  turnstone receipt (`648bf19`). **Reconciled 2026-08-23:** that clean Turnstone
+  state is the definitive routed screen-reader receipt; B1 has no remaining
+  manual leg.
+- 2026-08-23: **A2 resolution closed through the first projection-receipts
+  wave.** `chirograph::CoordinatedSelection` carries named focus/filter/brush
+  clauses and explicit `single` or `crossfilter` resolution. The mer3ly
+  spatial and Matrix views prove both clauses in a headed browser: each view
+  applies the foreign clause and excludes its own; deterministic Shelfmark
+  serialization restores both clauses; removing the Matrix clause restores all
+  18 spatial actors. Gazette's Ledger independently replays the same record.

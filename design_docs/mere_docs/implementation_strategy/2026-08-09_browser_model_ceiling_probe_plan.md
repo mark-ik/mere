@@ -15,7 +15,7 @@ independent of the personal mesh and Burn Remote.
 [`2026-07-05_inference_provider_plan.md`](2026-07-05_inference_provider_plan.md),
 [`../research/2026-06-24_local_models_harness_brief.md`](../research/2026-06-24_local_models_harness_brief.md),
 [`2026-08-08_esp_consolidation_plan.md`](2026-08-08_esp_consolidation_plan.md),
-[`../../../crates/intel/esp/design_docs/2026-08-09_feature_target_matrix.md`](../../../crates/intel/esp/design_docs/2026-08-09_feature_target_matrix.md),
+[`../../intel_docs/technical_architecture/2026-08-09_feature_target_matrix.md`](../../intel_docs/technical_architecture/2026-08-09_feature_target_matrix.md),
 [`../../../ports/graphshell/docs/2026-08-06_browser_storage_persistence_receipt.md`](../../../ports/graphshell/docs/2026-08-06_browser_storage_persistence_receipt.md)
 
 D2 answers an empirical question: what model artifact and execution sizes can

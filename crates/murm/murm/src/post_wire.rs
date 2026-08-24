@@ -206,8 +206,7 @@ pub(crate) fn build_header(
 /// p2panda 0.7.1 a signed header cannot be reconstructed from its parts, and
 /// `Header::decode` re-verifies the signature on the way through.
 fn signed_header(post: &Post) -> Result<(Header<CabalExt>, Vec<u8>), MurmError> {
-    let header =
-        Header::<CabalExt>::decode(&post.header).map_err(|_| MurmError::MalformedPost)?;
+    let header = Header::<CabalExt>::decode(&post.header).map_err(|_| MurmError::MalformedPost)?;
     let (_ext, body) = decompose(post.cabal_id, &post.links, &post.kind);
     Ok((header, body))
 }
@@ -300,8 +299,7 @@ pub fn decode_post(bytes: &[u8]) -> Result<Post, MurmError> {
     let wire: WirePost = decode_cbor(bytes).map_err(|_| MurmError::MalformedPost)?;
     // `Header::decode` verifies the signature before it will return a header,
     // so a malformed or forged post is rejected right here.
-    let header =
-        Header::<CabalExt>::decode(&wire.header).map_err(|_| MurmError::MalformedPost)?;
+    let header = Header::<CabalExt>::decode(&wire.header).map_err(|_| MurmError::MalformedPost)?;
     let author = from_p2_vk(&header.verifying_key)?;
     let signature = from_p2_sig(&header.signature);
     let links = header

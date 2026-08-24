@@ -4,7 +4,7 @@
 **Status:** ratified by Mark 2026-08-10; D1-D3 complete 2026-08-10; D4's wallet
 fold-in (2026-08-10) and credential port (castellan C1-C2, 2026-08-21) done;
 the `dramatis` facade reservation stays empty until something imports it
-**Authority for gaz internals:** `crates/dramatis/gaz/design_docs/2026-08-08_gaz_founding_plan.md` (travels with the crate)
+**Authority for gaz internals:** `design_docs/dramatis_docs/implementation_strategy/2026-08-08_gaz_founding_plan.md` (travels with the crate)
 
 ## What was ratified
 

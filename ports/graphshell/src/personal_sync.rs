@@ -827,12 +827,15 @@ fn to_operation(
         .body(&body_bytes)
         .seq_num(seq_num)
         .backlink(backlink.map(Hash::from))
-        .build(&signing_key, PersonalGraphExt {
+        .build(
+            &signing_key,
+            PersonalGraphExt {
                 graph,
                 encryption,
                 parents: record.parents.clone(),
                 writer_attestation: record.writer_attestation.clone(),
-            });
+            },
+        );
     let hash = header.hash();
     Ok(Operation {
         hash,

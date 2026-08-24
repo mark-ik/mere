@@ -6,6 +6,15 @@
 [contact identity model brief](2026-06-15_contact_identity_model_brief.md),
 the 2026-07-22 vault/agent plan, the participant gate + packs plan.
 
+> **Corrected in place 2026-08-24.** Three rows of the standards inventory below
+> had gone stale: the ssh-agent protocol was standardised as RFC 9987, CXF v1.0
+> reached Proposed Standard, and Linux acquired an emerging third-party passkey
+> provider seam. Each is marked **Corrected 2026-08-24** inline. The rest of this
+> brief stands, and the `otpauth://` "de-facto key-uri format" characterisation is
+> still accurate — that URI has no normative specification at all. Standards
+> across the whole stack, including the vault gaps this brief did not reach, are
+> surveyed in the [standards survey brief](../../2026-08-24_standards_survey_brief.md).
+
 The dramatis tier holds the cast list: personae (me), gaz (them, kept),
 gazette (them, found). This brief maps its two growth fronts, which point in
 opposite directions and share one spine. The credential port carries authority
@@ -56,12 +65,12 @@ consent.
 | Standard | What it buys | Notes |
 |---|---|---|
 | TOTP RFC 6238 / HOTP RFC 4226 | 2FA codes | Test vectors in the RFC appendices. Import via `otpauth://` URIs (the de-facto key-uri format). Small, self-contained, daily value. Steam's variant is nonstandard; decide explicitly whether to carry it. |
-| ssh-agent protocol | SSH keys | Shipped (ssh-agent-lib 0.6). The template for every other agent surface. |
-| CXF / CXP (FIDO Alliance Credential Exchange) | Import from 1Password, Bitwarden, Apple, Google | The 2024+ portability standard; drafts public, adopters shipping. An early Rust implementation would be notable and is the migration path for real users. |
+| ssh-agent protocol — **RFC 9987** | SSH keys | Shipped (ssh-agent-lib 0.6). The template for every other agent surface. **Corrected 2026-08-24**: the protocol is now standardised as RFC 9987 (Standards Track, May 2026, IETF SSHM WG), superseding the expired individual `draft-miller-ssh-agent`. personae can make a conformance claim rather than a compatibility one, and the RFC's constraint-extension namespace is the sanctioned wire slot for castellan's per-persona release policy instead of a side channel. Caveat: the `sk-*` FIDO key types stay outside the RFC as `@openssh.com` vendor extensions, so "RFC 9987 conformant" says nothing about hardware-backed keys. |
+| CXF / CXP (FIDO Alliance Credential Exchange) | Import from 1Password, Bitwarden, Apple, Google | **Corrected 2026-08-24**: this is no longer a draft. **CXF v1.0 is a Proposed Standard** (approved August 2025; errata folded in 2026-03-09) — fidoalliance.org's surrounding prose still says "early review draft", but the artefact links resolve to `cxf-v1.0-ps-errata-20260309.html`. An early Rust implementation is therefore no longer the notable thing: Bitwarden ships `credential-exchange-format` (MIT), though it still declares the March 2025 review draft, so diff it against the current CDDL before adopting. **CXP** — the transfer half, which was to carry the encryption — remains a Working Draft of 2024-10-03 and has not moved, so a `.cxf` file is plaintext credentials on disk and every import path must treat one as burning. |
 | `org.freedesktop.secrets` (Secret Service) | Serve every libsecret app on Linux | The one OS surface a third party can *be* rather than read: personae as the D-Bus secrets backend makes existing apps consumers without knowing it. |
 | KDBX 4 | KeePass-world import | Format documented; `keepass` crates exist as references. |
 | BIP-39 | Seed-phrase carry | Adjacent to persona seed carry regardless of the wallet. |
-| WebAuthn / CTAP2 passkey provider | Passkeys | The heavyweight item, and platform-entangled: Windows has a plugin-authenticator API (23H2+), macOS routes third parties through AutoFill provider extensions (entitlement territory), Linux has no blessed provider seam (virtual hidraw device or browser-level integration). Treat as its own project with per-platform plans. |
+| WebAuthn / CTAP2 passkey provider | Passkeys | The heavyweight item, and platform-entangled: Windows has a plugin-authenticator API (23H2+), macOS routes third parties through AutoFill provider extensions (entitlement territory). **Corrected 2026-08-24**: the "Linux has no blessed provider seam" line is stale — `credentialsd` plus a proposed XDG credential portal (the linux-credentials org, alongside `libwebauthn` and `oo7`) is an emerging third-party seam, to WATCH rather than to route around with virtual hidraw. Two further status notes: WebAuthn L3 is a Candidate Recommendation Snapshot (26 May 2026) proposed for advancement on 20 July 2026, **not** a Recommendation; and a WebAuthn credential is scoped to an RP ID, not to a persona, so the face-partition model has no representation in the standard. Treat as its own project with per-platform plans. |
 
 Explicitly *readable but not servable*: Windows Credential Manager and macOS
 Keychain have no third-party backend seam; they are import sources only.
@@ -180,6 +189,10 @@ surface **composes**. Gazette's only growth is one more typed endpoint class
 (`feed`) in its JRD/link classification. Everything downstream exists:
 nematic already owns RSS/Atom and gemtext; fetch and eidetic already own
 retrieval and retention; trail is the natural display substrate.
+
+**Fleece receipt (2026-08-23):** `gazette` names `fleece` directly; the poll
+pipeline will extract each feed item's linked page into an `Article` and store
+it as the item's body.
 
 What the open world actually offers, verified sense of each:
 

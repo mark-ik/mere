@@ -13,8 +13,8 @@
 //! reconciles.
 
 use identity::Ed25519Keypair;
-use p2panda_core::operation::validate_operation;
 use p2panda_core::cbor::{decode_cbor, encode_cbor};
+use p2panda_core::operation::validate_operation;
 use p2panda_core::prune::PruneFlag;
 use p2panda_core::{Body, Hash, Header, Operation, SigningKey};
 use serde::{Deserialize, Serialize};

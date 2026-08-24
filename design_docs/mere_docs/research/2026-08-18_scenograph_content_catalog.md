@@ -17,14 +17,15 @@ inside the entries as founding and transfer datasets.
 re-evaluates deck 2 after testing fifty candidate scenes against the grammar.
 This catalog remains the implementation and design history, including
 Rosette's landed Knot evidence. The follow-on owns the current categorization,
-collapses, Matrix ruling, and platform consequences.
+lower-layer reclassifications, separate evidence status, Matrix ruling, and
+platform consequences.
 
 **Related**:
 [projection_grammar_catalog](2026-08-15_projection_grammar_catalog.md)
 (the governing primitive grammar; every scene below is composed from it),
 [scenograph_expansion_brief](2026-08-10_scenograph_expansion_brief.md)
 (the stagecraft tiers and lanes this catalog fills), the scene contract note
-(`crates/scenograph/design_docs/2026-07-22_scene_contract_note.md`) (the
+(`design_docs/scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md`) (the
 representation slot's recognized core, `RoutedRelation`, `Region`, `Space`,
 hit overrides, `score::Arrangement`),
 [swatch_primitive_design](../design/2026-06-27_swatch_primitive_design.md)

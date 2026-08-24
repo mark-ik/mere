@@ -33,8 +33,8 @@ pub(super) fn place(config: &Embedded, items: &[&ScoreItem]) -> Vec<Vec2> {
                     // Angle from a stable hash rather than from position in the
                     // score: an unembedded item keeps its spot on the ring when
                     // a different item gains an embedding and leaves.
-                    let angle = (stable_hash(item) % 3_600) as f32 / 3_600.0
-                        * std::f32::consts::TAU;
+                    let angle =
+                        (stable_hash(item) % 3_600) as f32 / 3_600.0 * std::f32::consts::TAU;
                     Vec2::new(
                         config.origin.x + ring_radius * angle.cos(),
                         config.origin.y + ring_radius * angle.sin(),
@@ -120,7 +120,10 @@ mod tests {
         let placed = place(&config, &items(&owned));
         let embedded_reach = (placed[0].x.powi(2) + placed[0].y.powi(2)).sqrt();
         let ring_reach = (placed[1].x.powi(2) + placed[1].y.powi(2)).sqrt();
-        assert!(ring_reach > embedded_reach, "{ring_reach} vs {embedded_reach}");
+        assert!(
+            ring_reach > embedded_reach,
+            "{ring_reach} vs {embedded_reach}"
+        );
     }
 
     #[test]
@@ -132,10 +135,7 @@ mod tests {
             fallback: EmbeddingFallback::RingOutside,
             ..Embedded::default()
         };
-        let both = vec![
-            item_with_embedding(7, None),
-            item_with_embedding(9, None),
-        ];
+        let both = vec![item_with_embedding(7, None), item_with_embedding(9, None)];
         let alone = vec![item_with_embedding(7, None)];
         assert_eq!(
             place(&config, &items(&both))[0],

@@ -46,6 +46,8 @@ anchor embed's lib.rs cites).
 - **W3 — reports.** The trail/steward surface renders `top_domains` and
   `visits_histogram` from the fast-field columns (no re-index needed).
   Small; may ride W2's session.
+  **Fleece receipt (2026-08-23):** `mere-eidetic-search` names `fleece` directly;
+  `PageExtract.text` and `main_text` are the W2/W3 visited-page corpus input.
 - **W4 — canvas semantic search.** Wire `canvas::canvas_search` +
   `canvas::field_bridge` into the canvas's live surface: a query becomes a
   similarity field over the canvas through quint, with

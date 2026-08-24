@@ -96,6 +96,9 @@ a per-node last-session stamp the snapshot does not yet carry.
 
 ### D — Athanor, the distillation daemon
 
+**Fleece receipt (2026-08-23):** `mere-alembic` names `fleece` directly; a page
+engram will supply the extracted `Article` to Athanor instead of raw page bytes.
+
 An armillary actor (steady-heat: throttled at idle, yields to foreground): forgetting (evict expired
 short-term), consolidation (dedup by `content_hash`, relate version chains, maintain indices), facet
 extraction (later), and **proposal emission** (it proposes engrams / GC / facets for the host to

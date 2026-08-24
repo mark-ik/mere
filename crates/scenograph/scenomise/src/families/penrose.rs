@@ -256,7 +256,10 @@ mod tests {
         for count in [1usize, 10, 60, 200] {
             let depth = choose_auto_depth(PenroseVariant::Rhombus, count);
             let available = build_tiling(PenroseVariant::Rhombus, depth, 1.0).len();
-            assert!(available >= count, "depth {depth} gave {available} for {count}");
+            assert!(
+                available >= count,
+                "depth {depth} gave {available} for {count}"
+            );
         }
     }
 

@@ -97,12 +97,7 @@ pub fn spectral_coords(graph: &Graph, iterations: usize) -> HashMap<NodeKey, Vec
     }
     keys.iter()
         .zip(&coords)
-        .map(|(key, (x, y))| {
-            (
-                *key,
-                Vec2::new((x / max_abs) as f32, (y / max_abs) as f32),
-            )
-        })
+        .map(|(key, (x, y))| (*key, Vec2::new((x / max_abs) as f32, (y / max_abs) as f32)))
         .collect()
 }
 

@@ -236,10 +236,7 @@ impl SolverRegistry {
 /// consults it, and a failure there is returned rather than absorbed: a score
 /// naming a solver nobody registered has not been laid out, and saying so is the
 /// difference between a diagnosable error and a canvas of items at the origin.
-pub fn solve(
-    score: &sceno::Score,
-    registry: &SolverRegistry,
-) -> Result<sceno::Scene, SolveError> {
+pub fn solve(score: &sceno::Score, registry: &SolverRegistry) -> Result<sceno::Scene, SolveError> {
     let sceno::Arrangement::Custom { id, config } = &score.arrangement else {
         return Ok(scenomise::solve(score));
     };
@@ -377,8 +374,11 @@ mod tests {
         let mut registry = SolverRegistry::new();
         registry.register(Line::new(Vec::new())).unwrap();
 
-        let scene = solve(&custom_score(serde_json::json!({ "pitch": 25.0 })), &registry)
-            .expect("registered solver resolves");
+        let scene = solve(
+            &custom_score(serde_json::json!({ "pitch": 25.0 })),
+            &registry,
+        )
+        .expect("registered solver resolves");
         assert_eq!(scene.items.len(), 3);
         assert_eq!(scene.items[2].transform.translate, Vec2::new(50.0, 0.0));
     }
@@ -387,7 +387,11 @@ mod tests {
     fn the_config_reaches_the_solver() {
         let mut registry = SolverRegistry::new();
         registry.register(Line::new(Vec::new())).unwrap();
-        let scene = solve(&custom_score(serde_json::json!({ "pitch": 1.0 })), &registry).unwrap();
+        let scene = solve(
+            &custom_score(serde_json::json!({ "pitch": 1.0 })),
+            &registry,
+        )
+        .unwrap();
         assert_eq!(scene.items[2].transform.translate, Vec2::new(2.0, 0.0));
     }
 
@@ -406,7 +410,9 @@ mod tests {
         // everything as though every item disclosed nothing, and the result
         // looks like a bad layout rather than a missing input.
         let mut registry = SolverRegistry::new();
-        registry.register(Line::new(vec![Disclosure::Axis])).unwrap();
+        registry
+            .register(Line::new(vec![Disclosure::Axis]))
+            .unwrap();
         assert_eq!(
             solve(&custom_score(serde_json::json!({})), &registry),
             Err(SolveError::MissingDisclosure {
@@ -419,7 +425,9 @@ mod tests {
     #[test]
     fn a_disclosed_score_satisfies_the_requirement() {
         let mut registry = SolverRegistry::new();
-        registry.register(Line::new(vec![Disclosure::Axis])).unwrap();
+        registry
+            .register(Line::new(vec![Disclosure::Axis]))
+            .unwrap();
         let mut score = custom_score(serde_json::json!({}));
         score.items[1].axis = Some(AxisValue::Numeric(1.0));
         assert!(solve(&score, &registry).is_ok());

@@ -472,11 +472,14 @@ where
             .body(&ciphertext)
             .seq_num(seq_num)
             .backlink(backlink.map(Hash::from))
-            .build(&signing_key, KnotSyncExt {
+            .build(
+                &signing_key,
+                KnotSyncExt {
                     space_id: self.policy.space_id,
                     encryption: self.policy.encryption,
                     parents,
-                });
+                },
+            );
         let operation = Operation {
             hash: header.hash(),
             header,

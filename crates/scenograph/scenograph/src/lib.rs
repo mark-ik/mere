@@ -22,8 +22,8 @@
 pub mod registry;
 
 pub use registry::{
-    ArrangementId, Disclosure, RegisterError, SolveError, Solver, SolverCapability,
-    SolverRegistry, solve,
+    ArrangementId, Disclosure, RegisterError, SolveError, Solver, SolverCapability, SolverRegistry,
+    solve,
 };
 pub use sceno;
 pub use scenomise;

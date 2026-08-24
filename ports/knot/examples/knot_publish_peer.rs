@@ -65,7 +65,10 @@ async fn run() -> Result<(), String> {
     match args.next().as_deref() {
         Some("reader-key") => {
             let reader = reader_identity()?;
-            println!("{}", knot_editor::hex32(&reader.master_public_key().to_bytes()));
+            println!(
+                "{}",
+                knot_editor::hex32(&reader.master_public_key().to_bytes())
+            );
             Ok(())
         }
         Some("hold") => hold(false).await,

@@ -1,7 +1,7 @@
 # muniment OPFS probe
 
 The executable half of the
-[redb-over-OPFS feasibility plan](../../crates/eidetic/muniment/design_docs/2026-08-22_redb_opfs_feasibility_plan.md):
+[redb-over-OPFS feasibility plan](../../design_docs/eidetic_docs/implementation_strategy/2026-08-22_redb_opfs_feasibility_plan.md):
 can redb 4.2 run over an OPFS sync-access handle as a muniment backend, inside
 a dedicated browser worker, keeping redb's storage contract and recovery
 guarantees, without an `unsafe` thread claim and without browser authority

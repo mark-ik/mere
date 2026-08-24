@@ -327,7 +327,7 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   alias; removed `mere-infer`; repointed `mere-embed` and knot; retained
   Vates/Sibylla as deprecated compatibility crates; and swept the authority
   docs plus the standalone pointer repository. The recorded target matrix is
-  `crates/intel/esp/design_docs/2026-08-09_feature_target_matrix.md`. Empty,
+  `design_docs/intel_docs/technical_architecture/2026-08-09_feature_target_matrix.md`. Empty,
   every individual feature, combined CPU features, and combined browser-WGPU
   features compile on their claimed targets; the merged CPU suite passed 171
   tests with one ignored, the Eidetic corridor passed, and three real-device

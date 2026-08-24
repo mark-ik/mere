@@ -29,7 +29,7 @@ intersect, because no incumbent holds that combination. The differentiators:
 - an owned rendering engine embeddable behind `genet-host-api`;
 - a portable scene contract (sceno), already consumed by mere, isometry, and
   graphshell (see the
-  [scene contract note](../crates/scenograph/design_docs/2026-07-22_scene_contract_note.md));
+  [scene contract note](scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md));
 - a trust plane with attenuable, revocable delegation (personae).
 
 ## Candidate applications

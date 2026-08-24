@@ -16,7 +16,7 @@ static-path replacement, and adds the orthogonal analysis axis.
 principled profile ladder and the "analyze the web, don't just render it" goal.
 **Relates to**: genet's `docs/2026-05-12_genet_profile_ladder_plan.md` (the canonical
 rung taxonomy), the
-[engine picker plan](../../inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md)
+engine picker plan (`genet/design_docs/inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md`)
 (the rung selector), the
 [relational-browse graphlet plan](../../archive_docs/2026-08-06_completed_plans/2026-06-23_relational_browse_graphlet_plan.md) and the
 [eidetic browsing derivation plan](../../eidetic_docs/implementation_strategy/2026-06-12_eidetic_browsing_derivation_plan.md)
