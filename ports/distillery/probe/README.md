@@ -56,6 +56,9 @@ lease and session. Like `run-probe.ps1`, its nested workspace cannot use
 Cargo's `--locked` flag because inherited path-workspace patch tables reorder
 unused entries. The checked-in lockfile still pins the selected graph, and the
 fixture explicitly patches to Mere's production Burn Remote and CubeCL sources.
+It also restates Mere's p2panda fork patch because nested workspaces do not
+inherit the root patch table. The passing machine receipt is
+[`receipts/2026-08-23_remote_minilm.json`](receipts/2026-08-23_remote_minilm.json).
 
 ## Claim boundary
 

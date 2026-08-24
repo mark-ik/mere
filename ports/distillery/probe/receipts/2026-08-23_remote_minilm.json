@@ -1,0 +1,126 @@
+{
+  "first_run": {
+    "claim_and_start_steps": [
+      "Claimed { job: JobId([93, 54, 109, 161, 184, 228, 174, 112, 54, 112, 126, 213, 206, 17, 96, 109, 74, 243, 3, 149, 34, 56, 6, 196, 90, 150, 2, 117, 174, 197, 232, 110]) }",
+      "Granted { job: JobId([93, 54, 109, 161, 184, 228, 174, 112, 54, 112, 126, 213, 206, 17, 96, 109, 74, 243, 3, 149, 34, 56, 6, 196, 90, 150, 2, 117, 174, 197, 232, 110]), epoch: 0, lease: LeaseId([225, 173, 47, 134, 254, 239, 204, 61, 166, 248, 21, 144, 8, 129, 10, 90, 12, 91, 229, 217, 203, 142, 210, 176, 92, 187, 35, 47, 158, 140, 86, 117]) }",
+      "Started { job: JobId([93, 54, 109, 161, 184, 228, 174, 112, 54, 112, 126, 213, 206, 17, 96, 109, 74, 243, 3, 149, 34, 56, 6, 196, 90, 150, 2, 117, 174, 197, 232, 110]), lease: Some(LeaseId([225, 173, 47, 134, 254, 239, 204, 61, 166, 248, 21, 144, 8, 129, 10, 90, 12, 91, 229, 217, 203, 142, 210, 176, 92, 187, 35, 47, 158, 140, 86, 117])) }"
+    ],
+    "epoch": 0,
+    "job": "5d366da1b8e4ae7036707ed5ce11606d4af30395223806c45a960275aec5e86e",
+    "lease": "e1ad2f86feefcc3da6f8159008810a5a0c5be5d9cb8ed2b05cbb232f9e8c5675",
+    "numerical": {
+      "all_finite": true,
+      "browser_reference_first_8": [
+        0.045927152037620544,
+        -0.001806997344829142,
+        0.02857656031847,
+        0.07433602213859558,
+        0.07189270108938217,
+        0.05307673290371895,
+        -0.010092335753142834,
+        0.008586857467889786
+      ],
+      "browser_reference_max_abs_error": 1.4156103134155273e-7,
+      "dimensions": 384,
+      "first_8": [
+        0.04592718556523323,
+        -0.0018069690559059381,
+        0.02857658639550209,
+        0.07433600723743439,
+        0.07189284265041351,
+        0.05307677760720253,
+        -0.010092372074723244,
+        0.008586928248405457
+      ],
+      "l2_norm": 1.0000001192092896,
+      "native_reference_max_abs_error": 1.4901161193847656e-7,
+      "passes": true,
+      "tolerance": 0.00009999999747378752
+    },
+    "sessions_before_reclaim": 1,
+    "timings_ms": {
+      "native_control_execution": 82.84479999999999,
+      "native_control_load": 226.88330000000002,
+      "remote_execution": 722.9678,
+      "remote_load": 2866.6562
+    }
+  },
+  "fresh_session_recovery": {
+    "epoch": 1,
+    "final_session_count": 0,
+    "lease": "840544d8787243eb03a27c44adb9774233b9b388e16c2a69a1b656d7c83ad0bf",
+    "max_abs_error_vs_first_remote": 0.0,
+    "new_lease": true,
+    "numerical": {
+      "all_finite": true,
+      "browser_reference_first_8": [
+        0.045927152037620544,
+        -0.001806997344829142,
+        0.02857656031847,
+        0.07433602213859558,
+        0.07189270108938217,
+        0.05307673290371895,
+        -0.010092335753142834,
+        0.008586857467889786
+      ],
+      "browser_reference_max_abs_error": 1.4156103134155273e-7,
+      "dimensions": 384,
+      "first_8": [
+        0.04592718556523323,
+        -0.0018069690559059381,
+        0.02857658639550209,
+        0.07433600723743439,
+        0.07189284265041351,
+        0.05307677760720253,
+        -0.010092372074723244,
+        0.008586928248405457
+      ],
+      "l2_norm": 1.0000001192092896,
+      "native_reference_max_abs_error": 1.4901161193847656e-7,
+      "passes": true,
+      "tolerance": 0.00009999999747378752
+    },
+    "passes": true,
+    "reclaimed_for_shutdown": true,
+    "timings_ms": {
+      "remote_execution": 364.2656,
+      "remote_load": 1477.2392
+    }
+  },
+  "model": {
+    "id": "sentence-transformers/all-MiniLM-L6-v2",
+    "input": "query: Mere keeps a model local.",
+    "model_dir": "C:\\Users\\mark_\\Code\\repos\\mere\\models\\all-MiniLM-L6-v2",
+    "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    "weights_bytes": 90868376,
+    "weights_sha256": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db"
+  },
+  "owner_reclaim": {
+    "awaiting_stop_before_reclaim_fact": true,
+    "cancellation_batch": 512,
+    "in_flight_request_error": "backend: tensor readback: An error happened during execution\nCaused by:\n  Failed to read tensor: RecvError(())",
+    "passes": true,
+    "reclaimed": true,
+    "request_in_flight_at_reclaim": true,
+    "session_count_after_reclaim": 0
+  },
+  "passes": true,
+  "physical_gpu_allocation_release": {
+    "claim": "lease reclamation closes the Burn session and a fresh WGPU-backed session recovers exact model behavior",
+    "measured": false,
+    "remaining_gate": "process- or driver-level allocation telemetry; Burn Remote exposes session lifecycle, not physical GPU allocation counters"
+  },
+  "schema": "distillery.remote-minilm-receipt/v1",
+  "source": {
+    "commit": "176c31e817001a2cb77b54f3c0331ea9e6183eef",
+    "owned_paths_dirty": "false"
+  },
+  "topology": {
+    "client_backend": "Burn Dispatch Remote over authorized Iroh",
+    "client_peer": "43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de",
+    "same_endpoint": false,
+    "server_backend": "burn-wgpu 0.22.0-pre.2 Wgpu/AutoCompiler DiscreteGpu(0), fusion and autotune disabled",
+    "server_peer": "4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8",
+    "transport": "two distinct application-owned p2panda/Iroh endpoints"
+  }
+}
