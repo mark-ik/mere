@@ -287,7 +287,9 @@ condition for the whole probe.
   (`run-browser.mjs`), producing its own receipt.
 - **Done when** a second engine has its own receipt, and any divergence is
   recorded rather than averaged away.
-- **Status:** §5.12. Safari/WKWebView remain **not run** — no Apple host is
+- **Status:** Firefox §5.12; **WebKit run 2026-08-23 and cannot host the
+  probe at all** (no `navigator.storage`, §5.12b). Safari/WKWebView remain
+  **not run** — no Apple host is
   driveable from this machine — and native mobile direct-file is a separate
   proof entirely.
 
@@ -713,7 +715,8 @@ A receipt covers **one engine on one host**, and this section says which.
 |---|---|---|
 | Chromium | Electron 42 / Chrome 148 (in-app pane), and headless Chrome 151 via Playwright | all lanes pass |
 | Firefox | Playwright Firefox 153, headless | all lanes pass (§5.12) |
-| Safari / WebKit | — | **not run.** No Apple host is driveable from this machine; the iMac is on a separate network and headed Safari is not scriptable from here. WebKit's OPFS and worker-termination behaviour are unproven. |
+| WebKit (Playwright 26.5, Windows) | 2026-08-23 | **cannot host the probe: no OPFS at all.** §5.12b |
+| Safari (Apple hardware) | — | **not run**, and the WebKit row above does **not** substitute for it. §5.12b |
 | WKWebView, iOS/Android WebView | — | **not run**, and not implied by any desktop result |
 | Native mobile direct-file | — | out of scope; a different storage path entirely |
 
@@ -791,6 +794,51 @@ against a 5 s deadline and a timeout is recorded as a fact
 (`persistence_request.granted: null`) rather than swallowed. Any production
 code that awaits `persist()` on a background path should assume it may never
 resolve.
+
+### 5.12b WebKit has no OPFS, and does not close the Safari gap
+
+**Run 2026-08-23, and it refutes the reason for running it.** The argument for
+trying Playwright's WebKit was that it would cover much of the untested
+Safari/WKWebView surface cheaply. It does not, and the receipt
+([`2026-08-23_webkit_unsupported.json`](../../../../ports/muniment-opfs-probe/receipts/2026-08-23_webkit_unsupported.json))
+records why.
+
+Playwright WebKit 26.5 on Windows, secure context, in both page and worker:
+
+| Capability | Present |
+|---|---|
+| `navigator.storage` | **absent entirely** — not merely `getDirectory` |
+| `FileSystemFileHandle` | **not a global** |
+| `createSyncAccessHandle` | absent |
+| `navigator.locks` | present |
+| `indexedDB`, `WebAssembly`, `crypto.subtle` | present |
+
+So the probe cannot run there at all. That is **not a redb result and not a
+probe defect** — the platform has no origin-private file system for redb to
+sit on. Every lane failed at the same call.
+
+**What this does and does not mean.** It does **not** mean Safari lacks OPFS:
+Safari ships it from 15.2 and sync access handles from 16.4, on Apple
+hardware. What it means is narrower and still useful:
+
+1. **Playwright WebKit cannot stand in for Safari coverage.** The gap is
+   unchanged and genuinely needs Apple hardware. My suggestion that this run
+   would close much of it was wrong.
+2. **"WebKit" is not one storage platform.** A WebKit build shipping today,
+   in a secure context, with Web Locks and IndexedDB, and *no OPTS at all*,
+   exists. Any consumer that reasons about "the WebKit family" rather than
+   "Safari version N on Apple hardware" cannot assume an origin-private file
+   system — which matters for WKWebView-based embeddings and non-Apple WebKit
+   ports specifically, the very targets §5.11 lists as unproven.
+3. **A redb-on-OPFS browser lane needs a declared fallback**, because at least
+   one shipping engine offers no OPFS. muniment's IndexedDB backend is that
+   fallback today, which is an argument for keeping it regardless of the
+   adopt/reject decision.
+
+One harness defect this exposed and fixed: `run-browser.mjs` crashed on a null
+receipt when an engine failed before the page could build one. It now
+synthesizes an `outcome: "unsupported"` receipt carrying the capability probe,
+because "this engine cannot run it" is a result worth keeping.
 
 ### 5.13 The fair IndexedDB baseline (added after the second review)
 
@@ -1396,7 +1444,10 @@ Before the selection is made, the tail worth finishing (in order):
 4. Phase-level, repeated, batched-shape benchmarks **against a fair
    IndexedDB** — **done** (§5.10, §5.13). Read `log_batched` and the
    `vs_range` column, not totals and not `vs_shipping`.
-5. Firefox — **done** (§5.12). **Safari/WKWebView remain the real gap.**
+5. Firefox — **done** (§5.12). WebKit attempted 2026-08-23 and **has no
+   OPFS**, so it does not close the gap (§5.12b). **Safari on Apple hardware
+   remains the real gap**, and now also a demonstrated need for a declared
+   non-OPFS fallback.
 6. Price the range-query `scan` option — **still open after four attempts**;
    estimates have ranged 1.2×–3.7× and it is not always separable (§5.13).
    Needs a quiet machine and randomized backend order, plus its ordering

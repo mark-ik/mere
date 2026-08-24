@@ -1,0 +1,58 @@
+{
+  "schema": "muniment.opfs-probe/v1",
+  "outcome": "unsupported",
+  "reason": "the page never produced a receipt; the engine lacks a prerequisite",
+  "environment": {
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+    "capability_probe": {
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+      "secure_context": true,
+      "storage_manager": false,
+      "get_directory": "undefined",
+      "file_system_file_handle": "undefined",
+      "sync_access_handle": "undefined",
+      "web_locks": "function",
+      "indexed_db": "object",
+      "web_assembly": "object"
+    }
+  },
+  "runner": {
+    "engine": "webkit",
+    "playwright": true,
+    "headless": true,
+    "lanes": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6"
+    ],
+    "per_lane": {
+      "lane 1": {
+        "ok": false,
+        "error": "Error: page.evaluate: Error: TypeError: undefined is not an object (evaluating 'arg0.getDirectory') @ http://127.0.0.1:8733/ports/muniment-opfs-probe/web/pkg/muniment_opfs_probe.js:162"
+      },
+      "lane 2": {
+        "ok": false,
+        "error": "Error: page.evaluate: Error: TypeError: undefined is not an object (evaluating 'arg0.getDirectory') @ http://127.0.0.1:8733/ports/muniment-opfs-probe/web/pkg/muniment_opfs_probe.js:162"
+      },
+      "lane 3": {
+        "ok": false,
+        "error": "Error: page.evaluate: Error: TypeError: undefined is not an object (evaluating 'arg0.getDirectory') @ http://127.0.0.1:8733/ports/muniment-opfs-probe/web/pkg/muniment_opfs_probe.js:162"
+      },
+      "lane 4": {
+        "ok": false,
+        "error": "TimeoutError: page.waitForFunction: Timeout 180000ms exceeded."
+      },
+      "lane 5": {
+        "ok": false,
+        "error": "Error: page.evaluate: Error: TypeError: undefined is not an object (evaluating 'arg0.getDirectory') @ http://127.0.0.1:8733/ports/muniment-opfs-probe/web/pkg/muniment_opfs_probe.js:162"
+      },
+      "lane 6": {
+        "ok": false,
+        "error": "Error: page.evaluate: Error: TypeError: undefined is not an object (evaluating 'arg0.getDirectory') @ http://127.0.0.1:8733/ports/muniment-opfs-probe/web/pkg/muniment_opfs_probe.js:162"
+      }
+    }
+  }
+}

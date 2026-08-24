@@ -111,7 +111,31 @@ for (const lane of LANES) {
   }
 }
 
-const receipt = await page.evaluate(() => window.munimentOpfsProbe.receipt());
+// An engine can fail so early that the page never builds a receipt at all —
+// WebKit does exactly this, having no `navigator.storage` for the harness to
+// interrogate. That is a RESULT and must be recorded, so synthesize a
+// receipt rather than crashing on a null (which is what this did before).
+let receipt = await page.evaluate(() => window.munimentOpfsProbe.receipt() ?? null);
+if (!receipt) {
+  const probe = await page.evaluate(async () => ({
+    user_agent: navigator.userAgent,
+    secure_context: isSecureContext,
+    storage_manager: !!navigator.storage,
+    get_directory: typeof navigator.storage?.getDirectory,
+    file_system_file_handle: typeof self.FileSystemFileHandle,
+    sync_access_handle: typeof self.FileSystemFileHandle?.prototype?.createSyncAccessHandle,
+    web_locks: typeof navigator.locks?.request,
+    indexed_db: typeof indexedDB,
+    web_assembly: typeof WebAssembly,
+  }));
+  receipt = {
+    schema: "muniment.opfs-probe/v1",
+    outcome: "unsupported",
+    reason: "the page never produced a receipt; the engine lacks a prerequisite",
+    environment: { user_agent: probe.user_agent, capability_probe: probe },
+  };
+  console.log(`[${ENGINE}] no receipt — recording an "unsupported" result instead`);
+}
 receipt.runner = { engine: ENGINE, playwright: true, headless: HEADLESS, lanes: LANES, per_lane: results };
 
 // Close the browser→native half of lane 5 here rather than leaving a

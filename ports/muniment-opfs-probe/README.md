@@ -77,6 +77,13 @@ PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright node run-browser.mjs --en
 `--engine` takes `chromium`, `firefox` or `webkit`; `--headed true` to watch.
 Each run writes its own receipt, because a receipt covers one engine.
 
+**WebKit cannot run this probe.** Playwright WebKit 26.5 exposes no
+`navigator.storage` at all — no OPFS, in page or worker — so every lane fails
+at the same call and the runner records an `outcome: "unsupported"` receipt
+with a capability probe instead. This is a property of that WebKit build, not
+of Safari (which has had OPFS since 15.2). It does **not** substitute for
+Safari coverage.
+
 ## Provenance
 
 The probe is untracked while it is a probe, so a receipt cannot be identified
