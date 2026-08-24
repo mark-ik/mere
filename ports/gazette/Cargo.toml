@@ -1,0 +1,29 @@
+[package]
+name = "gazette"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Gazette is the Mere platform's directory port: it resolves who someone is into where they can be reached, keeps what you know about them, and reads what they publish. Built today: an embeddable contact Ledger projection plus WebFinger (RFC 7033) resolution. Live gaz-store hosting, NIP-05, atproto-did, the moot web-of-trust directory, feed polling, and the reading room remain. Not castellan, which guards and presents you."
+readme = "README.md"
+keywords = ["webfinger", "contacts", "directory", "feeds", "p2p"]
+categories = ["network-programming"]
+
+[features]
+# Expose test-only helpers (resolver fetch overrides) to downstream crates
+# for integration testing.
+test-support = []
+
+[dependencies]
+chirograph.workspace = true
+incipit.workspace = true
+sceno.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+url = "2.5"
+fleece.workspace = true
+
+[lib]
+name = "gazette"
+path = "src/lib.rs"

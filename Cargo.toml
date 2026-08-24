@@ -55,7 +55,6 @@ members = [
     "crates/dramatis/dramatis",
     "crates/dramatis/emblem",
     "crates/dramatis/gaz",
-    "crates/dramatis/gazette",
     "crates/dramatis/persona-picker",
     "crates/moot/commons",
     "crates/moot/gemot",
@@ -101,6 +100,9 @@ members = [
     "ports/djinn",
     "ports/castellan",
     "ports/distillery",
+    "ports/moot",
+    "ports/alembic",
+    "ports/gazette",
 ]
 exclude = [
     "crates/probes",
@@ -184,10 +186,22 @@ graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { path = "crates/graphshell/graphshell-network" }
 knot-editor = { version = "0.0.2", path = "ports/knot" }
-# The credential-keeper port; reservation, no implementation (dramatis plan D4).
+# The credential-keeper port (dramatis plan D4). No longer a reservation:
+# C1/C2 landed the OTP core, sealed OTP items, the release gate, and the
+# `keeper` identity surface graphshell re-exports.
 castellan = { version = "0.0.2", path = "ports/castellan" }
 # The model-works port; first real consumer of the mesh host supervisor.
 distillery = { version = "0.0.1", path = "ports/distillery" }
+# The places port: one port, two surfaces (murmur = conversation, moot =
+# community), composing gemot, commons, murm, and stickleback without owning
+# their authority. Founding reservation, no implementation. Package is
+# `mere-moot` because crates.io `moot` and `murmur` are both held elsewhere.
+moot = { package = "mere-moot", version = "0.0.1", path = "ports/moot" }
+# The recall-and-workshop port: memory surfaces behind `recall`, the granted
+# agent workshop over them, Athanor as its first actor. Founding reservation,
+# no implementation. Package is `mere-alembic`; crates.io `alembic` is the
+# Linux Foundation VFX binding.
+alembic = { package = "mere-alembic", version = "0.0.1", path = "ports/alembic" }
 # Shared pins the graphshell crates inherit.
 base64 = "0.22"
 blake3 = "1"
@@ -217,6 +231,7 @@ register-theme = { path = "crates/system/registry/register-theme" }
 inker = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 document-canvas = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 nematic = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+fleece = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 knot-editor-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 illume = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
@@ -292,11 +307,14 @@ servitor = { path = "crates/servitor" }
 # Path + version: the path is used for local workspace builds, the version lets
 # a publishable dependent (stickleback) record the crates.io dependency.
 muniment = { version = "0.1.1", path = "crates/eidetic/muniment" }
-# Handle-resolution index (WebFinger today; NIP-05 / atproto-did / moot
-# web-of-trust to come). Incubating, promoted out of the murm supercrate
-# 2026-07-08 (a gazetteer is a directory, not a broadcast gazette); no consumer
-# yet, and its blocking reqwest needs an async port before one wires it.
-gazetteer = { package = "mere-gazetteer", path = "crates/dramatis/gazetteer" }
+# The directory port. Promoted from `crates/dramatis/` to `ports/` 2026-08-23
+# (suite census 7.3): the three senses of the word were always the roadmap —
+# an index, being gazetted, and the paper you read — so the resolver grows
+# into the port rather than sitting beside one. Built today: WebFinger
+# resolution. Unbuilt: the contact and recipient surfaces over `gaz`, feed
+# polling over `mere-crawl`, and the reading room. Its blocking reqwest
+# still needs an async port before a resident polls with it.
+gazette = { version = "0.0.1", path = "ports/gazette" }
 # Stored key-rooted contacts (the "them" side personae keeps): petnames, handles,
 # per-endpoint trust, kith/kin tiers, recency. Relocated from repos/gaz 2026-08-10.
 gaz = { version = "0.0.1", path = "crates/dramatis/gaz" }

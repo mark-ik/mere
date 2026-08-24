@@ -1,0 +1,16 @@
+[package]
+name = "mere-moot"
+version = "0.0.1"
+edition.workspace = true
+license = "MPL-2.0"
+repository.workspace = true
+description = "Founding reservation. Moot is the Mere platform's places port: the first-party application surface over governed shared spaces. Two surfaces, one port — murmur (direct and invitation-scoped conversation, mail, drafts, delivery and refusal, calls) and moot (find, join, membership, proposals, moderation, space health) — with murmur mountable alone. Composes gemot, commons, murm, and stickleback; owns none of their authority."
+readme = "README.md"
+keywords = ["p2p", "chat", "community", "governance", "local-first"]
+categories = ["network-programming"]
+
+[lib]
+name = "moot"
+path = "src/lib.rs"
+
+[dependencies]

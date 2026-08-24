@@ -1,30 +1,64 @@
 // Copyright 2026 Mark AB (markik)
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Gazette: Mere's handle-resolution index (incubating; WebFinger only today).
+//! **Gazette**, the Mere platform's directory port: who someone is, where
+//! they can be reached, and what they publish.
 //!
-//! Named for the official gazette, the publication where appointments are
-//! *gazetted*: officially announced and thereby resolvable. The crate began as
-//! `gazette`, spent a year as `gazetteer` (an index, not a broadcast), and
+//! Named for the official gazette, and the name carries the whole roadmap in
+//! its three senses. A *gazetteer* is an index. To be *gazetted* is to be
+//! officially announced, and thereby resolvable. And a *gazette* is the paper
+//! you read. The crate began as `gazette`, spent a year as `gazetteer`, and
 //! returned to the original when the bare `gazetteer` crates.io name turned
-//! out to be taken and `gazette` free (2026-08-10). It lives on the dramatis
-//! tier (beside `personae` and `gaz`), not under the bilateral `murm`
-//! supercrate where it used to sit.
+//! out to be taken and `gazette` free (2026-08-10); it was promoted from the
+//! dramatis tier to a port on 2026-08-23, because those three senses were
+//! never three crates.
 //!
-//! Turns a name, handle, or key into the set of reachable, trust-stated
-//! endpoints Mere can navigate to or message. **Today** it implements
-//! WebFinger ([RFC 7033](https://www.rfc-editor.org/rfc/rfc7033)): it resolves
-//! an `acct:user@host` handle to its JRD document and classifies the
-//! document's aliases and links into typed peer-discovery endpoints (gemini
-//! capsules, gopher resources, misfin mailboxes, ActivityPub actors, HTTP
-//! profile pages, and a typed catch-all).
+//! Like `castellan`, the port splits in two. The **embeddable half** is what
+//! any host composes: contact cards, and the one recipient picker Knot, Moot,
+//! and Signalman all draw instead of three private lists. The **authority
+//! half** lives with the resident, which is the always-on party and therefore
+//! the natural poller: resolution, feed fetching, and trust state. Reading a
+//! friend's feed reveals your interest to their host, so which persona's
+//! network face does the fetching is a first-class setting, not an
+//! afterthought.
 //!
-//! The other resolvers land here as siblings behind the same facade: the
-//! key-rooted NIP-05 (`/.well-known/nostr.json`) and atproto-did lookups, and
-//! the moot web-of-trust directory (member lists as vouched handle->key
-//! bindings). See the contact identity model brief.
+//! **Built today:** the embeddable contact Ledger projection and WebFinger
+//! resolution. `ledger` reads contacts × selected facets, keeps contributor
+//! provenance and repeated instance addresses, composes coordinated selection,
+//! emits a semantic table, and cites its two authorities independently.
+//!
+//! WebFinger resolution
+//! ([RFC 7033](https://www.rfc-editor.org/rfc/rfc7033)) — an `acct:user@host`
+//! handle to its JRD document, with the document's aliases and links
+//! classified into typed peer-discovery endpoints (gemini capsules, gopher
+//! resources, misfin mailboxes, ActivityPub actors, HTTP profile pages, and a
+//! typed catch-all). The other resolvers land beside it behind the same
+//! facade: key-rooted NIP-05 (`/.well-known/nostr.json`) and atproto-did
+//! lookups, and the moot web-of-trust directory (member lists as vouched
+//! handle-to-key bindings).
+//!
+//! **Unbuilt:** hosting the Ledger and recipient picker over live `gaz`, feed polling
+//! (whose engine is `mere-crawl`), and the reading room over fleeced
+//! articles. The blocking `reqwest` below needs an async port before a
+//! resident polls with it.
+//!
+//! The boundaries are the point:
+//!
+//! - **Not `castellan`.** Castellan guards and presents *you*; gazette finds
+//!   and keeps *the other players*. Two outward faces of the dramatis tier,
+//!   pointing opposite ways.
+//! - **Not `gaz`.** Gaz is the contact store — your records about other
+//!   people, petnames, per-endpoint trust, kith and kin. This port composes
+//!   it; it does not replace it.
+//! - **Not a delivery layer.** Private grants, cross-service posting, and
+//!   inbox implementations are moot and murm territory. Gazette reads what is
+//!   already public.
+//! - **Not the highlights.** What you keep from what you read is Knot's, and
+//!   what memory makes of it is `alembic`'s.
 
 use std::time::Duration;
+
+pub mod ledger;
 
 use reqwest::header::ACCEPT;
 use serde::Deserialize;

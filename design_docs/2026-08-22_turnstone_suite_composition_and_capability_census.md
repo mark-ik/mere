@@ -5,7 +5,9 @@
 here. Amended same day (with Mark): the single Moot port ruling (§7.1–7.2),
 the gazette port ruling (§7.3), the Alembic workshop ruling (§7.4, §8), the
 place-ruling reversal recorded (§3), and the pane-registry cross-reference
-(§6).  
+(§6). Executed 2026-08-23: Moot and Alembic founded as stubs, gazette
+promoted from crate to port. Published 2026-08-24: `mere-moot` 0.0.1 and
+`mere-alembic` 0.0.1. Receipts on each item in §7 and §10.  
 **Scope:** State the current suite as sovereign, embeddable ports; correct the
 Graphshell, Castellan, and device-resident split; define the browser taxonomy
 that lets Turnstone compose the suite; and distinguish missing ports from
@@ -313,6 +315,24 @@ are its authority half, hosted by Djinn (see the
 The boundary proof asked for above is the second-host test already: the
 picker consumed by Knot, Moot, and Signalman.
 
+**Executed 2026-08-23, by promotion rather than founding (ruled with Mark).**
+The port could not take the plain `gazette` package name, because the
+dramatis resolver crate already held it — package and lib both, published,
+484 lines, no library consumers — and bare `gazetteer` is held by a stranger,
+so freeing the name by renaming the resolver was unavailable. Ruled: the
+resolver *is* the port, one directory earlier than expected.
+`crates/dramatis/gazette` moved to `ports/gazette`, keeping its package name,
+version, and code; the manifest, README, and module doc were reframed to the
+port identity, and the workspace member and dependency entries follow. The
+reasoning is the 2026-08-10 brief's own: the word's three senses — an index,
+being gazetted, and the paper you read — were the roadmap, and a roadmap
+inside one word does not want two crates. This is a deliberate exception to
+the port-is-not-its-domain-crate pattern castellan and distillery follow, and
+`knot` is its precedent (one port holding directory, vault, editor, sync, and
+search). What is built is unchanged — WebFinger resolution — and what is
+unbuilt is now stated on the port: the contact and recipient surfaces over
+`gaz`, feed polling over `mere-crawl`, and the reading room.
+
 ### 7.4 Granted agent and automation workshop: probable
 
 Servitor, packs and mods, Genet Probe, typed petitions, watches, transcripts,
@@ -465,13 +485,31 @@ incumbent application.
 5. Found the Moot port (`mere-moot`, lib `moot`) over Murm, Gemot, and
    `mere-comms`, with the murmur surface mountable alone; Turnstone's
    placeholder Comms pane and Signalman are its consumers. *(Amended
-   2026-08-22: one port, two surfaces, per 7.1.)*
+   2026-08-22: one port, two surfaces, per 7.1. **Stub founded 2026-08-23**
+   at `ports/moot`, MPL-2.0, registered and compiling; no implementation.
+   **Published 2026-08-24** as `mere-moot` 0.0.1, the name claimed per the
+   heddle lesson.)*
 6. Plan the moot community surface as that port's second surface, separate
    from the murmur surface. *(Amended 2026-08-22.)*
 7. Found the gazette port; its picker consumed by Knot, Moot, and Signalman
-   is the boundary proof 7.3 asked for. *(Amended 2026-08-22.)*
+   is the boundary proof 7.3 asked for. *(Amended 2026-08-22. **Executed
+   2026-08-23 by promotion**, per the naming ruling in 7.3: the resolver
+   crate moved `crates/dramatis/gazette` → `ports/gazette`, keeping its
+   package name and code, with the manifest, README, and module doc reframed
+   to the port. Compiles from its new home; the picker and feed surfaces
+   remain unbuilt.)*
 8. Keep the Alembic workshop behind one bounded two-host workflow receipt;
-   the receipt is its founding gate, per 7.4. *(Amended 2026-08-22.)*
+   the receipt is its founding gate, per 7.4. *(Amended 2026-08-22. **Stub
+   founded 2026-08-23** at `ports/alembic`, MPL-2.0, with the `recall`
+   feature declared and empty; the two-host receipt still gates
+   implementation. **Published 2026-08-24** as `mere-alembic` 0.0.1. One
+   correction was needed first: the fleece scope's F5 pass had added
+   `fleece.workspace = true` to the stub, which nothing in it calls, and an
+   unused dep on a versionless branch-git entry cannot be published at all.
+   Ruled with Mark: drop the dep, since a reservation stub ships empty
+   `[dependencies]` as chatelaine and emblem do, and re-add it with a version
+   when alembic has distillation code that consumes an `Article`. The other
+   three F5 consumers — crawl, eidetic-search, gazette — are untouched.)*
 
 ## 11. Done conditions for the composition thesis
 

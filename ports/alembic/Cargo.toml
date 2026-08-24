@@ -1,0 +1,29 @@
+[package]
+name = "mere-alembic"
+version = "0.0.1"
+edition.workspace = true
+license = "MPL-2.0"
+repository.workspace = true
+description = "Founding reservation. Alembic is the Mere platform's recall and workshop port: the memory surfaces (short-term, long-term, engrams, search) behind a `recall` feature, and the granted-agent and automation workshop over them — create, grant, run, observe, interrupt, and dissolve a bounded actor. Athanor, the distillation furnace, is its authority half and the first such actor. Not distillery: distillery runs models, alembic runs work."
+readme = "README.md"
+keywords = ["memory", "agents", "recall", "automation", "local-first"]
+categories = ["development-tools"]
+
+[lib]
+name = "alembic"
+path = "src/lib.rs"
+
+[features]
+# The memory surfaces without the workshop, for a host that wants recall only.
+# Mirrors castellan's `keeper` split: an embeddable half a host composes, and
+# an authority half that stays with the resident.
+recall = []
+
+[dependencies]
+# Deliberately empty, as for the other reservation stubs (chatelaine,
+# emblem). A `fleece` dependency was added here 2026-08-23 as the fleece
+# scope's F5 alembic receipt and removed 2026-08-24: nothing in this crate
+# calls it yet, and an unused dep made the reservation unpublishable
+# (fleece is carried as a branch-git dep with no version). Re-add it, with
+# a version, when alembic has distillation code that actually consumes an
+# Article.

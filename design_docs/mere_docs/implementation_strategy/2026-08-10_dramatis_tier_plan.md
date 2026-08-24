@@ -27,6 +27,12 @@ Considered and declined: gaz as the umbrella over the tier. gaz was defined
 | `crates/dramatis/gazette` | `gazette` | handle resolution (finding them) |
 | `crates/dramatis/gaz` | `gaz` | stored contacts (keeping them) |
 
+> **Moved since (2026-08-23):** `gazette` was promoted out of this tier to
+> `ports/gazette`, keeping its package and lib names. The table above records
+> the tier as this plan left it; the promotion and its reasoning are in the
+> [suite composition census](../../2026-08-22_turnstone_suite_composition_and_capability_census.md)
+> §7.3.
+
 Package names and lib names are untouched; only the tier directory and the
 workspace paths change. Consumers that take `personae` by git dep (hocket) key
 on package name and are unaffected.
