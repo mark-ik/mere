@@ -1,6 +1,6 @@
 param(
     [string]$ModelDir = (Join-Path $PSScriptRoot '..\..\..\models\all-MiniLM-L6-v2'),
-    [string]$Input = 'query: Mere keeps a model local.',
+    [string]$Text = 'query: Mere keeps a model local.',
     [int]$CancellationBatch = 512,
     [string]$TargetDir = 'C:\t\distillery-remote-minilm'
 )
@@ -21,5 +21,5 @@ $ownedStatus = git -C $mereRoot status --porcelain -- `
     support/patches/burn-remote
 $env:DISTILLERY_REMOTE_PROBE_DIRTY = if ($ownedStatus) { 'true' } else { 'false' }
 
-cargo run --release --manifest-path $fixture -- $resolvedModel $Input $CancellationBatch
+cargo run --release --manifest-path $fixture -- $resolvedModel $Text $CancellationBatch
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
