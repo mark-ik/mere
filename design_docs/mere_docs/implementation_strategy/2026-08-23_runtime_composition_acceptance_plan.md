@@ -37,7 +37,7 @@ Two extraction rules govern every row:
 | Runtime cadence | Product profile | Exact step, elapsed frame, turn, epoch, or event trigger | Isometry profile uses event-driven zero-step spatial publication | A second game must need the same trigger vocabulary | Provisional product-local |
 | Input and actions | Genet/Cambium captures input; product maps it to intents | Authorized intent lowering | Isometry protocol refusal and application tests | Two products must share semantics, not merely devices | No shared action contract |
 | Tactile bodies and spatial queries | Conatus owns the state it advances | Product source bindings to runtime `BodyId`s | Isometry product profile mirrors accepted map tokens | Paredros or Mesocosm must consume and challenge the profile shape | First profile proven product-local |
-| CPU voxel patch mechanics | Conatus mechanics; product owns voxel identity, material meaning, and durable authority | Product adapter supplies admitted source revisions | Mesocosm `GroundVoxelProfile` preserves `Ground`, replay, refusal, occupancy lowering, and silence | A second product tests mechanics; identity/frame contracts remain local regardless | First consumer implemented locally |
+| CPU voxel patch mechanics | `conatus-voxel` owns generic value mechanics; product owns voxel identity, material meaning, and durable authority | Product adapter supplies admitted source revisions | Mesocosm `GroundVoxelProfile` preserves `Ground`, replay, refusal, occupancy lowering, and silence without resolving Rapier | A second product tests mechanics; identity/frame contracts remain local regardless | Narrow package adopted locally |
 | Resident fields and chunks | Quint owns resident allocations and typed views for its advanced state | Profile orders passes and binds product source revisions | Mesocosm resident-ground and `ResidentChunk` receipts | Second product proves any shared lease or identity vocabulary | Mechanics proven; contract provisional |
 | DDA traversal | Product-free traversal kernel/data contract, final crate selected by adoption | Product lens owns camera, material, and composition | Mesocosm and Paredros headed profiles share WGSL/brick ABI in receipts | Permanent tracked adoption by the second product | Reusable core proven; permanent owner open |
 | Scene facts and transitions | Sceno/scenomise/scenotime; product adapter owns meaning | Profile chooses scene recipe and realization | Existing Mere and game consumers | Governed by Scenograph's own two-consumer receipts | Outside Conatus |
@@ -144,3 +144,8 @@ a shared contract. Product-specific fields remain local.
 - **2026-08-23:** The first Isometry profile proof closed without host wiring.
   It remains product-local and root-excluded; C3 and C4 stay open, and no
   conductor, source-binding, frame, trigger, or lease contract was promoted.
+- **2026-08-24:** The incumbent Rapier implementation moved behind a structural
+  private boundary, and reusable voxel value mechanics moved into
+  `conatus-voxel`. Mesocosm's adapter now depends on that narrow package. These
+  are mechanics and dependency corrections; they do not promote a shared
+  backend selector, voxel identity, conductor, frame, or lease contract.

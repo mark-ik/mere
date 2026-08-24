@@ -4,20 +4,14 @@ use std::{
     fmt,
 };
 
-use rapier3d::control::{
-    CharacterAutostep as RapierCharacterAutostep, CharacterLength, KinematicCharacterController,
-};
-use rapier3d::prelude::{
-    ColliderBuilder, ColliderHandle, Group, IVector, InteractionGroups, InteractionTestMode,
-    PhysicsWorld, QueryFilter as RapierQueryFilter, QueryFilterFlags, RigidBodyBuilder,
-    RigidBodyHandle, RigidBodyType, Rotation, SharedShape, Vector,
+use crate::{
+    BodyDesc, BodyId, BodyKind, BodyState, CharacterConfig, CharacterMove, ColliderDesc,
+    ColliderId, ColliderShape, SpatialFilter, Transform, Velocity, VoxelChange, VoxelEdit,
 };
 
-use crate::{
-    BodyDesc, BodyId, BodyKind, BodyState, CharacterCollision, CharacterConfig, CharacterMove,
-    ColliderDesc, ColliderId, ColliderShape, CollisionLayers, SpatialFilter, Transform, Velocity,
-    VoxelChange, VoxelEdit,
-};
+mod rapier;
+
+use rapier::RapierBodyBackend;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BodyError {
@@ -146,8 +140,7 @@ impl InteractionKey {
 
 struct Slot {
     generation: u32,
-    body: Option<RigidBodyHandle>,
-    colliders: Vec<ColliderHandle>,
+    occupied: bool,
     collider_revisions: Vec<u64>,
 }
 
@@ -155,8 +148,7 @@ impl Slot {
     fn vacant(generation: u32) -> Self {
         Self {
             generation,
-            body: None,
-            colliders: Vec::new(),
+            occupied: false,
             collider_revisions: Vec::new(),
         }
     }
@@ -167,7 +159,7 @@ impl Slot {
 /// The backend is deliberately private. Callers retain Conatus ids, arrays,
 /// descriptors, and frame changes instead of backend handles.
 pub struct BodyWorld {
-    physics: PhysicsWorld,
+    backend: RapierBodyBackend,
     slots: Vec<Slot>,
     free: Vec<u32>,
     tick: u64,
@@ -194,10 +186,8 @@ impl BodyWorld {
         if !finite3(gravity) {
             return Err(BodyError::InvalidBody("gravity must be finite"));
         }
-        let mut physics = PhysicsWorld::new();
-        physics.gravity = vector(gravity);
         Ok(Self {
-            physics,
+            backend: RapierBodyBackend::new(gravity),
             slots: Vec::new(),
             free: Vec::new(),
             tick: 0,
@@ -219,7 +209,7 @@ impl BodyWorld {
     }
 
     pub fn len(&self) -> usize {
-        self.slots.iter().filter(|slot| slot.body.is_some()).count()
+        self.slots.iter().filter(|slot| slot.occupied).count()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -227,18 +217,18 @@ impl BodyWorld {
     }
 
     pub fn contains(&self, id: BodyId) -> bool {
-        self.body_handle(id).is_some()
+        self.slot(id).is_some()
     }
 
     pub fn gravity(&self) -> [f32; 3] {
-        array(self.physics.gravity)
+        self.backend.gravity()
     }
 
     pub fn set_gravity(&mut self, gravity: [f32; 3]) -> Result<(), BodyError> {
         if !finite3(gravity) {
             return Err(BodyError::InvalidBody("gravity must be finite"));
         }
-        self.physics.gravity = vector(gravity);
+        self.backend.set_gravity(gravity);
         self.bump_revision();
         Ok(())
     }
@@ -247,42 +237,18 @@ impl BodyWorld {
         validate_body(&desc)?;
         let id = self.reserve_id();
 
-        let builder = match desc.kind {
-            BodyKind::Fixed => RigidBodyBuilder::fixed(),
-            BodyKind::Dynamic => RigidBodyBuilder::dynamic(),
-            BodyKind::KinematicPosition => RigidBodyBuilder::kinematic_position_based(),
-            BodyKind::KinematicVelocity => RigidBodyBuilder::kinematic_velocity_based(),
-        }
-        .pose(pose(desc.transform))
-        .linvel(vector(desc.velocity.linear))
-        .angvel(vector(desc.velocity.angular))
-        .linear_damping(desc.linear_damping)
-        .angular_damping(desc.angular_damping)
-        .gravity_scale(desc.gravity_scale)
-        .ccd_enabled(desc.continuous_collision_detection)
-        .user_data(id.raw() as u128);
-
-        let body_handle = self.physics.insert_body(builder);
-        let mut collider_handles = Vec::with_capacity(desc.colliders.len());
-        for (part, collider) in desc.colliders.into_iter().enumerate() {
-            let collider_id = ColliderId::new(id, part as u32);
-            let builder = collider_builder(collider, collider_id);
-            collider_handles.push(self.physics.insert_collider(builder, Some(body_handle)));
-        }
+        self.backend.insert(id, desc);
 
         let revision = self.bump_revision();
         let slot = &mut self.slots[id.slot() as usize];
-        slot.body = Some(body_handle);
-        slot.collider_revisions = vec![revision; collider_handles.len()];
-        slot.colliders = collider_handles;
+        slot.occupied = true;
+        slot.collider_revisions = vec![revision; self.backend.collider_count(id)];
         self.dirty_bodies.insert(id);
         Ok(id)
     }
 
     pub fn despawn(&mut self, id: BodyId) -> Result<BodyState, BodyError> {
         let state = self.state(id).ok_or(BodyError::UnknownBody(id))?;
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-
         let ended: Vec<_> = self
             .active_interactions
             .iter()
@@ -295,10 +261,9 @@ impl BodyWorld {
                 .push(interaction.event(self.tick, InteractionState::Stopped));
         }
 
-        self.physics.remove_body(handle);
+        self.backend.remove(id)?;
         let slot = &mut self.slots[id.slot() as usize];
-        slot.body = None;
-        slot.colliders.clear();
+        slot.occupied = false;
         slot.collider_revisions.clear();
         slot.generation = slot.generation.wrapping_add(1).max(1);
         self.free.push(id.slot());
@@ -309,18 +274,8 @@ impl BodyWorld {
     }
 
     pub fn state(&self, id: BodyId) -> Option<BodyState> {
-        let handle = self.body_handle(id)?;
-        let body = self.physics.bodies.get(handle)?;
-        Some(BodyState {
-            id,
-            kind: body_kind(body.body_type()),
-            transform: transform(body.position()),
-            velocity: Velocity {
-                linear: array(body.linvel()),
-                angular: array(body.angvel()),
-            },
-            sleeping: body.is_sleeping(),
-        })
+        self.slot(id)?;
+        self.backend.state(id)
     }
 
     /// A stable-slot-ordered state snapshot for save preparation, renderer
@@ -330,16 +285,16 @@ impl BodyWorld {
     }
 
     pub fn ids(&self) -> impl Iterator<Item = BodyId> + '_ {
-        self.slots.iter().enumerate().filter_map(|(slot, entry)| {
-            entry
-                .body
-                .map(|_| BodyId::from_parts(slot as u32, entry.generation))
-        })
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| entry.occupied)
+            .map(|(slot, entry)| BodyId::from_parts(slot as u32, entry.generation))
     }
 
     pub fn collider_ids(&self, body: BodyId) -> Result<Vec<ColliderId>, BodyError> {
         let slot = self.slot(body).ok_or(BodyError::UnknownBody(body))?;
-        Ok((0..slot.colliders.len())
+        Ok((0..slot.collider_revisions.len())
             .map(|part| ColliderId::new(body, part as u32))
             .collect())
     }
@@ -356,8 +311,8 @@ impl BodyWorld {
         wake: bool,
     ) -> Result<(), BodyError> {
         validate_transform(transform).map_err(BodyError::InvalidBody)?;
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        self.physics.bodies[handle].set_position(pose(transform), wake);
+        self.ensure_body(id)?;
+        self.backend.set_transform(id, transform, wake)?;
         self.dirty_bodies.insert(id);
         self.bump_revision();
         Ok(())
@@ -369,15 +324,8 @@ impl BodyWorld {
         transform: Transform,
     ) -> Result<(), BodyError> {
         validate_transform(transform).map_err(BodyError::InvalidBody)?;
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        let body = &mut self.physics.bodies[handle];
-        if !body.is_kinematic() {
-            return Err(BodyError::InvalidOperation {
-                body: id,
-                operation: "a kinematic target",
-            });
-        }
-        body.set_next_kinematic_position(pose(transform));
+        self.ensure_body(id)?;
+        self.backend.set_next_kinematic_transform(id, transform)?;
         self.bump_revision();
         Ok(())
     }
@@ -391,18 +339,16 @@ impl BodyWorld {
         if !finite3(velocity.linear) || !finite3(velocity.angular) {
             return Err(BodyError::InvalidBody("velocity must be finite"));
         }
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        let body = &mut self.physics.bodies[handle];
-        body.set_linvel(vector(velocity.linear), wake);
-        body.set_angvel(vector(velocity.angular), wake);
+        self.ensure_body(id)?;
+        self.backend.set_velocity(id, velocity, wake)?;
         self.dirty_bodies.insert(id);
         self.bump_revision();
         Ok(())
     }
 
     pub fn set_kind(&mut self, id: BodyId, kind: BodyKind) -> Result<(), BodyError> {
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        self.physics.bodies[handle].set_body_type(rapier_body_kind(kind), true);
+        self.ensure_body(id)?;
+        self.backend.set_kind(id, kind)?;
         self.dirty_bodies.insert(id);
         self.bump_revision();
         Ok(())
@@ -412,15 +358,8 @@ impl BodyWorld {
         if !finite3(force) {
             return Err(BodyError::InvalidBody("force must be finite"));
         }
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        let body = &mut self.physics.bodies[handle];
-        if !body.is_dynamic() {
-            return Err(BodyError::InvalidOperation {
-                body: id,
-                operation: "force application",
-            });
-        }
-        body.add_force(vector(force), true);
+        self.ensure_body(id)?;
+        self.backend.apply_force(id, force)?;
         self.bump_revision();
         Ok(())
     }
@@ -429,15 +368,8 @@ impl BodyWorld {
         if !finite3(torque) {
             return Err(BodyError::InvalidBody("torque must be finite"));
         }
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        let body = &mut self.physics.bodies[handle];
-        if !body.is_dynamic() {
-            return Err(BodyError::InvalidOperation {
-                body: id,
-                operation: "torque application",
-            });
-        }
-        body.add_torque(vector(torque), true);
+        self.ensure_body(id)?;
+        self.backend.apply_torque(id, torque)?;
         self.bump_revision();
         Ok(())
     }
@@ -446,15 +378,8 @@ impl BodyWorld {
         if !finite3(impulse) {
             return Err(BodyError::InvalidBody("impulse must be finite"));
         }
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        let body = &mut self.physics.bodies[handle];
-        if !body.is_dynamic() {
-            return Err(BodyError::InvalidOperation {
-                body: id,
-                operation: "impulse application",
-            });
-        }
-        body.apply_impulse(vector(impulse), true);
+        self.ensure_body(id)?;
+        self.backend.apply_impulse(id, impulse)?;
         self.bump_revision();
         Ok(())
     }
@@ -463,15 +388,8 @@ impl BodyWorld {
         if !finite3(impulse) {
             return Err(BodyError::InvalidBody("torque impulse must be finite"));
         }
-        let handle = self.body_handle(id).ok_or(BodyError::UnknownBody(id))?;
-        let body = &mut self.physics.bodies[handle];
-        if !body.is_dynamic() {
-            return Err(BodyError::InvalidOperation {
-                body: id,
-                operation: "torque impulse application",
-            });
-        }
-        body.apply_torque_impulse(vector(impulse), true);
+        self.ensure_body(id)?;
+        self.backend.apply_torque_impulse(id, impulse)?;
         self.bump_revision();
         Ok(())
     }
@@ -493,72 +411,12 @@ impl BodyWorld {
                 operation: "finite character movement with a positive step",
             });
         }
-        let body_handle = self
-            .body_handle(collider.body())
-            .ok_or(BodyError::UnknownBody(collider.body()))?;
-        if body_kind(self.physics.bodies[body_handle].body_type()) != BodyKind::KinematicPosition {
-            return Err(BodyError::InvalidOperation {
-                body: collider.body(),
-                operation: "position-kinematic character movement",
-            });
-        }
-        let collider_handle = self.collider_handle(collider)?;
-
-        let controller = KinematicCharacterController {
-            up: vector(config.up).normalize(),
-            offset: CharacterLength::Absolute(config.offset),
-            slide: config.slide,
-            autostep: config.autostep.map(|step| RapierCharacterAutostep {
-                max_height: CharacterLength::Absolute(step.max_height),
-                min_width: CharacterLength::Absolute(step.min_width),
-                include_dynamic_bodies: step.include_dynamic_bodies,
-            }),
-            max_slope_climb_angle: config.max_slope_climb_angle,
-            min_slope_slide_angle: config.min_slope_slide_angle,
-            snap_to_ground: config.snap_to_ground.map(CharacterLength::Absolute),
-            ..KinematicCharacterController::default()
-        };
-
-        let mut collisions = Vec::new();
-        let movement = {
-            let character = &self.physics.colliders[collider_handle];
-            let filter = RapierQueryFilter {
-                groups: Some(character.collision_groups()),
-                flags: QueryFilterFlags::EXCLUDE_SENSORS,
-                exclude_rigid_body: Some(body_handle),
-                ..RapierQueryFilter::default()
-            };
-            let queries = self.physics.query_pipeline_with_filter(filter);
-            controller.move_shape(
-                dt,
-                &queries,
-                character.shape(),
-                character.position(),
-                vector(requested),
-                |collision| {
-                    if let Some(collider) = self.collider_id(collision.handle) {
-                        collisions.push(CharacterCollision {
-                            collider,
-                            time_of_impact: collision.hit.time_of_impact,
-                            normal: array(collision.hit.normal1),
-                        });
-                    }
-                },
-            )
-        };
-
-        let mut target = *self.physics.bodies[body_handle].position();
-        target.translation += movement.translation;
-        self.physics.bodies[body_handle].set_next_kinematic_position(target);
+        self.collider_slot(collider)?;
+        let movement = self
+            .backend
+            .move_character(collider, requested, dt, config)?;
         self.bump_revision();
-
-        Ok(CharacterMove {
-            requested,
-            applied: array(movement.translation),
-            grounded: movement.grounded,
-            sliding_down_slope: movement.is_sliding_down_slope,
-            collisions,
-        })
+        Ok(movement)
     }
 
     /// Apply sparse edits directly to a voxel collider's acceleration
@@ -568,21 +426,10 @@ impl BodyWorld {
         collider: ColliderId,
         edits: impl IntoIterator<Item = VoxelEdit>,
     ) -> Result<VoxelEditSummary, BodyError> {
-        let handle = self.collider_handle(collider)?;
         let edits: Vec<_> = edits.into_iter().collect();
         let previous_revision = self.collider_revision(collider)?;
-        let shape = self.physics.colliders[handle].shape_mut();
-        let voxels = shape
-            .as_voxels_mut()
-            .ok_or(BodyError::NotVoxelCollider(collider))?;
-
-        let mut effective = Vec::new();
-        for edit in &edits {
-            let previous = voxels.set_voxel(ivector(edit.cell), edit.filled);
-            if previous.is_empty() == edit.filled {
-                effective.push(*edit);
-            }
-        }
+        self.collider_slot(collider)?;
+        let effective = self.backend.edit_voxels(collider, &edits)?;
 
         if effective.is_empty() {
             return Ok(VoxelEditSummary {
@@ -635,25 +482,14 @@ impl BodyWorld {
         if direction_length <= f32::EPSILON {
             return Err(BodyError::InvalidQuery("ray direction must be non-zero"));
         }
-        let direction = direction.map(|v| v / direction_length);
-        let ray = rapier3d::prelude::Ray::new(vector(origin), vector(direction));
-        let query_filter = self.query_filter(filter)?;
-        let Some((handle, hit)) =
-            self.physics
-                .cast_ray_and_get_normal(&ray, max_distance, solid, query_filter)
-        else {
-            return Ok(None);
-        };
-        let collider = self.collider_id(handle).ok_or(BodyError::InvalidQuery(
-            "backend returned an unowned collider",
-        ))?;
-        let point = ray.origin + ray.dir * hit.time_of_impact;
-        Ok(Some(RayHit {
-            collider,
-            distance: hit.time_of_impact,
-            point: array(point),
-            normal: array(hit.normal),
-        }))
+        self.backend.raycast(
+            origin,
+            direction,
+            direction_length,
+            max_distance,
+            solid,
+            filter,
+        )
     }
 
     pub fn overlaps(
@@ -667,17 +503,7 @@ impl BodyWorld {
         if !filter.include_sensors && !filter.include_solids {
             return Ok(Vec::new());
         }
-        let shape = shared_shape(shape);
-        let query_filter = self.query_filter(filter)?;
-        let mut hits: Vec<_> = self
-            .physics
-            .query_pipeline_with_filter(query_filter)
-            .intersect_shape(pose(transform), shape.as_ref())
-            .filter_map(|(handle, _)| self.collider_id(handle))
-            .collect();
-        hits.sort_unstable();
-        hits.dedup();
-        Ok(hits)
+        self.backend.overlaps(transform, shape, filter)
     }
 
     pub fn step(&mut self, dt: f32) -> Result<StepUpdate, BodyError> {
@@ -691,12 +517,11 @@ impl BodyWorld {
             .ids()
             .filter_map(|id| self.state(id).map(|state| (id, state.transform)))
             .collect();
-        self.physics.integration_parameters.dt = dt;
-        self.physics.step();
+        self.backend.step(dt);
         self.tick = self.tick.saturating_add(1);
         let revision = self.bump_revision();
 
-        let current_interactions = self.collect_interactions();
+        let current_interactions = self.backend.collect_interactions();
         let mut interactions = self.drain_events();
         let removed = self.drain_removed();
         let voxel_changes = self.drain_voxel_changes();
@@ -774,11 +599,11 @@ impl BodyWorld {
 
     fn slot(&self, id: BodyId) -> Option<&Slot> {
         let slot = self.slots.get(id.slot() as usize)?;
-        (slot.generation == id.generation() && slot.body.is_some()).then_some(slot)
+        (slot.generation == id.generation() && slot.occupied).then_some(slot)
     }
 
-    fn body_handle(&self, id: BodyId) -> Option<RigidBodyHandle> {
-        self.slot(id)?.body
+    fn ensure_body(&self, id: BodyId) -> Result<(), BodyError> {
+        self.slot(id).map(|_| ()).ok_or(BodyError::UnknownBody(id))
     }
 
     fn collider_slot(&self, id: ColliderId) -> Result<(&Slot, usize), BodyError> {
@@ -786,7 +611,7 @@ impl BodyWorld {
             .slot(id.body())
             .ok_or(BodyError::UnknownBody(id.body()))?;
         let index = id.part() as usize;
-        if index >= slot.colliders.len() {
+        if index >= slot.collider_revisions.len() {
             return Err(BodyError::UnknownCollider(id));
         }
         Ok((slot, index))
@@ -797,78 +622,12 @@ impl BodyWorld {
         let slot = self
             .slots
             .get_mut(id.body().slot() as usize)
-            .filter(|slot| slot.generation == id.body().generation() && slot.body.is_some())
+            .filter(|slot| slot.generation == id.body().generation() && slot.occupied)
             .ok_or(BodyError::UnknownBody(id.body()))?;
-        if index >= slot.colliders.len() {
+        if index >= slot.collider_revisions.len() {
             return Err(BodyError::UnknownCollider(id));
         }
         Ok((slot, index))
-    }
-
-    fn collider_handle(&self, id: ColliderId) -> Result<ColliderHandle, BodyError> {
-        let (slot, index) = self.collider_slot(id)?;
-        Ok(slot.colliders[index])
-    }
-
-    fn collider_id(&self, handle: ColliderHandle) -> Option<ColliderId> {
-        let raw = self.physics.colliders.get(handle)?.user_data;
-        let body = BodyId::from_raw(raw as u64);
-        let part = (raw >> 64) as u32;
-        self.collider_slot(ColliderId::new(body, part))
-            .ok()
-            .map(|_| ColliderId::new(body, part))
-    }
-
-    fn collect_interactions(&self) -> BTreeSet<InteractionKey> {
-        let mut current = BTreeSet::new();
-        for pair in self.physics.contact_pairs() {
-            if !pair.has_any_active_contact() {
-                continue;
-            }
-            let Some(a) = self.collider_id(pair.collider1) else {
-                continue;
-            };
-            let Some(b) = self.collider_id(pair.collider2) else {
-                continue;
-            };
-            if let Some(key) = InteractionKey::new(Interaction::Contact, a, b) {
-                current.insert(key);
-            }
-        }
-        for (a_handle, _, b_handle, _, intersecting) in self.physics.intersection_pairs() {
-            if !intersecting {
-                continue;
-            }
-            let Some(a) = self.collider_id(a_handle) else {
-                continue;
-            };
-            let Some(b) = self.collider_id(b_handle) else {
-                continue;
-            };
-            if let Some(key) = InteractionKey::new(Interaction::Sensor, a, b) {
-                current.insert(key);
-            }
-        }
-        current
-    }
-
-    fn query_filter(&self, filter: SpatialFilter) -> Result<RapierQueryFilter<'_>, BodyError> {
-        let flags = match (filter.include_sensors, filter.include_solids) {
-            (true, true) => QueryFilterFlags::empty(),
-            (true, false) => QueryFilterFlags::EXCLUDE_SOLIDS,
-            (false, true) => QueryFilterFlags::EXCLUDE_SENSORS,
-            (false, false) => QueryFilterFlags::EXCLUDE_SOLIDS | QueryFilterFlags::EXCLUDE_SENSORS,
-        };
-        let exclude_rigid_body = filter
-            .exclude_body
-            .map(|id| self.body_handle(id).ok_or(BodyError::UnknownBody(id)))
-            .transpose()?;
-        Ok(RapierQueryFilter {
-            flags,
-            groups: Some(interaction_groups(filter.layers)),
-            exclude_rigid_body,
-            ..RapierQueryFilter::default()
-        })
     }
 
     fn bump_revision(&mut self) -> u64 {
@@ -1017,104 +776,6 @@ fn positive3(values: [f32; 3], name: &'static str) -> Result<(), &'static str> {
             _ => "shape dimensions must be finite and positive",
         })
     }
-}
-
-fn collider_builder(desc: ColliderDesc, id: ColliderId) -> ColliderBuilder {
-    ColliderBuilder::new(shared_shape(&desc.shape))
-        .position(pose(desc.local_transform))
-        .density(desc.material.density)
-        .friction(desc.material.friction)
-        .restitution(desc.material.restitution)
-        .sensor(desc.sensor)
-        .collision_groups(interaction_groups(desc.layers))
-        .user_data(collider_user_data(id))
-}
-
-fn shared_shape(shape: &ColliderShape) -> SharedShape {
-    match shape {
-        ColliderShape::Sphere { radius } => SharedShape::ball(*radius),
-        ColliderShape::Box { half_extents } => {
-            SharedShape::cuboid(half_extents[0], half_extents[1], half_extents[2])
-        }
-        ColliderShape::CapsuleY {
-            half_height,
-            radius,
-        } => SharedShape::capsule_y(*half_height, *radius),
-        ColliderShape::CylinderY {
-            half_height,
-            radius,
-        } => SharedShape::cylinder(*half_height, *radius),
-        ColliderShape::VoxelGrid {
-            cell_size,
-            occupied,
-        } => {
-            let occupied: Vec<_> = occupied.iter().copied().map(ivector).collect();
-            SharedShape::voxels(vector(*cell_size), &occupied)
-        }
-    }
-}
-
-fn collider_user_data(id: ColliderId) -> u128 {
-    id.body().raw() as u128 | ((id.part() as u128) << 64)
-}
-
-fn interaction_groups(layers: CollisionLayers) -> InteractionGroups {
-    InteractionGroups::new(
-        Group::from_bits_truncate(layers.memberships),
-        Group::from_bits_truncate(layers.filter),
-        InteractionTestMode::And,
-    )
-}
-
-fn rapier_body_kind(kind: BodyKind) -> RigidBodyType {
-    match kind {
-        BodyKind::Fixed => RigidBodyType::Fixed,
-        BodyKind::Dynamic => RigidBodyType::Dynamic,
-        BodyKind::KinematicPosition => RigidBodyType::KinematicPositionBased,
-        BodyKind::KinematicVelocity => RigidBodyType::KinematicVelocityBased,
-    }
-}
-
-fn body_kind(kind: RigidBodyType) -> BodyKind {
-    match kind {
-        RigidBodyType::Fixed => BodyKind::Fixed,
-        RigidBodyType::Dynamic => BodyKind::Dynamic,
-        RigidBodyType::KinematicPositionBased => BodyKind::KinematicPosition,
-        RigidBodyType::KinematicVelocityBased => BodyKind::KinematicVelocity,
-    }
-}
-
-fn pose(transform: Transform) -> rapier3d::prelude::Pose {
-    let [x, y, z, w] = transform.rotation;
-    rapier3d::prelude::Pose::from_parts(
-        Vector::new(
-            transform.translation[0],
-            transform.translation[1],
-            transform.translation[2],
-        ),
-        Rotation::from_xyzw(x, y, z, w).normalize(),
-    )
-}
-
-fn transform(pose: &rapier3d::prelude::Pose) -> Transform {
-    let translation = pose.translation;
-    let rotation = pose.rotation;
-    Transform {
-        translation: [translation.x, translation.y, translation.z],
-        rotation: [rotation.x, rotation.y, rotation.z, rotation.w],
-    }
-}
-
-fn vector(value: [f32; 3]) -> Vector {
-    Vector::new(value[0], value[1], value[2])
-}
-
-fn ivector(value: [i32; 3]) -> IVector {
-    IVector::new(value[0], value[1], value[2])
-}
-
-fn array(value: Vector) -> [f32; 3] {
-    [value.x, value.y, value.z]
 }
 
 fn finite3(value: [f32; 3]) -> bool {

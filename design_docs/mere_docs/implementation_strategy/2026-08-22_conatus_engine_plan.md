@@ -1,7 +1,8 @@
 # Conatus Shared Spatial Runtime
 
 **Date:** 2026-08-22  
-**Status:** active; body/runtime foundation implemented; scope corrected 2026-08-23
+**Status:** active; body/runtime foundation implemented; private-backend
+integrity pass in progress 2026-08-24; scope corrected 2026-08-23
 **Scope:** Build the shared spatial runtime. Mesocosm, Paredros, Isometry,
 and Mere projections consume it through product-owned runtime profiles
 instead of incubating spatial machinery in product-local probes.
@@ -109,8 +110,27 @@ depend on Conatus. Conatus must not depend on a game.
 - effective sparse voxel edit streams for materialization and render systems;
 - serializable body, collider, voxel, filter, and character configuration.
 
-Rapier types stay private. Replacing the backend does not change game-facing
-ids, descriptors, queries, or frame changes.
+Rapier types stay private at the public API. That is insulation, not yet
+interchangeability: the initial `BodyWorld` directly embedded Rapier handles,
+lowerings, queries, character movement, voxel mutation, stepping, and event
+translation in one implementation. The 2026-08-24 integrity pass first makes
+that private implementation boundary structural. A future backend must still
+prove which game-facing behaviors it supports; unsupported behavior may not be
+silently approximated.
+
+### Private backend integrity pass (in progress 2026-08-24)
+
+Keep Conatus identities, generations, revision order, dirty publication, and
+normalized events as the stable spatial mechanics. Move Rapier-specific world
+state, handles, conversions, queries, character controller, voxel shape edits,
+and stepping behind a crate-private implementation module. This pass adds no
+public backend trait, backend selector, or Nexus dependency.
+
+Done when the existing public API and all behavior tests remain unchanged,
+Rapier imports and handles are confined to the private implementation, and
+warnings-denied checks pass. This proves a code boundary only. Nexus earns a
+backend seat later through an isolated lifecycle/query receipt and the exact
+host-device receipt; it does not inherit one from opacity alone.
 
 ## Runtime growth
 
@@ -179,13 +199,15 @@ Promote the generic parts already present across Mesocosm and Quint:
 - streaming budgets and explicit residency states;
 - body volumes using the same plane and product vocabulary as ground volumes.
 
-The first CPU mechanics slice now exists in `conatus::voxel`: Euclidean world
-cell addressing; dense opaque chunks in the incumbent Mesocosm Y/Z/X order;
-validated serialization; revision-gated, caller-bounded patch batches;
-effective changes; disposable dirty boxes; and lowering of occupancy changes
-into the existing voxel-collider edits. Product chunk identity, material
-meaning, admission, and durable authority remain outside Conatus. Mesocosm's
-`Ground` and Quint's `ResidentChunk` are unchanged.
+The first CPU mechanics slice now lives in the Rapier-free `conatus-voxel`
+package: Euclidean world cell addressing; dense opaque chunks in the incumbent
+Mesocosm Y/Z/X order; validated serialization; revision-gated, caller-bounded
+patch batches; effective changes; disposable dirty boxes; and lowering of
+material changes into backend-neutral occupancy edits. The full `conatus`
+runtime re-exports this vocabulary and lowers accepted occupancy edits into its
+voxel collider. Product chunk identity, material meaning, admission, and
+durable authority remain outside either package. Mesocosm's `Ground` and
+Quint's `ResidentChunk` are unchanged.
 
 Games define what a material or voxel means. Conatus owns storage,
 revision, locality, and derived spatial products.
@@ -275,17 +297,20 @@ product systems use.
 
 ## Immediate implementation order
 
-1. Keep extending `conatus` as the shared spatial package; `seiche` stays the
+1. Make the current private Rapier implementation a real internal boundary;
+   keep backend selection private until a named product workload forces a
+   second implementation.
+2. Keep extending `conatus` as the shared spatial package; `seiche` stays the
    2D graph specialist rather than the 2D graph API becoming the 3D core or
    being forced through it.
-2. Adopt the generic voxel chunk/revision/dirty-region mechanics in one product
+3. Adopt the generic voxel chunk/revision/dirty-region mechanics in one product
    without moving product identity or authority, then feed accepted occupancy
    changes into the voxel collider already implemented.
-3. Publish versioned profile-local resident body/chunk views through Quint
+4. Publish versioned profile-local resident body/chunk views through Quint
    allocations.
-4. Add the lean spatial frame and the Renderling/Netrender tenant adapter,
+5. Add the lean spatial frame and the Renderling/Netrender tenant adapter,
    seamed in the first product profile.
-5. Add optional field adapters and spatial scripting against the shared
+6. Add optional field adapters and spatial scripting against the shared
    resources without making Numen or Quint depend on Conatus.
 
 New work belongs in a product only when its meaning is genuinely product
@@ -324,3 +349,20 @@ contract declared in advance.
   [runtime composition acceptance plan](2026-08-23_runtime_composition_acceptance_plan.md).
   No conductor, source-binding, spatial-frame, trigger, or resident-lease
   contract was promoted in this pass.
+
+## Progress (2026-08-24 private-boundary pass)
+
+- `BodyWorld` now retains Conatus identity, revision, and publication
+  bookkeeping while all Rapier state, handles, conversions, queries, character
+  movement, voxel mutation, stepping, and interaction normalization live in a
+  crate-private implementation module. This is an internal boundary, not a
+  public backend ecosystem.
+- Generic chunk, patch, dirty-region, serialization, and occupancy-edit
+  mechanics moved into `conatus-voxel`; `conatus` re-exports the same public
+  vocabulary. Mesocosm now names the narrow package directly, so its
+  `GroundVoxelProfile` does not acquire Rapier merely to maintain a disposable
+  chunk view.
+- The next Nexus evidence is an isolated same-device rigid-body probe. It must
+  translate the public Conatus descriptor vocabulary, wrap Netrender's exact
+  device and queue through Khal, advance one body on the GPU, and read a changed
+  pose. It does not add Nexus to Conatus or establish shared buffer ownership.

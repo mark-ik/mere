@@ -10,6 +10,7 @@ keywords = ["game-engine", "physics", "voxel", "spatial", "simulation"]
 categories = ["game-engines", "simulation"]
 
 [dependencies]
+conatus-voxel = { workspace = true }
 rapier3d = "0.33"
 serde = { version = "1", features = ["derive"] }
 

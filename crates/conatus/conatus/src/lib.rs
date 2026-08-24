@@ -16,22 +16,21 @@ mod clock;
 mod command;
 mod engine;
 mod schedule;
-mod voxel;
 mod world;
 
 pub use body::{
     BodyDesc, BodyId, BodyKind, BodyState, CharacterAutostep, CharacterCollision, CharacterConfig,
     CharacterMove, ColliderDesc, ColliderId, ColliderShape, CollisionLayers, Material,
-    SpatialFilter, Transform, Velocity, VoxelChange, VoxelEdit,
+    SpatialFilter, Transform, Velocity, VoxelChange,
 };
 pub use clock::{ClockAdvance, ClockError, FixedClock};
 pub use command::{BodyCommand, CommandEffect, CommandId, CommandResult};
+pub use conatus_voxel::{
+    VoxelAddress, VoxelCellChange, VoxelCellEdit, VoxelChunk, VoxelChunkError, VoxelEdit,
+    VoxelPatch, VoxelRegion, split_voxel_address,
+};
 pub use engine::{Engine, EngineConfig, EngineConfigError, EngineError, FrameUpdate};
 pub use schedule::{Phase, Resources, SystemContext, SystemError};
-pub use voxel::{
-    VoxelAddress, VoxelCellChange, VoxelCellEdit, VoxelChunk, VoxelChunkError, VoxelPatch,
-    VoxelRegion, split_voxel_address,
-};
 pub use world::{
     BodyError, BodyWorld, Interaction, InteractionEvent, InteractionState, RayHit, StepUpdate,
     VoxelEditSummary,

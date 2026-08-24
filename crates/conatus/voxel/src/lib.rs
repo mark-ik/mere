@@ -1,8 +1,20 @@
+//! Generic revisioned voxel chunks and occupancy edits.
+//!
+//! This package owns value mechanics only: chunk coordinates, revision-gated
+//! edits, dirty regions, and lowering material changes into occupancy changes.
+//! Products retain durable voxel identity and admission policy; spatial
+//! runtimes decide how accepted occupancy edits affect colliders.
+
 use std::{collections::BTreeMap, error::Error, fmt};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
-use crate::VoxelEdit;
+/// One backend-neutral occupancy edit in collider-local cell coordinates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoxelEdit {
+    pub cell: [i32; 3],
+    pub filled: bool,
+}
 
 /// A world cell split into a product-owned chunk coordinate and chunk-local cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -427,7 +439,6 @@ fn cell_count(extent: [u32; 3]) -> Result<usize, VoxelChunkError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BodyDesc, BodyWorld, ColliderDesc, ColliderId, ColliderShape};
 
     #[test]
     fn negative_world_cells_split_with_euclidean_coordinates() {
@@ -538,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn material_patch_lowers_only_occupancy_changes_into_the_collider() {
+    fn material_patch_lowers_only_occupancy_changes() {
         let mut chunk = VoxelChunk::new([4, 4, 4], 0u8).unwrap();
         chunk
             .apply_edits(
@@ -550,17 +561,6 @@ mod tests {
                 }],
             )
             .unwrap();
-        let mut world = BodyWorld::new([0.0; 3]);
-        let body = world
-            .spawn(
-                BodyDesc::fixed().with_collider(ColliderDesc::new(ColliderShape::VoxelGrid {
-                    cell_size: [1.0; 3],
-                    occupied: chunk.occupied_cells(|material| *material != 0),
-                })),
-            )
-            .unwrap();
-        let collider = ColliderId::new(body, 0);
-
         let patch = chunk
             .apply_edits(
                 1,
@@ -580,9 +580,6 @@ mod tests {
         let collision_edits = patch.occupancy_edits(|material| *material != 0).unwrap();
         assert_eq!(collision_edits.len(), 1, "material-only edits stay out");
         assert_eq!(collision_edits[0].cell, [1, 0, 0]);
-        let summary = world.edit_voxels(collider, collision_edits).unwrap();
-        assert_eq!(summary.changed, 1);
-        assert!(summary.revision > summary.previous_revision);
     }
 
     #[test]

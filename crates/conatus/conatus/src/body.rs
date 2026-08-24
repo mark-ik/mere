@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use conatus_voxel::VoxelEdit;
+
 /// Stable, generational identity for one simulated body.
 ///
 /// Removing a body invalidates its id. Reusing the slot produces a new
@@ -385,12 +387,6 @@ pub struct BodyState {
     pub transform: Transform,
     pub velocity: Velocity,
     pub sleeping: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VoxelEdit {
-    pub cell: [i32; 3],
-    pub filled: bool,
 }
 
 /// Effective voxel-collider edits published to materialization systems and
