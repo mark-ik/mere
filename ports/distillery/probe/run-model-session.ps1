@@ -17,5 +17,14 @@ $ownedStatus = git -C $mereRoot status --porcelain -- `
     ports/distillery/probe/run-model-session.ps1
 $env:ESP_MODEL_SESSION_DIRTY = if ($ownedStatus) { 'true' } else { 'false' }
 
-cargo run --release --manifest-path $fixture -- $resolvedModel
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Cargo discovers config from its current directory rather than the manifest
+# path. Run outside the checkout so the gitignored local patch redirects cannot
+# contaminate the committed standalone lockfile or its receipt.
+Push-Location ([System.IO.Path]::GetTempPath())
+try {
+    cargo run --release --locked --manifest-path $fixture -- $resolvedModel
+    $cargoExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($cargoExit -ne 0) { exit $cargoExit }

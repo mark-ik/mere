@@ -1,0 +1,66 @@
+{
+  "schema": "distillery.model-session-peft-lora/v1",
+  "source_commit": "aa121f03f6fa33edc3edac21e93beef1e9928566",
+  "owned_paths_dirty": false,
+  "passes": true,
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "license": "Apache-2.0",
+    "bytes": 269060552,
+    "sha256": "5af571cbf074e6d21a03528d2330792e532ca608f24ac70a143f6b369968ab8c"
+  },
+  "adapter": {
+    "id": "spellicer/SmolLM2-135M-Instruct-contradiction",
+    "revision": "919fa899e7635df123b68eb9c266c0d98757d954",
+    "license": "Apache-2.0",
+    "bytes": 3717656,
+    "sha256": "453262ed1b523ffc181a1a73b71b5338b8a3a2cb536ac980fb8ff3a91177878c"
+  },
+  "adapter_config": {
+    "id": "spellicer/SmolLM2-135M-Instruct-contradiction",
+    "revision": "919fa899e7635df123b68eb9c266c0d98757d954",
+    "license": "Apache-2.0",
+    "bytes": 1088,
+    "sha256": "d43f44d3e997923121cf02acd08873664ae02345cc5d17313416f86496f21a3b"
+  },
+  "published_checkpoint": {
+    "id": "spellicer/SmolLM2-135M-Instruct-contradiction/merged_model.safetensors",
+    "revision": "919fa899e7635df123b68eb9c266c0d98757d954",
+    "license": "Apache-2.0",
+    "bytes": 538090408,
+    "sha256": "0398d153947d2e3084f2cddb2b6daddc2b9688e5f8ae1f10b07a5d20674ae223"
+  },
+  "published_checkpoint_audit": {
+    "target_tensor_count": 120,
+    "published_vs_base_target_max_abs_difference": 0.00025337934,
+    "expected_lora_target_max_abs_delta": 0.012088048,
+    "contains_adapter": false
+  },
+  "prompt_template_sha256": "872be49dbb638044ad01b60388f48d469ff2980e5f0dccdc22ec907db54d0788",
+  "session_id": "blake3:5c936bc182e52462c526724df74d6a578b5a1145286d9f46b96c1cf1bf55ac4f",
+  "base_model_manifest": "blake3:02461cc18fed48a5f319a177e860972df5c1d3ca04b8f0757f3a4883e51c3f62",
+  "adapter_manifest": "blake3:2e1ab285414a3caa4942d89c9f8bccb4fe92c8b9bec734b4902f90b7730580b9",
+  "ordered_adapter_count": 1,
+  "mismatch_rejected_before_execution": true,
+  "eidetic_round_trip": true,
+  "numerical": {
+    "dimensions": 49152,
+    "all_finite": true,
+    "adapted_vs_independent_merge_max_abs_error": 0.0,
+    "base_vs_adapted_max_abs_difference": 4.1851387,
+    "independent_merge_tolerance": 0.002,
+    "adapted_matches_independent_tokens": true,
+    "base_token_ids": [504, 1743, 314, 1679, 28, 347, 357, 314, 7018, 335, 253, 1678],
+    "adapted_token_ids": [504, 1743, 314, 1679, 30, 378, 3116, 21973, 253, 3082, 30, 198],
+    "independent_merge_token_ids": [504, 1743, 314, 1679, 30, 378, 3116, 21973, 253, 3082, 30, 198],
+    "adapted_text": "The model is local. The request crosses a network.\n",
+    "independent_merge_text": "The model is local. The request crosses a network.\n"
+  },
+  "timings_ms": {
+    "eidetic_save_resolve_ms": 263.9335,
+    "base_load_and_execute_ms": 10131.383100000001,
+    "adapted_load_and_execute_ms": 20796.805,
+    "independent_merge_and_execute_ms": 13389.66
+  }
+}

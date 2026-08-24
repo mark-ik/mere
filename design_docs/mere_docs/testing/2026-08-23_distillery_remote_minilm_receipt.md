@@ -30,8 +30,13 @@ The machine-readable receipt is
 
 This proves real model execution, numerical parity, active-request
 cancellation at the session boundary, stop-before-reclaim ordering, and fresh
-WGPU-backed recovery. It does not measure physical GPU allocation release;
-Burn Remote exposes session lifecycle rather than driver allocation counters.
+WGPU-backed recovery. It does not measure physical GPU allocation release.
+Burn Remote exposes session lifecycle rather than driver allocation counters,
+but Mere's patched native CubeCL does expose allocator-level
+`ComputeClient::memory_usage()` across streams. A follow-up can therefore
+measure bytes in use and active allocations returning to baseline after
+reclaim; reserved bytes may remain cached. That remains allocator evidence,
+not driver VRAM telemetry.
 
 The first forcing run used `burn-wgpu`'s default Fusion and autotune features.
 MiniLM's fused matmul autotune exhausted every plan, then `burn-fusion` panicked
@@ -40,3 +45,8 @@ one. The device runner died and the client waited. The passing receipt therefore
 uses plain native WGPU with Fusion and autotune disabled. That crash is a Burn
 Fusion/remote-server compatibility sidequest, not a lease-adapter defect and
 not acceptable cancellation behavior.
+
+The minimized follow-up should keep the passing plain-WGPU fixture as the
+default and add four bounded rows: local plain, local Fusion, remote plain, and
+remote Fusion. If the failure remains, report the fused-matmul all-plan failure
+and Fusion stream-order mismatch separately against pinned Burn/CubeCL source.

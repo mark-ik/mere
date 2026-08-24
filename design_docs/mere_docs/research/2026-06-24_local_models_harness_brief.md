@@ -134,10 +134,12 @@ Net-new here: the `InferenceProvider` / `AdapterLoader` traits, the inference ac
 manifest binding. Reused: `EmbeddingProvider`, the vector index, eidetic `ModelManifest` storage, the
 armillary actor framework, the eidetic typed-payload layer.
 
-**Current disposition (2026-08-09):** `InferenceProvider`, its deterministic stub, the Burn decoder,
-Eidetic model loading, streaming actor, cancellation, and a headed native host are landed in
-`esp::infer`. `AdapterLoader` and its manifest/session binding remain gated on one real adapter; the
-browser execution claim moved to the dedicated D2 probe.
+**Current disposition (2026-08-24):** `InferenceProvider`, its deterministic stub, the Burn decoder,
+Eidetic model loading, streaming actor, cancellation, a headed native host, typed
+`ModelAdapterManifest`, immutable `ModelSession`, and a real PEFT LoRA `AdapterLoader` are landed in
+`esp::infer`. The first adapter forcing row matches an independent full-checkpoint merge exactly.
+The browser execution claim remains in the dedicated D2 probe; real stacked adapters and training
+remain separate forcing rows.
 
 ---
 
@@ -180,3 +182,8 @@ browser execution claim moved to the dedicated D2 probe.
   slice as landed, recorded ESP as the seam home, linked the D2 headed-browser plan, and kept
   `AdapterLoader` gated on a real immutable model-session implementation rather than an abstract
   manifest-only trait.
+- 2026-08-24: Closed that gate with a pinned Apache-2.0 SmolLM2 PEFT adapter. The clean Distillery
+  row resolves base and adapter artifacts through Eidetic, rejects exact-envelope mismatches,
+  applies all 120 attention-projection tensors without shared mutable adapter state, and matches an
+  independent merge at all 49,152 next-token logits. The source repository's purported merged
+  checkpoint lacks the adapter and is recorded as a bad oracle.

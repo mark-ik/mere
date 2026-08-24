@@ -176,18 +176,17 @@ up, per the burn brief's own rule.
   `GPUDevice.destroy()`, terminates the worker, and reproduces the exact output
   in a fresh worker. The remaining D2 tail is physical GPU-allocation telemetry
   and larger capability bounds only when a consumer forces them.
-- **The harness's missing trait**: `AdapterLoader` was specified in the harness
-  brief §2 and never built. Load/stack LoRA-adapter engrams against a base,
-  honouring the geist compatibility envelope; a mismatch is a rejection, never
-  a guess. One tension to resolve on the way in: `GenerationRequest` says chat
-  templating happens above the seam (provider.rs:52), while the envelope makes
-  the template an adapter-compatibility fact. Resolve with a **`ModelSession`**
-  (prepared-request) seam binding base, tokenizer, prompt template,
-  quantization, and the *ordered* adapter set; the provider stays the streaming
-  execution contract. Per the mistral.rs lesson, adapter selection is
-  per-request against an immutable loaded base with the adapter-set identity
-  recorded; provider-global mutable adapter state is a bug waiting for
-  concurrent residents.
+- **The harness's model-session tail (landed 2026-08-24)**: `AdapterLoader`,
+  typed `ModelAdapterManifest`, and immutable `ModelSession` now bind the exact
+  base manifest, tokenizer, prompt template, quantization, loader, and ordered
+  adapter set before execution. ESP rejects artifact hashes, PEFT version,
+  base, loader, capability, template, and quantization mismatches rather than
+  guessing. The first real PEFT LoRA row applies all 120 q/k/v/o tensors from a
+  pinned SmolLM2 adapter and matches an independent full-checkpoint merge at
+  all 49,152 next-token logits. The provider remains the streaming execution
+  contract, and session loading creates a private tensor set rather than
+  mutating provider-global adapter state. A real stacked-adapter row remains
+  consumer-gated; training stays Lane 4.
 - **Lane 2, the personal mesh**: the split honors the standing
   resource-coordination boundaries rather than reinventing them.
   `crates/mesh/mesh` already owns the signed M1 job grammar and Echo/Blake3
@@ -400,3 +399,14 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   WGPU passes. Burn Fusion's fused-matmul autotune and stream ordering panic on
   this remote graph; that is a separate backend sidequest. Physical allocation
   release remains unmeasured.
+- **2026-08-24, immutable model session and real adapter**: Eidetic gained a
+  typed compatibility-bound `ModelAdapterManifest`; ESP gained content-addressed
+  `ModelSession`, prepared requests, `AdapterLoader`, and an ordinary PEFT LoRA
+  loader for llama-family q/k/v/o projections. A clean `aa121f03` Distillery
+  receipt round-tripped every artifact through Eidetic, rejected a template
+  mismatch before execution, changed the base result, and matched an
+  independent CPU merge at all 49,152 logits with `0.0` maximum error. The
+  adapter repository's published `merged_model.safetensors` was audited and is
+  effectively the base checkpoint, so it is recorded as an invalid reference
+  rather than used as the oracle. See the
+  [receipt](../testing/2026-08-24_model_session_peft_lora_receipt.md).

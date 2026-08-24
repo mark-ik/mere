@@ -2,10 +2,11 @@
 
 **Date**: 2026-08-12  
 **Status**: D0 complete; D1 resident authority lifecycle implemented; D2's
-configured browser embedding matrix and first exact decoder row complete,
-including cooperative cancellation, explicit browser device teardown, and
-fresh-worker recovery. The installed-port authority and physical GPU-allocation
-telemetry remain open.
+configured browser embedding matrix, first exact decoder row, lease-bound
+remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
+cancellation, explicit browser device teardown, fresh-worker recovery, exact
+remote reclaim ordering, and real adapter numerical parity are proven. The
+installed-port authority and physical GPU-allocation telemetry remain open.
 
 ## 1. Purpose
 
@@ -186,7 +187,23 @@ rows until a consumer asks for them.
 Cambium views should follow `ResidentReceipt` after the installed authority
 selects its Personae profile and settings location. The prerelease Burn 0.22
 migration has executed for ESP and Quint; stable repinning and package closure
-remain release-gated. The lease-bound Burn Remote adapter still owes a
-`0.22.0-pre.2` source re-audit and targeted session-close seam. Model manifest
-browsing, streaming console, portable remote checkpoints, tolerant
-comparators, and training remain separate slices.
+remain release-gated. The lease-bound Burn Remote source audit and targeted
+session-close seam are complete, including live-request interruption,
+stop-before-reclaim ordering, zero sessions, and fresh-lease recovery.
+
+The next remote sidequest is allocator telemetry using the patched CubeCL
+`ComputeClient::memory_usage()` seam. Record baseline, post-load/execute,
+post-reclaim cleanup, and fresh-session cleanup; require bytes in use and active
+allocation count to return to baseline, while recording but not requiring
+reserved bytes to fall. This is allocator evidence, not driver VRAM telemetry.
+The native seam lives in `support/patches/cubecl-runtime/src/client.rs`; Burn
+Remote's cleanup boundary is `support/patches/burn-remote/src/server/worker.rs`.
+The Burn Fusion/autotune crash follows as a minimized upstream four-row matrix:
+local plain, local Fusion, remote plain, and remote Fusion, with bounded timeout
+and stderr capture. Likely ownership is upstream CubeCL autotune scheduling and
+Burn Fusion ordering, not Distillery's lease adapter. The default passing remote
+receipt remains plain WGPU.
+
+Model manifest browsing, streaming console, portable remote checkpoints,
+tolerant comparators, a real stacked-adapter row, and training remain separate
+slices.
