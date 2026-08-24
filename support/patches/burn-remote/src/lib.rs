@@ -215,7 +215,7 @@ mod tests {
     #[cfg(not(feature = "fusion"))]
     pub fn test_custom_op_over_iroh() {
         use crate::{
-            BURN_REMOTE_ALPN, RemoteDevice,
+            BURN_REMOTE_ALPN, RemoteBackend, RemoteDevice,
             server::{AllowAll, CustomOpRegistry, IrohRemoteProtocol},
             telemetry::TelemetryProbe,
         };
@@ -309,6 +309,7 @@ mod tests {
             server::{AllowAll, IrohRemoteProtocol},
             telemetry::TelemetryProbe,
         };
+        use burn_backend::{TensorData, ops::FloatTensorOps};
         use iroh::{Endpoint, RelayMode, endpoint::presets, protocol::Router};
 
         async fn local_endpoint() -> Endpoint {
@@ -345,15 +346,15 @@ mod tests {
 
         let client = rt.block_on(local_endpoint());
         let credential = b"lease-bound-session".to_vec();
-        let device = RemoteDevice::iroh_authorized(
-            &client,
-            server_addr,
-            0,
-            credential.clone(),
+        let device = RemoteDevice::iroh_authorized(&client, server_addr, 0, credential.clone());
+        let input = <RemoteBackend as FloatTensorOps<RemoteBackend>>::float_from_data(
+            TensorData::from([1.0f32, 2.0, 3.0]),
+            &device,
         );
-        let input = Tensor::<1>::from_floats([1.0, 2.0, 3.0], &device);
-        let warmup: Vec<f32> = (input * 2.0).to_data().to_vec().unwrap();
-        assert_eq!(warmup, vec![2.0, 4.0, 6.0]);
+        let warmup = rt
+            .block_on(<RemoteBackend as FloatTensorOps<RemoteBackend>>::float_into_data(input))
+            .unwrap();
+        assert_eq!(warmup.to_vec::<f32>().unwrap(), vec![1.0, 2.0, 3.0]);
 
         let session = rt.block_on(async {
             tokio::time::timeout(std::time::Duration::from_secs(5), async {
@@ -379,12 +380,119 @@ mod tests {
         }));
         assert!(rt.block_on(control.sessions()).is_empty());
 
+        let runtime = rt.handle().clone();
         let finished = finishes_within(std::time::Duration::from_secs(10), move || {
-            let next = Tensor::<1>::from_floats([4.0, 5.0, 6.0], &device);
-            let _ = (next * 2.0).to_data();
+            let next = <RemoteBackend as FloatTensorOps<RemoteBackend>>::float_from_data(
+                TensorData::from([4.0f32, 5.0, 6.0]),
+                &device,
+            );
+            let _ = runtime
+                .block_on(<RemoteBackend as FloatTensorOps<RemoteBackend>>::float_into_data(next));
         });
-        assert!(finished, "client hung after its session was closed by the server");
+        assert!(
+            finished,
+            "client hung after its session was closed by the server"
+        );
 
+        rt.block_on(router.shutdown()).unwrap();
+    }
+
+    /// A server close cannot miss a session in the interval after application
+    /// authorization begins but before the worker is bound.
+    #[test]
+    #[cfg(not(feature = "fusion"))]
+    pub fn test_targeted_close_fences_inflight_admission() {
+        use crate::{
+            BURN_REMOTE_ALPN, PeerAddr,
+            server::{AuthorizationRequest, IrohRemoteProtocol, PeerAuthorizer},
+            shared::{RemoteMessage, SessionId, SessionInit},
+            telemetry::TelemetryProbe,
+            transport::iroh::node::{RemoteNode, StreamKind, send_frame},
+        };
+        use iroh::{Endpoint, RelayMode, endpoint::presets, protocol::Router};
+        use std::sync::{Arc, Barrier};
+
+        struct BlockingAuthorizer {
+            entered: Arc<Barrier>,
+            release: Arc<Barrier>,
+        }
+
+        impl PeerAuthorizer for BlockingAuthorizer {
+            fn authorize(&self, _request: AuthorizationRequest<'_>) -> Result<(), String> {
+                self.entered.wait();
+                self.release.wait();
+                Ok(())
+            }
+        }
+
+        async fn local_endpoint() -> Endpoint {
+            Endpoint::builder(presets::Minimal)
+                .relay_mode(RelayMode::Disabled)
+                .clear_ip_transports()
+                .bind_addr("127.0.0.1:0")
+                .unwrap()
+                .bind()
+                .await
+                .unwrap()
+        }
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .unwrap();
+        let entered = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        let server = rt.block_on(local_endpoint());
+        let server_addr = server.addr();
+        let protocol = IrohRemoteProtocol::<Flex>::new(
+            server.clone(),
+            vec![Default::default()],
+            Arc::new(BlockingAuthorizer {
+                entered: entered.clone(),
+                release: release.clone(),
+            }),
+            TelemetryProbe::disabled(),
+            Default::default(),
+        );
+        let control = protocol.clone();
+        let router = {
+            let _guard = rt.enter();
+            Router::builder(server)
+                .accept(BURN_REMOTE_ALPN, protocol)
+                .spawn()
+        };
+        let client = rt.block_on(local_endpoint());
+        let node = RemoteNode::from_endpoint(client);
+        let (mut send, _recv) = rt
+            .block_on(node.open_stream(&PeerAddr::from(server_addr), StreamKind::Session))
+            .unwrap();
+        let session_id = SessionId::new();
+        let init = vec![RemoteMessage::Init(SessionInit::new(
+            session_id,
+            0,
+            b"inflight-lease".to_vec(),
+        ))];
+        let frame = rmp_serde::to_vec(&init).unwrap();
+        rt.block_on(send_frame(&mut send, &frame)).unwrap();
+
+        entered.wait();
+        let session = rt
+            .block_on(control.sessions())
+            .into_iter()
+            .next()
+            .expect("in-flight admission is reserved and visible");
+        let closer = rt.spawn({
+            let control = control.clone();
+            async move { control.close_session(session.id).await }
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        release.wait();
+
+        assert!(rt.block_on(closer).unwrap());
+        assert!(rt.block_on(control.sessions()).is_empty());
+        drop(send);
+        drop(node);
         rt.block_on(router.shutdown()).unwrap();
     }
 

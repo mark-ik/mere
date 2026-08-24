@@ -80,6 +80,7 @@ pub mod namespace;
 pub mod policy;
 pub mod projection;
 pub mod registry;
+pub mod remote;
 pub mod resource;
 pub mod resources;
 pub mod retention;
@@ -103,10 +104,16 @@ pub use namespace::{
 pub use policy::{DeviceConditions, DevicePolicy, NetworkClass, QuietHours};
 pub use projection::{LapseReason, LeasePhase, LeasePolicy};
 pub use proofs::{BlobRef, Commitment, CommitmentDomain, CommitmentScheme, Digest, DigestAlg};
-pub use registry::{RegistryError, ResourceRegistry, RunError, Verdict, run_job, verify_output};
+pub use registry::{
+    RegistryError, ResourceRegistry, RunError, Verdict, run_job, run_job_for, verify_output,
+};
+pub use remote::{
+    MAX_REMOTE_SESSION_CREDENTIAL_BYTES, REMOTE_SESSION_CLAIM_VERSION, RemoteAdmission,
+    RemoteClaimError, RemoteSessionClaim,
+};
 pub use resource::{
     Cancelled, Checkpoint, ControlSignal, JobControl, JobControlHandle, MeshResource, Prepared,
-    ResourceDescriptor, ResourceError,
+    ResourceDescriptor, ResourceError, RunContext,
 };
 pub use retention::{
     AvailabilityPolicy, CheckpointError, ErasurePolicy, JobBoardSnapshot, KeepBound, LogFrontier,

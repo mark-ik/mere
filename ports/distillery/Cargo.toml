@@ -15,10 +15,19 @@ mesh-host.workspace = true
 mere-resident.workspace = true
 muniment.workspace = true
 thiserror = "1"
-tokio = { version = "1", features = ["macros", "time"] }
+tokio = { version = "1", features = ["macros", "sync", "time"] }
 transport.workspace = true
+burn-backend = { version = "=0.22.0-pre.2", optional = true }
+burn-ir = { version = "=0.22.0-pre.2", optional = true }
+burn-remote = { version = "=0.22.0-pre.2", default-features = false, features = ["client", "server", "iroh"], optional = true }
+iroh = { version = "1.0.3", optional = true }
+
+[features]
+default = []
+remote = ["dep:burn-backend", "dep:burn-ir", "dep:burn-remote", "dep:iroh"]
 
 [dev-dependencies]
+burn-flex = { version = "=0.22.0-pre.2", features = ["default"] }
 identity.workspace = true
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 tempfile = "3"

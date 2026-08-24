@@ -1018,6 +1018,16 @@ impl P2pandaTransport {
             .map(|g| (self.endpoint.clone(), g.clone()))
     }
 
+    /// The application-owned endpoint authority for mounting another Iroh
+    /// protocol on this transport.
+    ///
+    /// This is available independently of gossip. A resident service such as
+    /// Burn Remote registers its ALPN here so blobs, LogSync, and compute keep
+    /// one transport identity and one endpoint lifetime.
+    pub fn protocol_endpoint(&self) -> Endpoint {
+        self.endpoint.clone()
+    }
+
     /// The peer's current dialable address set as a ticket, if the endpoint
     /// holds any addresses for it. `None` when the peer is only a name.
     ///

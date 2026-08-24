@@ -45,21 +45,34 @@ where
         .ok_or_else(|| "Session stream closed before initialization".to_string())?;
     let init = parse_init_handshake(&handshake)?;
 
-    // Authorize before any session state is created.
-    authorize(&init)?;
+    // Reserve before authorization so a concurrent server close can fence the
+    // complete admission-to-binding interval rather than missing a session in
+    // the instant before its worker is inserted.
+    service
+        .reserve_session(
+            init.session_id,
+            init.device_index,
+            Arc::from(init.authorization.as_slice()),
+        )
+        .await?;
+
+    if let Err(error) = authorize(&init) {
+        service.finish_session(init.session_id).await;
+        return Err(error);
+    }
 
     // Bind the session (creating it + its worker on demand) and claim its response receiver.
     let SessionBinding {
         task_sender,
         mut responses,
         mut close,
-    } = service
-        .bind_session(
-            init.session_id,
-            init.device_index,
-            Arc::from(init.authorization.as_slice()),
-        )
-        .await?;
+    } = match service.bind_session(init.session_id).await {
+        Ok(binding) => binding,
+        Err(error) => {
+            service.finish_session(init.session_id).await;
+            return Err(error);
+        }
+    };
 
     // Reply with the selected device's settings + this server's identity, so the client can fill in
     // `RemoteDevice::defaults`/`enumerate` without an extra round-trip.

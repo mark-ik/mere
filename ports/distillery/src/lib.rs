@@ -39,10 +39,17 @@
 #![warn(missing_docs)]
 
 mod authority;
+#[cfg(feature = "remote")]
+mod remote;
 mod resident;
 
 pub use authority::{
     BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
+};
+#[cfg(feature = "remote")]
+pub use remote::{
+    BURN_REMOTE_RESOURCE, RemoteBurnResource, RemoteSessionError, RemoteSessionService,
+    RemoteSessionSettings,
 };
 pub use resident::{
     ResidentAuthority, ResidentError, ResidentReceipt, ResidentSettings, ResidentStorage,

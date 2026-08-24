@@ -22,6 +22,7 @@ use crate::ident::{ImplementationId, ResourceId};
 use crate::lease::{LeaseActivity, LeaseProgress};
 use crate::namespace::{BoxFuture, JobNamespaceView, NamespaceError};
 use crate::spec::{ResourceRequirements, VerificationClass};
+use crate::{JobId, LeaseId};
 
 /// Who this resource is, what it needs, and what its output may claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,6 +37,19 @@ pub struct ResourceDescriptor {
     /// The strongest claim this implementation's output can carry. Earned by
     /// receipt, not asserted (see the crate's lexical determinism test).
     pub verification: VerificationClass,
+}
+
+/// Mesh identity of one supervised resource run.
+///
+/// Most resources need only their granted namespace. A resident service such
+/// as remote compute also has to bind an external session to the exact run the
+/// host can cancel. The host supplies this context; the job never does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RunContext {
+    /// Job whose granted namespace is being executed.
+    pub job: JobId,
+    /// Live lease the host bound this run to, when the job is leased.
+    pub lease: Option<LeaseId>,
 }
 
 /// Whatever an adapter carried from preparation into execution.
@@ -275,6 +289,20 @@ pub trait MeshResource: Send + Sync {
         prepared: Prepared,
         control: &'a JobControl,
     ) -> BoxFuture<'a, Result<Vec<u8>, ResourceError>>;
+
+    /// Execute with the host-authored identity of this run.
+    ///
+    /// Ordinary adapters inherit the namespace-only behavior. Resources that
+    /// supervise an external session override this method so the session and
+    /// the host cancellation handle name the same job and lease.
+    fn execute_for<'a>(
+        &'a self,
+        prepared: Prepared,
+        control: &'a JobControl,
+        _context: RunContext,
+    ) -> BoxFuture<'a, Result<Vec<u8>, ResourceError>> {
+        self.execute(prepared, control)
+    }
 }
 
 #[cfg(test)]

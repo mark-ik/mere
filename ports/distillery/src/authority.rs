@@ -7,7 +7,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use mesh::{BlobRef, MeshStoreError, RetentionCheckpoint, RetentionEffect};
+use mesh::{BlobRef, JobBoard, MeshStoreError, RetentionCheckpoint, RetentionEffect};
 use mesh_host::{HostError, MeshHost, Step, TransportBlobSpace};
 use muniment::Backend;
 
@@ -66,6 +66,13 @@ pub enum DistilleryError {
     Custody(String),
 }
 
+/// Type-erased board projection consumed by an optional remote-session lane.
+#[cfg(feature = "remote")]
+pub trait RemoteSessionProjection: Send + Sync {
+    /// Replace the admission snapshot with the host's current folded board.
+    fn refresh(&self, board: JobBoard);
+}
+
 /// The resident device-side model works.
 ///
 /// This is deliberately a consumer of [`MeshHost`], not another scheduler. It
@@ -76,6 +83,8 @@ pub struct Distillery<B: Backend + Clone + Send + Sync + 'static> {
     host: MeshHost<B>,
     custody: Arc<dyn BlobCustody>,
     retention: RetentionSettings,
+    #[cfg(feature = "remote")]
+    remote: Option<Arc<dyn RemoteSessionProjection>>,
 }
 
 impl<B: Backend + Clone + Send + Sync + 'static> Distillery<B> {
@@ -90,12 +99,35 @@ impl<B: Backend + Clone + Send + Sync + 'static> Distillery<B> {
             host,
             custody,
             retention,
+            #[cfg(feature = "remote")]
+            remote: None,
         }
+    }
+
+    /// Attach the remote-session authority composed into this host's resource
+    /// registry and transport endpoint.
+    #[cfg(feature = "remote")]
+    pub fn attach_remote_sessions(&mut self, remote: Arc<dyn RemoteSessionProjection>) {
+        self.remote = Some(remote);
     }
 
     /// Drive one non-blocking supervisor tick.
     pub async fn tick(&mut self) -> Result<Vec<Step>, DistilleryError> {
-        Ok(self.host.tick().await?)
+        #[cfg(feature = "remote")]
+        self.refresh_remote().await?;
+        let steps = self.host.tick().await?;
+        #[cfg(feature = "remote")]
+        self.refresh_remote().await?;
+        Ok(steps)
+    }
+
+    #[cfg(feature = "remote")]
+    async fn refresh_remote(&self) -> Result<(), DistilleryError> {
+        if let Some(remote) = &self.remote {
+            let board = self.host.synced().board().await?;
+            remote.refresh(board);
+        }
+        Ok(())
     }
 
     /// The substrate host, for read-only board, progress, and sync projections.

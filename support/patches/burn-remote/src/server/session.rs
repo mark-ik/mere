@@ -57,7 +57,7 @@ where
 
 struct Session {
     /// Inbound channel to the session's dispatcher thread; cloned once per submit connection.
-    _task_sender: mpsc::Sender<Task>,
+    _task_sender: Option<mpsc::Sender<Task>>,
     device_index: u32,
     authorization: Arc<[u8]>,
     close: watch::Sender<bool>,
@@ -176,25 +176,49 @@ where
     B: BackendIr,
     T: TensorTransfer<B>,
 {
-    async fn bind_session(
+    async fn reserve_session(
         &self,
         session_id: SessionId,
         device_index: u32,
         authorization: Arc<[u8]>,
-    ) -> Result<SessionBinding, String> {
+    ) -> Result<(), String> {
         self.ensure_logger();
         let mut sessions = self.sessions.lock().await;
         if sessions.contains_key(&session_id) {
             return Err(format!("Session {session_id} is already active"));
         }
 
-        let (response_sender, responses) = mpsc::channel(RESPONSE_CHANNEL_CAPACITY);
-        let (close, close_receiver) = watch::channel(false);
+        let (close, _) = watch::channel(false);
         let (done, _) = watch::channel(false);
-        let runner = TensorInterpreter::with_custom_ops(
-            self.device(device_index),
-            self.custom_ops.clone(),
+        sessions.insert(
+            session_id,
+            Session {
+                _task_sender: None,
+                device_index,
+                authorization,
+                close,
+                done,
+            },
         );
+        Ok(())
+    }
+
+    async fn bind_session(&self, session_id: SessionId) -> Result<SessionBinding, String> {
+        let mut sessions = self.sessions.lock().await;
+        let session = sessions
+            .get_mut(&session_id)
+            .ok_or_else(|| format!("Session {session_id} was not reserved"))?;
+        if *session.close.borrow() {
+            return Err(format!("Session {session_id} was closed during admission"));
+        }
+        if session._task_sender.is_some() {
+            return Err(format!("Session {session_id} is already active"));
+        }
+
+        let device_index = session.device_index;
+        let (response_sender, responses) = mpsc::channel(RESPONSE_CHANNEL_CAPACITY);
+        let runner =
+            TensorInterpreter::with_custom_ops(self.device(device_index), self.custom_ops.clone());
         let task_sender = SessionHandler::spawn(
             session_id,
             runner,
@@ -203,16 +227,8 @@ where
             self.local_comm.clone(),
             self.probe.clone(),
         );
-        sessions.insert(
-            session_id,
-            Session {
-                _task_sender: task_sender.clone(),
-                device_index,
-                authorization,
-                close,
-                done,
-            },
-        );
+        session._task_sender = Some(task_sender.clone());
+        let close_receiver = session.close.subscribe();
         self.probe.emit(|| TelemetryEvent::SessionOpened {
             session: session_id,
             device: device_index,
@@ -240,10 +256,13 @@ where
     async fn finish_session(&self, session_id: SessionId) {
         let mut sessions = self.sessions.lock().await;
         if let Some(session) = sessions.remove(&session_id) {
+            let was_bound = session._task_sender.is_some();
             session.done.send_replace(true);
-            self.probe.emit(|| TelemetryEvent::SessionClosed {
-                session: session_id,
-            });
+            if was_bound {
+                self.probe.emit(|| TelemetryEvent::SessionClosed {
+                    session: session_id,
+                });
+            }
         }
     }
 }

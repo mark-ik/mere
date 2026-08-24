@@ -29,15 +29,22 @@ pub(crate) struct SessionBinding {
 /// be spawned by the server. The production implementation is
 /// [`SessionManager`](super::session::SessionManager).
 pub(crate) trait SessionService: Send + Sync + 'static {
-    /// Bind one admitted session and spawn its worker.
+    /// Reserve one session before application authorization begins.
     ///
-    /// A duplicate id is rejected. The opaque authorization bytes are retained
-    /// for the host's read-only active-session receipt.
-    fn bind_session(
+    /// A duplicate id is rejected. Reserving first makes server-requested
+    /// closure race-free: the host can see and close a session throughout the
+    /// interval between authorization and worker binding.
+    fn reserve_session(
         &self,
         session_id: SessionId,
         device_index: u32,
         authorization: Arc<[u8]>,
+    ) -> impl Future<Output = Result<(), String>> + Send;
+
+    /// Bind one reserved and admitted session and spawn its worker.
+    fn bind_session(
+        &self,
+        session_id: SessionId,
     ) -> impl Future<Output = Result<SessionBinding, String>> + Send;
 
     /// The default settings of the device at `device_index`, returned on the handshake so the

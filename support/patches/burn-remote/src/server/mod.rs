@@ -8,10 +8,10 @@ pub(crate) mod worker;
 
 mod builder;
 
+pub use crate::shared::SessionId;
 pub use builder::{Channel, RemoteServerBuilder};
 pub use burn_router::{CustomOpHandler, CustomOpRegistry};
 pub use session::ServedSession;
-pub use crate::shared::SessionId;
 
 #[cfg(feature = "iroh")]
 pub use crate::transport::iroh::protocol::{

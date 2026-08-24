@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use crate::ident::{ImplementationId, ResourceId};
 use crate::namespace::{BlobSink, BlobSource, JobNamespaceView, MemoryBlobSpace, NamespaceError};
-use crate::resource::{JobControl, MeshResource, ResourceError};
+use crate::resource::{JobControl, MeshResource, ResourceError, RunContext};
 use crate::resources::{legacy_resource_id, register_builtin};
 use crate::spec::{
     DeterminismClass, HostFacts, JobOutput, JobSpec, OutputError, SpecError, VerificationClass,
@@ -129,6 +129,33 @@ pub async fn run_job(
     sink: &dyn BlobSink,
     control: &JobControl,
 ) -> Result<JobOutput, RunError> {
+    run_job_inner(registry, spec, source, sink, control, None).await
+}
+
+/// Run one V2 job with the identity assigned by its supervising host.
+///
+/// The extra context is authority, not job input. It lets a resource bind an
+/// external session to the exact run the host can cancel without widening the
+/// resource's namespace.
+pub async fn run_job_for(
+    registry: &ResourceRegistry,
+    context: RunContext,
+    spec: &JobSpec,
+    source: &dyn BlobSource,
+    sink: &dyn BlobSink,
+    control: &JobControl,
+) -> Result<JobOutput, RunError> {
+    run_job_inner(registry, spec, source, sink, control, Some(context)).await
+}
+
+async fn run_job_inner(
+    registry: &ResourceRegistry,
+    spec: &JobSpec,
+    source: &dyn BlobSource,
+    sink: &dyn BlobSink,
+    control: &JobControl,
+    context: Option<RunContext>,
+) -> Result<JobOutput, RunError> {
     spec.validate()?;
     let adapter = registry
         .get(&spec.resource)
@@ -144,7 +171,10 @@ pub async fn run_job(
     let view = JobNamespaceView::grant(spec, source, sink);
     let prepared = adapter.prepare(&view).await?;
     control.check().map_err(ResourceError::from)?;
-    let bytes = adapter.execute(prepared, control).await?;
+    let bytes = match context {
+        Some(context) => adapter.execute_for(prepared, control, context).await?,
+        None => adapter.execute(prepared, control).await?,
+    };
     let commit = view.commit(&spec.output.name, &bytes).await?;
 
     let output = JobOutput {

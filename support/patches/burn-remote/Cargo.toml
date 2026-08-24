@@ -193,4 +193,7 @@ features = [
 broken_intra_doc_links = "deny"
 invalid_html_tags = "deny"
 
+[patch.crates-io]
+burn-remote = { path = "." }
+
 [workspace]

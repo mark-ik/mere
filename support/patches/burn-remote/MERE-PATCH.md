@@ -11,10 +11,13 @@ exposes no way for its host to end one already-admitted session. Its internal
 another task sender and therefore continues accepting work. Mere's owner-reclaim
 rule requires the session to stop before `LeaseRevokedByOwner` is authored.
 
-Change: each session now carries a server-close signal observed by the duplex
-pump. `IrohRemoteProtocol::sessions` reports active session ids and their opaque
-credentials, and `close_session` targets one pump. The existing client-close
-path uses the same teardown.
+Change: each session is reserved before application authorization and carries a
+server-close signal observed by the duplex pump. The reservation fences the
+authorization-to-worker-binding interval, so a concurrent reclaim cannot miss
+a session that appears immediately afterwards. `IrohRemoteProtocol::sessions`
+reports reserved or active session ids and their opaque credentials, and
+`close_session` targets one pump. The existing client-close path uses the same
+teardown.
 
 Removal condition: replace this patch with the first upstream `burn-remote`
 release that exposes equivalent targeted session control and passes Mere's

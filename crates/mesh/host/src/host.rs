@@ -10,8 +10,8 @@ use identity::{DerivedKeyAttestation, Ed25519Keypair};
 use mesh::{
     BlobSink, BlobSource, DevicePolicy, HostFacts, HostOffer, JobControl, JobId, LeaseId,
     LeasePolicy, LeaseProgress, MeshEvent, MeshStoreError, MeshSyncError, ReclaimReason,
-    ReleaseReason, ResourceRegistry, SyncedMesh, WorkerAction, next_action,
-    registry::{run_job, run_legacy},
+    ReleaseReason, ResourceRegistry, RunContext, SyncedMesh, WorkerAction, next_action,
+    registry::{run_job_for, run_legacy},
     spec::CheckpointClass,
 };
 use muniment::Backend;
@@ -445,8 +445,9 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
                     // Grant first, then fetch under the lease: pulling before
                     // the grant spends bandwidth on races this device may lose.
                     deliver_inputs(&spec, &*blobs, &*courier, &from, &control).await;
-                    run_job(
+                    run_job_for(
                         &registry,
+                        RunContext { job, lease },
                         &spec,
                         blobs.as_source(),
                         blobs.as_sink(),
