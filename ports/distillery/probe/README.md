@@ -39,7 +39,10 @@ they substantiate a boundary.
 The native remote fixture is a separate two-peer forcing proof for the same
 MiniLM row. It mounts Distillery's production Burn protocol on one real
 p2panda/Iroh endpoint, connects from a second, loads ESP's BERT model onto an
-authorized remote device, and runs the server on native WGPU:
+authorized remote device, and runs the server on native WGPU. The receipt uses
+plain WGPU with Fusion and autotune disabled; the first forcing run found a
+separate Burn Fusion executor crash in the MiniLM graph, which is retained as
+an upstream/backend sidequest rather than confused with lease cancellation:
 
 ```powershell
 ports/distillery/probe/run-remote-minilm.ps1

@@ -516,7 +516,7 @@ async fn main() -> Result<(), String> {
                 "server_peer": server_endpoint.id().to_string(),
                 "client_peer": client_endpoint.id().to_string(),
                 "same_endpoint": false,
-                "server_backend": "burn-wgpu 0.22.0-pre.2 Wgpu/AutoCompiler DiscreteGpu(0)",
+                "server_backend": "burn-wgpu 0.22.0-pre.2 Wgpu/AutoCompiler DiscreteGpu(0), fusion and autotune disabled",
                 "client_backend": "Burn Dispatch Remote over authorized Iroh"
             },
             "first_run": {

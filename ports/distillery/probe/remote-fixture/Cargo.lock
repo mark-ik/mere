@@ -912,7 +912,6 @@ checksum = "798e66d9efc792e6e646e16d6f531a2c6e503bbe92f2b017c84f2306fcc9e2d3"
 dependencies = [
  "burn-backend",
  "burn-cubecl",
- "burn-fusion",
  "cubecl",
 ]
 
@@ -9296,44 +9295,24 @@ name = "scrying"
 version = "0.5.0"
 
 [[patch.unused]]
-name = "grafting"
-version = "0.5.0"
+name = "netrender"
+version = "0.1.1"
 
 [[patch.unused]]
-name = "cambium"
-version = "0.3.3"
+name = "netrender_device"
+version = "0.1.1"
 
 [[patch.unused]]
-name = "cambium-winit"
-version = "0.3.0"
+name = "netrender_text"
+version = "0.1.1"
 
 [[patch.unused]]
-name = "genet-scripted-dom"
-version = "0.1.0"
+name = "paint_list_api"
+version = "0.1.1"
 
 [[patch.unused]]
-name = "illume"
-version = "0.0.2"
-
-[[patch.unused]]
-name = "layout-dom-api"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "p2panda-auth"
-version = "0.7.1"
-
-[[patch.unused]]
-name = "p2panda-stream"
-version = "0.7.1"
-
-[[patch.unused]]
-name = "sprigging"
-version = "0.2.1"
-
-[[patch.unused]]
-name = "tinct"
-version = "0.1.2"
+name = "paint_list_render"
+version = "0.1.1"
 
 [[patch.unused]]
 name = "cambium"
@@ -9432,24 +9411,44 @@ name = "weld-engine"
 version = "0.2.0"
 
 [[patch.unused]]
-name = "netrender"
-version = "0.1.1"
+name = "grafting"
+version = "0.5.0"
 
 [[patch.unused]]
-name = "netrender_device"
-version = "0.1.1"
+name = "cambium"
+version = "0.3.3"
 
 [[patch.unused]]
-name = "netrender_text"
-version = "0.1.1"
+name = "cambium-winit"
+version = "0.3.0"
 
 [[patch.unused]]
-name = "paint_list_api"
-version = "0.1.1"
+name = "genet-scripted-dom"
+version = "0.1.0"
 
 [[patch.unused]]
-name = "paint_list_render"
-version = "0.1.1"
+name = "illume"
+version = "0.0.2"
+
+[[patch.unused]]
+name = "layout-dom-api"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "p2panda-auth"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "p2panda-stream"
+version = "0.7.1"
+
+[[patch.unused]]
+name = "sprigging"
+version = "0.2.1"
+
+[[patch.unused]]
+name = "tinct"
+version = "0.1.2"
 
 [[patch.unused]]
 name = "outrider"

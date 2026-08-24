@@ -10,7 +10,7 @@ description = "Two-peer native WGPU receipt for Distillery's lease-bound Burn Re
 
 [dependencies]
 burn = { version = "0.22.0-pre.2", default-features = false, features = ["remote", "std"] }
-burn-wgpu = { version = "=0.22.0-pre.2", default-features = false, features = ["std", "fusion", "autotune"] }
+burn-wgpu = { version = "=0.22.0-pre.2", default-features = false, features = ["std"] }
 distillery = { path = "../..", features = ["remote"] }
 esp = { path = "../../../../crates/intel/esp", features = ["bert"] }
 identity = { package = "personae", path = "../../../../crates/dramatis/personae" }
