@@ -1,0 +1,24 @@
+Carries, unmentioned in the subject: design_docs/2026-08-24_standards_survey_brief.md (860 lines, new) and its required DOC_README.md index entry.
+
+Cross-repo standards survey and the workspace's single home for such findings
+per DOC_POLICY §2 — genet, retinue, smolweb, woodshed et al. cite it by path
+rather than keeping copies. 174 entries graded ADOPT/PULL/SKIP/WATCH across
+castellan, the mere ports, genet's fleece/pelt/tabard, and the apps.
+
+Headline findings:
+  - Vault gaps are crypto AGILITY, not crypto choice: neither
+    passphrase_storage.rs nor keypair.rs records its own derivation parameters,
+    so cost can never be raised and an argon2 default change is a silent
+    unlock failure. A v2-root decision, not a patch (§2.1).
+  - otpauth:// has no normative specification at all, and castellan already
+    imports it (§2.2).
+  - RFC 8446 was obsoleted by RFC 9846 (July 2026);
+    smolweb/crates/scorpion-protocol/src/tls.rs:29 still cites the dead
+    designator (flagged, out of scope) (§6).
+  - Continuous UTC goes to a vote at the 28th CGPM, 13-15 Oct 2026 (§6).
+  - No local-link discovery anywhere in the stack; mDNS/DNS-SD is the gap (§4).
+
+32 of the 174 entries were wrong on first pass and were corrected by an
+adversarial fact-checking pass; §8 records the method, the four sources that
+403 automated fetch and are therefore unconfirmed, and the re-check cadence.
+§9 lists seven open decisions.
