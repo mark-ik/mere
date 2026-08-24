@@ -353,6 +353,9 @@ classes, and remote tensor transport beyond the adapter gate above.
 - Checkpointing refuses to strand a live lease, and a device's retention
   settings decide when it drops a job's bytes.
 - A revoked lease closes its remote session.
+- A real ESP model executes numerically through that session, an in-flight
+  model request fails without hanging on owner reclaim, and a new lease opens a
+  numerically identical fresh session.
 
 ## 10. Progress
 
@@ -416,3 +419,12 @@ classes, and remote tensor transport beyond the adapter gate above.
   prove a real remote tensor round trip, live refusal rules, stop-before-reclaim
   ordering, and client error rather than a hang. Mere `7fb07225`; p2panda
   `9f2c2a01`. Stable Burn publication closure is the only gate left open.
+- **2026-08-23 (remote MiniLM forcing receipt)**: clean Mere `176c31e8` and
+  p2panda `9f2c2a01` ran ESP's pinned MiniLM between two distinct p2panda/Iroh
+  peers on plain native WGPU. Full-vector error against ESP NdArray was
+  `1.4901161e-7`; the BrowserWebGpu reference-prefix error was `1.4156103e-7`.
+  Reclaim interrupted a live 512-row request, preserved `AwaitingStop` before
+  `Reclaimed`, closed the session to zero, and epoch 1 reproduced every output
+  value exactly. This closes the executable remote-model gate. Physical GPU
+  allocation telemetry and Burn Fusion's remote MiniLM panic are explicit
+  sidequests; stable publication remains the release gate.

@@ -60,11 +60,12 @@ The same closure passed `cargo package -p esp` from a detached clean worktree;
 Cargo built and verified the extracted package. Repeat that receipt after the
 stable repin because dependency packaging is part of the release gate.
 
-Stable Burn 0.22 is still unpublished as of the 2026-08-22 crates.io recheck.
-Stable publication closure and remote-adapter acceptance therefore remain
-closed even though the chosen prerelease implementation and portability
-evidence are green. Re-auditing the pre.2 remote source and preparing the
-targeted session-close patch can proceed without claiming either closure.
+Stable Burn 0.22 is still unpublished as of the 2026-08-22 crates.io recheck,
+so stable publication closure remains open. Remote-adapter acceptance no
+longer shares that gate: Mark explicitly reopened the prerelease row, the
+targeted close patch and Distillery adapter landed 2026-08-23, and a clean
+two-peer MiniLM receipt now proves native WGPU numerics, active-request reclaim,
+and fresh-session recovery. Stable closure must repin and repeat those receipts.
 
 Original doc follows.
 
@@ -341,11 +342,12 @@ This probe may use a narrow temporary patch. It must not merge into main,
 publish crates, claim stable compatibility, or implement a second scheduler.
 Keep only a short diff/receipt if the result changes the stable migration plan.
 
-Burn Remote execution itself is outside this migration. It starts only after:
+Burn Remote execution remains a separate lane. Its four entrance conditions
+are now satisfied on the chosen prerelease row:
 
 1. M2 has a real resource registry and namespace receipt;
 2. M3 has cooperative cancellation and owner reclaim;
-3. stable Burn 0.22 is migrated; and
+3. the explicitly authorized 0.22.0-pre.2 production row is migrated; and
 4. the remote adapter can reuse the shared murm iroh endpoint without owning
    job authorization or lease policy.
 
@@ -371,7 +373,7 @@ Stop on any of these conditions:
 - Existing-device and browser feature boundaries are re-proven.
 - Test/example-only Burn dependencies are removed or justified.
 - ESP packages from a clean commit.
-- Burn Remote remains a separately gated resource adapter.
+- Burn Remote remains a separately versioned and verified resource adapter.
 - All refreshed performance claims name the version and hardware.
 
 ## 11. Progress
@@ -386,3 +388,11 @@ Stop on any of these conditions:
   `0.22.0-pre.2`, still with no stable 0.22. The release gate is unchanged.
   Remote API claims elsewhere in the lane remain explicitly sourced to pre.1
   and need a source recheck against the chosen migration version.
+- **2026-08-23**: the pre.2 remote source was re-audited; Mere's targeted
+  pump-close patch, p2panda exact-ALPN seam, and Distillery lease adapter
+  landed. A clean two-peer MiniLM receipt then matched ESP NdArray within
+  `1.4901161e-7`, interrupted an in-flight 512-row request on owner reclaim,
+  closed the session to zero, and recovered identical output under a new
+  lease. Plain WGPU passes; Burn Fusion's remote MiniLM autotune/ordering panic
+  is a separate backend sidequest. Stable repinning and package publication
+  remain release-gated.

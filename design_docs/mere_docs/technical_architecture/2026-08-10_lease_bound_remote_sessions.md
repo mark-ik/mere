@@ -191,7 +191,10 @@ The rejected alternatives remain rejected:
 - owner reclaim first yields `AwaitingStop`, closes the session, and only a
   later tick authors `LeaseRevokedByOwner`; and
 - the reclaimed client receives an error within the bounded receipt rather
-  than hanging.
+  than hanging; and
+- a clean two-peer MiniLM run executes ESP numerically on native WGPU, reclaim
+  interrupts a live 512-row request and closes the only session, and a fresh
+  epoch/session reproduces all 384 values exactly.
 
 ## 8. Progress
 
@@ -207,3 +210,11 @@ The rejected alternatives remain rejected:
   Added the reservation fence, exact raw-ALPN admission in p2panda, a
   transport-neutral signed claim in `mere-mesh`, host-authored `RunContext`, and
   the Distillery resource/service. Mere `7fb07225`; p2panda `9f2c2a01`.
+- **2026-08-23, forcing consumer**: clean Mere `176c31e8` drove the pinned
+  MiniLM through the adapter over two distinct p2panda peers. Maximum error was
+  `1.4901161e-7` against ESP NdArray and `1.4156103e-7` against the browser
+  reference prefix. Reclaim interrupted active model work, closed the session
+  to zero, and a new lease recovered identical output. The passing server is
+  plain native WGPU. Burn Fusion panicked in fused-matmul autotune/ordering and
+  remains a backend sidequest; physical GPU allocation release remains
+  unmeasured.

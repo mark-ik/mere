@@ -207,9 +207,16 @@ up, per the burn brief's own rule.
   exists in `burn-remote 0.22.0-pre.1`.) **The first step needs no burn at all**: the revised M2 plan uses
   `esp::embed::LexicalEmbeddingProvider` for a useful deterministic batch;
   `StubEmbeddingProvider` remains a test double with meaningless similarity.
-  Burn-remote mounting on the Router stays gated on a stable release (D3; it
-  exists today only as 0.22.0-pre.1). The 0.21 → 0.22 backend/device migration
-  has its own [release-gated plan](2026-08-09_burn_0_22_migration_plan.md).
+  The prerelease migration and lease-bound Burn Remote adapter have since
+  landed. Distillery now mounts the literal Burn ALPN on its existing
+  p2panda/Iroh endpoint, admits only a signed live-lease projection, and closes
+  the exact session before owner reclaim is authored. A clean two-peer MiniLM
+  receipt drives ESP over that adapter on native WGPU, interrupts an in-flight
+  512-row request, then exactly recovers all 384 values under a new lease.
+  Stable 0.22 publication remains the dependency repin gate, not an executable
+  adapter gate. See the
+  [migration plan](2026-08-09_burn_0_22_migration_plan.md) and
+  [receipt](../testing/2026-08-23_distillery_remote_minilm_receipt.md).
 - **Lane 4, training**: Distillery-as-trainer as a native-only armillary job
   over the scoped corpus, emitting the geist §6 engram triple
   (`ModelAdapterManifest` + `TrainingCorpus` + `EvalReport`); the bunsen
@@ -266,13 +273,14 @@ completes into: not a chat box, a bounded resident with a scoped faculty. The
 thoughtform words (servitor, tulpa, egregore) stay product language, not a
 runtime type hierarchy.
 
-**Sequence after E4:** the serial mesh track is 1. M2 versioned namespace,
-registry, and lexical-resource receipt. 2. M3 lease projection, host policy,
-and owner reclaim. 3. Stable Burn 0.22 migration. 4. Burn Remote as another
-resource adapter on murm's Router. 5. Immutable model sessions plus one real
-adapter. 6. Local training, then communal compute. The D2 headed-browser model
-probe is an independent evidence track and may proceed alongside M2; it has no
-dependency on mesh or Burn Remote.
+**Sequence after E4:** steps 1 through 4 have executable prerelease receipts:
+M2's versioned namespace and registry, M3's lease projection and owner reclaim,
+the chosen Burn 0.22 prerelease migration, and Burn Remote as a Distillery
+resource on the shared endpoint. Stable repinning remains release-gated. The
+next model-facing step is 5. immutable model sessions plus one real adapter,
+then 6. local training and communal compute. D2's headed-browser track remains
+independent evidence, now also the numerical reference for the remote MiniLM
+forcing receipt.
 
 ## 5. Posture (does this necessitate going beyond mere?)
 
@@ -382,3 +390,13 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   reopened the same manifest and reproduced the eight-token Transformers
   reference exactly. All GPU error scopes were empty. Browser allocation
   telemetry remains unavailable, so physical GPU-memory release is not claimed.
+- **2026-08-23, remote MiniLM forcing consumer**: a clean Distillery fixture
+  loaded ESP's pinned MiniLM through an authorized Burn Remote device between
+  two distinct p2panda/Iroh peers and executed it on native WGPU. The 384-value
+  output stayed within `1.4901161e-7` of ESP's native control and
+  `1.4156103e-7` of the BrowserWebGpu reference prefix. Owner reclaim
+  interrupted a live 512-row request, closed the only session before the
+  reclaim fact, and a new epoch/session reproduced all values exactly. Plain
+  WGPU passes. Burn Fusion's fused-matmul autotune and stream ordering panic on
+  this remote graph; that is a separate backend sidequest. Physical allocation
+  release remains unmeasured.
