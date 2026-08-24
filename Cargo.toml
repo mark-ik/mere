@@ -233,7 +233,7 @@ register-theme = { path = "crates/system/registry/register-theme" }
 inker = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 document-canvas = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 nematic = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-fleece = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+fleece = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
 knot-editor-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 illume = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", branch = "main" }
 cambium = { version = "0.3.3", git = "https://github.com/merely-made/genet.git", branch = "main" }
