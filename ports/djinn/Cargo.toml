@@ -18,7 +18,7 @@ blake3.workspace = true
 castellan = { workspace = true, features = ["keeper"] }
 chirograph.workspace = true
 graphshell = { version = "0.0.2", path = "../graphshell", features = ["personal-sync"] }
-knot-editor = { version = "0.0.2", path = "../knot" }
+knot-editor = { version = "0.0.3", path = "../knot" }
 mere-resident.workspace = true
 muniment.workspace = true
 pandect.workspace = true

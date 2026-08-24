@@ -185,7 +185,7 @@ graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { version = "0.0.2", path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { version = "0.0.2", path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { version = "0.0.1", path = "crates/graphshell/graphshell-network" }
-knot-editor = { version = "0.0.2", path = "ports/knot" }
+knot-editor = { version = "0.0.3", path = "ports/knot" }
 # The credential-keeper port; reservation, no implementation (dramatis plan D4).
 castellan = { version = "0.0.3", path = "ports/castellan" }
 # The model-works port; first real consumer of the mesh host supervisor.
