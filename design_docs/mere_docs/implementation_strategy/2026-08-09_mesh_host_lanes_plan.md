@@ -2,12 +2,16 @@
 
 **Date**: 2026-08-09
 
-**Status**: Open. Re-cut 2026-08-09 after review, around a supervisor gate the
-first draft was missing entirely. **H0, H1 and H2 have landed. H2's physical
-sweep and first host consumption landed in Distillery on 2026-08-12.** The
-Burn 0.22.0-pre.2 migration executed on 2026-08-20; stable repinning remains
-release-gated. The remote adapter is the next executable lane, beginning with
-a pre.2 source re-audit and the targeted session-close seam.
+**Status**: Implemented through the Burn 0.22.0-pre.2 production row. **H0, H1,
+H2, and the lease-bound remote adapter have landed.** Stable Burn 0.22
+repinning and its clean package receipt remain release-gated.
+
+The remote gate landed on 2026-08-23 in mere `7fb07225`, after the pre.2 source
+re-audit corrected the close seam and the client/server identity rules. The
+adapter mounts Burn on Distillery's existing p2panda/Iroh endpoint, admits only
+the job poster under the exact live host-supervised lease, and closes reserved
+or active matching sessions before owner reclaim is authored. P2panda's exact
+external-ALPN seam landed first in its `main` as `9f2c2a01`.
 
 **Related**:
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md),
@@ -40,7 +44,7 @@ supervises running work.
 | ~~**H1: Blob location and delivery**~~ | **Done 2026-08-10** — `DeviceAttested` + `TransportCourier`. Mesh author resolves to a transport endpoint through an existing master-signed attestation; disjoint-store two-host receipt passes |
 | ~~**H2: Retention safety**~~ | **Done 2026-08-12** — fail-closed checkpoint rules plus Distillery's owner-controlled sweep; shared hashes and cross-subsystem custody remain protected |
 | **Burn stable closure** | **Prerelease row executed 2026-08-20**; repeat dependency, backend, and package closure on stable 0.22 when published |
-| **Remote adapter** | Lease-bound authorization plus targeted session revocation |
+| ~~**Remote adapter**~~ | **Done 2026-08-23** — signed job-poster claim, exact live lease/resource/device admission, shared endpoint, targeted stop-before-reclaim receipt |
 
 Serial. H0 first, because H1 and H2 are both things a supervisor does.
 
@@ -273,37 +277,41 @@ real-device, and ESP package boundaries. Stable 0.22 is still unavailable, so
 the final repin and clean package receipt remain release-gated. Owned by the
 [Burn 0.22 migration plan](2026-08-09_burn_0_22_migration_plan.md).
 
-Remote-adapter source work can now use the exact production prerelease row.
-Stable publication closure must still repeat the dependency and receipt matrix;
-the prerelease success is not that receipt.
+The remote adapter uses this exact production prerelease row. Stable
+publication closure must still repeat the dependency and receipt matrix; the
+prerelease success is not that receipt.
 
 ---
 
 ## 6. Remote adapter
 
-The last gate, and the one with a real upstream question in it.
+Landed 2026-08-23.
 
 > **Named in error.** Earlier drafts of this section called the credential a
 > `RemoteTicket`. No such type exists in `burn-remote 0.22.0-pre.1`; the real
 > surface is `PeerAuthorizer` + an opaque `Vec<u8>` credential. The design is
 > [lease-bound remote sessions](../technical_architecture/2026-08-10_lease_bound_remote_sessions.md),
-> written against the source on 2026-08-10.
+> originally written against the source on 2026-08-10 and corrected against
+> pre.2 during implementation.
 
 **Burn Remote authorizes a session at admission.** M3 owner reclaim requires
 terminating a session that was *already* authorized — the whole point of reclaim
 is that permission granted a minute ago stops applying the moment the human
 wants their GPU back. Admission-time authorization cannot express that.
 
-So the adapter needs two things:
+The landed adapter supplies both:
 
 1. a **lease-bound credential** — the session's authority is the lease, so it
    expires when the lease does; and
 2. a **targeted close hook** — a way to end one server session on revoke.
 
-If upstream exposes no targeted close, patch or contribute one. A second
-endpoint or router is the wrong fix: Burn's protocol should mount on Mere's
-existing transport authority, not stand up a parallel one with its own
-lifetime.
+The vendored patch reserves the session before application authorization, then
+lets the pump observe a targeted server-close signal. That reservation matters:
+without it, reclaim could inspect the session list in the instant after
+authorization but before worker binding and miss the session. `p2panda-net`
+also gained `accept_raw`, because its ordinary application ALPNs are deliberately
+network-id salted while Burn peers require the literal `burn/remote/1` ALPN.
+No second endpoint, router, or transport identity was introduced.
 
 ---
 
@@ -392,11 +400,19 @@ classes, and remote tensor transport beyond the adapter gate above.
 - **2026-08-12 (upstream gate check)**: crates.io now exposes Burn and Burn
   Remote `0.22.0-pre.2`. Stable 0.22 remains unpublished, so the settled
   production-migration gate stays closed. The remote-session design was read
-  against pre.1 and must be revalidated against the chosen release before its
-  adapter starts.
+  against pre.1 at that checkpoint; its pre.2 revalidation landed on
+  2026-08-23.
 - **2026-08-20 (prerelease migration)**: Mark reopened the production gate for
   the chosen prerelease row. ESP migrated first and Quint second. The workspace
   now resolves one wgpu 30.0.0 and one libsqlite3-sys 0.38.2, the old
   `cubecl-wgpu` backport retired, and the native, wasm, WGPU, real-device, and
-  ESP package receipts passed. Stable repinning remains open. The remote
-  session design still needs its pre.2 source re-audit before implementation.
+  ESP package receipts passed. Stable repinning remains open.
+- **2026-08-23 (remote adapter)**: pre.2 was re-audited and the last executable
+  gate landed. The pure mesh claim binds mesh, job, lease, epoch, job poster,
+  server transport identity, device index, and exact resource; the authorizer
+  also requires the claim's job/lease to be the active host run. Distillery
+  mounts Burn on its shared p2panda endpoint and owner reclaim closes every
+  matching reserved or active session before the revoke fact. The receipts
+  prove a real remote tensor round trip, live refusal rules, stop-before-reclaim
+  ordering, and client error rather than a hang. Mere `7fb07225`; p2panda
+  `9f2c2a01`. Stable Burn publication closure is the only gate left open.

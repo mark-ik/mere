@@ -2,12 +2,18 @@
 
 **Date**: 2026-08-10
 
-**Status**: Design. Nothing here is implemented; the remote adapter is the last
-gate of the [mesh host lanes plan](../implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
-The Burn 0.22.0-pre.2 production migration executed on 2026-08-20, while the
-stable repin remains release-gated. Before implementation, this design must be
-re-audited against pre.2 and the targeted session-close seam must be exposed
-upstream or through a narrow documented patch.
+**Status**: Implemented 2026-08-23 in mere `7fb07225`; the required exact-ALPN
+endpoint seam is in p2panda `9f2c2a01`. This is the completed remote gate of the
+[mesh host lanes plan](../implementation_strategy/2026-08-09_mesh_host_lanes_plan.md).
+Stable Burn 0.22 repinning remains release-gated.
+
+`support/patches/burn-remote` vendors `burn-remote 0.22.0-pre.2` from upstream
+Burn `89bcc85f`, with source, unchanged MIT/Apache licensing, and a removal
+condition in `MERE-PATCH.md`. The pre.2 re-audit found that exposing the old
+manager close alone was insufficient: the duplex pump retained another task
+sender. The landed seam instead gives each session a pump-observed close signal
+and reserves it before application authorization, so reclaim cannot miss a
+session between authorization and worker binding.
 
 **Related**:
 [`../testing/2026-08-10_burn_0_21_baseline.md`](../testing/2026-08-10_burn_0_21_baseline.md),
@@ -28,7 +34,7 @@ for the selected pre.2 row.
 
 Both the Burn migration plan and the host lanes plan say Burn Remote offers a
 `RemoteTicket` plus an authorization callback. **`RemoteTicket` does not exist**
-in `0.22.0-pre.1`. The real surface is:
+in `0.22.0-pre.2`. The real surface is:
 
 | what | where |
 |---|---|
@@ -79,27 +85,33 @@ on.
 The client presents a `SessionClaim`, CBOR-encoded into `authorization`:
 
 ```rust
-struct SessionClaim {
+struct RemoteSessionClaim {
+    version: u8,
+    mesh_id: [u8; 32],
     job: JobId,
     lease: LeaseId,
     epoch: u32,
     client: [u8; 32],      // the client's mesh author key
-    server_peer: [u8; 32], // who this claim is for
-    signature: Vec<u8>,    // by `client`, over the four fields above
+    server_peer: [u8; 32], // server transport identity this claim is for
+    device_index: u32,
+    signature: Vec<u8>,    // by `client`, over every preceding field
 }
 ```
 
 The server's `PeerAuthorizer` closure holds a read handle on its own supervisor
 and admits only when **all** of these hold:
 
-1. the signature verifies for `client`, and `client` is in the board's
-   [`DeviceDirectory`](../../../crates/mesh/mesh/src/directory.rs) — so the
-   claimant is a ring member, not an arbitrary dialler;
-2. `server_peer` is this device, and matches `request.peer` via the directory —
-   so a claim captured from one device cannot be replayed at another;
-3. the board's lease for `job` at epoch `epoch` **is held by this device** and
-   is `Held` at the reading of this device's clock; and
-4. `request.device_index` is one this device's policy actually offers.
+1. the signature verifies for `client`, and `client` is the author who posted
+   this exact job, so another ring member cannot drive the poster's lease;
+2. the directory maps `client` to `request.peer`, which is Burn's authenticated
+   connecting client identity;
+3. `server_peer` is this local endpoint, and the directory separately maps this
+   server's mesh author to it, so a claim captured from one device cannot be
+   replayed at another;
+4. the claim's mesh, resource, epoch, lease id, and device index exactly match
+   the current board, the host's active run, and a device this server offers;
+5. the board projects that lease as `Held` by this server at the reading of the
+   server's clock.
 
 Rule 3 is the whole design: authorization is a *projection of live mesh state*,
 not a token that was true once. `job.lease_at(now_ms, &policy)` is already
@@ -109,69 +121,56 @@ Note what this does **not** need: no new key material, no ticket format, no
 expiry inside the credential. The lease's own signed window is the expiry, and
 it is already replicated.
 
-## 4. The gap: admission is not enough
+## 4. Why admission was not enough
 
 Rule 3 is evaluated once, when the session opens. After that, Burn Remote has no
 reason to ask again — and a session that started legitimately keeps running
 through a reclaim.
 
-Reading the source, the machinery to end a session **already exists**:
+The pre.2 source did contain a manager close, but deleting the manager entry did
+not end the live pump: the pump retained another task sender and kept accepting
+work. It also had no application-visible enumeration or targeted control.
 
-- `server/service/mod.rs:51` — `fn close(&self, session_id: SessionId)`,
-  documented "Drop the session, letting its worker drain and exit."
-- `server/session.rs:214` — `SessionManager`'s implementation of it.
-- `server/pump.rs:136` — the only caller, on client-initiated teardown.
+The vendored seam therefore closes at the pump boundary. A reserved or active
+session carries a close watch the pump selects against, and its opaque
+credential remains visible to the host. Reserving before the synchronous
+authorizer runs closes the admission race: every possibly admitted session is
+visible to `close_session`, including one whose worker has not been bound yet.
 
-What is missing is **reach**. `SessionManager` is not exported from
-`server/mod.rs` (which publishes only `Channel`, `RemoteServerBuilder`, the
-custom-op types, and the iroh protocol types), and `IrohRemoteProtocol` exposes
-no way to enumerate or end the sessions it is serving. So an application can
-decide *who may start*, and nothing else.
-
-## 5. What to ask upstream for
-
-Deliberately minimal — it exposes existing behaviour rather than adding any:
+## 5. The landed narrow patch
 
 ```rust
 impl<B: BackendIr> IrohRemoteProtocol<B> {
-    /// Sessions currently served, with the credential each was admitted under.
-    pub fn sessions(&self) -> Vec<(SessionId, Arc<[u8]>)>;
+    pub async fn sessions(&self) -> Vec<ServedSession>;
 
-    /// End one session. A no-op for an unknown id, mirroring `close`.
-    pub async fn close_session(&self, session_id: SessionId);
+    pub async fn close_session(&self, session_id: SessionId) -> bool;
 }
 ```
 
 With those two, revocation is a loop the supervisor already knows how to drive:
 on `WorkerAction::Reclaim`, decode each served credential, close every session
-whose `SessionClaim` names the ending lease, *then* author
+whose `RemoteSessionClaim` names the ending lease, *then* author
 `LeaseRevokedByOwner` — the same stop-before-you-say-so ordering H0 already
 enforces for local runs.
 
-A re-authorization hook (`PeerAuthorizer` consulted periodically) would be
-strictly better and is worth mentioning in the issue, but it is a bigger ask and
-the two accessors are sufficient.
+A periodic re-authorization hook would still be useful upstream for policies
+that can change without a host cancellation event. Mere does not need it for
+owner reclaim because the supervisor's cancellation path has exact session
+control.
 
-**If upstream declines**, patch rather than fork: the change is additive, and
-the migration plan's rule applies — name the upstream commit, the reason, the
-removal condition, and the licence. A Mere-owned Burn Remote is not on the table.
+The patch remains additive and documented; a Mere-owned Burn Remote is still
+not on the table. Remove it when an upstream release exposes equivalent
+reserved-session enumeration and pump-observed targeted close.
 
-## 6. The interim, and its honest cost
+## 6. The retired interim
 
-Until targeted close lands, revocation has exactly one blunt instrument: drop
-the `IrohRemoteProtocol` handler, which ends **every** session on it.
+The one-remote-lease-per-device fallback is no longer required for revocation
+correctness. The adapter keys active runs and served sessions by exact
+`(JobId, LeaseId)`, and reclaim closes only matching credentials. Owner policy
+may still choose `DevicePolicy::max_concurrent_jobs = 1` for memory or thermal
+reasons.
 
-That is acceptable only under a rule that makes "every" mean "one":
-
-> A device offering remote execution serves **at most one lease at a time**.
-
-`DevicePolicy::max_concurrent_jobs = 1` already expresses it, and
-`conservative()` already sets it. The cost is real and should be written into
-the adapter's descriptor rather than discovered: a device cannot lend its GPU to
-two jobs at once, and reclaiming one would otherwise kill the other's work
-without a revoke fact to explain it.
-
-What must **not** be used as the interim:
+The rejected alternatives remain rejected:
 
 - **A second endpoint or router per lease.** Closing it would revoke precisely,
   but it means a second identity per lease, which breaks the H1 directory
@@ -181,17 +180,18 @@ What must **not** be used as the interim:
   matters; a policy that only bites on reconnection is a policy that does not
   bite.
 
-## 7. Receipts this owes
+## 7. Receipts
 
-Whenever it is built:
-
-- a session opened under a live lease succeeds, and one naming a lease this
-  device does not hold is refused with a reason;
-- a claim captured from one server is refused at another (rule 2);
-- owner reclaim **ends the session before** `LeaseRevokedByOwner` is authored,
-  asserted in that order, as `supervised_reclaim.rs` does for local runs; and
-- the client observes the termination as a transport error rather than a hang —
-  a revoked worker that blocks forever is not a reclaim.
+- pure claim tests cover wrong mesh, wrong server, wrong client transport,
+  non-poster clients, wrong device/resource, and stale lease identity;
+- a real Burn tensor round trip succeeds over the same application-owned
+  p2panda/Iroh endpoint;
+- the vendored Burn test closes a session while its authorizer is still
+  in-flight, proving the reservation fence;
+- owner reclaim first yields `AwaitingStop`, closes the session, and only a
+  later tick authors `LeaseRevokedByOwner`; and
+- the reclaimed client receives an error within the bounded receipt rather
+  than hanging.
 
 ## 8. Progress
 
@@ -201,3 +201,9 @@ Whenever it is built:
   unreachable `SessionManager::close`; specified the credential as a live-lease
   projection rather than a bearer token; and named the one-lease-per-device
   interim with its cost.
+- **2026-08-23**: re-audited against pre.2 and implemented. Corrected two
+  assumptions from the design: `AuthorizationRequest.peer` is the connecting
+  client, not the server, and the old manager close did not terminate the pump.
+  Added the reservation fence, exact raw-ALPN admission in p2panda, a
+  transport-neutral signed claim in `mere-mesh`, host-authored `RunContext`, and
+  the Distillery resource/service. Mere `7fb07225`; p2panda `9f2c2a01`.
