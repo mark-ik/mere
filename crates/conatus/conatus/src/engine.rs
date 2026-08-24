@@ -126,12 +126,12 @@ pub struct FrameUpdate {
     pub commands: Vec<CommandResult>,
 }
 
-/// The shared fixed-step game engine.
+/// The shared fixed-step spatial runtime.
 ///
-/// A host supplies elapsed microseconds, queues gameplay changes through
-/// [`Self::bodies_mut`], and consumes [`FrameUpdate`] for rendering and rules.
-/// Window, input, audio, and rendering remain host tenants rather than being
-/// hidden inside this runtime.
+/// A product profile supplies elapsed microseconds or exact steps, admits
+/// spatial changes through [`Self::bodies_mut`] or [`Self::queue`], and routes
+/// [`FrameUpdate`] to its selected consumers. Rules, input, audio, rendering,
+/// and durable source bindings remain outside this runtime.
 pub struct Engine {
     bodies: BodyWorld,
     clock: FixedClock,
@@ -399,7 +399,7 @@ mod tests {
 
         let mut engine = engine();
         engine.resources_mut().insert(Count::default());
-        engine.add_system(Phase::Gameplay, "spawn once", |context| {
+        engine.add_system(Phase::BeforePhysics, "spawn once", |context| {
             let spawn = {
                 let count = context.resources_mut().get_mut::<Count>().unwrap();
                 count.0 += 1;
@@ -431,38 +431,38 @@ mod tests {
 
         let mut engine = engine();
         engine.resources_mut().insert(Order::default());
-        engine.add_system(Phase::Prepare, "prepare", |context| {
+        engine.add_system(Phase::Publish, "publish", |context| {
             context
                 .resources_mut()
                 .get_mut::<Order>()
                 .unwrap()
                 .0
-                .push("prepare");
+                .push("publish");
             Ok(())
         });
-        engine.add_system(Phase::Gameplay, "gameplay one", |context| {
+        engine.add_system(Phase::BeforePhysics, "before physics one", |context| {
             context
                 .resources_mut()
                 .get_mut::<Order>()
                 .unwrap()
                 .0
-                .push("gameplay one");
+                .push("before physics one");
             Ok(())
         });
-        engine.add_system(Phase::Gameplay, "gameplay two", |context| {
+        engine.add_system(Phase::BeforePhysics, "before physics two", |context| {
             context
                 .resources_mut()
                 .get_mut::<Order>()
                 .unwrap()
                 .0
-                .push("gameplay two");
+                .push("before physics two");
             Ok(())
         });
 
         engine.step(1).unwrap();
         assert_eq!(
             engine.resources().get::<Order>().unwrap().0,
-            ["gameplay one", "gameplay two", "prepare"]
+            ["before physics one", "before physics two", "publish"]
         );
     }
 

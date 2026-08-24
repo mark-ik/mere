@@ -9,25 +9,25 @@ use crate::{BodyCommand, BodyWorld, CommandId, StepUpdate, command::CommandQueue
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Phase {
-    Input,
-    Gameplay,
+    /// Receive already-admitted spatial work from the conducting profile.
+    Ingest,
+    /// Evaluate fields that may affect spatial state this step.
     Fields,
+    /// Run spatial systems immediately before tactile physics advances.
     BeforePhysics,
+    /// Observe the completed tactile step and enqueue derived spatial work.
     AfterPhysics,
+    /// Materialize voxel, geometry, or resident-state changes.
     Materialize,
-    Prepare,
+    /// Publish derived spatial changes to the conducting profile.
+    Publish,
 }
 
 impl Phase {
-    pub(crate) const BEFORE_PHYSICS: [Self; 4] = [
-        Self::Input,
-        Self::Gameplay,
-        Self::Fields,
-        Self::BeforePhysics,
-    ];
+    pub(crate) const BEFORE_PHYSICS: [Self; 3] = [Self::Ingest, Self::Fields, Self::BeforePhysics];
 
     pub(crate) const AFTER_PHYSICS: [Self; 3] =
-        [Self::AfterPhysics, Self::Materialize, Self::Prepare];
+        [Self::AfterPhysics, Self::Materialize, Self::Publish];
 }
 
 #[derive(Default)]

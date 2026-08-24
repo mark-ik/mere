@@ -17,8 +17,12 @@ impl CommandId {
     }
 }
 
-/// Structural and tactile operations systems can defer to a phase boundary.
-/// This is also the command vocabulary exposed to scripts and remote inputs.
+/// Structural and tactile operations trusted local systems can defer to a
+/// phase boundary.
+///
+/// This is a runtime-local command vocabulary. Scripts and peers submit
+/// product intents; authorized product code may lower accepted consequences
+/// into these commands.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum BodyCommand {

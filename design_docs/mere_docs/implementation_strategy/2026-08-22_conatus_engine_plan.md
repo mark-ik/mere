@@ -1,42 +1,84 @@
-# Conatus Shared Game Engine
+# Conatus Shared Spatial Runtime
 
 **Date:** 2026-08-22  
-**Status:** active; body/runtime foundation implemented  
-**Scope:** Build the reusable spatial game engine. Mesocosm, Paredros,
-Isometry, and Mere projections become consumers of it instead of incubating
-engine features in product-local probes.
+**Status:** active; body/runtime foundation implemented; scope corrected 2026-08-23
+**Scope:** Build the shared spatial runtime. Mesocosm, Paredros, Isometry,
+and Mere projections consume it through product-owned runtime profiles
+instead of incubating spatial machinery in product-local probes.
+
+## Scope correction (2026-08-23)
+
+Ruled by Mark after the 2026-08-23 engine-stack review chain (stack review,
+verdict, adjudication). The settled answer:
+
+> Product profiles conduct. Conatus advances spatial state. Reusable
+> mechanics can move early under settled ownership. Cross-product contracts
+> remain provisional until a second game proves them.
+
+The corrections, each carried into the body text below:
+
+- Conatus is the shared spatial runtime, not the application engine. "The
+  engine" is the composition: a product-owned runtime profile conducting
+  clocks, triggers, input mapping, authorization, source bindings, and
+  subsystem selection. Product clocks are not interchangeable
+  (`mesocosm/design_docs/2026-08-18_engine_ecology_rulings_and_review.md`
+  §2.8), and the implemented runtime already has the right shape:
+  host-driven `step(steps)` advances exact steps, and frame changes publish
+  on zero-step host frames.
+- Seiche remains the graph-oriented 2D specialist, not an eventual adapter.
+- The host/profile orders passes; allocation ownership follows advanced
+  state (the host-conducts ruling,
+  [spatial compute plan](../technical_architecture/2026-08-13_spatial_compute_plan.md)).
+  Netrender's tenancy seam stays the device seam.
+- The engine-owned render view becomes a lean spatial frame with no cameras,
+  lights, sprites, or presentation policy (§4).
+- Schedule phases are renamed around spatial work (§1).
+- Scripts and peers submit product intents; raw remote `BodyCommand`s leave
+  the architecture (§1).
+- Source bindings are profile-owned; Conatus identities stay runtime-only
+  (§1).
+- The closing extraction rule splits into early mechanics and
+  second-consumer contracts, reconciling this plan with the wing's
+  two-consumer law.
 
 ## Direction
 
-Conatus is the engine, not a collection of physics experiments.
+Conatus is the shared spatial runtime, not a collection of physics
+experiments — and not the application engine. The engine is the composition
+a product's runtime profile conducts: the profile owns clocks, triggers,
+input mapping, authorization, source bindings, and subsystem selection, and
+decides when to request a Conatus step, a Seiche relaxation, a field
+evaluation, or an inference job.
 
-The engine owns reusable advancement and spatial machinery: the fixed-step
-clock, body identities, transforms, collision, fields, resident allocations,
-procedural geometry, scene preparation, and system execution. A game owns its
-rules, durable world meaning, assets, and presentation choices. Netrender owns
-frame composition. Renderling is a 3D render tenant. Rapier is the current CPU
-collision and dynamics implementation. Nexus and its Khal kernels are source
-material for the scale at which the CPU backend stops being the right
-implementation.
+Conatus owns reusable spatial machinery: the fixed-step spatial clock, body
+identities, transforms, collision, field effects on the state it advances,
+resident allocations for that state, generic procedural geometry,
+spatial-frame preparation, and spatial system execution. A game owns its
+rules, durable world meaning, assets, procedural content choices, and
+presentation choices; its profile owns orchestration. Netrender owns device
+tenancy and frame composition. Renderling is a 3D render tenant. Rapier is the
+current CPU collision and dynamics implementation. Nexus and its Khal kernels
+are source material for the scale at which the CPU backend stops being the
+right implementation.
 
-Ordinary unit, property, and integration tests remain part of engine work.
+Ordinary unit, property, and integration tests remain part of runtime work.
 Windowed demos, screenshots, receipt applications, and benchmark gates are
 not the work queue. Performance work starts from a named engine workload and
 changes the engine path itself.
 
 ## Existing pieces
 
-| Piece | Role in the engine |
+| Piece | Role in the stack |
 |---|---|
 | `numen` | Serializable field and coupling vocabulary |
 | `quint` | Field evaluation, CubeCL kernels, resident tensor/chunk allocations |
-| `seiche` | Existing 2D graph-physics specialization; eventually an adapter over shared Conatus facilities |
+| `seiche` | Graph-oriented 2D dynamics specialist; shares contracts with the runtime where real, never an adapter over the 3D body API |
 | `conatus` | Shared 3D body world and host-neutral runtime |
 | Netrender | One-device tenancy and final frame composition |
 | Renderling | 3D scene/render implementation, consumed as a tenant |
 | Mesocosm voxel types | First source material for generic voxel storage, revision, dirty-region, collision, and meshing features |
 
-The dependency direction is engine to implementation only. Product crates
+The dependency direction is runtime to implementation only. Product crates
 depend on Conatus. Conatus must not depend on a game.
 
 ## Implemented foundation
@@ -55,8 +97,8 @@ depend on Conatus. Conatus must not depend on a game.
 - configurable kinematic character movement with wall sliding, slope limits,
   ground snap, and autostep;
 - a drift-free fixed-step engine clock with explicit catch-up policy;
-- ordered input, gameplay, field, before/after-physics, materialization, and
-  render-preparation system phases;
+- ordered ingest, field, before/after-physics, materialization, and publish
+  system phases;
 - typed shared resources and deterministic registration order;
 - a serializable structural command buffer applied between phases, with
   correlated command results;
@@ -70,19 +112,19 @@ depend on Conatus. Conatus must not depend on a game.
 Rapier types stay private. Replacing the backend does not change game-facing
 ids, descriptors, queries, or frame changes.
 
-## Engine growth
+## Runtime growth
 
 ### 1. Runtime and systems (foundation implemented)
 
-The ordered engine schedule now has concrete phases:
+The ordered spatial schedule now has concrete phases:
 
-1. ingest commands;
-2. run game systems;
-3. evaluate fields;
+1. run ingest adapters over already-admitted spatial work;
+2. evaluate fields;
+3. run before-physics spatial systems;
 4. advance tactile physics;
-5. materialize voxel and geometry changes;
-6. prepare render views;
-7. publish frame changes.
+5. run after-physics spatial systems;
+6. materialize voxel and geometry changes;
+7. publish derived spatial changes;
 
 Systems receive typed resources, current-step output after physics, and a
 command buffer. Structural mutations
@@ -90,10 +132,40 @@ apply between phases, so scripts and parallel systems cannot invalidate a
 live iteration. Tick-local events and durable game facts remain different
 types.
 
-The remaining runtime work is parallel system access declarations, command
-sources with explicit authority, and a renderer-facing frame resource. A game
-can already register systems, insert resources, queue structural commands, and
-advance without writing a physics loop or borrowing Rapier types.
+Three corrections (2026-08-23) narrow this machinery to spatial work:
+
+**Phase names.** On 2026-08-23, `Input` became `Ingest`, `Gameplay` merged
+into the existing `BeforePhysics` phase, and `Prepare` became `Publish`.
+The public schedule now names only spatial work and does not imply that
+Conatus owns user input, rules, or rendering.
+
+**Command trust boundary.** Scripts and peers submit product intents; only
+authorized product code — the profile and its registered systems — lowers
+accepted consequences into local `BodyCommand`s. Raw remote `BodyCommand`s
+leave the architecture, and `command.rs`'s doc line advertising the command
+vocabulary to "scripts and remote inputs" is corrected with the rename. The
+first product profile retains the request provenance alongside its admitted
+intent; only the product decides whether the request is allowed. Conatus does
+not invent a universal provenance field before that consumer names what it
+needs.
+
+**Source bindings stay profile-owned.** `BodyId` is generational and
+runtime-only, and `BodyDesc` deliberately carries no durable source
+reference. One durable product source may materialize as several bodies,
+scene instances, resident slots, and audio voices, so the binding table
+(`ProductSourceId -> RuntimeBindings { bodies, scene instances, resident
+slots, audio voices }`) belongs to the runtime profile, not to Conatus and
+not inside `BodyDesc`. Sceno's `SourceRef` is the pattern reference, not
+automatically the universal type: it belongs to semantic scenes and lacks
+revision and materialization information. The first Isometry profile
+defines a neutral-shaped binding table locally; the shared minimum is
+extracted when Paredros or Mesocosm needs the same vocabulary.
+
+The remaining runtime work is parallel system access declarations, enforcing
+the intent-lowering command boundary at the first product profile, and the
+lean spatial-frame resource (§4). A game can already register spatial
+systems, insert resources, queue structural commands, and advance without
+writing a physics loop or borrowing Rapier types.
 
 ### 2. Voxel world
 
@@ -107,7 +179,15 @@ Promote the generic parts already present across Mesocosm and Quint:
 - streaming budgets and explicit residency states;
 - body volumes using the same plane and product vocabulary as ground volumes.
 
-Games define what a material or voxel means. The engine owns storage,
+The first CPU mechanics slice now exists in `conatus::voxel`: Euclidean world
+cell addressing; dense opaque chunks in the incumbent Mesocosm Y/Z/X order;
+validated serialization; revision-gated, caller-bounded patch batches;
+effective changes; disposable dirty boxes; and lowering of occupancy changes
+into the existing voxel-collider edits. Product chunk identity, material
+meaning, admission, and durable authority remain outside Conatus. Mesocosm's
+`Ground` and Quint's `ResidentChunk` are unchanged.
+
+Games define what a material or voxel means. Conatus owns storage,
 revision, locality, and derived spatial products.
 
 Feature complete when terrain edits, body-volume edits, collision, queries,
@@ -128,64 +208,101 @@ Join the CPU body world to Quint's resident allocation model:
 
 Burn/CubeCL handles dense fields and authored kernels. Khal/rust-gpu artifacts
 are adopted where their explicit spatial algorithms are useful. Tool choice
-follows the operation, while allocations and scheduling remain Conatus's.
+follows the operation. Allocation ownership follows advanced state: Conatus
+owns the allocations whose state it advances, the profile orders passes on
+the shared device and queue (the host-conducts ruling, spatial compute plan
+2026-08-13), and Netrender's tenancy seam stays the device seam. Conatus is
+not the global allocator for ESP, Quint, Renderling, or future subsystems.
 
-Feature complete when CPU tactile bodies and GPU field bodies publish one
-stable spatial-view vocabulary and can coexist in one engine world.
+Feature complete when CPU tactile bodies and GPU field bodies can be joined
+through one versioned profile-local spatial view and coexist in one spatial
+world. Its cross-product vocabulary becomes stable only after a second game
+consumes it.
 
-### 4. Scene and rendering
+### 4. Spatial frame
 
-Add an engine-owned render view containing instances, cameras, lights,
-sprites, voxel surfaces, particles, and visibility changes. It is a projection
-of engine state, not a renderer scene graph.
+Publish a lean spatial frame: transforms addressable by runtime identity,
+removals, contacts, activity, sleeping and residency changes, voxel and
+geometry revisions, and resident products. No cameras, no lights, no sprites,
+no visibility or presentation policy: those belong to the product's rendering
+profile, which selects and configures tenants — Scenograph lanes for semantic
+2D, Renderling for 3D bodies, brick DDA for live volumes, several composed by
+Netrender.
 
-Renderling consumes the 3D portion through a tenant adapter. Mere's spatial
-renderer can consume the same view. Netrender receives each tenant's frame
-entry and composes them on the host's device and queue.
+Renderling consumes the 3D portion through a profile-owned tenant adapter.
+Mere's spatial renderer can consume the same frame. Netrender receives each
+tenant's frame entry and composes them on the host's device and queue.
+
+The frame vocabulary is a cross-product contract, so its shared form stays
+provisional until a second game consumes it. Until then it is the Isometry
+profile's seam, kept neutral in shape.
 
 Feature complete when a product selects render tenants and presentation
-settings while body transforms, visibility, and geometry revisions continue
-to originate in Conatus.
+settings in its profile while body transforms, activity, and geometry
+revisions continue to originate in Conatus.
 
 ### 5. Procedural and field systems
 
-Turn Numen and Quint into registered engine systems rather than utilities a
-product calls by hand:
+Keep Numen and Quint independently callable, including by Seiche and product
+profiles. Add Conatus adapters only for field effects on state Conatus
+advances:
 
-- scalar/vector field sampling;
-- force and material couplings;
-- particle and fluid systems;
-- SDF composition and extraction;
-- procedural terrain, bodies, vegetation, and scatter;
+- scalar/vector field sampling over Conatus bodies and volumes;
+- force and material couplings applied to Conatus state;
+- particle and fluid systems whose state Conatus advances;
+- SDF composition and extraction for Conatus geometry;
 - spatial trees, neighborhood queries, and large-body broad phase.
 
-Feature complete when these systems compose through shared resources,
-commands, and revisions, and adding one changes the products available to
-every game rather than one executable.
+Generic procedural algorithms may live in shared crates. Terrain, body,
+vegetation, and scatter recipes remain product content. Feature complete when
+a profile can select a field adapter for Conatus while Seiche and another
+consumer continue using the same Numen definitions and Quint evaluation
+without depending on Conatus.
 
 ### 6. Scripting and content
 
-Expose engine commands, queries, events, system parameters, body/voxel
-descriptors, and scene recipes to the script host. Scripts cannot obtain raw
-backend or GPU handles. Content catalogs select and combine registered engine
-features instead of growing fifty bespoke enums per category.
+Expose spatial queries, events, system parameters, body/voxel descriptors,
+and spatial body or voxel recipes to the script host. Scripts submit product
+intents; authorized product code lowers accepted consequences into commands.
+Scripts cannot obtain raw backend or GPU handles, and they do not receive the
+raw command buffer. Content catalogs select and combine registered features
+instead of growing fifty bespoke enums per category.
 
 Feature complete when a data/script-defined rule can spawn and alter bodies,
 edit voxel regions, query space, react to interactions, and configure fields
-through the same command vocabulary native game systems use.
+through product intents that lower into the same command vocabulary native
+product systems use.
 
 ## Immediate implementation order
 
-1. Keep extending `conatus` as the shared package; adapt `seiche` later rather
-   than making the 2D graph API the 3D engine core.
-2. Move generic voxel chunk/revision/dirty-region machinery under Conatus and
-   connect it to the voxel collider already implemented.
-3. Publish stable resident body/chunk views through Quint allocations.
-4. Add the renderer-neutral scene view and the Renderling/Netrender tenant
-   adapter.
-5. Register fields, procedural products, and scripting against those engine
-   resources.
+1. Keep extending `conatus` as the shared spatial package; `seiche` stays the
+   2D graph specialist rather than the 2D graph API becoming the 3D core or
+   being forced through it.
+2. Adopt the generic voxel chunk/revision/dirty-region mechanics in one product
+   without moving product identity or authority, then feed accepted occupancy
+   changes into the voxel collider already implemented.
+3. Publish versioned profile-local resident body/chunk views through Quint
+   allocations.
+4. Add the lean spatial frame and the Renderling/Netrender tenant adapter,
+   seamed in the first product profile.
+5. Add optional field adapters and spatial scripting against the shared
+   resources without making Numen or Quint depend on Conatus.
 
 New work belongs in a product only when its meaning is genuinely product
-specific. Reusable mechanics move into the engine as they are written, rather
-than after another probe duplicates them.
+specific. The extraction rule is split (ruled 2026-08-23):
+
+- **Mechanics may move early.** A reusable implementation whose authority is
+  already settled — collision algorithms, voxel revision machinery, spatial
+  queries — enters its natural shared crate after one forcing consumer, as
+  it is written, rather than after another probe duplicates it.
+- **Contracts wait for the second consumer.** Public contracts governing
+  orchestration, identity, authority, device ownership, or cross-product
+  frames — the conductor, source bindings, the spatial frame, shared trigger
+  vocabulary, resident lease contracts — stay provisional until a second
+  game proves them. The first implementation uses a neutral-shaped seam in
+  its profile; the second consumer tests that shape before it becomes stack
+  law.
+
+This reconciles the plan with the wing's two-consumer law (mesocosm
+`CLAUDE.md`): no deliberate duplication of machinery, and no cross-product
+contract declared in advance.

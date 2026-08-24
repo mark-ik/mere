@@ -377,7 +377,7 @@ impl BodyDesc {
     }
 }
 
-/// Backend-neutral state suitable for gameplay and render preparation.
+/// Backend-neutral state suitable for profile and spatial-frame preparation.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BodyState {
     pub id: BodyId,
