@@ -56,6 +56,10 @@ pub struct ShelfmarkAuthorityV1 {
 pub struct ShelfmarkInputV1 {
     pub authority: ShelfmarkAuthorityV1,
     pub reading: String,
+    /// Adapter-owned reading parameters needed for reconstitution, serialized
+    /// once by that adapter and preserved opaquely here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reading_parameters: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub arrangement: Option<String>,
     pub expects_generation: String,
@@ -103,6 +107,10 @@ impl ShelfmarkV1 {
                 || input.authority.adapter.trim().is_empty()
                 || input.authority.record.trim().is_empty()
                 || input.reading.trim().is_empty()
+                || input
+                    .reading_parameters
+                    .as_ref()
+                    .is_some_and(|parameters| parameters.trim().is_empty())
                 || input.expects_generation.trim().is_empty()
             {
                 return Err(ShelfmarkError::InvalidInput(role.clone()));
@@ -231,6 +239,7 @@ mod tests {
                     record: "specimen@authored".into(),
                 },
                 reading: "changes".into(),
+                reading_parameters: None,
                 arrangement: None,
                 expects_generation: "22".into(),
             },
@@ -243,6 +252,7 @@ mod tests {
                     record: "live@648bf19".into(),
                 },
                 reading: "neighbors".into(),
+                reading_parameters: Some("{\"focus\":\"mere\"}".into()),
                 arrangement: None,
                 expects_generation: "11".into(),
             },
@@ -272,6 +282,7 @@ mod tests {
                     record: "live".into(),
                 },
                 reading: "neighbors".into(),
+                reading_parameters: None,
                 arrangement: None,
                 expects_generation: String::new(),
             },
