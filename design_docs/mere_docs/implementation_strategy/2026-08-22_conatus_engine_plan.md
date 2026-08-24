@@ -1,8 +1,9 @@
 # Conatus Shared Spatial Runtime
 
 **Date:** 2026-08-22  
-**Status:** active; body/runtime foundation implemented; private-backend
-integrity pass in progress 2026-08-24; scope corrected 2026-08-23
+**Status:** active; body/runtime foundation and private-backend integrity pass
+implemented; Nexus admission probe blocked at its upstream Windows shader build;
+scope corrected 2026-08-23
 **Scope:** Build the shared spatial runtime. Mesocosm, Paredros, Isometry,
 and Mere projections consume it through product-owned runtime profiles
 instead of incubating spatial machinery in product-local probes.
@@ -118,7 +119,7 @@ that private implementation boundary structural. A future backend must still
 prove which game-facing behaviors it supports; unsupported behavior may not be
 silently approximated.
 
-### Private backend integrity pass (in progress 2026-08-24)
+### Private backend integrity pass (complete 2026-08-24)
 
 Keep Conatus identities, generations, revision order, dirty publication, and
 normalized events as the stable spatial mechanics. Move Rapier-specific world
@@ -131,6 +132,10 @@ Rapier imports and handles are confined to the private implementation, and
 warnings-denied checks pass. This proves a code boundary only. Nexus earns a
 backend seat later through an isolated lifecycle/query receipt and the exact
 host-device receipt; it does not inherit one from opacity alone.
+
+Complete at Mere commit `339e8567`: six `conatus-voxel` tests, eighteen
+Conatus unit tests, the cross-package voxel-collider integration test, and
+warnings-denied Clippy passed.
 
 ## Runtime growth
 
@@ -362,7 +367,8 @@ contract declared in advance.
   vocabulary. Mesocosm now names the narrow package directly, so its
   `GroundVoxelProfile` does not acquire Rapier merely to maintain a disposable
   chunk view.
-- The next Nexus evidence is an isolated same-device rigid-body probe. It must
-  translate the public Conatus descriptor vocabulary, wrap Netrender's exact
-  device and queue through Khal, advance one body on the GPU, and read a changed
-  pose. It does not add Nexus to Conatus or establish shared buffer ownership.
+- The isolated Nexus probe resolves Netrender, Vello, Khal, and Nexus onto one
+  wgpu-30 row after restating Netrender's temporary Vello patch. Its Windows
+  build reaches `nexus_rbd3d`, then the Khal build script's `cargo-gpu 0.1.0`
+  invocation fails while removing `Cargo.lock`. No Nexus kernel executed, so
+  Nexus remains outside Conatus and shared buffer ownership remains unproven.
