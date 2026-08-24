@@ -158,14 +158,11 @@ impl AdvertisedAction {
 /// can tell whose selection it is reading, and a field added later would be
 /// absent on every link already in circulation.
 ///
-/// **Deliberately absent: a resolution strategy.** Mosaic's clause vocabulary
-/// declares how selections from several views combine — single, union,
-/// intersect, or crossfilter, where a view is filtered by every brush but its
-/// own. Nothing ships two coordinated views yet, so adopting that here would be
-/// speculation, and the shape is easier to get right against a real second
-/// consumer than against an imagined one. The record is designed so it can
-/// arrive without breaking links already written: a reader that finds no
-/// strategy treats the selection as `single`, which is what one view means.
+/// A single [`Selection`] remains the backwards-compatible one-view record.
+/// When several views contribute clauses, [`CoordinatedSelection`] owns the
+/// declared rule that combines them. Keeping the wrapper separate means links
+/// already carrying this exact shape continue to decode without an inferred
+/// multi-view policy.
 ///
 /// This is a noun, not an intent. Freeze ruling D1 stands: the protocol owns
 /// the intent triple, and selecting something is not invoking anything.
@@ -183,11 +180,110 @@ pub struct Selection {
 /// Kind and id are opaque strings on purpose. The protocol does not learn a
 /// product's taxonomy, the same way a score carries opaque [`sceno::SourceRef`]s
 /// rather than source truth.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct SelectionTarget {
     /// The product's word for what this is: `node`, `edge`, a region name.
     pub kind: String,
     pub id: String,
+}
+
+/// What work one view's selection clause performs.
+///
+/// The role is carried because focus, filtering, and a brush are not
+/// interchangeable host gestures even when they happen to name the same
+/// source targets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionRole {
+    Focus,
+    Filter,
+    Brush,
+}
+
+/// The combination rule a coordinated set of views has actually forced.
+///
+/// `Single` preserves the meaning of the pre-coordination record.
+/// `Crossfilter` is the first multi-view rule: each consuming view applies
+/// every foreign clause and excludes its own. Union and intersection remain
+/// absent until a consumer needs their distinct behavior.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionResolution {
+    Single,
+    Crossfilter,
+}
+
+/// One source view's named contribution to coordinated selection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelectionClause {
+    pub role: SelectionRole,
+    pub targets: Vec<SelectionTarget>,
+}
+
+/// Selections contributed by several views, with their combination rule as
+/// data rather than host convention.
+///
+/// The ordered map makes the serialized clause order deterministic and makes
+/// the producing view an unavoidable part of every clause. Removing the last
+/// foreign clause makes [`Self::targets_for`] return `None`, the explicit
+/// unfiltered state.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CoordinatedSelection {
+    pub resolution: SelectionResolution,
+    pub clauses: BTreeMap<String, SelectionClause>,
+}
+
+impl CoordinatedSelection {
+    pub fn new(resolution: SelectionResolution) -> Self {
+        Self {
+            resolution,
+            clauses: BTreeMap::new(),
+        }
+    }
+
+    /// Insert or replace the clause produced by `selection.source`.
+    pub fn set(&mut self, role: SelectionRole, selection: Selection) {
+        self.clauses.insert(
+            selection.source,
+            SelectionClause {
+                role,
+                targets: selection.targets,
+            },
+        );
+    }
+
+    /// Remove one producing view's clause. Returns whether one existed.
+    pub fn remove(&mut self, source: &str) -> bool {
+        self.clauses.remove(source).is_some()
+    }
+
+    /// Resolve the targets that should constrain `consumer`.
+    ///
+    /// `None` means unfiltered. An empty set means the declared clauses were
+    /// applied and matched nothing. Crossfilter intersects foreign clauses:
+    /// every foreign brush constrains the view, while the view's own clause is
+    /// deliberately excluded.
+    pub fn targets_for(&self, consumer: &str) -> Option<BTreeSet<SelectionTarget>> {
+        match self.resolution {
+            SelectionResolution::Single => self
+                .clauses
+                .values()
+                .next()
+                .map(|clause| clause.targets.iter().cloned().collect()),
+            SelectionResolution::Crossfilter => {
+                let mut foreign = self
+                    .clauses
+                    .iter()
+                    .filter(|(source, _)| source.as_str() != consumer)
+                    .map(|(_, clause)| clause.targets.iter().cloned().collect::<BTreeSet<_>>());
+                let mut resolved = foreign.next()?;
+                for targets in foreign {
+                    resolved.retain(|target| targets.contains(target));
+                }
+                Some(resolved)
+            }
+        }
+    }
 }
 
 impl Selection {
@@ -1400,6 +1496,77 @@ mod tests {
         let also_mine = Selection::one("canvas", "node", "c");
         assert!(mine.is_foreign_to(&theirs));
         assert!(!mine.is_foreign_to(&also_mine));
+    }
+
+    #[test]
+    fn crossfilter_applies_foreign_clauses_and_excludes_the_consuming_view() {
+        let mut coordinated = CoordinatedSelection::new(SelectionResolution::Crossfilter);
+        coordinated.set(
+            SelectionRole::Focus,
+            Selection::one("spatial", "node", "mere"),
+        );
+        coordinated.set(
+            SelectionRole::Brush,
+            Selection::one("matrix", "node", "turnstone"),
+        );
+
+        assert_eq!(
+            coordinated.targets_for("spatial").unwrap(),
+            BTreeSet::from([SelectionTarget {
+                kind: "node".into(),
+                id: "turnstone".into(),
+            }])
+        );
+        assert_eq!(
+            coordinated.targets_for("matrix").unwrap(),
+            BTreeSet::from([SelectionTarget {
+                kind: "node".into(),
+                id: "mere".into(),
+            }])
+        );
+    }
+
+    #[test]
+    fn clause_removal_restores_the_unfiltered_reading() {
+        let mut coordinated = CoordinatedSelection::new(SelectionResolution::Crossfilter);
+        coordinated.set(
+            SelectionRole::Brush,
+            Selection::one("matrix", "node", "mere"),
+        );
+        assert!(coordinated.targets_for("spatial").is_some());
+        assert!(coordinated.remove("matrix"));
+        assert_eq!(coordinated.targets_for("spatial"), None);
+    }
+
+    #[test]
+    fn coordinated_selection_wire_is_deterministic() {
+        let mut left = CoordinatedSelection::new(SelectionResolution::Crossfilter);
+        left.set(
+            SelectionRole::Brush,
+            Selection::one("matrix", "node", "mere"),
+        );
+        left.set(
+            SelectionRole::Focus,
+            Selection::one("spatial", "node", "turnstone"),
+        );
+
+        let mut right = CoordinatedSelection::new(SelectionResolution::Crossfilter);
+        right.set(
+            SelectionRole::Focus,
+            Selection::one("spatial", "node", "turnstone"),
+        );
+        right.set(
+            SelectionRole::Brush,
+            Selection::one("matrix", "node", "mere"),
+        );
+
+        let wire = serde_json::to_string(&left).expect("serialize coordinated selection");
+        assert_eq!(wire, serde_json::to_string(&right).unwrap());
+        assert_eq!(
+            serde_json::from_str::<CoordinatedSelection>(&wire).unwrap(),
+            left
+        );
+        assert!(wire.find("matrix").unwrap() < wire.find("spatial").unwrap());
     }
 
     #[test]
