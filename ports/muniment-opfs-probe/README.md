@@ -115,10 +115,16 @@ command also spans the post-move checks. Only atomic outcomes have been
 observed, which is evidence; `move()` carries no spec crash guarantee.
 
 `IndexedDbRangeBackend` declares an **ASCII key contract** and errors on
-anything else. This is not fussiness: IndexedDB orders strings by UTF-16 code
-unit while `muniment::Backend::scan` is specified in Rust's code-point order,
-and the two disagree outside the BMP, so no range query can honour the
-contract for such keys. See `src/idb_keys.rs`.
+anything else, on **every key-bearing operation** — not just `scan`/`list`.
+Enforcing it only at the range query was not enough: a non-ASCII key admitted
+through `put` or `apply` sits in the store and surfaces through `list("")`,
+which has no bounds to validate, in IndexedDB's UTF-16 order. `apply`
+prevalidates the whole batch so a refusal stays all-or-nothing. This is not
+fussiness: IndexedDB orders strings by UTF-16 code unit while
+`muniment::Backend::scan` is specified in Rust's code-point order, and the two
+disagree outside the BMP, so no range query can honour the contract for such
+keys. See `src/idb_keys.rs` (native tests) and lane 5's `ascii_contract`
+(browser test).
 
 Read-performance numbers must cite the `indexed_db_range` backend, not
 `indexed_db`. The latter is muniment's shipping adapter, which fetches every
@@ -139,11 +145,14 @@ Get-Process chrome-headless-shell,firefox,node -ErrorAction SilentlyContinue | S
 ```
 
 Reaping strays is necessary but not sufficient on a daily-driver machine:
-ordinary desktop applications alone can move lane timings several-fold. **The
-benchmark's precision is bounded by host noise**, which is why every row
-carries `total_spread_ms` across its repeats. Read the spread before quoting
-a ratio; a comparison whose min/max straddle it needs a quiet machine to
-settle.
+ordinary desktop applications alone can move lane timings several-fold.
+**Quote worst-observed ratios, not just medians.** The two IndexedDB backends
+share identical *write* code, so their write phases are a built-in control on
+how much variation the host is injecting — it has been seen as high as 2.44×
+between identical code. Every summary row carries `envelopes` with the
+observed min/max per backend, the worst-observed ratio, and whether every
+repeat favoured the same side. A median that a single outlier can move 7× (it
+happened: 48.8× median, 6.7× worst) is not a number to put in a decision.
 
 Note that lane 3 prints nothing between its start and finish lines; a long
 silence there is normal, not a stall.

@@ -140,6 +140,14 @@ fn prefixed(prefix: &str) -> Result<IdbKeyRange, StoreError> {
     }
 }
 
+/// The ASCII contract, enforced on **every key-bearing operation**.
+///
+/// Checking only `scan`/`list` was not enough: a non-ASCII key admitted
+/// through `put` or `apply` would sit in the store and then surface through
+/// `list("")` — which has no bounds to validate and returns whatever
+/// IndexedDB holds, in **IndexedDB's** UTF-16 order. The contract has to be
+/// enforced at the door, not at the range query, or the store can reach a
+/// state the range query cannot describe correctly.
 fn contract(what: &'static str, key: &str) -> Result<(), StoreError> {
     require_ascii(what, key).map_err(|e| StoreError::Backend(e.to_string()))
 }
@@ -164,6 +172,7 @@ fn indexed_db_factory() -> Result<IdbFactory, StoreError> {
 #[async_trait(?Send)]
 impl Backend for IndexedDbRangeBackend {
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>, StoreError> {
+        contract("get key", key)?;
         let (_transaction, store) = self.transaction(IdbTransactionMode::Readonly)?;
         let request = store
             .get(&JsValue::from_str(key))
@@ -179,6 +188,7 @@ impl Backend for IndexedDbRangeBackend {
     }
 
     async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StoreError> {
+        contract("put key", key)?;
         let (transaction, store) = self.transaction(IdbTransactionMode::Readwrite)?;
         let value = Uint8Array::from(bytes);
         store
@@ -188,6 +198,7 @@ impl Backend for IndexedDbRangeBackend {
     }
 
     async fn delete(&self, key: &str) -> Result<(), StoreError> {
+        contract("delete key", key)?;
         let (transaction, store) = self.transaction(IdbTransactionMode::Readwrite)?;
         store
             .delete(&JsValue::from_str(key))
@@ -226,6 +237,15 @@ impl Backend for IndexedDbRangeBackend {
     async fn apply(&self, ops: &[WriteOp]) -> Result<(), StoreError> {
         if ops.is_empty() {
             return Ok(());
+        }
+        // Prevalidate the WHOLE batch before opening the transaction. Checking
+        // per-op inside the loop would let the ops before a bad key land, and
+        // `apply`'s contract is all-or-nothing.
+        for op in ops {
+            match op {
+                WriteOp::Put { key, .. } => contract("apply put key", key)?,
+                WriteOp::Delete { key } => contract("apply delete key", key)?,
+            }
         }
         let (transaction, store) = self.transaction(IdbTransactionMode::Readwrite)?;
         for op in ops {

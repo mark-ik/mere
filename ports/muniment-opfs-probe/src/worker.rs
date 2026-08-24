@@ -12,7 +12,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use js_sys::Uint8Array;
-use muniment::{IndexedDbBackend, MemoryBackend};
+use muniment::{Backend, IndexedDbBackend, MemoryBackend, WriteOp};
 use redb::backends::InMemoryBackend;
 use redb::{Database, ReadableDatabase, TableDefinition};
 use serde_json::json;
@@ -29,9 +29,9 @@ use crate::opfs_backend::{
 use crate::redb_backend::RedbBackend;
 use crate::workload::{self, BenchBackend};
 use crate::{
-    BenchReport, ChurnReport, DigestReport, ExistsReport, ExportReport, FaultReport, HoldReport,
-    ImportReport, IoStats, OpenReport, ProbeCommand, ProbeReport, ProgressReport, ReopenReport,
-    RoundTripReport, SmokeReport, StagedCreateReport, TryOpenReport,
+    AsciiContractReport, BenchReport, ChurnReport, DigestReport, ExistsReport, ExportReport,
+    FaultReport, HoldReport, ImportReport, IoStats, OpenReport, ProbeCommand, ProbeReport,
+    ProgressReport, ReopenReport, RoundTripReport, SmokeReport, StagedCreateReport, TryOpenReport,
 };
 
 /// redb defaults to a 1 GiB cache; a worker does not want that.
@@ -579,6 +579,87 @@ async fn execute(command: ProbeCommand) -> Result<ProbeReport, String> {
         ProbeCommand::Remove { path } => {
             let existed = opfs::remove(&path).await.map_err(|e| e.to_string())?;
             Ok(ProbeReport::Removed { path, existed })
+        }
+        ProbeCommand::AsciiContract { name } => {
+            post_state("contract", "ASCII key contract on the range backend")?;
+            let store = IndexedDbRangeBackend::open(&name, "muniment")
+                .await
+                .map_err(|e| e.to_string())?;
+            // Two keys the UTF-16/code-point orders disagree about, plus an
+            // ordinary non-ASCII one.
+            let bad = "\u{FFFF}";
+            let bad2 = "k/\u{10000}";
+            let mut refused = Vec::new();
+            refused.push(("put".into(), store.put(bad, b"v").await.is_err()));
+            refused.push(("get".into(), store.get(bad).await.is_err()));
+            refused.push(("delete".into(), store.delete(bad).await.is_err()));
+            refused.push(("list".into(), store.list(bad).await.is_err()));
+            refused.push(("scan_start".into(), store.scan(bad, "zzz").await.is_err()));
+            refused.push(("scan_end".into(), store.scan("a", bad).await.is_err()));
+            // A batch whose LAST op is bad must be refused whole, leaving the
+            // earlier ops unapplied.
+            let batch = vec![
+                WriteOp::Put {
+                    key: "ok/1".into(),
+                    value: b"a".to_vec(),
+                },
+                WriteOp::Put {
+                    key: "ok/2".into(),
+                    value: b"b".to_vec(),
+                },
+                WriteOp::Put {
+                    key: bad2.into(),
+                    value: b"c".to_vec(),
+                },
+            ];
+            refused.push(("apply".into(), store.apply(&batch).await.is_err()));
+            // Fail CLOSED. An earlier version read `get` errors as "absent"
+            // and `list` errors as "empty", so a backend that errored on
+            // every call would have scored a perfect pass. These reads are
+            // ASCII and must genuinely succeed; a failure is a failure.
+            let left_1 = store
+                .get("ok/1")
+                .await
+                .map_err(|e| format!("post-apply get(ok/1): {e}"))?;
+            let left_2 = store
+                .get("ok/2")
+                .await
+                .map_err(|e| format!("post-apply get(ok/2): {e}"))?;
+            let apply_left_nothing = left_1.is_none() && left_2.is_none();
+            // ASCII still works.
+            store
+                .put("ascii/key", b"v")
+                .await
+                .map_err(|e| format!("ascii put: {e}"))?;
+            let ascii_still_works = store
+                .get("ascii/key")
+                .await
+                .map_err(|e| format!("ascii get: {e}"))?
+                == Some(b"v".to_vec())
+                && store
+                    .scan("ascii/", "ascii0")
+                    .await
+                    .map_err(|e| format!("ascii scan: {e}"))?
+                    .len()
+                    == 1;
+            let final_keys = store
+                .list("")
+                .await
+                .map_err(|e| format!("final list: {e}"))?;
+            // Exactly the one key the ASCII writes put there — not merely
+            // "everything present happens to be ASCII", which an empty or
+            // partially-written store would also satisfy.
+            let ok = refused.iter().all(|(_, r)| *r)
+                && apply_left_nothing
+                && ascii_still_works
+                && final_keys == vec!["ascii/key".to_string()];
+            Ok(ProbeReport::AsciiContract(AsciiContractReport {
+                refused,
+                ascii_still_works,
+                apply_left_nothing,
+                final_keys,
+                ok,
+            }))
         }
         ProbeCommand::Exists { path } => {
             let exists = opfs::exists(&path).await.map_err(|e| e.to_string())?;

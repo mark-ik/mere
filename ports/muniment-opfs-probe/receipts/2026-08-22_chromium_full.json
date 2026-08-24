@@ -1,6 +1,6 @@
 {
   "schema": "muniment.opfs-probe.receipt/v1",
-  "generated_at": "2026-08-22T21:09:39.439Z",
+  "generated_at": "2026-08-23T22:47:18.367Z",
   "configuration": {
     "opfs_prefix": "muniment-probe",
     "shape": {
@@ -24,19 +24,19 @@
     "page_web_locks": true,
     "visibility": "visible",
     "wasm_bundle": {
-      "bytes": 1572666,
-      "wasm_sha256": "4c39a7c94a150ab71cf22dcc30c9ba68712cd324c1f7cfd79a9a40d67a9f4a0a",
-      "probe_js_sha256": "61b67f024f42f00f37f76f092562ad301837ea1a1f729664c6f7f1651fe2f0a7",
+      "bytes": 1586210,
+      "wasm_sha256": "9609c1e8fba8b9b959f14e2bf06886d95594ad3847bdc0d3313de2183c1b4d85",
+      "probe_js_sha256": "eb849d0a811e9d8c7d3959b8deca3e187c6d4e2bf040c32e81546d60c8ab9148",
       "worker_js_sha256": "7bb5c65191e4ce7d03857b6665bd62ef240228e0beb6635a4784f455ef4b5d74"
     },
     "build": {
-      "built_at": "2026-08-22T20:49:36.6082882Z",
+      "built_at": "2026-08-23T22:46:32.8194449Z",
       "cargo_lock_sha256": "8a00ee9778c8130aee916d7229b572fe61f8103896da15d712818701dd74e1ad",
-      "commit": "722ca9eb3effc2600fd65a4fde8f01eb06556458",
+      "commit": "d210519ed766750cb1f796d77eaab39fca94c327",
       "dirty": true,
       "locked_build": true,
       "muniment_source_sha256": "d0d99653d7b064d8f3c772544fb4c78e383c92fb19fb4ba3ec5efe3bca337765",
-      "probe_source_sha256": "c6e70406a9d36c874d4d329095997876aba556a5bb5997ff7612918dca9dc01d",
+      "probe_source_sha256": "a2e8d559fb3c59e60f21065cb84ad312d5c8ce6b28a5778eab9b17984a24667f",
       "profile": "release",
       "redb": "4.2.0",
       "schema": "muniment.opfs-probe/v1",
@@ -54,14 +54,14 @@
     "before": {
       "state": "best_effort",
       "persisted_timed_out": false,
-      "quota_bytes": 5368709294,
+      "quota_bytes": 6442451118,
       "usage_bytes": 174
     },
     "after": {
       "state": "best_effort",
       "persisted_timed_out": false,
-      "quota_bytes": 5594443487,
-      "usage_bytes": 225734367
+      "quota_bytes": 6667576370,
+      "usage_bytes": 225125426
     }
   },
   "lanes": {
@@ -70,7 +70,7 @@
         "report": "in_memory_smoke",
         "ok": true,
         "blobs": 64,
-        "ms": 37.10000002384186
+        "ms": 27
       },
       "ok": true
     },
@@ -82,7 +82,7 @@
           "opened": true,
           "error": null,
           "error_kind": null,
-          "open_ms": 36.60000002384186,
+          "open_ms": 22.100000001490116,
           "repair_invoked": true,
           "repair_callbacks": 3
         },
@@ -96,7 +96,7 @@
           "bytes_read": 320,
           "bytes_written": 1254080
         },
-        "ms": 256.89999997615814
+        "ms": 134.69999999925494
       },
       "reopened": {
         "report": "reopen",
@@ -104,7 +104,7 @@
           "opened": true,
           "error": null,
           "error_kind": null,
-          "open_ms": 19.69999998807907,
+          "open_ms": 9.100000001490116,
           "repair_invoked": false,
           "repair_callbacks": 0
         },
@@ -129,7 +129,7 @@
           "bytes_read": 586377,
           "bytes_written": 960
         },
-        "ms": 157.5999999642372
+        "ms": 47.5
       },
       "ok": true
     },
@@ -14919,24 +14919,24 @@
             "unopenable": 0,
             "harness_error": 0
           },
-          "kills_inside_a_commit": 8,
+          "kills_inside_a_commit": 10,
           "generations_after_terminate_call": {
             "n": 10,
-            "min": 5,
-            "median": 9,
-            "max": 13
+            "min": 68,
+            "median": 118,
+            "max": 122
           },
           "handle_release_wait_ms": {
             "n": 10,
-            "min": 2700.7999999523163,
-            "median": 4333.599999964237,
-            "max": 4905.700000047684
+            "min": 2069.800000000745,
+            "median": 2121.39999999851,
+            "max": 2188.199999999255
           },
           "reopen_open_ms": {
             "n": 10,
-            "min": 148.80000001192093,
-            "median": 732.8999999761581,
-            "max": 875.9000000357628
+            "min": 22.100000001490116,
+            "median": 33.900000002235174,
+            "max": 58.600000001490116
           },
           "repairs_invoked": 10
         },
@@ -14955,19 +14955,19 @@
             "n": 10,
             "min": 1,
             "median": 1,
-            "max": 1
+            "max": 2
           },
           "handle_release_wait_ms": {
             "n": 10,
-            "min": 669.8000000119209,
-            "median": 1127.6000000238419,
-            "max": 1695.699999988079
+            "min": 97.5,
+            "median": 111,
+            "max": 126.19999999925494
           },
           "reopen_open_ms": {
             "n": 10,
-            "min": 142.29999995231628,
-            "median": 272.0999999642372,
-            "max": 658
+            "min": 27.900000002235174,
+            "median": 30.300000000745058,
+            "max": 36.399999998509884
           },
           "repairs_invoked": 10
         },
@@ -14976,259 +14976,42 @@
           {
             "trial": 1,
             "mode": "forced",
-            "terminate_called_while_committing": 3,
-            "committed_at_terminate_call": 2,
-            "last_committed_reported": 8,
-            "last_committing_reported": 9,
-            "generations_after_terminate_call": 6,
+            "terminate_called_while_committing": 7,
+            "committed_at_terminate_call": 6,
+            "last_committed_reported": 124,
+            "last_committing_reported": 125,
+            "generations_after_terminate_call": 118,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 320,
-              "bytes_written": 318272,
+              "bytes_written": 942144,
               "reads": 1,
-              "set_lens": 1,
-              "syncs": 9,
-              "writes": 54
+              "set_lens": 2,
+              "syncs": 13,
+              "writes": 146
             },
-            "churn_open_release_wait_ms": 1518.8999999761581,
+            "churn_open_release_wait_ms": 331.80000000074506,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 4461,
-            "reopen_attempts": 6,
-            "wall_ms_terminate_to_reopen": 4848.5,
-            "reopened_generation": 8,
+            "reopen_release_wait_ms": 2121.900000002235,
+            "reopen_attempts": 64,
+            "wall_ms_terminate_to_reopen": 2154.5,
+            "reopened_generation": 124,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 732.8999999761581,
-            "file_len": 462848,
+            "open_ms": 33.100000001490116,
+            "file_len": 761856,
             "ok": true
           },
           {
             "trial": 2,
             "mode": "forced",
-            "terminate_called_while_committing": 14,
-            "committed_at_terminate_call": 13,
-            "last_committed_reported": 25,
-            "last_committing_reported": 25,
-            "generations_after_terminate_call": 12,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 780480,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 7,
-              "writes": 117
-            },
-            "churn_open_release_wait_ms": 2162.400000035763,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 2700.7999999523163,
-            "reopen_attempts": 6,
-            "wall_ms_terminate_to_reopen": 2883.699999988079,
-            "reopened_generation": 25,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 148.80000001192093,
-            "file_len": 462848,
-            "ok": true
-          },
-          {
-            "trial": 3,
-            "mode": "forced",
-            "terminate_called_while_committing": 34,
-            "committed_at_terminate_call": 33,
-            "last_committed_reported": 42,
-            "last_committing_reported": 43,
-            "generations_after_terminate_call": 9,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 1248384,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 10,
-              "writes": 186
-            },
-            "churn_open_release_wait_ms": 3212.699999988079,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 3471.199999988079,
-            "reopen_attempts": 6,
-            "wall_ms_terminate_to_reopen": 3926.399999976158,
-            "reopened_generation": 42,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 875.9000000357628,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 4,
-            "mode": "forced",
-            "terminate_called_while_committing": 47,
-            "committed_at_terminate_call": 46,
-            "last_committed_reported": 54,
-            "last_committing_reported": 55,
-            "generations_after_terminate_call": 8,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 624512,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 7,
-              "writes": 94
-            },
-            "churn_open_release_wait_ms": 1922.5,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 3291.400000035763,
-            "reopen_attempts": 5,
-            "wall_ms_terminate_to_reopen": 3452.100000023842,
-            "reopened_generation": 54,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 297.80000001192093,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 5,
-            "mode": "forced",
-            "terminate_called_while_committing": 56,
-            "committed_at_terminate_call": 55,
-            "last_committed_reported": 60,
-            "last_committing_reported": 61,
-            "generations_after_terminate_call": 5,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 172361,
-              "bytes_written": 156608,
-              "reads": 27,
-              "set_lens": 0,
-              "syncs": 3,
-              "writes": 25
-            },
-            "churn_open_release_wait_ms": 2342.699999988079,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 3055.300000011921,
-            "reopen_attempts": 5,
-            "wall_ms_terminate_to_reopen": 3847.900000035763,
-            "reopened_generation": 60,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 184.10000002384186,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 6,
-            "mode": "forced",
-            "terminate_called_while_committing": 61,
-            "committed_at_terminate_call": 60,
-            "last_committed_reported": 69,
-            "last_committing_reported": 70,
-            "generations_after_terminate_call": 9,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 29001,
-              "bytes_written": 4736,
-              "reads": 9,
-              "set_lens": 0,
-              "syncs": 2,
-              "writes": 3
-            },
-            "churn_open_release_wait_ms": 480,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 4905.700000047684,
-            "reopen_attempts": 4,
-            "wall_ms_terminate_to_reopen": 6358.400000035763,
-            "reopened_generation": 69,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 746.2000000476837,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 7,
-            "mode": "forced",
-            "terminate_called_while_committing": 75,
-            "committed_at_terminate_call": 74,
-            "last_committed_reported": 79,
-            "last_committing_reported": 80,
-            "generations_after_terminate_call": 5,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 780480,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 8,
-              "writes": 117
-            },
-            "churn_open_release_wait_ms": 2533.699999988079,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 4392.800000011921,
-            "reopen_attempts": 3,
-            "wall_ms_terminate_to_reopen": 4469.5,
-            "reopened_generation": 79,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 867.1999999880791,
-            "file_len": 458752,
-            "ok": true
-          },
-          {
-            "trial": 8,
-            "mode": "forced",
-            "terminate_called_while_committing": 80,
-            "committed_at_terminate_call": 79,
-            "last_committed_reported": 85,
-            "last_committing_reported": 86,
-            "generations_after_terminate_call": 6,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 29001,
-              "bytes_written": 4736,
-              "reads": 9,
-              "set_lens": 0,
-              "syncs": 2,
-              "writes": 3
-            },
-            "churn_open_release_wait_ms": 622.3000000119209,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 4333.599999964237,
-            "reopen_attempts": 3,
-            "wall_ms_terminate_to_reopen": 5509,
-            "reopened_generation": 85,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 504,
-            "file_len": 450560,
-            "ok": true
-          },
-          {
-            "trial": 9,
-            "mode": "forced",
-            "terminate_called_while_committing": 88,
-            "committed_at_terminate_call": 87,
-            "last_committed_reported": 96,
-            "last_committing_reported": 97,
-            "generations_after_terminate_call": 9,
+            "terminate_called_while_committing": 127,
+            "committed_at_terminate_call": 126,
+            "last_committed_reported": 219,
+            "last_committing_reported": 220,
+            "generations_after_terminate_call": 93,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
@@ -15238,29 +15021,29 @@
               "syncs": 4,
               "writes": 48
             },
-            "churn_open_release_wait_ms": 1126.5,
+            "churn_open_release_wait_ms": 297.6000000014901,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 3970.2000000476837,
-            "reopen_attempts": 8,
-            "wall_ms_terminate_to_reopen": 4202.900000035763,
-            "reopened_generation": 96,
+            "reopen_release_wait_ms": 2121.39999999851,
+            "reopen_attempts": 51,
+            "wall_ms_terminate_to_reopen": 2161.599999997765,
+            "reopened_generation": 219,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 435.10000002384186,
-            "file_len": 462848,
+            "open_ms": 34.399999998509884,
+            "file_len": 761856,
             "ok": true
           },
           {
-            "trial": 10,
+            "trial": 3,
             "mode": "forced",
-            "terminate_called_while_committing": 97,
-            "committed_at_terminate_call": 96,
-            "last_committed_reported": 109,
-            "last_committing_reported": 109,
-            "generations_after_terminate_call": 13,
-            "kill_landed_inside_commit": false,
+            "terminate_called_while_committing": 220,
+            "committed_at_terminate_call": 219,
+            "last_committed_reported": 308,
+            "last_committing_reported": 309,
+            "generations_after_terminate_call": 89,
+            "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 29001,
               "bytes_written": 4736,
@@ -15269,27 +15052,399 @@
               "syncs": 2,
               "writes": 3
             },
-            "churn_open_release_wait_ms": 634.8999999761581,
+            "churn_open_release_wait_ms": 241.5,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 4484.699999988079,
-            "reopen_attempts": 3,
-            "wall_ms_terminate_to_reopen": 4855.400000035763,
-            "reopened_generation": 109,
+            "reopen_release_wait_ms": 2164.599999997765,
+            "reopen_attempts": 51,
+            "wall_ms_terminate_to_reopen": 2207,
+            "reopened_generation": 308,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 815.1999999880791,
+            "open_ms": 56.899999998509884,
+            "file_len": 446464,
+            "ok": true
+          },
+          {
+            "trial": 4,
+            "mode": "forced",
+            "terminate_called_while_committing": 312,
+            "committed_at_terminate_call": 311,
+            "last_committed_reported": 379,
+            "last_committing_reported": 380,
+            "generations_after_terminate_call": 68,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 468544,
+              "reads": 42,
+              "set_lens": 1,
+              "syncs": 6,
+              "writes": 71
+            },
+            "churn_open_release_wait_ms": 405.30000000074506,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2188.199999999255,
+            "reopen_attempts": 42,
+            "wall_ms_terminate_to_reopen": 2252.5,
+            "reopened_generation": 379,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 58.600000001490116,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 5,
+            "mode": "forced",
+            "terminate_called_while_committing": 383,
+            "committed_at_terminate_call": 382,
+            "last_committed_reported": 463,
+            "last_committing_reported": 464,
+            "generations_after_terminate_call": 81,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 468544,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 5,
+              "writes": 71
+            },
+            "churn_open_release_wait_ms": 394.79999999701977,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2075.900000002235,
+            "reopen_attempts": 47,
+            "wall_ms_terminate_to_reopen": 2110.800000000745,
+            "reopened_generation": 463,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 25.100000001490116,
+            "file_len": 446464,
+            "ok": true
+          },
+          {
+            "trial": 6,
+            "mode": "forced",
+            "terminate_called_while_committing": 465,
+            "committed_at_terminate_call": 464,
+            "last_committed_reported": 569,
+            "last_committing_reported": 570,
+            "generations_after_terminate_call": 105,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 172361,
+              "bytes_written": 156608,
+              "reads": 27,
+              "set_lens": 0,
+              "syncs": 3,
+              "writes": 25
+            },
+            "churn_open_release_wait_ms": 331.8999999985099,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2098.800000000745,
+            "reopen_attempts": 58,
+            "wall_ms_terminate_to_reopen": 2128.300000000745,
+            "reopened_generation": 569,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 28.100000001490116,
+            "file_len": 888832,
+            "ok": true
+          },
+          {
+            "trial": 7,
+            "mode": "forced",
+            "terminate_called_while_committing": 576,
+            "committed_at_terminate_call": 575,
+            "last_committed_reported": 695,
+            "last_committing_reported": 696,
+            "generations_after_terminate_call": 120,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 8,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 351.80000000074506,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2121.39999999851,
+            "reopen_attempts": 62,
+            "wall_ms_terminate_to_reopen": 2147.10000000149,
+            "reopened_generation": 695,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 33.900000002235174,
+            "file_len": 446464,
+            "ok": true
+          },
+          {
+            "trial": 8,
+            "mode": "forced",
+            "terminate_called_while_committing": 698,
+            "committed_at_terminate_call": 697,
+            "last_committed_reported": 819,
+            "last_committing_reported": 820,
+            "generations_after_terminate_call": 122,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 312576,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 4,
+              "writes": 48
+            },
+            "churn_open_release_wait_ms": 281.8999999985099,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2076.300000000745,
+            "reopen_attempts": 59,
+            "wall_ms_terminate_to_reopen": 2109.10000000149,
+            "reopened_generation": 819,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 22.100000001490116,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 9,
+            "mode": "forced",
+            "terminate_called_while_committing": 826,
+            "committed_at_terminate_call": 825,
+            "last_committed_reported": 943,
+            "last_committing_reported": 944,
+            "generations_after_terminate_call": 118,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 8,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 342.5999999977648,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2101.5,
+            "reopen_attempts": 60,
+            "wall_ms_terminate_to_reopen": 2131.400000002235,
+            "reopened_generation": 943,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 36.599999997764826,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 10,
+            "mode": "forced",
+            "terminate_called_while_committing": 944,
+            "committed_at_terminate_call": 943,
+            "last_committed_reported": 1063,
+            "last_committing_reported": 1064,
+            "generations_after_terminate_call": 120,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 29001,
+              "bytes_written": 4736,
+              "reads": 9,
+              "set_lens": 0,
+              "syncs": 2,
+              "writes": 3
+            },
+            "churn_open_release_wait_ms": 195.59999999776483,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 2069.800000000745,
+            "reopen_attempts": 61,
+            "wall_ms_terminate_to_reopen": 2099.900000002235,
+            "reopened_generation": 1063,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 29.800000000745058,
             "file_len": 454656,
             "ok": true
           },
           {
             "trial": 11,
             "mode": "yielding",
-            "terminate_called_while_committing": 118,
-            "committed_at_terminate_call": 117,
-            "last_committed_reported": 118,
-            "last_committing_reported": 118,
+            "terminate_called_while_committing": 1070,
+            "committed_at_terminate_call": 1069,
+            "last_committed_reported": 1070,
+            "last_committing_reported": 1070,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 1,
+              "syncs": 9,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 353.30000000074506,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 108,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 138.19999999925494,
+            "reopened_generation": 1070,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 31.099999997764826,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 12,
+            "mode": "yielding",
+            "terminate_called_while_committing": 1077,
+            "committed_at_terminate_call": 1076,
+            "last_committed_reported": 1077,
+            "last_committing_reported": 1077,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 8,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 305.4000000022352,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 121.80000000074506,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 171.30000000074506,
+            "reopened_generation": 1077,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 36.399999998509884,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 13,
+            "mode": "yielding",
+            "terminate_called_while_committing": 1082,
+            "committed_at_terminate_call": 1081,
+            "last_committed_reported": 1083,
+            "last_committing_reported": 1083,
+            "generations_after_terminate_call": 2,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 624512,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 6,
+              "writes": 94
+            },
+            "churn_open_release_wait_ms": 310.80000000074506,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 111,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 142.10000000149012,
+            "reopened_generation": 1083,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 29.199999999254942,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 14,
+            "mode": "yielding",
+            "terminate_called_while_committing": 1090,
+            "committed_at_terminate_call": 1089,
+            "last_committed_reported": 1090,
+            "last_committing_reported": 1090,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 8,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 307,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 112.5,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 144.69999999925494,
+            "reopened_generation": 1090,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 30.300000000745058,
+            "file_len": 458752,
+            "ok": true
+          },
+          {
+            "trial": 15,
+            "mode": "yielding",
+            "terminate_called_while_committing": 1096,
+            "committed_at_terminate_call": 1095,
+            "last_committed_reported": 1096,
+            "last_committing_reported": 1096,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 780480,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 7,
+              "writes": 117
+            },
+            "churn_open_release_wait_ms": 314.5999999977648,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 103.40000000223517,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 132.5,
+            "reopened_generation": 1096,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 27.900000002235174,
+            "file_len": 454656,
+            "ok": true
+          },
+          {
+            "trial": 16,
+            "mode": "yielding",
+            "terminate_called_while_committing": 1105,
+            "committed_at_terminate_call": 1104,
+            "last_committed_reported": 1105,
+            "last_committing_reported": 1105,
             "generations_after_terminate_call": 1,
             "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
@@ -15300,214 +15455,28 @@
               "syncs": 11,
               "writes": 186
             },
-            "churn_open_release_wait_ms": 1872.8999999761581,
+            "churn_open_release_wait_ms": 382.5,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 1127.6000000238419,
+            "reopen_release_wait_ms": 117.59999999776483,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 2099.399999976158,
-            "reopened_generation": 118,
+            "wall_ms_terminate_to_reopen": 151.5,
+            "reopened_generation": 1105,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 284.60000002384186,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 12,
-            "mode": "yielding",
-            "terminate_called_while_committing": 125,
-            "committed_at_terminate_call": 124,
-            "last_committed_reported": 125,
-            "last_committing_reported": 125,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 936448,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 9,
-              "writes": 140
-            },
-            "churn_open_release_wait_ms": 2443.199999988079,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 669.8000000119209,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 867,
-            "reopened_generation": 125,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 142.29999995231628,
-            "file_len": 458752,
-            "ok": true
-          },
-          {
-            "trial": 13,
-            "mode": "yielding",
-            "terminate_called_while_committing": 128,
-            "committed_at_terminate_call": 127,
-            "last_committed_reported": 128,
-            "last_committing_reported": 128,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 312576,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 4,
-              "writes": 48
-            },
-            "churn_open_release_wait_ms": 1500.199999988079,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 1340.2000000476837,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 1778.5,
-            "reopened_generation": 128,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 342.39999997615814,
-            "file_len": 458752,
-            "ok": true
-          },
-          {
-            "trial": 14,
-            "mode": "yielding",
-            "terminate_called_while_committing": 137,
-            "committed_at_terminate_call": 136,
-            "last_committed_reported": 137,
-            "last_committing_reported": 137,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 1248384,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 10,
-              "writes": 186
-            },
-            "churn_open_release_wait_ms": 2872.2000000476837,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 1695.699999988079,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 1993.0999999642372,
-            "reopened_generation": 137,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 658,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 15,
-            "mode": "yielding",
-            "terminate_called_while_committing": 144,
-            "committed_at_terminate_call": 143,
-            "last_committed_reported": 144,
-            "last_committing_reported": 144,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 936448,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 9,
-              "writes": 140
-            },
-            "churn_open_release_wait_ms": 2147.699999988079,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 1281.699999988079,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 1439.300000011921,
-            "reopened_generation": 144,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 359.80000001192093,
-            "file_len": 905216,
-            "ok": true
-          },
-          {
-            "trial": 16,
-            "mode": "yielding",
-            "terminate_called_while_committing": 145,
-            "committed_at_terminate_call": 144,
-            "last_committed_reported": 145,
-            "last_committing_reported": 145,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 29001,
-              "bytes_written": 4736,
-              "reads": 9,
-              "set_lens": 0,
-              "syncs": 2,
-              "writes": 3
-            },
-            "churn_open_release_wait_ms": 621.8999999761581,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 916,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 1595.9000000357628,
-            "reopened_generation": 145,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 176.89999997615814,
-            "file_len": 446464,
+            "open_ms": 30.300000000745058,
+            "file_len": 442368,
             "ok": true
           },
           {
             "trial": 17,
             "mode": "yielding",
-            "terminate_called_while_committing": 146,
-            "committed_at_terminate_call": 145,
-            "last_committed_reported": 146,
-            "last_committing_reported": 146,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 29001,
-              "bytes_written": 4736,
-              "reads": 9,
-              "set_lens": 0,
-              "syncs": 2,
-              "writes": 3
-            },
-            "churn_open_release_wait_ms": 713.6000000238419,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 1124.3999999761581,
-            "reopen_attempts": 3,
-            "wall_ms_terminate_to_reopen": 1216.199999988079,
-            "reopened_generation": 146,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 248.5,
-            "file_len": 446464,
-            "ok": true
-          },
-          {
-            "trial": 18,
-            "mode": "yielding",
-            "terminate_called_while_committing": 154,
-            "committed_at_terminate_call": 153,
-            "last_committed_reported": 154,
-            "last_committing_reported": 154,
-            "generations_after_terminate_call": 1,
+            "terminate_called_while_committing": 1113,
+            "committed_at_terminate_call": 1112,
+            "last_committed_reported": 1114,
+            "last_committing_reported": 1114,
+            "generations_after_terminate_call": 2,
             "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
               "bytes_read": 295241,
@@ -15517,80 +15486,111 @@
               "syncs": 10,
               "writes": 163
             },
-            "churn_open_release_wait_ms": 1346.7000000476837,
+            "churn_open_release_wait_ms": 350.9000000022352,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 991,
+            "reopen_release_wait_ms": 105,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 1129.0999999642372,
-            "reopened_generation": 154,
+            "wall_ms_terminate_to_reopen": 134.69999999925494,
+            "reopened_generation": 1114,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 250.10000002384186,
-            "file_len": 462848,
+            "open_ms": 28.199999999254942,
+            "file_len": 880640,
+            "ok": true
+          },
+          {
+            "trial": 18,
+            "mode": "yielding",
+            "terminate_called_while_committing": 1122,
+            "committed_at_terminate_call": 1121,
+            "last_committed_reported": 1122,
+            "last_committing_reported": 1122,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 1092416,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 9,
+              "writes": 163
+            },
+            "churn_open_release_wait_ms": 357.29999999701977,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 107.10000000149012,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 139.10000000149012,
+            "reopened_generation": 1122,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 28.5,
+            "file_len": 446464,
             "ok": true
           },
           {
             "trial": 19,
             "mode": "yielding",
-            "terminate_called_while_committing": 155,
-            "committed_at_terminate_call": 154,
-            "last_committed_reported": 155,
-            "last_committing_reported": 155,
-            "generations_after_terminate_call": 1,
+            "terminate_called_while_committing": 1128,
+            "committed_at_terminate_call": 1127,
+            "last_committed_reported": 1129,
+            "last_committing_reported": 1129,
+            "generations_after_terminate_call": 2,
             "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
-              "bytes_read": 29001,
-              "bytes_written": 4736,
-              "reads": 9,
-              "set_lens": 0,
-              "syncs": 2,
-              "writes": 3
+              "bytes_read": 295241,
+              "bytes_written": 780480,
+              "reads": 42,
+              "set_lens": 1,
+              "syncs": 8,
+              "writes": 117
             },
-            "churn_open_release_wait_ms": 428.69999998807907,
+            "churn_open_release_wait_ms": 319.9000000022352,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 1130,
-            "reopen_attempts": 3,
-            "wall_ms_terminate_to_reopen": 1241.5,
-            "reopened_generation": 155,
+            "reopen_release_wait_ms": 126.19999999925494,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 166.19999999925494,
+            "reopened_generation": 1129,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 272.0999999642372,
-            "file_len": 450560,
+            "open_ms": 31.899999998509884,
+            "file_len": 462848,
             "ok": true
           },
           {
             "trial": 20,
             "mode": "yielding",
-            "terminate_called_while_committing": 158,
-            "committed_at_terminate_call": 157,
-            "last_committed_reported": 158,
-            "last_committing_reported": 158,
+            "terminate_called_while_committing": 1135,
+            "committed_at_terminate_call": 1134,
+            "last_committed_reported": 1135,
+            "last_committing_reported": 1135,
             "generations_after_terminate_call": 1,
             "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 312576,
+              "bytes_written": 780480,
               "reads": 42,
               "set_lens": 0,
-              "syncs": 4,
-              "writes": 48
+              "syncs": 7,
+              "writes": 117
             },
-            "churn_open_release_wait_ms": 913.5,
+            "churn_open_release_wait_ms": 298.5,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 733.8999999761581,
+            "reopen_release_wait_ms": 97.5,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 866,
-            "reopened_generation": 158,
+            "wall_ms_terminate_to_reopen": 124,
+            "reopened_generation": 1135,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 160.80000001192093,
-            "file_len": 454656,
+            "open_ms": 28.300000000745058,
+            "file_len": 462848,
             "ok": true
           }
         ],
@@ -15610,21 +15610,21 @@
         "release_after_kill": {
           "opened": true,
           "attempts": 1,
-          "ms": 232.19999998807907,
+          "ms": 70,
           "report": {
             "report": "try_open",
             "open": {
               "opened": true,
               "error": null,
               "error_kind": null,
-              "open_ms": 56.5,
+              "open_ms": 25,
               "repair_invoked": true,
               "repair_callbacks": 3
             },
             "dom_exception": null,
             "generation": 1
           },
-          "wall_ms_since_kill": 1162
+          "wall_ms_since_kill": 587.9000000022352
         },
         "release_after_clean_close": {
           "opened": true,
@@ -15640,7 +15640,7 @@
           "path": "muniment-probe/lane4-tabs.redb",
           "lock_name": "muniment-opfs:muniment-probe/lane4-tabs.redb",
           "lock_acquired": true,
-          "at": 1787434062102
+          "at": 1787525458034
         },
         "locks_held_before": [
           "muniment-opfs:muniment-probe/lane4-tabs.redb"
@@ -15649,19 +15649,19 @@
         "second_writer_dom_exception": "NoModificationAllowedError",
         "controlled_release": {
           "type": "released",
-          "at": 1787434062409
+          "at": 1787525458063
         },
         "takeover_after_release": {
           "opened": true,
           "attempts": 1,
-          "ms": 453.89999997615814,
+          "ms": 58.30000000074506,
           "report": {
             "report": "try_open",
             "open": {
               "opened": true,
               "error": null,
               "error_kind": null,
-              "open_ms": 134.9000000357628,
+              "open_ms": 21.299999997019768,
               "repair_invoked": true,
               "repair_callbacks": 3
             },
@@ -15674,21 +15674,21 @@
         "release_after_tab_close": {
           "opened": true,
           "attempts": 1,
-          "ms": 119.69999998807907,
+          "ms": 70.5,
           "report": {
             "report": "try_open",
             "open": {
               "opened": true,
               "error": null,
               "error_kind": null,
-              "open_ms": 55.89999997615814,
+              "open_ms": 27.800000000745058,
               "repair_invoked": true,
               "repair_callbacks": 3
             },
             "dom_exception": null,
             "generation": 2
           },
-          "wall_ms_since_close": 119.89999997615814
+          "wall_ms_since_close": 70.69999999925494
         },
         "ok": true
       },
@@ -15698,17 +15698,17 @@
       },
       "reload": {
         "path": "muniment-probe/lane4-reload.redb",
-        "wall_ms_since_reload_request": 717,
+        "wall_ms_since_reload_request": 262,
         "opened": true,
         "attempts": 1,
-        "ms": 579.8000000119209,
+        "ms": 224.30000000074506,
         "report": {
           "report": "try_open",
           "open": {
             "opened": true,
             "error": null,
             "error_kind": null,
-            "open_ms": 245.5999999642372,
+            "open_ms": 24.5,
             "repair_invoked": true,
             "repair_callbacks": 3
           },
@@ -15738,7 +15738,7 @@
         "imported": {
           "bytes": 761856,
           "blake3": "57b4b569b5954705382c6c6a3c0278789f8ac5284a0c5637ff474d3859dbc502",
-          "ms": 201.89999997615814
+          "ms": 34.399999998509884
         },
         "reopened": {
           "report": "reopen",
@@ -15746,7 +15746,7 @@
             "opened": true,
             "error": null,
             "error_kind": null,
-            "open_ms": 91.39999997615814,
+            "open_ms": 11.800000000745058,
             "repair_invoked": false,
             "repair_callbacks": 0
           },
@@ -15771,7 +15771,7 @@
             "bytes_read": 873097,
             "bytes_written": 960
           },
-          "ms": 930.6000000238419
+          "ms": 87.60000000149012
         },
         "digest": {
           "digest": "a74b7476f2387aa996cf3f4d8c11c7edadd7ef5d5b1b17808f0a5002c452f7ea",
@@ -15813,6 +15813,45 @@
         "ok": true,
         "round_trip_both_ways_ok": true
       },
+      "ascii_contract": {
+        "report": "ascii_contract",
+        "refused": [
+          [
+            "put",
+            true
+          ],
+          [
+            "get",
+            true
+          ],
+          [
+            "delete",
+            true
+          ],
+          [
+            "list",
+            true
+          ],
+          [
+            "scan_start",
+            true
+          ],
+          [
+            "scan_end",
+            true
+          ],
+          [
+            "apply",
+            true
+          ]
+        ],
+        "ascii_still_works": true,
+        "apply_left_nothing": true,
+        "final_keys": [
+          "ascii/key"
+        ],
+        "ok": true
+      },
       "bench": {
         "repeats": 3,
         "rows": [
@@ -15820,57 +15859,15 @@
             "workload": "small_slots",
             "backend": "memory",
             "run": 1,
-            "total_ms": 11,
+            "total_ms": 7.199999999254942,
             "phases": {
-              "put": 2.600000023841858,
-              "get": 2.800000011920929,
-              "overwrite": 1.399999976158142,
-              "digest": 2.699999988079071
+              "put": 2.199999999254942,
+              "get": 1.199999999254942,
+              "overwrite": 0.3999999985098839,
+              "digest": 2.2000000029802322
             },
-            "write_ms": 4,
-            "read_ms": 5.5,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 9.600000023841858,
-            "phases": {
-              "put": 2.699999988079071,
-              "get": 1.9000000357627869,
-              "overwrite": 0.3999999761581421,
-              "digest": 2.199999988079071
-            },
-            "write_ms": 3.099999964237213,
-            "read_ms": 4.100000023841858,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 13.399999976158142,
-            "phases": {
-              "put": 4.700000047683716,
-              "get": 2,
-              "overwrite": 1.899999976158142,
-              "digest": 3
-            },
-            "write_ms": 6.600000023841858,
-            "read_ms": 5,
+            "write_ms": 2.599999997764826,
+            "read_ms": 3.400000002235174,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
@@ -15883,15 +15880,15 @@
             "workload": "small_slots",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 15126.699999988079,
+            "total_ms": 1737.300000000745,
             "phases": {
-              "put": 8887.899999976158,
-              "get": 2.100000023841858,
-              "overwrite": 5913.099999964237,
-              "digest": 7.100000023841858
+              "put": 909.3999999985099,
+              "get": 1.800000000745058,
+              "overwrite": 787.3000000007451,
+              "digest": 2.699999999254942
             },
-            "write_ms": 14800.999999940395,
-            "read_ms": 9.200000047683716,
+            "write_ms": 1696.699999999255,
+            "read_ms": 4.5,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
@@ -15909,241 +15906,59 @@
           },
           {
             "workload": "small_slots",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 17581.5,
-            "phases": {
-              "put": 9107.699999988079,
-              "get": 3.5,
-              "overwrite": 8294.5,
-              "digest": 9.099999964237213
-            },
-            "write_ms": 17402.19999998808,
-            "read_ms": 12.599999964237213,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 2794,
-              "set_lens": 8,
-              "syncs": 408,
-              "bytes_read": 320,
-              "bytes_written": 9907392
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 7782,
-            "phases": {
-              "put": 3706,
-              "get": 1.4000000357627869,
-              "overwrite": 3847.899999976158,
-              "digest": 7.699999988079071
-            },
-            "write_ms": 7553.899999976158,
-            "read_ms": 9.100000023841858,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 2794,
-              "set_lens": 8,
-              "syncs": 408,
-              "bytes_read": 320,
-              "bytes_written": 9907392
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
             "backend": "indexed_db",
             "run": 1,
-            "total_ms": 1721.6000000238419,
+            "total_ms": 224.10000000149012,
             "phases": {
-              "put": 603.3000000119209,
-              "get": 317.10000002384186,
-              "overwrite": 532.8999999761581,
-              "digest": 212.5
+              "put": 67.5,
+              "get": 44,
+              "overwrite": 66.10000000149012,
+              "digest": 40
             },
-            "write_ms": 1136.199999988079,
-            "read_ms": 529.6000000238419,
+            "write_ms": 133.60000000149012,
+            "read_ms": 84,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
             "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 132785
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 2409.600000023842,
-            "phases": {
-              "put": 825.5,
-              "get": 388.9000000357628,
-              "overwrite": 747.0999999642372,
-              "digest": 431.19999998807907
-            },
-            "write_ms": 1572.5999999642372,
-            "read_ms": 820.1000000238419,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": -30745
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db",
-            "run": 3,
-            "total_ms": 3941.600000023842,
-            "phases": {
-              "put": 1350.3999999761581,
-              "get": 956.4000000357628,
-              "overwrite": 1029.300000011921,
-              "digest": 590
-            },
-            "write_ms": 2379.699999988079,
-            "read_ms": 1546.4000000357628,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 5439
+            "usage_delta_bytes": 132184
           },
           {
             "workload": "small_slots",
             "backend": "indexed_db_range",
             "run": 1,
-            "total_ms": 2752.699999988079,
+            "total_ms": 241.79999999701977,
             "phases": {
-              "put": 938.3999999761581,
-              "get": 344.69999998807907,
-              "overwrite": 780.6999999880791,
-              "digest": 681.7000000476837
+              "put": 80.30000000074506,
+              "get": 42,
+              "overwrite": 75.60000000149012,
+              "digest": 39.899999998509884
             },
-            "write_ms": 1719.0999999642372,
-            "read_ms": 1026.4000000357628,
+            "write_ms": 155.90000000223517,
+            "read_ms": 81.89999999850988,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
             "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 56339
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 2710.7000000476837,
-            "phases": {
-              "put": 946.1999999880791,
-              "get": 588.1999999880791,
-              "overwrite": 804.6000000238419,
-              "digest": 336.0999999642372
-            },
-            "write_ms": 1750.800000011921,
-            "read_ms": 924.2999999523163,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 22789
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db_range",
-            "run": 3,
-            "total_ms": 4399.5,
-            "phases": {
-              "put": 1364.6000000238419,
-              "get": 736.6999999880791,
-              "overwrite": 1300.199999988079,
-              "digest": 970.1000000238419
-            },
-            "write_ms": 2664.800000011921,
-            "read_ms": 1706.800000011921,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 4283
+            "usage_delta_bytes": 65083
           },
           {
             "workload": "ordered_log",
             "backend": "memory",
             "run": 1,
-            "total_ms": 33.5,
+            "total_ms": 13.699999999254942,
             "phases": {
-              "put_shuffled": 7.300000011920929,
-              "scan_full": 8,
-              "scan_windows": 11.300000011920929,
-              "digest": 5.199999988079071
+              "put_shuffled": 4.400000002235174,
+              "scan_full": 1.3999999985098839,
+              "scan_windows": 2.600000001490116,
+              "digest": 4.199999999254942
             },
-            "write_ms": 7.300000011920929,
-            "read_ms": 24.5,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 36.69999998807907,
-            "phases": {
-              "put_shuffled": 9.5,
-              "scan_full": 1.899999976158142,
-              "scan_windows": 11.400000035762787,
-              "digest": 12.599999964237213
-            },
-            "write_ms": 9.5,
-            "read_ms": 25.899999976158142,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 29.80000001192093,
-            "phases": {
-              "put_shuffled": 9.5,
-              "scan_full": 2.900000035762787,
-              "scan_windows": 5,
-              "digest": 9
-            },
-            "write_ms": 9.5,
-            "read_ms": 16.900000035762787,
+            "write_ms": 4.400000002235174,
+            "read_ms": 8.199999999254942,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
@@ -16156,15 +15971,15 @@
             "workload": "ordered_log",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 42420.59999996424,
+            "total_ms": 4072.199999999255,
             "phases": {
-              "put_shuffled": 42127.80000001192,
-              "scan_full": 10.100000023841858,
-              "scan_windows": 0.800000011920929,
-              "digest": 70.59999996423721
+              "put_shuffled": 4034.599999997765,
+              "scan_full": 1,
+              "scan_windows": 0.4000000022351742,
+              "digest": 5.699999999254942
             },
-            "write_ms": 42127.80000001192,
-            "read_ms": 81.5,
+            "write_ms": 4034.599999997765,
+            "read_ms": 7.100000001490116,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
@@ -16182,241 +15997,59 @@
           },
           {
             "workload": "ordered_log",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 37735.10000002384,
-            "phases": {
-              "put_shuffled": 37497.200000047684,
-              "scan_full": 2.699999988079071,
-              "scan_windows": 1.199999988079071,
-              "digest": 9.699999988079071
-            },
-            "write_ms": 37497.200000047684,
-            "read_ms": 13.599999964237213,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 7037,
-              "set_lens": 8,
-              "syncs": 1009,
-              "bytes_read": 320,
-              "bytes_written": 25021120
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 13189.599999964237,
-            "phases": {
-              "put_shuffled": 13119.800000011921,
-              "scan_full": 1.5999999642372131,
-              "scan_windows": 0.6000000238418579,
-              "digest": 9.300000011920929
-            },
-            "write_ms": 13119.800000011921,
-            "read_ms": 11.5,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 7037,
-              "set_lens": 8,
-              "syncs": 1009,
-              "bytes_read": 320,
-              "bytes_written": 25021120
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "ordered_log",
             "backend": "indexed_db",
             "run": 1,
-            "total_ms": 1842,
+            "total_ms": 846.7999999970198,
             "phases": {
-              "put_shuffled": 976.8000000119209,
-              "scan_full": 12.900000035762787,
-              "scan_windows": 387.89999997615814,
-              "digest": 459.19999998807907
+              "put_shuffled": 396.20000000298023,
+              "scan_full": 10.199999999254942,
+              "scan_windows": 210.89999999850988,
+              "digest": 225.5
             },
-            "write_ms": 976.8000000119209,
-            "read_ms": 860,
+            "write_ms": 396.20000000298023,
+            "read_ms": 446.5999999977648,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
             "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 157941
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 3384.2999999523163,
-            "phases": {
-              "put_shuffled": 1654.9000000357628,
-              "scan_full": 12.199999988079071,
-              "scan_windows": 383.19999998807907,
-              "digest": 1326.199999988079
-            },
-            "write_ms": 1654.9000000357628,
-            "read_ms": 1721.5999999642372,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 26969
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db",
-            "run": 3,
-            "total_ms": 3793.399999976158,
-            "phases": {
-              "put_shuffled": 2089.699999988079,
-              "scan_full": 33.19999998807907,
-              "scan_windows": 483.5,
-              "digest": 1179.300000011921
-            },
-            "write_ms": 2089.699999988079,
-            "read_ms": 1696,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 21050
+            "usage_delta_bytes": 554117
           },
           {
             "workload": "ordered_log",
             "backend": "indexed_db_range",
             "run": 1,
-            "total_ms": 1561.8999999761581,
+            "total_ms": 683.3999999985099,
             "phases": {
-              "put_shuffled": 1007.6999999880791,
-              "scan_full": 73.69999998807907,
-              "scan_windows": 14.800000011920929,
-              "digest": 456.69999998807907
+              "put_shuffled": 432.79999999701977,
+              "scan_full": 7.5,
+              "scan_windows": 16.900000002235174,
+              "digest": 221.59999999776483
             },
-            "write_ms": 1007.6999999880791,
-            "read_ms": 545.1999999880791,
+            "write_ms": 432.79999999701977,
+            "read_ms": 246,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
             "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 174004
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 2613.7000000476837,
-            "phases": {
-              "put_shuffled": 1940.199999988079,
-              "scan_full": 21.19999998807907,
-              "scan_windows": 54.10000002384186,
-              "digest": 588.8999999761581
-            },
-            "write_ms": 1940.199999988079,
-            "read_ms": 664.1999999880791,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 36681
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db_range",
-            "run": 3,
-            "total_ms": 1657.699999988079,
-            "phases": {
-              "put_shuffled": 957.3000000119209,
-              "scan_full": 11.799999952316284,
-              "scan_windows": 31.30000001192093,
-              "digest": 652.9000000357628
-            },
-            "write_ms": 957.3000000119209,
-            "read_ms": 696,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 19749
+            "usage_delta_bytes": -151722
           },
           {
             "workload": "log_batched",
             "backend": "memory",
             "run": 1,
-            "total_ms": 27.400000035762787,
+            "total_ms": 23.799999997019768,
             "phases": {
-              "apply_shuffled": 8.800000011920929,
-              "scan_full": 1.899999976158142,
-              "scan_windows": 5.100000023841858,
-              "digest": 9.399999976158142
+              "apply_shuffled": 7.5,
+              "scan_full": 2.199999999254942,
+              "scan_windows": 4.800000000745058,
+              "digest": 7.400000002235174
             },
-            "write_ms": 8.800000011920929,
-            "read_ms": 16.399999976158142,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "log_batched",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 22.5,
-            "phases": {
-              "apply_shuffled": 6.800000011920929,
-              "scan_full": 2,
-              "scan_windows": 4.400000035762787,
-              "digest": 7.5
-            },
-            "write_ms": 6.800000011920929,
-            "read_ms": 13.900000035762787,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "log_batched",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 23.600000023841858,
-            "phases": {
-              "apply_shuffled": 7.199999988079071,
-              "scan_full": 2,
-              "scan_windows": 5,
-              "digest": 7.599999964237213
-            },
-            "write_ms": 7.199999988079071,
-            "read_ms": 14.599999964237213,
+            "write_ms": 7.5,
+            "read_ms": 14.400000002235174,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16429,15 +16062,15 @@
             "workload": "log_batched",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 5079.399999976158,
+            "total_ms": 5620,
             "phases": {
-              "apply_shuffled": 5028.199999988079,
-              "scan_full": 1.199999988079071,
-              "scan_windows": 0.40000003576278687,
-              "digest": 12.099999964237213
+              "apply_shuffled": 5567.900000002235,
+              "scan_full": 1.2999999970197678,
+              "scan_windows": 0.6000000014901161,
+              "digest": 11.199999999254942
             },
-            "write_ms": 5028.199999988079,
-            "read_ms": 13.699999988079071,
+            "write_ms": 5567.900000002235,
+            "read_ms": 13.099999997764826,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16455,238 +16088,58 @@
           },
           {
             "workload": "log_batched",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 8342.099999964237,
-            "phases": {
-              "apply_shuffled": 8286.099999964237,
-              "scan_full": 1.100000023841858,
-              "scan_windows": 0.6000000238418579,
-              "digest": 14.199999988079071
-            },
-            "write_ms": 8286.099999964237,
-            "read_ms": 15.900000035762787,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 8789,
-              "set_lens": 5,
-              "syncs": 1008,
-              "bytes_read": 320,
-              "bytes_written": 32197312
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "log_batched",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 12994.5,
-            "phases": {
-              "apply_shuffled": 12913.299999952316,
-              "scan_full": 1.5,
-              "scan_windows": 0.7000000476837158,
-              "digest": 21.799999952316284
-            },
-            "write_ms": 12913.299999952316,
-            "read_ms": 24,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 8789,
-              "set_lens": 5,
-              "syncs": 1008,
-              "bytes_read": 320,
-              "bytes_written": 32197312
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "log_batched",
             "backend": "indexed_db",
             "run": 1,
-            "total_ms": 3416,
+            "total_ms": 1860.9000000022352,
             "phases": {
-              "apply_shuffled": 1331.300000011921,
-              "scan_full": 26.19999998807907,
-              "scan_windows": 818,
-              "digest": 1228.1000000238419
+              "apply_shuffled": 516.8999999985099,
+              "scan_full": 14.5,
+              "scan_windows": 481,
+              "digest": 844.6999999992549
             },
-            "write_ms": 1331.300000011921,
-            "read_ms": 2072.300000011921,
+            "write_ms": 516.8999999985099,
+            "read_ms": 1340.199999999255,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
             "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 1086310
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 5744,
-            "phases": {
-              "apply_shuffled": 1888.3999999761581,
-              "scan_full": 19.5,
-              "scan_windows": 1813.800000011921,
-              "digest": 2018.1000000238419
-            },
-            "write_ms": 1888.3999999761581,
-            "read_ms": 3851.400000035763,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": -776523
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db",
-            "run": 3,
-            "total_ms": 3504,
-            "phases": {
-              "apply_shuffled": 1436.2000000476837,
-              "scan_full": 35.09999996423721,
-              "scan_windows": 915.3000000119209,
-              "digest": 1108
-            },
-            "write_ms": 1436.2000000476837,
-            "read_ms": 2058.399999976158,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 34571
+            "usage_delta_bytes": 302596
           },
           {
             "workload": "log_batched",
             "backend": "indexed_db_range",
             "run": 1,
-            "total_ms": 1491.2999999523163,
+            "total_ms": 1165.699999999255,
             "phases": {
-              "apply_shuffled": 764.3000000119209,
-              "scan_full": 12.5,
-              "scan_windows": 27.600000023841858,
-              "digest": 681.8999999761581
+              "apply_shuffled": 591.3000000007451,
+              "scan_full": 7.199999999254942,
+              "scan_windows": 17.100000001490116,
+              "digest": 546.5
             },
-            "write_ms": 764.3000000119209,
-            "read_ms": 722,
+            "write_ms": 591.3000000007451,
+            "read_ms": 570.8000000007451,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
             "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 1390023
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 1145.1000000238419,
-            "phases": {
-              "apply_shuffled": 589.6999999880791,
-              "scan_full": 7.899999976158142,
-              "scan_windows": 17.600000023841858,
-              "digest": 526.1999999880791
-            },
-            "write_ms": 589.6999999880791,
-            "read_ms": 551.6999999880791,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": -1101243
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db_range",
-            "run": 3,
-            "total_ms": 1055.5,
-            "phases": {
-              "apply_shuffled": 484.10000002384186,
-              "scan_full": 7.5,
-              "scan_windows": 17.19999998807907,
-              "digest": 542.8000000119209
-            },
-            "write_ms": 484.10000002384186,
-            "read_ms": 567.5,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": -1019
+            "usage_delta_bytes": 307654
           },
           {
             "workload": "atomic_batches",
             "backend": "memory",
             "run": 1,
-            "total_ms": 11.900000035762787,
+            "total_ms": 10.300000000745058,
             "phases": {
-              "apply": 4.400000035762787,
-              "verify": 0.3999999761581421,
-              "digest": 4.5
+              "apply": 4.300000000745058,
+              "verify": 0.09999999776482582,
+              "digest": 4.300000000745058
             },
-            "write_ms": 4.400000035762787,
-            "read_ms": 4.899999976158142,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 17.400000035762787,
-            "phases": {
-              "apply": 6.800000011920929,
-              "verify": 0.5,
-              "digest": 7.800000011920929
-            },
-            "write_ms": 6.800000011920929,
-            "read_ms": 8.300000011920929,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 19.69999998807907,
-            "phases": {
-              "apply": 7.800000011920929,
-              "verify": 0.30000001192092896,
-              "digest": 9.5
-            },
-            "write_ms": 7.800000011920929,
-            "read_ms": 9.800000011920929,
+            "write_ms": 4.300000000745058,
+            "read_ms": 4.399999998509884,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
@@ -16699,14 +16152,14 @@
             "workload": "atomic_batches",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 841.3000000119209,
+            "total_ms": 585.8000000007451,
             "phases": {
-              "apply": 761.9000000357628,
-              "verify": 1.300000011920929,
-              "digest": 6.099999964237213
+              "apply": 548.8000000007451,
+              "verify": 1,
+              "digest": 5.300000000745058
             },
-            "write_ms": 761.9000000357628,
-            "read_ms": 7.399999976158142,
+            "write_ms": 548.8000000007451,
+            "read_ms": 6.300000000745058,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
@@ -16724,230 +16177,56 @@
           },
           {
             "workload": "atomic_batches",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 856.1999999880791,
-            "phases": {
-              "apply": 803.8999999761581,
-              "verify": 1.600000023841858,
-              "digest": 6.199999988079071
-            },
-            "write_ms": 803.8999999761581,
-            "read_ms": 7.800000011920929,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 1021,
-              "set_lens": 2,
-              "syncs": 107,
-              "bytes_read": 320,
-              "bytes_written": 3794368
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 728.6999999880791,
-            "phases": {
-              "apply": 683.3999999761581,
-              "verify": 1.5,
-              "digest": 5.900000035762787
-            },
-            "write_ms": 683.3999999761581,
-            "read_ms": 7.400000035762787,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 1021,
-              "set_lens": 2,
-              "syncs": 107,
-              "bytes_read": 320,
-              "bytes_written": 3794368
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "atomic_batches",
             "backend": "indexed_db",
             "run": 1,
-            "total_ms": 360.60000002384186,
+            "total_ms": 296.80000000074506,
             "phases": {
-              "apply": 175.30000001192093,
+              "apply": 115.29999999701977,
+              "verify": 49.30000000074506,
+              "digest": 128.19999999925494
+            },
+            "write_ms": 115.29999999701977,
+            "read_ms": 177.5,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 293065
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db_range",
+            "run": 1,
+            "total_ms": 288.5,
+            "phases": {
+              "apply": 116.59999999776483,
               "verify": 47.5,
-              "digest": 133.29999995231628
+              "digest": 120.60000000149012
             },
-            "write_ms": 175.30000001192093,
-            "read_ms": 180.79999995231628,
+            "write_ms": 116.59999999776483,
+            "read_ms": 168.10000000149012,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
             "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 276702
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 265.60000002384186,
-            "phases": {
-              "apply": 102.80000001192093,
-              "verify": 43.299999952316284,
-              "digest": 115.20000004768372
-            },
-            "write_ms": 102.80000001192093,
-            "read_ms": 158.5,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 9591
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db",
-            "run": 3,
-            "total_ms": 285.30000001192093,
-            "phases": {
-              "apply": 117.19999998807907,
-              "verify": 43.90000003576279,
-              "digest": 120.80000001192093
-            },
-            "write_ms": 117.19999998807907,
-            "read_ms": 164.70000004768372,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 2969
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db_range",
-            "run": 1,
-            "total_ms": 331,
-            "phases": {
-              "apply": 114.30000001192093,
-              "verify": 92.19999998807907,
-              "digest": 120.70000004768372
-            },
-            "write_ms": 114.30000001192093,
-            "read_ms": 212.9000000357628,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 286171
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 287.10000002384186,
-            "phases": {
-              "apply": 120.69999998807907,
-              "verify": 43.5,
-              "digest": 119.10000002384186
-            },
-            "write_ms": 120.69999998807907,
-            "read_ms": 162.60000002384186,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 2146
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db_range",
-            "run": 3,
-            "total_ms": 319.19999998807907,
-            "phases": {
-              "apply": 126.60000002384186,
-              "verify": 47.5,
-              "digest": 141.39999997615814
-            },
-            "write_ms": 126.60000002384186,
-            "read_ms": 188.89999997615814,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 13958
+            "usage_delta_bytes": 293161
           },
           {
             "workload": "large_blobs",
             "backend": "memory",
             "run": 1,
-            "total_ms": 264.9000000357628,
+            "total_ms": 296.80000000074506,
             "phases": {
-              "put": 140.5,
-              "get_verify": 61.39999997615814,
-              "digest": 61.80000001192093
+              "put": 152.5,
+              "get_verify": 67,
+              "digest": 76
             },
-            "write_ms": 140.5,
-            "read_ms": 123.19999998807907,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 274.80000001192093,
-            "phases": {
-              "put": 146,
-              "get_verify": 63.19999998807907,
-              "digest": 64.5
-            },
-            "write_ms": 146,
-            "read_ms": 127.69999998807907,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 260.69999998807907,
-            "phases": {
-              "put": 148.79999995231628,
-              "get_verify": 58.200000047683716,
-              "digest": 52.59999996423721
-            },
-            "write_ms": 148.79999995231628,
-            "read_ms": 110.80000001192093,
+            "write_ms": 152.5,
+            "read_ms": 143,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -16960,14 +16239,14 @@
             "workload": "large_blobs",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 647.8000000119209,
+            "total_ms": 716,
             "phases": {
-              "put": 352.5,
-              "get_verify": 112.09999996423721,
-              "digest": 150.5
+              "put": 387,
+              "get_verify": 125.80000000074506,
+              "digest": 165.5
             },
-            "write_ms": 352.5,
-            "read_ms": 262.5999999642372,
+            "write_ms": 387,
+            "read_ms": 291.30000000074506,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -16985,16 +16264,436 @@
           },
           {
             "workload": "large_blobs",
+            "backend": "indexed_db",
+            "run": 1,
+            "total_ms": 438.5999999977648,
+            "phases": {
+              "put": 181.69999999925494,
+              "get_verify": 125.10000000149012,
+              "digest": 115
+            },
+            "write_ms": 181.69999999925494,
+            "read_ms": 240.10000000149012,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25170672
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "indexed_db_range",
+            "run": 1,
+            "total_ms": 401,
+            "phases": {
+              "put": 174.89999999850988,
+              "get_verify": 113,
+              "digest": 109.10000000149012
+            },
+            "write_ms": 174.89999999850988,
+            "read_ms": 222.10000000149012,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25156881
+          },
+          {
+            "workload": "small_slots",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 9.199999999254942,
+            "phases": {
+              "put": 2.099999997764826,
+              "get": 1.300000000745058,
+              "overwrite": 0.5,
+              "digest": 3.699999999254942
+            },
+            "write_ms": 2.599999997764826,
+            "read_ms": 5,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "small_slots",
             "backend": "redb_opfs",
             "run": 2,
-            "total_ms": 686.8000000119209,
+            "total_ms": 1663.5,
             "phases": {
-              "put": 373.5,
-              "get_verify": 114.90000003576279,
-              "digest": 152.5999999642372
+              "put": 865.3000000007451,
+              "get": 1.5,
+              "overwrite": 758.5999999977648,
+              "digest": 2.900000002235174
             },
-            "write_ms": 373.5,
-            "read_ms": 267.5,
+            "write_ms": 1623.8999999985099,
+            "read_ms": 4.400000002235174,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 2794,
+              "set_lens": 8,
+              "syncs": 408,
+              "bytes_read": 320,
+              "bytes_written": 9907392
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 224,
+            "phases": {
+              "put": 69.29999999701977,
+              "get": 40.5,
+              "overwrite": 68,
+              "digest": 43
+            },
+            "write_ms": 137.29999999701977,
+            "read_ms": 83.5,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -282408
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 330.3999999985099,
+            "phases": {
+              "put": 65.80000000074506,
+              "get": 144.19999999925494,
+              "overwrite": 72.80000000074506,
+              "digest": 44
+            },
+            "write_ms": 138.60000000149012,
+            "read_ms": 188.19999999925494,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 3941
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 13.899999998509884,
+            "phases": {
+              "put_shuffled": 4.299999997019768,
+              "scan_full": 1.7000000029802322,
+              "scan_windows": 2.399999998509884,
+              "digest": 4
+            },
+            "write_ms": 4.299999997019768,
+            "read_ms": 8.100000001490116,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 4733.800000000745,
+            "phases": {
+              "put_shuffled": 4680.300000000745,
+              "scan_full": 1.3999999985098839,
+              "scan_windows": 0.6000000014901161,
+              "digest": 10.199999999254942
+            },
+            "write_ms": 4680.300000000745,
+            "read_ms": 12.199999999254942,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 7037,
+              "set_lens": 8,
+              "syncs": 1009,
+              "bytes_read": 320,
+              "bytes_written": 25021120
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 1272.1000000014901,
+            "phases": {
+              "put_shuffled": 641.1999999992549,
+              "scan_full": 9.900000002235174,
+              "scan_windows": 228.09999999776483,
+              "digest": 387.69999999925494
+            },
+            "write_ms": 641.1999999992549,
+            "read_ms": 625.6999999992549,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 12168
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 1045.1000000014901,
+            "phases": {
+              "put_shuffled": 456.8999999985099,
+              "scan_full": 8.200000002980232,
+              "scan_windows": 22.399999998509884,
+              "digest": 552.8999999985099
+            },
+            "write_ms": 456.8999999985099,
+            "read_ms": 583.5,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 202701
+          },
+          {
+            "workload": "log_batched",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 30.299999997019768,
+            "phases": {
+              "apply_shuffled": 8.600000001490116,
+              "scan_full": 1.800000000745058,
+              "scan_windows": 6.699999999254942,
+              "digest": 11.199999999254942
+            },
+            "write_ms": 8.600000001490116,
+            "read_ms": 19.699999999254942,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "log_batched",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 5523.400000002235,
+            "phases": {
+              "apply_shuffled": 5463.400000002235,
+              "scan_full": 1.5999999977648258,
+              "scan_windows": 0.6999999992549419,
+              "digest": 14.800000000745058
+            },
+            "write_ms": 5463.400000002235,
+            "read_ms": 17.099999997764826,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 8789,
+              "set_lens": 5,
+              "syncs": 1008,
+              "bytes_read": 320,
+              "bytes_written": 32197312
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "log_batched",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 1691.5,
+            "phases": {
+              "apply_shuffled": 502.30000000074506,
+              "scan_full": 14.5,
+              "scan_windows": 425.5999999977648,
+              "digest": 744.9000000022352
+            },
+            "write_ms": 502.30000000074506,
+            "read_ms": 1185,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 161072
+          },
+          {
+            "workload": "log_batched",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 1117.2000000029802,
+            "phases": {
+              "apply_shuffled": 512.0999999977648,
+              "scan_full": 8.400000002235174,
+              "scan_windows": 16.199999999254942,
+              "digest": 576.5
+            },
+            "write_ms": 512.0999999977648,
+            "read_ms": 601.1000000014901,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -315084
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 11.300000000745058,
+            "phases": {
+              "apply": 5.099999997764826,
+              "verify": 0.4000000022351742,
+              "digest": 4.399999998509884
+            },
+            "write_ms": 5.099999997764826,
+            "read_ms": 4.800000000745058,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 1094.1000000014901,
+            "phases": {
+              "apply": 1038.0999999977648,
+              "verify": 1.2000000029802322,
+              "digest": 7.299999997019768
+            },
+            "write_ms": 1038.0999999977648,
+            "read_ms": 8.5,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 1021,
+              "set_lens": 2,
+              "syncs": 107,
+              "bytes_read": 320,
+              "bytes_written": 3794368
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 340,
+            "phases": {
+              "apply": 113.79999999701977,
+              "verify": 58.30000000074506,
+              "digest": 163.60000000149012
+            },
+            "write_ms": 113.79999999701977,
+            "read_ms": 221.90000000223517,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -51483
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 357.80000000074506,
+            "phases": {
+              "apply": 124.89999999850988,
+              "verify": 58.70000000298023,
+              "digest": 170.09999999776483
+            },
+            "write_ms": 124.89999999850988,
+            "read_ms": 228.80000000074506,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 2425
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 292.6000000014901,
+            "phases": {
+              "put": 155.10000000149012,
+              "get_verify": 68.39999999850988,
+              "digest": 67.60000000149012
+            },
+            "write_ms": 155.10000000149012,
+            "read_ms": 136,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 845.5999999977648,
+            "phases": {
+              "put": 509.3999999985099,
+              "get_verify": 116.70000000298023,
+              "digest": 165.5
+            },
+            "write_ms": 509.3999999985099,
+            "read_ms": 282.20000000298023,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -17012,16 +16711,436 @@
           },
           {
             "workload": "large_blobs",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 397.80000000074506,
+            "phases": {
+              "put": 171.19999999925494,
+              "get_verify": 111.69999999925494,
+              "digest": 111.19999999925494
+            },
+            "write_ms": 171.19999999925494,
+            "read_ms": 222.89999999850988,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 26598184
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 435.19999999925494,
+            "phases": {
+              "put": 188.19999999925494,
+              "get_verify": 126.5,
+              "digest": 116.60000000149012
+            },
+            "write_ms": 188.19999999925494,
+            "read_ms": 243.10000000149012,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25150645
+          },
+          {
+            "workload": "small_slots",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 7.800000000745058,
+            "phases": {
+              "put": 2.599999997764826,
+              "get": 1.1000000014901161,
+              "overwrite": 0.3999999985098839,
+              "digest": 2.400000002235174
+            },
+            "write_ms": 2.9999999962747097,
+            "read_ms": 3.5000000037252903,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "small_slots",
             "backend": "redb_opfs",
             "run": 3,
-            "total_ms": 649.5,
+            "total_ms": 1805.300000000745,
             "phases": {
-              "put": 357.5,
-              "get_verify": 107.30000001192093,
-              "digest": 142.69999998807907
+              "put": 841,
+              "get": 1.5999999977648258,
+              "overwrite": 925.6999999992549,
+              "digest": 3.100000001490116
             },
-            "write_ms": 357.5,
-            "read_ms": 250,
+            "write_ms": 1766.699999999255,
+            "read_ms": 4.699999999254942,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 2794,
+              "set_lens": 8,
+              "syncs": 408,
+              "bytes_read": 320,
+              "bytes_written": 9907392
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db",
+            "run": 3,
+            "total_ms": 280.29999999701977,
+            "phases": {
+              "put": 77.80000000074506,
+              "get": 56.30000000074506,
+              "overwrite": 81.39999999850988,
+              "digest": 61.100000001490116
+            },
+            "write_ms": 159.19999999925494,
+            "read_ms": 117.40000000223517,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -1250006
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db_range",
+            "run": 3,
+            "total_ms": 263,
+            "phases": {
+              "put": 82.5,
+              "get": 51.599999997764826,
+              "overwrite": 75.80000000074506,
+              "digest": 49
+            },
+            "write_ms": 158.30000000074506,
+            "read_ms": 100.59999999776483,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -141760
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 13.5,
+            "phases": {
+              "put_shuffled": 4.300000000745058,
+              "scan_full": 1.5999999977648258,
+              "scan_windows": 2.400000002235174,
+              "digest": 4
+            },
+            "write_ms": 4.300000000745058,
+            "read_ms": 8,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "redb_opfs",
+            "run": 3,
+            "total_ms": 4401.10000000149,
+            "phases": {
+              "put_shuffled": 4356.900000002235,
+              "scan_full": 1.7999999970197678,
+              "scan_windows": 0.4000000022351742,
+              "digest": 6.099999997764826
+            },
+            "write_ms": 4356.900000002235,
+            "read_ms": 8.299999997019768,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 7037,
+              "set_lens": 8,
+              "syncs": 1009,
+              "bytes_read": 320,
+              "bytes_written": 25021120
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db",
+            "run": 3,
+            "total_ms": 905.6999999992549,
+            "phases": {
+              "put_shuffled": 455.69999999925494,
+              "scan_full": 8,
+              "scan_windows": 204.89999999850988,
+              "digest": 233.69999999925494
+            },
+            "write_ms": 455.69999999925494,
+            "read_ms": 446.5999999977648,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 11686
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db_range",
+            "run": 3,
+            "total_ms": 757.1999999992549,
+            "phases": {
+              "put_shuffled": 475.5999999977648,
+              "scan_full": 7.300000000745058,
+              "scan_windows": 18.900000002235174,
+              "digest": 251.69999999925494
+            },
+            "write_ms": 475.5999999977648,
+            "read_ms": 277.9000000022352,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 4737
+          },
+          {
+            "workload": "log_batched",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 21.400000002235174,
+            "phases": {
+              "apply_shuffled": 6.900000002235174,
+              "scan_full": 1.699999999254942,
+              "scan_windows": 4.599999997764826,
+              "digest": 6.700000002980232
+            },
+            "write_ms": 6.900000002235174,
+            "read_ms": 13,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "log_batched",
+            "backend": "redb_opfs",
+            "run": 3,
+            "total_ms": 4671.699999999255,
+            "phases": {
+              "apply_shuffled": 4629.400000002235,
+              "scan_full": 1.3999999985098839,
+              "scan_windows": 0.6999999992549419,
+              "digest": 9.200000002980232
+            },
+            "write_ms": 4629.400000002235,
+            "read_ms": 11.300000000745058,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 8789,
+              "set_lens": 5,
+              "syncs": 1008,
+              "bytes_read": 320,
+              "bytes_written": 32197312
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "log_batched",
+            "backend": "indexed_db",
+            "run": 3,
+            "total_ms": 1627.5999999977648,
+            "phases": {
+              "apply_shuffled": 542.5999999977648,
+              "scan_full": 16.5,
+              "scan_windows": 413.6000000014901,
+              "digest": 650.1999999992549
+            },
+            "write_ms": 542.5999999977648,
+            "read_ms": 1080.300000000745,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 360419
+          },
+          {
+            "workload": "log_batched",
+            "backend": "indexed_db_range",
+            "run": 3,
+            "total_ms": 1173.2999999970198,
+            "phases": {
+              "apply_shuffled": 561.0999999977648,
+              "scan_full": 6.800000000745058,
+              "scan_windows": 17.300000000745058,
+              "digest": 584.3999999985099
+            },
+            "write_ms": 561.0999999977648,
+            "read_ms": 608.5,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -285850
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 10.899999998509884,
+            "phases": {
+              "apply": 4.800000000745058,
+              "verify": 0.29999999701976776,
+              "digest": 4.700000002980232
+            },
+            "write_ms": 4.800000000745058,
+            "read_ms": 5,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "redb_opfs",
+            "run": 3,
+            "total_ms": 569,
+            "phases": {
+              "apply": 530.1999999992549,
+              "verify": 0.8000000007450581,
+              "digest": 5.600000001490116
+            },
+            "write_ms": 530.1999999992549,
+            "read_ms": 6.400000002235174,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 1021,
+              "set_lens": 2,
+              "syncs": 107,
+              "bytes_read": 320,
+              "bytes_written": 3794368
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db",
+            "run": 3,
+            "total_ms": 287.79999999701977,
+            "phases": {
+              "apply": 93.80000000074506,
+              "verify": 49.600000001490116,
+              "digest": 139.89999999850988
+            },
+            "write_ms": 93.80000000074506,
+            "read_ms": 189.5,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -81077
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db_range",
+            "run": 3,
+            "total_ms": 299.5,
+            "phases": {
+              "apply": 100.80000000074506,
+              "verify": 51.599999997764826,
+              "digest": 143.69999999925494
+            },
+            "write_ms": 100.80000000074506,
+            "read_ms": 195.29999999701977,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 1560
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 269.9000000022352,
+            "phases": {
+              "put": 142.39999999850988,
+              "get_verify": 66.10000000149012,
+              "digest": 60
+            },
+            "write_ms": 142.39999999850988,
+            "read_ms": 126.10000000149012,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "redb_opfs",
+            "run": 3,
+            "total_ms": 689.8000000007451,
+            "phases": {
+              "put": 382.0999999977648,
+              "get_verify": 107.90000000223517,
+              "digest": 152.5
+            },
+            "write_ms": 382.0999999977648,
+            "read_ms": 260.4000000022352,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -17040,122 +17159,42 @@
           {
             "workload": "large_blobs",
             "backend": "indexed_db",
-            "run": 1,
-            "total_ms": 392,
-            "phases": {
-              "put": 166.20000004768372,
-              "get_verify": 113.89999997615814,
-              "digest": 108.30000001192093
-            },
-            "write_ms": 166.20000004768372,
-            "read_ms": 222.19999998807907,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25170697
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 389.60000002384186,
-            "phases": {
-              "put": 178.0999999642372,
-              "get_verify": 104.69999998807907,
-              "digest": 103
-            },
-            "write_ms": 178.0999999642372,
-            "read_ms": 207.69999998807907,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 26905000
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db",
             "run": 3,
-            "total_ms": 368.5,
+            "total_ms": 404.30000000074506,
             "phases": {
-              "put": 156.9000000357628,
-              "get_verify": 101.79999995231628,
-              "digest": 106.10000002384186
+              "put": 181.40000000223517,
+              "get_verify": 106.29999999701977,
+              "digest": 112.30000000074506
             },
-            "write_ms": 156.9000000357628,
-            "read_ms": 207.89999997615814,
+            "write_ms": 181.40000000223517,
+            "read_ms": 218.59999999776483,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
             "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 25161309
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db_range",
-            "run": 1,
-            "total_ms": 374.5,
-            "phases": {
-              "put": 172.4000000357628,
-              "get_verify": 98.80000001192093,
-              "digest": 99.59999996423721
-            },
-            "write_ms": 172.4000000357628,
-            "read_ms": 198.39999997615814,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25170715
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 374.80000001192093,
-            "phases": {
-              "put": 158,
-              "get_verify": 103.30000001192093,
-              "digest": 109.90000003576279
-            },
-            "write_ms": 158,
-            "read_ms": 213.20000004768372,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25164546
+            "usage_delta_bytes": 26597512
           },
           {
             "workload": "large_blobs",
             "backend": "indexed_db_range",
             "run": 3,
-            "total_ms": 381.0999999642372,
+            "total_ms": 389,
             "phases": {
-              "put": 164.20000004768372,
-              "get_verify": 103.19999998807907,
-              "digest": 110.09999996423721
+              "put": 164.80000000074506,
+              "get_verify": 111.19999999925494,
+              "digest": 109.10000000149012
             },
-            "write_ms": 164.20000004768372,
-            "read_ms": 213.29999995231628,
+            "write_ms": 164.80000000074506,
+            "read_ms": 220.30000000074506,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
             "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 25169060
+            "usage_delta_bytes": 25150544
           }
         ],
         "summary": [
@@ -17163,439 +17202,759 @@
             "workload": "small_slots",
             "memory": {
               "runs": 3,
-              "total_ms": 11,
-              "write_ms": 4,
-              "read_ms": 5,
+              "total_ms": 7.800000000745058,
+              "write_ms": 2.599999997764826,
+              "read_ms": 3.5000000037252903,
               "total_spread_ms": [
-                9.600000023841858,
-                13.399999976158142
+                7.199999999254942,
+                9.199999999254942
               ],
               "phase_ms": {
-                "put": 2.699999988079071,
-                "get": 2,
-                "overwrite": 1.399999976158142,
-                "digest": 2.699999988079071
+                "put": 2.199999999254942,
+                "get": 1.199999999254942,
+                "overwrite": 0.3999999985098839,
+                "digest": 2.400000002235174
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 15126.699999988079,
-              "write_ms": 14800.999999940395,
-              "read_ms": 9.200000047683716,
+              "total_ms": 1737.300000000745,
+              "write_ms": 1696.699999999255,
+              "read_ms": 4.5,
               "total_spread_ms": [
-                7782,
-                17581.5
+                1663.5,
+                1805.300000000745
               ],
               "phase_ms": {
-                "put": 8887.899999976158,
-                "get": 2.100000023841858,
-                "overwrite": 5913.099999964237,
-                "digest": 7.699999988079071
+                "put": 865.3000000007451,
+                "get": 1.5999999977648258,
+                "overwrite": 787.3000000007451,
+                "digest": 2.900000002235174
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 2409.600000023842,
-              "write_ms": 1572.5999999642372,
-              "read_ms": 820.1000000238419,
+              "total_ms": 224.10000000149012,
+              "write_ms": 137.29999999701977,
+              "read_ms": 84,
               "total_spread_ms": [
-                1721.6000000238419,
-                3941.600000023842
+                224,
+                280.29999999701977
               ],
               "phase_ms": {
-                "put": 825.5,
-                "get": 388.9000000357628,
-                "overwrite": 747.0999999642372,
-                "digest": 431.19999998807907
+                "put": 69.29999999701977,
+                "get": 44,
+                "overwrite": 68,
+                "digest": 43
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 2752.699999988079,
-              "write_ms": 1750.800000011921,
-              "read_ms": 1026.4000000357628,
+              "total_ms": 263,
+              "write_ms": 155.90000000223517,
+              "read_ms": 100.59999999776483,
               "total_spread_ms": [
-                2710.7000000476837,
-                4399.5
+                241.79999999701977,
+                330.3999999985099
               ],
               "phase_ms": {
-                "put": 946.1999999880791,
-                "get": 588.1999999880791,
-                "overwrite": 804.6000000238419,
-                "digest": 681.7000000476837
+                "put": 80.30000000074506,
+                "get": 51.599999997764826,
+                "overwrite": 75.60000000149012,
+                "digest": 44
               }
             },
             "redb_over_indexeddb": {
-              "total": 6.277680942828025,
-              "write": 9.411802111329637,
-              "read": 0.011218144186582435,
+              "total": 7.75234270410171,
+              "write": 12.357611070911023,
+              "read": 0.05357142857142857,
               "by_phase": {
-                "put": 10.766686856421755,
-                "get": 0.005399845779503071,
-                "overwrite": 7.914736983331937,
-                "digest": 0.017857142829990597
+                "put": 12.486291486839209,
+                "get": 0.03636363631283695,
+                "overwrite": 11.577941176481545,
+                "digest": 0.06744186051709708
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 5.495222872108688,
-              "write": 8.453849668631264,
-              "read": 0.008963367154484763,
+              "total": 6.605703422056065,
+              "write": 10.88325849887703,
+              "read": 0.044731610338966034,
               "by_phase": {
-                "put": 9.393257239577398,
-                "get": 0.0035702142534587184,
-                "overwrite": 7.349117573687572,
-                "digest": 0.011295291165528047
+                "put": 10.7758405976677,
+                "get": 0.03100775189601034,
+                "overwrite": 10.414021163825753,
+                "digest": 0.06590909095989032
               }
             },
-            "indexeddb_adapter_overhead_read": 0.7990062353812034
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 4.400000002235174,
+                  "max": 4.699999999254942
+                },
+                "other_ms": {
+                  "min": 81.89999999850988,
+                  "max": 188.19999999925494
+                },
+                "worst_for_redb": 17.42553191733892,
+                "best_for_redb": 42.77272725082965,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 1623.8999999985099,
+                  "max": 1766.699999999255
+                },
+                "other_ms": {
+                  "min": 138.60000000149012,
+                  "max": 158.30000000074506
+                },
+                "worst_for_redb": 12.746753246610828,
+                "best_for_redb": 10.258370183138767,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 133.60000000149012,
+                  "max": 159.19999999925494
+                },
+                "range_ms": {
+                  "min": 138.60000000149012,
+                  "max": 158.30000000074506
+                },
+                "median_ratio": 0.8806927517322083,
+                "paired_ratios": [
+                  0.8569595894777079,
+                  0.9906204905883379,
+                  1.005685407444761
+                ],
+                "paired_span": {
+                  "min": 0.8569595894777079,
+                  "max": 1.005685407444761
+                },
+                "max_paired_deviation_pct": 17,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 0.8349900596606993,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 83.5,
+                "max": 117.40000000223517
+              },
+              "range_ms": {
+                "min": 81.89999999850988,
+                "max": 188.19999999925494
+              },
+              "median": 0.8349900596606993,
+              "worst_for_range": 0.4436769394278989,
+              "best_for_range": 1.4334554335088057,
+              "disjoint": false
+            }
           },
           {
             "workload": "ordered_log",
             "memory": {
               "runs": 3,
-              "total_ms": 33.5,
-              "write_ms": 9.5,
-              "read_ms": 24.5,
+              "total_ms": 13.699999999254942,
+              "write_ms": 4.300000000745058,
+              "read_ms": 8.100000001490116,
               "total_spread_ms": [
-                29.80000001192093,
-                36.69999998807907
+                13.5,
+                13.899999998509884
               ],
               "phase_ms": {
-                "put_shuffled": 9.5,
-                "scan_full": 2.900000035762787,
-                "scan_windows": 11.300000011920929,
-                "digest": 9
+                "put_shuffled": 4.300000000745058,
+                "scan_full": 1.5999999977648258,
+                "scan_windows": 2.400000002235174,
+                "digest": 4
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 37735.10000002384,
-              "write_ms": 37497.200000047684,
-              "read_ms": 13.599999964237213,
+              "total_ms": 4401.10000000149,
+              "write_ms": 4356.900000002235,
+              "read_ms": 8.299999997019768,
               "total_spread_ms": [
-                13189.599999964237,
-                42420.59999996424
+                4072.199999999255,
+                4733.800000000745
               ],
               "phase_ms": {
-                "put_shuffled": 37497.200000047684,
-                "scan_full": 2.699999988079071,
-                "scan_windows": 0.800000011920929,
-                "digest": 9.699999988079071
+                "put_shuffled": 4356.900000002235,
+                "scan_full": 1.3999999985098839,
+                "scan_windows": 0.4000000022351742,
+                "digest": 6.099999997764826
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 3384.2999999523163,
-              "write_ms": 1654.9000000357628,
-              "read_ms": 1696,
+              "total_ms": 905.6999999992549,
+              "write_ms": 455.69999999925494,
+              "read_ms": 446.5999999977648,
               "total_spread_ms": [
-                1842,
-                3793.399999976158
+                846.7999999970198,
+                1272.1000000014901
               ],
               "phase_ms": {
-                "put_shuffled": 1654.9000000357628,
-                "scan_full": 12.900000035762787,
-                "scan_windows": 387.89999997615814,
-                "digest": 1179.300000011921
+                "put_shuffled": 455.69999999925494,
+                "scan_full": 9.900000002235174,
+                "scan_windows": 210.89999999850988,
+                "digest": 233.69999999925494
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 1657.699999988079,
-              "write_ms": 1007.6999999880791,
-              "read_ms": 664.1999999880791,
+              "total_ms": 757.1999999992549,
+              "write_ms": 456.8999999985099,
+              "read_ms": 277.9000000022352,
               "total_spread_ms": [
-                1561.8999999761581,
-                2613.7000000476837
+                683.3999999985099,
+                1045.1000000014901
               ],
               "phase_ms": {
-                "put_shuffled": 1007.6999999880791,
-                "scan_full": 21.19999998807907,
-                "scan_windows": 31.30000001192093,
-                "digest": 588.8999999761581
+                "put_shuffled": 456.8999999985099,
+                "scan_full": 7.5,
+                "scan_windows": 18.900000002235174,
+                "digest": 251.69999999925494
               }
             },
             "redb_over_indexeddb": {
-              "total": 11.150045799886392,
-              "write": 22.658287509358487,
-              "read": 0.008018867903441753,
+              "total": 4.8593353207520265,
+              "write": 9.56089532589282,
+              "read": 0.018584863405869477,
               "by_phase": {
-                "put_shuffled": 22.658287509358487,
-                "scan_full": 0.2093023240770416,
-                "scan_windows": 0.002062387244058005,
-                "digest": 0.008225218339676942
+                "put_shuffled": 9.56089532589282,
+                "scan_full": 0.14141414123169682,
+                "scan_windows": 0.00189663348619251,
+                "digest": 0.026101839956287006
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 22.76352777963154,
-              "write": 37.21067778157315,
-              "read": 0.02047576025968278,
+              "total": 5.812334918127075,
+              "write": 9.535784635623648,
+              "read": 0.029866858571259484,
               "by_phase": {
-                "put_shuffled": 37.21067778157315,
-                "scan_full": 0.12735849007534447,
-                "scan_windows": 0.025559105802435804,
-                "digest": 0.01647138731273863
+                "put_shuffled": 9.535784635623648,
+                "scan_full": 0.18666666646798452,
+                "scan_windows": 0.021164021279781422,
+                "digest": 0.024235200626868823
               }
             },
-            "indexeddb_adapter_overhead_read": 2.553447756745618
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 7.100000001490116,
+                  "max": 12.199999999254942
+                },
+                "other_ms": {
+                  "min": 246,
+                  "max": 583.5
+                },
+                "worst_for_redb": 20.163934427460926,
+                "best_for_redb": 82.18309857430107,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 4034.599999997765,
+                  "max": 4680.300000000745
+                },
+                "other_ms": {
+                  "min": 432.79999999701977,
+                  "max": 475.5999999977648
+                },
+                "worst_for_redb": 10.814001848505022,
+                "best_for_redb": 8.483179142171418,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 396.20000000298023,
+                  "max": 641.1999999992549
+                },
+                "range_ms": {
+                  "min": 432.79999999701977,
+                  "max": 475.5999999977648
+                },
+                "median_ratio": 0.9973736047291336,
+                "paired_ratios": [
+                  0.9154343807895297,
+                  0.9581581160668557,
+                  1.4033705406026398
+                ],
+                "paired_span": {
+                  "min": 0.9154343807895297,
+                  "max": 1.4033705406026398
+                },
+                "max_paired_deviation_pct": 40,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.6070528967044722,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 446.5999999977648,
+                "max": 625.6999999992549
+              },
+              "range_ms": {
+                "min": 246,
+                "max": 583.5
+              },
+              "median": 1.6070528967044722,
+              "worst_for_range": 0.7653813196191342,
+              "best_for_range": 2.543495934956321,
+              "disjoint": false
+            }
           },
           {
             "workload": "log_batched",
             "memory": {
               "runs": 3,
-              "total_ms": 23.600000023841858,
-              "write_ms": 7.199999988079071,
-              "read_ms": 14.599999964237213,
+              "total_ms": 23.799999997019768,
+              "write_ms": 7.5,
+              "read_ms": 14.400000002235174,
               "total_spread_ms": [
-                22.5,
-                27.400000035762787
+                21.400000002235174,
+                30.299999997019768
               ],
               "phase_ms": {
-                "apply_shuffled": 7.199999988079071,
-                "scan_full": 2,
-                "scan_windows": 5,
-                "digest": 7.599999964237213
+                "apply_shuffled": 7.5,
+                "scan_full": 1.800000000745058,
+                "scan_windows": 4.800000000745058,
+                "digest": 7.400000002235174
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 8342.099999964237,
-              "write_ms": 8286.099999964237,
-              "read_ms": 15.900000035762787,
+              "total_ms": 5523.400000002235,
+              "write_ms": 5463.400000002235,
+              "read_ms": 13.099999997764826,
               "total_spread_ms": [
-                5079.399999976158,
-                12994.5
+                4671.699999999255,
+                5620
               ],
               "phase_ms": {
-                "apply_shuffled": 8286.099999964237,
-                "scan_full": 1.199999988079071,
-                "scan_windows": 0.6000000238418579,
-                "digest": 14.199999988079071
+                "apply_shuffled": 5463.400000002235,
+                "scan_full": 1.3999999985098839,
+                "scan_windows": 0.6999999992549419,
+                "digest": 11.199999999254942
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 3504,
-              "write_ms": 1436.2000000476837,
-              "read_ms": 2072.300000011921,
+              "total_ms": 1691.5,
+              "write_ms": 516.8999999985099,
+              "read_ms": 1185,
               "total_spread_ms": [
-                3416,
-                5744
+                1627.5999999977648,
+                1860.9000000022352
               ],
               "phase_ms": {
-                "apply_shuffled": 1436.2000000476837,
-                "scan_full": 26.19999998807907,
-                "scan_windows": 915.3000000119209,
-                "digest": 1228.1000000238419
+                "apply_shuffled": 516.8999999985099,
+                "scan_full": 14.5,
+                "scan_windows": 425.5999999977648,
+                "digest": 744.9000000022352
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 1145.1000000238419,
-              "write_ms": 589.6999999880791,
-              "read_ms": 567.5,
+              "total_ms": 1165.699999999255,
+              "write_ms": 561.0999999977648,
+              "read_ms": 601.1000000014901,
               "total_spread_ms": [
-                1055.5,
-                1491.2999999523163
+                1117.2000000029802,
+                1173.2999999970198
               ],
               "phase_ms": {
-                "apply_shuffled": 589.6999999880791,
-                "scan_full": 7.899999976158142,
-                "scan_windows": 17.600000023841858,
-                "digest": 542.8000000119209
+                "apply_shuffled": 561.0999999977648,
+                "scan_full": 7.199999999254942,
+                "scan_windows": 17.100000001490116,
+                "digest": 576.5
               }
             },
             "redb_over_indexeddb": {
-              "total": 2.3807363013596565,
-              "write": 5.769461077627857,
-              "read": 0.007672634288313141,
+              "total": 3.2653857522921874,
+              "write": 10.569549235863775,
+              "read": 0.011054852318788883,
               "by_phase": {
-                "apply_shuffled": 5.769461077627857,
-                "scan_full": 0.045801526283399535,
-                "scan_windows": 0.0006555228054561821,
-                "digest": 0.011562576327500528
+                "apply_shuffled": 10.569549235863775,
+                "scan_full": 0.0965517240351644,
+                "scan_windows": 0.0016447368403632947,
+                "digest": 0.015035575243954
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 7.285040607624267,
-              "write": 14.051382058897309,
-              "read": 0.028017621208392577,
+              "total": 4.738268851338908,
+              "write": 9.736945286088039,
+              "read": 0.02179337880175071,
               "by_phase": {
-                "apply_shuffled": 14.051382058897309,
-                "scan_full": 0.15189873312666063,
-                "scan_windows": 0.034090910399378824,
-                "digest": 0.026160648466778208
+                "apply_shuffled": 9.736945286088039,
+                "scan_full": 0.19444444425760504,
+                "scan_windows": 0.040935672467482045,
+                "digest": 0.019427580224206317
               }
             },
-            "indexeddb_adapter_overhead_read": 3.6516299559681427
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 11.300000000745058,
+                  "max": 17.099999997764826
+                },
+                "other_ms": {
+                  "min": 570.8000000007451,
+                  "max": 608.5
+                },
+                "worst_for_redb": 33.380116963471075,
+                "best_for_redb": 53.849557518573356,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 4629.400000002235,
+                  "max": 5567.900000002235
+                },
+                "other_ms": {
+                  "min": 512.0999999977648,
+                  "max": 591.3000000007451
+                },
+                "worst_for_redb": 10.872681117021163,
+                "best_for_redb": 7.829189920508036,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 502.30000000074506,
+                  "max": 542.5999999977648
+                },
+                "range_ms": {
+                  "min": 512.0999999977648,
+                  "max": 591.3000000007451
+                },
+                "median_ratio": 0.9212261628953288,
+                "paired_ratios": [
+                  0.8741755454048006,
+                  0.9670290500800682,
+                  0.9808631126790421
+                ],
+                "paired_span": {
+                  "min": 0.8741755454048006,
+                  "max": 0.9808631126790421
+                },
+                "max_paired_deviation_pct": 14,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.971385792708472,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 1080.300000000745,
+                "max": 1340.199999999255
+              },
+              "range_ms": {
+                "min": 570.8000000007451,
+                "max": 608.5
+              },
+              "median": 1.971385792708472,
+              "worst_for_range": 1.775349219393172,
+              "best_for_range": 2.3479327259942284,
+              "disjoint": true
+            }
           },
           {
             "workload": "atomic_batches",
             "memory": {
               "runs": 3,
-              "total_ms": 17.400000035762787,
-              "write_ms": 6.800000011920929,
-              "read_ms": 8.300000011920929,
+              "total_ms": 10.899999998509884,
+              "write_ms": 4.800000000745058,
+              "read_ms": 4.800000000745058,
               "total_spread_ms": [
-                11.900000035762787,
-                19.69999998807907
+                10.300000000745058,
+                11.300000000745058
               ],
               "phase_ms": {
-                "apply": 6.800000011920929,
-                "verify": 0.3999999761581421,
-                "digest": 7.800000011920929
+                "apply": 4.800000000745058,
+                "verify": 0.29999999701976776,
+                "digest": 4.399999998509884
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 841.3000000119209,
-              "write_ms": 761.9000000357628,
-              "read_ms": 7.400000035762787,
+              "total_ms": 585.8000000007451,
+              "write_ms": 548.8000000007451,
+              "read_ms": 6.400000002235174,
               "total_spread_ms": [
-                728.6999999880791,
-                856.1999999880791
+                569,
+                1094.1000000014901
               ],
               "phase_ms": {
-                "apply": 761.9000000357628,
-                "verify": 1.5,
-                "digest": 6.099999964237213
+                "apply": 548.8000000007451,
+                "verify": 1,
+                "digest": 5.600000001490116
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 285.30000001192093,
-              "write_ms": 117.19999998807907,
-              "read_ms": 164.70000004768372,
+              "total_ms": 296.80000000074506,
+              "write_ms": 113.79999999701977,
+              "read_ms": 189.5,
               "total_spread_ms": [
-                265.60000002384186,
-                360.60000002384186
+                287.79999999701977,
+                340
               ],
               "phase_ms": {
-                "apply": 117.19999998807907,
-                "verify": 43.90000003576279,
-                "digest": 120.80000001192093
+                "apply": 113.79999999701977,
+                "verify": 49.600000001490116,
+                "digest": 139.89999999850988
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 319.19999998807907,
-              "write_ms": 120.69999998807907,
-              "read_ms": 188.89999997615814,
+              "total_ms": 299.5,
+              "write_ms": 116.59999999776483,
+              "read_ms": 195.29999999701977,
               "total_spread_ms": [
-                287.10000002384186,
-                331
+                288.5,
+                357.80000000074506
               ],
               "phase_ms": {
-                "apply": 120.69999998807907,
-                "verify": 47.5,
-                "digest": 120.70000004768372
+                "apply": 116.59999999776483,
+                "verify": 51.599999997764826,
+                "digest": 143.69999999925494
               }
             },
             "redb_over_indexeddb": {
-              "total": 2.9488257973248095,
-              "write": 6.500853243287192,
-              "read": 0.0449301762818479,
+              "total": 1.973719676547421,
+              "write": 4.8224956064597295,
+              "read": 0.03377308708303522,
               "by_phase": {
-                "apply": 6.500853243287192,
-                "verify": 0.0341685648924382,
-                "digest": 0.05049668844068912
+                "apply": 4.8224956064597295,
+                "verify": 0.020161290321974945,
+                "digest": 0.04002859186240002
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 2.6356516292084597,
-              "write": 6.312344657092061,
-              "read": 0.03917416641978175,
+              "total": 1.9559265442428884,
+              "write": 4.706689536974832,
+              "read": 0.03277009729817121,
               "by_phase": {
-                "apply": 6.312344657092061,
-                "verify": 0.031578947368421054,
-                "digest": 0.05053852495300206
+                "apply": 4.706689536974832,
+                "verify": 0.019379844962079795,
+                "digest": 0.038970076558936334
               }
             },
-            "indexeddb_adapter_overhead_read": 0.8718898891925421
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 6.300000000745058,
+                  "max": 8.5
+                },
+                "other_ms": {
+                  "min": 168.10000000149012,
+                  "max": 228.80000000074506
+                },
+                "worst_for_redb": 19.776470588410604,
+                "best_for_redb": 36.31746031328356,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 530.1999999992549,
+                  "max": 1038.0999999977648
+                },
+                "other_ms": {
+                  "min": 100.80000000074506,
+                  "max": 124.89999999850988
+                },
+                "worst_for_redb": 10.298611111012814,
+                "best_for_redb": 4.244995996842118,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 93.80000000074506,
+                  "max": 115.29999999701977
+                },
+                "range_ms": {
+                  "min": 100.80000000074506,
+                  "max": 124.89999999850988
+                },
+                "median_ratio": 0.9759862778662202,
+                "paired_ratios": [
+                  0.9111289031095072,
+                  0.9305555555560688,
+                  0.9888507718630362
+                ],
+                "paired_span": {
+                  "min": 0.9111289031095072,
+                  "max": 0.9888507718630362
+                },
+                "max_paired_deviation_pct": 10,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 0.970302099349164,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 177.5,
+                "max": 221.90000000223517
+              },
+              "range_ms": {
+                "min": 168.10000000149012,
+                "max": 228.80000000074506
+              },
+              "median": 0.970302099349164,
+              "worst_for_range": 0.775786713284187,
+              "best_for_range": 1.3200475907214049,
+              "disjoint": false
+            }
           },
           {
             "workload": "large_blobs",
             "memory": {
               "runs": 3,
-              "total_ms": 264.9000000357628,
-              "write_ms": 146,
-              "read_ms": 123.19999998807907,
+              "total_ms": 292.6000000014901,
+              "write_ms": 152.5,
+              "read_ms": 136,
               "total_spread_ms": [
-                260.69999998807907,
-                274.80000001192093
+                269.9000000022352,
+                296.80000000074506
               ],
               "phase_ms": {
-                "put": 146,
-                "get_verify": 61.39999997615814,
-                "digest": 61.80000001192093
+                "put": 152.5,
+                "get_verify": 67,
+                "digest": 67.60000000149012
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 649.5,
-              "write_ms": 357.5,
-              "read_ms": 262.5999999642372,
+              "total_ms": 716,
+              "write_ms": 387,
+              "read_ms": 282.20000000298023,
               "total_spread_ms": [
-                647.8000000119209,
-                686.8000000119209
+                689.8000000007451,
+                845.5999999977648
               ],
               "phase_ms": {
-                "put": 357.5,
-                "get_verify": 112.09999996423721,
-                "digest": 150.5
+                "put": 387,
+                "get_verify": 116.70000000298023,
+                "digest": 165.5
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 389.60000002384186,
-              "write_ms": 166.20000004768372,
-              "read_ms": 207.89999997615814,
+              "total_ms": 404.30000000074506,
+              "write_ms": 181.40000000223517,
+              "read_ms": 222.89999999850988,
               "total_spread_ms": [
-                368.5,
-                392
+                397.80000000074506,
+                438.5999999977648
               ],
               "phase_ms": {
-                "put": 166.20000004768372,
-                "get_verify": 104.69999998807907,
-                "digest": 106.10000002384186
+                "put": 181.40000000223517,
+                "get_verify": 111.69999999925494,
+                "digest": 112.30000000074506
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 374.80000001192093,
-              "write_ms": 164.20000004768372,
-              "read_ms": 213.20000004768372,
+              "total_ms": 401,
+              "write_ms": 174.89999999850988,
+              "read_ms": 222.10000000149012,
               "total_spread_ms": [
-                374.5,
-                381.0999999642372
+                389,
+                435.19999999925494
               ],
               "phase_ms": {
-                "put": 164.20000004768372,
-                "get_verify": 103.19999998807907,
-                "digest": 109.90000003576279
+                "put": 174.89999999850988,
+                "get_verify": 113,
+                "digest": 109.10000000149012
               }
             },
             "redb_over_indexeddb": {
-              "total": 1.667094455750137,
-              "write": 2.151022863402113,
-              "read": 1.2631072630800964,
+              "total": 1.7709621568109832,
+              "write": 2.1334068356958737,
+              "read": 1.266038582345746,
               "by_phase": {
-                "put": 2.151022863402113,
-                "get_verify": 1.0706781277650497,
-                "digest": 1.4184731382297924
+                "put": 2.1334068356958737,
+                "get_verify": 1.0447627574195044,
+                "digest": 1.4737310774612822
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 1.7329242261988846,
-              "write": 2.17722289827151,
-              "read": 1.2317073166299477,
+              "total": 1.7855361596009975,
+              "write": 2.2126929674288003,
+              "read": 1.2705988293610395,
               "by_phase": {
-                "put": 2.17722289827151,
-                "get_verify": 1.0862403098564555,
-                "digest": 1.3694267511467286
+                "put": 2.2126929674288003,
+                "get_verify": 1.032743362858232,
+                "digest": 1.5169569202359263
               }
             },
-            "indexeddb_adapter_overhead_read": 0.9751407126156652
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 260.4000000022352,
+                  "max": 291.30000000074506
+                },
+                "other_ms": {
+                  "min": 220.30000000074506,
+                  "max": 243.10000000149012
+                },
+                "worst_for_redb": 0.7562650188815022,
+                "best_for_redb": 0.9335637480775861,
+                "disjoint": false
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 382.0999999977648,
+                  "max": 509.3999999985099
+                },
+                "other_ms": {
+                  "min": 164.80000000074506,
+                  "max": 188.19999999925494
+                },
+                "worst_for_redb": 3.0910194174527117,
+                "best_for_redb": 2.0302869287953107,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 171.19999999925494,
+                  "max": 181.69999999925494
+                },
+                "range_ms": {
+                  "min": 164.80000000074506,
+                  "max": 188.19999999925494
+                },
+                "median_ratio": 1.0371640937894835,
+                "paired_ratios": [
+                  0.9096705632302481,
+                  1.0388793596386678,
+                  1.1007281553483923
+                ],
+                "paired_span": {
+                  "min": 0.9096705632302481,
+                  "max": 1.1007281553483923
+                },
+                "max_paired_deviation_pct": 10,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.0036019810761567,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 218.59999999776483,
+                "max": 240.10000000149012
+              },
+              "range_ms": {
+                "min": 220.30000000074506,
+                "max": 243.10000000149012
+              },
+              "median": 1.0036019810761567,
+              "worst_for_range": 0.899218428615487,
+              "best_for_range": 1.0898774398578215,
+              "disjoint": false
+            }
           }
         ],
         "digests_agree": true,
@@ -17656,7 +18015,7 @@
             "opened": true,
             "error": null,
             "error_kind": null,
-            "open_ms": 5,
+            "open_ms": 4.800000000745058,
             "repair_invoked": false,
             "repair_callbacks": 0
           },
@@ -17681,7 +18040,7 @@
             "bytes_read": 586377,
             "bytes_written": 960
           },
-          "ms": 44.89999997615814
+          "ms": 40.100000001490116
         },
         "staging_left": false,
         "staging_len": 0,
@@ -17689,10 +18048,10 @@
       },
       "trials": 139,
       "creation_trials": 127,
-      "final_absent": 119,
-      "final_present_and_sound": 20,
+      "final_absent": 118,
+      "final_present_and_sound": 21,
       "unopenable_stubs": 0,
-      "staging_left_behind": 119,
+      "staging_left_behind": 118,
       "promotion": {
         "kind": "promotion_boundary_kills",
         "note": "the kill window straddles move(); landing inside the rename is not established",
@@ -17700,8 +18059,9 @@
         "terminated_before_command_returned": 12,
         "worker_finished_first": 0,
         "names_stabilized": 12,
-        "rename_not_applied": 5,
-        "rename_applied": 7,
+        "unsettled_and_therefore_failed": 0,
+        "rename_not_applied": 4,
+        "rename_applied": 8,
         "rename_applied_staging_remains": 0,
         "final_unopenable": 0,
         "both_absent": 0,
@@ -19236,6 +19596,7 @@
         {
           "name": "promotion_boundary_kill#1",
           "kill_jitter_ms": 0,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19252,6 +19613,7 @@
         {
           "name": "promotion_boundary_kill#2",
           "kill_jitter_ms": 0.35,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19268,6 +19630,7 @@
         {
           "name": "promotion_boundary_kill#3",
           "kill_jitter_ms": 0.7,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19284,6 +19647,7 @@
         {
           "name": "promotion_boundary_kill#4",
           "kill_jitter_ms": 1.0499999999999998,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19300,6 +19664,7 @@
         {
           "name": "promotion_boundary_kill#5",
           "kill_jitter_ms": 1.4,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19316,6 +19681,7 @@
         {
           "name": "promotion_boundary_kill#6",
           "kill_jitter_ms": 1.75,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19332,22 +19698,24 @@
         {
           "name": "promotion_boundary_kill#7",
           "kill_jitter_ms": 2.0999999999999996,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
           "settle_rounds": 1,
-          "classification": "rename_not_applied",
-          "final_exists": false,
-          "final_len": 0,
-          "final_sound": null,
-          "final_generation": null,
-          "staging_left": true,
-          "staging_len": 462848,
+          "classification": "rename_applied",
+          "final_exists": true,
+          "final_len": 462848,
+          "final_sound": true,
+          "final_generation": 4,
+          "staging_left": false,
+          "staging_len": 0,
           "ok": true
         },
         {
           "name": "promotion_boundary_kill#8",
           "kill_jitter_ms": 2.4499999999999997,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19364,6 +19732,7 @@
         {
           "name": "promotion_boundary_kill#9",
           "kill_jitter_ms": 2.8,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19380,6 +19749,7 @@
         {
           "name": "promotion_boundary_kill#10",
           "kill_jitter_ms": 3.15,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19396,6 +19766,7 @@
         {
           "name": "promotion_boundary_kill#11",
           "kill_jitter_ms": 3.5,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19412,6 +19783,7 @@
         {
           "name": "promotion_boundary_kill#12",
           "kill_jitter_ms": 3.8499999999999996,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19454,24 +19826,24 @@
         "unopenable": 0,
         "harness_error": 0
       },
-      "kills_inside_a_commit": 8,
+      "kills_inside_a_commit": 10,
       "generations_after_terminate_call": {
         "n": 10,
-        "min": 5,
-        "median": 9,
-        "max": 13
+        "min": 68,
+        "median": 118,
+        "max": 122
       },
       "handle_release_wait_ms": {
         "n": 10,
-        "min": 2700.7999999523163,
-        "median": 4333.599999964237,
-        "max": 4905.700000047684
+        "min": 2069.800000000745,
+        "median": 2121.39999999851,
+        "max": 2188.199999999255
       },
       "reopen_open_ms": {
         "n": 10,
-        "min": 148.80000001192093,
-        "median": 732.8999999761581,
-        "max": 875.9000000357628
+        "min": 22.100000001490116,
+        "median": 33.900000002235174,
+        "max": 58.600000001490116
       },
       "repairs_invoked": 10
     },
@@ -19490,19 +19862,19 @@
         "n": 10,
         "min": 1,
         "median": 1,
-        "max": 1
+        "max": 2
       },
       "handle_release_wait_ms": {
         "n": 10,
-        "min": 669.8000000119209,
-        "median": 1127.6000000238419,
-        "max": 1695.699999988079
+        "min": 97.5,
+        "median": 111,
+        "max": 126.19999999925494
       },
       "reopen_open_ms": {
         "n": 10,
-        "min": 142.29999995231628,
-        "median": 272.0999999642372,
-        "max": 658
+        "min": 27.900000002235174,
+        "median": 30.300000000745058,
+        "max": 36.399999998509884
       },
       "repairs_invoked": 10
     },
@@ -19511,82 +19883,82 @@
     "stop_condition_hit": false,
     "lane4_second_writer_refused": true,
     "lane4_refusal_name": "NoModificationAllowedError",
-    "lane4_release_after_kill_ms": 232.19999998807907,
+    "lane4_release_after_kill_ms": 70,
     "lane4_two_tabs": "ran",
     "lane4_two_tabs_ok": true,
-    "lane4_reload_reopen_ms": 579.8000000119209,
+    "lane4_reload_reopen_ms": 224.30000000074506,
     "lane5_native_to_browser_ok": true,
     "lane5_digests_agree": true,
     "lane5_redb_over_indexeddb": [
       {
         "workload": "small_slots",
         "vs_shipping": {
-          "total": 6.277680942828025,
-          "write": 9.411802111329637,
-          "read": 0.011218144186582435
+          "total": 7.75234270410171,
+          "write": 12.357611070911023,
+          "read": 0.05357142857142857
         },
         "vs_range": {
-          "total": 5.495222872108688,
-          "write": 8.453849668631264,
-          "read": 0.008963367154484763
+          "total": 6.605703422056065,
+          "write": 10.88325849887703,
+          "read": 0.044731610338966034
         },
-        "shipping_adapter_read_overhead": 0.7990062353812034
+        "shipping_adapter_read_overhead": 0.8349900596606993
       },
       {
         "workload": "ordered_log",
         "vs_shipping": {
-          "total": 11.150045799886392,
-          "write": 22.658287509358487,
-          "read": 0.008018867903441753
+          "total": 4.8593353207520265,
+          "write": 9.56089532589282,
+          "read": 0.018584863405869477
         },
         "vs_range": {
-          "total": 22.76352777963154,
-          "write": 37.21067778157315,
-          "read": 0.02047576025968278
+          "total": 5.812334918127075,
+          "write": 9.535784635623648,
+          "read": 0.029866858571259484
         },
-        "shipping_adapter_read_overhead": 2.553447756745618
+        "shipping_adapter_read_overhead": 1.6070528967044722
       },
       {
         "workload": "log_batched",
         "vs_shipping": {
-          "total": 2.3807363013596565,
-          "write": 5.769461077627857,
-          "read": 0.007672634288313141
+          "total": 3.2653857522921874,
+          "write": 10.569549235863775,
+          "read": 0.011054852318788883
         },
         "vs_range": {
-          "total": 7.285040607624267,
-          "write": 14.051382058897309,
-          "read": 0.028017621208392577
+          "total": 4.738268851338908,
+          "write": 9.736945286088039,
+          "read": 0.02179337880175071
         },
-        "shipping_adapter_read_overhead": 3.6516299559681427
+        "shipping_adapter_read_overhead": 1.971385792708472
       },
       {
         "workload": "atomic_batches",
         "vs_shipping": {
-          "total": 2.9488257973248095,
-          "write": 6.500853243287192,
-          "read": 0.0449301762818479
+          "total": 1.973719676547421,
+          "write": 4.8224956064597295,
+          "read": 0.03377308708303522
         },
         "vs_range": {
-          "total": 2.6356516292084597,
-          "write": 6.312344657092061,
-          "read": 0.03917416641978175
+          "total": 1.9559265442428884,
+          "write": 4.706689536974832,
+          "read": 0.03277009729817121
         },
-        "shipping_adapter_read_overhead": 0.8718898891925421
+        "shipping_adapter_read_overhead": 0.970302099349164
       },
       {
         "workload": "large_blobs",
         "vs_shipping": {
-          "total": 1.667094455750137,
-          "write": 2.151022863402113,
-          "read": 1.2631072630800964
+          "total": 1.7709621568109832,
+          "write": 2.1334068356958737,
+          "read": 1.266038582345746
         },
         "vs_range": {
-          "total": 1.7329242261988846,
-          "write": 2.17722289827151,
-          "read": 1.2317073166299477
+          "total": 1.7855361596009975,
+          "write": 2.2126929674288003,
+          "read": 1.2705988293610395
         },
-        "shipping_adapter_read_overhead": 0.9751407126156652
+        "shipping_adapter_read_overhead": 1.0036019810761567
       }
     ],
     "lane5_bench_repeats": 3,
@@ -19605,8 +19977,9 @@
       "terminated_before_command_returned": 12,
       "worker_finished_first": 0,
       "names_stabilized": 12,
-      "rename_not_applied": 5,
-      "rename_applied": 7,
+      "unsettled_and_therefore_failed": 0,
+      "rename_not_applied": 4,
+      "rename_applied": 8,
       "rename_applied_staging_remains": 0,
       "final_unopenable": 0,
       "both_absent": 0,
@@ -19641,31 +20014,31 @@
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 1
+        "seconds": 0
       },
       "lane 3": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 1079
+        "seconds": 218
       },
       "lane 4": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 5
+        "seconds": 2
       },
       "lane 5": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 227
+        "seconds": 63
       },
       "lane 6": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 19
+        "seconds": 17
       }
     }
   }

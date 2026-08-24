@@ -164,6 +164,10 @@ pub enum ProbeCommand {
     },
     /// Whether a file exists, and its length.
     Exists { path: String },
+    /// Lane 5: exercise the range backend's ASCII key contract in a real
+    /// browser — every key-bearing operation must refuse a non-ASCII key, and
+    /// a refused `apply` must leave nothing behind.
+    AsciiContract { name: String },
 }
 
 /// Storage-call counters collected by the OPFS backend for one open.
@@ -319,6 +323,21 @@ pub struct StagedCreateReport {
     pub ok: bool,
 }
 
+/// Lane 5: the ASCII contract, checked in the browser.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AsciiContractReport {
+    /// Operation name → refused as required.
+    pub refused: Vec<(String, bool)>,
+    /// ASCII operations still work (the contract is not just "refuse
+    /// everything").
+    pub ascii_still_works: bool,
+    /// A refused `apply` left no key behind — the batch is all-or-nothing.
+    pub apply_left_nothing: bool,
+    /// Keys present at the end; must contain only what ASCII writes put there.
+    pub final_keys: Vec<String>,
+    pub ok: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ExistsReport {
     pub path: String,
@@ -365,6 +384,7 @@ pub enum ProbeReport {
     Bench(BenchReport),
     StagedCreate(StagedCreateReport),
     Exists(ExistsReport),
+    AsciiContract(AsciiContractReport),
     Removed { path: String, existed: bool },
 }
 

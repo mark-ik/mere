@@ -717,9 +717,15 @@ async function lane5Bench(repeats = 3) {
   // what IndexedDB can actually do.
   const backends = ["memory", "redb_opfs", "indexed_db", "indexed_db_range"];
   const rows = [];
-  for (const workload of workloads) {
-    for (const backend of backends) {
-      for (let run = 1; run <= repeats; run += 1) {
+  // Repeat is the OUTER loop, so each repeat sweeps every backend before any
+  // backend gets its second sample. Running a backend's repeats consecutively
+  // (the earlier shape) let a single load spike land entirely on one backend
+  // and look like a property of that backend. This does not remove the
+  // ordering confound — backend order within a repeat is still fixed — but it
+  // stops one transient from owning a whole row.
+  for (let run = 1; run <= repeats; run += 1) {
+    for (const workload of workloads) {
+      for (const backend of backends) {
         const usesIdb = backend.startsWith("indexed_db");
         const name = usesIdb ? `muniment-opfs-probe-bench-${backend}-${workload}` : `${prefix()}/bench-${workload}.redb`;
         if (usesIdb) await deleteIndexedDb(name);
@@ -765,6 +771,27 @@ async function lane5Bench(repeats = 3) {
     const idb = forBackend("indexed_db");
     const idbRange = forBackend("indexed_db_range");
     const ratio = (a, b) => (a != null && b ? a / b : null);
+    // Medians alone overstate a comparison when one repeat is an outlier. The
+    // worst OBSERVED ratio (best case for the other backend against worst
+    // case for redb) is what a claim should be able to survive.
+    const span = (bk, phase) => {
+      const v = rows.filter((r) => r.workload === workload && r.backend === bk).map((r) => r[phase]).sort((a, b) => a - b);
+      return v.length ? { min: v[0], max: v[v.length - 1] } : null;
+    };
+    const envelope = (other, phase, redbFaster) => {
+      const a = span("redb_opfs", phase);
+      const b = span(other, phase);
+      if (!a || !b) return null;
+      return {
+        redb_ms: a,
+        other_ms: b,
+        // > 1 means redb is slower, matching the median ratios.
+        worst_for_redb: redbFaster ? b.min / a.max : a.max / b.min,
+        best_for_redb: redbFaster ? b.max / a.min : a.min / b.max,
+        // Did every single observed repeat favour the same side?
+        disjoint: redbFaster ? a.max < b.min : b.max < a.min,
+      };
+    };
     const against = (other) => other && {
       total: ratio(redb?.total_ms, other.total_ms),
       write: ratio(redb?.write_ms, other.write_ms),
@@ -783,9 +810,60 @@ async function lane5Bench(repeats = 3) {
       redb_over_indexeddb: against(idb),
       // The fair read comparison: IndexedDB asked for the range it wanted.
       redb_over_indexeddb_range: against(idbRange),
+      // Observed envelopes, so a claim can be checked against the worst
+      // sample rather than the median.
+      envelopes: {
+        read_vs_range: envelope("indexed_db_range", "read_ms", true),
+        write_vs_range: envelope("indexed_db_range", "write_ms", false),
+        // The control: identical write code in the two IndexedDB backends.
+        // Compare the two backends REPEAT BY REPEAT, not median to median.
+        // Medians hide how far identical code drifted within a single
+        // sample: the medians can sit at 0.88-1.11 while a paired repeat is
+        // 0.81. The paired span is the honest statement of run quality.
+        control_write_shipping_vs_range: (() => {
+          const a = span("indexed_db", "write_ms");
+          const b = span("indexed_db_range", "write_ms");
+          if (!a || !b) return null;
+          const paired = [];
+          for (let run = 1; run <= repeats; run += 1) {
+            const x = rows.find((r) => r.workload === workload && r.backend === "indexed_db" && r.run === run);
+            const y = rows.find((r) => r.workload === workload && r.backend === "indexed_db_range" && r.run === run);
+            if (x && y && y.write_ms) paired.push(x.write_ms / y.write_ms);
+          }
+          paired.sort((p, q) => p - q);
+          return {
+            shipping_ms: a,
+            range_ms: b,
+            median_ratio: ratio(idb?.write_ms, idbRange?.write_ms),
+            paired_ratios: paired,
+            paired_span: paired.length ? { min: paired[0], max: paired[paired.length - 1] } : null,
+            // How far identical code drifted, as a percentage.
+            max_paired_deviation_pct: paired.length
+              ? Math.round(Math.max(...paired.map((p) => Math.abs(1 - (p < 1 ? 1 / p : p)))) * 100)
+              : null,
+            disjoint: a.max < b.min || b.max < a.min,
+          };
+        })(),
+      },
       // How much of the shipping adapter's read cost is the adapter, not
-      // IndexedDB: > 1 means the range version is faster.
+      // IndexedDB: > 1 means the range version is faster. Reported as an
+      // envelope like every other comparison — a median alone here was the
+      // one place the conservative rule was bypassed.
       indexeddb_adapter_overhead_read: ratio(idb?.read_ms, idbRange?.read_ms),
+      adapter_overhead_envelope: (() => {
+        const a = span("indexed_db", "read_ms");
+        const b = span("indexed_db_range", "read_ms");
+        if (!a || !b) return null;
+        return {
+          shipping_ms: a,
+          range_ms: b,
+          median: ratio(idb?.read_ms, idbRange?.read_ms),
+          // Conservative: slowest range repeat against fastest shipping one.
+          worst_for_range: a.min / b.max,
+          best_for_range: a.max / b.min,
+          disjoint: b.max < a.min,
+        };
+      })(),
     };
   });
   return {
@@ -800,8 +878,17 @@ async function lane5Bench(repeats = 3) {
 
 async function lane5() {
   const portability = await lane5Portability();
+  setState("contract", "lane 5: ASCII key contract on the range backend");
+  const contractDb = "muniment-opfs-probe-ascii-contract";
+  await deleteIndexedDb(contractDb);
+  const contract = await oneShot("lane5-ascii-contract", { command: "ascii_contract", name: contractDb });
   const bench = await lane5Bench();
-  return { portability, bench, ok: (portability.ok ?? false) && bench.ok };
+  return {
+    portability,
+    ascii_contract: contract,
+    bench,
+    ok: (portability.ok ?? false) && contract.ok && bench.ok,
+  };
 }
 
 // ── lane 6: staged creation (the §5.4 remedy, crash-tested) ──────────────
@@ -968,12 +1055,17 @@ async function promotionKillTrials(path, base, attempts) {
       : finalState.exists && finalSound ? "rename_applied_staging_remains"
       : finalState.exists && finalSound === false ? "final_unopenable"
       : "both_absent";
-    const ok = classification === "rename_not_applied"
+    // A trial only counts if the names actually settled. Classifying an
+    // unsettled sample would be reading a state the browser had not finished
+    // producing, and calling it a pass.
+    const classificationOk = classification === "rename_not_applied"
       || classification === "rename_applied"
       || classification === "rename_applied_staging_remains";
+    const ok = settled && classificationOk;
     const row = {
       name: `promotion_boundary_kill#${trial}`,
       kill_jitter_ms: jitter,
+      classification_ok: classificationOk,
       // The page terminated the worker before the command returned. That
       // command spans move() AND the post-move checks, so this does NOT
       // establish the kill landed inside the rename.
@@ -1004,6 +1096,8 @@ async function promotionKillTrials(path, base, attempts) {
       terminated_before_command_returned: rows.filter((r) => r.terminated_before_command_returned).length,
       worker_finished_first: rows.filter((r) => r.worker_finished_first).length,
       names_stabilized: rows.filter((r) => r.names_stabilized).length,
+      // A trial passes only if it settled AND classified atomically.
+      unsettled_and_therefore_failed: rows.filter((r) => !r.names_stabilized).length,
       rename_not_applied: count("rename_not_applied"),
       rename_applied: count("rename_applied"),
       rename_applied_staging_remains: count("rename_applied_staging_remains"),

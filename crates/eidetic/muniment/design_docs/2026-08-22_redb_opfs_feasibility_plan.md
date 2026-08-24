@@ -1,19 +1,37 @@
 # redb over OPFS Feasibility Plan
 
-**Date:** 2026-08-22 (revised the same day after review)
+**Date:** founded 2026-08-22; **last revised 2026-08-23** (six review rounds;
+the fifth-pass receipts were generated 2026-08-23)
 **Status:** **Two-engine, single-threaded feasibility strongly evidenced;
 adoption and crash-atomic creation remain open.** Lanes 1–6 pass on native,
 Chromium 151 and Firefox 153 (lane 7) from a byte-identical harness. Safari
 and WKWebView are **not run**. Production muniment is unchanged.
 
-This plan has been corrected four times — three after review found it
+This plan has been corrected six times — five after review found it
 overclaiming, once when the benchmark's own internal control failed. Every
 round is recorded in place rather than edited away, newest first:
 
+- **Sixth round.** The adapter pricing bypassed the harness's own
+  worst-observed rule and is downgraded to a provisional 1.2–1.4× (§5.13);
+  "identical code agrees within ~12%" was read off medians and is false —
+  paired repeats span 0.81–1.11×, ~23% (§5.13); and the browser contract gate
+  read `get`/`list` errors as absence/empty instead of failing closed
+  (§5.13b). Repository state corrected: the fifth- and sixth-pass changes are
+  **uncommitted**, and the tree holds concurrent other-lane work.
+
+- **Fifth round.** The ASCII key contract was enforced only on `scan`/`list`,
+  so a non-ASCII key could enter through `put`/`apply` and surface through
+  `list("")` in IndexedDB's order (§5.13b); the promotion lane recorded
+  `names_stabilized` but did not gate `ok` on it (§5.4b); and "noise floor"
+  overstated what three samples show — the benchmark now reports
+  worst-observed ratios beside medians, which turns one 48.8× median into a
+  6.7× worst case (§5.13).
+
 - **Fourth round.** A built-in control (the two IndexedDB backends share
   identical *write* code, so their write phases measure only error) put the
-  measurement noise floor at **2.44× on Chromium, 1.44× on Firefox**. Every
-  comparison is now filtered against it; redb's read advantage clears it by
+  observed variation between identical code at up to **2.44× on Chromium,
+  1.44× on Firefox**. Every comparison is now reported with its worst
+  observed ratio, not just a median; redb's read advantage survives that by
   more than an order of magnitude, and the third round's adapter-overhead
   figure did not and is withdrawn (§5.13). A genuinely idle host turned out
   not to be obtainable here (§5.10).
@@ -677,7 +695,8 @@ and in IndexedDB's favour as writes get smaller and less batched.**
 **And the write penalty differs by engine**, consistently across runs: much
 larger on Chromium than Firefox (final runs: 6–37× against 2–3×). The
 *direction* is stable; the *magnitude* is not pinned, because it moved
-substantially between runs and the noise floor is 2.44×/1.44× (§5.13). Treat
+substantially between runs and identical code varied by up to 2.44×/1.44×
+(§5.13). Treat
 it as "Chromium punishes redb's per-commit flush considerably harder than
 Firefox does", not as a number. A selection made from one engine's figures
 would be made from the least favourable one.
@@ -742,23 +761,22 @@ promotion on Firefox too. Two engines, still not a spec guarantee.
    either way** — it does not distinguish, because it does not let the worker
    run on.
 
-**The performance ratio is engine-dependent by roughly 3×**, which is on its
-own enough to retire any single-number claim. redb's write penalty versus
-IndexedDB, from the final sequential runs, **filtered by each engine's
-measured noise floor** (§5.13); unresolvable cells are named rather than
-filled with a number:
+**The write penalty is engine-dependent by roughly 2×**, which is on its own
+enough to retire any single-number claim. From the well-conditioned final
+runs (median / worst observed, versus range-query IndexedDB; cells the
+samples cannot separate are named rather than filled with a number):
 
 | Workload | Chromium write | Firefox write |
 |---|---|---|
-| small slots | 8.5× slower | 2.2× slower |
-| ordered log (unbatched) | 37× slower | 3.2× slower |
-| log batched (shipping shape) | 14× slower | *unresolvable* |
-| atomic batches | 6.3× slower | *unresolvable* |
-| large blobs | *unresolvable* | *unresolvable* |
+| small slots | 10.1× / 11.8× slower | 5.0× / 5.3× slower |
+| ordered log (unbatched) | 9.5× / 11.8× slower | 4.8× / 5.0× slower |
+| log batched (shipping shape) | 8.7× / 9.9× slower | 4.4× / 4.4× slower |
+| atomic batches | 6.8× / 6.9× slower | 3.0× / 3.1× slower |
+| large blobs | 1.9× / 2.0× slower | *not separated* |
 
 redb's read advantage holds on both engines and survives the fair baseline by
-a wide margin: **26–112× faster than range-query IndexedDB on Chromium,
-37–79× on Firefox**, spreads nowhere near overlapping (§5.13). The
+a wide margin: medians **21–46×** with the **worst single repeat 7.2×**,
+every repeat in both sequential runs agreeing and ranges disjoint (§5.13). The
 engine difference on writes is directionally clear — Chromium punishes redb
 much harder than Firefox — but its magnitude is not pinned by this data.
 Whatever the eventual selection, it cannot be made from one engine's numbers.
@@ -783,41 +801,122 @@ Three browser backends, same workloads, same harness: redb-on-OPFS, the
 **Methodology, forced by the host-noise problem (§5.10 item 2).** The two
 IndexedDB backends share **byte-identical write code** — only `scan`/`list`
 differ. Their write phases are therefore a **built-in control**: any
-difference between them is measurement error. On the final sequential runs
-that control reports a **noise floor of 2.44× on Chromium** (log_batched,
-spreads not even overlapping) and **1.44× on Firefox**. Nothing below those
-figures is resolvable by this harness on this machine, and the table below
-reports only comparisons that clear the floor *and* whose min–max spreads do
-not overlap. Everything else is marked unresolvable rather than quoted.
+difference between them is measurement error. On the sequential runs that
+control showed identical code differing by up to **2.44× on Chromium**
+(log_batched, ranges not even overlapping) and **1.44× on Firefox**.
 
-| Workload | redb READ vs range | redb WRITE vs range |
+**What that is and is not.** It is a demonstration of *observed uncontrolled
+variation*, **not a calibrated noise floor** — an earlier draft of this
+section called it one, which claimed more than three samples can support. The
+control has real confounds: only 3 repeats, separate IndexedDB database names
+per backend, and a fixed backend order within each repeat. (The order confound
+is now partly mitigated: repeats are the outer loop, so each repeat sweeps
+every backend before any backend takes a second sample. That stops one
+transient owning a whole row; it does not randomize order.) Treat the control
+figures as a rough floor on credulity, not a threshold with a p-value.
+
+Accordingly the table below reports each comparison **three ways** — the
+median ratio, the **worst observed** ratio, and whether *every* observed
+repeat favoured the same side — and quotes nothing whose ranges overlap.
+Receipts carry all three under `bench.summary[].envelopes`.
+
+**Read the control paired, not by medians, and expect it to move run to run.**
+Comparing the two backends *repeat by repeat* — the honest form, since medians
+hide within-sample drift — identical write code has spanned:
+
+| Run | Chromium paired | Firefox paired |
 |---|---|---|
-| small slots | **112× faster** (Ch) / **56× faster** (Fx) | 8.5× slower (Ch) / 2.2× slower (Fx) |
-| ordered log | **49×** / **37×** | 37× slower / 3.2× slower |
-| log batched | **36×** / **58×** | 14× slower / *unresolvable* |
-| atomic batches | **26×** / **79×** | 6.3× slower / *unresolvable* |
-| large blobs | *unresolvable* / 1.6× faster | *unresolvable* on both |
+| fifth pass (quiet) | 0.81–1.11× (≈23% max deviation) | 0.97–1.11× (11%) |
+| sixth pass (busy) | 0.86–1.40× (**40%**) | 0.70–1.86× (**86%**) |
+
+An earlier draft said "identical code agrees within ~12%", read off the
+*medians*; that was **false** even on the quiet run. And the sixth-pass row
+settles the larger point: **this is not a calibrated constant.** It is
+whatever the host was doing, and on a daily-driver machine it varies by more
+than 4×. Receipts carry `paired_ratios`, `paired_span` and
+`max_paired_deviation_pct` per workload so the run's own quality is legible.
+
+**Because of that, the table below is stated across runs, not from the
+prettiest one.** Cherry-picking the quiet run would be the same error in a new
+costume. Figures are the range of medians and the **worst single observed
+repeat** across the two sequential runs; "all agree" means every repeat in
+every run favoured the same side.
+
+| Workload | redb READ vs range (medians / worst repeat) | redb WRITE vs range |
+|---|---|---|
+| small slots | **20.7–22.4× / 17.4×** (Ch) · **20.8–35.9× / 13.5×** (Fx) | 10.1–10.9× slower (Ch) · 2.7–5.0× (Fx) |
+| ordered log | **30.8–33.5× / 20.2×** · **22.5–23.9× / 7.2×** | 9.5× · 3.4–4.8× |
+| log batched | **45.7–45.9× / 33.4×** · **23.3–32.9× / 19.0×** | 8.7–9.7× · 1.7–4.4× |
+| atomic batches | **25.2–30.5× / 19.8×** · **14.0–24.0× / 7.5×** | 4.7–6.8× · 3.0–3.2× |
+| large blobs | *not separated* on either engine | 1.9–2.2× slower (Ch) · *not separated* (Fx) |
+
+Every cell except large blobs had **all repeats, in both runs, favouring the
+same side with non-overlapping ranges**.
+
+**The honest headline, stated to survive the worst sample in either run:**
+on the four key-oriented workloads redb reads faster in **every observed
+repeat**, with medians **21–46×** and the **worst single repeat 7.2×**. The
+earliest, concurrent run's "26–112×" overstated the medians; the noisier
+sixth-pass run shows the worst repeat can fall to 7×. Both bracket the same
+conclusion — redb reads through an index, IndexedDB pays per key — and the
+number to carry into a decision is the **worst-repeat 7×**, not a median.
+
+Write penalty likewise: **Chromium 4.7–10.9×, Firefox 1.7–5.0×** by median,
+consistently worse on Chromium, every repeat agreeing.
 
 **What survives, and what I have to withdraw.**
 
-- **Survives, robustly:** on the four key-oriented workloads, **redb reads
-  25–112× faster than IndexedDB used properly**, on both engines, with
-  spreads nowhere near touching. Across three separate benchmark runs the
-  direction never changed and the order of magnitude never changed. This is
-  the finding the decision can lean on.
-- **Survives, directionally:** redb writes are slower. The magnitude is not
-  pinned — Chromium 6–37×, Firefox 2–3×, and it moved substantially between
-  runs.
-- **Withdrawn:** the earlier claim that a range-query adapter buys
-  "**1.6–1.8× on scan-heavy workloads**". That figure was **below the noise
-  floor** and should not have been quoted. On the final runs the same
-  comparison is resolvable *only* on Chromium's two scan-heavy workloads
-  (2.6× and 3.7×) and is unresolvable everywhere else, including on every
-  Firefox workload. The honest statement is: **fixing the adapter helps
-  scan-heavy workloads by an amount this harness cannot pin down, and does
-  not measurably help the others.**
-- **Withdrawn:** large blobs as "the workload where the two nearly meet".
-  On Chromium that comparison is now unresolvable in both directions.
+- **Survives, and stated the way the samples support it:** on the four
+  key-oriented workloads, **every observed repeat favoured redb, the observed
+  ranges did not overlap, median advantages were 21–46×, and the worst
+  observed repeat was 17–41×** — on both engines. Across five benchmark runs
+  the direction never changed. This is the finding the decision can lean on.
+
+  **Always quote the worst observed ratio alongside the median.** On the
+  noisy earlier run a single outlier repeat pulled Chromium's ordered_log
+  median to 48.8× while its **worst observed was 6.7×** — redb still won every
+  repeat, but "49× faster" oversold what one bad sample allowed. On the
+  better-conditioned final run the two agree closely (30.8× vs 24.9× for the
+  same row), which is what a trustworthy measurement looks like. Receipts
+  carry the envelopes under `bench.summary[].envelopes`.
+- **Survives, and now with a magnitude:** redb writes are slower —
+  **6.8–10.1× on Chromium, 3.0–5.0× on Firefox** (medians; worst observed
+  6.9–11.8× and 3.1–5.3×), every repeat agreeing. The engine gap is roughly
+  2×, consistent in direction across every run.
+- **Withdrawn, then re-established on better data — the adapter overhead.**
+  The third pass claimed a range-query adapter buys "1.6–1.8× on scan-heavy
+  workloads". On the noisy run that figure sat inside the variation the
+  control showed between *identical code*, so it was withdrawn as
+  unsupported. On the well-conditioned final run it is cleanly measurable
+  with **separated ranges** on the two scan-heavy workloads (ordered_log,
+  log_batched) and **not separated (≈1.0×) on every other workload** — small
+  slots, atomic batches and large blobs, whose read phases are point `get`s
+  and the whole-store digest rather than ranges.
+
+  **Applying the same conservative extrema rule used everywhere else** — which
+  a sixth review caught this section bypassing, since the adapter figure was
+  emitted median-only while every other comparison carried an envelope. What
+  four attempts to measure it have produced:
+
+  | Run | Chromium scan-heavy | Firefox scan-heavy |
+  |---|---|---|
+  | third pass (noisy) | 1.6–1.8× (median only) | — |
+  | fourth pass (noisy) | 2.6×, 3.7× (median) | not separated |
+  | fifth pass (quiet) | 1.83–1.86× med, **1.34–1.42× worst** | 1.24–1.28× med, **1.18–1.21× worst** |
+  | sixth pass (busy) | one row only: 1.97× med, **1.78× worst** | **not separated at all** |
+
+  **This estimate has not stabilized**, and saying so is the finding. Across
+  four attempts the same quantity has been quoted at 1.2×, 1.8×, 2.6× and
+  3.7×, and on the noisiest runs it is not separable on Firefox at all. What
+  is durable: the benefit is **real in direction** (a range query beats a full
+  key-set scan), confined to **scan-heavy workloads**, **absent elsewhere**
+  (≈1.0× on point-get and digest phases), and **smaller than one order of
+  magnitude** — nowhere near redb's 7–46×. Anything more precise needs a
+  quiet machine and randomized backend order, neither of which this harness
+  has.
+- **Withdrawn:** large blobs as "the workload where the two nearly meet". On
+  Chromium the read comparison is *not separated* in either direction; on
+  Firefox redb reads 1.4× faster but its writes are not separated.
 
 Why: even a proper range query returns its keys through the structured-clone
 boundary, and — under this seam — every value still costs an individual
@@ -901,8 +1000,8 @@ check, and the ordering divergence itself are covered by native tests in
 Two things follow:
 
 - **For the adoption case:** redb's read advantage survives the fair
-  comparison intact, and survives the noise floor by more than an order of
-  magnitude. Correcting the baseline changed the *number* but not the
+  comparison intact: every repeat favoured redb and the ranges did not
+  overlap. Correcting the baseline changed the *number* but not the
   *conclusion*.
 - **The cheap fix is no longer priced.** It was, wrongly, at 1.6–1.8×; that
   was noise. This harness can say only that it helps scan-heavy workloads
@@ -1013,7 +1112,7 @@ Two things follow:
   ~2.1 s forcible-termination grace is Chromium's alone** (Firefox: ~91 ms,
   0–3 further generations), and **the redb/IndexedDB write penalty is much
   larger on Chromium than Firefox** (the specific ratios quoted at the time
-  were later found to be below the measurement noise floor; the direction
+  were later found to sit inside the control's own variation; the direction
   held across runs, the magnitude did not — §5.13). Both are reasons the
   selection cannot be made from one engine.
   Receipts: `2026-08-22_chromium_full.json`, `2026-08-22_firefox.json`.
@@ -1047,7 +1146,7 @@ Two things follow:
     runs every workload. The correction moves the baseline but not the
     conclusion: redb stays tens of times faster than IndexedDB used properly.
     *(The adapter-overhead figure quoted here at the time, 1.6–1.8×, was
-    withdrawn in the fourth round as below the noise floor — §5.13.)*
+    withdrawn in the fourth round as inside the control's variation — §5.13.)*
     §5.13, §7.2b.
 - **2026-08-22, third review pass.** Four cleanup items, all confirmed, all
   fixed; the promotion and provenance claims are downgraded accordingly.
@@ -1088,21 +1187,99 @@ Two things follow:
     minutes of that silence as a stall. §5.10 item 2.
   - **A control was available and it failed.** The two IndexedDB backends
     share byte-identical *write* code, so their write phases measure only
-    error. That control reports a **noise floor of 2.44× (Chromium) and
-    1.44× (Firefox)** — on log_batched the identical code differed by 2.44×
+    error. That control showed identical code differing by up to **2.44×
+    (Chromium) and 1.44× (Firefox)** — on log_batched the identical code differed by 2.44×
     with *non-overlapping* spreads. Every comparison is now filtered against
-    it. **redb's 26–112× read advantage clears it by more than an order of
-    magnitude and is the finding to lean on; the 1.6–1.8× adapter-overhead
-    figure from the third pass did not clear it and is withdrawn**, as is
+    it, and reported with worst-observed ratios beside medians. **redb won
+    every repeat with non-overlapping ranges (medians 26–112× on this noisy
+    run, worst observed 6.7–73×) and is the finding to lean on; the 1.6–1.8×
+    adapter-overhead figure from the third pass sat inside the control's own
+    variation and was withdrawn here** (the fifth pass's cleaner run
+    re-established it at 1.2–1.9× and revised the read advantage down to
+    21–46× — §5.13), as is
     "large blobs nearly meet". §5.13.
 
   Correctness results were unaffected: 707 fault trials, 127 creation trials
   and 0 unopenable stubs per engine, round-trip exact both ways with the
   digest enforced, on both engines, from one `probe_source_sha256`.
+- **2026-08-22, fifth pass.** Three more, all confirmed.
+  - **The ASCII contract was enforced at the range query, not at the door.**
+    Only `scan` and `list` validated; `put`, `get`, `delete` and `apply` did
+    not. A non-ASCII key admitted through `put` would sit in the store and
+    surface through `list("")` — which has no bounds to check — in
+    IndexedDB's UTF-16 order, exactly the failure the contract exists to
+    prevent. Every key-bearing operation now validates, `apply` prevalidates
+    the **whole batch** before opening its transaction (per-op checking would
+    let earlier ops land and break all-or-nothing), and a browser test
+    (`ProbeCommand::AsciiContract`, lane 5) asserts each refusal, that a
+    refused batch leaves nothing behind, and that ASCII still works. §5.13b.
+  - **`names_stabilized` was recorded but not enforced.** A promotion trial
+    that never settled could still pass on its last sampled classification.
+    `ok` is now `settled && classification_ok`. The receipts that existed
+    showed 12/12 settled, so no past result changes — but the harness was
+    grading on a sample it had not established was final. §5.4b.
+  - **"Noise floor" claimed more than the data supports.** Three samples,
+    separate database names and fixed backend order demonstrate *observed
+    uncontrolled variation*, not a calibrated threshold. Wording corrected
+    throughout, and the benchmark now reports **worst-observed ratios beside
+    medians** — which matters: Chromium's ordered_log median advantage is
+    48.8× while its worst observed repeat is **6.7×**. Repeats are now the
+    outer loop so one transient cannot own a whole row. §5.13.
+
+  **Fresh receipts, and the run was much cleaner.** Both engines re-run
+  sequentially on a cleared host with interleaved repeats. The control came in
+  at **0.88–1.11× by median, never disjoint** (against 2.44× before), and
+  median vs worst-observed now agree closely instead of differing 7×.
+  Consequences: the **read advantage revises down to 21–46× (Chromium) /
+  21–24× (Firefox)** — the noisy run had overstated it — the **write penalty
+  is now pinned** at 6.8–10.1× and 3.0–5.0×, and the **adapter overhead the
+  third pass claimed and the fourth withdrew is re-established as a bounded
+  range** (1.2–1.4× worst observed, 1.2–1.9× median, ≈1.0× elsewhere). The
+  browser ASCII test passes on both engines and promotion is 12/12 settled
+  under the new `settled && classification_ok` gate.
+
+- **2026-08-23, sixth pass.** Three more, all confirmed.
+  - **The adapter pricing bypassed the harness's own envelope rule** — it was
+    emitted median-only while every other comparison carried worst-observed
+    extrema. Fixed (`adapter_overhead_envelope`), and the pricing downgraded
+    from "1.24–1.86×" to **1.2–1.4× worst observed**, explicitly provisional
+    while backend order within a repeat stays fixed. §5.13.
+  - **"Identical code agrees within ~12%" was false.** That was read off
+    *median* ratios; comparing the backends **repeat by repeat** the span is
+    **0.81–1.11× on Chromium — about a 23% deviation**. The control now
+    reports `paired_ratios` and `max_paired_deviation_pct`. §5.13.
+  - **The browser contract gate masked errors.** It read `get` failures as
+    "absent" and `list` failures as "empty", so a backend erroring on every
+    call would have scored a perfect pass, and it accepted any all-ASCII final
+    key set rather than exactly `["ascii/key"]`. Now fails closed on both
+    counts. The existing receipts carry the exact expected result, so their
+    evidence stands; the gate was simply not reusable. §5.13b.
+
+  **Sixth-pass receipts (2026-08-23) were noisier, and are reported anyway.**
+  The re-run after these fixes landed on a busier host: paired control
+  deviation reached **40% (Chromium) and 86% (Firefox)** against 23%/11% on
+  the fifth pass, and the adapter overhead became separable on only one row.
+  The correctness results were unaffected (707 fault trials recovered, 127
+  creation trials with 0 stubs, 12/12 settled promotions, ASCII contract
+  passing with `final_keys == ["ascii/key"]` under the new fail-closed gate).
+  The performance figures in §5.13 are therefore stated **across both
+  sequential runs**, worst-repeat first. Reporting only the quiet run would
+  have been the same error as quoting medians, in a new costume.
+
+  **State note (corrected).** The probe *landed* in `cc40c24f` ("Sweep:
+  muniment OPFS probe, conatus engine, scenograph absorption"), a 102-file
+  sweep, with commits since. **The fifth- and sixth-pass changes above are
+  uncommitted at the time of writing** — an earlier draft said "this work is
+  not uncommitted", which was true of the original landing and false of these
+  fixes. They change the behavioural hash and belong in a follow-on commit
+  whose boundary needs care: the working tree currently also holds concurrent
+  Alembic / Moot / gazette / crawl work, and `design_docs/DOC_README.md`
+  carries **one line from each lane**, so that file needs hunk-level
+  separation rather than path-level.
 
 ## 7. Decision
 
-**Revised 2026-08-22, across three review rounds.** The first version of this
+**Revised through six review rounds (2026-08-22 to 2026-08-23).** The first version of this
 section recommended not adopting redb-on-OPFS, on the strength of a
 totals-based reading of the benchmark. That reading was wrong (§5.10) and the
 recommendation built on it is withdrawn. What follows separates what is
@@ -1147,13 +1324,13 @@ native-compatible database contents — replicated on Chromium 151 and Firefox
    and `move()` is a vendor extension whose absence would downgrade staged
    creation to best-effort (§5.11, §5.12).
 2. **Performance, and it is not a scalar.** The axis is read/write mix and
-   batching. redb wins **26–112× on indexed reads** against a fair
-   range-query baseline — robust across three runs, two engines, and well
-   clear of the noise floor — and pays on durable writes by an amount that is
-   directionally certain but **not pinned** (much worse on Chromium than
-   Firefox; §5.13). A decision needs a named consumer's mix, a target-engine
-   weighting, and — for anything finer than an order of magnitude — a quieter
-   machine than this one (§5.10 item 2).
+   batching. redb wins on indexed reads against a fair range-query baseline in
+   **every observed repeat across two sequential runs** — medians 21–46×,
+   **worst single repeat 7.2×** — and pays **4.7–10.9× on Chromium writes,
+   1.7–5.0× on Firefox** (§5.13). Quote the worst repeat, not the median. A
+   decision needs a named consumer's mix, a target-engine weighting, and — for
+   anything finer than these bands — a quieter machine than this one
+   (§5.10 item 2).
 3. **Crash-atomic promotion.** `move()` is a vendor extension with no spec
    crash guarantee. 24 promotion-*boundary* kills across two engines produced
    only atomic outcomes — but the harness cannot establish that any kill
@@ -1172,16 +1349,19 @@ quo". It is not. The options are:
 1. **Keep IndexedDB as it is.** Ships, passes, no work.
 2. **Give `muniment::IndexedDbBackend` an `IDBKeyRange` `scan`/`list`.** A
    small, contained change to a shipping backend — no new engine, no new file
-   format, no creation-atomicity machinery.
+   format, no creation-atomicity machinery. Worth a sub-order-of-magnitude
+   gain on scan-heavy reads that four attempts have failed to pin (§5.13),
+   against a correctness bill (§5.13b).
 3. **Adopt redb-on-OPFS.** Everything this probe built, in exchange for the
    read advantage plus real transactions and native format portability, at
    the cost of durable writes.
 
-Option 2 is **not yet priced**, and my two previous attempts to price it were
-both wrong — first by assuming it captured most of redb's read advantage, then
-by quoting 1.6–1.8× from below the measurement noise floor (§5.13). What can
-be said: it helps scan-heavy workloads by an unpinned amount, does not
-measurably help the rest, and is nowhere near redb's 25–112×.
+Option 2 is **not priced, after four attempts** — quoted variously at 1.2×,
+1.8×, 2.6× and 3.7×, and not separable at all on Firefox in the noisiest run
+(§5.13). What is durable: the benefit is real in direction, confined to
+scan-heavy workloads, absent elsewhere, and **well under an order of
+magnitude** against redb's 7–46× on the same reads. That is enough to say it
+is worth doing and not enough to say what it buys.
 
 It also carries a correctness bill that option 1 does not (§5.13b): a range
 query orders in UTF-16, muniment's `scan` is specified in Rust's order, and
@@ -1217,10 +1397,10 @@ Before the selection is made, the tail worth finishing (in order):
    IndexedDB** — **done** (§5.10, §5.13). Read `log_batched` and the
    `vs_range` column, not totals and not `vs_shipping`.
 5. Firefox — **done** (§5.12). **Safari/WKWebView remain the real gap.**
-6. Price the range-query `scan` option — **still open**. Two attempts to
-   price it were wrong (§7.2b), the second because the figure sat below the
-   noise floor. It needs a quiet machine, and §5.13b's ordering problem
-   costed alongside it.
+6. Price the range-query `scan` option — **still open after four attempts**;
+   estimates have ranged 1.2×–3.7× and it is not always separable (§5.13).
+   Needs a quiet machine and randomized backend order, plus its ordering
+   problem (§5.13b) costed, before the option is taken.
 7. Then decide default versus feature, against a named consumer's read/write
    mix and a target-engine weighting rather than in the abstract.
 

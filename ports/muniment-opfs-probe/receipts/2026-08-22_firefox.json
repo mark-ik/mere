@@ -1,6 +1,6 @@
 {
   "schema": "muniment.opfs-probe.receipt/v1",
-  "generated_at": "2026-08-22T21:32:13.341Z",
+  "generated_at": "2026-08-23T22:52:24.374Z",
   "configuration": {
     "opfs_prefix": "muniment-probe",
     "shape": {
@@ -25,19 +25,19 @@
     "page_web_locks": true,
     "visibility": "visible",
     "wasm_bundle": {
-      "bytes": 1572666,
-      "wasm_sha256": "4c39a7c94a150ab71cf22dcc30c9ba68712cd324c1f7cfd79a9a40d67a9f4a0a",
-      "probe_js_sha256": "61b67f024f42f00f37f76f092562ad301837ea1a1f729664c6f7f1651fe2f0a7",
+      "bytes": 1586210,
+      "wasm_sha256": "9609c1e8fba8b9b959f14e2bf06886d95594ad3847bdc0d3313de2183c1b4d85",
+      "probe_js_sha256": "eb849d0a811e9d8c7d3959b8deca3e187c6d4e2bf040c32e81546d60c8ab9148",
       "worker_js_sha256": "7bb5c65191e4ce7d03857b6665bd62ef240228e0beb6635a4784f455ef4b5d74"
     },
     "build": {
-      "built_at": "2026-08-22T20:49:36.6082882Z",
+      "built_at": "2026-08-23T22:46:32.8194449Z",
       "cargo_lock_sha256": "8a00ee9778c8130aee916d7229b572fe61f8103896da15d712818701dd74e1ad",
-      "commit": "722ca9eb3effc2600fd65a4fde8f01eb06556458",
+      "commit": "d210519ed766750cb1f796d77eaab39fca94c327",
       "dirty": true,
       "locked_build": true,
       "muniment_source_sha256": "d0d99653d7b064d8f3c772544fb4c78e383c92fb19fb4ba3ec5efe3bca337765",
-      "probe_source_sha256": "c6e70406a9d36c874d4d329095997876aba556a5bb5997ff7612918dca9dc01d",
+      "probe_source_sha256": "a2e8d559fb3c59e60f21065cb84ad312d5c8ce6b28a5778eab9b17984a24667f",
       "profile": "release",
       "redb": "4.2.0",
       "schema": "muniment.opfs-probe/v1",
@@ -62,7 +62,7 @@
       "state": "best_effort",
       "persisted_timed_out": false,
       "quota_bytes": 10737418240,
-      "usage_bytes": 125088640
+      "usage_bytes": 125669152
     }
   },
   "lanes": {
@@ -71,7 +71,7 @@
         "report": "in_memory_smoke",
         "ok": true,
         "blobs": 64,
-        "ms": 24
+        "ms": 14
       },
       "ok": true
     },
@@ -83,7 +83,7 @@
           "opened": true,
           "error": null,
           "error_kind": null,
-          "open_ms": 77,
+          "open_ms": 27,
           "repair_invoked": true,
           "repair_callbacks": 3
         },
@@ -97,7 +97,7 @@
           "bytes_read": 320,
           "bytes_written": 1254080
         },
-        "ms": 256
+        "ms": 107
       },
       "reopened": {
         "report": "reopen",
@@ -105,7 +105,7 @@
           "opened": true,
           "error": null,
           "error_kind": null,
-          "open_ms": 63,
+          "open_ms": 13,
           "repair_invoked": false,
           "repair_callbacks": 0
         },
@@ -130,7 +130,7 @@
           "bytes_read": 586377,
           "bytes_written": 960
         },
-        "ms": 145
+        "ms": 39
       },
       "ok": true
     },
@@ -14913,62 +14913,62 @@
         "forced": {
           "trials": 10,
           "outcomes": {
-            "preceding": 9,
-            "completed": 1,
+            "preceding": 10,
+            "completed": 0,
             "later": 0,
             "regression": 0,
             "unopenable": 0,
             "harness_error": 0
           },
-          "kills_inside_a_commit": 9,
+          "kills_inside_a_commit": 10,
           "generations_after_terminate_call": {
             "n": 10,
             "min": 0,
             "median": 1,
-            "max": 1
+            "max": 2
           },
           "handle_release_wait_ms": {
             "n": 10,
-            "min": 166,
-            "median": 227,
-            "max": 334
+            "min": 116,
+            "median": 132,
+            "max": 156
           },
           "reopen_open_ms": {
             "n": 10,
-            "min": 32,
-            "median": 54,
-            "max": 100
+            "min": 23,
+            "median": 28,
+            "max": 39
           },
           "repairs_invoked": 10
         },
         "yielding": {
           "trials": 10,
           "outcomes": {
-            "preceding": 9,
-            "completed": 1,
+            "preceding": 10,
+            "completed": 0,
             "later": 0,
             "regression": 0,
             "unopenable": 0,
             "harness_error": 0
           },
-          "kills_inside_a_commit": 5,
+          "kills_inside_a_commit": 4,
           "generations_after_terminate_call": {
             "n": 10,
             "min": 0,
             "median": 1,
-            "max": 1
+            "max": 2
           },
           "handle_release_wait_ms": {
             "n": 10,
-            "min": 198,
-            "median": 243,
-            "max": 351
+            "min": 97,
+            "median": 107,
+            "max": 121
           },
           "reopen_open_ms": {
             "n": 10,
-            "min": 31,
-            "median": 51,
-            "max": 106
+            "min": 19,
+            "median": 23,
+            "max": 27
           },
           "repairs_invoked": 10
         },
@@ -14977,134 +14977,72 @@
           {
             "trial": 1,
             "mode": "forced",
-            "terminate_called_while_committing": 8,
-            "committed_at_terminate_call": 7,
-            "last_committed_reported": 8,
-            "last_committing_reported": 9,
+            "terminate_called_while_committing": 7,
+            "committed_at_terminate_call": 6,
+            "last_committed_reported": 7,
+            "last_committing_reported": 8,
             "generations_after_terminate_call": 1,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 320,
-              "bytes_written": 1098112,
+              "bytes_written": 942144,
               "reads": 1,
               "set_lens": 2,
-              "syncs": 14,
-              "writes": 169
+              "syncs": 13,
+              "writes": 146
             },
-            "churn_open_release_wait_ms": 628,
+            "churn_open_release_wait_ms": 337,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 300,
+            "reopen_release_wait_ms": 125,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 419,
-            "reopened_generation": 8,
+            "wall_ms_terminate_to_reopen": 200,
+            "reopened_generation": 7,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 100,
-            "file_len": 462848,
+            "open_ms": 25,
+            "file_len": 761856,
             "ok": true
           },
           {
             "trial": 2,
             "mode": "forced",
-            "terminate_called_while_committing": 16,
-            "committed_at_terminate_call": 15,
-            "last_committed_reported": 16,
-            "last_committing_reported": 17,
-            "generations_after_terminate_call": 1,
+            "terminate_called_while_committing": 11,
+            "committed_at_terminate_call": 10,
+            "last_committed_reported": 10,
+            "last_committing_reported": 11,
+            "generations_after_terminate_call": 0,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 1092416,
+              "bytes_written": 468544,
               "reads": 42,
               "set_lens": 0,
-              "syncs": 9,
-              "writes": 163
+              "syncs": 5,
+              "writes": 71
             },
-            "churn_open_release_wait_ms": 473,
+            "churn_open_release_wait_ms": 264,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 225,
+            "reopen_release_wait_ms": 119,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 368,
-            "reopened_generation": 16,
+            "wall_ms_terminate_to_reopen": 191,
+            "reopened_generation": 10,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 41,
-            "file_len": 462848,
+            "open_ms": 27,
+            "file_len": 761856,
             "ok": true
           },
           {
             "trial": 3,
             "mode": "forced",
-            "terminate_called_while_committing": 25,
-            "committed_at_terminate_call": 24,
-            "last_committed_reported": 24,
-            "last_committing_reported": 25,
-            "generations_after_terminate_call": 0,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 1248384,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 10,
-              "writes": 186
-            },
-            "churn_open_release_wait_ms": 508,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 243,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 414,
-            "reopened_generation": 24,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 74,
-            "file_len": 454656,
-            "ok": true
-          },
-          {
-            "trial": 4,
-            "mode": "forced",
-            "terminate_called_while_committing": 30,
-            "committed_at_terminate_call": 29,
-            "last_committed_reported": 29,
-            "last_committing_reported": 30,
-            "generations_after_terminate_call": 0,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 780480,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 8,
-              "writes": 117
-            },
-            "churn_open_release_wait_ms": 422,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 218,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 376,
-            "reopened_generation": 29,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 33,
-            "file_len": 462848,
-            "ok": true
-          },
-          {
-            "trial": 5,
-            "mode": "forced",
-            "terminate_called_while_committing": 35,
-            "committed_at_terminate_call": 34,
-            "last_committed_reported": 35,
-            "last_committing_reported": 36,
+            "terminate_called_while_committing": 16,
+            "committed_at_terminate_call": 15,
+            "last_committed_reported": 16,
+            "last_committing_reported": 17,
             "generations_after_terminate_call": 1,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
@@ -15115,60 +15053,60 @@
               "syncs": 7,
               "writes": 117
             },
-            "churn_open_release_wait_ms": 375,
+            "churn_open_release_wait_ms": 295,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 166,
+            "reopen_release_wait_ms": 132,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 294,
-            "reopened_generation": 35,
+            "wall_ms_terminate_to_reopen": 247,
+            "reopened_generation": 16,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 36,
-            "file_len": 454656,
+            "open_ms": 28,
+            "file_len": 462848,
             "ok": true
           },
           {
-            "trial": 6,
+            "trial": 4,
             "mode": "forced",
-            "terminate_called_while_committing": 45,
-            "committed_at_terminate_call": 44,
-            "last_committed_reported": 45,
-            "last_committing_reported": 46,
-            "generations_after_terminate_call": 1,
+            "terminate_called_while_committing": 26,
+            "committed_at_terminate_call": 25,
+            "last_committed_reported": 25,
+            "last_committing_reported": 26,
+            "generations_after_terminate_call": 0,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
               "bytes_written": 1404352,
               "reads": 42,
-              "set_lens": 1,
-              "syncs": 12,
+              "set_lens": 0,
+              "syncs": 11,
               "writes": 209
             },
-            "churn_open_release_wait_ms": 658,
+            "churn_open_release_wait_ms": 373,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 206,
+            "reopen_release_wait_ms": 143,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 316,
-            "reopened_generation": 45,
+            "wall_ms_terminate_to_reopen": 228,
+            "reopened_generation": 25,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 41,
+            "open_ms": 30,
             "file_len": 462848,
             "ok": true
           },
           {
-            "trial": 7,
+            "trial": 5,
             "mode": "forced",
-            "terminate_called_while_committing": 48,
-            "committed_at_terminate_call": 47,
-            "last_committed_reported": 47,
-            "last_committing_reported": 48,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
+            "terminate_called_while_committing": 28,
+            "committed_at_terminate_call": 27,
+            "last_committed_reported": 27,
+            "last_committing_reported": 28,
+            "generations_after_terminate_call": 0,
+            "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
               "bytes_written": 312576,
@@ -15177,28 +15115,28 @@
               "syncs": 4,
               "writes": 48
             },
-            "churn_open_release_wait_ms": 520,
+            "churn_open_release_wait_ms": 280,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 237,
+            "reopen_release_wait_ms": 150,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 385,
-            "reopened_generation": 48,
-            "classification": "completed",
+            "wall_ms_terminate_to_reopen": 233,
+            "reopened_generation": 27,
+            "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 56,
-            "file_len": 462848,
+            "open_ms": 39,
+            "file_len": 454656,
             "ok": true
           },
           {
-            "trial": 8,
+            "trial": 6,
             "mode": "forced",
-            "terminate_called_while_committing": 50,
-            "committed_at_terminate_call": 49,
-            "last_committed_reported": 49,
-            "last_committing_reported": 50,
-            "generations_after_terminate_call": 0,
+            "terminate_called_while_committing": 29,
+            "committed_at_terminate_call": 28,
+            "last_committed_reported": 29,
+            "last_committing_reported": 30,
+            "generations_after_terminate_call": 1,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 172361,
@@ -15208,270 +15146,270 @@
               "syncs": 3,
               "writes": 25
             },
-            "churn_open_release_wait_ms": 323,
+            "churn_open_release_wait_ms": 238,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 334,
+            "reopen_release_wait_ms": 156,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 463,
-            "reopened_generation": 49,
+            "wall_ms_terminate_to_reopen": 233,
+            "reopened_generation": 29,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 73,
+            "open_ms": 30,
+            "file_len": 446464,
+            "ok": true
+          },
+          {
+            "trial": 7,
+            "mode": "forced",
+            "terminate_called_while_committing": 36,
+            "committed_at_terminate_call": 35,
+            "last_committed_reported": 36,
+            "last_committing_reported": 37,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 1,
+              "syncs": 9,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 313,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 121,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 189,
+            "reopened_generation": 36,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 25,
+            "file_len": 462848,
+            "ok": true
+          },
+          {
+            "trial": 8,
+            "mode": "forced",
+            "terminate_called_while_committing": 42,
+            "committed_at_terminate_call": 41,
+            "last_committed_reported": 42,
+            "last_committing_reported": 43,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 780480,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 7,
+              "writes": 117
+            },
+            "churn_open_release_wait_ms": 297,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 116,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 194,
+            "reopened_generation": 42,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 27,
             "file_len": 462848,
             "ok": true
           },
           {
             "trial": 9,
             "mode": "forced",
-            "terminate_called_while_committing": 59,
-            "committed_at_terminate_call": 58,
-            "last_committed_reported": 58,
-            "last_committing_reported": 59,
+            "terminate_called_while_committing": 49,
+            "committed_at_terminate_call": 48,
+            "last_committed_reported": 50,
+            "last_committing_reported": 51,
+            "generations_after_terminate_call": 2,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 8,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 286,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 128,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 195,
+            "reopened_generation": 50,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 31,
+            "file_len": 454656,
+            "ok": true
+          },
+          {
+            "trial": 10,
+            "mode": "forced",
+            "terminate_called_while_committing": 60,
+            "committed_at_terminate_call": 59,
+            "last_committed_reported": 59,
+            "last_committing_reported": 60,
             "generations_after_terminate_call": 0,
             "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
               "bytes_written": 1404352,
               "reads": 42,
-              "set_lens": 0,
-              "syncs": 11,
+              "set_lens": 1,
+              "syncs": 12,
               "writes": 209
             },
-            "churn_open_release_wait_ms": 503,
+            "churn_open_release_wait_ms": 295,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 220,
+            "reopen_release_wait_ms": 152,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 383,
-            "reopened_generation": 58,
+            "wall_ms_terminate_to_reopen": 226,
+            "reopened_generation": 59,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 32,
-            "file_len": 462848,
-            "ok": true
-          },
-          {
-            "trial": 10,
-            "mode": "forced",
-            "terminate_called_while_committing": 61,
-            "committed_at_terminate_call": 60,
-            "last_committed_reported": 60,
-            "last_committing_reported": 61,
-            "generations_after_terminate_call": 0,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 312576,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 4,
-              "writes": 48
-            },
-            "churn_open_release_wait_ms": 305,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 227,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 397,
-            "reopened_generation": 60,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 54,
-            "file_len": 462848,
+            "open_ms": 23,
+            "file_len": 450560,
             "ok": true
           },
           {
             "trial": 11,
             "mode": "yielding",
-            "terminate_called_while_committing": 65,
-            "committed_at_terminate_call": 64,
+            "terminate_called_while_committing": 66,
+            "committed_at_terminate_call": 65,
             "last_committed_reported": 65,
-            "last_committing_reported": 65,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
+            "last_committing_reported": 66,
+            "generations_after_terminate_call": 0,
+            "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 624512,
+              "bytes_written": 936448,
               "reads": 42,
-              "set_lens": 0,
-              "syncs": 6,
-              "writes": 94
+              "set_lens": 1,
+              "syncs": 9,
+              "writes": 140
             },
-            "churn_open_release_wait_ms": 414,
+            "churn_open_release_wait_ms": 294,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 198,
+            "reopen_release_wait_ms": 104,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 457,
+            "wall_ms_terminate_to_reopen": 171,
             "reopened_generation": 65,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 56,
-            "file_len": 446464,
+            "open_ms": 23,
+            "file_len": 454656,
             "ok": true
           },
           {
             "trial": 12,
             "mode": "yielding",
-            "terminate_called_while_committing": 69,
-            "committed_at_terminate_call": 68,
+            "terminate_called_while_committing": 67,
+            "committed_at_terminate_call": 66,
             "last_committed_reported": 68,
-            "last_committing_reported": 69,
-            "generations_after_terminate_call": 0,
-            "kill_landed_inside_commit": true,
+            "last_committing_reported": 68,
+            "generations_after_terminate_call": 2,
+            "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 468544,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 6,
-              "writes": 71
+              "bytes_read": 172361,
+              "bytes_written": 156608,
+              "reads": 27,
+              "set_lens": 0,
+              "syncs": 3,
+              "writes": 25
             },
-            "churn_open_release_wait_ms": 582,
+            "churn_open_release_wait_ms": 194,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 261,
+            "reopen_release_wait_ms": 107,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 428,
+            "wall_ms_terminate_to_reopen": 183,
             "reopened_generation": 68,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 48,
-            "file_len": 454656,
+            "open_ms": 19,
+            "file_len": 442368,
             "ok": true
           },
           {
             "trial": 13,
             "mode": "yielding",
-            "terminate_called_while_committing": 71,
-            "committed_at_terminate_call": 70,
-            "last_committed_reported": 71,
-            "last_committing_reported": 72,
+            "terminate_called_while_committing": 76,
+            "committed_at_terminate_call": 75,
+            "last_committed_reported": 76,
+            "last_committing_reported": 76,
             "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": true,
+            "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 312576,
+              "bytes_written": 1092416,
               "reads": 42,
-              "set_lens": 0,
-              "syncs": 4,
-              "writes": 48
+              "set_lens": 1,
+              "syncs": 10,
+              "writes": 163
             },
-            "churn_open_release_wait_ms": 419,
+            "churn_open_release_wait_ms": 269,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 256,
+            "reopen_release_wait_ms": 108,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 395,
-            "reopened_generation": 71,
+            "wall_ms_terminate_to_reopen": 188,
+            "reopened_generation": 76,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 51,
-            "file_len": 446464,
+            "open_ms": 23,
+            "file_len": 462848,
             "ok": true
           },
           {
             "trial": 14,
             "mode": "yielding",
-            "terminate_called_while_committing": 74,
-            "committed_at_terminate_call": 73,
-            "last_committed_reported": 73,
-            "last_committing_reported": 74,
-            "generations_after_terminate_call": 0,
-            "kill_landed_inside_commit": true,
+            "terminate_called_while_committing": 83,
+            "committed_at_terminate_call": 82,
+            "last_committed_reported": 84,
+            "last_committing_reported": 84,
+            "generations_after_terminate_call": 2,
+            "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 312576,
+              "bytes_written": 936448,
               "reads": 42,
               "set_lens": 0,
-              "syncs": 4,
-              "writes": 48
+              "syncs": 8,
+              "writes": 140
             },
-            "churn_open_release_wait_ms": 350,
+            "churn_open_release_wait_ms": 266,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 351,
+            "reopen_release_wait_ms": 115,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 528,
-            "reopened_generation": 73,
+            "wall_ms_terminate_to_reopen": 192,
+            "reopened_generation": 84,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 101,
-            "file_len": 442368,
+            "open_ms": 24,
+            "file_len": 454656,
             "ok": true
           },
           {
             "trial": 15,
-            "mode": "yielding",
-            "terminate_called_while_committing": 82,
-            "committed_at_terminate_call": 81,
-            "last_committed_reported": 82,
-            "last_committing_reported": 82,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 1248384,
-              "reads": 42,
-              "set_lens": 1,
-              "syncs": 11,
-              "writes": 186
-            },
-            "churn_open_release_wait_ms": 562,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 222,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 456,
-            "reopened_generation": 82,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 46,
-            "file_len": 462848,
-            "ok": true
-          },
-          {
-            "trial": 16,
-            "mode": "yielding",
-            "terminate_called_while_committing": 90,
-            "committed_at_terminate_call": 89,
-            "last_committed_reported": 89,
-            "last_committing_reported": 90,
-            "generations_after_terminate_call": 0,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 295241,
-              "bytes_written": 1092416,
-              "reads": 42,
-              "set_lens": 0,
-              "syncs": 9,
-              "writes": 163
-            },
-            "churn_open_release_wait_ms": 739,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 237,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 423,
-            "reopened_generation": 89,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 41,
-            "file_len": 446464,
-            "ok": true
-          },
-          {
-            "trial": 17,
             "mode": "yielding",
             "terminate_called_while_committing": 93,
             "committed_at_terminate_call": 92,
@@ -15481,66 +15419,35 @@
             "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 468544,
+              "bytes_written": 1248384,
               "reads": 42,
               "set_lens": 1,
-              "syncs": 6,
-              "writes": 71
+              "syncs": 11,
+              "writes": 186
             },
-            "churn_open_release_wait_ms": 387,
+            "churn_open_release_wait_ms": 322,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 235,
+            "reopen_release_wait_ms": 115,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 405,
+            "wall_ms_terminate_to_reopen": 187,
             "reopened_generation": 93,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 34,
-            "file_len": 462848,
+            "open_ms": 23,
+            "file_len": 454656,
             "ok": true
           },
           {
-            "trial": 18,
+            "trial": 16,
             "mode": "yielding",
-            "terminate_called_while_committing": 94,
-            "committed_at_terminate_call": 93,
-            "last_committed_reported": 94,
-            "last_committing_reported": 95,
-            "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": true,
-            "io_before_terminate_call": {
-              "bytes_read": 29001,
-              "bytes_written": 4736,
-              "reads": 9,
-              "set_lens": 0,
-              "syncs": 2,
-              "writes": 3
-            },
-            "churn_open_release_wait_ms": 365,
-            "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 284,
-            "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 386,
-            "reopened_generation": 94,
-            "classification": "preceding",
-            "repair_invoked": true,
-            "integrity_ok": true,
-            "invariant_ok": true,
-            "open_ms": 106,
-            "file_len": 462848,
-            "ok": true
-          },
-          {
-            "trial": 19,
-            "mode": "yielding",
-            "terminate_called_while_committing": 97,
-            "committed_at_terminate_call": 96,
+            "terminate_called_while_committing": 96,
+            "committed_at_terminate_call": 95,
             "last_committed_reported": 96,
             "last_committing_reported": 97,
             "generations_after_terminate_call": 1,
-            "kill_landed_inside_commit": false,
+            "kill_landed_inside_commit": true,
             "io_before_terminate_call": {
               "bytes_read": 295241,
               "bytes_written": 312576,
@@ -15549,49 +15456,142 @@
               "syncs": 4,
               "writes": 48
             },
-            "churn_open_release_wait_ms": 411,
+            "churn_open_release_wait_ms": 237,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 243,
+            "reopen_release_wait_ms": 121,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 451,
-            "reopened_generation": 97,
-            "classification": "completed",
+            "wall_ms_terminate_to_reopen": 260,
+            "reopened_generation": 96,
+            "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 74,
-            "file_len": 462848,
+            "open_ms": 27,
+            "file_len": 446464,
+            "ok": true
+          },
+          {
+            "trial": 17,
+            "mode": "yielding",
+            "terminate_called_while_committing": 105,
+            "committed_at_terminate_call": 104,
+            "last_committed_reported": 105,
+            "last_committing_reported": 106,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 1248384,
+              "reads": 42,
+              "set_lens": 1,
+              "syncs": 11,
+              "writes": 186
+            },
+            "churn_open_release_wait_ms": 399,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 97,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 157,
+            "reopened_generation": 105,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 20,
+            "file_len": 450560,
+            "ok": true
+          },
+          {
+            "trial": 18,
+            "mode": "yielding",
+            "terminate_called_while_committing": 113,
+            "committed_at_terminate_call": 112,
+            "last_committed_reported": 112,
+            "last_committing_reported": 113,
+            "generations_after_terminate_call": 0,
+            "kill_landed_inside_commit": true,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 1092416,
+              "reads": 42,
+              "set_lens": 1,
+              "syncs": 10,
+              "writes": 163
+            },
+            "churn_open_release_wait_ms": 236,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 104,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 176,
+            "reopened_generation": 112,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 26,
+            "file_len": 458752,
+            "ok": true
+          },
+          {
+            "trial": 19,
+            "mode": "yielding",
+            "terminate_called_while_committing": 119,
+            "committed_at_terminate_call": 118,
+            "last_committed_reported": 119,
+            "last_committing_reported": 119,
+            "generations_after_terminate_call": 1,
+            "kill_landed_inside_commit": false,
+            "io_before_terminate_call": {
+              "bytes_read": 295241,
+              "bytes_written": 936448,
+              "reads": 42,
+              "set_lens": 0,
+              "syncs": 8,
+              "writes": 140
+            },
+            "churn_open_release_wait_ms": 243,
+            "churn_open_attempts": 1,
+            "reopen_release_wait_ms": 106,
+            "reopen_attempts": 1,
+            "wall_ms_terminate_to_reopen": 167,
+            "reopened_generation": 119,
+            "classification": "preceding",
+            "repair_invoked": true,
+            "integrity_ok": true,
+            "invariant_ok": true,
+            "open_ms": 19,
+            "file_len": 458752,
             "ok": true
           },
           {
             "trial": 20,
             "mode": "yielding",
-            "terminate_called_while_committing": 106,
-            "committed_at_terminate_call": 105,
-            "last_committed_reported": 106,
-            "last_committing_reported": 106,
-            "generations_after_terminate_call": 1,
+            "terminate_called_while_committing": 125,
+            "committed_at_terminate_call": 124,
+            "last_committed_reported": 126,
+            "last_committing_reported": 126,
+            "generations_after_terminate_call": 2,
             "kill_landed_inside_commit": false,
             "io_before_terminate_call": {
               "bytes_read": 295241,
-              "bytes_written": 1248384,
+              "bytes_written": 780480,
               "reads": 42,
               "set_lens": 0,
-              "syncs": 10,
-              "writes": 186
+              "syncs": 7,
+              "writes": 117
             },
-            "churn_open_release_wait_ms": 560,
+            "churn_open_release_wait_ms": 242,
             "churn_open_attempts": 1,
-            "reopen_release_wait_ms": 217,
+            "reopen_release_wait_ms": 97,
             "reopen_attempts": 1,
-            "wall_ms_terminate_to_reopen": 326,
-            "reopened_generation": 106,
+            "wall_ms_terminate_to_reopen": 160,
+            "reopened_generation": 126,
             "classification": "preceding",
             "repair_invoked": true,
             "integrity_ok": true,
             "invariant_ok": true,
-            "open_ms": 31,
-            "file_len": 454656,
+            "open_ms": 21,
+            "file_len": 458752,
             "ok": true
           }
         ],
@@ -15611,21 +15611,21 @@
         "release_after_kill": {
           "opened": true,
           "attempts": 1,
-          "ms": 130,
+          "ms": 82,
           "report": {
             "report": "try_open",
             "open": {
               "opened": true,
               "error": null,
               "error_kind": null,
-              "open_ms": 31,
+              "open_ms": 18,
               "repair_invoked": true,
               "repair_callbacks": 3
             },
             "dom_exception": null,
             "generation": 1
           },
-          "wall_ms_since_kill": 883
+          "wall_ms_since_kill": 628
         },
         "release_after_clean_close": {
           "opened": true,
@@ -15634,64 +15634,9 @@
         "ok": true
       },
       "two_tabs": {
-        "state": "ran",
-        "path": "muniment-probe/lane4-tabs.redb",
-        "holder": {
-          "type": "holding",
-          "path": "muniment-probe/lane4-tabs.redb",
-          "lock_name": "muniment-opfs:muniment-probe/lane4-tabs.redb",
-          "lock_acquired": true,
-          "at": 1787434652970
-        },
-        "locks_held_before": [
-          "muniment-opfs:muniment-probe/lane4-tabs.redb"
-        ],
-        "second_writer_refused": true,
-        "second_writer_dom_exception": "NoModificationAllowedError",
-        "controlled_release": {
-          "type": "released",
-          "at": 1787434653082
-        },
-        "takeover_after_release": {
-          "opened": true,
-          "attempts": 1,
-          "ms": 162,
-          "report": {
-            "report": "try_open",
-            "open": {
-              "opened": true,
-              "error": null,
-              "error_kind": null,
-              "open_ms": 71,
-              "repair_invoked": true,
-              "repair_callbacks": 3
-            },
-            "dom_exception": null,
-            "generation": 1
-          }
-        },
-        "lock_available_after_release": true,
-        "second_writer_refused_again": true,
-        "release_after_tab_close": {
-          "opened": true,
-          "attempts": 1,
-          "ms": 162,
-          "report": {
-            "report": "try_open",
-            "open": {
-              "opened": true,
-              "error": null,
-              "error_kind": null,
-              "open_ms": 29,
-              "repair_invoked": true,
-              "repair_callbacks": 3
-            },
-            "dom_exception": null,
-            "generation": 2
-          },
-          "wall_ms_since_close": 162
-        },
-        "ok": true
+        "state": "no_holder",
+        "reason": "no holder tab announced within 30 s",
+        "holder_url": "http://127.0.0.1:8733/ports/muniment-opfs-probe/web/?role=holder&path=muniment-probe%2Flane4-tabs.redb"
       },
       "visibility": {
         "state": "visible",
@@ -15699,17 +15644,17 @@
       },
       "reload": {
         "path": "muniment-probe/lane4-reload.redb",
-        "wall_ms_since_reload_request": 966,
+        "wall_ms_since_reload_request": 1084,
         "opened": true,
         "attempts": 1,
-        "ms": 520,
+        "ms": 560,
         "report": {
           "report": "try_open",
           "open": {
             "opened": true,
             "error": null,
             "error_kind": null,
-            "open_ms": 50,
+            "open_ms": 87,
             "repair_invoked": true,
             "repair_callbacks": 3
           },
@@ -15739,7 +15684,7 @@
         "imported": {
           "bytes": 761856,
           "blake3": "57b4b569b5954705382c6c6a3c0278789f8ac5284a0c5637ff474d3859dbc502",
-          "ms": 286
+          "ms": 610
         },
         "reopened": {
           "report": "reopen",
@@ -15747,7 +15692,7 @@
             "opened": true,
             "error": null,
             "error_kind": null,
-            "open_ms": 61,
+            "open_ms": 20,
             "repair_invoked": false,
             "repair_callbacks": 0
           },
@@ -15772,7 +15717,7 @@
             "bytes_read": 873097,
             "bytes_written": 960
           },
-          "ms": 158
+          "ms": 223
         },
         "digest": {
           "digest": "a74b7476f2387aa996cf3f4d8c11c7edadd7ef5d5b1b17808f0a5002c452f7ea",
@@ -15814,6 +15759,45 @@
         "ok": true,
         "round_trip_both_ways_ok": true
       },
+      "ascii_contract": {
+        "report": "ascii_contract",
+        "refused": [
+          [
+            "put",
+            true
+          ],
+          [
+            "get",
+            true
+          ],
+          [
+            "delete",
+            true
+          ],
+          [
+            "list",
+            true
+          ],
+          [
+            "scan_start",
+            true
+          ],
+          [
+            "scan_end",
+            true
+          ],
+          [
+            "apply",
+            true
+          ]
+        ],
+        "ascii_still_works": true,
+        "apply_left_nothing": true,
+        "final_keys": [
+          "ascii/key"
+        ],
+        "ok": true
+      },
       "bench": {
         "repeats": 3,
         "rows": [
@@ -15821,56 +15805,14 @@
             "workload": "small_slots",
             "backend": "memory",
             "run": 1,
-            "total_ms": 9,
+            "total_ms": 11,
             "phases": {
-              "put": 2,
+              "put": 3,
               "get": 2,
-              "overwrite": 2,
-              "digest": 3
-            },
-            "write_ms": 4,
-            "read_ms": 5,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 12,
-            "phases": {
-              "put": 2,
-              "get": 4,
-              "overwrite": 2,
-              "digest": 3
-            },
-            "write_ms": 4,
-            "read_ms": 7,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 10,
-            "phases": {
-              "put": 2,
-              "get": 3,
               "overwrite": 3,
-              "digest": 2
+              "digest": 3
             },
-            "write_ms": 5,
+            "write_ms": 6,
             "read_ms": 5,
             "ops": 600,
             "bytes": 153600,
@@ -15884,15 +15826,15 @@
             "workload": "small_slots",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 2141,
+            "total_ms": 1915,
             "phases": {
-              "put": 1134,
-              "get": 5,
-              "overwrite": 914,
+              "put": 894,
+              "get": 9,
+              "overwrite": 745,
               "digest": 5
             },
-            "write_ms": 2048,
-            "read_ms": 10,
+            "write_ms": 1639,
+            "read_ms": 14,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
@@ -15910,115 +15852,17 @@
           },
           {
             "workload": "small_slots",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 2568,
-            "phases": {
-              "put": 1234,
-              "get": 24,
-              "overwrite": 1130,
-              "digest": 6
-            },
-            "write_ms": 2364,
-            "read_ms": 30,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 2794,
-              "set_lens": 8,
-              "syncs": 408,
-              "bytes_read": 320,
-              "bytes_written": 9907392
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 2379,
-            "phases": {
-              "put": 1210,
-              "get": 5,
-              "overwrite": 940,
-              "digest": 4
-            },
-            "write_ms": 2150,
-            "read_ms": 9,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 2794,
-              "set_lens": 8,
-              "syncs": 408,
-              "bytes_read": 320,
-              "bytes_written": 9907392
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "small_slots",
             "backend": "indexed_db",
             "run": 1,
-            "total_ms": 1175,
+            "total_ms": 1838,
             "phases": {
-              "put": 327,
-              "get": 143,
-              "overwrite": 376,
-              "digest": 271
+              "put": 521,
+              "get": 203,
+              "overwrite": 550,
+              "digest": 220
             },
-            "write_ms": 703,
-            "read_ms": 414,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 2591224
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 1892,
-            "phases": {
-              "put": 788,
-              "get": 219,
-              "overwrite": 434,
-              "digest": 346
-            },
-            "write_ms": 1222,
-            "read_ms": 565,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 2591224
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db",
-            "run": 3,
-            "total_ms": 728,
-            "phases": {
-              "put": 238,
-              "get": 105,
-              "overwrite": 182,
-              "digest": 127
-            },
-            "write_ms": 420,
-            "read_ms": 232,
+            "write_ms": 1071,
+            "read_ms": 423,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
@@ -16031,15 +15875,15 @@
             "workload": "small_slots",
             "backend": "indexed_db_range",
             "run": 1,
-            "total_ms": 1689,
+            "total_ms": 1022,
             "phases": {
-              "put": 525,
-              "get": 291,
-              "overwrite": 535,
-              "digest": 271
+              "put": 301,
+              "get": 185,
+              "overwrite": 305,
+              "digest": 177
             },
-            "write_ms": 1060,
-            "read_ms": 562,
+            "write_ms": 606,
+            "read_ms": 362,
             "ops": 600,
             "bytes": 153600,
             "keys": 200,
@@ -16049,102 +15893,18 @@
             "usage_delta_bytes": 122880
           },
           {
-            "workload": "small_slots",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 1606,
-            "phases": {
-              "put": 600,
-              "get": 306,
-              "overwrite": 364,
-              "digest": 273
-            },
-            "write_ms": 964,
-            "read_ms": 579,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 2591224
-          },
-          {
-            "workload": "small_slots",
-            "backend": "indexed_db_range",
-            "run": 3,
-            "total_ms": 1337,
-            "phases": {
-              "put": 416,
-              "get": 172,
-              "overwrite": 472,
-              "digest": 240
-            },
-            "write_ms": 888,
-            "read_ms": 412,
-            "ops": 600,
-            "bytes": 153600,
-            "keys": 200,
-            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 2591224
-          },
-          {
             "workload": "ordered_log",
             "backend": "memory",
             "run": 1,
-            "total_ms": 107,
-            "phases": {
-              "put_shuffled": 9,
-              "scan_full": 6,
-              "scan_windows": 69,
-              "digest": 17
-            },
-            "write_ms": 9,
-            "read_ms": 92,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": -2468344
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 65,
+            "total_ms": 55,
             "phases": {
               "put_shuffled": 9,
               "scan_full": 4,
-              "scan_windows": 38,
-              "digest": 14
-            },
-            "write_ms": 9,
-            "read_ms": 56,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 85,
-            "phases": {
-              "put_shuffled": 9,
-              "scan_full": 5,
-              "scan_windows": 58,
+              "scan_windows": 29,
               "digest": 13
             },
             "write_ms": 9,
-            "read_ms": 76,
+            "read_ms": 46,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
@@ -16157,71 +15917,15 @@
             "workload": "ordered_log",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 6226,
+            "total_ms": 5982,
             "phases": {
-              "put_shuffled": 5924,
-              "scan_full": 2,
-              "scan_windows": 2,
-              "digest": 19
-            },
-            "write_ms": 5924,
-            "read_ms": 23,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 7037,
-              "set_lens": 8,
-              "syncs": 1009,
-              "bytes_read": 320,
-              "bytes_written": 25021120
-            },
-            "usage_delta_bytes": 290816
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 5558,
-            "phases": {
-              "put_shuffled": 5425,
-              "scan_full": 1,
-              "scan_windows": 3,
-              "digest": 35
-            },
-            "write_ms": 5425,
-            "read_ms": 39,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 7037,
-              "set_lens": 8,
-              "syncs": 1009,
-              "bytes_read": 320,
-              "bytes_written": 25021120
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 4471,
-            "phases": {
-              "put_shuffled": 4340,
+              "put_shuffled": 5638,
               "scan_full": 2,
               "scan_windows": 3,
-              "digest": 25
+              "digest": 33
             },
-            "write_ms": 4340,
-            "read_ms": 30,
+            "write_ms": 5638,
+            "read_ms": 38,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
@@ -16235,63 +15939,21 @@
               "bytes_read": 320,
               "bytes_written": 25021120
             },
-            "usage_delta_bytes": 0
+            "usage_delta_bytes": -2177528
           },
           {
             "workload": "ordered_log",
             "backend": "indexed_db",
             "run": 1,
-            "total_ms": 3919,
+            "total_ms": 4642,
             "phases": {
-              "put_shuffled": 2408,
-              "scan_full": 14,
-              "scan_windows": 319,
-              "digest": 1123
+              "put_shuffled": 2933,
+              "scan_full": 6,
+              "scan_windows": 460,
+              "digest": 1037
             },
-            "write_ms": 2408,
-            "read_ms": 1456,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 7774184
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 3239,
-            "phases": {
-              "put_shuffled": 2194,
-              "scan_full": 5,
-              "scan_windows": 219,
-              "digest": 740
-            },
-            "write_ms": 2194,
-            "read_ms": 964,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 7774184
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db",
-            "run": 3,
-            "total_ms": 4028,
-            "phases": {
-              "put_shuffled": 2468,
-              "scan_full": 17,
-              "scan_windows": 398,
-              "digest": 1093
-            },
-            "write_ms": 2468,
-            "read_ms": 1508,
+            "write_ms": 2933,
+            "read_ms": 1503,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
@@ -16304,15 +15966,15 @@
             "workload": "ordered_log",
             "backend": "indexed_db_range",
             "run": 1,
-            "total_ms": 2868,
+            "total_ms": 3726,
             "phases": {
-              "put_shuffled": 1674,
-              "scan_full": 5,
-              "scan_windows": 82,
-              "digest": 1028
+              "put_shuffled": 2371,
+              "scan_full": 4,
+              "scan_windows": 68,
+              "digest": 1092
             },
-            "write_ms": 1674,
-            "read_ms": 1115,
+            "write_ms": 2371,
+            "read_ms": 1164,
             "ops": 1051,
             "bytes": 192000,
             "keys": 1000,
@@ -16322,60 +15984,18 @@
             "usage_delta_bytes": 270336
           },
           {
-            "workload": "ordered_log",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 3967,
-            "phases": {
-              "put_shuffled": 2358,
-              "scan_full": 7,
-              "scan_windows": 77,
-              "digest": 1437
-            },
-            "write_ms": 2358,
-            "read_ms": 1521,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 7774184
-          },
-          {
-            "workload": "ordered_log",
-            "backend": "indexed_db_range",
-            "run": 3,
-            "total_ms": 2172,
-            "phases": {
-              "put_shuffled": 1342,
-              "scan_full": 2,
-              "scan_windows": 30,
-              "digest": 734
-            },
-            "write_ms": 1342,
-            "read_ms": 766,
-            "ops": 1051,
-            "bytes": 192000,
-            "keys": 1000,
-            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 7774184
-          },
-          {
             "workload": "log_batched",
             "backend": "memory",
             "run": 1,
-            "total_ms": 81,
+            "total_ms": 85,
             "phases": {
-              "apply_shuffled": 16,
+              "apply_shuffled": 13,
               "scan_full": 4,
-              "scan_windows": 34,
-              "digest": 26
+              "scan_windows": 39,
+              "digest": 29
             },
-            "write_ms": 16,
-            "read_ms": 64,
+            "write_ms": 13,
+            "read_ms": 72,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16386,59 +16006,17 @@
           },
           {
             "workload": "log_batched",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 89,
-            "phases": {
-              "apply_shuffled": 15,
-              "scan_full": 8,
-              "scan_windows": 43,
-              "digest": 22
-            },
-            "write_ms": 15,
-            "read_ms": 73,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "log_batched",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 142,
-            "phases": {
-              "apply_shuffled": 16,
-              "scan_full": 12,
-              "scan_windows": 64,
-              "digest": 48
-            },
-            "write_ms": 16,
-            "read_ms": 124,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "log_batched",
             "backend": "redb_opfs",
             "run": 1,
-            "total_ms": 6542,
+            "total_ms": 5752,
             "phases": {
-              "apply_shuffled": 6342,
-              "scan_full": 1,
-              "scan_windows": 2,
-              "digest": 68
+              "apply_shuffled": 5547,
+              "scan_full": 2,
+              "scan_windows": 3,
+              "digest": 94
             },
-            "write_ms": 6342,
-            "read_ms": 71,
+            "write_ms": 5547,
+            "read_ms": 99,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16456,16 +16034,435 @@
           },
           {
             "workload": "log_batched",
+            "backend": "indexed_db",
+            "run": 1,
+            "total_ms": 4301,
+            "phases": {
+              "apply_shuffled": 2661,
+              "scan_full": 9,
+              "scan_windows": 350,
+              "digest": 1234
+            },
+            "write_ms": 2661,
+            "read_ms": 1593,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 17839344
+          },
+          {
+            "workload": "log_batched",
+            "backend": "indexed_db_range",
+            "run": 1,
+            "total_ms": 3594,
+            "phases": {
+              "apply_shuffled": 1432,
+              "scan_full": 3,
+              "scan_windows": 48,
+              "digest": 2025
+            },
+            "write_ms": 1432,
+            "read_ms": 2076,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 49152
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "memory",
+            "run": 1,
+            "total_ms": 19,
+            "phases": {
+              "apply": 10,
+              "verify": 1,
+              "digest": 8
+            },
+            "write_ms": 10,
+            "read_ms": 9,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -17405168
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "redb_opfs",
+            "run": 1,
+            "total_ms": 1137,
+            "phases": {
+              "apply": 747,
+              "verify": 2,
+              "digest": 33
+            },
+            "write_ms": 747,
+            "read_ms": 35,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 1021,
+              "set_lens": 2,
+              "syncs": 107,
+              "bytes_read": 320,
+              "bytes_written": 3794368
+            },
+            "usage_delta_bytes": 589824
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db",
+            "run": 1,
+            "total_ms": 1864,
+            "phases": {
+              "apply": 577,
+              "verify": 231,
+              "digest": 824
+            },
+            "write_ms": 577,
+            "read_ms": 1055,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 3823104
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db_range",
+            "run": 1,
+            "total_ms": 892,
+            "phases": {
+              "apply": 353,
+              "verify": 146,
+              "digest": 314
+            },
+            "write_ms": 353,
+            "read_ms": 460,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 49152
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "memory",
+            "run": 1,
+            "total_ms": 2821,
+            "phases": {
+              "put": 1575,
+              "get_verify": 679,
+              "digest": 567
+            },
+            "write_ms": 1575,
+            "read_ms": 1246,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -3233280
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "redb_opfs",
+            "run": 1,
+            "total_ms": 2060,
+            "phases": {
+              "put": 1151,
+              "get_verify": 412,
+              "digest": 446
+            },
+            "write_ms": 1151,
+            "read_ms": 858,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": {
+              "reads": 14,
+              "writes": 83,
+              "set_lens": 6,
+              "syncs": 22,
+              "bytes_read": 102785344,
+              "bytes_written": 50566464
+            },
+            "usage_delta_bytes": 67112960
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "indexed_db",
+            "run": 1,
+            "total_ms": 2470,
+            "phases": {
+              "put": 1076,
+              "get_verify": 596,
+              "digest": 763
+            },
+            "write_ms": 1076,
+            "read_ms": 1359,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25311664
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "indexed_db_range",
+            "run": 1,
+            "total_ms": 4277,
+            "phases": {
+              "put": 1532,
+              "get_verify": 1186,
+              "digest": 1528
+            },
+            "write_ms": 1532,
+            "read_ms": 2714,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25220992
+          },
+          {
+            "workload": "small_slots",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 10,
+            "phases": {
+              "put": 2,
+              "get": 3,
+              "overwrite": 2,
+              "digest": 3
+            },
+            "write_ms": 4,
+            "read_ms": 6,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -90672
+          },
+          {
+            "workload": "small_slots",
             "backend": "redb_opfs",
             "run": 2,
-            "total_ms": 5698,
+            "total_ms": 2292,
             "phases": {
-              "apply_shuffled": 5509,
-              "scan_full": 1,
-              "scan_windows": 4,
+              "put": 1038,
+              "get": 4,
+              "overwrite": 1013,
+              "digest": 4
+            },
+            "write_ms": 2051,
+            "read_ms": 8,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 2794,
+              "set_lens": 8,
+              "syncs": 408,
+              "bytes_read": 320,
+              "bytes_written": 9907392
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 1331,
+            "phases": {
+              "put": 414,
+              "get": 306,
+              "overwrite": 429,
+              "digest": 128
+            },
+            "write_ms": 843,
+            "read_ms": 434,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 2591224
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 1194,
+            "phases": {
+              "put": 603,
+              "get": 151,
+              "overwrite": 227,
+              "digest": 136
+            },
+            "write_ms": 830,
+            "read_ms": 287,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 122880
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 43,
+            "phases": {
+              "put_shuffled": 8,
+              "scan_full": 4,
+              "scan_windows": 21,
+              "digest": 10
+            },
+            "write_ms": 8,
+            "read_ms": 35,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 73728
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 5934,
+            "phases": {
+              "put_shuffled": 5570,
+              "scan_full": 2,
+              "scan_windows": 2,
+              "digest": 36
+            },
+            "write_ms": 5570,
+            "read_ms": 40,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 7037,
+              "set_lens": 8,
+              "syncs": 1009,
+              "bytes_read": 320,
+              "bytes_written": 25021120
+            },
+            "usage_delta_bytes": -2542072
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 3139,
+            "phases": {
+              "put_shuffled": 1470,
+              "scan_full": 20,
+              "scan_windows": 218,
+              "digest": 1117
+            },
+            "write_ms": 1470,
+            "read_ms": 1355,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 7774184
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 2570,
+            "phases": {
+              "put_shuffled": 1626,
+              "scan_full": 8,
+              "scan_windows": 47,
+              "digest": 852
+            },
+            "write_ms": 1626,
+            "read_ms": 907,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 7774184
+          },
+          {
+            "workload": "log_batched",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 72,
+            "phases": {
+              "apply_shuffled": 15,
+              "scan_full": 4,
+              "scan_windows": 31,
+              "digest": 22
+            },
+            "write_ms": 15,
+            "read_ms": 57,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -7503848
+          },
+          {
+            "workload": "log_batched",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 5587,
+            "phases": {
+              "apply_shuffled": 5373,
+              "scan_full": 2,
+              "scan_windows": 3,
               "digest": 54
             },
-            "write_ms": 5509,
+            "write_ms": 5373,
             "read_ms": 59,
             "ops": 1051,
             "bytes": 256000,
@@ -16484,17 +16481,436 @@
           },
           {
             "workload": "log_batched",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 9285,
+            "phases": {
+              "apply_shuffled": 4790,
+              "scan_full": 8,
+              "scan_windows": 583,
+              "digest": 3719
+            },
+            "write_ms": 4790,
+            "read_ms": 4310,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 17839344
+          },
+          {
+            "workload": "log_batched",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 5414,
+            "phases": {
+              "apply_shuffled": 3453,
+              "scan_full": 4,
+              "scan_windows": 86,
+              "digest": 1791
+            },
+            "write_ms": 3453,
+            "read_ms": 1881,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 17839344
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 16,
+            "phases": {
+              "apply": 9,
+              "verify": 0,
+              "digest": 7
+            },
+            "write_ms": 9,
+            "read_ms": 7,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -17790192
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 518,
+            "phases": {
+              "apply": 442,
+              "verify": 2,
+              "digest": 11
+            },
+            "write_ms": 442,
+            "read_ms": 13,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 1021,
+              "set_lens": 2,
+              "syncs": 107,
+              "bytes_read": 320,
+              "bytes_written": 3794368
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 631,
+            "phases": {
+              "apply": 187,
+              "verify": 79,
+              "digest": 251
+            },
+            "write_ms": 187,
+            "read_ms": 330,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 3823104
+          },
+          {
+            "workload": "atomic_batches",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 491,
+            "phases": {
+              "apply": 174,
+              "verify": 78,
+              "digest": 186
+            },
+            "write_ms": 174,
+            "read_ms": 264,
+            "ops": 200,
+            "bytes": 457600,
+            "keys": 601,
+            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 3823104
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "memory",
+            "run": 2,
+            "total_ms": 2996,
+            "phases": {
+              "put": 1280,
+              "get_verify": 845,
+              "digest": 871
+            },
+            "write_ms": 1280,
+            "read_ms": 1716,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -3233280
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "redb_opfs",
+            "run": 2,
+            "total_ms": 2386,
+            "phases": {
+              "put": 1281,
+              "get_verify": 514,
+              "digest": 522
+            },
+            "write_ms": 1281,
+            "read_ms": 1036,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": {
+              "reads": 14,
+              "writes": 83,
+              "set_lens": 6,
+              "syncs": 22,
+              "bytes_read": 102785344,
+              "bytes_written": 50566464
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "indexed_db",
+            "run": 2,
+            "total_ms": 3794,
+            "phases": {
+              "put": 1592,
+              "get_verify": 1342,
+              "digest": 812
+            },
+            "write_ms": 1592,
+            "read_ms": 2154,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25311664
+          },
+          {
+            "workload": "large_blobs",
+            "backend": "indexed_db_range",
+            "run": 2,
+            "total_ms": 2987,
+            "phases": {
+              "put": 1654,
+              "get_verify": 684,
+              "digest": 597
+            },
+            "write_ms": 1654,
+            "read_ms": 1281,
+            "ops": 20,
+            "bytes": 50331648,
+            "keys": 10,
+            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 25311664
+          },
+          {
+            "workload": "small_slots",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 6,
+            "phases": {
+              "put": 1,
+              "get": 2,
+              "overwrite": 2,
+              "digest": 1
+            },
+            "write_ms": 3,
+            "read_ms": 3,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -90672
+          },
+          {
+            "workload": "small_slots",
             "backend": "redb_opfs",
             "run": 3,
-            "total_ms": 8131,
+            "total_ms": 1273,
             "phases": {
-              "apply_shuffled": 7732,
+              "put": 650,
+              "get": 4,
+              "overwrite": 553,
+              "digest": 3
+            },
+            "write_ms": 1203,
+            "read_ms": 7,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 2794,
+              "set_lens": 8,
+              "syncs": 408,
+              "bytes_read": 320,
+              "bytes_written": 9907392
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db",
+            "run": 3,
+            "total_ms": 499,
+            "phases": {
+              "put": 138,
+              "get": 82,
+              "overwrite": 152,
+              "digest": 91
+            },
+            "write_ms": 290,
+            "read_ms": 173,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 2591224
+          },
+          {
+            "workload": "small_slots",
+            "backend": "indexed_db_range",
+            "run": 3,
+            "total_ms": 555,
+            "phases": {
+              "put": 174,
+              "get": 98,
+              "overwrite": 156,
+              "digest": 91
+            },
+            "write_ms": 330,
+            "read_ms": 189,
+            "ops": 600,
+            "bytes": 153600,
+            "keys": 200,
+            "digest": "532cd2c289b668a16f18b8803618c4266160b0edf795e3cd88c08c7740829ae1",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 2591224
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 44,
+            "phases": {
+              "put_shuffled": 8,
+              "scan_full": 4,
+              "scan_windows": 23,
+              "digest": 9
+            },
+            "write_ms": 8,
+            "read_ms": 36,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -2468344
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "redb_opfs",
+            "run": 3,
+            "total_ms": 4459,
+            "phases": {
+              "put_shuffled": 4250,
+              "scan_full": 1,
+              "scan_windows": 1,
+              "digest": 13
+            },
+            "write_ms": 4250,
+            "read_ms": 15,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": {
+              "reads": 1,
+              "writes": 7037,
+              "set_lens": 8,
+              "syncs": 1009,
+              "bytes_read": 320,
+              "bytes_written": 25021120
+            },
+            "usage_delta_bytes": 0
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db",
+            "run": 3,
+            "total_ms": 1071,
+            "phases": {
+              "put_shuffled": 624,
+              "scan_full": 2,
+              "scan_windows": 113,
+              "digest": 298
+            },
+            "write_ms": 624,
+            "read_ms": 413,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 7774184
+          },
+          {
+            "workload": "ordered_log",
+            "backend": "indexed_db_range",
+            "run": 3,
+            "total_ms": 897,
+            "phases": {
+              "put_shuffled": 575,
+              "scan_full": 3,
+              "scan_windows": 15,
+              "digest": 269
+            },
+            "write_ms": 575,
+            "read_ms": 287,
+            "ops": 1051,
+            "bytes": 192000,
+            "keys": 1000,
+            "digest": "188c89d84e0875a900277fe3469ac6edcea8f55406c03ec5be4fda263adbf539",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": 7774184
+          },
+          {
+            "workload": "log_batched",
+            "backend": "memory",
+            "run": 3,
+            "total_ms": 50,
+            "phases": {
+              "apply_shuffled": 9,
+              "scan_full": 5,
+              "scan_windows": 23,
+              "digest": 12
+            },
+            "write_ms": 9,
+            "read_ms": 40,
+            "ops": 1051,
+            "bytes": 256000,
+            "keys": 2666,
+            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
+            "checks_ok": true,
+            "io": null,
+            "usage_delta_bytes": -7503848
+          },
+          {
+            "workload": "log_batched",
+            "backend": "redb_opfs",
+            "run": 3,
+            "total_ms": 8047,
+            "phases": {
+              "apply_shuffled": 7927,
               "scan_full": 1,
               "scan_windows": 3,
-              "digest": 114
+              "digest": 45
             },
-            "write_ms": 7732,
-            "read_ms": 118,
+            "write_ms": 7927,
+            "read_ms": 49,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16513,100 +16929,16 @@
           {
             "workload": "log_batched",
             "backend": "indexed_db",
-            "run": 1,
-            "total_ms": 6706,
-            "phases": {
-              "apply_shuffled": 2479,
-              "scan_full": 28,
-              "scan_windows": 550,
-              "digest": 3433
-            },
-            "write_ms": 2479,
-            "read_ms": 4011,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 17839344
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 10083,
-            "phases": {
-              "apply_shuffled": 3525,
-              "scan_full": 8,
-              "scan_windows": 766,
-              "digest": 5600
-            },
-            "write_ms": 3525,
-            "read_ms": 6374,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 17839344
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db",
             "run": 3,
-            "total_ms": 16599,
+            "total_ms": 5975,
             "phases": {
-              "apply_shuffled": 5999,
-              "scan_full": 88,
-              "scan_windows": 3993,
-              "digest": 6126
+              "apply_shuffled": 2897,
+              "scan_full": 9,
+              "scan_windows": 707,
+              "digest": 2279
             },
-            "write_ms": 5999,
-            "read_ms": 10207,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 17839344
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db_range",
-            "run": 1,
-            "total_ms": 11962,
-            "phases": {
-              "apply_shuffled": 6217,
-              "scan_full": 6,
-              "scan_windows": 51,
-              "digest": 5624
-            },
-            "write_ms": 6217,
-            "read_ms": 5681,
-            "ops": 1051,
-            "bytes": 256000,
-            "keys": 2666,
-            "digest": "ee77212cca0843d017a961521de9718e348f0cccbf84e217fc1abad788698e31",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 434176
-          },
-          {
-            "workload": "log_batched",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 8809,
-            "phases": {
-              "apply_shuffled": 4772,
-              "scan_full": 4,
-              "scan_windows": 128,
-              "digest": 3749
-            },
-            "write_ms": 4772,
-            "read_ms": 3881,
+            "write_ms": 2897,
+            "read_ms": 2995,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16619,15 +16951,15 @@
             "workload": "log_batched",
             "backend": "indexed_db_range",
             "run": 3,
-            "total_ms": 8247,
+            "total_ms": 5231,
             "phases": {
-              "apply_shuffled": 4017,
-              "scan_full": 5,
-              "scan_windows": 95,
-              "digest": 4030
+              "apply_shuffled": 3195,
+              "scan_full": 7,
+              "scan_windows": 56,
+              "digest": 1880
             },
-            "write_ms": 4017,
-            "read_ms": 4130,
+            "write_ms": 3195,
+            "read_ms": 1943,
             "ops": 1051,
             "bytes": 256000,
             "keys": 2666,
@@ -16639,129 +16971,35 @@
           {
             "workload": "atomic_batches",
             "backend": "memory",
-            "run": 1,
-            "total_ms": 21,
-            "phases": {
-              "apply": 11,
-              "verify": 1,
-              "digest": 9
-            },
-            "write_ms": 11,
-            "read_ms": 10,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": -17405168
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 19,
+            "run": 3,
+            "total_ms": 17,
             "phases": {
               "apply": 9,
               "verify": 0,
-              "digest": 10
+              "digest": 8
             },
             "write_ms": 9,
-            "read_ms": 10,
+            "read_ms": 8,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
             "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
             "checks_ok": true,
             "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 21,
-            "phases": {
-              "apply": 10,
-              "verify": 1,
-              "digest": 10
-            },
-            "write_ms": 10,
-            "read_ms": 11,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
+            "usage_delta_bytes": -17790192
           },
           {
             "workload": "atomic_batches",
             "backend": "redb_opfs",
-            "run": 1,
-            "total_ms": 835,
+            "run": 3,
+            "total_ms": 842,
             "phases": {
-              "apply": 578,
+              "apply": 615,
               "verify": 2,
-              "digest": 32
+              "digest": 19
             },
-            "write_ms": 578,
-            "read_ms": 34,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 1021,
-              "set_lens": 2,
-              "syncs": 107,
-              "bytes_read": 320,
-              "bytes_written": 3794368
-            },
-            "usage_delta_bytes": 589824
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 909,
-            "phases": {
-              "apply": 709,
-              "verify": 3,
-              "digest": 16
-            },
-            "write_ms": 709,
-            "read_ms": 19,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": {
-              "reads": 1,
-              "writes": 1021,
-              "set_lens": 2,
-              "syncs": 107,
-              "bytes_read": 320,
-              "bytes_written": 3794368
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "redb_opfs",
-            "run": 3,
-            "total_ms": 1170,
-            "phases": {
-              "apply": 974,
-              "verify": 3,
-              "digest": 17
-            },
-            "write_ms": 974,
-            "read_ms": 20,
+            "write_ms": 615,
+            "read_ms": 21,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
@@ -16780,95 +17018,15 @@
           {
             "workload": "atomic_batches",
             "backend": "indexed_db",
-            "run": 1,
-            "total_ms": 2951,
-            "phases": {
-              "apply": 1226,
-              "verify": 395,
-              "digest": 1002
-            },
-            "write_ms": 1226,
-            "read_ms": 1397,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 3823104
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 2586,
-            "phases": {
-              "apply": 884,
-              "verify": 206,
-              "digest": 1345
-            },
-            "write_ms": 884,
-            "read_ms": 1551,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 3823104
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db",
             "run": 3,
-            "total_ms": 3036,
+            "total_ms": 782,
             "phases": {
-              "apply": 1077,
-              "verify": 446,
-              "digest": 1267
+              "apply": 305,
+              "verify": 117,
+              "digest": 312
             },
-            "write_ms": 1077,
-            "read_ms": 1713,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 3823104
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db_range",
-            "run": 1,
-            "total_ms": 4050,
-            "phases": {
-              "apply": 1767,
-              "verify": 512,
-              "digest": 1060
-            },
-            "write_ms": 1767,
-            "read_ms": 1572,
-            "ops": 200,
-            "bytes": 457600,
-            "keys": 601,
-            "digest": "c2bc5741884644bb6710ef721422d2642582186286946e39e395c83ddd08d21d",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 49152
-          },
-          {
-            "workload": "atomic_batches",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 2713,
-            "phases": {
-              "apply": 886,
-              "verify": 548,
-              "digest": 1219
-            },
-            "write_ms": 886,
-            "read_ms": 1767,
+            "write_ms": 305,
+            "read_ms": 429,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
@@ -16881,14 +17039,14 @@
             "workload": "atomic_batches",
             "backend": "indexed_db_range",
             "run": 3,
-            "total_ms": 2851,
+            "total_ms": 520,
             "phases": {
-              "apply": 1352,
-              "verify": 274,
-              "digest": 1108
+              "apply": 190,
+              "verify": 74,
+              "digest": 220
             },
-            "write_ms": 1352,
-            "read_ms": 1382,
+            "write_ms": 190,
+            "read_ms": 294,
             "ops": 200,
             "bytes": 457600,
             "keys": 601,
@@ -16900,15 +17058,15 @@
           {
             "workload": "large_blobs",
             "backend": "memory",
-            "run": 1,
-            "total_ms": 5618,
+            "run": 3,
+            "total_ms": 2773,
             "phases": {
-              "put": 2898,
-              "get_verify": 1259,
-              "digest": 1461
+              "put": 1428,
+              "get_verify": 636,
+              "digest": 709
             },
-            "write_ms": 2898,
-            "read_ms": 2720,
+            "write_ms": 1428,
+            "read_ms": 1345,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -16919,110 +17077,16 @@
           },
           {
             "workload": "large_blobs",
-            "backend": "memory",
-            "run": 2,
-            "total_ms": 3504,
-            "phases": {
-              "put": 1716,
-              "get_verify": 848,
-              "digest": 940
-            },
-            "write_ms": 1716,
-            "read_ms": 1788,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "memory",
-            "run": 3,
-            "total_ms": 4566,
-            "phases": {
-              "put": 2668,
-              "get_verify": 1024,
-              "digest": 874
-            },
-            "write_ms": 2668,
-            "read_ms": 1898,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "redb_opfs",
-            "run": 1,
-            "total_ms": 4573,
-            "phases": {
-              "put": 2151,
-              "get_verify": 1193,
-              "digest": 1042
-            },
-            "write_ms": 2151,
-            "read_ms": 2235,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": {
-              "reads": 14,
-              "writes": 83,
-              "set_lens": 6,
-              "syncs": 22,
-              "bytes_read": 102785344,
-              "bytes_written": 50566464
-            },
-            "usage_delta_bytes": 67112960
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "redb_opfs",
-            "run": 2,
-            "total_ms": 5741,
-            "phases": {
-              "put": 2689,
-              "get_verify": 1368,
-              "digest": 1367
-            },
-            "write_ms": 2689,
-            "read_ms": 2735,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": {
-              "reads": 14,
-              "writes": 83,
-              "set_lens": 6,
-              "syncs": 22,
-              "bytes_read": 102785344,
-              "bytes_written": 50566464
-            },
-            "usage_delta_bytes": 0
-          },
-          {
-            "workload": "large_blobs",
             "backend": "redb_opfs",
             "run": 3,
-            "total_ms": 4252,
+            "total_ms": 2530,
             "phases": {
-              "put": 1956,
-              "get_verify": 946,
-              "digest": 891
+              "put": 1395,
+              "get_verify": 467,
+              "digest": 484
             },
-            "write_ms": 1956,
-            "read_ms": 1837,
+            "write_ms": 1395,
+            "read_ms": 951,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -17041,95 +17105,15 @@
           {
             "workload": "large_blobs",
             "backend": "indexed_db",
-            "run": 1,
-            "total_ms": 5288,
-            "phases": {
-              "put": 2576,
-              "get_verify": 1261,
-              "digest": 1306
-            },
-            "write_ms": 2576,
-            "read_ms": 2567,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25311664
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db",
-            "run": 2,
-            "total_ms": 5249,
-            "phases": {
-              "put": 2352,
-              "get_verify": 1580,
-              "digest": 1242
-            },
-            "write_ms": 2352,
-            "read_ms": 2822,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25311664
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db",
             "run": 3,
-            "total_ms": 6970,
+            "total_ms": 2714,
             "phases": {
-              "put": 2965,
-              "get_verify": 2466,
-              "digest": 1449
+              "put": 1441,
+              "get_verify": 601,
+              "digest": 609
             },
-            "write_ms": 2965,
-            "read_ms": 3915,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25311664
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db_range",
-            "run": 1,
-            "total_ms": 7568,
-            "phases": {
-              "put": 3796,
-              "get_verify": 1997,
-              "digest": 1669
-            },
-            "write_ms": 3796,
-            "read_ms": 3666,
-            "ops": 20,
-            "bytes": 50331648,
-            "keys": 10,
-            "digest": "0fdd513cc8cc127f709a65d42c8ad313d03b2b8401c769e7853e20213c6afd12",
-            "checks_ok": true,
-            "io": null,
-            "usage_delta_bytes": 25220992
-          },
-          {
-            "workload": "large_blobs",
-            "backend": "indexed_db_range",
-            "run": 2,
-            "total_ms": 7303,
-            "phases": {
-              "put": 2812,
-              "get_verify": 2265,
-              "digest": 2081
-            },
-            "write_ms": 2812,
-            "read_ms": 4346,
+            "write_ms": 1441,
+            "read_ms": 1210,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -17142,14 +17126,14 @@
             "workload": "large_blobs",
             "backend": "indexed_db_range",
             "run": 3,
-            "total_ms": 7050,
+            "total_ms": 2128,
             "phases": {
-              "put": 3290,
-              "get_verify": 1600,
-              "digest": 2075
+              "put": 1116,
+              "get_verify": 476,
+              "digest": 504
             },
-            "write_ms": 3290,
-            "read_ms": 3675,
+            "write_ms": 1116,
+            "read_ms": 980,
             "ops": 20,
             "bytes": 50331648,
             "keys": 10,
@@ -17168,435 +17152,755 @@
               "write_ms": 4,
               "read_ms": 5,
               "total_spread_ms": [
-                9,
-                12
+                6,
+                11
               ],
               "phase_ms": {
                 "put": 2,
-                "get": 3,
+                "get": 2,
                 "overwrite": 2,
                 "digest": 3
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 2379,
-              "write_ms": 2150,
-              "read_ms": 10,
+              "total_ms": 1915,
+              "write_ms": 1639,
+              "read_ms": 8,
               "total_spread_ms": [
-                2141,
-                2568
+                1273,
+                2292
               ],
               "phase_ms": {
-                "put": 1210,
-                "get": 5,
-                "overwrite": 940,
-                "digest": 5
+                "put": 894,
+                "get": 4,
+                "overwrite": 745,
+                "digest": 4
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 1175,
-              "write_ms": 703,
-              "read_ms": 414,
+              "total_ms": 1331,
+              "write_ms": 843,
+              "read_ms": 423,
               "total_spread_ms": [
-                728,
-                1892
+                499,
+                1838
               ],
               "phase_ms": {
-                "put": 327,
-                "get": 143,
-                "overwrite": 376,
-                "digest": 271
+                "put": 414,
+                "get": 203,
+                "overwrite": 429,
+                "digest": 128
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 1606,
-              "write_ms": 964,
-              "read_ms": 562,
+              "total_ms": 1022,
+              "write_ms": 606,
+              "read_ms": 287,
               "total_spread_ms": [
-                1337,
-                1689
+                555,
+                1194
               ],
               "phase_ms": {
-                "put": 525,
-                "get": 291,
-                "overwrite": 472,
-                "digest": 271
+                "put": 301,
+                "get": 151,
+                "overwrite": 227,
+                "digest": 136
               }
             },
             "redb_over_indexeddb": {
-              "total": 2.0246808510638297,
-              "write": 3.058321479374111,
-              "read": 0.024154589371980676,
+              "total": 1.4387678437265214,
+              "write": 1.944246737841044,
+              "read": 0.018912529550827423,
               "by_phase": {
-                "put": 3.7003058103975537,
-                "get": 0.03496503496503497,
-                "overwrite": 2.5,
-                "digest": 0.01845018450184502
+                "put": 2.1594202898550723,
+                "get": 0.019704433497536946,
+                "overwrite": 1.7365967365967365,
+                "digest": 0.03125
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 1.4813200498132004,
-              "write": 2.2302904564315353,
-              "read": 0.017793594306049824,
+              "total": 1.8737769080234834,
+              "write": 2.7046204620462047,
+              "read": 0.027874564459930314,
               "by_phase": {
-                "put": 2.3047619047619046,
-                "get": 0.01718213058419244,
-                "overwrite": 1.9915254237288136,
-                "digest": 0.01845018450184502
+                "put": 2.9700996677740865,
+                "get": 0.026490066225165563,
+                "overwrite": 3.2819383259911894,
+                "digest": 0.029411764705882353
               }
             },
-            "indexeddb_adapter_overhead_read": 0.7366548042704626
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 7,
+                  "max": 14
+                },
+                "other_ms": {
+                  "min": 189,
+                  "max": 362
+                },
+                "worst_for_redb": 13.5,
+                "best_for_redb": 51.714285714285715,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 1203,
+                  "max": 2051
+                },
+                "other_ms": {
+                  "min": 330,
+                  "max": 830
+                },
+                "worst_for_redb": 6.215151515151515,
+                "best_for_redb": 1.4493975903614458,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 290,
+                  "max": 1071
+                },
+                "range_ms": {
+                  "min": 330,
+                  "max": 830
+                },
+                "median_ratio": 1.391089108910891,
+                "paired_ratios": [
+                  0.8787878787878788,
+                  1.0156626506024096,
+                  1.7673267326732673
+                ],
+                "paired_span": {
+                  "min": 0.8787878787878788,
+                  "max": 1.7673267326732673
+                },
+                "max_paired_deviation_pct": 77,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.4738675958188154,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 173,
+                "max": 434
+              },
+              "range_ms": {
+                "min": 189,
+                "max": 362
+              },
+              "median": 1.4738675958188154,
+              "worst_for_range": 0.47790055248618785,
+              "best_for_range": 2.2962962962962963,
+              "disjoint": false
+            }
           },
           {
             "workload": "ordered_log",
             "memory": {
               "runs": 3,
-              "total_ms": 85,
-              "write_ms": 9,
-              "read_ms": 76,
+              "total_ms": 44,
+              "write_ms": 8,
+              "read_ms": 36,
               "total_spread_ms": [
-                65,
-                107
+                43,
+                55
               ],
               "phase_ms": {
-                "put_shuffled": 9,
-                "scan_full": 5,
-                "scan_windows": 58,
-                "digest": 14
-              }
-            },
-            "redb_opfs": {
-              "runs": 3,
-              "total_ms": 5558,
-              "write_ms": 5425,
-              "read_ms": 30,
-              "total_spread_ms": [
-                4471,
-                6226
-              ],
-              "phase_ms": {
-                "put_shuffled": 5425,
-                "scan_full": 2,
-                "scan_windows": 3,
-                "digest": 25
-              }
-            },
-            "indexed_db": {
-              "runs": 3,
-              "total_ms": 3919,
-              "write_ms": 2408,
-              "read_ms": 1456,
-              "total_spread_ms": [
-                3239,
-                4028
-              ],
-              "phase_ms": {
-                "put_shuffled": 2408,
-                "scan_full": 14,
-                "scan_windows": 319,
-                "digest": 1093
-              }
-            },
-            "indexed_db_range": {
-              "runs": 3,
-              "total_ms": 2868,
-              "write_ms": 1674,
-              "read_ms": 1115,
-              "total_spread_ms": [
-                2172,
-                3967
-              ],
-              "phase_ms": {
-                "put_shuffled": 1674,
-                "scan_full": 5,
-                "scan_windows": 77,
-                "digest": 1028
-              }
-            },
-            "redb_over_indexeddb": {
-              "total": 1.418218933401378,
-              "write": 2.252906976744186,
-              "read": 0.020604395604395604,
-              "by_phase": {
-                "put_shuffled": 2.252906976744186,
-                "scan_full": 0.14285714285714285,
-                "scan_windows": 0.009404388714733543,
-                "digest": 0.022872827081427266
-              }
-            },
-            "redb_over_indexeddb_range": {
-              "total": 1.9379358437935843,
-              "write": 3.240740740740741,
-              "read": 0.026905829596412557,
-              "by_phase": {
-                "put_shuffled": 3.240740740740741,
-                "scan_full": 0.4,
-                "scan_windows": 0.03896103896103896,
-                "digest": 0.024319066147859923
-              }
-            },
-            "indexeddb_adapter_overhead_read": 1.3058295964125561
-          },
-          {
-            "workload": "log_batched",
-            "memory": {
-              "runs": 3,
-              "total_ms": 89,
-              "write_ms": 16,
-              "read_ms": 73,
-              "total_spread_ms": [
-                81,
-                142
-              ],
-              "phase_ms": {
-                "apply_shuffled": 16,
-                "scan_full": 8,
-                "scan_windows": 43,
-                "digest": 26
-              }
-            },
-            "redb_opfs": {
-              "runs": 3,
-              "total_ms": 6542,
-              "write_ms": 6342,
-              "read_ms": 71,
-              "total_spread_ms": [
-                5698,
-                8131
-              ],
-              "phase_ms": {
-                "apply_shuffled": 6342,
-                "scan_full": 1,
-                "scan_windows": 3,
-                "digest": 68
-              }
-            },
-            "indexed_db": {
-              "runs": 3,
-              "total_ms": 10083,
-              "write_ms": 3525,
-              "read_ms": 6374,
-              "total_spread_ms": [
-                6706,
-                16599
-              ],
-              "phase_ms": {
-                "apply_shuffled": 3525,
-                "scan_full": 28,
-                "scan_windows": 766,
-                "digest": 5600
-              }
-            },
-            "indexed_db_range": {
-              "runs": 3,
-              "total_ms": 8809,
-              "write_ms": 4772,
-              "read_ms": 4130,
-              "total_spread_ms": [
-                8247,
-                11962
-              ],
-              "phase_ms": {
-                "apply_shuffled": 4772,
-                "scan_full": 5,
-                "scan_windows": 95,
-                "digest": 4030
-              }
-            },
-            "redb_over_indexeddb": {
-              "total": 0.6488148368541109,
-              "write": 1.7991489361702129,
-              "read": 0.011139002196422968,
-              "by_phase": {
-                "apply_shuffled": 1.7991489361702129,
-                "scan_full": 0.03571428571428571,
-                "scan_windows": 0.0039164490861618795,
-                "digest": 0.012142857142857143
-              }
-            },
-            "redb_over_indexeddb_range": {
-              "total": 0.742649562946986,
-              "write": 1.329002514668902,
-              "read": 0.01719128329297821,
-              "by_phase": {
-                "apply_shuffled": 1.329002514668902,
-                "scan_full": 0.2,
-                "scan_windows": 0.031578947368421054,
-                "digest": 0.01687344913151365
-              }
-            },
-            "indexeddb_adapter_overhead_read": 1.5433414043583535
-          },
-          {
-            "workload": "atomic_batches",
-            "memory": {
-              "runs": 3,
-              "total_ms": 21,
-              "write_ms": 10,
-              "read_ms": 10,
-              "total_spread_ms": [
-                19,
-                21
-              ],
-              "phase_ms": {
-                "apply": 10,
-                "verify": 1,
+                "put_shuffled": 8,
+                "scan_full": 4,
+                "scan_windows": 23,
                 "digest": 10
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 909,
-              "write_ms": 709,
-              "read_ms": 20,
+              "total_ms": 5934,
+              "write_ms": 5570,
+              "read_ms": 38,
               "total_spread_ms": [
-                835,
-                1170
+                4459,
+                5982
               ],
               "phase_ms": {
-                "apply": 709,
-                "verify": 3,
-                "digest": 17
+                "put_shuffled": 5570,
+                "scan_full": 2,
+                "scan_windows": 2,
+                "digest": 33
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 2951,
-              "write_ms": 1077,
-              "read_ms": 1551,
+              "total_ms": 3139,
+              "write_ms": 1470,
+              "read_ms": 1355,
               "total_spread_ms": [
-                2586,
-                3036
+                1071,
+                4642
               ],
               "phase_ms": {
-                "apply": 1077,
-                "verify": 395,
-                "digest": 1267
+                "put_shuffled": 1470,
+                "scan_full": 6,
+                "scan_windows": 218,
+                "digest": 1037
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 2851,
-              "write_ms": 1352,
-              "read_ms": 1572,
+              "total_ms": 2570,
+              "write_ms": 1626,
+              "read_ms": 907,
               "total_spread_ms": [
-                2713,
-                4050
+                897,
+                3726
               ],
               "phase_ms": {
-                "apply": 1352,
-                "verify": 512,
-                "digest": 1108
+                "put_shuffled": 1626,
+                "scan_full": 4,
+                "scan_windows": 47,
+                "digest": 852
               }
             },
             "redb_over_indexeddb": {
-              "total": 0.30803117587258555,
-              "write": 0.6583101207056639,
-              "read": 0.012894906511927788,
+              "total": 1.8904109589041096,
+              "write": 3.7891156462585034,
+              "read": 0.028044280442804426,
               "by_phase": {
-                "apply": 0.6583101207056639,
-                "verify": 0.007594936708860759,
-                "digest": 0.013417521704814523
+                "put_shuffled": 3.7891156462585034,
+                "scan_full": 0.3333333333333333,
+                "scan_windows": 0.009174311926605505,
+                "digest": 0.03182256509161042
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 0.31883549631708175,
-              "write": 0.5244082840236687,
-              "read": 0.01272264631043257,
+              "total": 2.3089494163424122,
+              "write": 3.4255842558425584,
+              "read": 0.04189636163175303,
               "by_phase": {
-                "apply": 0.5244082840236687,
-                "verify": 0.005859375,
-                "digest": 0.015342960288808664
+                "put_shuffled": 3.4255842558425584,
+                "scan_full": 0.5,
+                "scan_windows": 0.0425531914893617,
+                "digest": 0.03873239436619718
               }
             },
-            "indexeddb_adapter_overhead_read": 0.9866412213740458
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 15,
+                  "max": 40
+                },
+                "other_ms": {
+                  "min": 287,
+                  "max": 1164
+                },
+                "worst_for_redb": 7.175,
+                "best_for_redb": 77.6,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 4250,
+                  "max": 5638
+                },
+                "other_ms": {
+                  "min": 575,
+                  "max": 2371
+                },
+                "worst_for_redb": 9.805217391304348,
+                "best_for_redb": 1.7924926191480388,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 624,
+                  "max": 2933
+                },
+                "range_ms": {
+                  "min": 575,
+                  "max": 2371
+                },
+                "median_ratio": 0.9040590405904059,
+                "paired_ratios": [
+                  0.9040590405904059,
+                  1.085217391304348,
+                  1.2370307886967524
+                ],
+                "paired_span": {
+                  "min": 0.9040590405904059,
+                  "max": 1.2370307886967524
+                },
+                "max_paired_deviation_pct": 24,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.49393605292172,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 413,
+                "max": 1503
+              },
+              "range_ms": {
+                "min": 287,
+                "max": 1164
+              },
+              "median": 1.49393605292172,
+              "worst_for_range": 0.3548109965635739,
+              "best_for_range": 5.2369337979094075,
+              "disjoint": false
+            }
+          },
+          {
+            "workload": "log_batched",
+            "memory": {
+              "runs": 3,
+              "total_ms": 72,
+              "write_ms": 13,
+              "read_ms": 57,
+              "total_spread_ms": [
+                50,
+                85
+              ],
+              "phase_ms": {
+                "apply_shuffled": 13,
+                "scan_full": 4,
+                "scan_windows": 31,
+                "digest": 22
+              }
+            },
+            "redb_opfs": {
+              "runs": 3,
+              "total_ms": 5752,
+              "write_ms": 5547,
+              "read_ms": 59,
+              "total_spread_ms": [
+                5587,
+                8047
+              ],
+              "phase_ms": {
+                "apply_shuffled": 5547,
+                "scan_full": 2,
+                "scan_windows": 3,
+                "digest": 54
+              }
+            },
+            "indexed_db": {
+              "runs": 3,
+              "total_ms": 5975,
+              "write_ms": 2897,
+              "read_ms": 2995,
+              "total_spread_ms": [
+                4301,
+                9285
+              ],
+              "phase_ms": {
+                "apply_shuffled": 2897,
+                "scan_full": 9,
+                "scan_windows": 583,
+                "digest": 2279
+              }
+            },
+            "indexed_db_range": {
+              "runs": 3,
+              "total_ms": 5231,
+              "write_ms": 3195,
+              "read_ms": 1943,
+              "total_spread_ms": [
+                3594,
+                5414
+              ],
+              "phase_ms": {
+                "apply_shuffled": 3195,
+                "scan_full": 4,
+                "scan_windows": 56,
+                "digest": 1880
+              }
+            },
+            "redb_over_indexeddb": {
+              "total": 0.9626778242677825,
+              "write": 1.9147393855712806,
+              "read": 0.01969949916527546,
+              "by_phase": {
+                "apply_shuffled": 1.9147393855712806,
+                "scan_full": 0.2222222222222222,
+                "scan_windows": 0.005145797598627788,
+                "digest": 0.02369460289600702
+              }
+            },
+            "redb_over_indexeddb_range": {
+              "total": 1.099598547122921,
+              "write": 1.736150234741784,
+              "read": 0.030365414307771486,
+              "by_phase": {
+                "apply_shuffled": 1.736150234741784,
+                "scan_full": 0.5,
+                "scan_windows": 0.05357142857142857,
+                "digest": 0.02872340425531915
+              }
+            },
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 49,
+                  "max": 99
+                },
+                "other_ms": {
+                  "min": 1881,
+                  "max": 2076
+                },
+                "worst_for_redb": 19,
+                "best_for_redb": 42.36734693877551,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 5373,
+                  "max": 7927
+                },
+                "other_ms": {
+                  "min": 1432,
+                  "max": 3453
+                },
+                "worst_for_redb": 5.535614525139665,
+                "best_for_redb": 1.5560382276281495,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 2661,
+                  "max": 4790
+                },
+                "range_ms": {
+                  "min": 1432,
+                  "max": 3453
+                },
+                "median_ratio": 0.9067292644757433,
+                "paired_ratios": [
+                  0.9067292644757433,
+                  1.3871995366348102,
+                  1.8582402234636872
+                ],
+                "paired_span": {
+                  "min": 0.9067292644757433,
+                  "max": 1.8582402234636872
+                },
+                "max_paired_deviation_pct": 86,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.541430777148739,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 1593,
+                "max": 4310
+              },
+              "range_ms": {
+                "min": 1881,
+                "max": 2076
+              },
+              "median": 1.541430777148739,
+              "worst_for_range": 0.7673410404624278,
+              "best_for_range": 2.2913343965975543,
+              "disjoint": false
+            }
+          },
+          {
+            "workload": "atomic_batches",
+            "memory": {
+              "runs": 3,
+              "total_ms": 17,
+              "write_ms": 9,
+              "read_ms": 8,
+              "total_spread_ms": [
+                16,
+                19
+              ],
+              "phase_ms": {
+                "apply": 9,
+                "verify": 0,
+                "digest": 8
+              }
+            },
+            "redb_opfs": {
+              "runs": 3,
+              "total_ms": 842,
+              "write_ms": 615,
+              "read_ms": 21,
+              "total_spread_ms": [
+                518,
+                1137
+              ],
+              "phase_ms": {
+                "apply": 615,
+                "verify": 2,
+                "digest": 19
+              }
+            },
+            "indexed_db": {
+              "runs": 3,
+              "total_ms": 782,
+              "write_ms": 305,
+              "read_ms": 429,
+              "total_spread_ms": [
+                631,
+                1864
+              ],
+              "phase_ms": {
+                "apply": 305,
+                "verify": 117,
+                "digest": 312
+              }
+            },
+            "indexed_db_range": {
+              "runs": 3,
+              "total_ms": 520,
+              "write_ms": 190,
+              "read_ms": 294,
+              "total_spread_ms": [
+                491,
+                892
+              ],
+              "phase_ms": {
+                "apply": 190,
+                "verify": 78,
+                "digest": 220
+              }
+            },
+            "redb_over_indexeddb": {
+              "total": 1.0767263427109974,
+              "write": 2.0163934426229506,
+              "read": 0.04895104895104895,
+              "by_phase": {
+                "apply": 2.0163934426229506,
+                "verify": 0.017094017094017096,
+                "digest": 0.060897435897435896
+              }
+            },
+            "redb_over_indexeddb_range": {
+              "total": 1.6192307692307693,
+              "write": 3.236842105263158,
+              "read": 0.07142857142857142,
+              "by_phase": {
+                "apply": 3.236842105263158,
+                "verify": 0.02564102564102564,
+                "digest": 0.08636363636363636
+              }
+            },
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 13,
+                  "max": 35
+                },
+                "other_ms": {
+                  "min": 264,
+                  "max": 460
+                },
+                "worst_for_redb": 7.542857142857143,
+                "best_for_redb": 35.38461538461539,
+                "disjoint": true
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 442,
+                  "max": 747
+                },
+                "other_ms": {
+                  "min": 174,
+                  "max": 353
+                },
+                "worst_for_redb": 4.293103448275862,
+                "best_for_redb": 1.2521246458923512,
+                "disjoint": true
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 187,
+                  "max": 577
+                },
+                "range_ms": {
+                  "min": 174,
+                  "max": 353
+                },
+                "median_ratio": 1.605263157894737,
+                "paired_ratios": [
+                  1.0747126436781609,
+                  1.605263157894737,
+                  1.6345609065155808
+                ],
+                "paired_span": {
+                  "min": 1.0747126436781609,
+                  "max": 1.6345609065155808
+                },
+                "max_paired_deviation_pct": 63,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.4591836734693877,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 330,
+                "max": 1055
+              },
+              "range_ms": {
+                "min": 264,
+                "max": 460
+              },
+              "median": 1.4591836734693877,
+              "worst_for_range": 0.717391304347826,
+              "best_for_range": 3.996212121212121,
+              "disjoint": false
+            }
           },
           {
             "workload": "large_blobs",
             "memory": {
               "runs": 3,
-              "total_ms": 4566,
-              "write_ms": 2668,
-              "read_ms": 1898,
+              "total_ms": 2821,
+              "write_ms": 1428,
+              "read_ms": 1345,
               "total_spread_ms": [
-                3504,
-                5618
+                2773,
+                2996
               ],
               "phase_ms": {
-                "put": 2668,
-                "get_verify": 1024,
-                "digest": 940
+                "put": 1428,
+                "get_verify": 679,
+                "digest": 709
               }
             },
             "redb_opfs": {
               "runs": 3,
-              "total_ms": 4573,
-              "write_ms": 2151,
-              "read_ms": 2235,
+              "total_ms": 2386,
+              "write_ms": 1281,
+              "read_ms": 951,
               "total_spread_ms": [
-                4252,
-                5741
+                2060,
+                2530
               ],
               "phase_ms": {
-                "put": 2151,
-                "get_verify": 1193,
-                "digest": 1042
+                "put": 1281,
+                "get_verify": 467,
+                "digest": 484
               }
             },
             "indexed_db": {
               "runs": 3,
-              "total_ms": 5288,
-              "write_ms": 2576,
-              "read_ms": 2822,
+              "total_ms": 2714,
+              "write_ms": 1441,
+              "read_ms": 1359,
               "total_spread_ms": [
-                5249,
-                6970
+                2470,
+                3794
               ],
               "phase_ms": {
-                "put": 2576,
-                "get_verify": 1580,
-                "digest": 1306
+                "put": 1441,
+                "get_verify": 601,
+                "digest": 763
               }
             },
             "indexed_db_range": {
               "runs": 3,
-              "total_ms": 7303,
-              "write_ms": 3290,
-              "read_ms": 3675,
+              "total_ms": 2987,
+              "write_ms": 1532,
+              "read_ms": 1281,
               "total_spread_ms": [
-                7050,
-                7568
+                2128,
+                4277
               ],
               "phase_ms": {
-                "put": 3290,
-                "get_verify": 1997,
-                "digest": 2075
+                "put": 1532,
+                "get_verify": 684,
+                "digest": 597
               }
             },
             "redb_over_indexeddb": {
-              "total": 0.8647881996974282,
-              "write": 0.8350155279503105,
-              "read": 0.791991495393338,
+              "total": 0.8791451731761238,
+              "write": 0.8889659958362248,
+              "read": 0.6997792494481236,
               "by_phase": {
-                "put": 0.8350155279503105,
-                "get_verify": 0.7550632911392405,
-                "digest": 0.7978560490045942
+                "put": 0.8889659958362248,
+                "get_verify": 0.7770382695507487,
+                "digest": 0.6343381389252949
               }
             },
             "redb_over_indexeddb_range": {
-              "total": 0.6261810214980145,
-              "write": 0.6537993920972645,
-              "read": 0.6081632653061224,
+              "total": 0.7987947773685973,
+              "write": 0.8361618798955613,
+              "read": 0.7423887587822015,
               "by_phase": {
-                "put": 0.6537993920972645,
-                "get_verify": 0.5973960941412119,
-                "digest": 0.5021686746987952
+                "put": 0.8361618798955613,
+                "get_verify": 0.6827485380116959,
+                "digest": 0.8107202680067002
               }
             },
-            "indexeddb_adapter_overhead_read": 0.767891156462585
+            "envelopes": {
+              "read_vs_range": {
+                "redb_ms": {
+                  "min": 858,
+                  "max": 1036
+                },
+                "other_ms": {
+                  "min": 980,
+                  "max": 2714
+                },
+                "worst_for_redb": 0.9459459459459459,
+                "best_for_redb": 3.163170163170163,
+                "disjoint": false
+              },
+              "write_vs_range": {
+                "redb_ms": {
+                  "min": 1151,
+                  "max": 1395
+                },
+                "other_ms": {
+                  "min": 1116,
+                  "max": 1654
+                },
+                "worst_for_redb": 1.25,
+                "best_for_redb": 0.6958887545344619,
+                "disjoint": false
+              },
+              "control_write_shipping_vs_range": {
+                "shipping_ms": {
+                  "min": 1076,
+                  "max": 1592
+                },
+                "range_ms": {
+                  "min": 1116,
+                  "max": 1654
+                },
+                "median_ratio": 0.9406005221932114,
+                "paired_ratios": [
+                  0.7023498694516971,
+                  0.9625151148730351,
+                  1.2912186379928314
+                ],
+                "paired_span": {
+                  "min": 0.7023498694516971,
+                  "max": 1.2912186379928314
+                },
+                "max_paired_deviation_pct": 42,
+                "disjoint": false
+              }
+            },
+            "indexeddb_adapter_overhead_read": 1.0608899297423888,
+            "adapter_overhead_envelope": {
+              "shipping_ms": {
+                "min": 1210,
+                "max": 2154
+              },
+              "range_ms": {
+                "min": 980,
+                "max": 2714
+              },
+              "median": 1.0608899297423888,
+              "worst_for_range": 0.4458364038319823,
+              "best_for_range": 2.1979591836734693,
+              "disjoint": false
+            }
           }
         ],
         "digests_agree": true,
@@ -17657,7 +17961,7 @@
             "opened": true,
             "error": null,
             "error_kind": null,
-            "open_ms": 73,
+            "open_ms": 8,
             "repair_invoked": false,
             "repair_callbacks": 0
           },
@@ -17682,7 +17986,7 @@
             "bytes_read": 586377,
             "bytes_written": 960
           },
-          "ms": 246
+          "ms": 39
         },
         "staging_left": false,
         "staging_len": 0,
@@ -17690,10 +17994,10 @@
       },
       "trials": 139,
       "creation_trials": 127,
-      "final_absent": 124,
-      "final_present_and_sound": 15,
+      "final_absent": 123,
+      "final_present_and_sound": 16,
       "unopenable_stubs": 0,
-      "staging_left_behind": 124,
+      "staging_left_behind": 123,
       "promotion": {
         "kind": "promotion_boundary_kills",
         "note": "the kill window straddles move(); landing inside the rename is not established",
@@ -17701,8 +18005,9 @@
         "terminated_before_command_returned": 12,
         "worker_finished_first": 0,
         "names_stabilized": 12,
-        "rename_not_applied": 10,
-        "rename_applied": 2,
+        "unsettled_and_therefore_failed": 0,
+        "rename_not_applied": 9,
+        "rename_applied": 3,
         "rename_applied_staging_remains": 0,
         "final_unopenable": 0,
         "both_absent": 0,
@@ -19237,6 +19542,7 @@
         {
           "name": "promotion_boundary_kill#1",
           "kill_jitter_ms": 0,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19253,6 +19559,7 @@
         {
           "name": "promotion_boundary_kill#2",
           "kill_jitter_ms": 0.35,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19269,6 +19576,7 @@
         {
           "name": "promotion_boundary_kill#3",
           "kill_jitter_ms": 0.7,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19285,6 +19593,7 @@
         {
           "name": "promotion_boundary_kill#4",
           "kill_jitter_ms": 1.0499999999999998,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19301,6 +19610,7 @@
         {
           "name": "promotion_boundary_kill#5",
           "kill_jitter_ms": 1.4,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19317,6 +19627,7 @@
         {
           "name": "promotion_boundary_kill#6",
           "kill_jitter_ms": 1.75,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19333,6 +19644,7 @@
         {
           "name": "promotion_boundary_kill#7",
           "kill_jitter_ms": 2.0999999999999996,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19349,6 +19661,7 @@
         {
           "name": "promotion_boundary_kill#8",
           "kill_jitter_ms": 2.4499999999999997,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19365,22 +19678,24 @@
         {
           "name": "promotion_boundary_kill#9",
           "kill_jitter_ms": 2.8,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
           "settle_rounds": 1,
-          "classification": "rename_not_applied",
-          "final_exists": false,
-          "final_len": 0,
-          "final_sound": null,
-          "final_generation": null,
-          "staging_left": true,
-          "staging_len": 462848,
+          "classification": "rename_applied",
+          "final_exists": true,
+          "final_len": 462848,
+          "final_sound": true,
+          "final_generation": 4,
+          "staging_left": false,
+          "staging_len": 0,
           "ok": true
         },
         {
           "name": "promotion_boundary_kill#10",
           "kill_jitter_ms": 3.15,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19397,6 +19712,7 @@
         {
           "name": "promotion_boundary_kill#11",
           "kill_jitter_ms": 3.5,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19413,6 +19729,7 @@
         {
           "name": "promotion_boundary_kill#12",
           "kill_jitter_ms": 3.8499999999999996,
+          "classification_ok": true,
           "terminated_before_command_returned": true,
           "worker_finished_first": false,
           "names_stabilized": true,
@@ -19448,62 +19765,62 @@
     "lane3_termination_forced": {
       "trials": 10,
       "outcomes": {
-        "preceding": 9,
-        "completed": 1,
+        "preceding": 10,
+        "completed": 0,
         "later": 0,
         "regression": 0,
         "unopenable": 0,
         "harness_error": 0
       },
-      "kills_inside_a_commit": 9,
+      "kills_inside_a_commit": 10,
       "generations_after_terminate_call": {
         "n": 10,
         "min": 0,
         "median": 1,
-        "max": 1
+        "max": 2
       },
       "handle_release_wait_ms": {
         "n": 10,
-        "min": 166,
-        "median": 227,
-        "max": 334
+        "min": 116,
+        "median": 132,
+        "max": 156
       },
       "reopen_open_ms": {
         "n": 10,
-        "min": 32,
-        "median": 54,
-        "max": 100
+        "min": 23,
+        "median": 28,
+        "max": 39
       },
       "repairs_invoked": 10
     },
     "lane3_termination_yielding": {
       "trials": 10,
       "outcomes": {
-        "preceding": 9,
-        "completed": 1,
+        "preceding": 10,
+        "completed": 0,
         "later": 0,
         "regression": 0,
         "unopenable": 0,
         "harness_error": 0
       },
-      "kills_inside_a_commit": 5,
+      "kills_inside_a_commit": 4,
       "generations_after_terminate_call": {
         "n": 10,
         "min": 0,
         "median": 1,
-        "max": 1
+        "max": 2
       },
       "handle_release_wait_ms": {
         "n": 10,
-        "min": 198,
-        "median": 243,
-        "max": 351
+        "min": 97,
+        "median": 107,
+        "max": 121
       },
       "reopen_open_ms": {
         "n": 10,
-        "min": 31,
-        "median": 51,
-        "max": 106
+        "min": 19,
+        "median": 23,
+        "max": 27
       },
       "repairs_invoked": 10
     },
@@ -19512,82 +19829,82 @@
     "stop_condition_hit": false,
     "lane4_second_writer_refused": true,
     "lane4_refusal_name": "NoModificationAllowedError",
-    "lane4_release_after_kill_ms": 130,
-    "lane4_two_tabs": "ran",
-    "lane4_two_tabs_ok": true,
-    "lane4_reload_reopen_ms": 520,
+    "lane4_release_after_kill_ms": 82,
+    "lane4_two_tabs": "no_holder",
+    "lane4_two_tabs_ok": null,
+    "lane4_reload_reopen_ms": 560,
     "lane5_native_to_browser_ok": true,
     "lane5_digests_agree": true,
     "lane5_redb_over_indexeddb": [
       {
         "workload": "small_slots",
         "vs_shipping": {
-          "total": 2.0246808510638297,
-          "write": 3.058321479374111,
-          "read": 0.024154589371980676
+          "total": 1.4387678437265214,
+          "write": 1.944246737841044,
+          "read": 0.018912529550827423
         },
         "vs_range": {
-          "total": 1.4813200498132004,
-          "write": 2.2302904564315353,
-          "read": 0.017793594306049824
+          "total": 1.8737769080234834,
+          "write": 2.7046204620462047,
+          "read": 0.027874564459930314
         },
-        "shipping_adapter_read_overhead": 0.7366548042704626
+        "shipping_adapter_read_overhead": 1.4738675958188154
       },
       {
         "workload": "ordered_log",
         "vs_shipping": {
-          "total": 1.418218933401378,
-          "write": 2.252906976744186,
-          "read": 0.020604395604395604
+          "total": 1.8904109589041096,
+          "write": 3.7891156462585034,
+          "read": 0.028044280442804426
         },
         "vs_range": {
-          "total": 1.9379358437935843,
-          "write": 3.240740740740741,
-          "read": 0.026905829596412557
+          "total": 2.3089494163424122,
+          "write": 3.4255842558425584,
+          "read": 0.04189636163175303
         },
-        "shipping_adapter_read_overhead": 1.3058295964125561
+        "shipping_adapter_read_overhead": 1.49393605292172
       },
       {
         "workload": "log_batched",
         "vs_shipping": {
-          "total": 0.6488148368541109,
-          "write": 1.7991489361702129,
-          "read": 0.011139002196422968
+          "total": 0.9626778242677825,
+          "write": 1.9147393855712806,
+          "read": 0.01969949916527546
         },
         "vs_range": {
-          "total": 0.742649562946986,
-          "write": 1.329002514668902,
-          "read": 0.01719128329297821
+          "total": 1.099598547122921,
+          "write": 1.736150234741784,
+          "read": 0.030365414307771486
         },
-        "shipping_adapter_read_overhead": 1.5433414043583535
+        "shipping_adapter_read_overhead": 1.541430777148739
       },
       {
         "workload": "atomic_batches",
         "vs_shipping": {
-          "total": 0.30803117587258555,
-          "write": 0.6583101207056639,
-          "read": 0.012894906511927788
+          "total": 1.0767263427109974,
+          "write": 2.0163934426229506,
+          "read": 0.04895104895104895
         },
         "vs_range": {
-          "total": 0.31883549631708175,
-          "write": 0.5244082840236687,
-          "read": 0.01272264631043257
+          "total": 1.6192307692307693,
+          "write": 3.236842105263158,
+          "read": 0.07142857142857142
         },
-        "shipping_adapter_read_overhead": 0.9866412213740458
+        "shipping_adapter_read_overhead": 1.4591836734693877
       },
       {
         "workload": "large_blobs",
         "vs_shipping": {
-          "total": 0.8647881996974282,
-          "write": 0.8350155279503105,
-          "read": 0.791991495393338
+          "total": 0.8791451731761238,
+          "write": 0.8889659958362248,
+          "read": 0.6997792494481236
         },
         "vs_range": {
-          "total": 0.6261810214980145,
-          "write": 0.6537993920972645,
-          "read": 0.6081632653061224
+          "total": 0.7987947773685973,
+          "write": 0.8361618798955613,
+          "read": 0.7423887587822015
         },
-        "shipping_adapter_read_overhead": 0.767891156462585
+        "shipping_adapter_read_overhead": 1.0608899297423888
       }
     ],
     "lane5_bench_repeats": 3,
@@ -19606,8 +19923,9 @@
       "terminated_before_command_returned": 12,
       "worker_finished_first": 0,
       "names_stabilized": 12,
-      "rename_not_applied": 10,
-      "rename_applied": 2,
+      "unsettled_and_therefore_failed": 0,
+      "rename_not_applied": 9,
+      "rename_applied": 3,
       "rename_applied_staging_remains": 0,
       "final_unopenable": 0,
       "both_absent": 0,
@@ -19636,37 +19954,37 @@
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 26
+        "seconds": 5
       },
       "lane 2": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 1
+        "seconds": 0
       },
       "lane 3": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 289
+        "seconds": 147
       },
       "lane 4": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 6
+        "seconds": 53
       },
       "lane 5": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 240
+        "seconds": 148
       },
       "lane 6": {
         "ok": true,
         "failed": false,
         "error": null,
-        "seconds": 55
+        "seconds": 23
       }
     }
   }
