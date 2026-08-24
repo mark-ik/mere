@@ -178,7 +178,11 @@ reading, and selection on a second device. What is still unforced is the clause
 shape: the site carries one selected id with no resolution strategy, so union,
 intersect, and crossfilter have no consumer yet. Treat the serialization
 question as open now and the resolution question as still gated on a genuine
-two-view ask.
+two-view ask. The two-view ask is now scheduled: the
+[projection receipts plan](2026-08-23_projection_receipts_plan.md) FT3 builds
+the sandbox's spatial view and a two-reading Matrix as coordinated views over
+one authority (the direction note's receipt 8). Evidence lands against this
+entry; this entry still rules the gate.
 Validation: brush in view one filters view two; crossfilter resolution
 honored (the brushing view is unfiltered by its own clause); serialized round
 trip is deterministic; clause removal restores the unfiltered reading.
@@ -867,3 +871,16 @@ not settled without it.
   speculative: route ActionRequests when a consumer asks for operable rather
   than readable, per-node rects from the surface plan, and a label for the
   frisket root group that announces as blank.
+- 2026-08-20: **The routed half landed: a screen reader's Enter reaches the
+  app.** Mark asked for it, which is the forcing consumer B1's follow-up was
+  written to wait for. Turnstone e117f27: a route table built beside every
+  pushed tree (ids are one-way path hashes, so routing cannot be parsed back
+  out of the tree), a frozen-projection instance selecting its member in the
+  graph, the omnibar opening, both through the same update spine a keypress
+  uses; unrouted requests land as interaction-missed a11y-action, the pointer
+  miss's exact vocabulary. Eight tests. Linking them exposed two real defects:
+  the livery cutover had shipped a second AccessKit platform stack beside the
+  bridge's (two UIA providers in one process, deduped), and the grown graph
+  crossed the preview MSVC linker's PDB limit. Both fixed and recorded in the
+  turnstone receipt (648bf19). Still manual-pending: Enter on a read node
+  observed selecting on the canvas, with Mark at the machine.
