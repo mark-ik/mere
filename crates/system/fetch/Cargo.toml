@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+publish = true
 description = "Host-neutral fetch actor and session-cookie runtime for Mere."
 
 [lib]
@@ -14,8 +14,8 @@ path = "src/lib.rs"
 [dependencies]
 armillary.workspace = true
 eidetic.workspace = true
-errand = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-netfetcher = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+errand = { version = "0.3.4", git = "https://github.com/merely-made/genet.git", branch = "main" }
+netfetcher = { version = "0.1.1", git = "https://github.com/merely-made/genet.git", branch = "main" }
 pollster = "0.4"
 rustls-pki-types = "1"
 serde = { workspace = true }
@@ -24,7 +24,7 @@ pandect.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
 tracing.workspace = true
 url = "2"
-verso-tile = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+verso-tile = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
 zeroize = "1"
 
 [lints]

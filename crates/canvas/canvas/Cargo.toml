@@ -4,15 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+publish = true
+autobins = false
 rust-version = "1.92.0"
 description = "The mere graph canvas: the graph-truth presentation library (content-root: graph + seiche physics + camera + the abs-pos node-children pool + the scene-paint underlay), composited through the shared genet-winit-host present stack. Was `orrery`; that name retired to the Merely product tier ladder 2026-07-09, and platen's graph-scene lane merged in the same pass."
 
 [features]
 default = []
-# The reusable canvas library is portable. This feature adds only the
-# standalone native winit presenter.
-native-present = ["dep:genet-winit-host", "dep:winit", "dep:wgpu"]
 
 # The reusable canvas content-root (window-agnostic): graph + seiche physics + camera
 # + the abs-pos node-children pool, with `frame(w, h) -> (Scene, needs_redraw)` and
@@ -21,11 +19,6 @@ native-present = ["dep:genet-winit-host", "dep:winit", "dep:wgpu"]
 [lib]
 name = "canvas"
 path = "src/lib.rs"
-
-[[bin]]
-name = "canvas"
-path = "src/main.rs"
-required-features = ["native-present"]
 
 [dependencies]
 kernel.workspace = true
@@ -62,31 +55,22 @@ armillary.workspace = true
 
 # Compose the underlay (+ the node-children document) into one Scene, and
 # present it. Path deps on the sibling netrender checkout, like meerkat's.
-paint_list_render = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
-paint_list_api = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
-netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
+paint_list_render = "=0.1.2"
+paint_list_api = "=0.1.2"
+netrender = "=0.1.2"
 
 # The node-children layer: a retained Livery document over a persistent Genet
 # ScriptedDom (abs-pos node subtrees under the camera-transformed container),
 # painted through Buckram and composited with the underlay.
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-genet-livery = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-layout_dom_api = { package = "layout-dom-api", git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-scripted-dom = "0.1.0"
+genet-livery = "0.0.2"
+layout_dom_api = { version = "0.1.0", package = "layout-dom-api" }
 
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = "1"
 # Constructing seed positions for the seiche simulation (its position type).
 euclid = "0.22"
-
-# The native present stack: the Orrery lib is window-agnostic (frame -> Scene), so
-# the winit window + wgpu present + the shared SurfaceHost are bin-only and gated
-# off wasm. The wasm present path (canvas + WebGPU) is a later step. (P2, 2026-06-06.)
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main", optional = true }
-winit = { workspace = true, optional = true }
-wgpu = { version = "30", default-features = false, features = ["std", "wgsl"], optional = true }
-png = "0.18"
 
 [lints]
 workspace = true

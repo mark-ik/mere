@@ -95,7 +95,6 @@ members = [
     "crates/graphshell/graphshell-local",
     "crates/graphshell/graphshell-network",
     "ports/graphshell",
-    "ports/graphshell/web",
     "ports/knot",
     "ports/djinn",
     "ports/castellan",
@@ -106,6 +105,9 @@ members = [
 ]
 exclude = [
     "crates/probes",
+    # The unpublished browser host carries Git-only Genet presentation deps.
+    # Keep it outside release resolution; it remains buildable by manifest path.
+    "ports/graphshell/web",
     # A private cross-product port: it consumes the neighboring Retinue
     # checkout during the integration phase, so it must not make the Mere
     # workspace's ordinary build acquire a sibling checkout.
@@ -135,24 +137,24 @@ authors = ["Mark AB (markik)"]
 # quint + seiche extracted to sibling repos + published 2026-07-18 (portable,
 # MIT/Apache); crates.io deps, local checkout via the gitignored
 # `.cargo/config.toml` `[patch.crates-io]`. (numen the same, on graph-kernel.)
-quint = { path = "crates/conatus/quint" }
-seiche = { path = "crates/conatus/seiche" }
+quint = { version = "0.0.4", path = "crates/conatus/quint" }
+seiche = { version = "0.0.5", path = "crates/conatus/seiche" }
 conatus = { path = "crates/conatus/conatus" }
-cartography = { package = "mere-cartography", path = "crates/canvas/cartography" }
-linked-data = { package = "mere-linked-data", path = "crates/graph/linked-data" }
-kernel = { package = "mere-kernel", version = "0.0.1", path = "crates/graph/graph-kernel" }
-graphlets = { path = "crates/graph/graphlets" }
+cartography = { package = "mere-cartography", version = "0.0.2", path = "crates/canvas/cartography" }
+linked-data = { package = "mere-linked-data", version = "0.0.1", path = "crates/graph/linked-data" }
+kernel = { package = "mere-kernel", version = "0.0.2", path = "crates/graph/graph-kernel" }
+graphlets = { version = "0.0.1", path = "crates/graph/graphlets" }
 # The graph-canvas content-root (was `orrery`; that name retired to the Merely
 # product tier ladder, 2026-07-09 — see the boundary pass plan amendments).
-canvas = { package = "mere-canvas", path = "crates/canvas/canvas" }
+canvas = { package = "mere-canvas", version = "0.0.1", path = "crates/canvas/canvas" }
 # Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
-glossary = { package = "mere-glossary", path = "crates/graph/glossary" }
+glossary = { package = "mere-glossary", version = "0.0.1", path = "crates/graph/glossary" }
 
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
 # Send actor harness the constellation is built on. Promoted to its standalone
 # repo (code-identical cutover 2026-07-09, boundary pass slice A); git sibling
 # consumed one-way, local checkout via the gitignored `.cargo/config.toml` patch.
-armillary = { path = "crates/armillary" }
+armillary = { version = "0.1.1", path = "crates/armillary" }
 # The scenograph projection-engine family's core contract (scene snapshots,
 # footprints, spaces, measurements) — git sibling consumed one-way, local
 # checkout via the gitignored `.cargo/config.toml` patch. cartography emits
@@ -162,34 +164,34 @@ scenomise = { version = "0.0.4", path = "crates/scenograph/scenomise" }
 scenotime = { version = "0.0.4", path = "crates/scenograph/scenotime" }
 # The remaining families absorbed 2026-07-23. Consumers keep using
 # `<dep>.workspace = true`, so only this block knows where each one lives.
-personae = { version = "0.2.0", path = "crates/dramatis/personae" }
+personae = { version = "0.2.1", path = "crates/dramatis/personae" }
 notochord = { version = "0.1.0", path = "crates/system/notochord" }
 codicil = { version = "0.1.1", path = "crates/eidetic/codicil" }
-chartulary = { version = "0.2.0", path = "crates/eidetic/chartulary" }
+chartulary = { version = "0.2.1", path = "crates/eidetic/chartulary" }
 scholia = { path = "crates/eidetic/scholia" }
 # The legend/memorial view over a codicil log; reservation, no implementation.
 tulpa = { version = "0.0.2", path = "crates/eidetic/tulpa" }
 numen = { version = "0.2.0", path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
-esp = { path = "crates/intel/esp" }
+esp = { version = "0.1.0", path = "crates/intel/esp" }
 mora = "0.1.0"
-mora-cmudict = { path = "crates/intel/mora-cmudict" }
+mora-cmudict = { version = "0.0.1", path = "crates/intel/mora-cmudict" }
 # The projection contract, executed in duplicate (was graphshell-protocol;
 # renamed 2026-08-14 because the contract is the family's, not the portal's).
 chirograph = { version = "0.0.2", path = "crates/chirograph" }
 # The card vocabulary chirograph re-exports and castellan wants without the wire.
-titulus = { version = "0.0.1", path = "crates/titulus" }
-graphshell-client = { path = "crates/graphshell/graphshell-client" }
+titulus = { version = "0.0.2", path = "crates/titulus" }
+graphshell-client = { version = "0.0.2", path = "crates/graphshell/graphshell-client" }
 graphshell-local = { path = "crates/graphshell/graphshell-local" }
-graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
-graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
-graphshell-network = { path = "crates/graphshell/graphshell-network" }
-knot-editor = { version = "0.0.2", path = "ports/knot" }
+graphshell-endpoint = { version = "0.0.2", path = "crates/graphshell/graphshell-endpoint" }
+graphshell-stdio = { version = "0.0.2", path = "crates/graphshell/graphshell-stdio" }
+graphshell-network = { version = "0.0.1", path = "crates/graphshell/graphshell-network" }
+knot-editor = { version = "0.0.3", path = "ports/knot" }
 # The credential-keeper port (dramatis plan D4). No longer a reservation:
 # C1/C2 landed the OTP core, sealed OTP items, the release gate, and the
 # `keeper` identity surface graphshell re-exports.
-castellan = { version = "0.0.2", path = "ports/castellan" }
+castellan = { version = "0.0.3", path = "ports/castellan" }
 # The model-works port; first real consumer of the mesh host supervisor.
 distillery = { version = "0.0.1", path = "ports/distillery" }
 # The places port: one port, two surfaces (murmur = conversation, moot =
@@ -207,15 +209,15 @@ base64 = "0.22"
 blake3 = "1"
 mere = { path = "crates/mere" }
 
-fetch = { package = "mere-fetch", path = "crates/system/fetch" }
+fetch = { package = "mere-fetch", version = "0.0.1", path = "crates/system/fetch" }
 content-contract = { path = "crates/system/content-contract" }
 proofs = { package = "mere-proofs", version = "0.1.0", path = "crates/system/proofs" }
 shell-state = { path = "crates/system/shell-state" }
 incipit = { version = "0.2.0", path = "crates/incipit" }
 chrome = { package = "mere-chrome", path = "crates/shell/chrome" }
 comms = { package = "mere-comms", path = "crates/shell/comms" }
-pandect = { version = "0.1.0", path = "crates/system/pandect" }
-mere-resident = { path = "crates/system/resident" }
+pandect = { version = "0.1.1", path = "crates/system/pandect" }
+mere-resident = { version = "0.0.1", path = "crates/system/resident" }
 # Self-update over signed manifests (the cargo-packager-updater fork; ruled
 # 2026-07-24: name luggage, home mere). Apps consume it via git dep like the
 # rest of the family; mere itself will when its own packaging lands.
@@ -233,8 +235,8 @@ document-canvas = { git = "https://github.com/merely-made/genet.git", branch = "
 nematic = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 fleece = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 knot-editor-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-illume = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+illume = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", branch = "main" }
+cambium = { version = "0.3.3", git = "https://github.com/merely-made/genet.git", branch = "main" }
 scrying-engine = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 graft-engine = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 weld-engine = { git = "https://github.com/merely-made/genet.git", branch = "main" }
@@ -243,16 +245,16 @@ weld-engine = { git = "https://github.com/merely-made/genet.git", branch = "main
 # (an HTML template engine). The `package =` alias keeps every `use forme::...`
 # in the tree working, so this rename is one line, not a sweep.
 forme = { package = "mere-forme", version = "0.1.0", path = "crates/forme/forme" }
-uxtree = { path = "crates/forme/uxtree" }
+uxtree = { version = "0.0.2", path = "crates/forme/uxtree" }
 
-platen = { path = "crates/platen/platen" }
-apparatus = { package = "mere-apparatus", path = "crates/domain/apparatus" }
-gloss = { package = "mere-gloss", path = "crates/domain/gloss" }
-roster = { package = "mere-roster", path = "crates/domain/roster" }
-trail = { package = "mere-trail", path = "crates/domain/trail" }
-workbench = { path = "crates/platen/domain/workbench" }
+platen = { version = "0.0.1", path = "crates/platen/platen" }
+apparatus = { package = "mere-apparatus", version = "0.0.1", path = "crates/domain/apparatus" }
+gloss = { package = "mere-gloss", version = "0.0.1", path = "crates/domain/gloss" }
+roster = { package = "mere-roster", version = "0.0.1", path = "crates/domain/roster" }
+trail = { package = "mere-trail", version = "0.0.1", path = "crates/domain/trail" }
+workbench = { version = "0.0.1", path = "crates/platen/domain/workbench" }
 
-eidetic = { package = "mere-eidetic", version = "0.0.1", path = "crates/eidetic/eidetic-core", default-features = false }
+eidetic = { package = "mere-eidetic", version = "0.0.2", path = "crates/eidetic/eidetic-core", default-features = false }
 eidetic-fjall = { package = "mere-eidetic-fjall", path = "crates/eidetic/eidetic-fjall" }
 eidetic-https-fetcher = { package = "mere-eidetic-https-fetcher", path = "crates/eidetic/eidetic-https-fetcher" }
 eidetic-iroh-fetcher = { package = "mere-eidetic-iroh-fetcher", path = "crates/eidetic/eidetic-iroh-fetcher" }
@@ -265,8 +267,8 @@ eidetic-search = { package = "mere-eidetic-search", path = "crates/eidetic/eidet
 import = { path = "crates/import" }
 crawl = { package = "mere-crawl", path = "crates/crawl" }
 
-signals = { package = "mere-signals", path = "crates/intel/signals" }
-capability = { package = "mere-capability", path = "crates/capability" }
+signals = { package = "mere-signals", version = "0.0.2", path = "crates/intel/signals" }
+capability = { package = "mere-capability", version = "0.0.1", path = "crates/capability" }
 
 # Standalone spec-B misfin implementation (promoted out of this workspace
 # 2026-07-03). It moved into the smolweb workspace in the 2026-07-23
@@ -280,11 +282,11 @@ misfin = { version = "0.0.4", features = ["ring"] }
 # supercrate 2026-07-26 (it was `murm-replication`, but Murm, Mesh, Moot, and
 # transport all consume it). Domains keep their own operation grammar,
 # addressing, authorization, and materialization.
-stickleback = { version = "0.1.0", path = "crates/stickleback" }
+stickleback = { version = "0.1.1", path = "crates/stickleback" }
 murm = { path = "crates/murm/murm" }
-transport = { package = "mere-transport", path = "crates/murm/transport" }
+transport = { package = "mere-transport", version = "0.0.2", path = "crates/murm/transport" }
 
-gemot = { version = "0.1.0", path = "crates/moot/gemot" }
+gemot = { version = "0.1.1", path = "crates/moot/gemot" }
 commons-spine = { path = "crates/moot/commons" }
 moothold = { version = "0.1.0", path = "crates/moot/moothold" }
 mooting = { version = "0.1.0", path = "crates/moot/mooting" }
@@ -300,13 +302,13 @@ mesh-host = { package = "mere-mesh-host", path = "crates/mesh/host" }
 # The same crate as `personae` above, under mere's historical alias. Both
 # entries must carry the SAME version: they resolve to one package, and a
 # stale pin here is invisible from the personae line.
-identity = { package = "personae", version = "0.2.0", path = "crates/dramatis/personae" }
+identity = { package = "personae", version = "0.2.1", path = "crates/dramatis/personae" }
 # The denizen authority gate (participant gate B1/B3): document-host derives
 # its import-level Grant from a servitor authority — one grant, two faces.
-servitor = { path = "crates/servitor" }
+servitor = { version = "0.0.2", path = "crates/servitor" }
 # Path + version: the path is used for local workspace builds, the version lets
 # a publishable dependent (stickleback) record the crates.io dependency.
-muniment = { version = "0.1.1", path = "crates/eidetic/muniment" }
+muniment = { version = "0.1.2", path = "crates/eidetic/muniment" }
 # The directory port. Promoted from `crates/dramatis/` to `ports/` 2026-08-23
 # (suite census 7.3): the three senses of the word were always the roadmap —
 # an index, being gazetted, and the paper you read — so the resolver grows
@@ -329,7 +331,7 @@ persona-picker = { package = "mere-persona-picker", path = "crates/dramatis/pers
 
 # Rhai backend for the knot block-evaluator lane (the thin BlockEvaluator
 # slice, distinct from genet's full ScriptEngine seam). Pure Rust, sandboxed.
-script-rhai = { path = "crates/script/rhai" }
+script-rhai = { version = "0.0.1", path = "crates/script/rhai" }
 
 # ─── External pins ───────────────────────────────────────────────────────────
 # Linebender visual stack — one row, one wgpu. Vello is NOT upstream-current
@@ -372,7 +374,7 @@ tincture = { package = "tinct", version = "=0.1.2" }
 # could not parse ratcheted announces from real RNS). Since the 2026-07-23 radio
 # merge the repo is one workspace (retinue, tulle, sennet, tucket, firmware), so
 # this is a branch pin rather than a relative path.
-retinue = { git = "https://github.com/merely-made/retinue.git", branch = "main" }
+retinue = { version = "0.1.1", git = "https://github.com/merely-made/retinue.git", branch = "main" }
 
 # Reticulum identity derivation: HKDF-SHA256 stretches Mere's 32-byte master seed
 # into retinue's 64-byte dual-key private identity. retinue owns the X25519/RNG
