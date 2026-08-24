@@ -3,10 +3,14 @@
 **Date**: 2026-08-24
 **Status**: **complete 2026-08-24 — A, B and C all landed.** Decisions taken by
 Mark 2026-08-24 (four questions, recorded in §Decisions). Phases A and B are
-mere-local; phase C touched smolweb and genet. Nothing is committed — mere,
-genet, mesocosm and woodshed all carry other sessions' live work, so the trees
-are left dirty for Mark to sweep. One follow-on lane is recorded and **not**
-scheduled: genet's `docs/` migration (§Finding).
+mere-local; phase C touched smolweb and genet.
+
+**Committed 2026-08-24** in twelve repos: mere (swept by a concurrent session
+in `db9c613c`), smolweb, mesocosm, woodshed, and the eight policy-only repos.
+**Not committed**: genet and turquet, where sessions were actively writing at
+the time — genet's `design_docs/` is therefore still untracked, which is a live
+risk recorded below. Two follow-on lanes are recorded and **not** scheduled:
+genet's `docs/` migration, and the pre-existing broken links (§Findings).
 
 **Scope**: Three separable pieces, in dependency order.
 
@@ -143,9 +147,10 @@ are out of scope until they grow one.
   crate reservations) becomes an addendum below the core, not a deletion.
 - **A3**. Add a policy to the seven repos that have docs but none.
 
-**Done when**: all thirteen `DOC_POLICY.md` files share a byte-identical core
-section, each carries a provenance stamp, and `diff` between any two shows only
-addendum content.
+**Done when**: every `DOC_POLICY.md` in the workspace shares a byte-identical
+core section, each carries a provenance stamp, and `diff` between any two shows
+only addendum content. **Met**: fifteen files, core `54f3a6ed…` in all of them,
+the `## Local addendum` boundary at line 124 in every one.
 
 ### B. Facade collapse (mere-local)
 
@@ -190,11 +195,11 @@ left to be discovered. **All met 2026-08-24.**
   found during verification, not predicted.
 
 - **2026-08-24 (A landed)**: Canonical core v1 written as a union of both
-  lineages plus mere's principles — ten sections. Distributed to **fourteen**
+  lineages plus mere's principles — ten sections. Distributed to **fifteen**
   repositories: the six that had a policy, the seven that had docs but none,
-  and smolweb (founded in C1). Verified byte-identical: `sha256` of the core
-  region is `54f3a6ed…` in all fourteen, and `diff` between any two shows only
-  addendum text.
+  and the two founded during phase C, smolweb and genet. Verified
+  byte-identical: `sha256` of the core region is `54f3a6ed…` in all fifteen,
+  and `diff` between any two shows only addendum text.
 
   One correction made during the pass, worth keeping because the ambiguity
   caused a real error: the old policies never said **where**
@@ -262,11 +267,19 @@ Merging them is the obvious end state and was **deliberately not attempted**:
 each needing repair under core §5 — and thirteen files inside `docs/` are
 currently dirty from another session. Doing it badly is worse than the split.
 
-### Finding: 364 broken link targets already in mere's doc tree
+### Finding: 485 broken link targets already in mere's doc tree
 
 Surfaced by the link checker written for B2, and **not caused by this work** —
-each was verified present in `HEAD` before any move. Unique broken targets
-across `mere/design_docs/`:
+each was verified present in `HEAD` before any move.
+
+**Corrected upward 2026-08-24 by an independent audit.** This section first
+reported 364, measured over a narrower file set than it claimed. The real
+figure across all 386 markdown files under `mere/design_docs/` is **485
+distinct broken targets across 806 occurrences**, out of 2809 local targets —
+431 occurrences in `archive_docs/`, 345 in `mere_docs/`. The correction does
+not change the conclusion, but the original number was quoted as if it covered
+the whole tree and it did not. The breakdown below is from the original,
+narrower pass and is indicative rather than complete:
 
 | Cause | Count |
 |---|---|
@@ -282,3 +295,40 @@ the graphshell and meerkat entries are what §5's rot warning describes. This is
 a real cleanup lane and it is **not scheduled here** — it is recorded so the
 next person does not rediscover it. Much of it sits in `archive_docs/`, where
 rot is arguably acceptable, so any sweep should scope active docs first.
+
+### Finding: an independent audit found four defects this pass missed
+
+Run 2026-08-24 after A, B and C had landed. Worth recording both what it found
+and why the original checks did not.
+
+**The cross-repo citations were invisible to the link checker.** Core §5 says
+cross-repo references are path citations rather than links, so the rewrite pass
+turned them into inline code spans. A code span is not a markdown link, so the
+`](path)` checker that verified every tree could not see them — it reported
+clean while five citations pointed at nothing. Four of those named the exact
+`mere/design_docs/nematic_docs/` paths that phase C then deleted: C2 wrote them
+before C3 moved those documents to genet, and this side was never re-swept.
+Fixed in smolweb; one remains in genet, which is an active tree.
+
+**The committed index contradicted itself.** `DOC_README.md` carried both
+"C3 open … genet has no `design_docs/` to receive them" and "moved to genet
+2026-08-24 … all eight now live in `genet/design_docs/`". The first was written
+before the decision and never revised after executing it.
+
+**Two counts were wrong**: fourteen repos where there are fifteen, and the
+broken-link figure above.
+
+**A rule worth keeping:** a checker that reports zero is only evidence if it
+would have reported non-zero. The audit found its own first checker silently
+dead — a heredoc had mangled its character classes — and thereafter gated every
+negative behind planted defects it had to catch first. The link checker this
+plan relied on had a real blind spot and reported clean anyway.
+
+### Open risk: genet's design_docs is untracked while mere's deletion is committed
+
+`db9c613c` permanently removed the eight documents from mere. Their only copy
+now lives in genet's **working tree**, untracked — `git clean` there would
+destroy them, recoverable only from `db9c613c^`. smolweb was in the same state
+and is now committed; genet is not, because a session is actively working in
+that tree and its `design_docs/` also holds that session's in-flight fleece
+work. Committing it is theirs to do, not ours. Flagged rather than fixed.
