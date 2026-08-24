@@ -306,3 +306,21 @@ specific. The extraction rule is split (ruled 2026-08-23):
 This reconciles the plan with the wing's two-consumer law (mesocosm
 `CLAUDE.md`): no deliberate duplication of machinery, and no cross-product
 contract declared in advance.
+
+## Progress (2026-08-23 product adoption pass)
+
+- Conatus's corrected spatial-runtime foundation and first voxel mechanics
+  landed at Mere commit `5767563c` with 24 tests and warnings-denied Clippy.
+- Mesocosm became the first tracked mechanics consumer locally at `b112931`:
+  `Ground` remains authoritative while a product adapter uses `VoxelChunk`
+  patch and occupancy machinery, with replay, refusal, snapshot-silence, and
+  unchanged-source receipts. Its divergent main and concurrent dirty lane keep
+  remote integration open.
+- Isometry's first profile landed product-side at `303e347` in
+  `isometry-runtime`: accepted map events drive an event-cadenced, zero-step
+  Conatus projection with map-qualified source bindings. Host wiring remains
+  gated by Isometry's active protocol work and Genet host migration.
+- The cross-product ownership and receipt queue now lives in the
+  [runtime composition acceptance plan](2026-08-23_runtime_composition_acceptance_plan.md).
+  No conductor, source-binding, spatial-frame, trigger, or resident-lease
+  contract was promoted in this pass.
