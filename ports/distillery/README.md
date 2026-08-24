@@ -67,10 +67,18 @@ cooperative token-boundary cancellation, explicit `GPUDevice.destroy()`, and
 exact recovery in a fresh worker. The upper model boundaries and physical GPU
 allocation release remain unmeasured.
 
+The lease-bound Burn Remote adapter is now live behind Distillery's `remote`
+feature. It mounts on the resident p2panda/Iroh endpoint, admits only a signed
+claim projected from the host's exact active mesh lease, and closes every
+matching session before owner reclaim is authored. The native MiniLM forcing
+fixture under `probe/remote-fixture` exercises ESP over that adapter on WGPU;
+the checked-in receipt records the numerical, cancellation, and fresh-session
+recovery boundaries.
+
 There is not yet an installed standalone binary because Distillery still needs
 a product-level choice of Personae profile and persisted settings authority.
-Cambium views, Burn resource migration, the Burn Remote adapter, model manifest
-browsing, and training remain later slices.
+Cambium views, model manifest browsing, physical GPU-allocation telemetry, and
+training remain later slices.
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/distillery`.

@@ -36,6 +36,24 @@ and stream messages observed by the page. Generated wasm and model artifacts
 stay out of Git; selected dated decision receipts are checked in when
 they substantiate a boundary.
 
+The native remote fixture is a separate two-peer forcing proof for the same
+MiniLM row. It mounts Distillery's production Burn protocol on one real
+p2panda/Iroh endpoint, connects from a second, loads ESP's BERT model onto an
+authorized remote device, and runs the server on native WGPU:
+
+```powershell
+ports/distillery/probe/run-remote-minilm.ps1
+```
+
+The fixture compares all 384 remote values with ESP's native control and the
+first eight with this probe's pinned BrowserWebGpu reference. It then reclaims
+the lease while a configurable model batch is still in flight, requires the
+request to fail without hanging, and repeats the numerical proof under a fresh
+lease and session. Like `run-probe.ps1`, its nested workspace cannot use
+Cargo's `--locked` flag because inherited path-workspace patch tables reorder
+unused entries. The checked-in lockfile still pins the selected graph, and the
+fixture explicitly patches to Mere's production Burn Remote and CubeCL sources.
+
 ## Claim boundary
 
 The 2026-08-22 D2c embedding matrix passes all four configured rows in a clean
@@ -96,6 +114,6 @@ messages in the 300 ms quiet window, and exactly reproduces all eight tokens in
 a fresh worker.
 
 This completes D2c's configured embedding phase and establishes one decoder
-Physical GPU-memory release remains unobservable because the browser exposes no
-allocation telemetry; host-controlled device teardown is proven. A product
-default remains open. Trainers remain outside this ceiling probe.
+ceiling. Physical GPU-memory release remains unobservable because the browser
+exposes no allocation telemetry; host-controlled device teardown is proven. A
+product default remains open. Trainers remain outside this ceiling probe.

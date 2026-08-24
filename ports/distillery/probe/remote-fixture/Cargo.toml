@@ -1,0 +1,28 @@
+[package]
+name = "distillery-remote-minilm-fixture"
+version = "0.0.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Two-peer native WGPU receipt for Distillery's lease-bound Burn Remote lane."
+
+[workspace]
+
+[dependencies]
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["remote", "std"] }
+burn-wgpu = { version = "=0.22.0-pre.2", default-features = false, features = ["std", "fusion", "autotune"] }
+distillery = { path = "../..", features = ["remote"] }
+esp = { path = "../../../../crates/intel/esp", features = ["bert"] }
+identity = { package = "personae", path = "../../../../crates/dramatis/personae" }
+mesh = { package = "mere-mesh", path = "../../../../crates/mesh/mesh" }
+mesh-host = { package = "mere-mesh-host", path = "../../../../crates/mesh/host" }
+muniment = { path = "../../../../crates/eidetic/muniment" }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+transport = { package = "mere-transport", path = "../../../../crates/murm/transport" }
+
+[patch.crates-io]
+burn-cubecl = { path = "../../../../support/patches/burn-cubecl" }
+burn-remote = { path = "../../../../support/patches/burn-remote" }
+cubecl-runtime = { path = "../../../../support/patches/cubecl-runtime" }
+cubek-reduce = { path = "../../../../support/patches/cubek-reduce" }
