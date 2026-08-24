@@ -141,8 +141,18 @@ not `chrome`), and strays from an aborted run slowed a later fault sweep ~5×.
 Before a benchmarking run:
 
 ```powershell
-Get-Process chrome-headless-shell,firefox,node -ErrorAction SilentlyContinue | Stop-Process -Force
+# Playwright's browsers ONLY — filter by path. Playwright's Firefox and your
+# own share the process name `firefox`, so a name-only kill closes your
+# browser too. (Learned the hard way: an earlier version of this command was
+# `Get-Process chrome-headless-shell,firefox,node | Stop-Process -Force`,
+# which cannot tell the two apart and would also kill unrelated `node`.)
+Get-Process chrome-headless-shell,firefox -ErrorAction SilentlyContinue |
+  Where-Object { $_.Path -like '*ms-playwright*' } |
+  Stop-Process -Force
 ```
+
+To check what that would reap before running it, swap `Stop-Process -Force`
+for `Select-Object Id,Path`.
 
 Reaping strays is necessary but not sufficient on a daily-driver machine:
 ordinary desktop applications alone can move lane timings several-fold.
