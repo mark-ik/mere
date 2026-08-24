@@ -7,8 +7,10 @@
 //! manifests and the library API for saving, loading, and resolving
 //! model components (config, weights, tokenizer) from an eidetic store.
 
+pub mod adapter;
 pub mod library;
 
+pub use adapter::{AdapterRuntimeCompat, MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest};
 pub use library::{ModelComponents, ModelLibrary, ResolvedModel};
 use serde::{Deserialize, Serialize};
 

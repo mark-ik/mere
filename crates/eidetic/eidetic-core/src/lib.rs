@@ -81,7 +81,10 @@ pub use bundle::{
 pub use deleted::{DeletedNode, clear_deleted, list_deleted, purge_deleted, record_deleted};
 pub use engram::{Engram, TimeBounds};
 pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher, delete_manifest};
-pub use models::{ModelComponents, ModelLibrary, ModelManifest};
+pub use models::{
+    AdapterRuntimeCompat, MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest, ModelComponents,
+    ModelLibrary, ModelManifest,
+};
 pub use schema::{
     Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
     SignatureRef, Timestamp, TrustEnvelope, TrustLevel,
