@@ -1,0 +1,11 @@
+Carries, unmentioned in the subject: three in-place corrections to design_docs/mere_docs/research/2026-08-10_credential_port_gazette_brief.md, plus a correction banner at its head.
+
+The standards inventory in that brief had gone stale in three rows:
+  - ssh-agent protocol standardised as RFC 9987 (Standards Track, May 2026,
+    IETF SSHM WG), superseding the expired draft-miller-ssh-agent.
+  - CXF v1.0 reached FIDO Proposed Standard (approved Aug 2025, errata
+    2026-03-09); the row had called it 'drafts public'.
+  - Linux gained an emerging third-party passkey provider seam (credentialsd
+    plus a proposed XDG credential portal); the row said none existed.
+
+Superseding survey: design_docs/2026-08-24_standards_survey_brief.md
