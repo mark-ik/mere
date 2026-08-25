@@ -3,7 +3,9 @@
 **Date:** 2026-08-24
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
-host receipt implemented and independently green; Turnstone T0 open
+host receipt implemented and independently green; Turnstone T0 consumer core
+landed, with invocation, read-only, generic accessibility, and the full shell
+build receipt still open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -357,6 +359,14 @@ hit testing, scene conversion, scroll, focus, accessibility hosting, and
 eviction around the boxed session. Mount `knot.document.v1` without a new
 `PaneRenderer` arm or a concrete Knot map.
 
+**Progress:** Turnstone `1e9dde1` lands registration, versioned source
+admission, the erased retained-session map, render and pointer/key/IME routing,
+focus, hover, scroll, repin replacement, and eviction. It mounts the published
+Knot session and converts typed product unavailability into a generic retained
+surface. A user-facing command or file chooser still needs to mint the source;
+the shared Knot model still needs an explicit read-only posture; and the
+generic DOM is not yet joined to Turnstone's AccessKit projection.
+
 Reuse A6 for commands and A7's `SettingsProvider` direction. Do not add command
 or settings arrays to the surface descriptor. Preserve all existing Knot
 authority and protocol receipts while changing only composition.
@@ -480,6 +490,15 @@ through UI admission.
   Mere commit `fb82d12f` published the package through `origin/main` merge
   `80c2f17c`. Turnstone may now import the narrow package without acquiring the
   broad Knot port graph.
+- 2026-08-25: Turnstone `1e9dde1` published the provider-neutral T0 consumer
+  core without adding a `PaneRenderer` arm or concrete Knot session map. An
+  isolated current-Genet harness compiled the exact provider and Knot adapter
+  sources and passed eight admission, unavailability, erasure, retention,
+  repin, and real-Djot tests; strict locked metadata also accepts the direct
+  package dependency. The broad Turnstone workspace resolver did not reach
+  `rustc`, so this is not a full-shell green receipt. Invocation, read-only,
+  generic AccessKit projection, and that full-shell build remain explicit T0
+  gates.
 
 ## 8. Final done conditions
 
