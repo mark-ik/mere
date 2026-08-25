@@ -385,16 +385,106 @@ impl Canvas {
             .expect("canvas Livery/Buckram node frame");
 
         // Favicon layer: a textured quad over each on-screen tile that carries a
-        // favicon. This layer is NOT under the `.stage` camera transform (it is a
-        // bare command list, not the genet DOM), so the camera is applied here by
-        // projecting each corner through `Camera::to_screen` (at the default camera
-        // that is `world * zoom + offset`). The favicon's `favicon_rgba` is already
-        // the `ImageResource` shape (RGBA8, straight alpha), so the host's existing
-        // rasterize uploads it with no GPU plumbing in the canvas. It draws above the
-        // colored tile square and below the marquee. (Favicon-on-tile.)
+        // favicon, above the colored tile square and below the marquee.
+        // (Favicon-on-tile.)
+        let (favicon_cmds, favicon_images) = self.favicon_layer(&on_screen, &positions);
+
+        // P3 fake height: a stem from each raised node's ground anchor up to its
+        // floating gnode. (Isometric camera P3.)
+        let stem_cmds = self.height_stem_cmds(&on_screen, &positions);
+
+        // A screen-space layer for the marquee rubber-band, when active.
+        let marquee_cmds = self
+            .marquee
+            .map(|origin| marquee_rect_cmds(origin, self.cursor));
+        // The canvas's own opaque backdrop is the bottom layer (so the surface is
+        // dark without depending on the host clear color); then the living-backdrop
+        // scene orbs, then the underlay edges + demoted rects, then the on-screen node
+        // DOM, then any marquee on top.
+        let bg_cmds = background_cmds(w, h, self.backdrop);
+        // Ambient backdrop: the sim painted as the bottom layer (above the bg fill, below the scene),
+        // in its tincture, stretched across the viewport. The sim owns its look (GoL = run-merged
+        // cell rects; a continuous sim = dots). (Physics scenes P5.)
+        let ambient_cmds: Vec<PaintCmd> = self
+            .ambient
+            .as_ref()
+            .map(|sim| sim.paint(w as f32, h as f32, self.ambient_tincture))
+            .unwrap_or_default();
+        // Living backdrop: the scene bodies as soft orbs / polygons, plus the
+        // textured sprite props in their own layer above them. (Physics scenes
+        // P1, P4b; scene-prop sprites.)
+        let (scene_cmds, scene_sprite_cmds, scene_sprite_images) = self.scene_body_layers();
+
+        // Liquid pool: the PBF particles as soft watery orbs, above the backdrop
+        // scene and below the graph. (Physics scenes P4c.)
+        let fluid_cmds = self.fluid_cmds();
+
+        let mut layers = vec![CompositeLayer::commands_only(&bg_cmds)];
+        if !ambient_cmds.is_empty() {
+            layers.push(CompositeLayer::commands_only(&ambient_cmds));
+        }
+        if !scene_cmds.is_empty() {
+            layers.push(CompositeLayer::commands_only(&scene_cmds));
+        }
+        if !scene_sprite_cmds.is_empty() {
+            layers.push(CompositeLayer {
+                commands: &scene_sprite_cmds,
+                fonts: &[],
+                images: &scene_sprite_images,
+            });
+        }
+        if !fluid_cmds.is_empty() {
+            layers.push(CompositeLayer::commands_only(&fluid_cmds));
+        }
+        layers.push(CompositeLayer::commands_only(underlay.commands()));
+        // The on-screen gnode + favicon layers, unless the host renders these gnodes as
+        // chrome DOM elements instead (canvas-as-element); then only edges + demoted
+        // dots remain as the underlay. (Canvas-as-element — Phase 2.)
+        if !self.render_gnodes_as_dom {
+            // Height stems under the gnodes (P3): the floating gnode paints over its stem.
+            if !stem_cmds.is_empty() {
+                layers.push(CompositeLayer::commands_only(&stem_cmds));
+            }
+            layers.push(CompositeLayer {
+                commands: nodes_plist.commands(),
+                fonts: nodes_plist.fonts(),
+                images: nodes_plist.images(),
+            });
+            if !favicon_cmds.is_empty() {
+                layers.push(CompositeLayer {
+                    commands: &favicon_cmds,
+                    fonts: &[],
+                    images: &favicon_images,
+                });
+            }
+        }
+        if let Some(cmds) = marquee_cmds.as_ref() {
+            layers.push(CompositeLayer::commands_only(cmds));
+        }
+        let scene = composite_paint_layers(viewport, &layers).scene;
+
+        let needs_redraw = settling || gliding || dragging || self.ambient.is_some();
+        (scene, needs_redraw)
+    }
+
+    /// The favicon layer: a textured quad over each on-screen tile that carries
+    /// a favicon, with the image resources it needs.
+    ///
+    /// This layer is NOT under the `.stage` camera transform (it is a bare
+    /// command list, not the genet DOM), so the camera is applied here by
+    /// projecting through `Camera::to_screen` (at the default camera that is
+    /// `world * zoom + offset`). The favicon's RGBA is already the
+    /// `ImageResource` shape (RGBA8, straight alpha), so the host's existing
+    /// rasterize uploads it with no GPU plumbing in the canvas.
+    /// (Favicon-on-tile.)
+    fn favicon_layer(
+        &mut self,
+        on_screen: &HashSet<NodeKey>,
+        positions: &HashMap<NodeKey, PortablePoint>,
+    ) -> (Vec<PaintCmd>, Vec<ImageResource>) {
         let mut favicon_cmds: Vec<PaintCmd> = Vec::new();
         let mut favicon_images: Vec<ImageResource> = Vec::new();
-        for &key in &on_screen {
+        for &key in on_screen {
             let Some(pos) = positions.get(&key) else {
                 continue;
             };
@@ -406,8 +496,15 @@ impl Canvas {
             let Some(favicon) = node.favicon().copied() else {
                 continue;
             };
-            let Some((rgba, fav_w, fav_h)) = self.resolved_images.get(&favicon.digest) else {
+            // Bump the LRU clock, then *borrow* the pixels: the degenerate
+            // entries are rejected before anything is copied, so a frame pays
+            // one buffer copy per painted favicon rather than one per resident
+            // favicon.
+            if !self.resolved_images.touch(&favicon.digest) {
                 self.request_image(favicon);
+                continue;
+            }
+            let Some((rgba, fav_w, fav_h)) = self.resolved_images.peek(&favicon.digest) else {
                 continue;
             };
             if rgba.is_empty() || fav_w == 0 || fav_h == 0 {
@@ -418,7 +515,7 @@ impl Canvas {
                 key: img_key,
                 width: fav_w,
                 height: fav_h,
-                data: rgba,
+                data: rgba.to_vec(),
             });
             // Billboard the favicon too: an upright screen-space square centered on the
             // node's projected anchor (not two projected corners, which would foreshorten
@@ -447,13 +544,20 @@ impl Canvas {
                 },
             }));
         }
+        (favicon_cmds, favicon_images)
+    }
 
-        // P3 fake height: a stem from each raised node's ground anchor up to its floating
-        // gnode, so the gnode reads as standing above its ground spot (where its edges meet).
-        // Composited before the gnode layer, so stems sit under the gnodes. Zero-height nodes
-        // contribute nothing, so this is empty until height-by-degree is on. (Isometric camera P3.)
+    /// P3 fake height: a stem from each raised node's ground anchor up to its floating
+    /// gnode, so the gnode reads as standing above its ground spot (where its edges meet).
+    /// Composited before the gnode layer, so stems sit under the gnodes. Zero-height nodes
+    /// contribute nothing, so this is empty until height-by-degree is on. (Isometric camera P3.)
+    fn height_stem_cmds(
+        &self,
+        on_screen: &HashSet<NodeKey>,
+        positions: &HashMap<NodeKey, PortablePoint>,
+    ) -> Vec<PaintCmd> {
         let mut stem_cmds: Vec<PaintCmd> = Vec::new();
-        for &key in &on_screen {
+        for &key in on_screen {
             let Some(pos) = positions.get(&key) else {
                 continue;
             };
@@ -475,31 +579,17 @@ impl Canvas {
                 },
             }));
         }
+        stem_cmds
+    }
 
-        // A screen-space layer for the marquee rubber-band, when active.
-        let marquee_cmds = self
-            .marquee
-            .map(|origin| marquee_rect_cmds(origin, self.cursor));
-        // The canvas's own opaque backdrop is the bottom layer (so the surface is
-        // dark without depending on the host clear color); then the living-backdrop
-        // scene orbs, then the underlay edges + demoted rects, then the on-screen node
-        // DOM, then any marquee on top.
-        let bg_cmds = background_cmds(w, h, self.backdrop);
-        // Ambient backdrop: the sim painted as the bottom layer (above the bg fill, below the scene),
-        // in its tincture, stretched across the viewport. The sim owns its look (GoL = run-merged
-        // cell rects; a continuous sim = dots). (Physics scenes P5.)
-        let ambient_cmds: Vec<PaintCmd> = self
-            .ambient
-            .as_ref()
-            .map(|sim| sim.paint(w as f32, h as f32, self.ambient_tincture))
-            .unwrap_or_default();
-        // Living backdrop: drifting scene-decoration bodies as soft orbs behind the graph
-        // (under the edges), projected through the camera so they recline with the iso
-        // ground. (Physics scenes P1.)
+    /// The living backdrop, as `(abstract commands, sprite commands, sprite
+    /// images)`: drifting scene-decoration bodies as soft orbs behind the graph
+    /// (under the edges), projected through the camera so they recline with the
+    /// iso ground. Textured props (an opt-in sprite handle that resolves in the
+    /// registry) billboard a quad in their own layer above the abstract scene;
+    /// the orb / polygon paints the rest. (Physics scenes P1; scene-prop sprites.)
+    fn scene_body_layers(&self) -> (Vec<PaintCmd>, Vec<PaintCmd>, Vec<ImageResource>) {
         let mut scene_cmds: Vec<PaintCmd> = Vec::new();
-        // Textured scene props (an opt-in sprite handle that resolves in the registry) billboard a
-        // quad in their own layer above the abstract scene; the orb / polygon paints the rest.
-        // (Scene-prop sprites.)
         let mut scene_sprite_cmds: Vec<PaintCmd> = Vec::new();
         let mut scene_sprite_images: Vec<ImageResource> = Vec::new();
         for body in self.view.scene_bodies() {
@@ -656,11 +746,14 @@ impl Canvas {
                 }
             }
         }
+        (scene_cmds, scene_sprite_cmds, scene_sprite_images)
+    }
 
-        // Liquid pool: each PBF particle a soft watery orb; overlapping soft-alpha gradients read as
-        // a connected blob (a true iso-surface threshold is later polish). Painted above the backdrop
-        // scene, below the graph, and projected through the camera so it reclines with the iso ground.
-        // (Physics scenes P4c.)
+    /// Liquid pool: each PBF particle a soft watery orb; overlapping soft-alpha gradients read as
+    /// a connected blob (a true iso-surface threshold is later polish). Painted above the backdrop
+    /// scene, below the graph, and projected through the camera so it reclines with the iso ground.
+    /// (Physics scenes P4c.)
+    fn fluid_cmds(&self) -> Vec<PaintCmd> {
         let mut fluid_cmds: Vec<PaintCmd> = Vec::new();
         let fr = self.view.fluid_radius();
         for p in self.view.fluid_particles() {
@@ -691,53 +784,7 @@ impl Canvas {
                 tile_spacing: LayoutSize::zero(),
             }));
         }
-
-        let mut layers = vec![CompositeLayer::commands_only(&bg_cmds)];
-        if !ambient_cmds.is_empty() {
-            layers.push(CompositeLayer::commands_only(&ambient_cmds));
-        }
-        if !scene_cmds.is_empty() {
-            layers.push(CompositeLayer::commands_only(&scene_cmds));
-        }
-        if !scene_sprite_cmds.is_empty() {
-            layers.push(CompositeLayer {
-                commands: &scene_sprite_cmds,
-                fonts: &[],
-                images: &scene_sprite_images,
-            });
-        }
-        if !fluid_cmds.is_empty() {
-            layers.push(CompositeLayer::commands_only(&fluid_cmds));
-        }
-        layers.push(CompositeLayer::commands_only(underlay.commands()));
-        // The on-screen gnode + favicon layers, unless the host renders these gnodes as
-        // chrome DOM elements instead (canvas-as-element); then only edges + demoted
-        // dots remain as the underlay. (Canvas-as-element — Phase 2.)
-        if !self.render_gnodes_as_dom {
-            // Height stems under the gnodes (P3): the floating gnode paints over its stem.
-            if !stem_cmds.is_empty() {
-                layers.push(CompositeLayer::commands_only(&stem_cmds));
-            }
-            layers.push(CompositeLayer {
-                commands: nodes_plist.commands(),
-                fonts: nodes_plist.fonts(),
-                images: nodes_plist.images(),
-            });
-            if !favicon_cmds.is_empty() {
-                layers.push(CompositeLayer {
-                    commands: &favicon_cmds,
-                    fonts: &[],
-                    images: &favicon_images,
-                });
-            }
-        }
-        if let Some(cmds) = marquee_cmds.as_ref() {
-            layers.push(CompositeLayer::commands_only(cmds));
-        }
-        let scene = composite_paint_layers(viewport, &layers).scene;
-
-        let needs_redraw = settling || gliding || dragging || self.ambient.is_some();
-        (scene, needs_redraw)
+        fluid_cmds
     }
 }
 

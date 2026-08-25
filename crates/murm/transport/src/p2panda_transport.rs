@@ -378,13 +378,27 @@ pub struct KnownPeer {
     pub connected: bool,
 }
 
+/// How, and to whom, this transport serves iroh-blobs.
+///
+/// One choice rather than a store plus two optional authorizers: the three were
+/// mutually exclusive in every builder method that set them, and the reader of
+/// the bind path had to reconstruct that from a priority chain of `if let`s.
+enum BlobServing<'a> {
+    /// Do not register the blobs protocol at all.
+    None,
+    /// Serve the store to any peer that connects.
+    Plain(&'a BlobStore),
+    /// Serve only peers the domain-owned authorizer admits.
+    Authorized(&'a BlobStore, BlobPeerAuthorizer),
+    /// Serve only hashes retained by one scope, to that scope's readers.
+    Scoped(&'a BlobStore, BlobScope, BlobReadAuthorizer),
+}
+
 /// Builder for [`P2pandaTransport`]. Use [`P2pandaTransport::builder`].
 pub struct P2pandaTransportBuilder<'a> {
     signing_seed: [u8; 32],
     alpns: Vec<Alpn>,
-    blobs: Option<&'a BlobStore>,
-    blob_authorizer: Option<BlobPeerAuthorizer>,
-    scoped_blob_authorizer: Option<(BlobScope, BlobReadAuthorizer)>,
+    blobs: BlobServing<'a>,
     mdns: Option<MdnsDiscoveryMode>,
     discovery: Option<DiscoveryConfig>,
     gossip: bool,
@@ -401,17 +415,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
     /// Serve the iroh-blobs protocol against the given store. Peers can then
     /// `fetch_from` this transport's PeerID.
     pub fn blobs<'b>(self, store: &'b BlobStore) -> P2pandaTransportBuilder<'b> {
-        P2pandaTransportBuilder {
-            signing_seed: self.signing_seed,
-            alpns: self.alpns,
-            blobs: Some(store),
-            blob_authorizer: None,
-            scoped_blob_authorizer: None,
-            mdns: self.mdns,
-            discovery: self.discovery,
-            gossip: self.gossip,
-            relay_urls: self.relay_urls,
-        }
+        self.serving(BlobServing::Plain(store))
     }
 
     /// Serve blobs only to peers admitted by the domain-owned authorizer.
@@ -423,17 +427,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
         store: &'b BlobStore,
         authorizer: BlobPeerAuthorizer,
     ) -> P2pandaTransportBuilder<'b> {
-        P2pandaTransportBuilder {
-            signing_seed: self.signing_seed,
-            alpns: self.alpns,
-            blobs: Some(store),
-            blob_authorizer: Some(authorizer),
-            scoped_blob_authorizer: None,
-            mdns: self.mdns,
-            discovery: self.discovery,
-            gossip: self.gossip,
-            relay_urls: self.relay_urls,
-        }
+        self.serving(BlobServing::Authorized(store, authorizer))
     }
 
     /// Serve only hashes retained by `scope` to that scope's current readers.
@@ -443,12 +437,17 @@ impl<'a> P2pandaTransportBuilder<'a> {
         scope: BlobScope,
         authorizer: BlobReadAuthorizer,
     ) -> P2pandaTransportBuilder<'b> {
+        self.serving(BlobServing::Scoped(store, scope, authorizer))
+    }
+
+    /// Rebind the builder to one blob-serving choice, replacing any earlier
+    /// one. The lifetime moves with the store, which is the only borrow the
+    /// builder holds.
+    fn serving<'b>(self, blobs: BlobServing<'b>) -> P2pandaTransportBuilder<'b> {
         P2pandaTransportBuilder {
             signing_seed: self.signing_seed,
             alpns: self.alpns,
-            blobs: Some(store),
-            blob_authorizer: None,
-            scoped_blob_authorizer: Some((scope, authorizer)),
+            blobs,
             mdns: self.mdns,
             discovery: self.discovery,
             gossip: self.gossip,
@@ -510,18 +509,7 @@ impl<'a> P2pandaTransportBuilder<'a> {
 
     /// Bind the p2panda-net endpoint. Consumes the builder.
     pub async fn bind(self) -> Result<P2pandaTransport, TransportError> {
-        P2pandaTransport::bind_inner(
-            self.signing_seed,
-            self.alpns,
-            self.blobs,
-            self.blob_authorizer,
-            self.scoped_blob_authorizer,
-            self.mdns,
-            self.discovery,
-            self.gossip,
-            self.relay_urls,
-        )
-        .await
+        P2pandaTransport::bind_inner(self).await
     }
 }
 
@@ -549,9 +537,7 @@ impl P2pandaTransport {
         P2pandaTransportBuilder {
             signing_seed: master.to_seed(),
             alpns: Vec::new(),
-            blobs: None,
-            blob_authorizer: None,
-            scoped_blob_authorizer: None,
+            blobs: BlobServing::None,
             mdns: None,
             discovery: None,
             relay_urls: Vec::new(),
@@ -568,9 +554,7 @@ impl P2pandaTransport {
         P2pandaTransportBuilder {
             signing_seed,
             alpns: Vec::new(),
-            blobs: None,
-            blob_authorizer: None,
-            scoped_blob_authorizer: None,
+            blobs: BlobServing::None,
             mdns: None,
             discovery: None,
             relay_urls: Vec::new(),
@@ -588,18 +572,10 @@ impl P2pandaTransport {
         signing_seed: [u8; 32],
         alpns: Vec<Alpn>,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(
-            signing_seed,
-            alpns,
-            None,
-            None,
-            None,
-            None,
-            None,
-            false,
-            Vec::new(),
-        )
-        .await
+        Self::builder_from_seed(signing_seed)
+            .alpns(alpns)
+            .bind()
+            .await
     }
 
     /// Bind with the given ALPNs and serve iroh-blobs against the provided store.
@@ -608,18 +584,11 @@ impl P2pandaTransport {
         alpns: Vec<Alpn>,
         blobs: Option<&BlobStore>,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(
-            master.to_seed(),
-            alpns,
-            blobs,
-            None,
-            None,
-            None,
-            None,
-            false,
-            Vec::new(),
-        )
-        .await
+        let builder = Self::builder(master).alpns(alpns);
+        match blobs {
+            Some(store) => builder.blobs(store).bind().await,
+            None => builder.bind().await,
+        }
     }
 
     /// Bind and serve blobs only to transport-authenticated admitted peers.
@@ -629,31 +598,26 @@ impl P2pandaTransport {
         blobs: &BlobStore,
         authorizer: BlobPeerAuthorizer,
     ) -> Result<Self, TransportError> {
-        Self::bind_inner(
-            master.to_seed(),
-            alpns,
-            Some(blobs),
-            Some(authorizer),
-            None,
-            None,
-            None,
-            false,
-            Vec::new(),
-        )
-        .await
+        Self::builder(master)
+            .alpns(alpns)
+            .authorized_blobs(blobs, authorizer)
+            .bind()
+            .await
     }
 
-    async fn bind_inner(
-        signing_seed: [u8; 32],
-        alpns: Vec<Alpn>,
-        blobs: Option<&BlobStore>,
-        blob_authorizer: Option<BlobPeerAuthorizer>,
-        scoped_blob_authorizer: Option<(BlobScope, BlobReadAuthorizer)>,
-        mdns: Option<MdnsDiscoveryMode>,
-        discovery: Option<DiscoveryConfig>,
-        gossip: bool,
-        relay_urls: Vec<iroh::RelayUrl>,
-    ) -> Result<Self, TransportError> {
+    /// The one bind path. Takes the builder itself rather than restating its
+    /// fields positionally, so adding a builder option cannot silently
+    /// mis-order an existing one at any of the call sites.
+    async fn bind_inner(builder: P2pandaTransportBuilder<'_>) -> Result<Self, TransportError> {
+        let P2pandaTransportBuilder {
+            signing_seed,
+            alpns,
+            blobs,
+            mdns,
+            discovery,
+            gossip,
+            relay_urls,
+        } = builder;
         let signing_key = SigningKey::from_bytes(&signing_seed);
         let peer_id = PeerID::from_bytes(signing_key.verifying_key().as_bytes())
             .map_err(|error| TransportError::Backend(format!("transport key: {error}")))?;
@@ -690,9 +654,35 @@ impl P2pandaTransport {
                 .insert(alpn.clone(), Arc::new(TokioMutex::new(rx)));
         }
 
-        if let Some(store) = blobs {
-            let blobs_protocol = iroh_blobs::BlobsProtocol::new(store.store(), None);
-            if let Some((scope, authorizer)) = scoped_blob_authorizer {
+        // One total match: each arm builds only the protocol it registers. The
+        // earlier priority chain built the plain protocol up front and then
+        // discarded it unused whenever a scoped authorizer was present.
+        match blobs {
+            BlobServing::None => {}
+            BlobServing::Plain(store) => {
+                endpoint
+                    .accept(
+                        iroh_blobs::ALPN,
+                        iroh_blobs::BlobsProtocol::new(store.store(), None),
+                    )
+                    .await
+                    .map_err(|e| TransportError::Backend(format!("blobs register: {e}")))?;
+            }
+            BlobServing::Authorized(store, authorizer) => {
+                endpoint
+                    .accept(
+                        iroh_blobs::ALPN,
+                        AuthorizedBlobsProtocol {
+                            inner: iroh_blobs::BlobsProtocol::new(store.store(), None),
+                            authorizer,
+                        },
+                    )
+                    .await
+                    .map_err(|e| {
+                        TransportError::Backend(format!("authorized blobs register: {e}"))
+                    })?;
+            }
+            BlobServing::Scoped(store, scope, authorizer) => {
                 endpoint
                     .accept(
                         iroh_blobs::ALPN,
@@ -704,24 +694,6 @@ impl P2pandaTransport {
                     )
                     .await
                     .map_err(|e| TransportError::Backend(format!("scoped blobs register: {e}")))?;
-            } else if let Some(authorizer) = blob_authorizer {
-                endpoint
-                    .accept(
-                        iroh_blobs::ALPN,
-                        AuthorizedBlobsProtocol {
-                            inner: blobs_protocol,
-                            authorizer,
-                        },
-                    )
-                    .await
-                    .map_err(|e| {
-                        TransportError::Backend(format!("authorized blobs register: {e}"))
-                    })?;
-            } else {
-                endpoint
-                    .accept(iroh_blobs::ALPN, blobs_protocol)
-                    .await
-                    .map_err(|e| TransportError::Backend(format!("blobs register: {e}")))?;
             }
         }
 

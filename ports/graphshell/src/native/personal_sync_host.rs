@@ -1,5 +1,6 @@
 //! Resident owner of Graphshell's durable personal-graph replica.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use chirograph::{
@@ -8,7 +9,7 @@ use chirograph::{
 use muniment::RedbBackend;
 use personae::IdentityProvider;
 use std::sync::Arc;
-use stickleback::{JoinError, JoinedSpace, SyncStatus};
+use stickleback::{GroupPrekeyBundle, GroupRecipientId, JoinError, JoinedSpace, SyncStatus};
 
 use stickleback::DataKeyring;
 use tokio::sync::{Mutex, RwLock};
@@ -26,8 +27,9 @@ use crate::transfer_offer::{TransferOfferV1, offers_in, transfer_offer_rule};
 use crate::identity_endpoint::{SupplementalCard, TRANSFER_ACCEPT_INTENT, TRANSFER_ACCEPT_SCHEMA};
 use crate::identity_projection::IdentityProjectionAction;
 use crate::personal_sync::{
-    PersonalGraphError, PersonalGraphEvent, PersonalGraphExt, PersonalGraphIdentityError,
-    PersonalGraphReplica, SyncRoster, SyncSelection, accept_into, personal_graph_identity_salt,
+    KeyAgreementEvent, KeyAgreementStep, PersonalGraphError, PersonalGraphEvent, PersonalGraphExt,
+    PersonalGraphIdentityError, PersonalGraphReplica, SyncRoster, SyncSelection, accept_into,
+    personal_graph_identity_salt,
 };
 
 const MAX_NODE_CARDS: usize = 128;
@@ -816,6 +818,9 @@ impl PersonalSyncHost {
         };
         let seated = self.key_group_members().await?;
         let mine = self.key_group.lock().await.member();
+        // Both loops below cross between roots and seats, once per seat and
+        // once per reader. Resolve the lane once here rather than per query.
+        let prekeys = PrekeyDirectory::read(&steps);
 
         let mut changes = 0;
         for member in seated {
@@ -824,8 +829,10 @@ impl PersonalSyncHost {
             }
             // A seat whose root the graph no longer admits, or which no
             // pre-key on the lane accounts for, is a seat nothing justifies.
-            let justified = crate::native::graph_keys::root_for_recipient(&steps, member)
-                .is_some_and(|root| readers.contains_key(&root));
+            let justified = prekeys
+                .root_of_seat
+                .get(&member)
+                .is_some_and(|root| readers.contains_key(root));
             if justified {
                 continue;
             }
@@ -836,7 +843,7 @@ impl PersonalSyncHost {
         }
 
         for root in readers.keys() {
-            let Some(member) = crate::native::graph_keys::recipient_for_root(&steps, *root) else {
+            let Some(&member) = prekeys.seat_of_root.get(root) else {
                 // Admitted but has not published yet. Ordinary for a device
                 // paired a moment ago; it seats itself on a later pass.
                 continue;
@@ -1173,6 +1180,14 @@ impl PersonalSyncHost {
             });
         }
 
+        // One pass over the observation log instead of a filter-scan per blob:
+        // every observation names exactly one blob, so tallying once answers
+        // every card below without re-walking the log for each of them.
+        let mut observed_times = BTreeMap::<[u8; 32], usize>::new();
+        for observation in &projection.blob_availability {
+            *observed_times.entry(observation.blob).or_default() += 1;
+        }
+
         for (blob, devices) in &projection.available_blobs {
             cards.push(SupplementalCard {
                 adapter: "graphshell.blob-availability".into(),
@@ -1186,11 +1201,10 @@ impl PersonalSyncHost {
                         ),
                         value(
                             "Observations",
-                            projection
-                                .blob_availability
-                                .iter()
-                                .filter(|observation| observation.blob == *blob)
-                                .count()
+                            observed_times
+                                .get(blob)
+                                .copied()
+                                .unwrap_or_default()
                                 .to_string(),
                         ),
                     ],
@@ -1212,6 +1226,52 @@ fn value(label: impl Into<String>, value: impl Into<String>) -> CardValueV1 {
     CardValueV1 {
         label: label.into(),
         value: value.into(),
+    }
+}
+
+/// Both directions of the lane's Personae-root/group-seat correspondence,
+/// resolved in one pass.
+///
+/// [`recipient_for_root`] and [`root_for_recipient`] each re-decode every
+/// pre-key bundle on the lane per call, and decoding one verifies an identity
+/// signature. Reconciliation crosses between roots and seats once per seated
+/// member and once per admitted reader, so on a graph with any history the
+/// signature checks, not the reconciling, are what the pass costs.
+///
+/// Folding forward with overwrite says the same thing those two helpers say:
+/// each takes the last step that both decodes and carries a readable root, in
+/// whichever direction it was asked. A root and a seat need separate maps
+/// because the correspondence is not required to be one-to-one — a device that
+/// re-publishes under a new seat leaves the old seat still resolvable.
+///
+/// [`recipient_for_root`]: crate::native::graph_keys::recipient_for_root
+/// [`root_for_recipient`]: crate::native::graph_keys::root_for_recipient
+#[derive(Default)]
+struct PrekeyDirectory {
+    seat_of_root: BTreeMap<[u8; 32], GroupRecipientId>,
+    root_of_seat: BTreeMap<GroupRecipientId, [u8; 32]>,
+}
+
+impl PrekeyDirectory {
+    fn read(steps: &[KeyAgreementStep]) -> Self {
+        let mut directory = Self::default();
+        for step in steps {
+            let KeyAgreementEvent::Prekey(bundle) = &step.step else {
+                continue;
+            };
+            // A frame that will not decode, or whose root will not verify, is
+            // skipped rather than fatal: one bad bundle from one device must
+            // not stop this one reconciling against every other.
+            let Ok(bundle) = GroupPrekeyBundle::from_bytes(bundle) else {
+                continue;
+            };
+            let Ok(root) = bundle.personae_root() else {
+                continue;
+            };
+            directory.seat_of_root.insert(root, bundle.recipient);
+            directory.root_of_seat.insert(bundle.recipient, root);
+        }
+        directory
     }
 }
 

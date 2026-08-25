@@ -388,6 +388,50 @@ struct PresentedDocument {
     byte_size: u64,
 }
 
+/// Fixed three-column card grid for the directory projection. Placement and the
+/// scene bounds are derived from the same numbers here so the two cannot drift.
+struct CardGrid {
+    columns: usize,
+    card: Size2,
+    step_x: f32,
+    step_y: f32,
+}
+
+impl CardGrid {
+    /// Where the first card sits. The scene bounds begin above and to the left
+    /// of it, leaving the margin the host draws its chrome into.
+    const ORIGIN: (f32, f32) = (156.0, 146.0);
+
+    fn new() -> Self {
+        Self {
+            columns: 3,
+            card: Size2::new(248.0, 168.0),
+            step_x: 298.0,
+            step_y: 218.0,
+        }
+    }
+
+    fn placement(&self, index: usize) -> Transform2 {
+        Transform2::translation(
+            Self::ORIGIN.0 + (index % self.columns) as f32 * self.step_x,
+            Self::ORIGIN.1 + (index / self.columns) as f32 * self.step_y,
+        )
+    }
+
+    /// Bounds stay a full `columns` wide even when fewer documents are present,
+    /// so the viewport does not reflow horizontally as documents come and go.
+    fn bounds(&self, count: usize) -> Rect {
+        let rows = count.div_ceil(self.columns).max(1);
+        Rect::new(
+            Vec2::new(32.0, 62.0),
+            Size2::new(
+                self.card.w + self.step_x * self.columns.saturating_sub(1) as f32,
+                self.card.h + self.step_y * rows.saturating_sub(1) as f32,
+            ),
+        )
+    }
+}
+
 struct DerivedDocument {
     base_token: Vec<u8>,
     document: EngineDocument,
@@ -990,13 +1034,6 @@ impl KnotEndpoint {
         self.scene_revision
     }
 
-    fn install_projection(&mut self, projection: KnotDocumentProjection) -> Result<(), String> {
-        let Source::Vault(source) = &self.source else {
-            return Err("Knot sync projection requires a vault source".into());
-        };
-        source.state().install_projection(projection)
-    }
-
     fn refresh_vault_projection(&mut self) -> Result<(), String> {
         let Source::Vault(source) = &self.source else {
             return Ok(());
@@ -1197,26 +1234,184 @@ impl KnotEndpoint {
         source.vault.store_derived_cache(id, &stored)
     }
 
+    /// Which clip-insert contract this endpoint advertises. Retaining observed
+    /// source bytes needs an evidence store, so granting one moves the
+    /// advertised schema to v2. `IntentSink::invoke` gates arriving intents on
+    /// the same decision, and the two must not drift: an intent admitted
+    /// against one schema but parsed as the other would silently drop or
+    /// invent provenance.
+    fn clip_insert_schema(&self) -> &'static str {
+        if self.clip_evidence.is_some() {
+            KNOT_CLIP_INSERT_SCHEMA_V2
+        } else {
+            KNOT_CLIP_INSERT_SCHEMA
+        }
+    }
+
+    /// Human-facing wording for the clip action, keyed off the same decision as
+    /// [`Self::clip_insert_schema`] so the promise made to the host matches the
+    /// contract it is offered.
+    fn clip_insert_explanation(&self) -> &'static str {
+        if self.clip_insert_schema() == KNOT_CLIP_INSERT_SCHEMA_V2 {
+            "Retain observed source bytes and append a semantic clip with content-addressed provenance through Knot authority."
+        } else {
+            "Append a semantic clip with structured source provenance through Knot authority."
+        }
+    }
+
+    /// A Resolve offer needs both a granted fetcher and a policy that admits
+    /// fetching; either alone leaves the effect unadvertised.
+    fn resolve_effect_admitted(&self) -> bool {
+        self.effects.as_ref().is_some_and(|effects| {
+            effects.policy.resolve != KnotEffectMode::Never && effects.fetcher.is_some()
+        })
+    }
+
+    /// A Run offer needs an evaluator for at least one language the policy
+    /// admits. An evaluator for a language outside `allowed_languages` never
+    /// makes Run advertisable, and neither does an allowed language with no
+    /// evaluator behind it.
+    fn run_effect_admitted(&self) -> bool {
+        self.effects.as_ref().is_some_and(|effects| {
+            effects.policy.run != KnotEffectMode::Never
+                && effects.evaluators.languages().into_iter().any(|language| {
+                    effects
+                        .policy
+                        .allowed_languages
+                        .iter()
+                        .any(|allowed| allowed == language)
+                })
+        })
+    }
+
+    /// The effects a host may invoke on an editable document, in advertised
+    /// order. This is the whole effect-gating policy for the editable-text
+    /// offer: Save and Insert clip ride along with editable text itself, while
+    /// the two external effects are each gated above.
+    ///
+    /// `IntentSink::invoke` re-checks every arriving intent against the
+    /// advertised list, so an effect omitted here cannot be invoked.
+    fn advertised_actions(&self) -> Vec<AdvertisedAction> {
+        let mut actions = vec![
+            AdvertisedAction {
+                intent: IntentReference(EDITABLE_TEXT_SAVE_INTENT.into()),
+                label: "Save".into(),
+                explanation: "Write this document through Knot authority.".into(),
+                payload_schema: EDITABLE_TEXT_SAVE_SCHEMA.into(),
+                input_form: None,
+                effect: IntentEffect::DomainTruth,
+            },
+            AdvertisedAction {
+                intent: IntentReference(KNOT_CLIP_INSERT_INTENT.into()),
+                label: "Insert clip".into(),
+                explanation: self.clip_insert_explanation().into(),
+                payload_schema: self.clip_insert_schema().into(),
+                input_form: None,
+                effect: IntentEffect::DomainTruth,
+            },
+        ];
+        if self.resolve_effect_admitted() {
+            actions.push(AdvertisedAction {
+                intent: IntentReference(KNOT_TRANSCLUSION_RESOLVE_INTENT.into()),
+                label: "Resolve".into(),
+                explanation: "Fetch admitted include fences into a temporary derived preview."
+                    .into(),
+                payload_schema: KNOT_TRANSCLUSION_RESOLVE_SCHEMA.into(),
+                input_form: None,
+                effect: IntentEffect::ExternalEffect,
+            });
+        }
+        if self.run_effect_admitted() {
+            actions.push(AdvertisedAction {
+                intent: IntentReference(KNOT_BLOCK_RUN_INTENT.into()),
+                label: "Run".into(),
+                explanation: "Evaluate admitted code fences into a temporary derived preview."
+                    .into(),
+                payload_schema: KNOT_BLOCK_RUN_SCHEMA.into(),
+                input_form: None,
+                effect: IntentEffect::ExternalEffect,
+            });
+        }
+        actions
+    }
+
+    /// The portable card a host without any richer codec falls back to. Badges
+    /// disclose both where the bytes live and whether they can be written back;
+    /// a vault conflict outranks editability because the document is not
+    /// authorable until the conflict is settled.
+    fn card_payload(
+        &self,
+        document: &PresentedDocument,
+        title: String,
+        editable: bool,
+    ) -> PortableCardV1 {
+        let address = document
+            .container
+            .primary_address()
+            .map_or_else(String::new, |address| address.0);
+        let media_type = document
+            .container
+            .media_type
+            .as_deref()
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let conflicted = match &self.source {
+            Source::Vault(source) => source.state().conflicts.contains(
+                document
+                    .id
+                    .strip_prefix("knot:vault:")
+                    .unwrap_or(&document.id),
+            ),
+            _ => false,
+        };
+        PortableCardV1 {
+            title,
+            values: vec![
+                CardValueV1 {
+                    label: "Address".into(),
+                    value: address,
+                },
+                CardValueV1 {
+                    label: "Type".into(),
+                    value: media_type,
+                },
+                CardValueV1 {
+                    label: "Size".into(),
+                    value: format!("{} bytes", document.byte_size),
+                },
+            ],
+            badges: match (&self.source, editable, conflicted) {
+                (Source::Vault(_), _, true) => {
+                    vec!["sealed vault".into(), "conflict".into()]
+                }
+                (Source::Vault(_), true, false) => {
+                    vec!["sealed vault".into(), "editable".into()]
+                }
+                (Source::Vault(_), false, false) => {
+                    vec!["sealed vault".into(), "read only".into()]
+                }
+                (_, true, _) => vec!["files in place".into(), "editable".into()],
+                (_, false, _) => vec!["files in place".into(), "read only".into()],
+            },
+            media: Vec::new(),
+        }
+    }
+
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, String> {
         let documents = self.documents();
+        let grid = CardGrid::new();
         let mut scene = Scene::new();
         let mut presentation = PresentationManifest::default();
         let mut resources = BTreeMap::new();
-        let columns = 3usize;
-        let card = Size2::new(248.0, 168.0);
-        let step_x = 298.0;
-        let step_y = 218.0;
         self.bindings.clear();
 
         for (index, document) in documents.iter().enumerate() {
             let source = scene.intern_source(SourceRef::new(SOURCE_KIND, document.id.clone()));
-            let x = 156.0 + (index % columns) as f32 * step_x;
-            let y = 146.0 + (index / columns) as f32 * step_y;
             scene.items.push(ProjectedItem {
                 source,
                 space: Scene::WORLD,
-                transform: Transform2::translation(x, y),
-                footprint: Footprint::Rect { size: card },
+                transform: grid.placement(index),
+                footprint: Footprint::Rect { size: grid.card },
                 representation: Representation::Card,
                 layer: 0,
                 visible: true,
@@ -1225,59 +1420,12 @@ impl KnotEndpoint {
             });
 
             let title = document.container.title().unwrap_or("Untitled").to_string();
-            let address = document
-                .container
-                .primary_address()
-                .map_or_else(String::new, |address| address.0);
-            let media_type = document
-                .container
-                .media_type
-                .as_deref()
-                .unwrap_or("application/octet-stream")
-                .to_string();
+            // Read the editable projection before the card, so the vault lock is
+            // taken in the same order it always was.
             let editable = (self.protocol_version.minor >= ProtocolVersion::V1_2.minor)
                 .then(|| self.editable_text(document))
                 .flatten();
-            let conflicted = match &self.source {
-                Source::Vault(source) => source.state().conflicts.contains(
-                    document
-                        .id
-                        .strip_prefix("knot:vault:")
-                        .unwrap_or(&document.id),
-                ),
-                _ => false,
-            };
-            let card_payload = PortableCardV1 {
-                title: title.clone(),
-                values: vec![
-                    CardValueV1 {
-                        label: "Address".into(),
-                        value: address,
-                    },
-                    CardValueV1 {
-                        label: "Type".into(),
-                        value: media_type,
-                    },
-                    CardValueV1 {
-                        label: "Size".into(),
-                        value: format!("{} bytes", document.byte_size),
-                    },
-                ],
-                badges: match (&self.source, editable.is_some(), conflicted) {
-                    (Source::Vault(_), _, true) => {
-                        vec!["sealed vault".into(), "conflict".into()]
-                    }
-                    (Source::Vault(_), true, false) => {
-                        vec!["sealed vault".into(), "editable".into()]
-                    }
-                    (Source::Vault(_), false, false) => {
-                        vec!["sealed vault".into(), "read only".into()]
-                    }
-                    (_, true, _) => vec!["files in place".into(), "editable".into()],
-                    (_, false, _) => vec!["files in place".into(), "read only".into()],
-                },
-                media: Vec::new(),
-            };
+            let card_payload = self.card_payload(document, title.clone(), editable.is_some());
             let glyph = NativeGlyphV1 {
                 label: title.clone(),
                 icon: Some("◇".into()),
@@ -1310,67 +1458,7 @@ impl KnotEndpoint {
                 let editable_hash = ContentHash::of(&editable_bytes);
                 resources.insert(editable_hash, editable_bytes.clone());
                 let mut editable_semantics = semantics.clone();
-                editable_semantics.actions.push(AdvertisedAction {
-                    intent: IntentReference(EDITABLE_TEXT_SAVE_INTENT.into()),
-                    label: "Save".into(),
-                    explanation: "Write this document through Knot authority.".into(),
-                    payload_schema: EDITABLE_TEXT_SAVE_SCHEMA.into(),
-                    input_form: None,
-                    effect: IntentEffect::DomainTruth,
-                });
-                editable_semantics.actions.push(AdvertisedAction {
-                    intent: IntentReference(KNOT_CLIP_INSERT_INTENT.into()),
-                    label: "Insert clip".into(),
-                    explanation: if self.clip_evidence.is_some() {
-                        "Retain observed source bytes and append a semantic clip with content-addressed provenance through Knot authority."
-                    } else {
-                        "Append a semantic clip with structured source provenance through Knot authority."
-                    }
-                    .into(),
-                    payload_schema: if self.clip_evidence.is_some() {
-                        KNOT_CLIP_INSERT_SCHEMA_V2
-                    } else {
-                        KNOT_CLIP_INSERT_SCHEMA
-                    }
-                    .into(),
-                    input_form: None,
-                    effect: IntentEffect::DomainTruth,
-                });
-                if self.effects.as_ref().is_some_and(|effects| {
-                    effects.policy.resolve != KnotEffectMode::Never && effects.fetcher.is_some()
-                }) {
-                    editable_semantics.actions.push(AdvertisedAction {
-                        intent: IntentReference(KNOT_TRANSCLUSION_RESOLVE_INTENT.into()),
-                        label: "Resolve".into(),
-                        explanation:
-                            "Fetch admitted include fences into a temporary derived preview."
-                                .into(),
-                        payload_schema: KNOT_TRANSCLUSION_RESOLVE_SCHEMA.into(),
-                        input_form: None,
-                        effect: IntentEffect::ExternalEffect,
-                    });
-                }
-                if self.effects.as_ref().is_some_and(|effects| {
-                    effects.policy.run != KnotEffectMode::Never
-                        && effects.evaluators.languages().into_iter().any(|language| {
-                            effects
-                                .policy
-                                .allowed_languages
-                                .iter()
-                                .any(|allowed| allowed == language)
-                        })
-                }) {
-                    editable_semantics.actions.push(AdvertisedAction {
-                        intent: IntentReference(KNOT_BLOCK_RUN_INTENT.into()),
-                        label: "Run".into(),
-                        explanation:
-                            "Evaluate admitted code fences into a temporary derived preview."
-                                .into(),
-                        payload_schema: KNOT_BLOCK_RUN_SCHEMA.into(),
-                        input_form: None,
-                        effect: IntentEffect::ExternalEffect,
-                    });
-                }
+                editable_semantics.actions = self.advertised_actions();
                 offers.push(PresentationOffer {
                     codec: PresentationCodec::EditableTextV1,
                     resource: editable_hash,
@@ -1398,14 +1486,7 @@ impl KnotEndpoint {
             presentation.offers.insert(key, offers);
         }
 
-        let rows = documents.len().div_ceil(columns).max(1);
-        scene.bounds = Rect::new(
-            Vec2::new(32.0, 62.0),
-            Size2::new(
-                card.w + step_x * columns.saturating_sub(1) as f32,
-                card.h + step_y * rows.saturating_sub(1) as f32,
-            ),
-        );
+        scene.bounds = grid.bounds(documents.len());
         scene.generation = self.revision().0;
         let scene = SceneSnapshot::from_dense(SceneEpoch(1), self.revision(), scene)
             .map_err(|error| format!("invalid Knot scene: {error:?}"))?;
@@ -1617,7 +1698,9 @@ impl KnotEndpoint {
         format.validate_source(&current.address, &payload.source)?;
 
         let stale_result = self.stale_result();
-        let vault_projection = match &mut self.source {
+        // Every arm installs whatever it produced before returning; nothing is
+        // handed back for the caller to install.
+        match &mut self.source {
             Source::Directory { source, .. } => {
                 let path = source
                     .writable_document_path(id)
@@ -1631,7 +1714,6 @@ impl KnotEndpoint {
                 source
                     .refresh()
                     .map_err(|error| format!("directory refresh failed after save: {error}"))?;
-                None
             }
             Source::Vault(resident) => {
                 let mut source = resident.state();
@@ -1685,16 +1767,12 @@ impl KnotEndpoint {
                     }
                 };
                 source.install_projection(projection)?;
-                None
             }
             Source::Fixture(_) => {
                 return Ok(IntentResult::Rejected {
                     reason: "fixture documents are read-only".into(),
                 });
             }
-        };
-        if let Some(projection) = vault_projection {
-            self.install_projection(projection)?;
         }
 
         self.sync_source_revision();
@@ -2481,8 +2559,7 @@ impl IntentSink for KnotEndpoint {
         }
         let expected_schema = match intent.intent.as_str() {
             EDITABLE_TEXT_SAVE_INTENT => EDITABLE_TEXT_SAVE_SCHEMA,
-            KNOT_CLIP_INSERT_INTENT if self.clip_evidence.is_some() => KNOT_CLIP_INSERT_SCHEMA_V2,
-            KNOT_CLIP_INSERT_INTENT => KNOT_CLIP_INSERT_SCHEMA,
+            KNOT_CLIP_INSERT_INTENT => self.clip_insert_schema(),
             KNOT_TRANSCLUSION_RESOLVE_INTENT => KNOT_TRANSCLUSION_RESOLVE_SCHEMA,
             KNOT_BLOCK_RUN_INTENT => KNOT_BLOCK_RUN_SCHEMA,
             _ => {

@@ -206,6 +206,28 @@ fn checkpoint_reject(error: CheckpointError) -> Reject {
     Reject::new(code, error.to_string())
 }
 
+/// One retained operation beside its decoded event.
+///
+/// `from_operation` decodes a CBOR body, which is the most expensive thing any
+/// of the read paths below does per operation. Checkpoint selection, the board
+/// tail filter and the frontier scan each used to redo it over the whole mesh,
+/// so the paths that need more than one of them decode once and pass the slice
+/// down. Operations whose body is absent or malformed are dropped here, which
+/// is what every one of those scans did individually.
+struct DecodedOp<'a> {
+    op: &'a Operation<MeshExt>,
+    event: MeshEvent,
+}
+
+fn decode_ops(ops: &[Operation<MeshExt>]) -> Vec<DecodedOp<'_>> {
+    ops.iter()
+        .filter_map(|op| {
+            let (_, event) = from_operation(op).ok()?;
+            Some(DecodedOp { op, event })
+        })
+        .collect()
+}
+
 /// The mesh's operation store: insert once, serve to both the board fold and the
 /// LogSync session. Clone-cheap (the muniment handle is shared). Generic over the
 /// backend — [`MemoryBackend`] for tests and rehearsals, [`RedbBackend`] for a
@@ -324,11 +346,23 @@ impl<B: Backend + Clone> MeshStore<B> {
     /// Every operation on `mesh_id`, across all known authors' logs — the board
     /// fold's input.
     pub async fn ops(&self, mesh_id: [u8; 32]) -> Result<Vec<Operation<MeshExt>>, MeshStoreError> {
+        self.ops_in(mesh_id, None).await
+    }
+
+    /// Every operation on `mesh_id`, optionally narrowed to one log.
+    async fn ops_in(
+        &self,
+        mesh_id: [u8; 32],
+        want: Option<MeshLogId>,
+    ) -> Result<Vec<Operation<MeshExt>>, MeshStoreError> {
         let logs: BTreeMap<VerifyingKey, Vec<MeshLogId>> =
             self.store.resolve(&Topic::from(mesh_id)).await?;
         let mut out = Vec::new();
         for (author, log_ids) in logs {
             for log_id in log_ids {
+                if want.is_some_and(|want| want != log_id) {
+                    continue;
+                }
                 if let Some(entries) = self
                     .store
                     .get_log_entries(&author, &log_id, None, None)
@@ -344,8 +378,22 @@ impl<B: Backend + Clone> MeshStore<B> {
     /// Fold the store's view of `mesh_id` into its [`JobBoard`].
     pub async fn board(&self, mesh_id: [u8; 32]) -> Result<JobBoard, MeshStoreError> {
         let ops = self.ops(mesh_id).await?;
-        let Some(stored) = self.latest_checkpoint_from_ops(mesh_id, &ops)? else {
-            return Ok(JobBoard::fold(mesh_id, ops.iter()));
+        let decoded = decode_ops(&ops);
+        let current = self.latest_checkpoint_from_decoded(mesh_id, &decoded)?;
+        Ok(self.board_from(mesh_id, &decoded, current.as_ref()))
+    }
+
+    /// The board fold over an already-decoded mesh, under an already-selected
+    /// checkpoint. Callers that need the checkpoint or the decoded events for
+    /// their own work share them with the fold rather than recomputing both.
+    fn board_from(
+        &self,
+        mesh_id: [u8; 32],
+        decoded: &[DecodedOp<'_>],
+        current: Option<&StoredCheckpoint>,
+    ) -> JobBoard {
+        let Some(stored) = current else {
+            return JobBoard::fold(mesh_id, decoded.iter().map(|decoded| decoded.op));
         };
         let frontier: BTreeMap<_, _> = stored
             .checkpoint
@@ -353,22 +401,18 @@ impl<B: Backend + Clone> MeshStore<B> {
             .iter()
             .map(|entry| ((entry.author, entry.log_id), entry.seq_num))
             .collect();
-        let tail: Vec<_> = ops
+        let tail = decoded
             .iter()
-            .filter(|op| {
-                let Ok((_, event)) = from_operation(op) else {
-                    return false;
-                };
+            .filter(|decoded| {
                 frontier
-                    .get(&(*op.header.verifying_key.as_bytes(), event.log_id()))
-                    .is_none_or(|seq| u64::from(op.header.seq_num) > *seq)
+                    .get(&(
+                        *decoded.op.header.verifying_key.as_bytes(),
+                        decoded.event.log_id(),
+                    ))
+                    .is_none_or(|seq| u64::from(decoded.op.header.seq_num) > *seq)
             })
-            .collect();
-        Ok(JobBoard::fold_from_snapshot(
-            mesh_id,
-            &stored.checkpoint.snapshot,
-            tail,
-        ))
+            .map(|decoded| decoded.op);
+        JobBoard::fold_from_snapshot(mesh_id, &stored.checkpoint.snapshot, tail)
     }
 
     /// Blobs this device may stop holding — jobs the mesh has agreed are
@@ -380,8 +424,10 @@ impl<B: Backend + Clone> MeshStore<B> {
         &self,
         mesh_id: [u8; 32],
     ) -> Result<Vec<proofs::BlobRef>, MeshStoreError> {
-        let current = self.latest_checkpoint(mesh_id).await?;
-        let board = self.board(mesh_id).await?;
+        let ops = self.ops(mesh_id).await?;
+        let decoded = decode_ops(&ops);
+        let current = self.latest_checkpoint_from_decoded(mesh_id, &decoded)?;
+        let board = self.board_from(mesh_id, &decoded, current.as_ref());
         Ok(crate::retention::collectable_blobs(
             current.as_ref().map(|stored| &stored.checkpoint),
             &board,
@@ -392,22 +438,27 @@ impl<B: Backend + Clone> MeshStore<B> {
         &self,
         mesh_id: [u8; 32],
     ) -> Result<Option<StoredCheckpoint>, MeshStoreError> {
-        let ops = self.ops(mesh_id).await?;
-        self.latest_checkpoint_from_ops(mesh_id, &ops)
+        // Admission addresses a checkpoint to `MeshLogId::Checkpoints`, so that
+        // log holds every accepted one. Reading it alone keeps the accept path
+        // off a whole-mesh read and decode for each operation admitted.
+        let ops = self.ops_in(mesh_id, Some(MeshLogId::Checkpoints)).await?;
+        self.latest_checkpoint_from_decoded(mesh_id, &decode_ops(&ops))
     }
 
-    fn latest_checkpoint_from_ops(
+    fn latest_checkpoint_from_decoded(
         &self,
         mesh_id: [u8; 32],
-        ops: &[Operation<MeshExt>],
+        decoded: &[DecodedOp<'_>],
     ) -> Result<Option<StoredCheckpoint>, MeshStoreError> {
         let Some(policy) = self.retention.as_ref() else {
             return Ok(None);
         };
-        let mut checkpoints: Vec<_> = ops
+        let mut checkpoints: Vec<_> = decoded
             .iter()
-            .filter_map(|op| match from_operation(op).ok()?.1 {
-                MeshEvent::RetentionCheckpoint { checkpoint } => Some((op, *checkpoint)),
+            .filter_map(|decoded| match &decoded.event {
+                MeshEvent::RetentionCheckpoint { checkpoint } => {
+                    Some((decoded.op, checkpoint.as_ref()))
+                }
                 _ => None,
             })
             .collect();
@@ -419,12 +470,12 @@ impl<B: Backend + Clone> MeshStore<B> {
                     mesh_id,
                     *op.header.verifying_key.as_bytes(),
                     current.as_ref().map(|stored| &stored.checkpoint),
-                    &checkpoint,
+                    checkpoint,
                 )
                 .map_err(|error| MeshStoreError::Retention(error.to_string()))?;
             current = Some(StoredCheckpoint {
                 operation: *op.hash.as_bytes(),
-                checkpoint,
+                checkpoint: checkpoint.clone(),
             });
         }
         Ok(current)
@@ -439,8 +490,9 @@ impl<B: Backend + Clone> MeshStore<B> {
             MeshStoreError::Retention("this mesh has no configured retention policy".into())
         })?;
         let ops = self.ops(mesh_id).await?;
-        let current = self.latest_checkpoint_from_ops(mesh_id, &ops)?;
-        let board = self.board(mesh_id).await?;
+        let decoded = decode_ops(&ops);
+        let current = self.latest_checkpoint_from_decoded(mesh_id, &decoded)?;
+        let board = self.board_from(mesh_id, &decoded, current.as_ref());
         let mut snapshot = JobBoardSnapshot::from_board(&board);
         if policy.erasure.terminal_job_payload == PayloadRule::EraseTerminalAtCheckpoint {
             snapshot.erase_terminal_payloads();
@@ -457,20 +509,17 @@ impl<B: Backend + Clone> MeshStore<B> {
             .flat_map(|stored| stored.checkpoint.frontier.iter().cloned())
             .map(|entry| ((entry.author, entry.log_id), entry))
             .collect();
-        for op in &ops {
-            let Ok((_, event)) = from_operation(op) else {
-                continue;
-            };
-            let log_id = event.log_id();
+        for decoded in &decoded {
+            let log_id = decoded.event.log_id();
             if log_id != MeshLogId::Events {
                 continue;
             }
-            let key = (*op.header.verifying_key.as_bytes(), log_id);
+            let key = (*decoded.op.header.verifying_key.as_bytes(), log_id);
             let entry = LogFrontier {
                 author: key.0,
                 log_id,
-                seq_num: u64::from(op.header.seq_num),
-                operation: *op.hash.as_bytes(),
+                seq_num: u64::from(decoded.op.header.seq_num),
+                operation: *decoded.op.hash.as_bytes(),
             };
             frontier.insert(key, entry);
         }

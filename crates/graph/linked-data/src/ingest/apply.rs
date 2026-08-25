@@ -81,34 +81,22 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
                 },
             );
         }
-        for tag in &node.tags {
-            let _ = apply_graph_delta(
-                graph,
-                GraphDelta::InsertNodeTag {
-                    key,
-                    tag: tag.clone(),
-                },
-            );
-        }
-        for property in &node.properties {
-            let _ = apply_graph_delta(
-                graph,
-                GraphDelta::AppendNodeProperty {
-                    key,
-                    property: property.clone(),
-                },
-            );
-        }
+        // Batched rather than one delta per item: each single-item write
+        // reserializes the node's whole facet array, so a document with P
+        // properties on a node cost Theta(P^2) JSON work. The batch entry
+        // points read each facet once and record the same per-item captured
+        // deltas the `GraphDelta` path would have, so the journal is unchanged
+        // — which is also why they must not be wrapped in `apply_graph_delta`.
+        let _ = graph.insert_node_tags(key, node.tags.clone());
+        let _ = graph.append_node_properties(key, node.properties.clone());
         // `@type` IRIs become `rdf:type` classifications (kernel dedups them).
-        for type_iri in &node.types {
-            let _ = apply_graph_delta(
-                graph,
-                GraphDelta::AddNodeClassification {
-                    key,
-                    classification: rdf_type_classification(type_iri),
-                },
-            );
-        }
+        let _ = graph.add_node_classifications(
+            key,
+            node.types
+                .iter()
+                .map(|type_iri| rdf_type_classification(type_iri))
+                .collect(),
+        );
         key_for.insert(node.id.as_str(), key);
     }
 

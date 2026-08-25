@@ -22,7 +22,7 @@ use crate::drop::{
     DropId, DropLimits, DropProtector, DropRecord, DropWriteReceipt, NativeDropError,
     read_plain_drop, read_protected_drop, write_plain_drop, write_protected_drop,
 };
-use crate::store::pending_payload_key;
+use crate::store::{VerifiedBytes, pending_payload_key};
 use crate::{
     DropReceipt, MunimentStore, OperationPolicy, OperationProcessor, ProcessError, ReceiptPeer,
 };
@@ -150,8 +150,8 @@ pub enum DropIoError {
 
 #[derive(Default)]
 struct AssembledContent {
-    payloads: BTreeMap<[u8; 32], Vec<u8>>,
-    blobs: BTreeMap<[u8; 32], Vec<u8>>,
+    payloads: BTreeMap<[u8; 32], VerifiedBytes>,
+    blobs: BTreeMap<[u8; 32], VerifiedBytes>,
 }
 
 /// Encode one p2panda operation as a native-drop record.
@@ -665,7 +665,7 @@ where
             continue;
         }
         if let Some(bytes) = content.payloads.get(&digest) {
-            operation.body = Some(Body::from(bytes.clone()));
+            operation.body = Some(Body::from(bytes.as_slice().to_vec()));
             consumed_payloads.insert(digest);
             continue;
         }
@@ -694,25 +694,28 @@ where
             key: pending_payload_key(&payload_hash),
         });
     }
-    for (digest, bytes) in &content.payloads {
-        let payload_hash = Hash::from_bytes(*digest);
+    // Both maps are consumed here rather than borrowed: the assembled bytes have
+    // no further reader, so a retained payload moves into its pending write and a
+    // blob moves into its store write instead of being copied one last time.
+    for (digest, bytes) in content.payloads {
+        let payload_hash = Hash::from_bytes(digest);
         let (writes, attached) = processor
             .store()
-            .payload_attachment_writes(&payload_hash, bytes)
+            .verified_payload_attachment_writes(&payload_hash, &bytes)
             .await?;
         leading_writes.extend(writes);
         let pending_key = pending_payload_key(&payload_hash);
-        if consumed_payloads.contains(digest) || attached > 0 {
+        if consumed_payloads.contains(&digest) || attached > 0 {
             leading_writes.push(WriteOp::Delete { key: pending_key });
         } else {
             leading_writes.push(WriteOp::Put {
                 key: pending_key,
-                value: bytes.clone(),
+                value: bytes.into_inner(),
             });
         }
     }
-    for (digest, bytes) in &content.blobs {
-        leading_writes.push(MunimentStore::<B, E>::imported_blob_write(*digest, bytes)?);
+    for (digest, bytes) in content.blobs {
+        leading_writes.push(MunimentStore::<B, E>::imported_blob_write(digest, bytes));
     }
 
     let stage_keys = stage_records(drop_id, &records, processor.store().backend()).await?;
@@ -809,7 +812,7 @@ fn assemble_chunks(
     kind: &'static str,
     digest: [u8; 32],
     mut chunks: Vec<(u64, &[u8])>,
-) -> Result<Vec<u8>, DropIoError> {
+) -> Result<VerifiedBytes, DropIoError> {
     chunks.sort_by_key(|(offset, _)| *offset);
     let mut bytes = Vec::new();
     let mut expected = 0u64;
@@ -836,7 +839,9 @@ fn assemble_chunks(
             digest: hex::encode(digest),
         });
     }
-    Ok(bytes)
+    // This is the one hash of the assembled buffer; the store trusts it rather
+    // than walking these (often multi-megabyte) bytes again on the way in.
+    Ok(VerifiedBytes::assume_verified(bytes))
 }
 
 async fn stage_records<B: Backend>(

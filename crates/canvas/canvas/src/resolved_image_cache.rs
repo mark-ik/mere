@@ -50,13 +50,28 @@ impl ResolvedImageCache {
         self.entries.contains_key(digest)
     }
 
-    /// Read and touch one entry. The returned pixels are owned because the
-    /// paint list already needs its own `ImageResource` bytes.
-    pub(crate) fn get(&mut self, digest: &[u8; 32]) -> Option<(Vec<u8>, u32, u32)> {
+    /// Bump the LRU clock for one entry and report whether it was resident.
+    ///
+    /// Reading is split from touching so callers can decide (dimensions, empty
+    /// pixels) *before* paying for a copy: a combined `get` needs `&mut self`
+    /// for the clock, which forces it to hand back owned pixels — a full
+    /// buffer clone per image per frame, even for entries about to be
+    /// discarded. Pair this with [`peek`](Self::peek).
+    pub(crate) fn touch(&mut self, digest: &[u8; 32]) -> bool {
         self.clock = self.clock.wrapping_add(1);
-        let entry = self.entries.get_mut(digest)?;
-        entry.touched = self.clock;
-        Some((entry.rgba.clone(), entry.width, entry.height))
+        match self.entries.get_mut(digest) {
+            Some(entry) => {
+                entry.touched = self.clock;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Borrow one entry's pixels without disturbing the LRU order.
+    pub(crate) fn peek(&self, digest: &[u8; 32]) -> Option<(&[u8], u32, u32)> {
+        let entry = self.entries.get(digest)?;
+        Some((entry.rgba.as_slice(), entry.width, entry.height))
     }
 
     /// Insert decoded pixels and return every digest evicted to honor the
@@ -136,7 +151,7 @@ mod tests {
         let c = [3; 32];
         assert!(cache.insert(a, vec![1; 4], 1, 1).is_empty());
         assert!(cache.insert(b, vec![2; 4], 1, 1).is_empty());
-        assert!(cache.get(&a).is_some(), "a becomes most recent");
+        assert!(cache.touch(&a), "a becomes most recent");
 
         assert_eq!(cache.insert(c, vec![3; 4], 1, 1), vec![b]);
         assert!(cache.contains(&a));

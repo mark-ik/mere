@@ -310,11 +310,16 @@ impl BlobReadAuthorizer {
 
     /// Evaluate the exact serving decision `(scope, peer, hash, read)`.
     pub fn allows(&self, scope: BlobScope, peer: &[u8; 32], hash: BlobHash) -> bool {
+        // Answered once per hash in a blob request, so the decision is read
+        // under the guard rather than out of a clone of the whole scope
+        // authority: two set lookups never need their own copy of both sets.
         self.scopes
             .read()
-            .ok()
-            .and_then(|scopes| scopes.get(&scope).cloned())
-            .map(|authority| authority.readers.contains(peer) && authority.retained.contains(&hash))
+            .map(|scopes| {
+                scopes.get(&scope).is_some_and(|authority| {
+                    authority.readers.contains(peer) && authority.retained.contains(&hash)
+                })
+            })
             .unwrap_or(false)
     }
 
@@ -322,9 +327,12 @@ impl BlobReadAuthorizer {
     pub fn readers(&self, scope: BlobScope) -> Vec<[u8; 32]> {
         self.scopes
             .read()
-            .ok()
-            .and_then(|scopes| scopes.get(&scope).cloned())
-            .map(|authority| authority.readers.into_iter().collect())
+            .map(|scopes| {
+                scopes
+                    .get(&scope)
+                    .map(|authority| authority.readers.iter().copied().collect())
+                    .unwrap_or_default()
+            })
             .unwrap_or_default()
     }
 

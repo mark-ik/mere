@@ -20,7 +20,7 @@ use personae::{DerivedKeyAttestation, IdentityError, IdentityProvider};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use stickleback::{
-    Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, GroupCiphertext,
+    Admission, CausalEntry, CausalError, CausalIndex, CausalLimits, DataKeyring, GroupCiphertext,
     GroupPrekeyBundle, GroupSessionDispatch, MunimentStore, OperationPolicy, OperationProcessor,
     PendingCausalOperation, ProcessError, Reject, StoreTarget, author_head, causal_projection,
     happens_before, observed_frontier, stable_writer_subject, validate_causal_metadata,
@@ -1510,30 +1510,46 @@ fn collect_conflicts(
 ) -> Vec<SyncConflict> {
     let effective: BTreeSet<_> = order.iter().copied().collect();
     let mut conflicts = BTreeMap::<String, BTreeSet<[u8; 32]>>::new();
+    // Indexed once rather than per pair: this scan asks two reachability
+    // questions for every pair of records, and rebuilding the hash index inside
+    // each made the pair test alone O(R^3 log R) in stored operations.
+    let causal = CausalIndex::new(entries);
+    // `event_target` formats a fresh String, so it is computed once per event
+    // here instead of three times per event pair inside the loops below.
+    let targets: Vec<Vec<Option<String>>> = records
+        .iter()
+        .map(|record| {
+            record
+                .record
+                .events
+                .iter()
+                .map(|event| selection.projects(event).then(|| event_target(event)))
+                .collect()
+        })
+        .collect();
     for left in 0..records.len() {
         if !effective.contains(&left) {
             continue;
         }
         for right in (left + 1)..records.len() {
             if !effective.contains(&right)
-                || happens_before(entries, entries[left].operation, entries[right].operation)
-                || happens_before(entries, entries[right].operation, entries[left].operation)
+                || causal.happens_before(entries[left].operation, entries[right].operation)
+                || causal.happens_before(entries[right].operation, entries[left].operation)
             {
                 continue;
             }
-            for left_event in &records[left].record.events {
-                if !selection.projects(left_event) {
+            for (left_index, left_event) in records[left].record.events.iter().enumerate() {
+                let Some(left_target) = targets[left][left_index].as_ref() else {
                     continue;
-                }
-                for right_event in &records[right].record.events {
-                    if !selection.projects(right_event)
-                        || left_event == right_event
-                        || event_target(left_event) != event_target(right_event)
-                    {
+                };
+                for (right_index, right_event) in records[right].record.events.iter().enumerate() {
+                    let Some(right_target) = targets[right][right_index].as_ref() else {
+                        continue;
+                    };
+                    if left_event == right_event || left_target != right_target {
                         continue;
                     }
-                    let target = event_target(left_event);
-                    conflicts.entry(target).or_default().extend([
+                    conflicts.entry(left_target.clone()).or_default().extend([
                         *records[left].operation.hash.as_bytes(),
                         *records[right].operation.hash.as_bytes(),
                     ]);

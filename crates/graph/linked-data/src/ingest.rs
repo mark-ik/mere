@@ -531,19 +531,64 @@ fn collect_contribution<E: std::fmt::Display>(
     // value + typing + scope). A `urn:mere:statement:<id>` reifier also hands
     // over the fact id, keeping the round trip id-stable; a foreign reifier
     // leaves the id to the kernel's minter.
+    //
+    // Both matches are indexed up front rather than linear-scanned per reifier,
+    // which is what turns this pass from O(R x E) into O(R + E). Each key maps
+    // to the FIRST position that carries it, preserving `find`'s semantics when
+    // a document repeats a triple.
+    type EdgeMatchKey = (String, String, String, GraphScope);
+    type PropertyMatchKey = (
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        GraphScope,
+    );
+    let mut edge_index: std::collections::HashMap<EdgeMatchKey, usize> =
+        std::collections::HashMap::new();
+    let mut property_index: std::collections::HashMap<PropertyMatchKey, usize> =
+        std::collections::HashMap::new();
+    if !reified.is_empty() {
+        for (position, edge) in edges.iter().enumerate() {
+            edge_index
+                .entry((
+                    edge.subject.clone(),
+                    edge.predicate.clone(),
+                    edge.object.clone(),
+                    edge.graph_scope.clone(),
+                ))
+                .or_insert(position);
+        }
+        for (subject, node) in &nodes {
+            for (position, property) in node.properties.iter().enumerate() {
+                property_index
+                    .entry((
+                        subject.clone(),
+                        property.predicate.clone(),
+                        property.value.clone(),
+                        property.datatype.clone(),
+                        property.lang.clone(),
+                        property.graph_scope.clone(),
+                    ))
+                    .or_insert(position);
+            }
+        }
+    }
     for (reifier, statement) in reified {
         let statement_id = reifier
             .strip_prefix(STATEMENT_REIFIER_PREFIX)
             .map(str::to_string);
         match &statement.object {
             ReifiedObject::Resource(object) => {
-                let matched = edges.iter_mut().find(|edge| {
-                    edge.subject == statement.subject
-                        && edge.predicate == statement.predicate
-                        && &edge.object == object
-                        && edge.graph_scope == statement.graph_scope
-                });
-                if let Some(edge) = matched {
+                let match_key = (
+                    statement.subject.clone(),
+                    statement.predicate.clone(),
+                    object.clone(),
+                    statement.graph_scope.clone(),
+                );
+                if let Some(&position) = edge_index.get(&match_key) {
+                    let edge = &mut edges[position];
                     edge.statement_id = statement_id;
                     edge.label = statement.label;
                     edge.provenance_iri = statement.provenance_iri;
@@ -556,6 +601,10 @@ fn collect_contribution<E: std::fmt::Display>(
                     nodes
                         .entry(statement.subject.clone())
                         .or_insert_with(|| NodeContribution::new(&statement.subject));
+                    // The materialized edge joins the index, so a later reifier
+                    // naming the same fact attaches to it instead of pushing a
+                    // duplicate — what the old linear scan over `edges` did.
+                    edge_index.insert(match_key, edges.len());
                     edges.push(EdgeContribution {
                         subject: statement.subject,
                         predicate: statement.predicate,
@@ -573,28 +622,31 @@ fn collect_contribution<E: std::fmt::Display>(
                 datatype,
                 lang,
             } => {
-                let Some(node) = nodes.get_mut(&statement.subject) else {
-                    continue;
-                };
                 let wanted_datatype = if lang.is_some() {
                     None
                 } else {
                     (datatype != XSD_STRING).then(|| normalize_schema_org(datatype))
                 };
-                let matched = node.properties.iter_mut().find(|property| {
-                    property.predicate == statement.predicate
-                        && &property.value == value
-                        && property.datatype == wanted_datatype
-                        && &property.lang == lang
-                        && property.graph_scope == statement.graph_scope
-                });
-                if let Some(property) = matched {
-                    if let Some(id) = statement_id {
-                        property.statement_id = id;
-                    }
-                    property.provenance_iri = statement.provenance_iri;
-                    property.asserted_at_ms = statement.asserted_at_ms;
+                let match_key = (
+                    statement.subject.clone(),
+                    statement.predicate.clone(),
+                    value.clone(),
+                    wanted_datatype,
+                    lang.clone(),
+                    statement.graph_scope.clone(),
+                );
+                let Some(&position) = property_index.get(&match_key) else {
+                    continue;
+                };
+                let Some(node) = nodes.get_mut(&statement.subject) else {
+                    continue;
+                };
+                let property = &mut node.properties[position];
+                if let Some(id) = statement_id {
+                    property.statement_id = id;
                 }
+                property.provenance_iri = statement.provenance_iri;
+                property.asserted_at_ms = statement.asserted_at_ms;
             }
         }
     }

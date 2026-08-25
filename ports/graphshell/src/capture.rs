@@ -4,7 +4,7 @@
 //! event shape, configurable privacy policy, graph projection, durable batch
 //! boundary, and forget operation.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Mutex;
 
 use async_trait::async_trait;
@@ -40,39 +40,58 @@ pub trait CaptureBackend: Backend {}
 #[cfg(target_arch = "wasm32")]
 impl<T: Backend> CaptureBackend for T {}
 
+/// Buffered writes for one capture transaction, plus where each key's most
+/// recent write sits in them.
+///
+/// The ordered vec is what commits; `latest` exists only so a read does not
+/// rescan it. `forget_url` interleaves a read per access-record manifest with
+/// a `Delete` push into the same growing buffer, and unlike browsing traces
+/// those manifests have no retention pass, so a linear overlay scan made that
+/// loop quadratic in a set that only ever grows.
+#[derive(Default)]
+struct StagedWrites {
+    ops: Vec<WriteOp>,
+    latest: HashMap<String, usize>,
+}
+
+impl StagedWrites {
+    fn push(&mut self, op: WriteOp) {
+        let key = match &op {
+            WriteOp::Put { key, .. } | WriteOp::Delete { key } => key.clone(),
+        };
+        self.latest.insert(key, self.ops.len());
+        self.ops.push(op);
+    }
+}
+
 /// Read-through, write-buffer backend for one capture transaction.
 struct CaptureBatch<'a, B> {
     base: &'a B,
-    ops: Mutex<Vec<WriteOp>>,
+    staged: Mutex<StagedWrites>,
 }
 
 impl<'a, B: Backend> CaptureBatch<'a, B> {
     fn new(base: &'a B) -> Self {
         Self {
             base,
-            ops: Mutex::new(Vec::new()),
+            staged: Mutex::new(StagedWrites::default()),
         }
     }
 
+    /// Drain the buffer into the base backend. One transaction commits once
+    /// and both callers drop the batch afterwards, so taking the buffer under
+    /// the lock is cheaper than copying it and leaves no stale overlay behind.
     async fn commit(&self) -> Result<(), StoreError> {
-        let ops = self.ops.lock().unwrap().clone();
-        self.base.apply(&ops).await
+        let staged = std::mem::take(&mut *self.staged.lock().unwrap());
+        self.base.apply(&staged.ops).await
     }
 
     fn overlay(&self, key: &str) -> Option<Option<Vec<u8>>> {
-        self.ops
-            .lock()
-            .unwrap()
-            .iter()
-            .rev()
-            .find_map(|op| match op {
-                WriteOp::Put {
-                    key: candidate,
-                    value,
-                } if candidate == key => Some(Some(value.clone())),
-                WriteOp::Delete { key: candidate } if candidate == key => Some(None),
-                _ => None,
-            })
+        let staged = self.staged.lock().unwrap();
+        match &staged.ops[*staged.latest.get(key)?] {
+            WriteOp::Put { value, .. } => Some(Some(value.clone())),
+            WriteOp::Delete { .. } => Some(None),
+        }
     }
 
     fn overlay_keys(
@@ -80,12 +99,17 @@ impl<'a, B: Backend> CaptureBatch<'a, B> {
         mut keys: BTreeSet<String>,
         accepts: impl Fn(&str) -> bool,
     ) -> Vec<String> {
-        for op in self.ops.lock().unwrap().iter() {
-            match op {
-                WriteOp::Put { key, .. } if accepts(key) => {
+        // Only a key's last write decides whether it is present, so the index
+        // gives the same answer as replaying the log. A key `accepts` rejects
+        // is one the base listing never returned either, so its `Delete` was
+        // already a no-op on this set.
+        let staged = self.staged.lock().unwrap();
+        for (key, index) in &staged.latest {
+            match &staged.ops[*index] {
+                WriteOp::Put { .. } if accepts(key) => {
                     keys.insert(key.clone());
                 }
-                WriteOp::Delete { key } => {
+                WriteOp::Delete { .. } => {
                     keys.remove(key);
                 }
                 _ => {}
@@ -106,7 +130,7 @@ impl<'a, B: CaptureBackend> Backend for CaptureBatch<'a, B> {
     }
 
     async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), StoreError> {
-        self.ops.lock().unwrap().push(WriteOp::Put {
+        self.staged.lock().unwrap().push(WriteOp::Put {
             key: key.to_string(),
             value: bytes.to_vec(),
         });
@@ -114,7 +138,7 @@ impl<'a, B: CaptureBackend> Backend for CaptureBatch<'a, B> {
     }
 
     async fn delete(&self, key: &str) -> Result<(), StoreError> {
-        self.ops.lock().unwrap().push(WriteOp::Delete {
+        self.staged.lock().unwrap().push(WriteOp::Delete {
             key: key.to_string(),
         });
         Ok(())
@@ -131,7 +155,10 @@ impl<'a, B: CaptureBackend> Backend for CaptureBatch<'a, B> {
     }
 
     async fn apply(&self, ops: &[WriteOp]) -> Result<(), StoreError> {
-        self.ops.lock().unwrap().extend_from_slice(ops);
+        let mut staged = self.staged.lock().unwrap();
+        for op in ops {
+            staged.push(op.clone());
+        }
         Ok(())
     }
 }
