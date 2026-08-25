@@ -398,10 +398,13 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   reclaim fact, and a new epoch/session reproduced all values exactly. Plain
   WGPU passes. The follow-up measures 101 live CubeCL allocations and
   90,261,504 bytes during each run, returning exactly to the zero baseline
-  before both reclaim facts. Driver VRAM remains unmeasured. A fresh-process
-  feature matrix passes all local profiles and remote plain; optional Fusion
-  and autotune profiles remain remote-unsafe through distinct load, timing, and
-  cleanup failures rather than the old unbounded panic-hang.
+  before both reclaim facts. The later driver receipt measures 604,114,944 and
+  637,603,840 dedicated bytes released, zero retained growth across reclaim
+  baselines, NVIDIA GPU 0 attribution, and counter disappearance after process
+  exit. A fresh-process feature matrix passes all local profiles and remote
+  plain; optional Fusion and autotune profiles remain remote-unsafe through
+  distinct load, timing, and cleanup failures rather than the old unbounded
+  panic-hang.
 - **2026-08-24, immutable model session and real adapter**: Eidetic gained a
   typed compatibility-bound `ModelAdapterManifest`; ESP gained content-addressed
   `ModelSession`, prepared requests, `AdapterLoader`, and an ordinary PEFT LoRA
@@ -422,4 +425,6 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   bounded matrix passes every local feature profile and remote plain. Remote
   Fusion plus autotune retains five allocations; the split remote Fusion and
   autotune profiles remain timing/load unsafe. Plain WGPU remains the supported
-  profile; driver VRAM telemetry remains outside the claim.
+  profile. A clean Windows per-PID driver-memory receipt now closes physical
+  allocation release for that plain profile while leaving optional remote
+  Fusion/autotune unclaimed.

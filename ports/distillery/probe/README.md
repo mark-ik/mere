@@ -59,7 +59,8 @@ the lease while a configurable model batch is still in flight, requires the
 request to fail without hanging, requires active CubeCL allocations and bytes
 in use to return exactly to baseline, and repeats the numerical and cleanup
 proof under a fresh lease and session. Reserved allocator bytes are recorded
-but are not a live-allocation gate; driver VRAM remains outside the claim.
+but are not a live-allocation gate. The base fixture's receipt remains scoped
+to allocator telemetry.
 Unlike the browser workspace, this nested fixture has a stable committed lock
 and runs Cargo from outside the checkout with `--locked`, so gitignored local
 patch redirects cannot contaminate the receipt. It explicitly patches to
@@ -69,6 +70,21 @@ passing machine receipt is
 [`receipts/2026-08-23_remote_minilm.json`](receipts/2026-08-23_remote_minilm.json).
 The allocator and feature-sidequest summary is
 [`receipts/2026-08-25_remote_minilm_sidequests.json`](receipts/2026-08-25_remote_minilm_sidequests.json).
+
+On Windows with `typeperf.exe` and `nvidia-smi.exe`, the separate physical
+driver-memory gate is:
+
+```powershell
+ports/distillery/probe/measure-remote-minilm-vram.ps1
+```
+
+It holds the fixture at each lifecycle stage, sums the Windows per-PID
+`GPU Process Memory` dedicated-byte counters, and uses `nvidia-smi pmon` to
+attribute the active PID to NVIDIA GPU 0. The gate requires both active cycles
+to release at least 64 MiB, permits at most 32 MiB of retained growth across
+reclaims, and requires the PID counter to disappear after process exit. Board
+memory totals are contextual only. The first passing receipt is
+[`receipts/2026-08-25_remote_minilm_driver_vram.json`](receipts/2026-08-25_remote_minilm_driver_vram.json).
 
 ## Claim boundary
 

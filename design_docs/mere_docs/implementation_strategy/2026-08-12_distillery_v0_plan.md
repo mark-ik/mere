@@ -6,8 +6,9 @@ configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
-parity are proven. The installed-port authority and driver-level GPU telemetry
-remain open.
+parity are proven. Driver-level release is proven for the supported plain
+remote profile. The installed-port authority and browser-level physical GPU
+telemetry remain open.
 
 ## 1. Purpose
 
@@ -196,7 +197,10 @@ The allocator sidequest is complete through the patched CubeCL
 `ComputeClient::memory_usage()` seam. Both plain-WGPU MiniLM sessions rose from
 zero to 101 live allocations and 90,261,504 bytes in use, then returned exactly
 to the zero baseline before their reclaim facts. Reserved bytes are recorded
-but remain outside the gate; driver VRAM remains unmeasured. Burn Remote now
+but remain outside the allocator gate. A separate Windows driver receipt now
+measures 604,114,944 and 637,603,840 dedicated bytes released across the two
+plain-profile cycles, zero retained growth across reclaim baselines, NVIDIA GPU
+0 attribution, and counter disappearance after process exit. Burn Remote now
 keeps draining sessions visible until worker cleanup, propagates worker failure
 through Distillery, and wakes detached writers on close.
 

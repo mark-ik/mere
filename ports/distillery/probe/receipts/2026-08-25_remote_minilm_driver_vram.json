@@ -1,0 +1,45 @@
+{
+  "schema": "distillery.remote-minilm-driver-vram/v1",
+  "date": "2026-08-25",
+  "source": {
+    "commit": "3ff4d5a47d9add8e637c695b97116827d938bf33",
+    "owned_paths_dirty": false
+  },
+  "machine": {
+    "adapter": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "driver": "610.88",
+    "reported_total_mib": 8188,
+    "board_memory_used_as_gate": false
+  },
+  "method": {
+    "counter": "Windows GPU Process Memory Dedicated Usage summed across the fixture PID instances",
+    "adapter_attribution": "nvidia-smi pmon observed the same PID on NVIDIA GPU 0 at both active stages",
+    "pre_gpu_counter": "absent",
+    "steady_context_rule": "the second post-reclaim sample may shrink; retained growth above the first post-reclaim sample must stay within tolerance",
+    "active_minimum_delta_mib": 64,
+    "reclaim_growth_tolerance_mib": 32
+  },
+  "samples": {
+    "first_active_bytes": 693260288,
+    "first_reclaimed_bytes": 89145344,
+    "first_released_bytes": 604114944,
+    "recovery_active_bytes": 726712320,
+    "recovery_reclaimed_bytes": 89108480,
+    "recovery_released_bytes": 637603840,
+    "repeated_reclaim_growth_bytes": 0,
+    "shutdown_bytes": 89108480,
+    "counter_after_process_exit": "absent"
+  },
+  "fixture": {
+    "exit_code": 0,
+    "plain_remote_passes": true,
+    "allocator_first_reclaim_bytes_in_use": 0,
+    "allocator_recovery_reclaim_bytes_in_use": 0,
+    "fresh_session_matches_first_remote_max_abs_error": 0.0,
+    "native_reference_max_abs_error": 1.4901161193847656e-7,
+    "browser_reference_max_abs_error": 1.4156103134155273e-7
+  },
+  "driver_vram_claimed": true,
+  "passes": true,
+  "claim": "on the supported plain remote profile, both MiniLM session cycles release their driver-accounted model/runtime allocation to a stable or smaller persistent WGPU process context, with no retained growth and no PID GPU counter after process exit"
+}

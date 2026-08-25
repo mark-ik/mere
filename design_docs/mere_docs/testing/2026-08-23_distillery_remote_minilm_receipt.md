@@ -41,6 +41,18 @@ allocations and zero bytes in use before reclaim was acknowledged. Reserved
 bytes also happened to return from 612,368,384 to zero, but remain recorded
 rather than required. This is allocator evidence, not driver VRAM telemetry.
 
+The follow-up driver receipt closes that narrower physical gate for the
+supported plain profile on an NVIDIA RTX 4060 Laptop GPU. Windows per-PID
+dedicated-memory counters measured 693,260,288 bytes active and 89,145,344
+bytes after first reclaim, then 726,712,320 bytes active and 89,108,480 bytes
+after recovery reclaim. That is 604,114,944 and 637,603,840 bytes released,
+with zero retained growth between reclaim baselines. `nvidia-smi pmon`
+attributed the same PID to NVIDIA GPU 0 at both active stages, and its GPU
+process-memory counter disappeared after exit. The persistent roughly 85 MiB
+WGPU process context is recorded, not described as leaked model allocation.
+See
+[`2026-08-25_remote_minilm_driver_vram.json`](../../../ports/distillery/probe/receipts/2026-08-25_remote_minilm_driver_vram.json).
+
 Burn Remote now acknowledges closure only after its worker drains, syncs,
 drops its interpreter, and runs backend memory cleanup. Draining sessions stay
 visible; a worker panic becomes a failed resource stop rather than a false
