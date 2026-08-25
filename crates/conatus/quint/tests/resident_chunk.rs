@@ -7,8 +7,8 @@
 #![cfg(feature = "field-gpu")]
 
 use quint::resident::{
-    ChunkBounds, ChunkStamp, DirtyRegion, PlaneClass, PlaneElementType, PlaneId, RawKernelView,
-    ReadEpoch, ResidentChunk, ResidentChunkError, ResidentClient,
+    ChunkBounds, ChunkStamp, DirtyRegion, PlaneClass, PlaneElementType, PlaneId, PlanePatch,
+    RawKernelView, ReadEpoch, ResidentChunk, ResidentChunkError, ResidentClient,
 };
 
 fn setup() -> Option<burn::backend::wgpu::WgpuSetup> {
@@ -344,4 +344,102 @@ fn committed_patch_retains_the_allocation_and_restamps_new_views() {
         }
     );
     assert_eq!(chunk.stamp(), committed, "a stale patch changed the stamp");
+}
+
+#[test]
+fn sparse_patch_batch_publishes_nonadjacent_rows_once_or_not_at_all() {
+    let Some(setup) = setup() else {
+        eprintln!("no wgpu adapter: skipping the resident sparse-patch receipt");
+        return;
+    };
+    let device = setup.device.clone();
+    let queue = setup.queue.clone();
+    let mut chunk = ResidentChunk::new(
+        ResidentClient::init(setup),
+        "body positions",
+        ChunkBounds {
+            origin: [0, 0, 0],
+            extent: [8, 1, 1],
+        },
+        8,
+        ReadEpoch::new(19),
+        Vec::new(),
+    );
+    let positions = PlaneId::new("positions").unwrap();
+    chunk
+        .insert_plane(
+            positions.clone(),
+            PlaneClass::Derived,
+            [8, 4, 1],
+            &[0.0f32; 32],
+        )
+        .unwrap();
+
+    let before = chunk.raw_kernel_view(&positions).unwrap();
+    let expected = before.stamp();
+    let committed = ChunkStamp {
+        revision: 9,
+        valid_read_epoch: ReadEpoch::new(20),
+    };
+    let slot_one = [1.0f32, 2.0, 3.0, 1.0];
+    let slot_five = [5.0f32, 6.0, 7.0, 1.0];
+    let dirty = vec![
+        DirtyRegion {
+            origin: [1, 0, 0],
+            extent: [1, 1, 1],
+        },
+        DirtyRegion {
+            origin: [5, 0, 0],
+            extent: [1, 1, 1],
+        },
+    ];
+
+    chunk
+        .commit_plane_patches(
+            &queue,
+            &positions,
+            expected,
+            &[
+                PlanePatch::new(4, &slot_one),
+                PlanePatch::new(20, &slot_five),
+            ],
+            committed,
+            dirty.clone(),
+        )
+        .unwrap();
+    let after = chunk.raw_kernel_view(&positions).unwrap();
+    assert_eq!(before.allocation(), after.allocation());
+    assert_eq!(before.stamp(), expected);
+    assert_eq!(after.stamp(), committed);
+    assert_eq!(chunk.dirty_regions(), dirty);
+
+    let bytes = readback(&device, &queue, &after);
+    let values: &[f32] = bytemuck::cast_slice(&bytes);
+    assert_eq!(&values[4..8], &slot_one);
+    assert_eq!(&values[20..24], &slot_five);
+    assert!(values[..4].iter().all(|value| *value == 0.0));
+    assert!(values[8..20].iter().all(|value| *value == 0.0));
+
+    let replacement = [9.0f32, 9.0, 9.0, 1.0];
+    let malformed = [4.0f32, 4.0, 4.0, 1.0];
+    let rejected = chunk
+        .commit_plane_patches(
+            &queue,
+            &positions,
+            committed,
+            &[
+                PlanePatch::new(4, &replacement),
+                PlanePatch::new(31, &malformed),
+            ],
+            ChunkStamp {
+                revision: 10,
+                valid_read_epoch: ReadEpoch::new(21),
+            },
+            Vec::new(),
+        )
+        .unwrap_err();
+    assert!(matches!(rejected, ResidentChunkError::PatchRange { .. }));
+    assert_eq!(chunk.stamp(), committed);
+    let unchanged = chunk.raw_kernel_view(&positions).unwrap();
+    assert_eq!(readback(&device, &queue, &unchanged), bytes);
 }
