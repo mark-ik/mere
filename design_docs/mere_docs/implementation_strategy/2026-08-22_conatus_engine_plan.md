@@ -1,10 +1,10 @@
 # Conatus Shared Spatial Runtime
 
 **Date:** 2026-08-22  
-**Status:** active; body/runtime foundation, private-backend integrity, and the
-first profile-local resident body-position publication implemented; Nexus
-admission probe blocked at its upstream Windows shader build; scope corrected
-2026-08-23
+**Status:** active; body/runtime foundation, private-backend integrity, first
+profile-local resident body-position publication, and first product renderer
+tenant implemented; Nexus admission probe blocked at its upstream Windows
+shader build; scope corrected 2026-08-23
 **Scope:** Build the shared spatial runtime. Mesocosm, Paredros, Isometry,
 and Mere projections consume it through product-owned runtime profiles
 instead of incubating spatial machinery in product-local probes.
@@ -266,9 +266,19 @@ profile, which selects and configures tenants — Scenograph lanes for semantic
 2D, Renderling for 3D bodies, brick DDA for live volumes, several composed by
 Netrender.
 
-Renderling consumes the 3D portion through a profile-owned tenant adapter.
-Mere's spatial renderer can consume the same frame. Netrender receives each
-tenant's frame entry and composes them on the host's device and queue.
+The first realized adapter is Isometry's product-local, fixed-isometric body
+marker tenant at commit `7d45c40`. It binds the stamped Quint position
+suballocation directly, projects through configurable basis and appearance
+settings, renders into its own same-device texture, and gives Netrender an
+explicit external-composition boundary. Netrender learns neither Conatus body
+semantics nor Quint allocation policy.
+
+Renderling remains a candidate for a later 3D portion through another
+profile-owned adapter. It was not pulled into the 2D proof because its current
+stage cannot attach the external resident plane without a sidecar pass. Mere's
+spatial renderer may consume a later common frame if another product proves
+one. Netrender receives each tenant's frame entry and composes them on the
+host's device and queue.
 
 The frame vocabulary is a cross-product contract, so its shared form stays
 provisional until a second game consumes it. Until then it is the Isometry
@@ -324,9 +334,11 @@ product systems use.
 4. Publish versioned profile-local resident body/chunk views through Quint
    allocations. The first body-position view is complete; rotation, velocity,
    forces, flags, voxel/chunk joins, and direct-GPU advancement remain open.
-5. Add a profile-owned Renderling/Netrender tenant adapter over the existing
-   Isometry spatial frame and stamped position view. Keep any shared frame
-   vocabulary provisional until a second game challenges it.
+5. The first profile-owned Netrender tenant adapter is complete in Isometry:
+   it realizes stamped resident positions as fixed-isometric body markers.
+   Add a Renderling or other 3D adapter only when a product lens demands it,
+   and keep shared frame vocabulary provisional until a second game challenges
+   it.
 6. Add optional field adapters and spatial scripting against the shared
    resources without making Numen or Quint depend on Conatus.
 
@@ -399,3 +411,19 @@ contract declared in advance.
 - Shared frame, source, lease, and conductor contracts remain provisional.
   The next critical slice is the product-owned renderer tenant adapter; host
   construction still waits for Isometry's protocol and Genet migration gates.
+
+## Progress (2026-08-25 renderer-tenant pass)
+
+- Isometry commit `7d45c40` added the first product-owned resident renderer
+  tenant. Its production path reads the stamped Quint storage suballocation
+  directly, draws configurable fixed-isometric markers into a tenant texture,
+  and exposes that texture to Netrender at an explicit scene boundary.
+- The real-device receipt proves scene content below and above the tenant,
+  silent-frame skipping, stable-allocation moves, stale-view refusal, removal,
+  generation-aware slot reuse, and capacity and target-limit refusal. Default
+  profile tests remain GPU-free.
+- This closes the first renderer-adapter slice, not host adoption or a shared
+  tenant contract. Isometry desktop construction still waits for protocol H2
+  and Genet migration. Renderling remains a later 3D candidate, and shared
+  frame, source, lease, tenant, and conductor vocabulary still waits for a
+  second product.

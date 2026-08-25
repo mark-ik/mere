@@ -1,9 +1,9 @@
 # Runtime Composition Acceptance Plan
 
 **Date:** 2026-08-23
-**Status:** active; Conatus foundation, first product profile, and first
-resident body-position proof complete; renderer, host adoption, and
-second-consumer gates open
+**Status:** active; Conatus foundation, first product profile, first resident
+body-position proof, and first product renderer tenant complete; host adoption,
+3D realization, and second-consumer gates open
 **Scope:** Name how Merely games compose runtime organs, who owns each seam,
 and which executable receipts are required before a local shape becomes a
 shared contract.
@@ -43,6 +43,7 @@ Two extraction rules govern every row:
 | DDA traversal | Product-free traversal kernel/data contract, final crate selected by adoption | Product lens owns camera, material, and composition | Mesocosm and Paredros headed profiles share WGSL/brick ABI in receipts | Permanent tracked adoption by the second product | Reusable core proven; permanent owner open |
 | Scene facts and transitions | Sceno/scenomise/scenotime; product adapter owns meaning | Profile chooses scene recipe and realization | Existing Mere and game consumers | Governed by Scenograph's own two-consumer receipts | Outside Conatus |
 | Device tenancy and final composition | Netrender | Profile selects tenants on host device and queue | Existing same-device composition receipts | New contract only if a second host needs it | Established seam |
+| 2D resident body realization | Isometry product tenant | Stamped Quint position view to tenant-owned same-device texture | Isometry `7d45c40` direct-buffer and Netrender boundary receipt | Second product or renderer challenges the tenant and frame shape | First product adapter complete; contract provisional |
 | 3D body realization | Renderling or another selected tenant | Product-local spatial-frame adapter | First adapter remains open | Second renderer or product challenges the frame | Open |
 | Inference and learned proposals | ESP/Burn/CubeCL or product-selected model organ | Proposal plus provenance enters product adjudication | Mesocosm bounded fauna and field proposals | Shared proposal envelope needs two products | Product authority settled; composition local |
 | Assets and procedural content | Product campaign/content packs; shared cache only when forced | Profile binds durable content refs to runtime instances | Isometry campaign and voxel-appearance packs | Shared asset lifecycle needs heterogeneous pack consumers | No universal asset manager |
@@ -75,6 +76,13 @@ capacity, source-to-`BodyId` generation binding, coordinate interpretation,
 and tenant selection for a Quint-backed position plane. The plane is rebuilt
 from accepted product truth and is not a durable identity table or a shared
 spatial-frame contract.
+
+Its first renderer tenant is likewise product-local. A configurable
+fixed-isometric marker pass reads the position plane's exact GPU
+suballocation, renders to a tenant-owned texture, and enters Netrender at an
+explicit scene boundary. This proves direct resident realization and
+same-device composition. It does not establish a shared frame, lease, tenant,
+marker, camera, or 3D-rendering contract.
 
 ### Mesocosm
 
@@ -125,6 +133,18 @@ reuse on a real adapter. The default four-test profile graph remains GPU-free.
 This proves the mechanism and one product seam; it promotes no shared frame,
 source, lease, or tenant contract.
 
+### C2b — First renderer tenant
+
+**Complete in Isometry at commit `7d45c40`.** A product-owned plain-wgpu
+tenant reads the stamped Quint position suballocation directly and emits a
+same-device texture for Netrender. Its real-device receipt proves explicit
+scene ordering around the tenant, silent-frame skipping, stable-allocation
+moves, stale-view refusal, removal, generation-aware slot reuse, and refusal
+before invalid resource creation. The isometric basis, target, marker
+geometry, and color remain product configuration. This closes the first 2D
+adapter only; Renderling-backed 3D, desktop host adoption, and contract
+promotion remain open.
+
 ### C3 — First host adoption
 
 **Open behind existing Isometry prerequisites.** Done when the desktop host's
@@ -171,3 +191,8 @@ a shared contract. Product-specific fields remain local.
   preserved allocation identity and product authority. Renderer tenancy, host
   adoption, direct-GPU body ownership, and the second-consumer challenge stay
   open.
+- **2026-08-25:** C2b closed at Isometry commit `7d45c40`. The product tenant
+  now realizes resident positions without CPU position carriage and composes
+  through Netrender at an explicit scene boundary. Host adoption, 3D
+  realization, broader resident body planes, direct-GPU advancement, and the
+  second-consumer challenge stay open.
