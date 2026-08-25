@@ -1,9 +1,10 @@
 # Conatus Shared Spatial Runtime
 
 **Date:** 2026-08-22  
-**Status:** active; body/runtime foundation and private-backend integrity pass
-implemented; Nexus admission probe blocked at its upstream Windows shader build;
-scope corrected 2026-08-23
+**Status:** active; body/runtime foundation, private-backend integrity, and the
+first profile-local resident body-position publication implemented; Nexus
+admission probe blocked at its upstream Windows shader build; scope corrected
+2026-08-23
 **Scope:** Build the shared spatial runtime. Mesocosm, Paredros, Isometry,
 and Mere projections consume it through product-owned runtime profiles
 instead of incubating spatial machinery in product-local probes.
@@ -233,6 +234,15 @@ Join the CPU body world to Quint's resident allocation model:
 - leases with allocation epoch, source revision, shape, units, and valid read
   interval.
 
+The first position-plane slice is complete at Mere commit `c382e734` and
+Isometry commit `15f5da2`. Quint can validate and publish several disjoint
+ranges under one stamp. Isometry uses that mechanism to project an accepted
+`IsometrySpatialFrame` into one fixed-capacity `[x, y, z, occupied]` plane.
+The product owns capacity, coordinates, source bindings, generation handling,
+and tenant selection. Conatus's existing `FrameUpdate` remains unchanged.
+This disposable product projection does not settle allocation ownership for
+state advanced directly on the GPU, or establish a shared frame or lease.
+
 Burn/CubeCL handles dense fields and authored kernels. Khal/rust-gpu artifacts
 are adopted where their explicit spatial algorithms are useful. Tool choice
 follows the operation. Allocation ownership follows advanced state: Conatus
@@ -312,9 +322,11 @@ product systems use.
    without moving product identity or authority, then feed accepted occupancy
    changes into the voxel collider already implemented.
 4. Publish versioned profile-local resident body/chunk views through Quint
-   allocations.
-5. Add the lean spatial frame and the Renderling/Netrender tenant adapter,
-   seamed in the first product profile.
+   allocations. The first body-position view is complete; rotation, velocity,
+   forces, flags, voxel/chunk joins, and direct-GPU advancement remain open.
+5. Add a profile-owned Renderling/Netrender tenant adapter over the existing
+   Isometry spatial frame and stamped position view. Keep any shared frame
+   vocabulary provisional until a second game challenges it.
 6. Add optional field adapters and spatial scripting against the shared
    resources without making Numen or Quint depend on Conatus.
 
@@ -372,3 +384,18 @@ contract declared in advance.
   build reaches `nexus_rbd3d`, then the Khal build script's `cargo-gpu 0.1.0`
   invocation fails while removing `Cargo.lock`. No Nexus kernel executed, so
   Nexus remains outside Conatus and shared buffer ownership remains unproven.
+
+## Progress (2026-08-25 resident-position pass)
+
+- Quint commit `c382e734` added an atomic sparse batch-patch mechanism to
+  `ResidentChunk`. Its real-adapter receipt changes nonadjacent rows under one
+  advancing stamp, retains the allocation, and proves malformed batches write
+  nothing.
+- Isometry commit `15f5da2` added the first product-local consumer: accepted
+  Conatus body changes populate a retained position plane, silent frames do
+  not write, capacity refusal leaves the allocation untouched, and same-slot
+  generation reuse remains distinct in the product binding. The accepted
+  `MapDocument` stays authoritative and unchanged.
+- Shared frame, source, lease, and conductor contracts remain provisional.
+  The next critical slice is the product-owned renderer tenant adapter; host
+  construction still waits for Isometry's protocol and Genet migration gates.

@@ -1,8 +1,9 @@
 # Runtime Composition Acceptance Plan
 
 **Date:** 2026-08-23
-**Status:** active; Conatus foundation and first product proofs complete;
-host adoption and second-consumer gates open
+**Status:** active; Conatus foundation, first product profile, and first
+resident body-position proof complete; renderer, host adoption, and
+second-consumer gates open
 **Scope:** Name how Merely games compose runtime organs, who owns each seam,
 and which executable receipts are required before a local shape becomes a
 shared contract.
@@ -38,7 +39,7 @@ Two extraction rules govern every row:
 | Input and actions | Genet/Cambium captures input; product maps it to intents | Authorized intent lowering | Isometry protocol refusal and application tests | Two products must share semantics, not merely devices | No shared action contract |
 | Tactile bodies and spatial queries | Conatus owns the state it advances | Product source bindings to runtime `BodyId`s | Isometry product profile mirrors accepted map tokens | Paredros or Mesocosm must consume and challenge the profile shape | First profile proven product-local |
 | CPU voxel patch mechanics | `conatus-voxel` owns generic value mechanics; product owns voxel identity, material meaning, and durable authority | Product adapter supplies admitted source revisions | Mesocosm `GroundVoxelProfile` preserves `Ground`, replay, refusal, occupancy lowering, and silence without resolving Rapier | A second product tests mechanics; identity/frame contracts remain local regardless | Narrow package adopted locally |
-| Resident fields and chunks | Quint owns resident allocations and typed views for its advanced state | Profile orders passes and binds product source revisions | Mesocosm resident-ground and `ResidentChunk` receipts | Second product proves any shared lease or identity vocabulary | Mechanics proven; contract provisional |
+| Resident fields and chunks | Quint owns resident allocations and typed views for its advanced state | Profile orders passes and binds product source revisions | Mesocosm resident-ground plus Isometry resident body-position receipts | Second product proves any shared lease or identity vocabulary | Reusable mechanics proven twice; contract provisional |
 | DDA traversal | Product-free traversal kernel/data contract, final crate selected by adoption | Product lens owns camera, material, and composition | Mesocosm and Paredros headed profiles share WGSL/brick ABI in receipts | Permanent tracked adoption by the second product | Reusable core proven; permanent owner open |
 | Scene facts and transitions | Sceno/scenomise/scenotime; product adapter owns meaning | Profile chooses scene recipe and realization | Existing Mere and game consumers | Governed by Scenograph's own two-consumer receipts | Outside Conatus |
 | Device tenancy and final composition | Netrender | Profile selects tenants on host device and queue | Existing same-device composition receipts | New contract only if a second host needs it | Established seam |
@@ -68,6 +69,12 @@ its own lock until adoption, because the desktop graph still carries Genet's
 deleted layout compatibility cone. Desktop-host wiring waits for the active
 protocol H2 gate and that Genet migration; the profile must not become a reason
 to reorder either prerequisite.
+
+Its optional resident slice remains product-local too. Isometry owns the fixed
+capacity, source-to-`BodyId` generation binding, coordinate interpretation,
+and tenant selection for a Quint-backed position plane. The plane is rebuilt
+from accepted product truth and is not a durable identity table or a shared
+spatial-frame contract.
 
 ### Mesocosm
 
@@ -107,6 +114,16 @@ proves map-qualified source bindings, accepted-event-only synchronization,
 stable body identity across moves, distinct identity across maps, unchanged-
 frame silence, and warnings-denied checks. Four focused tests and Clippy pass
 under Rust 1.96.0. Desktop wiring remains a separate adoption gate.
+
+### C2a — First resident body view
+
+**Complete at Mere commit `c382e734` and Isometry commit `15f5da2`.** Quint
+atomically publishes disjoint patches under one stamp. Isometry's optional
+resident consumer proves nonadjacent body updates, stable allocation identity,
+silent-frame behavior, explicit capacity refusal, and generation-aware slot
+reuse on a real adapter. The default four-test profile graph remains GPU-free.
+This proves the mechanism and one product seam; it promotes no shared frame,
+source, lease, or tenant contract.
 
 ### C3 — First host adoption
 
@@ -149,3 +166,8 @@ a shared contract. Product-specific fields remain local.
   `conatus-voxel`. Mesocosm's adapter now depends on that narrow package. These
   are mechanics and dependency corrections; they do not promote a shared
   backend selector, voxel identity, conductor, frame, or lease contract.
+- **2026-08-25:** C2a closed with Quint's atomic sparse patch mechanism and
+  Isometry's product-owned resident position consumer. The real-adapter receipt
+  preserved allocation identity and product authority. Renderer tenancy, host
+  adoption, direct-GPU body ownership, and the second-consumer challenge stay
+  open.
