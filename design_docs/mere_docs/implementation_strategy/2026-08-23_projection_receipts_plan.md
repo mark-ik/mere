@@ -3,8 +3,8 @@
 **Date:** 2026-08-23  
 **Status:** active; Wave 1 receipts landed 2026-08-23. Mer3ly is the headed
 first consumer and gazette Ledger the heterogeneous second; the Gazette port
-promotion and this plan landed at `0da3b8ba`. Wave 2 FT6 closed 2026-08-24;
-FT7 is next, and wave 3 remains explicitly gated.
+promotion and this plan landed at `0da3b8ba`. Wave 2 FT6 and FT7 closed
+2026-08-25; FT8 is next, and wave 3 remains explicitly gated.
 **Scope:** sequence the nine acceptance receipts of the
 [projection-scenes direction note](../../2026-08-23_projection_scenes_and_graph_native_platform.md)
 §8 into feature targets with named forcing consumers and done-conditions.
@@ -194,15 +194,18 @@ entering graph truth; prove an authorized source edit travels through
 application intent routing rather than the view-state path.
 Done when: receipt 7 holds verbatim.
 
-**FT7. Local, remote, and frozen parity (receipt 5).**
+**FT7. Local, remote, and frozen parity (receipt 5) — CLOSED 2026-08-25.**
 Context: B1 (accessible static realization, including the long-form table) is
 closed; the Graphshell remote projection host carries the remote leg;
 `FrozenScene` names the frozen leg.
-Tasks: take one scene — FT1's Matrix is the natural pick — interactive in a
-local host; across a Graphshell session to a viewer without source access;
-frozen into a navigable semantic document or table. The same source mapping
-must hold in all three realizations (the §4 rule).
-Done when: receipt 5 holds verbatim.
+Receipt: FT1's Matrix runs through `LocalCarrier`, crosses an admitted
+Graphshell session over `MemoryTransport` using Notochord/personae policy to a
+source-free viewer, and freezes into a navigable semantic table. The exact
+`InstanceId -> SourceRef` mapping, including repeated source instances, is
+preserved in all three realizations. The Mere platform seam is at
+`302bbe72d7597b7573e14199ce926bd3b03eea7f`; the Mer3ly consumer is
+`4c42847272489c41a20dc515884e83f3b413059a`.
+Done when: receipt 5 holds verbatim. **Met.**
 
 **FT8. Mixed realization (receipt 4).**
 Context: genet-side — one focus and pointer-capture model across DOM content
@@ -300,3 +303,19 @@ radio model for Current.
   reopens; those two Turnstone receipts used the existing post-source test
   binary because the live checkout's local patch redirects prevent a fresh
   locked build.
+- 2026-08-25: FT7 closed. The FT1 Matrix preserves its exact
+  `InstanceId -> SourceRef` mapping, including repeated source instances,
+  through `LocalCarrier`, an admitted Graphshell `MemoryTransport` session
+  using Notochord/personae policy to a source-free viewer, and the
+  `FrozenScene` semantic-table realization. The Mere platform implementation
+  is `302bbe72d7597b7573e14199ce926bd3b03eea7f`; the Mer3ly consumer is
+  `4c42847272489c41a20dc515884e83f3b413059a`. FT8 is next;
+  A3 stage two and A5 remain gated by their own consumer rules.
+  Verification: all 29 `mer3ly-repo-graph` tests pass against Mere's pushed
+  revision, and the generated `/repos/` page exposes 116 instance-mapped
+  Matrix controls. Repeated `Mere` and `Turnstone` sources keep distinct
+  instance IDs; selecting the shared `Mere` cell coordinates the graph node;
+  the headed browser records no warnings or errors. The four-test M5 site
+  contract passes with the active firmware-data lane. On clean origin, its
+  asset-only test passes under `--locked`; the other three tests stop at the
+  pre-existing retained-firmware digest mismatch before exercising FT7.

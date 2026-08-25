@@ -1,11 +1,12 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status (reconciled 2026-08-23)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
+**Status (reconciled 2026-08-25)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
 one, A4+C2, and A2 are closed. Turnstone `648bf19` is B1's definitive close,
 including routed screen-reader interaction. The Projection Receipts Plan's
 coordinated spatial/Matrix views close A2's resolution half. A3 stage two and
-A5 retain their entrance gates.
+A5 retain their entrance gates. FT7 is closed through the local, admitted
+remote, and frozen Matrix parity receipt; FT8 is next.
 The Scenograph family is now on an unpublished 0.0.4 development line with
 Score v4. Mer3ly ruled an authority-grade consumer 2026-08-16. This plan turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
@@ -887,3 +888,11 @@ not settled without it.
   applies the foreign clause and excludes its own; deterministic Shelfmark
   serialization restores both clauses; removing the Matrix clause restores all
   18 spatial actors. Gazette's Ledger independently replays the same record.
+- 2026-08-25: **FT7 closed.** The FT1 Matrix preserves its exact
+  `InstanceId -> SourceRef` mapping, including repeated source instances,
+  through `LocalCarrier`, an admitted Graphshell `MemoryTransport` session
+  using Notochord/personae policy to a source-free viewer, and the
+  `FrozenScene` semantic-table realization. The Mere platform implementation
+  is `302bbe72d7597b7573e14199ce926bd3b03eea7f`; the Mer3ly consumer is
+  `4c42847272489c41a20dc515884e83f3b413059a`. FT8 is next. A3 stage two and A5
+  remain gated by their own consumer rules.
