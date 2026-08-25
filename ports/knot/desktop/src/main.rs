@@ -45,6 +45,11 @@ fn focused_text(
     >,
 ) -> Option<FocusedTextSlot<KnotDocumentSurfaceState>> {
     let focused = runner.focus()?;
+    if runner.state().snapshot().write_posture
+        == knot_document::KnotDocumentWritePostureV1::ReadOnly
+    {
+        return None;
+    }
     let dom = runner.dom();
     let dom_ref = dom.borrow();
     let textarea = LayoutDom::element_name(&*dom_ref, focused)
@@ -53,7 +58,12 @@ fn focused_text(
     textarea.then(|| FocusedTextSlot {
         node: focused,
         get: Box::new(|state| state.session().input()),
-        get_mut: Box::new(|state| state.session_mut().input_mut()),
+        get_mut: Box::new(|state| {
+            state
+                .session_mut()
+                .input_mut()
+                .expect("focused textarea requires writable document posture")
+        }),
     })
 }
 fn host_hooks() -> HostHooks<
