@@ -1,0 +1,68 @@
+{
+  "schema": "distillery.remote-minilm-sidequests/v1",
+  "date": "2026-08-25",
+  "implementation_commit": "74b55236",
+  "clean_plain_source_commit": "1aa8d4f9d4645d3d91349b023409c5e5755e2a94",
+  "clean_plain_owned_paths_dirty": false,
+  "model": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "allocator": {
+    "scope": "CubeCL ComputeClient memory usage across every server-device stream",
+    "baseline": {
+      "number_allocs": 0,
+      "bytes_in_use": 0,
+      "bytes_reserved": 0
+    },
+    "after_each_plain_remote_execution": {
+      "number_allocs": 101,
+      "bytes_in_use": 90261504,
+      "bytes_reserved": 612368384
+    },
+    "after_first_reclaim": {
+      "number_allocs": 0,
+      "bytes_in_use": 0,
+      "bytes_reserved": 0
+    },
+    "after_recovery_reclaim": {
+      "number_allocs": 0,
+      "bytes_in_use": 0,
+      "bytes_reserved": 0
+    },
+    "driver_vram_claimed": false,
+    "passes": true
+  },
+  "matrix": {
+    "process_timeout_seconds": 120,
+    "rows": [
+      { "name": "local-plain", "result": "pass" },
+      { "name": "local-fusion-autotune", "result": "pass" },
+      { "name": "remote-plain", "result": "pass" },
+      {
+        "name": "remote-fusion-autotune",
+        "result": "fail",
+        "last_stage": "native-control-passed",
+        "failure": "five live allocations remained after first reclaim"
+      },
+      { "name": "local-autotune-only", "result": "pass" },
+      {
+        "name": "remote-autotune-only",
+        "result": "timeout",
+        "last_stage": "native-control-passed"
+      },
+      { "name": "local-fusion-only", "result": "pass" },
+      {
+        "name": "remote-fusion-only",
+        "result": "timeout",
+        "last_stage": "first-lease-active"
+      }
+    ],
+    "supported_remote_profile": "plain",
+    "passes": false
+  },
+  "lifecycle_repair": {
+    "session_visible_until_worker_cleanup": true,
+    "worker_failure_propagates": true,
+    "client_close_wakes_writer": true,
+    "reclaim_requires_clean_worker_completion": true
+  },
+  "claim": "plain remote MiniLM executes with numerical parity, allocator cleanup, reclaim ordering, and fresh-session recovery; optional Fusion and autotune profiles remain remote-unsafe"
+}

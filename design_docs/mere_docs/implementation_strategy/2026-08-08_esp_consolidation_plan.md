@@ -396,9 +396,12 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   `1.4156103e-7` of the BrowserWebGpu reference prefix. Owner reclaim
   interrupted a live 512-row request, closed the only session before the
   reclaim fact, and a new epoch/session reproduced all values exactly. Plain
-  WGPU passes. Burn Fusion's fused-matmul autotune and stream ordering panic on
-  this remote graph; that is a separate backend sidequest. Physical allocation
-  release remains unmeasured.
+  WGPU passes. The follow-up measures 101 live CubeCL allocations and
+  90,261,504 bytes during each run, returning exactly to the zero baseline
+  before both reclaim facts. Driver VRAM remains unmeasured. A fresh-process
+  feature matrix passes all local profiles and remote plain; optional Fusion
+  and autotune profiles remain remote-unsafe through distinct load, timing, and
+  cleanup failures rather than the old unbounded panic-hang.
 - **2026-08-24, immutable model session and real adapter**: Eidetic gained a
   typed compatibility-bound `ModelAdapterManifest`; ESP gained content-addressed
   `ModelSession`, prepared requests, `AdapterLoader`, and an ordinary PEFT LoRA
@@ -410,3 +413,13 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   effectively the base checkpoint, so it is recorded as an invalid reference
   rather than used as the oracle. See the
   [receipt](../testing/2026-08-24_model_session_peft_lora_receipt.md).
+- **2026-08-25, remote allocator and feature sidequests**: Burn Remote now
+  acknowledges session closure after the worker has synced, dropped its
+  interpreter, and run backend cleanup. Draining sessions remain visible and
+  worker failure propagates through Distillery, preventing false reclaim
+  receipts. Plain remote MiniLM returns CubeCL's 101 allocations and 90,261,504
+  live bytes to zero across first reclaim and fresh-session recovery. The
+  bounded matrix passes every local feature profile and remote plain. Remote
+  Fusion plus autotune retains five allocations; the split remote Fusion and
+  autotune profiles remain timing/load unsafe. Plain WGPU remains the supported
+  profile; driver VRAM telemetry remains outside the claim.

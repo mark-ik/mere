@@ -67,6 +67,8 @@ Mere's production Burn Remote and CubeCL sources and restates Mere's p2panda
 fork because nested workspaces do not inherit the root patch table. The first
 passing machine receipt is
 [`receipts/2026-08-23_remote_minilm.json`](receipts/2026-08-23_remote_minilm.json).
+The allocator and feature-sidequest summary is
+[`receipts/2026-08-25_remote_minilm_sidequests.json`](receipts/2026-08-25_remote_minilm_sidequests.json).
 
 ## Claim boundary
 
