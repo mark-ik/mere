@@ -4,8 +4,8 @@
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
 host receipt implemented and independently green; Turnstone T0 consumer core
-landed, with invocation, read-only, generic accessibility, and the full shell
-build receipt still open
+and user invocation landed, including explicit read-only admission; generic
+accessibility and the full shell build receipt remain open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -363,9 +363,13 @@ eviction around the boxed session. Mount `knot.document.v1` without a new
 admission, the erased retained-session map, render and pointer/key/IME routing,
 focus, hover, scroll, repin replacement, and eviction. It mounts the published
 Knot session and converts typed product unavailability into a generic retained
-surface. A user-facing command or file chooser still needs to mint the source;
-the shared Knot model still needs an explicit read-only posture; and the
-generic DOM is not yet joined to Turnstone's AccessKit projection.
+surface. Mere `709ae402` adds an explicit posture whose edit, save, and mutable
+input routes refuse without mutation. Turnstone `a37e6a1` adds editable and
+read-only file-choice commands, mints the selected path into the versioned
+provider source, and inserts the legacy pane and matching blueprint atomically.
+Source-bearing actions remain host-only because a pane grant must not imply
+local-file authority. The generic DOM is not yet joined to Turnstone's
+AccessKit projection.
 
 Reuse A6 for commands and A7's `SettingsProvider` direction. Do not add command
 or settings arrays to the surface descriptor. Preserve all existing Knot
@@ -499,6 +503,19 @@ through UI admission.
   `rustc`, so this is not a full-shell green receipt. Invocation, read-only,
   generic AccessKit projection, and that full-shell build remain explicit T0
   gates.
+- 2026-08-25: Mere `709ae402` published the explicit read-only document
+  posture. Edit, save, and direct mutable-input access refuse without changing
+  the document or file; the retained component renders an inert document body
+  with no save button, and the desktop host yields no writable text slot. An
+  independent exact-source package mirror passed nine unit tests, including
+  the DOM and file-immutability receipts.
+- 2026-08-25: Turnstone `a37e6a1` published both file-choice commands and the
+  atomic contributed-pane summon. The selected path and access posture persist
+  in the versioned source, cancel is a no-op, and source admission is host-only.
+  The exact current-Genet provider harness passed nine tests, including the
+  read-only admission. A concurrent Cargo package-cache lock and the existing
+  broad resolver prevented a full-shell compile from reaching `rustc`; generic
+  AccessKit projection and that build receipt remain open T0 gates.
 
 ## 8. Final done conditions
 
