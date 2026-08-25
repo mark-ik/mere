@@ -1,10 +1,9 @@
 # Knot Shared Surface and Port Contribution Plan
 
 **Date:** 2026-08-24
-**Status:** in progress; current-origin G0 published; K0, reusable Knot
-surface, narrow `knot-document` package, desktop wrapper, and semantic host
-receipt implemented and independently green; Mere publication and Turnstone T0
-open
+**Status:** in progress; current-origin G0 and the narrow `knot-document`
+package published; K0, the reusable Knot surface, desktop wrapper, and semantic
+host receipt implemented and independently green; Turnstone T0 open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -478,8 +477,9 @@ through UI admission.
   re-exports and enables the optional engine conversion layer. An independent
   exact-current-origin verifier passed five default tests and eleven engine
   tests. This closes the dependency-breadth choice and local source receipt;
-  publishing Mere remains the cross-repository gate before Turnstone imports
-  the new package.
+  Mere commit `fb82d12f` published the package through `origin/main` merge
+  `80c2f17c`. Turnstone may now import the narrow package without acquiring the
+  broad Knot port graph.
 
 ## 8. Final done conditions
 
