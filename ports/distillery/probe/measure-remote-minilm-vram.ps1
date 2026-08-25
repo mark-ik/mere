@@ -127,13 +127,12 @@ $start.UseShellExecute = $false
 $start.RedirectStandardOutput = $true
 $start.RedirectStandardError = $true
 $start.CreateNoWindow = $true
-$start.ArgumentList.Add('remote')
-$start.ArgumentList.Add($resolvedModel)
-$start.ArgumentList.Add($Text)
-$start.ArgumentList.Add($CancellationBatch.ToString())
-$start.Environment['DISTILLERY_REMOTE_PROBE_COMMIT'] = $sourceCommit
-$start.Environment['DISTILLERY_REMOTE_PROBE_DIRTY'] = $ownedPathsDirty.ToString().ToLowerInvariant()
-$start.Environment['DISTILLERY_REMOTE_STAGE_HOLD_MS'] = $StageHoldMs.ToString()
+$escapedModel = $resolvedModel.Replace('"', '\"')
+$escapedText = $Text.Replace('"', '\"')
+$start.Arguments = "remote `"$escapedModel`" `"$escapedText`" $CancellationBatch"
+$start.EnvironmentVariables['DISTILLERY_REMOTE_PROBE_COMMIT'] = $sourceCommit
+$start.EnvironmentVariables['DISTILLERY_REMOTE_PROBE_DIRTY'] = $ownedPathsDirty.ToString().ToLowerInvariant()
+$start.EnvironmentVariables['DISTILLERY_REMOTE_STAGE_HOLD_MS'] = $StageHoldMs.ToString()
 
 $process = [System.Diagnostics.Process]::new()
 $process.StartInfo = $start
