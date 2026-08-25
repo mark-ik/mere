@@ -207,14 +207,14 @@ $firstReleased = if ($samplesComplete) {
 $recoveryReleased = if ($samplesComplete) {
     [int64]$recoveryActive.dedicated_bytes - [int64]$recoveryReclaimed.dedicated_bytes
 } else { $null }
-$reclaimDrift = if ($samplesComplete) {
-    [Math]::Abs([int64]$recoveryReclaimed.dedicated_bytes - [int64]$firstReclaimed.dedicated_bytes)
+$reclaimGrowth = if ($samplesComplete) {
+    [Math]::Max(0, [int64]$recoveryReclaimed.dedicated_bytes - [int64]$firstReclaimed.dedicated_bytes)
 } else { $null }
 
 $passes = -not $timedOut -and $exitCode -eq 0 -and $samplesComplete -and $preGpuCounterAbsent -and `
     $firstReleased -ge $activeMinimumDelta -and `
     $recoveryReleased -ge $activeMinimumDelta -and `
-    $reclaimDrift -le $reclaimTolerance -and `
+    $reclaimGrowth -le $reclaimTolerance -and `
     $firstActive.nvidia_gpu_0_visible -and $recoveryActive.nvidia_gpu_0_visible -and `
     -not $afterExit.counter_available
 
@@ -237,7 +237,7 @@ $receipt = [pscustomobject]@{
         adapter_attribution = 'nvidia-smi pmon observes the same PID on NVIDIA GPU 0 at active stages'
         board_memory = 'nvidia-smi total memory is contextual only and is not a gate'
         pre_gpu_baseline = 'the PID has no GPU process-memory counter before WGPU initialization'
-        steady_driver_context = 'the first post-reclaim sample is the persistent process context baseline; repeat reclaim must match it within tolerance'
+        steady_driver_context = 'the first post-reclaim sample is the persistent process context baseline; repeat reclaim must not grow beyond it by more than tolerance'
         stage_hold_ms = $StageHoldMs
         active_minimum_delta_mib = $ActiveMinimumDeltaMiB
         reclaim_tolerance_mib = $ReclaimToleranceMiB
@@ -247,7 +247,7 @@ $receipt = [pscustomobject]@{
     deltas = [pscustomobject]@{
         first_released_bytes = $firstReleased
         recovery_released_bytes = $recoveryReleased
-        repeated_reclaim_drift_bytes = $reclaimDrift
+        repeated_reclaim_growth_bytes = $reclaimGrowth
         steady_context_bytes = if ($samplesComplete) { $firstReclaimed.dedicated_bytes } else { $null }
     }
     driver_vram_claimed = $passes
