@@ -19,62 +19,13 @@
 
 use serde::{Deserialize, Serialize};
 
-// TODO(m4-followon / portable viewer identity): this module currently
-// only carries `ContentLoadState` because that was the trivial 3-
-// variant wrap. The companion problem — wrapping `servo::WebViewId`
-// as a portable `ViewerInstanceId` so the shell-state types can move
-// to a servo-free sub-crate — still needs a design pass. Brief
-// sketch of the options considered during the 2026-04-22 work, so
-// this doesn't have to start from zero:
-//
-// - **Enum sum type across providers** (preferred). Looks like:
-//
-//   ```rust
-//   pub enum ViewerInstanceId {
-//       Servo(u64),          // encoding of WebViewId(PainterId, BrowsingContextId)
-//       Wry(u64),            // Wry native handle
-//       IcedWebview(u64),    // iced_webview native id
-//       MiddlenetDirect(u32),
-//   }
-//   ```
-//
-//   Pros: explicit about which engine produced the id; no generic
-//   type parameter propagates through `GraphshellRuntime`, the
-//   authority bundles, or the view-model; mixed-provider shells (some
-//   panes Servo, others Wry or iced_webview) work naturally.
-//
-//   Cons: 16 bytes instead of 12; each provider needs its own
-//   `From<NativeId>` boundary impl; if a native id carries more than
-//   64 bits we'd bump the variant payload.
-//
-//   Note on encoding: `servo::WebViewId` is 12 bytes
-//   (`PainterId(PipelineNamespaceId, PipelineIndex)` + `BrowsingContextId`).
-//   The pack/unpack is 1:1 by laying both structs' `u32` fields into
-//   a `u64`. Deterministic, lossless, no registry needed.
-//
-// - **Provider-opaque `[u8; 16]` with a ProviderTag enum**. One
-//   storage shape, flexible internal layout. Close second-place;
-//   slightly less explicit than the enum sum and forces every call
-//   site that reads the bytes to also read the tag.
-//
-// - **Generic `<V: ViewerIdentity>` parameter on shell-state types**.
-//   Zero encoding cost; maximum type noise. `GraphshellRuntime<V>`,
-//   `ToolbarAuthorityMut<'a, V>`, `FrameViewModel<V>`, ... Rejected
-//   on readability grounds unless a compelling reason emerges.
-//
-// Adopting the enum sum unlocks moving `GraphshellRuntime`, the
-// authority bundles that reference webview ids
-// (`PendingWebviewContextSurfaceRequest`, `EmbeddedContentTarget`,
-// `FocusedContentStatus`), and the remaining parts of `gui_state.rs`
-// and `frame_model.rs` into a servo-free sub-crate. The
-// `thumbnail_capture_in_flight: HashSet<ViewerInstanceId>` on the
-// runtime would become portable; the toolbar/palette/omnibar types
-// we already extracted or can trivially extract would follow.
-//
-// When that slice happens, update this module to own `ViewerInstanceId`
-// alongside `ContentLoadState`, add provider-specific boundary
-// conversions (Servo first, Wry/iced/MiddleNet as they land), and
-// revisit the sub-crate extraction plan.
+// This module carries two portable types: `ContentLoadState` and
+// `ViewerInstanceId` (declared below, after the load-state tests). The
+// 2026-04-22 viewer-identity design pass is settled — a sum-over-providers
+// enum, not a generic parameter threaded through the shell-state types, and
+// the Servo variant holds its `WebViewId` in `serde_json` form rather than the
+// packed `u64` first sketched, because `WebViewId`'s fields are private to the
+// servo crate. Per-variant encoding is documented on `ViewerInstanceId` itself.
 
 /// Life-cycle state of content loading in a viewer.
 ///

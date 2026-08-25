@@ -281,114 +281,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
 
     // After the seed notes, and still before the watchers, so a staged blob's
     // advertisement is authored in the same quiet window.
-    //
-    // A failure here is reported and does not stop the host. Staging is a
-    // request to hold and offer bytes; if it fails the host is still a working
-    // sync engine, and exiting would take the graph down over a file that
-    // could not be read. A fetch failure is more often "the holder is not up
-    // yet" than anything permanent, and the record stays, so asking again
-    // later is the recovery.
-    for action in blob_actions {
-        match action {
-            BlobAction::Stage { path } => match std::fs::read(&path) {
-                Ok(bytes) => {
-                    let byte_len = bytes.len();
-                    let container = uuid::Uuid::new_v4();
-                    match host.stage_blob(container, bytes).await {
-                        Ok(blob) => tracing::info!(
-                            path = %path.display(),
-                            byte_len,
-                            container = %container,
-                            blob = %owner_settings::hex32(&blob),
-                            "staged a blob; a paired device can now fetch it by this hash"
-                        ),
-                        Err(error) => {
-                            tracing::error!(path = %path.display(), %error, "could not stage the blob")
-                        }
-                    }
-                }
-                Err(error) => {
-                    tracing::error!(path = %path.display(), %error, "could not read the file to stage")
-                }
-            },
-            BlobAction::Fetch { blob } => {
-                // Wait for the graph to say who holds this before asking.
-                //
-                // These actions run before the watchers start, which is early:
-                // on a host that has only just joined, the advertisement has
-                // not arrived yet, so an immediate attempt would report "no
-                // paired device has advertised" for a blob that is on its way.
-                // Waiting for the record is what a fetch means here, since the
-                // graph is how this device learns where bytes are.
-                let mut holders = Vec::new();
-                for _ in 0..BLOB_FETCH_WAIT_TICKS {
-                    holders = host.blob_holders(blob).await.unwrap_or_default();
-                    if !holders.is_empty() {
-                        break;
-                    }
-                    tokio::time::sleep(BLOB_FETCH_WAIT_TICK).await;
-                }
-                if holders.is_empty() {
-                    // Say which of the two causes it is. The first version of
-                    // this blamed the lane, and cost an hour on a device whose
-                    // lane was on and which simply had no route to its peer:
-                    // no relay configured, and mDNS not announcing. Those need
-                    // opposite fixes, so guessing between them is worse than
-                    // saying nothing.
-                    //
-                    // `known_peers` reports address-book membership rather than
-                    // a live connection, so it cannot promise reachability; it
-                    // can still separate "no peer is even configured" from
-                    // "a peer is configured and told us nothing".
-                    let peers = host.known_peers().await.unwrap_or_default();
-                    let connected = peers.iter().filter(|peer| peer.connected).count();
-                    let waited_s = BLOB_FETCH_WAIT_TICKS * BLOB_FETCH_WAIT_TICK.as_secs();
-                    if peers.is_empty() {
-                        tracing::error!(
-                            blob = %owner_settings::hex32(&blob),
-                            waited_s,
-                            "no device is paired onto this graph's overlay, so \
-                             nothing could advertise this blob"
-                        );
-                    } else if connected == 0 {
-                        tracing::error!(
-                            blob = %owner_settings::hex32(&blob),
-                            waited_s,
-                            peers = peers.len(),
-                            "no paired device has a live path, so no \
-                             advertisement could arrive. This is a connectivity \
-                             failure, not a missing blob: check a firewall on \
-                             either end, then whether a relay is configured and \
-                             reachable"
-                        );
-                    } else {
-                        tracing::error!(
-                            blob = %owner_settings::hex32(&blob),
-                            waited_s,
-                            peers = peers.len(),
-                            connected,
-                            "a device is connected but none advertised this \
-                             blob. The holder most likely never staged it, or \
-                             staged it with the blob-availability lane disabled"
-                        );
-                    }
-                    continue;
-                }
-                match host.fetch_blob_by_availability(blob).await {
-                    Ok(supplier) => tracing::info!(
-                        blob = %owner_settings::hex32(&blob),
-                        supplier = %owner_settings::hex32(&supplier),
-                        "fetched a blob from a paired device"
-                    ),
-                    Err(error) => tracing::error!(
-                        blob = %owner_settings::hex32(&blob),
-                        %error,
-                        "could not fetch the blob"
-                    ),
-                }
-            }
-        }
-    }
+    run_blob_actions(&host, blob_actions).await;
 
     spawn_pairing_watch(
         Arc::clone(&host),
@@ -428,6 +321,131 @@ pub async fn start<P: IdentityProvider + ?Sized>(
     Ok(Some(surface))
 }
 
+/// Run the one-shot blob operations the operator asked for on this start.
+///
+/// Nothing here can stop the host. Staging is a request to hold and offer
+/// bytes; if it fails the host is still a working sync engine, and exiting
+/// would take the graph down over a file that could not be read. A fetch
+/// failure is more often "the holder is not up yet" than anything permanent,
+/// and the record stays, so asking again later is the recovery.
+///
+/// This lives beside sync bring-up only because the blob store and the graph
+/// that advertises it are owned by this process, which holds the store's
+/// single-writer lock.
+async fn run_blob_actions(host: &PersonalSyncHost, actions: Vec<BlobAction>) {
+    for action in actions {
+        match action {
+            BlobAction::Stage { path } => stage_blob(host, &path).await,
+            BlobAction::Fetch { blob } => fetch_blob(host, blob).await,
+        }
+    }
+}
+
+async fn stage_blob(host: &PersonalSyncHost, path: &Path) {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::error!(path = %path.display(), %error, "could not read the file to stage");
+            return;
+        }
+    };
+    let byte_len = bytes.len();
+    let container = uuid::Uuid::new_v4();
+    match host.stage_blob(container, bytes).await {
+        Ok(blob) => tracing::info!(
+            path = %path.display(),
+            byte_len,
+            container = %container,
+            blob = %owner_settings::hex32(&blob),
+            "staged a blob; a paired device can now fetch it by this hash"
+        ),
+        Err(error) => {
+            tracing::error!(path = %path.display(), %error, "could not stage the blob")
+        }
+    }
+}
+
+async fn fetch_blob(host: &PersonalSyncHost, blob: [u8; 32]) {
+    // Wait for the graph to say who holds this before asking.
+    //
+    // These actions run before the watchers start, which is early: on a host
+    // that has only just joined, the advertisement has not arrived yet, so an
+    // immediate attempt would report "no paired device has advertised" for a
+    // blob that is on its way. Waiting for the record is what a fetch means
+    // here, since the graph is how this device learns where bytes are.
+    let mut holders = Vec::new();
+    for _ in 0..BLOB_FETCH_WAIT_TICKS {
+        holders = host.blob_holders(blob).await.unwrap_or_default();
+        if !holders.is_empty() {
+            break;
+        }
+        tokio::time::sleep(BLOB_FETCH_WAIT_TICK).await;
+    }
+    if holders.is_empty() {
+        report_unadvertised_blob(host, blob).await;
+        return;
+    }
+    match host.fetch_blob_by_availability(blob).await {
+        Ok(supplier) => tracing::info!(
+            blob = %owner_settings::hex32(&blob),
+            supplier = %owner_settings::hex32(&supplier),
+            "fetched a blob from a paired device"
+        ),
+        Err(error) => tracing::error!(
+            blob = %owner_settings::hex32(&blob),
+            %error,
+            "could not fetch the blob"
+        ),
+    }
+}
+
+/// Say which of the causes it is. The first version of this blamed the lane,
+/// and cost an hour on a device whose lane was on and which simply had no route
+/// to its peer: no relay configured, and mDNS not announcing. Those need
+/// opposite fixes, so guessing between them is worse than saying nothing.
+///
+/// `known_peers` reports address-book membership rather than a live connection,
+/// so it cannot promise reachability; it can still separate "no peer is even
+/// configured" from "a peer is configured and told us nothing".
+async fn report_unadvertised_blob(host: &PersonalSyncHost, blob: [u8; 32]) {
+    let peers = host.known_peers().await.unwrap_or_default();
+    let connected = peers.iter().filter(|peer| peer.connected).count();
+    let waited_s = BLOB_FETCH_WAIT_TICKS * BLOB_FETCH_WAIT_TICK.as_secs();
+    if peers.is_empty() {
+        tracing::error!(
+            blob = %owner_settings::hex32(&blob),
+            waited_s,
+            "no device is paired onto this graph's overlay, so \
+             nothing could advertise this blob"
+        );
+    } else if connected == 0 {
+        tracing::error!(
+            blob = %owner_settings::hex32(&blob),
+            waited_s,
+            peers = peers.len(),
+            "no paired device has a live path, so no \
+             advertisement could arrive. This is a connectivity \
+             failure, not a missing blob: check a firewall on \
+             either end, then whether a relay is configured and \
+             reachable"
+        );
+    } else {
+        tracing::error!(
+            blob = %owner_settings::hex32(&blob),
+            waited_s,
+            peers = peers.len(),
+            connected,
+            "a device is connected but none advertised this \
+             blob. The holder most likely never staged it, or \
+             staged it with the blob-availability lane disabled"
+        );
+    }
+}
+
+/// Node id to Personae root, the shape every reconciliation phase below passes
+/// around. See [`paired_nodes_with_roots`] for why both halves travel together.
+type PairedNodes = std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>>;
+
 /// The pairing loop's second half: `pair_device` and `unpair_device` write the
 /// file, and this reconciles the live overlay against it, so a device paired
 /// or dropped now takes effect now.
@@ -443,7 +461,7 @@ pub async fn start<P: IdentityProvider + ?Sized>(
 /// the key group, so `None` is a real answer rather than missing data.
 fn paired_nodes_with_roots(
     sync: &owner_settings::SyncSettings,
-) -> Result<std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>>, OwnerSettingsError> {
+) -> Result<PairedNodes, OwnerSettingsError> {
     let mut paired = std::collections::BTreeMap::new();
     for device in &sync.paired_devices {
         let node = owner_settings::parse_hex32(&device.node_id)?;
@@ -459,7 +477,7 @@ fn paired_nodes_with_roots(
 fn spawn_pairing_watch(
     host: Arc<PersonalSyncHost>,
     settings_file: PathBuf,
-    already_applied: std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>>,
+    already_applied: PairedNodes,
     local_root: [u8; 32],
 ) {
     // Node id to Personae root, not just node ids. Unpairing has to revoke the
@@ -489,324 +507,383 @@ fn spawn_pairing_watch(
             // not the same as an empty roster; leave the live overlay alone
             // rather than tearing every device off it on a partial edit.
             let Some(sync) = reloaded.sync else { continue };
-            let desired: std::collections::BTreeMap<[u8; 32], Option<[u8; 32]>> =
-                match paired_nodes_with_roots(&sync) {
-                    Ok(paired) => paired,
-                    Err(error) => {
-                        tracing::warn!(%error, "owner settings hold an unusable node id");
-                        continue;
-                    }
-                };
-
-            // Authority moves with reachability. Tagging a peer onto the
-            // overlay without admitting its root produces a device that
-            // connects and then has everything it sends refused, which is the
-            // most confusing shape this can fail in.
-            match sync.roster_root_keys() {
-                Ok(mut roots) => {
-                    roots.push(local_root);
-                    roots.sort_unstable();
-                    roots.dedup();
-                    let roots_len = roots.len();
-                    let next = SyncRoster::new(roots);
-                    if host.roster().await != next {
-                        host.set_roster(next).await;
-                        tracing::info!(admitted = roots_len, "personal sync roster changed");
-                    }
+            let desired: PairedNodes = match paired_nodes_with_roots(&sync) {
+                Ok(paired) => paired,
+                Err(error) => {
+                    tracing::warn!(%error, "owner settings hold an unusable node id");
+                    continue;
                 }
-                Err(error) => tracing::warn!(%error, "owner settings hold an unusable roster root"),
-            }
+            };
 
-            // A node can stay paired while its Personae authority changes,
-            // especially when a receive-only pairing is promoted. Reconcile
-            // that value as well as map membership. When a root is removed or
-            // replaced, finish its key revocation before forgetting it so a
-            // transient lane-write failure remains retryable on the next pass.
-            let authority_changes: Vec<([u8; 32], Option<[u8; 32]>, Option<[u8; 32]>)> = desired
-                .iter()
-                .filter_map(|(node, next)| {
-                    let previous = applied.get(node)?;
-                    (previous != next).then_some((*node, *previous, *next))
-                })
-                .collect();
-            for (node, previous, next) in authority_changes {
-                if let Some(root) = previous {
-                    match host.retire_reader(root).await {
-                        Ok(()) => tracing::info!(
-                            node = %owner_settings::hex32(&node),
-                            "retired the device's previous readership"
-                        ),
-                        Err(error) => {
-                            tracing::warn!(
-                                %error,
-                                node = %owner_settings::hex32(&node),
-                                "could not revoke changed key authority; will retry"
-                            );
-                            continue;
-                        }
-                    }
-                }
-                applied.insert(node, next);
-            }
-
-            let relayed: std::collections::BTreeMap<[u8; 32], Option<String>> = sync
-                .paired_devices
-                .iter()
-                .filter_map(|device| {
-                    let node = owner_settings::parse_hex32(&device.node_id).ok()?;
-                    Some((node, device.prekey.clone()))
-                })
-                .collect();
-            let arrivals: Vec<([u8; 32], Option<[u8; 32]>)> = desired
-                .iter()
-                .filter(|(node, _)| !applied.contains_key(*node))
-                .map(|(node, root)| (*node, *root))
-                .collect();
-            for (node, root) in arrivals {
-                match host.pair_node(node).await {
-                    Ok(()) => {
-                        applied.insert(node, root);
-                        // Reachability and readership are separate grants and
-                        // stay separate: pairing says where a device is, this
-                        // says it may read. A receive-only device has no root
-                        // and gets neither, which is what receive-only means.
-                        if let Some(root) = root {
-                            if let Err(error) = host.admit_reader(root, "paired device").await {
-                                tracing::warn!(
-                                    %error,
-                                    node = %owner_settings::hex32(&node),
-                                    "could not admit the paired device as a reader"
-                                );
-                            }
-                        }
-                        // Relay a pre-key its owner could not publish. The
-                        // bundle authenticates its own subject, so carrying it
-                        // asserts nothing on that device's behalf beyond what
-                        // it already signed.
-                        if let Some(prekey) = relayed.get(&node).cloned().flatten() {
-                            match owner_settings::parse_hex(&prekey) {
-                                Ok(bundle) => {
-                                    if let Err(error) = host
-                                        .author(vec![PersonalGraphEvent::PublishPrekey { bundle }])
-                                        .await
-                                    {
-                                        tracing::warn!(
-                                            %error,
-                                            node = %owner_settings::hex32(&node),
-                                            "could not relay the paired device's pre-key; it                                              stays reachable but unreadable until this succeeds"
-                                        );
-                                    }
-                                }
-                                Err(error) => tracing::warn!(
-                                    %error,
-                                    node = %owner_settings::hex32(&node),
-                                    "the paired device's recorded pre-key is unreadable"
-                                ),
-                            }
-                        }
-                        tracing::info!(
-                            node = %owner_settings::hex32(&node),
-                            "applied a newly paired device without a restart"
-                        );
-                    }
-                    // Leave it unapplied so the next pass retries rather than
-                    // silently dropping the pairing.
-                    Err(error) => tracing::warn!(
-                        %error,
-                        node = %owner_settings::hex32(&node),
-                        "could not apply a paired device"
-                    ),
-                }
-            }
-
-            let departures: Vec<([u8; 32], Option<[u8; 32]>)> = applied
-                .iter()
-                .filter(|(node, _)| !desired.contains_key(*node))
-                .map(|(node, root)| (*node, *root))
-                .collect();
-            for (node, root) in departures {
-                // Revoke while the departure remains in `applied`. A failed
-                // lane write then retries next pass instead of leaving a local
-                // epoch turn that the rest of the graph never received.
-                if let Some(root) = root {
-                    match host.retire_reader(root).await {
-                        Ok(()) => tracing::info!(
-                            node = %owner_settings::hex32(&node),
-                            "retired the unpaired device's readership"
-                        ),
-                        Err(error) => {
-                            tracing::warn!(
-                                %error,
-                                node = %owner_settings::hex32(&node),
-                                "could not retire the unpaired device's readership; will retry"
-                            );
-                            continue;
-                        }
-                    }
-                }
-                match host.unpair_node(node).await {
-                    Ok(()) => {
-                        applied.remove(&node);
-                        tracing::info!(
-                            node = %owner_settings::hex32(&node),
-                            "dropped an unpaired device without a restart"
-                        );
-                    }
-                    // Keep it in `applied` so the next pass retries: a device
-                    // the owner removed must not stay on the overlay quietly.
-                    Err(error) => tracing::warn!(
-                        %error,
-                        node = %owner_settings::hex32(&node),
-                        "could not drop an unpaired device"
-                    ),
-                }
-            }
-
-            // Turn encryption on if the owner asked and nobody has yet.
-            //
-            // Checked against the lane, not against this device: seeing a
-            // group means some device already created one, and starting a
-            // second would split the graph into two halves that cannot read
-            // each other. So this creates at most once per graph, and only
-            // from the device whose settings say so.
-            if sync.encrypted && !host.is_keyed().await {
-                match host.key_group_exists().await {
-                    Ok(false) => match host.enable_encryption().await {
-                        Ok(()) => tracing::info!("encryption is on for this graph"),
-                        Err(error) => tracing::warn!(
-                            %error,
-                            "could not turn encryption on; this graph stays readable to every                              admitted device"
-                        ),
-                    },
-                    // Somebody created it. This device waits to be added,
-                    // which is the ordinary path for every device but one.
-                    Ok(true) => {}
-                    Err(error) => {
-                        tracing::warn!(%error, "could not tell whether this graph has a key group")
-                    }
-                }
-            }
-
-            // Key whatever has published since the last pass, and learn any
-            // epoch this device has been given. Paired with the revocation
-            // above deliberately: a host that keys devices automatically but
-            // waits for someone to revoke would widen the reader set on its
-            // own and narrow it only when asked.
-            //
-            // A no-op on a graph where encryption was never turned on, which
-            // is why it is unconditional rather than gated on a setting.
-            match host.key_paired_devices().await {
-                Ok(0) => {}
-                Ok(keyed) => tracing::info!(keyed, "keyed newly paired devices"),
-                Err(error) => tracing::warn!(%error, "could not key paired devices this pass"),
-            }
-
-            // Report connectedness, not just membership or a known address. A
-            // paired device discovery never resolved is silently doing
-            // nothing, and one with an address it cannot actually reach looks
-            // identical unless the two are named apart.
-            //
-            // They were not, and it cost hours: a firewall dropped every
-            // inbound packet to a peer while its address stayed in the book,
-            // so this line read `reachable=1` the whole time and the host
-            // looked healthy while nothing replicated at all (2026-08-03).
-            match host.known_peers().await {
-                Ok(peers) => {
-                    // Refresh the cached dial hints while the truth is live.
-                    // Only connected peers: an address the endpoint holds for
-                    // a peer it is NOT talking to may be exactly the stale
-                    // route a working hint would replace, so writing it back
-                    // would overwrite good information with bad.
-                    for peer in peers.iter().filter(|peer| peer.connected) {
-                        let node = peer.peer.to_bytes();
-                        let ticket = match host.peer_ticket(node).await {
-                            Ok(Some(ticket)) => ticket,
-                            Ok(None) => continue,
-                            Err(error) => {
-                                tracing::warn!(%error, "could not read a peer's current address");
-                                continue;
-                            }
-                        };
-                        let stored = sync
-                            .paired_devices
-                            .iter()
-                            .find(|device| {
-                                device
-                                    .node_id
-                                    .eq_ignore_ascii_case(&owner_settings::hex32(&node))
-                            })
-                            .and_then(|device| device.last_endpoint.as_deref());
-                        if stored == Some(ticket.as_str()) {
-                            continue;
-                        }
-                        // Load-modify-save through the same atomic path every
-                        // other settings write uses, so a concurrent pair or
-                        // unpair edit is not clobbered by this refresh.
-                        match OwnerSettings::load(&settings_file) {
-                            Ok(mut latest) => {
-                                let Some(live) = latest.sync.as_mut() else {
-                                    continue;
-                                };
-                                if live.record_endpoint(&node, &ticket) {
-                                    match latest.save(&settings_file) {
-                                        Ok(()) => tracing::info!(
-                                            node = %owner_settings::hex32(&node),
-                                            "recorded a fresh dial hint for a connected device"
-                                        ),
-                                        Err(error) => tracing::warn!(
-                                            %error,
-                                            "could not persist a refreshed dial hint"
-                                        ),
-                                    }
-                                }
-                            }
-                            Err(error) => {
-                                tracing::warn!(%error, "could not reload settings to refresh a hint");
-                            }
-                        }
-                    }
-                    let mut current: Vec<(String, bool, bool)> = peers
-                        .iter()
-                        .map(|peer| {
-                            (
-                                owner_settings::hex32(&peer.peer.to_bytes()),
-                                peer.reachable,
-                                peer.connected,
-                            )
-                        })
-                        .collect();
-                    current.sort();
-                    if reported.as_ref() != Some(&current) {
-                        let addressed = current.iter().filter(|(_, ok, _)| *ok).count();
-                        let connected = current.iter().filter(|(_, _, live)| *live).count();
-                        tracing::info!(
-                            peers = current.len(),
-                            addressed,
-                            connected,
-                            detail = ?current,
-                            "personal sync peer directory changed"
-                        );
-                        // The state that looks fine and is not: peers exist,
-                        // every one has an address, and not one is talking.
-                        // Say it plainly rather than leaving it to be inferred
-                        // from a count nobody reads as connectivity.
-                        if connected == 0 && !current.is_empty() {
-                            tracing::warn!(
-                                peers = current.len(),
-                                addressed,
-                                "no paired device has a live path: this host is \
-                                 replicating nothing. Check a firewall on either \
-                                 end, then whether a relay is configured and \
-                                 reachable"
-                            );
-                        }
-                        reported = Some(current);
-                    }
-                }
-                Err(error) => tracing::warn!(%error, "could not read the peer directory"),
-            }
+            // Each phase carries its own failure and retry policy, and they run
+            // in this order deliberately: authority is admitted before a device
+            // is tagged onto the overlay, and revoked before it is forgotten.
+            reconcile_roster(&host, &sync, local_root).await;
+            reconcile_authority(&host, &desired, &mut applied).await;
+            apply_arrivals(&host, &sync, &desired, &mut applied).await;
+            apply_departures(&host, &desired, &mut applied).await;
+            ensure_encryption(&host, &sync).await;
+            key_paired_devices(&host).await;
+            refresh_peer_directory(&host, &settings_file, &sync, &mut reported).await;
         }
     });
+}
+
+/// Authority moves with reachability. Tagging a peer onto the overlay without
+/// admitting its root produces a device that connects and then has everything
+/// it sends refused, which is the most confusing shape this can fail in.
+async fn reconcile_roster(
+    host: &PersonalSyncHost,
+    sync: &owner_settings::SyncSettings,
+    local_root: [u8; 32],
+) {
+    match sync.roster_root_keys() {
+        Ok(mut roots) => {
+            roots.push(local_root);
+            roots.sort_unstable();
+            roots.dedup();
+            let roots_len = roots.len();
+            let next = SyncRoster::new(roots);
+            if host.roster().await != next {
+                host.set_roster(next).await;
+                tracing::info!(admitted = roots_len, "personal sync roster changed");
+            }
+        }
+        Err(error) => tracing::warn!(%error, "owner settings hold an unusable roster root"),
+    }
+}
+
+/// A node can stay paired while its Personae authority changes, especially when
+/// a receive-only pairing is promoted. Reconcile that value as well as map
+/// membership. When a root is removed or replaced, finish its key revocation
+/// before forgetting it so a transient lane-write failure remains retryable on
+/// the next pass.
+async fn reconcile_authority(
+    host: &PersonalSyncHost,
+    desired: &PairedNodes,
+    applied: &mut PairedNodes,
+) {
+    let authority_changes: Vec<([u8; 32], Option<[u8; 32]>, Option<[u8; 32]>)> = desired
+        .iter()
+        .filter_map(|(node, next)| {
+            let previous = applied.get(node)?;
+            (previous != next).then_some((*node, *previous, *next))
+        })
+        .collect();
+    for (node, previous, next) in authority_changes {
+        if let Some(root) = previous {
+            match host.retire_reader(root).await {
+                Ok(()) => tracing::info!(
+                    node = %owner_settings::hex32(&node),
+                    "retired the device's previous readership"
+                ),
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        node = %owner_settings::hex32(&node),
+                        "could not revoke changed key authority; will retry"
+                    );
+                    continue;
+                }
+            }
+        }
+        applied.insert(node, next);
+    }
+}
+
+/// Tag devices the owner has paired since the last pass onto the live overlay.
+async fn apply_arrivals(
+    host: &PersonalSyncHost,
+    sync: &owner_settings::SyncSettings,
+    desired: &PairedNodes,
+    applied: &mut PairedNodes,
+) {
+    let relayed: std::collections::BTreeMap<[u8; 32], Option<String>> = sync
+        .paired_devices
+        .iter()
+        .filter_map(|device| {
+            let node = owner_settings::parse_hex32(&device.node_id).ok()?;
+            Some((node, device.prekey.clone()))
+        })
+        .collect();
+    let arrivals: Vec<([u8; 32], Option<[u8; 32]>)> = desired
+        .iter()
+        .filter(|(node, _)| !applied.contains_key(*node))
+        .map(|(node, root)| (*node, *root))
+        .collect();
+    for (node, root) in arrivals {
+        match host.pair_node(node).await {
+            Ok(()) => {
+                applied.insert(node, root);
+                admit_paired_reader(host, node, root).await;
+                if let Some(prekey) = relayed.get(&node).cloned().flatten() {
+                    relay_prekey(host, node, &prekey).await;
+                }
+                tracing::info!(
+                    node = %owner_settings::hex32(&node),
+                    "applied a newly paired device without a restart"
+                );
+            }
+            // Leave it unapplied so the next pass retries rather than
+            // silently dropping the pairing.
+            Err(error) => tracing::warn!(
+                %error,
+                node = %owner_settings::hex32(&node),
+                "could not apply a paired device"
+            ),
+        }
+    }
+}
+
+/// Reachability and readership are separate grants and stay separate: pairing
+/// says where a device is, this says it may read. A receive-only device has no
+/// root and gets neither, which is what receive-only means.
+async fn admit_paired_reader(host: &PersonalSyncHost, node: [u8; 32], root: Option<[u8; 32]>) {
+    let Some(root) = root else { return };
+    if let Err(error) = host.admit_reader(root, "paired device").await {
+        tracing::warn!(
+            %error,
+            node = %owner_settings::hex32(&node),
+            "could not admit the paired device as a reader"
+        );
+    }
+}
+
+/// Relay a pre-key its owner could not publish. The bundle authenticates its
+/// own subject, so carrying it asserts nothing on that device's behalf beyond
+/// what it already signed.
+async fn relay_prekey(host: &PersonalSyncHost, node: [u8; 32], prekey: &str) {
+    let bundle = match owner_settings::parse_hex(prekey) {
+        Ok(bundle) => bundle,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                node = %owner_settings::hex32(&node),
+                "the paired device's recorded pre-key is unreadable"
+            );
+            return;
+        }
+    };
+    if let Err(error) = host
+        .author(vec![PersonalGraphEvent::PublishPrekey { bundle }])
+        .await
+    {
+        tracing::warn!(
+            %error,
+            node = %owner_settings::hex32(&node),
+            "could not relay the paired device's pre-key; it                                              stays reachable but unreadable until this succeeds"
+        );
+    }
+}
+
+/// Drop devices the owner has removed from the settings file.
+async fn apply_departures(
+    host: &PersonalSyncHost,
+    desired: &PairedNodes,
+    applied: &mut PairedNodes,
+) {
+    let departures: Vec<([u8; 32], Option<[u8; 32]>)> = applied
+        .iter()
+        .filter(|(node, _)| !desired.contains_key(*node))
+        .map(|(node, root)| (*node, *root))
+        .collect();
+    for (node, root) in departures {
+        // Revoke while the departure remains in `applied`. A failed
+        // lane write then retries next pass instead of leaving a local
+        // epoch turn that the rest of the graph never received.
+        if let Some(root) = root {
+            match host.retire_reader(root).await {
+                Ok(()) => tracing::info!(
+                    node = %owner_settings::hex32(&node),
+                    "retired the unpaired device's readership"
+                ),
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        node = %owner_settings::hex32(&node),
+                        "could not retire the unpaired device's readership; will retry"
+                    );
+                    continue;
+                }
+            }
+        }
+        match host.unpair_node(node).await {
+            Ok(()) => {
+                applied.remove(&node);
+                tracing::info!(
+                    node = %owner_settings::hex32(&node),
+                    "dropped an unpaired device without a restart"
+                );
+            }
+            // Keep it in `applied` so the next pass retries: a device
+            // the owner removed must not stay on the overlay quietly.
+            Err(error) => tracing::warn!(
+                %error,
+                node = %owner_settings::hex32(&node),
+                "could not drop an unpaired device"
+            ),
+        }
+    }
+}
+
+/// Turn encryption on if the owner asked and nobody has yet.
+///
+/// Checked against the lane, not against this device: seeing a group means some
+/// device already created one, and starting a second would split the graph into
+/// two halves that cannot read each other. So this creates at most once per
+/// graph, and only from the device whose settings say so.
+async fn ensure_encryption(host: &PersonalSyncHost, sync: &owner_settings::SyncSettings) {
+    if !sync.encrypted || host.is_keyed().await {
+        return;
+    }
+    match host.key_group_exists().await {
+        Ok(false) => match host.enable_encryption().await {
+            Ok(()) => tracing::info!("encryption is on for this graph"),
+            Err(error) => tracing::warn!(
+                %error,
+                "could not turn encryption on; this graph stays readable to every                              admitted device"
+            ),
+        },
+        // Somebody created it. This device waits to be added,
+        // which is the ordinary path for every device but one.
+        Ok(true) => {}
+        Err(error) => {
+            tracing::warn!(%error, "could not tell whether this graph has a key group")
+        }
+    }
+}
+
+/// Key whatever has published since the last pass, and learn any epoch this
+/// device has been given. Paired with the revocation above deliberately: a host
+/// that keys devices automatically but waits for someone to revoke would widen
+/// the reader set on its own and narrow it only when asked.
+///
+/// A no-op on a graph where encryption was never turned on, which is why it is
+/// unconditional rather than gated on a setting.
+async fn key_paired_devices(host: &PersonalSyncHost) {
+    match host.key_paired_devices().await {
+        Ok(0) => {}
+        Ok(keyed) => tracing::info!(keyed, "keyed newly paired devices"),
+        Err(error) => tracing::warn!(%error, "could not key paired devices this pass"),
+    }
+}
+
+/// Report connectedness, not just membership or a known address. A paired
+/// device discovery never resolved is silently doing nothing, and one with an
+/// address it cannot actually reach looks identical unless the two are named
+/// apart.
+///
+/// They were not, and it cost hours: a firewall dropped every inbound packet to
+/// a peer while its address stayed in the book, so this line read `reachable=1`
+/// the whole time and the host looked healthy while nothing replicated at all
+/// (2026-08-03).
+async fn refresh_peer_directory(
+    host: &PersonalSyncHost,
+    settings_file: &Path,
+    sync: &owner_settings::SyncSettings,
+    reported: &mut Option<Vec<(String, bool, bool)>>,
+) {
+    let peers = match host.known_peers().await {
+        Ok(peers) => peers,
+        Err(error) => {
+            tracing::warn!(%error, "could not read the peer directory");
+            return;
+        }
+    };
+    // Refresh the cached dial hints while the truth is live. Only connected
+    // peers: an address the endpoint holds for a peer it is NOT talking to may
+    // be exactly the stale route a working hint would replace, so writing it
+    // back would overwrite good information with bad.
+    for peer in peers.iter().filter(|peer| peer.connected) {
+        refresh_dial_hint(host, settings_file, sync, peer.peer.to_bytes()).await;
+    }
+    let mut current: Vec<(String, bool, bool)> = peers
+        .iter()
+        .map(|peer| {
+            (
+                owner_settings::hex32(&peer.peer.to_bytes()),
+                peer.reachable,
+                peer.connected,
+            )
+        })
+        .collect();
+    current.sort();
+    if reported.as_ref() == Some(&current) {
+        return;
+    }
+    let addressed = current.iter().filter(|(_, ok, _)| *ok).count();
+    let connected = current.iter().filter(|(_, _, live)| *live).count();
+    tracing::info!(
+        peers = current.len(),
+        addressed,
+        connected,
+        detail = ?current,
+        "personal sync peer directory changed"
+    );
+    // The state that looks fine and is not: peers exist, every one has an
+    // address, and not one is talking. Say it plainly rather than leaving it to
+    // be inferred from a count nobody reads as connectivity.
+    if connected == 0 && !current.is_empty() {
+        tracing::warn!(
+            peers = current.len(),
+            addressed,
+            "no paired device has a live path: this host is \
+             replicating nothing. Check a firewall on either \
+             end, then whether a relay is configured and \
+             reachable"
+        );
+    }
+    *reported = Some(current);
+}
+
+async fn refresh_dial_hint(
+    host: &PersonalSyncHost,
+    settings_file: &Path,
+    sync: &owner_settings::SyncSettings,
+    node: [u8; 32],
+) {
+    let ticket = match host.peer_ticket(node).await {
+        Ok(Some(ticket)) => ticket,
+        Ok(None) => return,
+        Err(error) => {
+            tracing::warn!(%error, "could not read a peer's current address");
+            return;
+        }
+    };
+    // Encode the node once, not once per candidate device: this runs on every
+    // pairing poll, and hex32 inside the `find` predicate allocated a 64-byte
+    // String for every device in the settings file.
+    let node_hex = owner_settings::hex32(&node);
+    let stored = sync
+        .paired_devices
+        .iter()
+        .find(|device| device.node_id.eq_ignore_ascii_case(&node_hex))
+        .and_then(|device| device.last_endpoint.as_deref());
+    if stored == Some(ticket.as_str()) {
+        return;
+    }
+    // Load-modify-save through the same atomic path every other settings write
+    // uses, so a concurrent pair or unpair edit is not clobbered by this
+    // refresh.
+    let mut latest = match OwnerSettings::load(settings_file) {
+        Ok(latest) => latest,
+        Err(error) => {
+            tracing::warn!(%error, "could not reload settings to refresh a hint");
+            return;
+        }
+    };
+    let Some(live) = latest.sync.as_mut() else {
+        return;
+    };
+    if !live.record_endpoint(&node, &ticket) {
+        return;
+    }
+    match latest.save(settings_file) {
+        Ok(()) => {
+            tracing::info!(node = %node_hex, "recorded a fresh dial hint for a connected device")
+        }
+        Err(error) => tracing::warn!(%error, "could not persist a refreshed dial hint"),
+    }
 }
 
 /// Act on transfers a person has accepted.

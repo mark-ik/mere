@@ -59,14 +59,140 @@ pub(crate) struct IndexedOperation<'a, E, L> {
     pub erase_payloads: &'a [Hash],
 }
 
+/// Bytes whose BLAKE3 digest the producer has already checked against the
+/// content address they will be stored under.
+///
+/// Drop import hashes each assembled chunk-set once, as part of checking the
+/// chunk layout. Carrying that proof in the type lets the store skip a second
+/// pass over the same multi-megabyte buffer without weakening the check for
+/// callers that arrive with bytes of unproven provenance: those still go
+/// through the hashing entry points, which are the only way in without one of
+/// these.
+pub(crate) struct VerifiedBytes(Vec<u8>);
+
+impl VerifiedBytes {
+    /// Claim a digest the caller has just computed over exactly these bytes.
+    pub(crate) fn assume_verified(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    pub(crate) fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+/// One operation a batch has planned but not yet submitted.
+///
+/// Its position in the log lives in [`BatchPlan::by_log`], which is what prunes
+/// query, so it is deliberately not repeated here.
 struct PlannedOperation<E> {
     pointer: String,
     log_key: String,
-    log_prefix: String,
     payload_ref: Option<String>,
-    seq_num: u32,
     header: Header<E>,
     has_body: bool,
+}
+
+/// The writes one atomic batch is accumulating, plus the operations it has
+/// already planned but not yet submitted.
+///
+/// A later entry in the same batch may prune or erase an earlier one, so the
+/// two have to be tracked together: `writes` is keyed so a revision replaces
+/// the earlier decision for that key, and `planned` is what a prune or erasure
+/// looks at before falling back to the durable store. `by_log` indexes
+/// `planned` by `(log prefix, sequence number, id)` purely so pruning a prefix
+/// is a range query — scanning `planned` for every pruning entry made the
+/// batch quadratic in its own size, and this is the chokepoint both drop import
+/// and LogSync push their whole backlog through.
+struct BatchPlan<E> {
+    writes: BTreeMap<String, Option<Vec<u8>>>,
+    planned: BTreeMap<String, PlannedOperation<E>>,
+    by_log: BTreeSet<(String, u32, String)>,
+}
+
+// Derived `Default` would demand `E: Default`; the three maps need nothing of `E`.
+impl<E> Default for BatchPlan<E> {
+    fn default() -> Self {
+        Self {
+            writes: BTreeMap::new(),
+            planned: BTreeMap::new(),
+            by_log: BTreeSet::new(),
+        }
+    }
+}
+
+impl<E: Extensions> BatchPlan<E> {
+    /// Fold one caller-supplied write into the plan, last decision winning.
+    fn record(&mut self, write: WriteOp) {
+        match write {
+            WriteOp::Put { key, value } => self.writes.insert(key, Some(value)),
+            WriteOp::Delete { key } => self.writes.insert(key, None),
+        };
+    }
+
+    /// Undo everything this batch planned for `prefix` below `until`.
+    fn prune_planned(&mut self, prefix: &str, until: u32) {
+        let stale: Vec<_> = self
+            .by_log
+            .range((prefix.to_owned(), 0, String::new())..(prefix.to_owned(), until, String::new()))
+            .cloned()
+            .collect();
+        for key in stale {
+            self.by_log.remove(&key);
+            let Some(operation) = self.planned.remove(&key.2) else {
+                continue;
+            };
+            self.writes.insert(operation.pointer, None);
+            self.writes.insert(operation.log_key, None);
+            if let Some(payload_ref) = operation.payload_ref {
+                self.writes.insert(payload_ref, None);
+            }
+        }
+    }
+
+    /// Record the topic, log, pointer and payload-reference writes that index
+    /// one operation, and remember it as prunable by later entries.
+    fn plan_operation<L: LogId>(
+        &mut self,
+        entry: &IndexedOperation<'_, E, L>,
+        topic: String,
+        log_prefix: String,
+        log_key: String,
+        pointer: String,
+    ) -> Result<(), StoreError> {
+        self.writes.insert(topic, Some(Vec::new()));
+        self.writes
+            .insert(log_key.clone(), Some(encode_op(entry.operation)?));
+        self.writes
+            .insert(pointer.clone(), Some(log_key.clone().into_bytes()));
+        let payload_ref = entry.operation.header.payload_hash.as_ref().map(|hash| {
+            (
+                payload_ref_key(hash, &entry.operation.hash),
+                log_key.clone().into_bytes(),
+            )
+        });
+        if let Some((key, value)) = payload_ref.as_ref() {
+            self.writes.insert(key.clone(), Some(value.clone()));
+        }
+        let id_hex = entry.operation.hash.to_hex();
+        self.by_log
+            .insert((log_prefix, entry.operation.header.seq_num, id_hex.clone()));
+        self.planned.insert(
+            id_hex,
+            PlannedOperation {
+                pointer,
+                log_key,
+                payload_ref: payload_ref.map(|(key, _)| key),
+                header: entry.operation.header.clone(),
+                has_body: entry.operation.body.is_some(),
+            },
+        );
+        Ok(())
+    }
 }
 
 /// A p2panda operation store over a muniment [`Backend`].
@@ -195,17 +321,6 @@ fn codec(err: impl std::fmt::Display) -> StoreError {
     StoreError::Codec(err.to_string())
 }
 
-fn record_write(writes: &mut BTreeMap<String, Option<Vec<u8>>>, write: WriteOp) {
-    match write {
-        WriteOp::Put { key, value } => {
-            writes.insert(key, Some(value));
-        }
-        WriteOp::Delete { key } => {
-            writes.insert(key, None);
-        }
-    }
-}
-
 // ── operation encode / decode ─────────────────────────────────────────────────
 
 /// The `(header-bytes, Option<body-bytes>)` blob stored at a log key.
@@ -216,9 +331,13 @@ fn record_write(writes: &mut BTreeMap<String, Option<Vec<u8>>>, write: WriteOp) 
 /// byte string instead of inline. The header bytes are byte-identical to 0.7.0
 /// — `Header::encode` emits the same CBOR array the old serde impl did — so
 /// only the nesting changed.
+///
+/// The body arrives borrowed: a `&[u8]` serialises to the same CBOR array a
+/// `Vec<u8>` does, so encoding a retained body no longer needs a private copy
+/// of it first — payload attachment encodes multi-megabyte bodies.
 fn encode_blob<E: Extensions>(
     header: &Header<E>,
-    body: &Option<Vec<u8>>,
+    body: Option<&[u8]>,
 ) -> Result<Vec<u8>, StoreError> {
     // `serde_bytes` so the header travels as a CBOR byte string. A bare
     // `Vec<u8>` serialises as an array of integers, which costs roughly two
@@ -244,7 +363,7 @@ fn stale_blob(error: impl std::fmt::Display) -> StoreError {
 /// Encode an operation as the blob stored at its log key.
 fn encode_op<E: Extensions>(op: &Operation<E>) -> Result<Vec<u8>, StoreError> {
     let body = op.body.as_ref().map(|b| b.to_bytes());
-    encode_blob(&op.header, &body)
+    encode_blob(&op.header, body.as_deref())
 }
 
 /// Decode a stored blob back into an operation, recomputing its id from the
@@ -378,10 +497,9 @@ where
         trailing_writes: &[WriteOp],
     ) -> Result<(), StoreError> {
         let mut pointers = BTreeSet::new();
-        let mut writes: BTreeMap<String, Option<Vec<u8>>> = BTreeMap::new();
-        let mut planned: BTreeMap<String, PlannedOperation<E>> = BTreeMap::new();
+        let mut plan = BatchPlan::<E>::default();
         for write in leading_writes {
-            record_write(&mut writes, write.clone());
+            plan.record(write.clone());
         }
         for entry in operations {
             let pointer = op_ptr(&entry.operation.hash);
@@ -402,108 +520,18 @@ where
             let log_key = format!("{prefix}{:016x}", entry.operation.header.seq_num);
 
             if entry.prune_before_current {
-                let (live_prune, _) = self
-                    .prefix_prune_writes(
-                        &entry.operation.header.verifying_key,
-                        entry.log_id,
-                        entry.operation.header.seq_num,
-                    )
-                    .await?;
-                for write in live_prune {
-                    record_write(&mut writes, write);
-                }
-                let planned_prefix: Vec<_> = planned
-                    .iter()
-                    .filter(|(_, operation)| {
-                        operation.log_prefix == prefix
-                            && operation.seq_num < entry.operation.header.seq_num
-                    })
-                    .map(|(id, _)| id.clone())
-                    .collect();
-                for id in planned_prefix {
-                    if let Some(operation) = planned.remove(&id) {
-                        writes.insert(operation.pointer, None);
-                        writes.insert(operation.log_key, None);
-                        if let Some(payload_ref) = operation.payload_ref {
-                            writes.insert(payload_ref, None);
-                        }
-                    }
-                }
+                self.plan_prune_writes(&mut plan, entry, &prefix).await?;
             }
-
             for id in entry.erase_payloads {
-                let id_hex = id.to_hex();
-                if let Some(operation) = planned.get_mut(&id_hex) {
-                    if let Some(payload_ref) = operation.payload_ref.as_ref() {
-                        writes.insert(payload_ref.clone(), None);
-                    }
-                    if operation.has_body {
-                        writes.insert(
-                            operation.log_key.clone(),
-                            Some(encode_blob(&operation.header, &None)?),
-                        );
-                        operation.has_body = false;
-                    }
-                    continue;
-                }
-                let payload_pointer = op_ptr(id);
-                if matches!(writes.get(&payload_pointer), Some(None)) {
-                    continue;
-                }
-                let Some(payload_log_key) = self.log_key_for(id).await? else {
-                    continue;
-                };
-                let payload_blob = match writes.get(&payload_log_key) {
-                    Some(Some(bytes)) => Some(bytes.clone()),
-                    Some(None) => None,
-                    None => self.backend.get(&payload_log_key).await?,
-                };
-                let Some(payload_blob) = payload_blob else {
-                    continue;
-                };
-                let (header, body) = decode_blob::<E>(&payload_blob[..])?;
-                if let Some(payload_hash) = header.payload_hash.as_ref() {
-                    writes.insert(payload_ref_key(payload_hash, id), None);
-                }
-                if body.is_some() {
-                    writes.insert(payload_log_key.clone(), Some(encode_blob(&header, &None)?));
-                }
+                self.plan_payload_erasure(&mut plan, id).await?;
             }
-
-            writes.insert(topic, Some(Vec::new()));
-            writes.insert(log_key.clone(), Some(encode_op(entry.operation)?));
-            writes.insert(pointer.clone(), Some(log_key.clone().into_bytes()));
-            let payload_ref = entry
-                .operation
-                .header
-                .payload_hash
-                .as_ref()
-                .map(|payload_hash| {
-                    (
-                        payload_ref_key(payload_hash, &entry.operation.hash),
-                        log_key.clone().into_bytes(),
-                    )
-                });
-            if let Some((key, value)) = payload_ref.as_ref() {
-                writes.insert(key.clone(), Some(value.clone()));
-            }
-            planned.insert(
-                entry.operation.hash.to_hex(),
-                PlannedOperation {
-                    pointer,
-                    log_key,
-                    log_prefix: prefix,
-                    payload_ref: payload_ref.map(|(key, _)| key),
-                    seq_num: entry.operation.header.seq_num,
-                    header: entry.operation.header.clone(),
-                    has_body: entry.operation.body.is_some(),
-                },
-            );
+            plan.plan_operation(entry, topic, prefix, log_key, pointer)?;
         }
         for write in trailing_writes {
-            record_write(&mut writes, write.clone());
+            plan.record(write.clone());
         }
-        let writes: Vec<_> = writes
+        let writes: Vec<_> = plan
+            .writes
             .into_iter()
             .map(|(key, value)| match value {
                 Some(value) => WriteOp::Put { key, value },
@@ -511,6 +539,81 @@ where
             })
             .collect();
         self.backend.apply(&writes).await
+    }
+
+    /// Plan the removal of one log's entries below `entry`'s sequence number:
+    /// those already durable, and those an earlier entry of this same batch
+    /// planned but has not written yet.
+    async fn plan_prune_writes<L: LogId>(
+        &self,
+        plan: &mut BatchPlan<E>,
+        entry: &IndexedOperation<'_, E, L>,
+        prefix: &str,
+    ) -> Result<(), StoreError> {
+        let (live_prune, _) = self
+            .prefix_prune_writes(
+                &entry.operation.header.verifying_key,
+                entry.log_id,
+                entry.operation.header.seq_num,
+            )
+            .await?;
+        for write in live_prune {
+            plan.record(write);
+        }
+        plan.prune_planned(prefix, entry.operation.header.seq_num);
+        Ok(())
+    }
+
+    /// Plan the erasure of one operation's payload, keeping its signed header.
+    ///
+    /// This reads through the batch's own pending writes before the backend, so
+    /// an operation this batch is still assembling is erased in place rather
+    /// than read back stale. That overlay is why the single-operation path in
+    /// [`Self::insert_indexed_operation_with_effects`] cannot simply call this:
+    /// it plans into an ordered `Vec<WriteOp>` with no overlay to consult.
+    async fn plan_payload_erasure(
+        &self,
+        plan: &mut BatchPlan<E>,
+        id: &Hash,
+    ) -> Result<(), StoreError> {
+        let id_hex = id.to_hex();
+        if let Some(operation) = plan.planned.get_mut(&id_hex) {
+            if let Some(payload_ref) = operation.payload_ref.as_ref() {
+                plan.writes.insert(payload_ref.clone(), None);
+            }
+            if operation.has_body {
+                plan.writes.insert(
+                    operation.log_key.clone(),
+                    Some(encode_blob(&operation.header, None)?),
+                );
+                operation.has_body = false;
+            }
+            return Ok(());
+        }
+        let payload_pointer = op_ptr(id);
+        if matches!(plan.writes.get(&payload_pointer), Some(None)) {
+            return Ok(());
+        }
+        let Some(payload_log_key) = self.log_key_for(id).await? else {
+            return Ok(());
+        };
+        let payload_blob = match plan.writes.get(&payload_log_key) {
+            Some(Some(bytes)) => Some(bytes.clone()),
+            Some(None) => None,
+            None => self.backend.get(&payload_log_key).await?,
+        };
+        let Some(payload_blob) = payload_blob else {
+            return Ok(());
+        };
+        let (header, body) = decode_blob::<E>(&payload_blob[..])?;
+        if let Some(payload_hash) = header.payload_hash.as_ref() {
+            plan.writes.insert(payload_ref_key(payload_hash, id), None);
+        }
+        if body.is_some() {
+            plan.writes
+                .insert(payload_log_key.clone(), Some(encode_blob(&header, None)?));
+        }
+        Ok(())
     }
 
     /// Atomically index one operation and optionally remove its preceding log.
@@ -578,7 +681,7 @@ where
             if body.is_none() {
                 continue;
             }
-            let stripped = encode_blob(&header, &None)?;
+            let stripped = encode_blob(&header, None)?;
             writes.push(WriteOp::Put {
                 key: payload_log_key.clone(),
                 value: stripped,
@@ -698,7 +801,7 @@ where
             return Ok(false);
         };
         let (header, _body) = decode_blob::<E>(&blob[..])?;
-        let stripped = encode_blob(&header, &None)?;
+        let stripped = encode_blob(&header, None)?;
         let mut writes = vec![WriteOp::Put {
             key: log_key,
             value: stripped,
@@ -733,6 +836,27 @@ where
         if Hash::digest(bytes) != *payload_hash {
             return Err(codec("payload chunk-set has a false digest"));
         }
+        self.attachment_writes(payload_hash, bytes).await
+    }
+
+    /// As [`Self::payload_attachment_writes`], for bytes that were hashed
+    /// against `payload_hash` when they were assembled.
+    ///
+    /// Drop import walks multi-megabyte chunk-sets; hashing each one a second
+    /// time here bought nothing that [`VerifiedBytes`] does not already state.
+    pub(crate) async fn verified_payload_attachment_writes(
+        &self,
+        payload_hash: &Hash,
+        bytes: &VerifiedBytes,
+    ) -> Result<(Vec<WriteOp>, u64), StoreError> {
+        self.attachment_writes(payload_hash, bytes.as_slice()).await
+    }
+
+    async fn attachment_writes(
+        &self,
+        payload_hash: &Hash,
+        bytes: &[u8],
+    ) -> Result<(Vec<WriteOp>, u64), StoreError> {
         let mut writes = Vec::new();
         let mut attached = 0;
         for reference_key in self.backend.list(&payload_ref_prefix(payload_hash)).await? {
@@ -755,7 +879,7 @@ where
             if body.is_none() {
                 writes.push(WriteOp::Put {
                     key: log_key,
-                    value: encode_blob(&header, &Some(bytes.to_vec()))?,
+                    value: encode_blob(&header, Some(bytes))?,
                 });
                 attached += 1;
             }
@@ -780,17 +904,15 @@ where
     }
 
     /// Prepare one verified content-addressed blob write for an import batch.
-    pub(crate) fn imported_blob_write(
-        blob_hash: [u8; 32],
-        bytes: &[u8],
-    ) -> Result<WriteOp, StoreError> {
-        if *blake3::hash(bytes).as_bytes() != blob_hash {
-            return Err(codec("blob chunk-set has a false digest"));
-        }
-        Ok(WriteOp::Put {
+    ///
+    /// The digest check happened where the chunk-set was assembled, which is
+    /// what [`VerifiedBytes`] records; the bytes then move straight into the
+    /// write instead of being hashed and copied again.
+    pub(crate) fn imported_blob_write(blob_hash: [u8; 32], bytes: VerifiedBytes) -> WriteOp {
+        WriteOp::Put {
             key: format!("blob/{}", hex::encode(blob_hash)),
-            value: bytes.to_vec(),
-        })
+            value: bytes.into_inner(),
+        }
     }
 
     /// Store content-addressed bytes in the shared muniment backend.

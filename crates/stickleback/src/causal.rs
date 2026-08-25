@@ -311,32 +311,59 @@ pub fn author_head<L: Clone + Ord>(
     }
 }
 
+/// An operation-hash index over a causal entry set, reusable across queries.
+///
+/// [`happens_before`] answers one reachability question, and building the hash
+/// index is the expensive half of answering it. A caller asking the question
+/// once per operation over the same entries — a projection fold, a conflict
+/// scan — would otherwise rebuild the whole index per call and pay O(n^2 log n)
+/// to walk a graph that never changed. Build this once and ask it many times.
+pub struct CausalIndex<'a, L: Clone + Ord> {
+    by_hash: BTreeMap<[u8; 32], &'a CausalEntry<L>>,
+}
+
+impl<'a, L: Clone + Ord> CausalIndex<'a, L> {
+    /// Index `entries` by operation hash. O(n log n), paid once.
+    pub fn new(entries: &'a [CausalEntry<L>]) -> Self {
+        Self {
+            by_hash: entries
+                .iter()
+                .map(|entry| (entry.operation, entry))
+                .collect(),
+        }
+    }
+
+    /// Whether `earlier` is in `later`'s transitive dependency set.
+    pub fn happens_before(&self, earlier: [u8; 32], later: [u8; 32]) -> bool {
+        let Some(later) = self.by_hash.get(&later) else {
+            return false;
+        };
+        let mut seen = BTreeSet::new();
+        let mut pending: Vec<_> = later.dependencies().into_iter().collect();
+        while let Some(operation) = pending.pop() {
+            if operation == earlier {
+                return true;
+            }
+            if seen.insert(operation)
+                && let Some(entry) = self.by_hash.get(&operation)
+            {
+                pending.extend(entry.dependencies());
+            }
+        }
+        false
+    }
+}
+
 /// Whether `earlier` is in `later`'s transitive dependency set.
+///
+/// Builds a fresh [`CausalIndex`] per call. Asking this repeatedly over one
+/// entry set is quadratic; hoist a `CausalIndex` out of the loop instead.
 pub fn happens_before<L: Clone + Ord>(
     entries: &[CausalEntry<L>],
     earlier: [u8; 32],
     later: [u8; 32],
 ) -> bool {
-    let by_hash: BTreeMap<_, _> = entries
-        .iter()
-        .map(|entry| (entry.operation, entry))
-        .collect();
-    let Some(later) = by_hash.get(&later) else {
-        return false;
-    };
-    let mut seen = BTreeSet::new();
-    let mut pending: Vec<_> = later.dependencies().into_iter().collect();
-    while let Some(operation) = pending.pop() {
-        if operation == earlier {
-            return true;
-        }
-        if seen.insert(operation)
-            && let Some(entry) = by_hash.get(&operation)
-        {
-            pending.extend(entry.dependencies());
-        }
-    }
-    false
+    CausalIndex::new(entries).happens_before(earlier, later)
 }
 
 fn order_key<L: Clone + Ord>(

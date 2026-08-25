@@ -32,6 +32,8 @@ pub mod identity_projection;
 pub mod lifecycle;
 #[cfg(feature = "web")]
 pub mod mere_host;
+#[cfg(feature = "web")]
+mod mere_host_fixture;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod native;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]

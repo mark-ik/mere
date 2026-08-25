@@ -12,18 +12,21 @@ use p2panda_store::logs::LogStore;
 use p2panda_store::topics::TopicStore;
 use proofs::Digest;
 use serde::{Deserialize, Serialize};
-use similar::{Algorithm, TextDiff};
+use stickleback::CausalIndex;
 use stickleback::{
     Admission, CausalEntry, CausalError, CausalLimits, DataKeyring, EpochCheckpointBasis,
     EpochHold, EpochHoldReason, EpochPruningProposal, EpochRetentionFacts, GroupCiphertext,
     GroupCryptoError, GroupEncryptionProfile, GroupSecretId, JoinError, JoinedSpace, MunimentStore,
     OperationPolicy, OperationProcessor, PendingCausalOperation, ProcessError, Reject, StoreTarget,
-    author_head, causal_projection, happens_before, observed_frontier, propose_epoch_pruning,
+    author_head, causal_projection, observed_frontier, propose_epoch_pruning,
     validate_causal_metadata,
 };
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{KnotVault, VaultDocument, djot_merge::merge_djot_sources};
+use crate::{
+    KnotVault, VaultDocument,
+    djot_merge::{automatic_text_merge, automatic_text_merge_head},
+};
 
 const LOG_ID: u64 = 0;
 const SYNC_AAD: &[u8] = b"mere.knot.sync-operation.v1";
@@ -619,6 +622,10 @@ where
         let records = self.load_operations().await?;
         let entries = causal_entries(&records);
         let projection = causal_projection(&entries)?;
+        // Indexed once for the whole fold: the retain below asks a reachability
+        // question per surviving version per operation, and rebuilding the hash
+        // index inside each of those made a save cost O(n^2 log n) in history.
+        let causal = CausalIndex::new(&entries);
         let mut current = BTreeMap::<String, BTreeMap<[u8; 32], KnotDocumentVersion>>::new();
         let mut event_documents = BTreeMap::<[u8; 32], String>::new();
         let mut version_history = Vec::<([u8; 32], String, Option<VaultDocument>)>::new();
@@ -637,7 +644,7 @@ where
                     document,
                 } => {
                     let targets = validate_resolution(
-                        &entries,
+                        &causal,
                         &event_documents,
                         operation_id,
                         &id,
@@ -651,9 +658,8 @@ where
                 }
             };
             if replaces_observed && let Some(versions) = current.get_mut(&id) {
-                versions.retain(|_, version| {
-                    !happens_before(&entries, version.operation, operation_id)
-                });
+                versions
+                    .retain(|_, version| !causal.happens_before(version.operation, operation_id));
             }
             event_documents.insert(operation_id, id.clone());
             version_history.push((operation_id, id.clone(), document.clone()));
@@ -679,7 +685,7 @@ where
                     documents.push(document);
                 }
             } else if let Some(automatic) =
-                automatic_text_merge(&entries, &version_history, &id, &versions)
+                automatic_text_merge(&causal, &version_history, &id, &versions)
             {
                 document_heads.insert(
                     id,
@@ -1267,180 +1273,8 @@ fn decode_event(
         .map_err(|error| KnotSyncError::Payload(error.to_string()))
 }
 
-fn automatic_text_merge(
-    entries: &[CausalEntry<u64>],
-    history: &[([u8; 32], String, Option<VaultDocument>)],
-    id: &str,
-    versions: &BTreeMap<[u8; 32], KnotDocumentVersion>,
-) -> Option<KnotAutomaticTextMerge> {
-    if versions.len() != 2 {
-        return None;
-    }
-    let versions: Vec<_> = versions.values().collect();
-    let left = versions[0].document.as_ref()?;
-    let right = versions[1].document.as_ref()?;
-    let (base_operation, base) =
-        history
-            .iter()
-            .rev()
-            .find_map(|(operation, event_id, document)| {
-                let document = document.as_ref()?;
-                (event_id == id
-                    && happens_before(entries, *operation, versions[0].operation)
-                    && happens_before(entries, *operation, versions[1].operation))
-                .then_some((*operation, document))
-            })?;
-    let document = merge_text_document(base, left, right)?;
-    let mut supersedes = vec![versions[0].operation, versions[1].operation];
-    supersedes.sort_unstable();
-    Some(KnotAutomaticTextMerge {
-        id: id.into(),
-        base: base_operation,
-        supersedes,
-        document,
-    })
-}
-
-fn merge_text_document(
-    base: &VaultDocument,
-    left: &VaultDocument,
-    right: &VaultDocument,
-) -> Option<VaultDocument> {
-    if base.id != left.id || base.id != right.id {
-        return None;
-    }
-    let title = merge_scalar(&base.title, &left.title, &right.title)?;
-    let media_type = merge_scalar(&base.media_type, &left.media_type, &right.media_type)?;
-    if !media_type.starts_with("text/") {
-        return None;
-    }
-    let base_body = std::str::from_utf8(&base.body).ok()?;
-    let left_body = std::str::from_utf8(&left.body).ok()?;
-    let right_body = std::str::from_utf8(&right.body).ok()?;
-    let body = if matches!(media_type.as_str(), "text/djot" | "text/vnd.knot") {
-        merge_djot_sources(base_body, left_body, right_body)
-            .or_else(|| merge_text_lines(base_body, left_body, right_body))?
-    } else {
-        merge_text_lines(base_body, left_body, right_body)?
-    }
-    .into_bytes();
-    Some(VaultDocument {
-        id: base.id.clone(),
-        title,
-        body,
-        media_type,
-    })
-}
-
-fn merge_scalar<T: Clone + Eq>(base: &T, left: &T, right: &T) -> Option<T> {
-    if left == right {
-        Some(left.clone())
-    } else if left == base {
-        Some(right.clone())
-    } else if right == base {
-        Some(left.clone())
-    } else {
-        None
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct LineEdit {
-    start: usize,
-    end: usize,
-    replacement: Vec<String>,
-}
-
-fn line_edits(base: &[&str], branch: &[&str]) -> Vec<LineEdit> {
-    TextDiff::configure()
-        .algorithm(Algorithm::Myers)
-        .diff_slices(base, branch)
-        .ops()
-        .iter()
-        .filter_map(|operation| {
-            let old = operation.old_range();
-            let new = operation.new_range();
-            (old.len() != new.len() || base[old.clone()] != branch[new.clone()]).then(|| LineEdit {
-                start: old.start,
-                end: old.end,
-                replacement: branch[new].iter().map(|line| (*line).to_owned()).collect(),
-            })
-        })
-        .collect()
-}
-
-pub(crate) fn merge_text_lines(base: &str, left: &str, right: &str) -> Option<String> {
-    if left == right {
-        return Some(left.into());
-    }
-    if left == base {
-        return Some(right.into());
-    }
-    if right == base {
-        return Some(left.into());
-    }
-    let base: Vec<_> = base.split_inclusive('\n').collect();
-    let left: Vec<_> = left.split_inclusive('\n').collect();
-    let right: Vec<_> = right.split_inclusive('\n').collect();
-    let left_edits = line_edits(&base, &left);
-    let right_edits = line_edits(&base, &right);
-    for left in &left_edits {
-        for right in &right_edits {
-            if line_edits_conflict(left, right) {
-                return None;
-            }
-        }
-    }
-    let mut edits = left_edits;
-    edits.extend(right_edits);
-    edits.sort_by(|left, right| {
-        (left.start, left.end, &left.replacement).cmp(&(right.start, right.end, &right.replacement))
-    });
-    edits.dedup();
-
-    let mut output = String::new();
-    let mut cursor = 0;
-    for edit in edits {
-        if edit.start < cursor {
-            return None;
-        }
-        output.extend(base[cursor..edit.start].iter().copied());
-        output.extend(edit.replacement.iter().map(String::as_str));
-        cursor = edit.end;
-    }
-    output.extend(base[cursor..].iter().copied());
-    Some(output)
-}
-
-fn line_edits_conflict(left: &LineEdit, right: &LineEdit) -> bool {
-    if left == right {
-        return false;
-    }
-    let left_insert = left.start == left.end;
-    let right_insert = right.start == right.end;
-    match (left_insert, right_insert) {
-        (true, true) => left.start == right.start,
-        (true, false) => left.start > right.start && left.start < right.end,
-        (false, true) => right.start > left.start && right.start < left.end,
-        (false, false) => left.start.max(right.start) < left.end.min(right.end),
-    }
-}
-
-fn automatic_text_merge_head(
-    base: [u8; 32],
-    supersedes: &[[u8; 32]],
-    document: &VaultDocument,
-) -> Result<[u8; 32], KnotSyncError> {
-    let bytes = encode_cbor(&(base, supersedes, document))
-        .map_err(|error| KnotSyncError::Payload(error.to_string()))?;
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"mere.knot.automatic-text-merge.v1");
-    hasher.update(&bytes);
-    Ok(*hasher.finalize().as_bytes())
-}
-
 fn validate_resolution(
-    entries: &[CausalEntry<u64>],
+    causal: &CausalIndex<'_, u64>,
     event_documents: &BTreeMap<[u8; 32], String>,
     resolution: [u8; 32],
     id: &str,
@@ -1481,7 +1315,7 @@ fn validate_resolution(
                 "resolution names a version of another document".into(),
             ));
         }
-        if !happens_before(entries, *target, resolution) {
+        if !causal.happens_before(*target, resolution) {
             return Err(KnotSyncError::InvalidResolution(
                 "resolution names a version outside its causal history".into(),
             ));

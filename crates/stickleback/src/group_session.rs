@@ -534,9 +534,16 @@ impl GroupSession {
         &mut self,
         added: GroupRecipientId,
     ) -> Result<GroupSessionDispatch, GroupSessionError> {
-        self.require_active_author()?;
+        // One membership snapshot answers both the active-author check and the
+        // already-present check; `members()` walks the DCGKA state and rebuilds
+        // two sets on every call, so the checks share one view here rather than
+        // each asking for their own.
+        let members = self.members()?;
+        if !members.contains(&self.member) {
+            return Err(GroupSessionError::LocalMemberInactive);
+        }
         self.require_registered(std::iter::once(added))?;
-        if self.members()?.contains(&added) {
+        if members.contains(&added) {
             return Err(GroupSessionError::MemberAlreadyPresent(added));
         }
         let mut next = self.try_clone()?;
@@ -555,11 +562,15 @@ impl GroupSession {
         &mut self,
         removed: GroupRecipientId,
     ) -> Result<GroupSessionDispatch, GroupSessionError> {
-        self.require_active_author()?;
+        // As in `add`: one membership snapshot serves both checks.
+        let members = self.members()?;
+        if !members.contains(&self.member) {
+            return Err(GroupSessionError::LocalMemberInactive);
+        }
         if removed == self.member {
             return Err(GroupSessionError::CannotRemoveSelf);
         }
-        if !self.members()?.contains(&removed) {
+        if !members.contains(&removed) {
             return Err(GroupSessionError::UnknownMember(removed));
         }
         let mut next = self.try_clone()?;
@@ -701,20 +712,22 @@ impl GroupSession {
             });
         }
 
-        let members = self.members()?;
+        // Only Update and Remove consult membership: Create and Add decide from
+        // the frame alone, so the membership snapshot is built inside the arms
+        // that read it instead of once for every frame processed.
         let needs_direct = match &control.action {
             GroupControlAction::Create { initial_members } => {
                 control.id.author != self.member && initial_members.contains(&self.member)
             }
             GroupControlAction::Update => {
-                control.id.author != self.member && members.contains(&self.member)
+                control.id.author != self.member && self.members()?.contains(&self.member)
             }
             GroupControlAction::Add { added } => {
                 control.id.author != self.member && *added == self.member
             }
             GroupControlAction::Remove { removed } => {
                 control.id.author != self.member
-                    && members.contains(&self.member)
+                    && self.members()?.contains(&self.member)
                     && *removed != self.member
             }
         };
