@@ -21,6 +21,7 @@ cambium.workspace = true
 chartulary.workspace = true
 eidetic = { workspace = true, features = ["json-schema"] }
 fetch.workspace = true
+fleece = { git = "file:///C:/Users/mark_/Code/repos/genet", rev = "ed1c49c034bf9991561e4b6c208fc677d1ba2fe8" }
 graphshell-endpoint.workspace = true
 chirograph.workspace = true
 graphshell-stdio.workspace = true

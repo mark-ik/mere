@@ -25,6 +25,7 @@ mod settings;
 mod startup;
 mod sync;
 mod vault;
+mod web_annotation;
 mod watcher;
 mod writer;
 
@@ -100,5 +101,6 @@ pub use sync::{
     KnotSyncFileStore, KnotSyncStore, KnotTailReceipt,
 };
 pub use vault::{KnotVault, VaultDocument};
+pub use web_annotation::{SpecificResource, SpecificResourceSelector};
 pub use watcher::DirectoryWatcher;
 pub use writer::{AuthoredFile, DocumentFormat, SaveOutcome};
