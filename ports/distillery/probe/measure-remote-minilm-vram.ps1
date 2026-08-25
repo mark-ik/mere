@@ -198,26 +198,23 @@ $recoveryReclaimed = Find-StageSample -Samples $samples -Stage 'recovery-reclaim
 $activeMinimumDelta = [uint64]$ActiveMinimumDeltaMiB * 1MB
 $reclaimTolerance = [uint64]$ReclaimToleranceMiB * 1MB
 
-$requiredSamples = @($baseline, $firstActive, $firstReclaimed, $recoveryActive, $recoveryReclaimed)
+$requiredSamples = @($firstActive, $firstReclaimed, $recoveryActive, $recoveryReclaimed)
 $samplesComplete = @($requiredSamples | Where-Object { $null -eq $_ -or -not $_.counter_available }).Count -eq 0
-$firstActiveDelta = if ($samplesComplete) {
-    [int64]$firstActive.dedicated_bytes - [int64]$baseline.dedicated_bytes
+$preGpuCounterAbsent = $null -ne $baseline -and -not $baseline.counter_available
+$firstReleased = if ($samplesComplete) {
+    [int64]$firstActive.dedicated_bytes - [int64]$firstReclaimed.dedicated_bytes
 } else { $null }
-$firstRetainedDelta = if ($samplesComplete) {
-    [Math]::Max(0, [int64]$firstReclaimed.dedicated_bytes - [int64]$baseline.dedicated_bytes)
+$recoveryReleased = if ($samplesComplete) {
+    [int64]$recoveryActive.dedicated_bytes - [int64]$recoveryReclaimed.dedicated_bytes
 } else { $null }
-$recoveryActiveDelta = if ($samplesComplete) {
-    [int64]$recoveryActive.dedicated_bytes - [int64]$baseline.dedicated_bytes
-} else { $null }
-$recoveryRetainedDelta = if ($samplesComplete) {
-    [Math]::Max(0, [int64]$recoveryReclaimed.dedicated_bytes - [int64]$baseline.dedicated_bytes)
+$reclaimDrift = if ($samplesComplete) {
+    [Math]::Abs([int64]$recoveryReclaimed.dedicated_bytes - [int64]$firstReclaimed.dedicated_bytes)
 } else { $null }
 
-$passes = -not $timedOut -and $exitCode -eq 0 -and $samplesComplete -and `
-    $firstActiveDelta -ge $activeMinimumDelta -and `
-    $recoveryActiveDelta -ge $activeMinimumDelta -and `
-    $firstRetainedDelta -le $reclaimTolerance -and `
-    $recoveryRetainedDelta -le $reclaimTolerance -and `
+$passes = -not $timedOut -and $exitCode -eq 0 -and $samplesComplete -and $preGpuCounterAbsent -and `
+    $firstReleased -ge $activeMinimumDelta -and `
+    $recoveryReleased -ge $activeMinimumDelta -and `
+    $reclaimDrift -le $reclaimTolerance -and `
     $firstActive.nvidia_gpu_0_visible -and $recoveryActive.nvidia_gpu_0_visible -and `
     -not $afterExit.counter_available
 
@@ -239,6 +236,8 @@ $receipt = [pscustomobject]@{
         counter = 'Windows GPU Process Memory Dedicated Usage, summed across the fixture PID instances'
         adapter_attribution = 'nvidia-smi pmon observes the same PID on NVIDIA GPU 0 at active stages'
         board_memory = 'nvidia-smi total memory is contextual only and is not a gate'
+        pre_gpu_baseline = 'the PID has no GPU process-memory counter before WGPU initialization'
+        steady_driver_context = 'the first post-reclaim sample is the persistent process context baseline; repeat reclaim must match it within tolerance'
         stage_hold_ms = $StageHoldMs
         active_minimum_delta_mib = $ActiveMinimumDeltaMiB
         reclaim_tolerance_mib = $ReclaimToleranceMiB
@@ -246,10 +245,10 @@ $receipt = [pscustomobject]@{
     samples = $samples
     after_process_exit = $afterExit
     deltas = [pscustomobject]@{
-        first_active_bytes = $firstActiveDelta
-        first_retained_after_reclaim_bytes = $firstRetainedDelta
-        recovery_active_bytes = $recoveryActiveDelta
-        recovery_retained_after_reclaim_bytes = $recoveryRetainedDelta
+        first_released_bytes = $firstReleased
+        recovery_released_bytes = $recoveryReleased
+        repeated_reclaim_drift_bytes = $reclaimDrift
+        steady_context_bytes = if ($samplesComplete) { $firstReclaimed.dedicated_bytes } else { $null }
     }
     driver_vram_claimed = $passes
     passes = $passes
