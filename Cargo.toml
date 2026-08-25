@@ -97,6 +97,7 @@ members = [
     "crates/graphshell/graphshell-network",
     "ports/graphshell",
     "ports/knot",
+    "ports/knot-document",
     "ports/djinn",
     "ports/castellan",
     "ports/distillery",
@@ -109,6 +110,9 @@ exclude = [
     # The unpublished browser host carries Git-only Genet presentation deps.
     # Keep it outside release resolution; it remains buildable by manifest path.
     "ports/graphshell/web",
+    # The desktop wrapper carries Git-only Genet presentation deps. Keep it
+    # buildable by manifest path without ordinary Mere resolution pulling winit.
+    "ports/knot/desktop",
     # A private cross-product port: it consumes the neighboring Retinue
     # checkout during the integration phase, so it must not make the Mere
     # workspace's ordinary build acquire a sibling checkout.
@@ -190,6 +194,7 @@ graphshell-endpoint = { version = "0.0.2", path = "crates/graphshell/graphshell-
 graphshell-stdio = { version = "0.0.2", path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { version = "0.0.1", path = "crates/graphshell/graphshell-network" }
 knot-editor = { version = "0.0.3", path = "ports/knot" }
+knot-document = { version = "0.0.1", path = "ports/knot-document" }
 # The credential-keeper port (dramatis plan D4). No longer a reservation:
 # C1/C2 landed the OTP core, sealed OTP items, the release gate, and the
 # `keeper` identity surface graphshell re-exports.
