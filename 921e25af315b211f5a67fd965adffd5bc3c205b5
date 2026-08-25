@@ -22,3 +22,22 @@ Headline findings:
 adversarial fact-checking pass; §8 records the method, the four sources that
 403 automated fetch and are therefore unconfirmed, and the re-check cadence.
 §9 lists seven open decisions.
+
+---
+
+Correction to the commit message (appended; the note above is another session's and is untouched).
+
+The message's line about Cargo.lock is wrong. Cargo.lock is not tracked in
+this repo — ea9d3169 ("build: stop committing Cargo.lock — track latest
+deps") removed it deliberately and .gitignore:10 keeps it out. The stated
+advance of the genet.git pin from c36c34b to b9bc9269 was a local
+working-copy effect and is not carried by this commit.
+
+The illume fix still holds for other checkouts, but by a different mechanism
+than the message describes: inker, nematic and knot-editor-host are branch
+git deps, so a fresh checkout resolves genet.git main at its head and gets a
+single illume regardless of any lockfile.
+
+Everything else in the message — the Cargo.toml conflict resolution, the
+graphshell source and manifest repair, and the cargo check --all-targets
+verification across ten packages — is accurate and is carried by the commit.
