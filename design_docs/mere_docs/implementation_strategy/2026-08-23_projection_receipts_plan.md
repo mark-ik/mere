@@ -1,10 +1,10 @@
 # Projection Receipts Plan
 
 **Date:** 2026-08-23  
-**Status:** active; Wave 1 receipts complete 2026-08-23. Mer3ly is the landed
-headed first consumer; gazette Ledger is the heterogeneous second consumer in
-the untracked port-promotion working tree. This plan is still untracked rather
-than landed authority, and wave 3 remains explicitly gated.  
+**Status:** active; Wave 1 receipts landed 2026-08-23. Mer3ly is the headed
+first consumer and gazette Ledger the heterogeneous second; the Gazette port
+promotion and this plan landed at `0da3b8ba`. Wave 2 FT6 closed 2026-08-24;
+FT7 is next, and wave 3 remains explicitly gated.
 **Scope:** sequence the nine acceptance receipts of the
 [projection-scenes direction note](../../2026-08-23_projection_scenes_and_graph_native_platform.md)
 §8 into feature targets with named forcing consumers and done-conditions.
@@ -177,6 +177,15 @@ Outputs: the first real product surface on `ports/gazette`.
 ## 4. Wave 2 — parity and view-state
 
 **FT6. View-state authority (receipt 7).**
+**Status: complete 2026-08-24.** Mer3ly now cites its spatial reading as a named
+input beside the Matrix axes and carries scope, filters, selected facets,
+arrangement, placement, backdrop, camera, and repeated-instance visibility in
+target-owned `ShelfmarkV1` delta sections. Unknown delta sections survive
+re-share. Changing those deltas leaves every named input's authority record,
+reading, parameters, arrangement, and expected generation unchanged. Pandect
+now preserves mirror-only pane intent. Turnstone's view-only `Fit` receipt and
+its real Knot domain-edit path provide the paired authority proof; the default
+Turnstone endpoint remains deliberately unable to edit graph truth.
 Context: mere owns saved scene recipes and active `ViewIntent` separate from
 graph truth; the sandbox already restores view state through shelfmark v1.
 Tasks: enumerate the view-state inventory — scope, filters, selected facets,
@@ -250,6 +259,12 @@ radio model for Current.
   wires use `graph`, `changes`, `activity`, `neighbors`, `matrix`, and
   `graph_layout:*`; `Neighborhood` is only a label for
   `graph_layout:radial`. No alias machinery is required.
+- FT6 needed one additional named `spatial` input, not a new envelope: cited
+  projection inputs say which authority and reading to reconstitute; target-owned
+  delta sections say what the visitor did to that view.
+- A headed FT6 pass exposed a stale browser consumer that still admitted Score
+  v3 after the native contract and M7 had moved to v4. The browser now checks
+  the same version, and M7 pins the agreement.
 
 ## Progress
 
@@ -273,3 +288,15 @@ radio model for Current.
   composed `mere.shelfmark/1` reload verifies two input generations, restores
   both clauses, and honors one dismissed Deck instance with no console warning.
   This closes A2 under the adoption plan's own validation rule.
+- 2026-08-24: FT6 closed. Mer3ly's 28 repo-graph tests, four M5 tests, and six
+  M7 tests pass; the checked-in Wasm was rebuilt. The full browser smoke passes
+  against 18 repositories and 25 graph edges after saving and reopening scope,
+  crossfilter clauses, selected Deck facet, grid arrangement, free motion,
+  props backdrop, pinned Ashland placement, camera `80,0,1.20`, and a dismissed
+  Ashland Deck instance. An in-app inspection found seven distinct camera
+  controls and no console warnings or errors. Pandect's mirror-only intent
+  round-trip passes. Turnstone's projected `Fit` accepts curation while refusing
+  graph change, and its real Knot consumer saves, rejects stale authority, and
+  reopens; those two Turnstone receipts used the existing post-source test
+  binary because the live checkout's local patch redirects prevent a fresh
+  locked build.
