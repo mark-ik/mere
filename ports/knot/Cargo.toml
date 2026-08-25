@@ -26,7 +26,7 @@ cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", b
 chartulary.workspace = true
 eidetic = { workspace = true, features = ["json-schema"] }
 fetch.workspace = true
-fleece = "0.2.0"
+fleece.workspace = true
 genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
 graphshell-endpoint.workspace = true
 chirograph.workspace = true
