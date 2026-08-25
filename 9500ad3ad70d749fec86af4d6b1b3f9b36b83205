@@ -1,0 +1,37 @@
+Correction to this commit's own message.
+
+The message's closing line, "Committed alone, not swept: conatus is mid
+crate-split and distillery has active remote work in the same tree", is WRONG.
+This commit did sweep that conatus work in.
+
+What it actually carries, beyond the intended
+design_docs/2026-08-24_standards_survey_brief.md:
+
+  Cargo.toml
+  crates/conatus/conatus/Cargo.toml
+  crates/conatus/conatus/src/body.rs
+  crates/conatus/conatus/src/lib.rs
+  crates/conatus/conatus/src/world.rs          (473-line rewrite)
+  crates/conatus/conatus/src/world/rapier.rs   (new, 511 lines)
+  crates/conatus/conatus/tests/voxel_integration.rs (new)
+  crates/conatus/voxel/Cargo.toml              (new crate)
+  crates/conatus/voxel/src/lib.rs              (moved from conatus/src/voxel.rs)
+  design_docs/mere_docs/implementation_strategy/2026-08-22_conatus_engine_plan.md
+  design_docs/mere_docs/implementation_strategy/2026-08-23_runtime_composition_acceptance_plan.md
+
+That is a conatus crate split -- voxel extracted to its own crate, world.rs
+rewritten around a rapier backend -- authored by a concurrent session, not by
+the standards-survey work the subject describes. Anyone bisecting or reading
+`git log --oneline` for the conatus split will not find it under a subject
+that mentions it; it is here.
+
+Cause, recorded so it is not repeated: a first commit attempt failed on
+.git/index.lock while the other session was staging. The `git add` had already
+run. On retry, a pathspec-less `git commit` took the whole index, which by then
+held their staged work. The working tree was checked before committing; the
+index was not. The fix is to commit with an explicit pathspec and to read
+`git diff --cached --numstat` immediately before committing, not only
+`git status` beforehand.
+
+Left bundled deliberately, per the workspace rule against history surgery to
+un-bundle a commit. Ruled by Mark 2026-08-24.
