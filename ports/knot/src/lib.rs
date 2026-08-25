@@ -10,6 +10,8 @@ mod clip_evidence;
 mod content_classes;
 mod directory;
 mod djot_merge;
+mod document_surface;
+mod document_view;
 mod editor;
 mod endpoint;
 mod mark;
@@ -38,6 +40,16 @@ pub use content_classes::{
     FILE_CLASS, FILE_DOCUMENT_FACET, KnotContentClasses, NOTE_CLASS, NOTE_DOCUMENT_FACET,
 };
 pub use directory::{DirectorySource, DiskDocument, IgnorePolicy};
+pub use document_surface::{
+    KnotDocumentIntentErrorV1, KnotDocumentIntentV1, KnotDocumentRefusalV1,
+    KnotDocumentSaveFailureV1, KnotDocumentSaveOutcomeV1, KnotDocumentSession,
+    KnotDocumentSnapshotV1, KnotDocumentSourceKindV1, KnotDocumentSourceV1,
+    KnotDocumentWritePostureV1,
+};
+pub use document_view::{
+    KNOT_DOCUMENT_CSS, KnotDocumentSurfaceState, KnotDocumentView, knot_document_descriptor,
+    knot_document_surface, knot_document_view,
+};
 pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::{
     KnotEffectAuthority, KnotEffectFetcher, KnotEffectMode, KnotEffectPolicy, KnotEndpoint,

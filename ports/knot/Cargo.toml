@@ -14,14 +14,20 @@ path = "src/bin/knot_endpoint.rs"
 name = "knot_sync_host"
 path = "src/bin/knot_sync_host.rs"
 
+[[bin]]
+name = "knot"
+path = "src/bin/knot.rs"
+
 [dependencies]
 base64.workspace = true
 blake3.workspace = true
 cambium.workspace = true
+cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 chartulary.workspace = true
 eidetic = { workspace = true, features = ["json-schema"] }
 fetch.workspace = true
 fleece = "0.2.0"
+genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
 graphshell-endpoint.workspace = true
 chirograph.workspace = true
 graphshell-stdio.workspace = true
@@ -29,6 +35,7 @@ inker.workspace = true
 illume.workspace = true
 jotdown = "0.10"
 knot-editor-host.workspace = true
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 muniment = { workspace = true, features = ["redb"] }
 mora.workspace = true
 mora-cmudict.workspace = true
@@ -77,6 +84,7 @@ zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 gemot.workspace = true
+genet-probe = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 graphshell = { path = "../graphshell" }
 graphshell-local.workspace = true
 rcgen = "0.14"

@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+# Stands on its own, outside the mere workspace. The root manifest lists this
+# path under `exclude`, but that entry cannot fire by itself: cargo only
+# excludes a path that is not already an explicit member, and `ports/graphshell`
+# directly above this one IS an explicit member, so the exclude is inert and
+# cargo reports "current package believes it's in a workspace when it's not".
+# This table is what actually keeps it out. Standing alone also means nothing is
+# inherited: the dependency versions below are spelled out rather than taken
+# from `workspace.dependencies`, and any `[patch]` the root manifest carries has
+# to be restated at the bottom of this file.
+[workspace]
+
 [lib]
 name = "graphshell_web"
 crate-type = ["cdylib"]
@@ -19,7 +30,7 @@ muniment = { path = "../../../crates/eidetic/muniment", features = ["indexeddb"]
 graphshell-client = { path = "../../../crates/graphshell/graphshell-client" }
 sceno = { path = "../../../crates/scenograph/sceno" }
 scenotime = { path = "../../../crates/scenograph/scenotime" }
-serde.workspace = true
+serde = { version = "1", features = ["derive"] }
 cambium = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 genet-render = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 # The present core, shared with every winit host. Booting wgpu, picking a
@@ -31,9 +42,9 @@ genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch 
 js-sys = "0.3"
 netrender = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
 netrender_device = { git = "https://github.com/merely-made/netrender.git", branch = "main" }
-serde_json.workspace = true
-sha2.workspace = true
-uuid.workspace = true
+serde_json = "1"
+sha2 = "0.11"
+uuid = { version = "1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.126"
 wasm-bindgen-futures = "0.4"
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "webgpu"] }

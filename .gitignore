@@ -75,6 +75,14 @@ mere-sessions/
 .cargo/
 /target-*/
 
+# Isolated cargo homes created for dependency experiments — e.g.
+# `.cargo-conatus-rapier-test/`, used on 2026-08-24 to resolve conatus against
+# rapier in a clean resolver. Each holds a full git checkout cache: thousands of
+# vendored files, including entire upstream test suites (that one carried a WPT
+# checkout). A `git add -A` sweeps every one of them into the commit, which is
+# how this rule came to be written. Ignore the class rather than the one name.
+.cargo-*/
+
 # Local host receipts can contain machine addresses, key fingerprints, and
 # endpoint reachability details. Keep the raw resident-host rehearsal local.
 ports/graphshell/docs/2026-07-28_h4f_resident_device_host_receipt.md

@@ -6,90 +6,88 @@ use std::path::{Path, PathBuf};
 use cambium::{CaretSelection, TextCommand, TextInput};
 use illume::{Fold, OutlineItem, Span};
 use inker::EngineDocument;
-use knot_editor_host::KnotReadout;
+pub use knot_editor_host::EditOutcome;
+use knot_editor_host::KnotEditor as SharedKnotEditor;
 
-use crate::writer::{SaveOutcome, file_address, write_if_distinct};
+use crate::writer::{DocumentFormat, SaveOutcome, file_address, write_if_distinct};
 
-/// What changed when one platform-neutral command was applied.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct EditOutcome {
-    pub state_changed: bool,
-    pub source_changed: bool,
-}
-
-/// One `.knot` editor session.
+/// One Djot or legacy `.knot` editor session.
 ///
 /// Cambium's [`TextInput`] owns the sole source buffer. Highlighting, outline,
-/// folds, and preview are re-derived from that buffer by [`KnotReadout`].
+/// folds, and preview are re-derived by the shared editor model.
 pub struct KnotEditor {
     path: Option<PathBuf>,
     address: String,
-    original: Vec<u8>,
-    input: TextInput,
-    readout: KnotReadout,
+    format: DocumentFormat,
+    editor: SharedKnotEditor,
 }
 
 impl KnotEditor {
-    /// Open a file-backed native Knot source.
+    /// Open a file-backed Djot or legacy Knot source.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, String> {
         let path = path.into();
-        if path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_none_or(|extension| !extension.eq_ignore_ascii_case("knot"))
-        {
-            return Err(format!(
-                "KnotEditor requires a .knot file: {}",
-                path.display()
-            ));
-        }
+        let format = DocumentFormat::from_path(&path)
+            .filter(|format| matches!(format, DocumentFormat::Knot | DocumentFormat::Djot))
+            .ok_or_else(|| {
+                format!(
+                    "KnotEditor requires a .djot or .knot file: {}",
+                    path.display()
+                )
+            })?;
         let original = fs::read(&path)
             .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-        let source = String::from_utf8(original.clone())
+        let source = String::from_utf8(original)
             .map_err(|error| format!("{} is not UTF-8: {error}", path.display()))?;
         let address = file_address(&path)?;
         Ok(Self {
             path: Some(path),
+            editor: SharedKnotEditor::scratch(address.clone(), source),
             address,
-            original,
-            input: TextInput::new(source),
-            readout: KnotReadout::new(),
+            format,
         })
     }
 
     /// Start an unsaved editor with a caller-selected address.
     pub fn scratch(address: impl Into<String>, source: impl Into<String>) -> Self {
         let source = source.into();
+        let address = address.into();
         Self {
             path: None,
-            address: address.into(),
-            original: source.as_bytes().to_vec(),
-            input: TextInput::new(source),
-            readout: KnotReadout::new(),
+            editor: SharedKnotEditor::scratch(address.clone(), source),
+            address,
+            format: DocumentFormat::Djot,
         }
     }
 
     pub fn input(&self) -> &TextInput {
-        &self.input
+        self.editor.input()
+    }
+
+    pub fn input_mut(&mut self) -> &mut TextInput {
+        self.editor.input_mut()
     }
 
     pub fn source(&self) -> &str {
-        self.input.text()
+        self.editor.source()
+    }
+
+    /// The stable source address used by the editor readout.
+    pub fn address(&self) -> &str {
+        &self.address
+    }
+
+    pub fn format(&self) -> DocumentFormat {
+        self.format
     }
 
     pub fn selection(&self) -> CaretSelection {
-        self.input.caret_selection()
+        self.editor.selection()
     }
 
     /// Apply a logical edit, motion, undo, or IME command through Cambium's
     /// single mutation path.
     pub fn apply(&mut self, command: TextCommand) -> EditOutcome {
-        let before = self.input.text().to_string();
-        let state_changed = self.input.apply(command);
-        EditOutcome {
-            state_changed,
-            source_changed: self.input.text() != before,
-        }
+        self.editor.apply(command)
     }
 
     /// Apply the byte-plus-affinity selection returned by a layout host.
@@ -98,25 +96,23 @@ impl KnotEditor {
     }
 
     pub fn highlights(&self) -> Vec<Span> {
-        self.readout.highlights(self.input.text())
+        self.editor.highlights()
     }
 
     pub fn outline(&self) -> Vec<OutlineItem> {
-        self.readout.outline(self.input.text())
+        self.editor.outline()
     }
 
     pub fn folds(&self) -> Vec<Fold> {
-        self.readout.folds(self.input.text())
+        self.editor.folds()
     }
 
     pub fn preview(&self) -> Result<EngineDocument, String> {
-        self.readout
-            .rendered(&self.address, self.input.text())
-            .map_err(|error| format!("could not render Knot preview: {error}"))
+        self.editor.preview()
     }
 
     pub fn is_dirty(&self) -> bool {
-        self.input.text().as_bytes() != self.original
+        self.editor.is_dirty()
     }
 
     /// Write the committed source bytes back to the opened file.
@@ -125,9 +121,14 @@ impl KnotEditor {
             .path
             .as_deref()
             .ok_or_else(|| "scratch Knot editor has no save path".to_string())?;
-        let bytes = self.input.text().as_bytes();
-        let outcome = write_if_distinct(path, &self.original, bytes)?;
-        self.original = bytes.to_vec();
+        if !self.editor.is_dirty() {
+            return Ok(SaveOutcome::Unchanged);
+        }
+        let source = self.editor.source().to_owned();
+        let existing = fs::read(path)
+            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
+        let outcome = write_if_distinct(path, &existing, source.as_bytes())?;
+        self.editor.accept_saved_source(&source);
         Ok(outcome)
     }
 

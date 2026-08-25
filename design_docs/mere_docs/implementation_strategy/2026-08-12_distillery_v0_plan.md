@@ -5,8 +5,9 @@
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
-remote reclaim ordering, and real adapter numerical parity are proven. The
-installed-port authority and physical GPU-allocation telemetry remain open.
+remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
+parity are proven. The installed-port authority and driver-level GPU telemetry
+remain open.
 
 ## 1. Purpose
 
@@ -191,18 +192,20 @@ remain release-gated. The lease-bound Burn Remote source audit and targeted
 session-close seam are complete, including live-request interruption,
 stop-before-reclaim ordering, zero sessions, and fresh-lease recovery.
 
-The next remote sidequest is allocator telemetry using the patched CubeCL
-`ComputeClient::memory_usage()` seam. Record baseline, post-load/execute,
-post-reclaim cleanup, and fresh-session cleanup; require bytes in use and active
-allocation count to return to baseline, while recording but not requiring
-reserved bytes to fall. This is allocator evidence, not driver VRAM telemetry.
-The native seam lives in `support/patches/cubecl-runtime/src/client.rs`; Burn
-Remote's cleanup boundary is `support/patches/burn-remote/src/server/worker.rs`.
-The Burn Fusion/autotune crash follows as a minimized upstream four-row matrix:
-local plain, local Fusion, remote plain, and remote Fusion, with bounded timeout
-and stderr capture. Likely ownership is upstream CubeCL autotune scheduling and
-Burn Fusion ordering, not Distillery's lease adapter. The default passing remote
-receipt remains plain WGPU.
+The allocator sidequest is complete through the patched CubeCL
+`ComputeClient::memory_usage()` seam. Both plain-WGPU MiniLM sessions rose from
+zero to 101 live allocations and 90,261,504 bytes in use, then returned exactly
+to the zero baseline before their reclaim facts. Reserved bytes are recorded
+but remain outside the gate; driver VRAM remains unmeasured. Burn Remote now
+keeps draining sessions visible until worker cleanup, propagates worker failure
+through Distillery, and wakes detached writers on close.
+
+The bounded feature matrix passes every local row and remote plain. Remote
+Fusion plus autotune completes inference but retains five live allocations;
+remote autotune-only becomes timing-sensitive through inference/reclaim, while
+remote Fusion-only stalls during first provider load. This is an upstream
+Burn/CubeCL remote-backend compatibility lane, not a Distillery lease-adapter
+gate. Plain WGPU remains the supported remote profile.
 
 Model manifest browsing, streaming console, portable remote checkpoints,
 tolerant comparators, a real stacked-adapter row, and training remain separate

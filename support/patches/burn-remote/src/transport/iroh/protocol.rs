@@ -123,8 +123,9 @@ impl<B: BackendIr> IrohRemoteProtocol<B> {
 
     /// End one active session and wait for its pump to reach teardown.
     ///
-    /// Returns `false` when `session_id` was not active.
-    pub async fn close_session(&self, session_id: SessionId) -> bool {
+    /// Returns `Ok(false)` when `session_id` was not active. Worker cleanup failures are returned
+    /// so callers cannot mistake a crashed worker for a clean resource release.
+    pub async fn close_session(&self, session_id: SessionId) -> Result<bool, String> {
         self.sessions.close_session(session_id).await
     }
 

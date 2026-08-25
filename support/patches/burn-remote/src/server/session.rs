@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Once},
 };
-use tokio::sync::{Mutex, mpsc, watch};
+use tokio::sync::{Mutex, mpsc, oneshot, watch};
 
 use crate::metrics::{MetricSide, logger_task};
 use crate::server::local_comm::LocalCommService;
@@ -61,7 +61,16 @@ struct Session {
     device_index: u32,
     authorization: Arc<[u8]>,
     close: watch::Sender<bool>,
-    done: watch::Sender<bool>,
+    done: watch::Sender<SessionCompletion>,
+    worker_done: Option<oneshot::Receiver<()>>,
+    finishing: bool,
+}
+
+#[derive(Clone, Debug)]
+enum SessionCompletion {
+    Running,
+    Clean,
+    Failed(Arc<str>),
 }
 
 /// One session currently served by an Iroh remote protocol.
@@ -150,24 +159,27 @@ where
         served
     }
 
-    /// Ask one active pump to close, and wait until its worker and writer have
-    /// reached the ordinary session teardown boundary.
-    pub async fn close_session(&self, session_id: SessionId) -> bool {
+    /// Ask one active pump to close, and wait until its worker has released backend state.
+    pub async fn close_session(&self, session_id: SessionId) -> Result<bool, String> {
         let (close, mut done) = {
             let sessions = self.sessions.lock().await;
             let Some(session) = sessions.get(&session_id) else {
-                return false;
+                return Ok(false);
             };
             (session.close.clone(), session.done.subscribe())
         };
 
         close.send_replace(true);
-        while !*done.borrow() {
-            if done.changed().await.is_err() {
-                break;
+        loop {
+            match done.borrow().clone() {
+                SessionCompletion::Running => {}
+                SessionCompletion::Clean => return Ok(true),
+                SessionCompletion::Failed(error) => return Err(error.to_string()),
             }
+            done.changed()
+                .await
+                .map_err(|_| format!("Session {session_id} teardown signal was dropped"))?;
         }
-        true
     }
 }
 
@@ -189,7 +201,7 @@ where
         }
 
         let (close, _) = watch::channel(false);
-        let (done, _) = watch::channel(false);
+        let (done, _) = watch::channel(SessionCompletion::Running);
         sessions.insert(
             session_id,
             Session {
@@ -198,6 +210,8 @@ where
                 authorization,
                 close,
                 done,
+                worker_done: None,
+                finishing: false,
             },
         );
         Ok(())
@@ -219,7 +233,7 @@ where
         let (response_sender, responses) = mpsc::channel(RESPONSE_CHANNEL_CAPACITY);
         let runner =
             TensorInterpreter::with_custom_ops(self.device(device_index), self.custom_ops.clone());
-        let task_sender = SessionHandler::spawn(
+        let (task_sender, worker_done) = SessionHandler::spawn(
             session_id,
             runner,
             response_sender,
@@ -228,6 +242,7 @@ where
             self.probe.clone(),
         );
         session._task_sender = Some(task_sender.clone());
+        session.worker_done = Some(worker_done);
         let close_receiver = session.close.subscribe();
         self.probe.emit(|| TelemetryEvent::SessionOpened {
             session: session_id,
@@ -253,15 +268,69 @@ where
         self.devices.len() as u32
     }
 
-    async fn finish_session(&self, session_id: SessionId) {
+    async fn finish_session(&self, session_id: SessionId) -> Result<(), String> {
+        let (worker_done, mut concurrent_done, was_bound) = {
+            let mut sessions = self.sessions.lock().await;
+            let Some(session) = sessions.get_mut(&session_id) else {
+                return Ok(());
+            };
+            if session.finishing {
+                (None, Some(session.done.subscribe()), false)
+            } else {
+                session.finishing = true;
+                session.close.send_replace(true);
+                let was_bound = session._task_sender.is_some();
+                // The manager retains one sender so a worker cannot disappear while the pump is
+                // active. Drop it before waiting, then acknowledge closure only after the worker
+                // has synced, dropped its interpreter, and run backend memory cleanup.
+                drop(session._task_sender.take());
+                (session.worker_done.take(), None, was_bound)
+            }
+        };
+
+        if let Some(done) = concurrent_done.as_mut() {
+            loop {
+                match done.borrow().clone() {
+                    SessionCompletion::Running => {}
+                    SessionCompletion::Clean => return Ok(()),
+                    SessionCompletion::Failed(error) => return Err(error.to_string()),
+                }
+                done.changed()
+                    .await
+                    .map_err(|_| format!("Session {session_id} teardown signal was dropped"))?;
+            }
+        }
+
+        let cleanup = match worker_done {
+            Some(worker_done) => worker_done.await.map_err(|_| {
+                format!("Session {session_id} worker stopped before backend cleanup completed")
+            }),
+            None => Ok(()),
+        };
+
         let mut sessions = self.sessions.lock().await;
-        if let Some(session) = sessions.remove(&session_id) {
-            let was_bound = session._task_sender.is_some();
-            session.done.send_replace(true);
-            if was_bound {
-                self.probe.emit(|| TelemetryEvent::SessionClosed {
-                    session: session_id,
-                });
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return Err(format!(
+                "Session {session_id} disappeared before teardown completed"
+            ));
+        };
+        match cleanup {
+            Ok(()) => {
+                let done = session.done.clone();
+                sessions.remove(&session_id);
+                done.send_replace(SessionCompletion::Clean);
+                if was_bound {
+                    self.probe.emit(|| TelemetryEvent::SessionClosed {
+                        session: session_id,
+                    });
+                }
+                Ok(())
+            }
+            Err(error) => {
+                session
+                    .done
+                    .send_replace(SessionCompletion::Failed(Arc::from(error.as_str())));
+                Err(error)
             }
         }
     }

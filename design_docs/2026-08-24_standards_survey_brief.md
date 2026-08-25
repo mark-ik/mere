@@ -98,14 +98,56 @@ the PHC string format exist partly to prevent exactly this; BLAKE3's own
 `derive_key` context-string mode, or RFC 5869 HKDF's `info` parameter, is the
 equivalent fix on the derivation side.
 
-This is a v2-root decision rather than a patch, which is the argument for taking
-it **before** the vault carries anyone's real credentials rather than after. The
-`argon2` 0.5.3 hold already recorded in the crypto stack decision is the right
-instinct; this is the same instinct applied to the file format.
+> **Revised 2026-08-24, after a code-level pass.** The paragraph that stood here
+> called this "a v2-root decision rather than a patch" and argued for taking it
+> before the vault carries real credentials. Both halves were wrong, and the
+> corrected version is cheaper:
+>
+> - **The passphrase ladder holds no data.** There is no `vault.json` and no
+>   `vault-root.pass.json` anywhere on the machine. The live vault is the
+>   DPAPI/auto-unlock ladder (`AppData\Local\personae\vault\`, plus a second
+>   store under `Hocket\personae\`). The Argon2 question touches zero bytes of
+>   real data today.
+> - **The SSH key is not at risk from either change.** It is a Direct slot with
+>   lineage `LocallyGeneratedExternallyRegistered` (`ssh_slot.rs:53-59`) holding
+>   OpenSSH private-key bytes — stored, not derived — and it lives on the DPAPI
+>   ladder. `derive_child` cannot orphan it.
+> - **The two problems have nearly disjoint blast radii.** `derive_kek` has 3
+>   in-crate callers. `derive_child`'s public surface has ~118 call sites across
+>   73 files, with `DerivedKeyAttestation` on the wire in 21 of them and a hard
+>   version gate at `provider.rs:44`.
+> - **Read-old/write-new is already house style here.**
+>   `sealed_record_storage.rs:30-31` carries `LEGACY=1` and `CURRENT=2`
+>   simultaneously, accepts both, and always writes 2. So the format change needs
+>   no flag day and no migration to write.
+>
+> Corrected sequencing: **the format and parameter change is patch-shaped and can
+> land alone.** The derivation-context change is the expensive one — it requires
+> every peer to ship a v2-aware verifier before any peer mints a v2 key, and the
+> SSH CA (`ssh_ca.rs:139-141`, enrolled as a `cert-authority` line on the Linux
+> laptop's sshd) needs manual re-enrollment regardless. The two are independent;
+> bundling them holds a cheap fix hostage to an expensive one.
+>
+> One further gap: the `argon2` hold recorded in the crypto stack decision is
+> **not enforced by the manifest**. `crates/dramatis/personae/Cargo.toml:44`
+> reads `argon2 = "0.5"` (caret); only `Cargo.lock` pins 0.5.3. Since 0.6 changes
+> the default parameters, a `cargo update` is exactly the silent-unlock-failure
+> path this section describes.
+>
+> Note also that `p=4` buys no wall-clock speedup here: argon2 0.5.3 has no
+> threading and its lane loop is serial, so parallelism is an anti-GPU structural
+> parameter only. Work scales as `m x t`, making RFC 9106's second recommended
+> option ~5.1x current cost and the first ~53.9x. The first option is
+> *unallocatable* on wasm, so it is not coherent across mere's declared targets
+> even in principle.
+
+The `argon2` 0.5.3 hold already recorded in the crypto stack decision is the
+right instinct; this is the same instinct applied to the file format.
 
 **Verdict: ADOPT RFC 9106 §4 as a named parameter target and record it in the
 format; ADOPT RFC 5869 (or BLAKE3 `derive_key`) as the versioned derivation
-context.** Both are small now and ugly later.
+context.** The first is small and cheap today. The second is not, and should be
+sequenced on its own terms.
 
 ### 2.2 `otpauth://` has no normative specification at all
 
@@ -588,180 +630,180 @@ recorded in §1, §3.3, §5, §6 and §8.
 
 | Verdict | Standard | Designator | Consumer |
 |---|---|---|---|
-| ADOPT | Argon2 memory-hard password hashing | RFC 9106 | personae — crates/dramatis/personae/src/passphrase_storag |
-| PULL | scrypt password-based KDF | RFC 7914 | import (the crate that migrates STORED browser and vault |
-| PULL | PBKDF2 (PKCS #5 v2.1) and NIST's password-based KDF recommendation | RFC 8018 / NIST SP 800-132 | Two, both narrow. (1) import — KDBX 4, 1Password, Bitwar |
-| ADOPT | Digital Identity Guidelines — Authentication and Authenticator Management | NIST SP 800-63B-4 (within SP 800-63-4) | Two real ones. (1) **personae passphrase enrollment** — e |
-| SKIP | Information security controls — Authentication information | ISO/IEC 27002:2022 control 5.17 | None in the codebase. The nearest thing is castellan's gat |
-| ADOPT | ChaCha20-Poly1305 AEAD (and its X-nonce variant) | RFC 8439 (+ draft-irtf-cfrg-xchacha-03, EXPIRED) | Both halves are already shipped. personae/src/passphrase_ |
-| SKIP | AES Galois/Counter Mode (GCM and GMAC) | NIST SP 800-38D | **None in the vault.** ChaCha20-Poly1305 already occupies  |
-| PULL | Misuse-resistant AEAD: AES-SIV and AES-GCM-SIV | RFC 5297 (AES-SIV) and RFC 8452 (AES-GCM-SIV) | Not today. The consumer that would create real demand is * |
-| SKIP | AES Key Wrap (KW / KWP) | NIST SP 800-38F | None in the vault. Would only appear as an interop require |
-| ADOPT | HKDF extract-and-expand key derivation | RFC 5869 (and NIST SP 800-56C Rev. 2 for the key-establishment case) | **personae Ed25519Keypair::derive_child** — crates/dram |
-| PULL | Hierarchical deterministic key derivation and seed-phrase carry | BIP-32, BIP-39, SLIP-0010 | personae's master seed and the wallet carry layer. design |
-| PULL | Shamir's Secret-Sharing for Mnemonic Codes | SLIP-0039 | personae vault-root recovery. design_docs/mere_docs/imple |
-| SKIP | OPAQUE augmented password-authenticated key exchange | RFC 9807 (and, as the balanced alternative, draft-irtf-cfrg-cpace-21) | **None, and that is the finding.** There is no sync server |
-| SKIP | Secure Remote Password (SRP-6a) | RFC 2945 (SRP-3) and RFC 5054 (SRP-6a for TLS) | None. Same reason as OPAQUE. Worth knowing only because ** |
-| WATCH | Post-quantum cryptography: ML-KEM, ML-DSA, SLH-DSA and the transition timeline | FIPS 203, FIPS 204, FIPS 205 (+ NIST SP 800-227, NIST IR 8547, CNSA 2.0) | For the **vault**: none, honestly. For the **sync transpor |
-| WATCH | X-Wing general-purpose hybrid post-quantum KEM | draft-connolly-cfrg-xwing-kem-10 | None today. Would become relevant only in the sync-transpo |
-| SKIP | Messaging Layer Security | RFC 9420 | For a shared/family vault: no fit, see below. The real MLS |
-| SKIP | Cryptographic module validation | FIPS 140-3 (and the CMVP) | None. There is no US federal buyer, no FedRAMP boundary, n |
-| WATCH | Cryptoki — the cryptographic token interface | PKCS #11 Specification Version 3.2 (and PKCS #11 Profiles v3.2) | castellan's authority half, in two opposite directions. ** |
-| PULL | TPM 2.0 NV monotonic counters (the standard that closes the rollback gap) | TCG TPM 2.0 Library Specification, Family 2.0, Level 00, Revision 01.83 (published as IS | **personae sealed_record_storage::freshness::FileFreshnes |
-| PULL | Credential Exchange Format and Protocol | CXF v1.0 (Proposed Standard, 2025-08-21, with Errata 2026-03-09) / CXP v1.0 (Working Dra | castellan's import path. The README states plainly: 'CXF i |
-| ADOPT | FIDO Credential Exchange Format | CXF v1.0 Proposed Standard with Errata, 2026-03-09 | repos/mere/ports/castellan — the README's own open item, ' |
-| WATCH | FIDO Credential Exchange Protocol | CXP v1.0 Working Draft, 2024-10-03 | castellan's authority half — it is the only component that |
-| PULL | KDBX (KeePass database format) | KDBX 4.1 File Format Specification (format version 0x00040001) | castellan import. KeePassXC is also the closest architectu |
-| PULL | 1Password Unencrypted Export (1PUX) and OPVault | 1PUX export format; OPVault design | castellan import, as the pre-CXF fallback for 1Password us |
-| PULL | De-facto vault and browser export formats (Bitwarden JSON, Chrome/Firefox CSV, Apple Passwords CSV) | Bitwarden export .json / .csv; Chromium password CSV; Firefox password CSV; Apple Passwo | castellan import — specifically the long tail of users who |
-| ADOPT | Freedesktop Secret Service API | Secret Service 0.2 DRAFT (publication date 2026-04-08) | repos/mere/ports/castellan, feature secret-service — alr |
-| PULL | XDG Desktop Portal Secret interface | org.freedesktop.portal.Secret, interface version 1 (xdg-desktop-portal ≥ 1.5.0) | Only a hypothetical Flatpak or Snap build of pelt/graphshe |
-| ADOPT | HTML autofill field names (autocomplete tokens) | WHATWG HTML Standard, Living Standard — Autofill / autocomplete attribute | repos/genet (the engine and pelt), paired with castellan's |
-| PULL | Credential Management API | Credential Management Level 1, W3C Working Draft 2026-02-13 | repos/genet, if and only if WebAuthn support lands there;  |
-| ADOPT | A Well-Known URL for Changing Passwords | W3C Working Draft, 3 June 2024 (/.well-known/change-password) | castellan's embeddable half (the 'change this password' af |
-| ADOPT | Public Suffix List | publicsuffix.org PSL (public_suffix_list.dat), ICANN and PRIVATE sections | castellan credential scoping (which stored login is offere |
-| ADOPT | Web Authentication (WebAuthn) | Web Authentication: An API for accessing Public Key Credentials, Level 3 | castellan as a passkey provider (the chatelaine side, sinc |
-| PULL | FIDO Client to Authenticator Protocol | CTAP v2.3 Proposed Standard, 2026-02-26 (v2.3.1 Working Draft, 2026-05-29; v2.2 PS 2025- | Only genet, and only if it needs to talk to roaming authen |
-| PULL | Third-party credential-provider seams (platform APIs, not standards) | Windows WebAuthn Plugin APIs / IPluginAuthenticator + WebAuthNPluginAddAuthenticator (Wi | castellan's authority half — but only where a shippable ap |
-| WATCH | Linux passkey provider seam (credentialsd / proposed XDG portal) | credentialsd D-Bus service + proposed XDG portal for credential management (linux-creden | castellan on Linux, alongside the Secret Service server it |
-| PULL | HIBP Pwned Passwords Range API (k-anonymity) | Have I Been Pwned API v3 — Pwned Passwords range endpoint | castellan's embeddable half — the vault health view, the o |
-| ADOPT | Secure Shell (SSH) Agent Protocol | RFC 9987 | repos/mere/crates/personae (the ssh-agent, live on Mark's  |
-| PULL | OWASP Application Security Verification Standard | OWASP ASVS 5.0.0 (released 2025-05-30) | castellan and personae as a self-assessment instrument; no |
-| SKIP | Organisational assurance regimes (SOC 2, ISO/IEC 27001, PCI DSS, MASVS) | SOC 2 (AICPA Trust Services Criteria); ISO/IEC 27001:2022 (+ Amd 1:2024); PCI DSS v4.0.1 | None. There is no server, no tenancy, no cardholder data e |
-| ADOPT | Web Annotation Data Model | W3C Recommendation, 23 February 2017 (REC-annotation-model-20170223) | fleece (emit selectors alongside Article/Block and Ex |
-| SKIP | Selectors and States | W3C Working Group Note, 23 February 2017 | None — and that is the point. Anyone in fleece or import r |
-| ADOPT | URL Fragment Text Directives (Text Fragments / scroll-to-text) | WICG Draft Community Group Report; upstreaming in progress as whatwg/html PR #11895 | fleece (mint a directive per extracted block); turnstone ( |
-| ADOPT | schema.org vocabulary | schema.org release v30.0 | fleece StructuredData (the @type and itemtype values |
-| ADOPT | JSON-LD 1.1 | W3C Recommendation, 16 July 2020 (REC-json-ld11-20200716) | fleece extract_structured_data — already parses <script |
-| ADOPT | HTML Microdata | WHATWG HTML Living Standard, the Microdata section (html.spec.whatwg.org/multipage/micro | fleece extract_structured_data + microdata_item + col |
-| SKIP | RDFa Core 1.1 / RDFa Lite 1.1 | RDFa Core 1.1 – Third Edition, W3C Recommendation, 17 March 2015 | None that justifies it. fleece already gets the only RDFa- |
-| ADOPT | The Open Graph protocol | ogp.me (no version number, no release history) | fleece extract_metadata — already harvests og:* with t |
-| PULL | microformats2 / h-entry | microformats.org/wiki/h-entry (Living Specification); parsing algorithm at microformats. | gazette, if and when it polls IndieWeb sites; moot (h-card |
-| PULL | DCMI Metadata Terms / Dublin Core | DCMI Metadata Terms, DCMI Recommendation 2020-01-20; ISO 15836-1:2017 and ISO 15836-2:20 | fleece Metadata (a DC.* meta-name tier); eidetic corpu |
-| SKIP | "The readable article" — no standard exists | n/a — this entry records a verified negative. Nearest de-facto: Mozilla Readability (moz | fleece Article, Block, RootSelector, ExtractionLine |
-| SKIP | CSV on the Web (CSVW) | Model for Tabular Data and Metadata on the Web, W3C Recommendation 17 December 2015; wit | None with the right shape. fleece's Block::Table is an e |
-| ADOPT | HTML tabular data model and table accessibility semantics | WHATWG HTML Living Standard §4.9 Tabular data (including the 'forming a table' algorithm | fleece Block::Table / TableRow / TableCell (repos/ge |
-| WATCH | WAI-ARIA and the accessibility tree as an extraction substrate | WAI-ARIA 1.2 (W3C Recommendation, June 2023); Core Accessibility API Mappings 1.2 (W3C C | fleece, hypothetically. genet-render actually — it already |
-| ADOPT | The Atom Syndication Format | RFC 4287 (Proposed Standard, December 2005); companion RFC 5023 (Atom Publishing Protoco | gazette feed polling (explicitly Unbuilt today, engine is  |
-| ADOPT | RSS 2.0 and RSS Autodiscovery | RSS 2.0 Specification version 2.0.11 (30 March 2009); RSS Autodiscovery (RSS Advisory Bo | gazette feed polling; mere-crawl as the polling engine; fl |
-| PULL | JSON Feed | JSON Feed Version 1.1 (7 August 2020) | gazette feed polling, as a third format behind Atom and RS |
-| WATCH | WebSub | W3C Recommendation, 2 June 2026 (revising the Recommendation of 23 January 2018) | gazette feed polling — as the thing it would replace, not  |
-| ADOPT | Web Linking and the IANA Link Relation Types registry | RFC 8288 (Proposed Standard, October 2017), obsoletes RFC 5988; IANA Link Relation Types | fleece extract_metadata (already reads rel="canonical" |
-| WATCH | Djot | djot syntax reference at djot.net/syntax (no version number on the syntax document); ref | knot (writer::DocumentFormat::Djot; text/x-knot routes |
-| ADOPT | CommonMark | CommonMark Spec version 0.31.2, 28 January 2024 | nematic (pulldown-cmark = "0.13", deliberately retained  |
-| ADOPT | File System Standard (Origin Private File System) and the File System Access pickers | WHATWG File System Living Standard (fs.spec.whatwg.org) for OPFS and FileSystemHandle; F | mere ports/muniment-opfs-probe and crates/eidetic/mun |
-| SKIP | WebDAV | RFC 4918 (Proposed Standard, June 2007), obsoletes RFC 2518; updated by RFC 5689 (Extend | None. knot's projection is a NATIVE filesystem projection, |
-| PULL | Netscape Bookmark File Format | No formal specification. DOCTYPE NETSCAPE-Bookmark-file-1. Nearest reference: Microsof | mere/crates/import — detect_bookmark_file_format plus th |
-| PULL | OPML 2.0 | OPML 2.0 (opml.org/spec2.opml) | gazette (import and export a subscription list); mere/crat |
-| WATCH | EPUB 3.4 and EPUB Accessibility 1.2 | EPUB 3.4, W3C Candidate Recommendation Snapshot, 21 July 2026 (CR-epub-34-20260721); EPU | knot, plausibly — as an EXPORT target for a directory or v |
-| SKIP | JATS (Journal Article Tag Suite) | ANSI/NISO Z39.96-2024, JATS: Journal Article Tag Suite, version 1.4 | None. No repo in this workspace publishes, archives or ren |
-| PULL | WARC (Web ARChive) file format | ISO 28500:2017 (second edition; cancels and replaces ISO 28500:2009) | mere-crawl (the frontier engine); eidetic corpus (the stor |
-| WATCH | WebExtensions API (common core) | W3C WebExtensions Working Group deliverables (chartered; draft state adopted from the We | mere/crates/import — BrowserImportMode::SnapshotBridge a |
-| ADOPT | Design Tokens Format Module (DTCG) | Design Tokens 2025.10 — Format Module (W3C Design Tokens Community Group Report) | genet/ports/tabard — the one port whose README already nam |
-| ADOPT | Design Tokens Color Module (DTCG) | Design Tokens 2025.10 — Color Module | genet/components/tinct (the derivation math) via genet/por |
-| WATCH | Design Tokens Resolver Module (DTCG) | Design Tokens 2025.10 — Resolver Module | genet/ports/tabard, and downstream genet/components/livery |
-| ADOPT | CSS Color Module Level 4 | CSS Color Module Level 4 | genet/components/livery — already implemented. components/ |
-| ADOPT | CSS Color Module Level 5 | CSS Color Module Level 5 | genet/components/livery — color-mix() and relative color s |
-| ADOPT | WCAG 2.2 contrast success criteria | Web Content Accessibility Guidelines (WCAG) 2.2, SC 1.4.3 / 1.4.6 / 1.4.11 | genet/components/tinct — already the basis of the derivati |
-| SKIP | APCA / WCAG 3.0 visual contrast | APCA (Accessible Perceptual Contrast Algorithm, base 0.0.98G-4g) and W3C Accessibility G | Would be genet/components/tinct. It is the obvious upgrade |
-| ADOPT | CSS user-preference media features and color-scheme | Media Queries Level 5 (prefers-color-scheme, prefers-contrast, prefers-reduced-motion, f | genet/components/livery (parsing, done) and genet/ports/pe |
-| ADOPT | XDG Base Directory Specification | XDG Base Directory Specification, Version 0.8 | mere/ports/djinn (src/settings.rs already reads LOCALAPPDA |
-| ADOPT | Desktop Entry Specification | Desktop Entry Specification, Version 1.5 | genet/ports/pelt (as a viewer that wants to be openable fr |
-| ADOPT | XDG Desktop Portals | XDG Desktop Portal D-Bus interfaces: org.freedesktop.portal.Settings (v2, org.freedeskto | genet/ports/pelt — this is the missing OS-preference sourc |
-| PULL | shared-mime-info and Icon Theme Specification | Shared MIME-info Database Specification 0.21 (2018-10-02); Icon Theme Specification 0.13 | genet/ports/pelt (file-manager association and window icon |
-| PULL | Windows and macOS application, file-type and URL-scheme registration | Windows: HKCU\Software\Classes ProgID + RegisteredApplications + UserChoice; macOS: Unif | genet/ports/pelt and turnstone on Windows and macOS; mere/ |
-| PULL | Web Application Manifest (and protocol_handlers) | Web Application Manifest (W3C) + Manifest Incubations (WICG) for protocol_handlers, file | genet/ports/pelt as a *consumer* (a viewer that installs w |
-| ADOPT | Core Accessibility API Mappings | Core Accessibility API Mappings 1.2 (Core-AAM) | genet/components/genet-render (whose Cargo.toml comment al |
-| WATCH | EN 301 549 and the European Accessibility Act | EN 301 549 V3.2.1 (harmonised, clause 11 Software) / V4.1.1 (pending); Directive (EU) 20 | genet/ports/pelt and turnstone if either is ever distribut |
-| PULL | ICC colour profiles | ICC.1:2022 (profile version 4.4.0.0), published as ISO 15076-1:2025 Edition 3 | genet/components/genet-render and genet/ports/pelt. Verifi |
-| WATCH | HDR colour: BT.2100 and the Wayland colour-management protocol | ITU-R BT.2100-3 (PQ/HLG HDR image parameters); wayland-protocols staging/color-managemen | genet/ports/pelt (desktop/smoke_wayland.rs, smoke_windows. |
-| ADOPT | Global Privacy Control | Global Privacy Control (W3C) — Sec-GPC header, navigator.globalPrivacyControl, /.well-kn | genet/ports/pelt and turnstone as user agents; the netfetc |
-| ADOPT | Public Suffix List | Public Suffix List (publicsuffix.org) | genet's netfetch stack and cookie implementation. The exis |
-| PULL | HTTP Strict Transport Security and the preload list | RFC 6797 (HSTS); hstspreload.org preload list | genet's netfetch stack. Verified absent: no HSTS handling  |
-| WATCH | Certificate Transparency | RFC 6962 (CT v1), RFC 9162 (CT v2.0), and the Static CT API (C2SP static-ct-api v1.0.0) | genet's TLS/netfetch stack. Absent, as expected for a pre- |
-| SKIP | User-Agent Client Hints | HTTP Client Hints (RFC 8942) + User-Agent Client Hints (WICG draft) | genet's netfetch stack, as a would-be sender. Nothing here |
-| SKIP | Do Not Track | DNT header / W3C Tracking Preference Expression (TPE) | None. genet has no DNT handling and should not acquire one |
+| ADOPT | Argon2 memory-hard password hashing | RFC 9106 | personae — crates/dramatis/personae/src/passphrase_storage.rs::derive_kek, used by both passphrase_storage.rs and passphrase_root.rs (the 'one unlock … |
+| PULL | scrypt password-based KDF | RFC 7914 | import (the crate that migrates STORED browser and vault data) — and only there. There is no house-sealing consumer: Argon2id already occupies that … |
+| PULL | PBKDF2 (PKCS #5 v2.1) and NIST's password-based KDF recommendation | RFC 8018 / NIST SP 800-132 | Two, both narrow. (1) import — KDBX 4, 1Password, Bitwarden, Chrome/Firefox login-data and Apple exports all use PBKDF2 somewhere in their history, … |
+| ADOPT | Digital Identity Guidelines — Authentication and Authenticator Management | NIST SP 800-63B-4 (within SP 800-63-4) | Two real ones. (1) **personae passphrase enrollment** — enroll.rs / passphrase_root.rs / change_passphrase are where a human picks the secret that … |
+| SKIP | Information security controls — Authentication information | ISO/IEC 27002:2022 control 5.17 | None in the codebase. The nearest thing is castellan's gate-petition transcript, which incidentally satisfies 5.17's records requirement. |
+| ADOPT | ChaCha20-Poly1305 AEAD (and its X-nonce variant) | RFC 8439 (+ draft-irtf-cfrg-xchacha-03, EXPIRED) | Both halves are already shipped. personae/src/passphrase_root.rs uses RFC-8439 ChaCha20-Poly1305 (12-byte nonce) to seal the 32-byte vault root; … |
+| SKIP | AES Galois/Counter Mode (GCM and GMAC) | NIST SP 800-38D | **None in the vault.** ChaCha20-Poly1305 already occupies the AEAD slot and is the better fit for a pure-Rust, no-AES-NI-guarantee posture. GCM only … |
+| PULL | Misuse-resistant AEAD: AES-SIV and AES-GCM-SIV | RFC 5297 (AES-SIV) and RFC 8452 (AES-GCM-SIV) | Not today. The consumer that would create real demand is **multi-writer P2P vault sync** — the moment two devices can both seal a record under the … |
+| SKIP | AES Key Wrap (KW / KWP) | NIST SP 800-38F | None in the vault. Would only appear as an interop requirement from a PKCS#11 token (CKM_AES_KEY_WRAP / CKM_AES_KEY_WRAP_KWP) or a FIPS-boundary … |
+| ADOPT | HKDF extract-and-expand key derivation | RFC 5869 (and NIST SP 800-56C Rev. 2 for the key-establishment case) | CORRECTED 2026-08-24: no current consumer. personae derive_child uses blake3::keyed_hash; HKDF is one of two candidate fixes for the missing context slot (see §2.1), not shipped |
+| PULL | Hierarchical deterministic key derivation and seed-phrase carry | BIP-32, BIP-39, SLIP-0010 | personae's master seed and the wallet carry layer. design_docs/mere_docs/implementation_strategy/2026-06-25_persona_wallet_carry_layer_plan.md … |
+| PULL | Shamir's Secret-Sharing for Mnemonic Codes | SLIP-0039 | personae vault-root recovery. design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md already lists 'Shamir's Secret … |
+| SKIP | OPAQUE augmented password-authenticated key exchange | RFC 9807 (and, as the balanced alternative, draft-irtf-cfrg-cpace-21) | **None, and that is the finding.** There is no sync server, no account, no server-side password file. The 2026-08-10 credential-port brief's … |
+| SKIP | Secure Remote Password (SRP-6a) | RFC 2945 (SRP-3) and RFC 5054 (SRP-6a for TLS) | None. Same reason as OPAQUE. Worth knowing only because **1Password's account model is built on SRP-6a** (combined with their Secret Key in a … |
+| WATCH | Post-quantum cryptography: ML-KEM, ML-DSA, SLH-DSA and the transition timeline | FIPS 203, FIPS 204, FIPS 205 (+ NIST SP 800-227, NIST IR 8547, CNSA 2.0) | For the **vault**: none, honestly. For the **sync transport** (retinue/Reticulum, iroh, murm): eventually yes — but that is a different lane. |
+| WATCH | X-Wing general-purpose hybrid post-quantum KEM | draft-connolly-cfrg-xwing-kem-10 | None today. Would become relevant only in the sync-transport lane, and only if that lane decides to hybridise before a standardised alternative … |
+| SKIP | Messaging Layer Security | RFC 9420 | For a shared/family vault: no fit, see below. The real MLS consumer in this house is **moot** — 'murmur' (conversation, store-and-forward mail, … |
+| SKIP | Cryptographic module validation | FIPS 140-3 (and the CMVP) | None. There is no US federal buyer, no FedRAMP boundary, no procurement requirement anywhere in this workspace. |
+| WATCH | Cryptoki — the cryptographic token interface | PKCS #11 Specification Version 3.2 (and PKCS #11 Profiles v3.2) | castellan's authority half, in two opposite directions. **As a consumer**: a YubiKey PIV applet, a smartcard, or a Nitrokey holding a persona's root … |
+| PULL | TPM 2.0 NV monotonic counters (the standard that closes the rollback gap) | TCG TPM 2.0 Library Specification, Family 2.0, Level 00, Revision 01.83 (published as ISO/IEC 11889) | **personae sealed_record_storage::freshness::FileFreshnessLedger** — directly and specifically. The castellan README states the gap in its own words: … |
+| PULL | Credential Exchange Format and Protocol | CXF v1.0 (Proposed Standard, 2025-08-21, with Errata 2026-03-09) / CXP v1.0 (Working Draft, 2024-10-03) | castellan's import path. The README states plainly: 'CXF import remains follow-on work.' The 2026-08-10 credential-port brief already identified CXF … |
+| ADOPT | FIDO Credential Exchange Format | CXF v1.0 Proposed Standard with Errata, 2026-03-09 | repos/mere/ports/castellan — the README's own open item, 'CXF import remains follow-on work'. Second consumer: repos/mere/crates/import, which today … |
+| WATCH | FIDO Credential Exchange Protocol | CXP v1.0 Working Draft, 2024-10-03 | castellan's authority half — it is the only component that would ever hold the HPKE private half. Speculatively distillery/moot if credential handoff … |
+| PULL | KDBX (KeePass database format) | KDBX 4.1 File Format Specification (format version 0x00040001) | castellan import. KeePassXC is also the closest architectural sibling to castellan's local-first, no-account posture, so its users are the most … |
+| PULL | 1Password Unencrypted Export (1PUX) and OPVault | 1PUX export format; OPVault design | castellan import, as the pre-CXF fallback for 1Password users. |
+| PULL | De-facto vault and browser export formats (Bitwarden JSON, Chrome/Firefox CSV, Apple Passwords CSV) | Bitwarden export .json / .csv; Chromium password CSV; Firefox password CSV; Apple Passwords CSV export | castellan import — specifically the long tail of users who are not on any platform that brokers CXP and are not KeePass users. |
+| ADOPT | Freedesktop Secret Service API | Secret Service 0.2 DRAFT (publication date 2026-04-08) | repos/mere/ports/castellan, feature secret-service — already shipped: the resident owns org.freedesktop.secrets without replacement, implements the … |
+| PULL | XDG Desktop Portal Secret interface | org.freedesktop.portal.Secret, interface version 1 (xdg-desktop-portal ≥ 1.5.0) | Only a hypothetical Flatpak or Snap build of pelt/graphshell/castellan. No such build exists today. |
+| ADOPT | HTML autofill field names (autocomplete tokens) | WHATWG HTML Standard, Living Standard — Autofill / autocomplete attribute | repos/genet (the engine and pelt), paired with castellan's embeddable half. This is the entry where owning the engine changes the verdict. |
+| PULL | Credential Management API | Credential Management Level 1, W3C Working Draft 2026-02-13 | repos/genet, if and only if WebAuthn support lands there; castellan would be the credential store behind it. |
+| ADOPT | A Well-Known URL for Changing Passwords | W3C Working Draft, 3 June 2024 (/.well-known/change-password) | castellan's embeddable half (the 'change this password' affordance on a card) plus genet for the fetch. |
+| ADOPT | Public Suffix List | publicsuffix.org PSL (public_suffix_list.dat), ICANN and PRIVATE sections | castellan credential scoping (which stored login is offered for which site), and genet for cookie scoping and same-site logic if it does not already … |
+| ADOPT | Web Authentication (WebAuthn) | Web Authentication: An API for accessing Public Key Credentials, Level 3 | castellan as a passkey provider (the chatelaine side, since a passkey private key is bearer material); genet as the user agent implementing the API; … |
+| PULL | FIDO Client to Authenticator Protocol | CTAP v2.3 Proposed Standard, 2026-02-26 (v2.3.1 Working Draft, 2026-05-29; v2.2 PS 2025-07-14 still published) | Only genet, and only if it needs to talk to roaming authenticators (USB security keys) or Hybrid (phone-as-authenticator) — i.e. the user-agent side. … |
+| PULL | Third-party credential-provider seams (platform APIs, not standards) | Windows WebAuthn Plugin APIs / IPluginAuthenticator + WebAuthNPluginAddAuthenticator (Win11 24H2+); Apple com.apple.developer.authentication-services.autofill-credential-provider + ASCredentialProviderExtension + ASCredentialExportManager/ASCredentialImportManager (iOS/macOS 26); Android CredentialProviderService (API 34+) | castellan's authority half — but only where a shippable app shell for that platform already exists. Today that is Windows (pelt/graphshell run there … |
+| WATCH | Linux passkey provider seam (credentialsd / proposed XDG portal) | credentialsd D-Bus service + proposed XDG portal for credential management (linux-credentials); libwebauthn; oo7 | castellan on Linux, alongside the Secret Service server it already runs. Also genet/pelt on Linux as the browser side. |
+| PULL | HIBP Pwned Passwords Range API (k-anonymity) | Have I Been Pwned API v3 — Pwned Passwords range endpoint | castellan's embeddable half — the vault health view, the one place a secret-free read model can say something useful *about* a secret without … |
+| ADOPT | Secure Shell (SSH) Agent Protocol | RFC 9987 | repos/mere/crates/personae (the ssh-agent, live on Mark's Windows box since 2026-07-22) and castellan's keeper authority, which serves it. … |
+| PULL | OWASP Application Security Verification Standard | OWASP ASVS 5.0.0 (released 2025-05-30) | castellan and personae as a self-assessment instrument; not a certification target. |
+| SKIP | Organisational assurance regimes (SOC 2, ISO/IEC 27001, PCI DSS, MASVS) | SOC 2 (AICPA Trust Services Criteria); ISO/IEC 27001:2022 (+ Amd 1:2024); PCI DSS v4.0.1; OWASP MASVS 2.1.0 | None. There is no server, no tenancy, no cardholder data environment, no shipping mobile application, and no customer demanding an attestation. |
+| ADOPT | Web Annotation Data Model | W3C Recommendation, 23 February 2017 (REC-annotation-model-20170223) | fleece (emit selectors alongside Article/Block and ExtractionLineage); mere/crates/import web_clip::ClipFragment.selector (today a bare CSS-selector … |
+| SKIP | Selectors and States | W3C Working Group Note, 23 February 2017 | None — and that is the point. Anyone in fleece or import reaching for a non-annotation-framed selector spec would land here first. |
+| ADOPT | URL Fragment Text Directives (Text Fragments / scroll-to-text) | WICG Draft Community Group Report; upstreaming in progress as whatwg/html PR #11895 | fleece (mint a directive per extracted block); turnstone (a shared addressable place that links to a passage, not a page); knot (a highlight that … |
+| ADOPT | schema.org vocabulary | schema.org release v30.0 | fleece StructuredData (the @type and itemtype values it already collects are overwhelmingly schema.org terms); eidetic corpus typing; gazette's … |
+| ADOPT | JSON-LD 1.1 | W3C Recommendation, 16 July 2020 (REC-json-ld11-20200716) | fleece extract_structured_data — already parses <script type="application/ld+json"> and tags it StructuredDataSource::JsonLd. |
+| ADOPT | HTML Microdata | WHATWG HTML Living Standard, the Microdata section (html.spec.whatwg.org/multipage/microdata.html) | fleece extract_structured_data + microdata_item + collect_microdata_fields — already implemented, including nested itemscope items. |
+| SKIP | RDFa Core 1.1 / RDFa Lite 1.1 | RDFa Core 1.1 – Third Edition, W3C Recommendation, 17 March 2015 | None that justifies it. fleece already gets the only RDFa-shaped data that matters (Open Graph) via a property="og:*" prefix strip that costs nothing. |
+| ADOPT | The Open Graph protocol | ogp.me (no version number, no release history) | fleece extract_metadata — already harvests og:* with the prefix stripped and gives OG precedence over name; Article.site maps from og:site_name, … |
+| PULL | microformats2 / h-entry | microformats.org/wiki/h-entry (Living Specification); parsing algorithm at microformats.org/wiki/microformats2-parsing | gazette, if and when it polls IndieWeb sites; moot (h-card for membership, h-entry for posts). Not fleece's general-web path — under 1% coverage does … |
+| PULL | DCMI Metadata Terms / Dublin Core | DCMI Metadata Terms, DCMI Recommendation 2020-01-20; ISO 15836-1:2017 and ISO 15836-2:2019 | fleece Metadata (a DC.* meta-name tier); eidetic corpus as an internal normalized metadata vocabulary; knot document facets; muniment. |
+| SKIP | "The readable article" — no standard exists | n/a — this entry records a verified negative. Nearest de-facto: Mozilla Readability (mozilla/readability, Apache-2.0), trafilatura, Postlight Parser. | fleece Article, Block, RootSelector, ExtractionLineage, extract_article, extract_main_text, select_content. |
+| SKIP | CSV on the Web (CSVW) | Model for Tabular Data and Metadata on the Web, W3C Recommendation 17 December 2015; with Metadata Vocabulary for Tabular Data, Generating JSON from Tabular Data on the Web, Generating RDF from Tabular Data on the Web, and Embedding Tabular Metadata in HTML (all REC, same date) | None with the right shape. fleece's Block::Table is an extracted HTML table; CSVW is about describing a CSV file that already exists. |
+| ADOPT | HTML tabular data model and table accessibility semantics | WHATWG HTML Living Standard §4.9 Tabular data (including the 'forming a table' algorithm and header-cell association); WCAG 2.2 (W3C Recommendation 5 October 2023, editorial update 12 December 2024; ISO/IEC 40500:2025) for the conformance framing | fleece Block::Table / TableRow / TableCell (repos/genet/components/fleece/src/lib.rs around lines 130-146); knot when a table round-trips into a Djot … |
+| WATCH | WAI-ARIA and the accessibility tree as an extraction substrate | WAI-ARIA 1.2 (W3C Recommendation, June 2023); Core Accessibility API Mappings 1.2 (W3C Candidate Recommendation, 21 June 2024); Accessible Name and Description Computation 1.2 (W3C Working Draft); WAI-ARIA 1.3 (W3C Working Draft, editor's draft February 2026) | fleece, hypothetically. genet-render actually — it already exposes pub fn accesskit_tree(dom, fragments, focus) -> accesskit::TreeUpdate. |
+| ADOPT | The Atom Syndication Format | RFC 4287 (Proposed Standard, December 2005); companion RFC 5023 (Atom Publishing Protocol) | gazette feed polling (explicitly Unbuilt today, engine is mere-crawl, and the README already records that each item's linked page will be extracted … |
+| ADOPT | RSS 2.0 and RSS Autodiscovery | RSS 2.0 Specification version 2.0.11 (30 March 2009); RSS Autodiscovery (RSS Advisory Board) | gazette feed polling; mere-crawl as the polling engine; fleece as the per-item page extractor downstream of it. |
+| PULL | JSON Feed | JSON Feed Version 1.1 (7 August 2020) | gazette feed polling, as a third format behind Atom and RSS. |
+| WATCH | WebSub | W3C Recommendation, 2 June 2026 (revising the Recommendation of 23 January 2018) | gazette feed polling — as the thing it would replace, not the thing it would use. |
+| ADOPT | Web Linking and the IANA Link Relation Types registry | RFC 8288 (Proposed Standard, October 2017), obsoletes RFC 5988; IANA Link Relation Types registry | fleece extract_metadata (already reads rel="canonical", and already has a test for the multi-token rel="alternate canonical" case); fleece … |
+| WATCH | Djot | djot syntax reference at djot.net/syntax (no version number on the syntax document); reference implementations jgm/djot (Lua) and djot.js, latest tagged release 0.2.0 | knot (writer::DocumentFormat::Djot; text/x-knot routes to nematic.knot-djot by DEFAULT); nematic's Djot Knot engine (nematic.knot-djot); the whole … |
+| ADOPT | CommonMark | CommonMark Spec version 0.31.2, 28 January 2024 | nematic (pulldown-cmark = "0.13", deliberately retained for foreign markdown and the pinned nematic.knot compat engine); knot … |
+| ADOPT | File System Standard (Origin Private File System) and the File System Access pickers | WHATWG File System Living Standard (fs.spec.whatwg.org) for OPFS and FileSystemHandle; File System Access API (WICG proposal) for showOpenFilePicker / showSaveFilePicker / showDirectoryPicker | mere ports/muniment-opfs-probe and crates/eidetic/muniment (the storage lane already probes OPFS); knot ONLY if it ever grows a browser-hosted … |
+| SKIP | WebDAV | RFC 4918 (Proposed Standard, June 2007), obsoletes RFC 2518; updated by RFC 5689 (Extended MKCOL) | None. knot's projection is a NATIVE filesystem projection, not an HTTP one. |
+| PULL | Netscape Bookmark File Format | No formal specification. DOCTYPE NETSCAPE-Bookmark-file-1. Nearest reference: Microsoft's legacy IE developer documentation, aa753582(v=vs.85). | mere/crates/import — detect_bookmark_file_format plus the <DL>/<DT>/<H3>/<A> tokenizer in parser.rs. Already built. |
+| PULL | OPML 2.0 | OPML 2.0 (opml.org/spec2.opml) | gazette (import and export a subscription list); mere/crates/import (a subscription list is browser-adjacent user data and belongs beside bookmarks). |
+| WATCH | EPUB 3.4 and EPUB Accessibility 1.2 | EPUB 3.4, W3C Candidate Recommendation Snapshot, 21 July 2026 (CR-epub-34-20260721); EPUB Reading Systems 3.4; EPUB Accessibility 1.2. Current stable predecessor: EPUB 3.3, W3C Recommendation, 25 May 2023. | knot, plausibly — as an EXPORT target for a directory or vault of authored documents. Also alembic (a saved-reading corpus as a portable book). No … |
+| SKIP | JATS (Journal Article Tag Suite) | ANSI/NISO Z39.96-2024, JATS: Journal Article Tag Suite, version 1.4 | None. No repo in this workspace publishes, archives or renders scholarly articles. |
+| PULL | WARC (Web ARChive) file format | ISO 28500:2017 (second edition; cancels and replaces ISO 28500:2009) | mere-crawl (the frontier engine); eidetic corpus (the stored side of what a crawl fetched); mere/crates/import web_clip (a clip is a single-record … |
+| WATCH | WebExtensions API (common core) | W3C WebExtensions Working Group deliverables (chartered; draft state adopted from the WebExtensions Community Group) | mere/crates/import — BrowserImportMode::SnapshotBridge and BrowserImportMode::IncrementalBridge already exist in the enum, which is precisely the … |
+| ADOPT | Design Tokens Format Module (DTCG) | Design Tokens 2025.10 — Format Module (W3C Design Tokens Community Group Report) | genet/ports/tabard — the one port whose README already names it: "W3C Design Tokens (the non-negotiable interchange form)." Currently a name … |
+| ADOPT | Design Tokens Color Module (DTCG) | Design Tokens 2025.10 — Color Module | genet/components/tinct (the derivation math) via genet/ports/tabard (the authoring surface). tinct already derives in OKLCH and already owns its own … |
+| WATCH | Design Tokens Resolver Module (DTCG) | Design Tokens 2025.10 — Resolver Module | genet/ports/tabard, and downstream genet/components/livery — which already parses prefers-color-scheme, prefers-contrast, forced-colors and … |
+| ADOPT | CSS Color Module Level 4 | CSS Color Module Level 4 | genet/components/livery — already implemented. components/livery/src/values/color/parse.rs handles Srgb, Hsl, Hwb, Lab, Lch, Oklab, Oklch and … |
+| ADOPT | CSS Color Module Level 5 | CSS Color Module Level 5 | genet/components/livery — color-mix() and relative color syntax already exist (values/color/mix.rs defaults to Oklab interpolation; … |
+| ADOPT | WCAG 2.2 contrast success criteria | Web Content Accessibility Guidelines (WCAG) 2.2, SC 1.4.3 / 1.4.6 / 1.4.11 | genet/components/tinct — already the basis of the derivation. lib.rs carries WCAG relative luminance and contrast ratio (1.0..=21.0), a … |
+| SKIP | APCA / WCAG 3.0 visual contrast | APCA (Accessible Perceptual Contrast Algorithm, base 0.0.98G-4g) and W3C Accessibility Guidelines (WCAG) 3.0 Working Draft | Would be genet/components/tinct. It is the obvious upgrade candidate for the dark-mode contrast problem noted above. |
+| ADOPT | CSS user-preference media features and color-scheme | Media Queries Level 5 (prefers-color-scheme, prefers-contrast, prefers-reduced-motion, forced-colors, inverted-colors, color-gamut, dynamic-range) + CSS Color Adjust Module Level 1 (color-scheme property, forced-color-adjust) | genet/components/livery (parsing, done) and genet/ports/pelt (the half that is missing: nothing in pelt actually *sources* these preference values … |
+| ADOPT | XDG Base Directory Specification | XDG Base Directory Specification, Version 0.8 | mere/ports/djinn (src/settings.rs already reads LOCALAPPDATA then falls back to XDG_DATA_HOME) and mere/ports/graphshell (native/app_admission.rs and … |
+| ADOPT | Desktop Entry Specification | Desktop Entry Specification, Version 1.5 | genet/ports/pelt (as a viewer that wants to be openable from a file manager and to claim http/https/gemini/gopher), mere/ports/graphshell (which … |
+| ADOPT | XDG Desktop Portals | XDG Desktop Portal D-Bus interfaces: org.freedesktop.portal.Settings (v2, org.freedesktop.appearance namespace), org.freedesktop.portal.FileChooser, org.freedesktop.portal.Screenshot, org.freedesktop.portal.OpenURI | genet/ports/pelt — this is the missing OS-preference source for livery's prefers-color-scheme / prefers-contrast evaluator (see the user-preference … |
+| PULL | shared-mime-info and Icon Theme Specification | Shared MIME-info Database Specification 0.21 (2018-10-02); Icon Theme Specification 0.13 (2013-07-02) | genet/ports/pelt (file-manager association and window icon), mere/ports/knot (which serves a projection over a real directory and therefore has to … |
+| PULL | Windows and macOS application, file-type and URL-scheme registration | Windows: HKCU\Software\Classes ProgID + RegisteredApplications + UserChoice; macOS: Uniform Type Identifiers (UTType) + Info.plist CFBundleURLTypes / CFBundleDocumentTypes / LSHandlerRank | genet/ports/pelt and turnstone on Windows and macOS; mere/ports/djinn, which already ships install-windows.ps1 and installs itself as a Scheduled … |
+| PULL | Web Application Manifest (and protocol_handlers) | Web Application Manifest (W3C) + Manifest Incubations (WICG) for protocol_handlers, file_handlers, share_target | genet/ports/pelt as a *consumer* (a viewer that installs web apps), and — more interestingly for this stack — turnstone and graphshell, whose … |
+| ADOPT | Core Accessibility API Mappings | Core Accessibility API Mappings 1.2 (Core-AAM) | genet/components/genet-render (whose Cargo.toml comment already states its job is ScriptedDom → accesskit::TreeUpdate), … |
+| WATCH | EN 301 549 and the European Accessibility Act | EN 301 549 V3.2.1 (harmonised, clause 11 Software) / V4.1.1 (pending); Directive (EU) 2019/882 (European Accessibility Act) | genet/ports/pelt and turnstone if either is ever distributed commercially in the EU; also woodshed, hocket, isometry and the other apps if they are … |
+| PULL | ICC colour profiles | ICC.1:2022 (profile version 4.4.0.0), published as ISO 15076-1:2025 Edition 3 | genet/components/genet-render and genet/ports/pelt. Verified absent: no qcms, lcms2 or moxcms dependency anywhere in genet or mere; no colour-space … |
+| WATCH | HDR colour: BT.2100 and the Wayland colour-management protocol | ITU-R BT.2100-3 (PQ/HLG HDR image parameters); wayland-protocols staging/color-management/color-management-v1 | genet/ports/pelt (desktop/smoke_wayland.rs, smoke_windows.rs, smoke_macos.rs are the present-backend seams) and repos/netrender. Verified: zero HDR … |
+| ADOPT | Global Privacy Control | Global Privacy Control (W3C) — Sec-GPC header, navigator.globalPrivacyControl, /.well-known/gpc.json; plus California AB 566 (Opt Me Out Act) | genet/ports/pelt and turnstone as user agents; the netfetch/errand transport as the place the header is attached. Verified absent: no GPC handling … |
+| ADOPT | Public Suffix List | Public Suffix List (publicsuffix.org) | genet's netfetch stack and cookie implementation. The existing house W3C doc's S7 already scopes RFC 6265bis cookies and partition-by-default as … |
+| PULL | HTTP Strict Transport Security and the preload list | RFC 6797 (HSTS); hstspreload.org preload list | genet's netfetch stack. Verified absent: no HSTS handling in genet or mere. |
+| WATCH | Certificate Transparency | RFC 6962 (CT v1), RFC 9162 (CT v2.0), and the Static CT API (C2SP static-ct-api v1.0.0) | genet's TLS/netfetch stack. Absent, as expected for a pre-1.0 engine. |
+| SKIP | User-Agent Client Hints | HTTP Client Hints (RFC 8942) + User-Agent Client Hints (WICG draft) | genet's netfetch stack, as a would-be sender. Nothing here needs it. |
+| SKIP | Do Not Track | DNT header / W3C Tracking Preference Expression (TPE) | None. genet has no DNT handling and should not acquire one. |
 | SKIP | Vendor token and palette interchange formats | Adobe Swatch Exchange (.ase); Figma Variables REST API; Style Dictionary; Tokens Studio | genet/ports/tabard, as candidate import/export formats. |
 | ADOPT | WebFinger | RFC 7033 | ports/gazette (already built), gaz HandleKind::Acct |
-| ADOPT | JSContact | RFC 9553 (data model), with RFC 9554 (vCard extensions for JSContact) and RFC 9555 (vCar | crates/dramatis/gaz (the contact store), ports/gazette Led |
-| PULL | vCard 4.0 and jCard | RFC 6350 (vCard 4.0), RFC 7095 (jCard) | gaz import/export; ports/gazette contact-import UX (the br |
-| SKIP | CardDAV, JMAP Core/Mail/Contacts | RFC 6352 (CardDAV); RFC 8620 (JMAP Core), RFC 8621 (JMAP Mail), RFC 9610 (JMAP Contacts) | None. gazette explicitly disclaims delivery ('not a delive |
-| PULL | Decentralized Identifiers (DIDs), with did:key and did:web | W3C DID Core 1.1; did:key and did:web method specs (W3C CCG) | crates/dramatis/gaz (HandleKind::Did already exists, carry |
-| ADOPT | Verifiable Credentials Data Model 2.0 | W3C VC Data Model 2.0 | crates/dramatis/emblem (the graded identity proof), ports/ |
-| PULL | Nostr NIP-05 (DNS-based internet identifiers) | NIP-05 | ports/gazette (README names NIP-05 as landing 'beside' Web |
-| PULL | ActivityPub (with Activity Streams 2.0) | W3C ActivityPub; W3C Activity Streams 2.0 | ports/gazette (already classifies ActivityPub actor links  |
-| PULL | HTTP Message Signatures | RFC 9421 | Only if gazette or moot ever writes to the fediverse. No c |
-| WATCH | AT Protocol (atproto) | draft-newbold-at-architecture, draft-holmgren-at-repository, and the IETF ATP working gr | ports/gazette — HandleKind::Did already accepts did:plc, a |
-| ADOPT | Messaging Layer Security (MLS) | RFC 9420 | ports/moot — the murmur surface (invitation-scoped convers |
-| WATCH | More Instant Messaging Interoperability (MIMI) | draft-ietf-mimi-protocol, draft-ietf-mimi-content, draft-ietf-mimi-arch, draft-ietf-mimi | ports/moot (murmur) — speculative only |
-| SKIP | Matrix | Matrix Specification v1.16 (client-server, server-server, and the Olm/Megolm ratchets) | None. moot/murmur is unimplemented and its README scopes i |
-| PULL | Signal protocol: Double Ratchet, X3DH, PQXDH, SPQR | Signal specifications (Double Ratchet; X3DH; PQXDH; Sparse Post-Quantum Ratchet) | crates/murm — the bilateral lane (design_docs/murm_docs/te |
-| PULL | WebRTC (and SIP) | W3C WebRTC: Real-Time Communication in Browsers; IETF RTCWEB suite (RFC 8825 overview, 8 | ports/moot (murmur) — 'calls when the transport and media  |
-| PULL | Reticulum Network Stack and LXMF | RNS (Reticulum Network Stack, manual v1.5.0) and LXMF (Lightweight Extensible Message Fo | ports/signalman (already built on it via retinue/postilion |
-| SKIP | FCC Part 97 — prohibited transmissions (amateur service) | 47 CFR §97.113(a)(4), with §97.113(a)(3) | repos/retinue (all of it), ports/signalman — this constrai |
-| ADOPT | Unlicensed ISM regulatory floor: FCC Part 15.247, ETSI EN 300 220-2, ARIB STD-T108 | 47 CFR §15.247 (US, 902–928 MHz); ETSI EN 300 220-2 V3.3.1 (2025-03) (EU SRD 25–1000 MHz | repos/retinue/crates/radio-hand (region.rs, executive.rs)  |
-| SKIP | LoRaWAN | LoRa Alliance TS001 (L2 specification) and RP002 Regional Parameters | None. retinue uses raw LoRa PHY via SX1262 with its own me |
-| PULL | AX.25, KISS, and APRS | AX.25 Link Access Protocol for Amateur Packet Radio v2.2 (July 1998); the KISS protocol  | repos/retinue — KISS is **already implemented** in crates/ |
-| ADOPT | safetensors | safetensors format specification (Hugging Face) | crates/intel/esp — already a dependency (safetensors = "0 |
-| PULL | GGUF | GGUF file format specification (ggml docs/gguf.md), format version 3 | ports/distillery — no current GGUF reference anywhere in t |
-| SKIP | ONNX, and OCI-based model packaging (ModelPack) | ONNX (Open Neural Network Exchange) IR and opset; CNCF ModelPack Specification over OCI  | None. distillery's model-manifest browsing is unbuilt; esp |
-| WATCH | Model Context Protocol (MCP) | MCP specification, revision 2026-07-28 | ports/alembic — the workshop half (agent identity and purp |
-| PULL | OpenAI-compatible HTTP API (Chat Completions) | POST /v1/chat/completions — the de-facto local-inference interface | ports/distillery — the streaming console and any path wher |
-| ADOPT | EU AI Act — Article 50 transparency obligations | Regulation (EU) 2024/1689 (AI Act), Article 50; as amended by the AI Digital Omnibus | ports/distillery and ports/alembic — anything that generat |
-| SKIP | Job, lease and heartbeat semantics for a P2P device ring | No applicable standard. Nearest neighbours surveyed and rejected: Kubernetes coordinatio | ports/distillery (mesh host supervisor, leases, heartbeats |
-| ADOPT | MIDI 1.0 Detailed Specification (incl. System Real Time clock and transport) | MMA/AMEI "Complete MIDI 1.0 Detailed Specification", document version 96.1 (3rd edition) | repos/woodshed — crates/woodshed-audio/src/midi.rs (MidiIn |
-| PULL | Standard MIDI File | MMA RP-001, "Standard MIDI Files 1.0" (SMF), incorporated into the Complete MIDI 1.0 Det | repos/woodshed — the Set/Rehearsal model (crates/woodshed- |
-| WATCH | MIDI 2.0 — Universal MIDI Packet and MIDI-CI | UMP and MIDI 2.0 Protocol Specification M2-104-UM v1.1.2; MIDI-CI M2-101; Common Rules f | repos/woodshed — would replace or sit beside crates/woodsh |
-| ADOPT | MusicXML | MusicXML 4.0, W3C Music Notation Community Group Final Report, 7 June 2021 | repos/woodshed — crates/woodshedding (chord.rs, scale.rs,  |
-| WATCH | MNX | MNX 1.0 draft specification (W3C Music Notation Community Group) | None today. Would be the same woodshed surface as MusicXML |
-| SKIP | Music Encoding Initiative | MEI Guidelines 5.1 (released 22 January 2024); chapter 7, "Repertoire: String Tablature" | None. Would be the same woodshed notation surface as Music |
-| PULL | ABC notation | The abc music standard 2.1 (December 2011); abc 2.2 referenced as future work and never  | repos/woodshed — the theory/repertoire side (crates/woodsh |
-| SKIP | Guitar Pro file formats and alphaTex | Guitar Pro .gp3/.gp4/.gp5 (binary), .gpx (GP6 container), .gp (GP7/GP8 zip + Content/sco | repos/woodshed — would be an import path only. No export c |
-| PULL | RIFF/WAVE, Broadcast Wave Format and BW64 | Microsoft/IBM RIFF + WAVE; EBU Tech 3285 v2 (20 May 2011) "Specification of the Broadcas | repos/hocket — crates/hocket-engine export path (stereo f3 |
-| ADOPT | FLAC | RFC 9639, "Free Lossless Audio Codec (FLAC)", Proposed Standard, December 2024 (IETF CEL | repos/hocket — the .hock container's media entries (curr |
-| PULL | Opus | RFC 6716 (Definition of the Opus Audio Codec, Standards Track, Sep 2012); RFC 8251 (Upda | repos/pipit — the tier above its own codecs, for links tha |
-| ADOPT | Loudness measurement and normalisation | Recommendation ITU-R BS.1770-5 (11/2023), "Algorithms to measure audio programme loudnes | repos/hocket — crates/audio-primitives (which already owns |
-| PULL | ReplayGain 2.0 | ReplayGain 2.0 specification (HydrogenAudio Knowledgebase wiki) | repos/hocket — export path, and the .hock media entries  |
-| PULL | Audio metadata tag formats | APEv2 (HydrogenAudio spec); Vorbis comments, now normatively defined in RFC 9639 §8.6; I | repos/wavicle — .wv files, whose native tag format is AP |
-| PULL | Open Sound Control | OSC 1.0 specification (2002); OSC 1.1 (2009, described in a NIME conference paper rather | repos/hocket — transport control and session state for a l |
-| SKIP | Ableton Link | Ableton Link (github.com/Ableton/link) — a C++ library, with no published protocol speci | repos/hocket — this is exactly what a cross-platform loop  |
-| PULL | CLAP (CLever Audio Plug-in) | CLAP 1.2.10 (tagged 13 July 2026); MIT licence | None today, by doctrine. Would be repos/hocket (as host, f |
-| WATCH | VST3 and ASIO (Steinberg SDKs) | VST 3 SDK, MIT licence since SDK version 3.8; ASIO SDK, now GPLv3+ / proprietary dual | repos/hocket — Windows is the primary platform (per the us |
-| ADOPT | Subjective speech quality testing | ITU-T P.800 (08/1996), "Methods for subjective determination of transmission quality"; I | repos/pipit — the only crate in the lane making codec qual |
-| SKIP | Objective speech quality metrics — PESQ, POLQA, ViSQOL | ITU-T P.862 (02/2001) PESQ — **withdrawn 5 January 2024**; ITU-T P.863 (03/2018) POLQA + | repos/pipit — the objective half of any quality claim, pai |
-| PULL | International Phonetic Alphabet and its Unicode encoding | IPA chart (revised to 2015, itself a minor revision of 2005; re-issued annually since 20 | repos/mora — src/phone.rs (the language-neutral phone mode |
-| ADOPT | Language identification tags | BCP 47 — currently RFC 5646 ("Tags for Identifying Languages", Sep 2009) and RFC 4647 (" | repos/mora — src/lib.rs and the module structure. Today a  |
-| PULL | Unicode Text Segmentation | Unicode Standard Annex #29, "Unicode Text Segmentation", Revision 47, for Unicode 17.0.0 | Not mora itself. repos/mora reads phones, not spelling, an |
-| SKIP | Speech Synthesis Markup Language | SSML Version 1.1, W3C Recommendation, 7 September 2010 | repos/mora — the question the lane brief asks directly: is |
-| PULL | Praat TextGrid and ToBI prosodic annotation | Praat TextGrid file format (long text, short text, and binary variants — defined by the  | repos/mora — an import path if mora ever wants time-aligne |
-| PULL | FITS (Flexible Image Transport System) | FITS Standard Version 4.0 | turquet — but there is no consumer today. A repo-wide grep |
-| PULL | FITS World Coordinate System (WCS) | WCS Paper I (Greisen & Calabretta 2002), Paper II (Calabretta & Greisen 2002), Paper III | turquet, if it ever grows a sky view or chart renderer. ne |
-| PULL | IVOA VOTable | IVOA Recommendation VOTable 1.5 | turquet, only if it grows a catalogue-query or table-expor |
-| PULL | IVOA SAMP (Simple Application Messaging Protocol) | IVOA Recommendation SAMP 1.3 | turquet, and any turquet-backed viewer in pelt or graphshe |
-| SKIP | IVOA HiPS and Simple Cone Search | IVOA Recommendation HiPS 1.0 (Hierarchical Progressive Survey); IVOA Recommendation Simp | None. turquet computes positions and returns typed states; |
-| ADOPT | ICRS / ICRF3 celestial reference frame | IAU 2018 Resolution B2 (ICRF3); ICRS per IAU 1997 Resolution B2 and IAU 2000 Resolution  | turquet — already the implicit frame at the head of its ty |
-| WATCH | Continuous UTC — the leap second decision | CGPM 27th meeting (2022) Resolution 4; 28th CGPM Draft Resolution C, 'On the technical a | turquet (hifitime's leap-second table, every UTC-TAI-TT co |
-| PULL | CCSDS Orbit Data Messages (OMM), and TLE/SGP4 | CCSDS 502.0-B-3, 'Orbit Data Messages', Recommended Standard (Blue Book), Issue 3, April | turquet, if Earth satellites ever join the ten solar-syste |
-| PULL | IAU constellation boundaries and star nomenclature | IAU constellation boundaries per Delporte (1930), following the IAU's 1928 adoption of 8 | turquet if it answers 'which constellation is this positio |
-| ADOPT | NAIF SPICE kernels and JPL DE ephemerides | NASA/NAIF SPICE Toolkit N0067; SPK (Spacecraft and Planet Kernel) file format per NAIF r | turquet — and this is already decided, landed, and should  |
-| ADOPT | W3C WebGPU and WGSL | W3C WebGPU; W3C WebGPU Shading Language (WGSL) | netrender (261 WGSL and 149 SPIR-V references), wgpu-graft |
-| ADOPT | SPIR-V and Vulkan | SPIR-V Specification version 1.6, Revision 7 (12 March 2026); Vulkan 1.4 (spec build 1.4 | netrender (SPIR-V is what WGSL lowers to on the Vulkan bac |
-| ADOPT | CSS Color Module Level 4 | W3C CSS Color Module Level 4 | netrender, genet-livery, the tinct crate, and tabard. |
-| WATCH | ICC profiles, BT.2100 HDR, and Display P3 | ICC.1:2022 (profile v4.4), published as ISO 15076-1:2025 Ed. 3; ISO 20677:2019 (iccMAX); ITU-R BT.2100-3 | netrender / wgpu family, tabard |
-| ADOPT | OpenType and COLRv1 colour fonts | OpenType specification version 1.9.1 (page dated 2024-05-14); ISO/IEC 14496-22 'Open Fon | netrender (netrender_text, swash; COLR appears 15 times  |
-| ADOPT | Design Tokens Format Module | Design Tokens Format Module, version 2025.10 | tabard — repos/genet/ports/tabard/README.md line 14 name |
-| PULL | IconVG | IconVG specification, spec/iconvg-spec.md at nigeltao/iconvg, Apache-2.0. The house de | repos/iconvg itself. The motivating downstream is 'a gra |
-| PULL | SVG 1.1 / SVG 2 / SVG Tiny | SVG 1.1 (Second Edition), W3C Recommendation, 16 August 2011; SVG 2, W3C Candidate Recom | genet — an SVG-capable engine must eventually. iconvg only |
-| SKIP | Lottie | Lottie Specification version 1.0.1 | None. No repo in this lane has an animated-vector consumer |
-| PULL | Tiled TMX map format | TMX Map Format version 1.8 (documented against Tiled 1.10+, with the reference describin | isometry. |
-| PULL | Universal VTT (dd2vtt / uvtt / df2vtt) | 'Universal VTT' export format — .dd2vtt, .uvtt, .df2vtt. **No document number exis | isometry — this is the format a GM's existing purchased an |
-| SKIP | WebRTC and the data channel | W3C 'WebRTC: Real-Time Communication in Browsers', REC 13 March 2025 (amended); RFC 8831/8832/8834 | isometry host-plus-players session model |
-| ADOPT | Gemini protocol and gemtext | Gemini network protocol specification v0.24.1; Gemini hypertext format ('gemtext') speci | repos/smolweb/crates/gemini-protocol — implemented, publ |
-| ADOPT | The RFC-backed small-web protocols: gopher, finger, DICT | RFC 1436 (The Internet Gopher Protocol, March 1993); RFC 4266 (The gopher URI Scheme, No | smolweb/crates/{gopher,finger,dict}-protocol — all imple |
-| ADOPT | The nine unspecified small-web protocols | **No standard designator exists for any of these.** Nex (spec at nex://nightfall.city/n | Nine smolweb crates, all implemented and published to crat |
-| ADOPT | URI and IRI syntax | RFC 3986 (STD 66), 'Uniform Resource Identifier (URI): Generic Syntax', January 2005; RF | Every smolweb crate — scorpion-protocol/src/request.rs c |
-| ADOPT | TLS 1.3 | RFC 9846 (July 2026; obsoletes RFC 8446/5077/5246/6961/7627/8422) | gemini, titan, misfin, kepler; scorpion-protocol |
-| SKIP | glTF 2.0 — and the games standards vacuum | Khronos glTF 2.0; ISO/IEC 12113:2022, 'Information technology — Runtime 3D asset deliver | mesocosm, paredros, isometry — and the honest answer is th |
+| ADOPT | JSContact | RFC 9553 (data model), with RFC 9554 (vCard extensions for JSContact) and RFC 9555 (vCard conversion) | crates/dramatis/gaz (the contact store), ports/gazette Ledger projection and recipient picker |
+| PULL | vCard 4.0 and jCard | RFC 6350 (vCard 4.0), RFC 7095 (jCard) | gaz import/export; ports/gazette contact-import UX (the brief names 'WebFinger paste, QR, ticket' as open UX questions) |
+| SKIP | CardDAV, JMAP Core/Mail/Contacts | RFC 6352 (CardDAV); RFC 8620 (JMAP Core), RFC 8621 (JMAP Mail), RFC 9610 (JMAP Contacts) | None. gazette explicitly disclaims delivery ('not a delivery layer — private grants, cross-service posting, and inboxes are moot and murm territory'). |
+| PULL | Decentralized Identifiers (DIDs), with did:key and did:web | W3C DID Core 1.1; did:key and did:web method specs (W3C CCG) | crates/dramatis/gaz (HandleKind::Did already exists, carrying did:web and did:plc), ports/gazette resolver facade, emblem |
+| ADOPT | Verifiable Credentials Data Model 2.0 | W3C VC Data Model 2.0 | CORRECTED 2026-08-24: no current consumer. crates/dramatis/emblem is a 23-line 0.0.1 name reservation; VC 2.0 is its plausible eventual shape, not a shipped dependency |
+| PULL | Nostr NIP-05 (DNS-based internet identifiers) | NIP-05 | ports/gazette (README names NIP-05 as landing 'beside' WebFinger behind the same facade), gaz HandleKind::Nostr |
+| PULL | ActivityPub (with Activity Streams 2.0) | W3C ActivityPub; W3C Activity Streams 2.0 | ports/gazette (already classifies ActivityPub actor links out of WebFinger JRDs); ports/moot as a future publish target |
+| PULL | HTTP Message Signatures | RFC 9421 | Only if gazette or moot ever writes to the fediverse. No current consumer. |
+| WATCH | AT Protocol (atproto) | draft-newbold-at-architecture, draft-holmgren-at-repository, and the IETF ATP working group charter | ports/gazette — HandleKind::Did already accepts did:plc, and the README names atproto-did resolution as landing behind the resolver facade; the … |
+| ADOPT | Messaging Layer Security (MLS) | RFC 9420 | CORRECTED 2026-08-24: not ports/moot, which is a 43-line reservation. Prospective home is crates/murm/transport (reserves ALPN mere/mls/v1); crates/moot/commons ships encrypted group chat today via p2panda, not MLS |
+| WATCH | More Instant Messaging Interoperability (MIMI) | draft-ietf-mimi-protocol, draft-ietf-mimi-content, draft-ietf-mimi-arch, draft-ietf-mimi-room-policy | ports/moot (murmur) — speculative only |
+| SKIP | Matrix | Matrix Specification v1.16 (client-server, server-server, and the Olm/Megolm ratchets) | None. moot/murmur is unimplemented and its README scopes it to Mere's own governed spaces. |
+| PULL | Signal protocol: Double Ratchet, X3DH, PQXDH, SPQR | Signal specifications (Double Ratchet; X3DH; PQXDH; Sparse Post-Quantum Ratchet) | crates/murm — the bilateral lane (design_docs/murm_docs/technical_architecture/MURM_AS_BILATERAL.md) |
+| PULL | WebRTC (and SIP) | W3C WebRTC: Real-Time Communication in Browsers (REC 13 March 2025); IETF RTCWEB suite (RFC 8825 overview, 8826/8827 security, 8829 JSEP, 8831 data channels, 8834 media transport); SIP is RFC 3261 | ports/moot (murmur) — 'calls when the transport and media receipts support them'; genet/pelt as the engine that would host a browser-side peer … |
+| PULL | Reticulum Network Stack and LXMF | RNS (Reticulum Network Stack, manual v1.5.0) and LXMF (Lightweight Extensible Message Format) | ports/signalman (already built on it via retinue/postilion), crates/prns (Rust Reticulum checkout, MIT OR Apache-2.0 — verified in its Cargo.toml) |
+| SKIP | FCC Part 97 — prohibited transmissions (amateur service) | 47 CFR §97.113(a)(4), with §97.113(a)(3) | repos/retinue (all of it), ports/signalman — this constrains what band a station may ever legally use |
+| ADOPT | Unlicensed ISM regulatory floor: FCC Part 15.247, ETSI EN 300 220-2, ARIB STD-T108 | 47 CFR §15.247 (US, 902–928 MHz); ETSI EN 300 220-2 V3.3.1 (2025-03) (EU SRD 25–1000 MHz, harmonised under RED 2014/53/EU art. 3.2); ARIB STD-T108 (Japan, 920 MHz); ITU-R Radio Regulations Edition of 2024 for the underlying region allocations | repos/retinue/crates/radio-hand (region.rs, executive.rs) — already implemented |
+| SKIP | LoRaWAN | LoRa Alliance TS001 (L2 specification) and RP002 Regional Parameters | None. retinue uses raw LoRa PHY via SX1262 with its own mesh layer. |
+| PULL | AX.25, KISS, and APRS | AX.25 Link Access Protocol for Amateur Packet Radio v2.2 (July 1998); the KISS protocol (Chepponis/Karn, 1987); APRS Protocol Reference v1.0.1 (2000) | repos/retinue — KISS is **already implemented** in crates/selvage/src/kiss.rs (FEND 0xC0, FESC 0xDB, TFEND 0xDC, TFESC 0xDD, with the escape rules) … |
+| ADOPT | safetensors | safetensors format specification (Hugging Face) | crates/intel/esp — already a dependency (safetensors = "0.4", behind the decoder and bert features); the BERT modules are deliberately named so HF … |
+| PULL | GGUF | GGUF file format specification (ggml docs/gguf.md), format version 3 | ports/distillery — no current GGUF reference anywhere in the tree; this would be new. esp is safetensors-only today. |
+| SKIP | ONNX, and OCI-based model packaging (ModelPack) | ONNX (Open Neural Network Exchange) IR and opset; CNCF ModelPack Specification over OCI Image Manifest v1.1 | None. distillery's model-manifest browsing is unbuilt; esp is safetensors-and-Burn. |
+| WATCH | Model Context Protocol (MCP) | MCP specification, revision 2026-07-28 | ports/alembic — the workshop half (agent identity and purpose, granted reads/writes/actions/watches, model and tool selection, pending petitions, … |
+| PULL | OpenAI-compatible HTTP API (Chat Completions) | POST /v1/chat/completions — the de-facto local-inference interface | ports/distillery — the streaming console and any path where a user points Mere at an existing local server (Ollama, llama.cpp) instead of running esp … |
+| ADOPT | EU AI Act — Article 50 transparency obligations | Regulation (EU) 2024/1689 (AI Act), Article 50; as amended by the AI Digital Omnibus | ports/distillery and ports/alembic — anything that generates text for a user, or that a user talks to as an assistant, in a build available in the EU. |
+| SKIP | Job, lease and heartbeat semantics for a P2P device ring | No applicable standard. Nearest neighbours surveyed and rejected: Kubernetes coordination.k8s.io/v1 Lease (not a standard — an API of one implementation); Eclipse Sparkplug B / ISO-IEC 20922 MQTT (broker-centric); DMTF Redfish (datacenter hardware management); OGF DRMAA / OGF GLUE (grid batch scheduling, effectively dormant) | ports/distillery (mesh host supervisor, leases, heartbeats, device conditions, reclaim), ports/signalman (station grants), crates/mesh |
+| ADOPT | MIDI 1.0 Detailed Specification (incl. System Real Time clock and transport) | MMA/AMEI "Complete MIDI 1.0 Detailed Specification", document version 96.1 (3rd edition) | repos/woodshed — crates/woodshed-audio/src/midi.rs (MidiIn/MidiOut/MidiClockSync over midir), crates/woodshed-core/src/midi.rs, … |
+| PULL | Standard MIDI File | MMA RP-001, "Standard MIDI Files 1.0" (SMF), incorporated into the Complete MIDI 1.0 Detailed Specification | repos/woodshed — the Set/Rehearsal model (crates/woodshed-core/src/song.rs, arpeggio.rs, scale.rs) has ordered material with dwell, tempo and time … |
+| WATCH | MIDI 2.0 — Universal MIDI Packet and MIDI-CI | UMP and MIDI 2.0 Protocol Specification M2-104-UM v1.1.2; MIDI-CI M2-101; Common Rules for Profiles M2-102; Bit Scaling M2-115 | repos/woodshed — would replace or sit beside crates/woodshed-audio/src/midi.rs. No other repo in this lane speaks MIDI. |
+| ADOPT | MusicXML | MusicXML 4.0, W3C Music Notation Community Group Final Report, 7 June 2021 | repos/woodshed — crates/woodshedding (chord.rs, scale.rs, arpeggio.rs, fretboard.rs, tuning.rs) plus woodshed-core/src/song.rs. Woodshed's theory … |
+| WATCH | MNX | MNX 1.0 draft specification (W3C Music Notation Community Group) | None today. Would be the same woodshed surface as MusicXML, if it ever stabilises. |
+| SKIP | Music Encoding Initiative | MEI Guidelines 5.1 (released 22 January 2024); chapter 7, "Repertoire: String Tablature" | None. Would be the same woodshed notation surface as MusicXML, for import of scholarly editions. |
+| PULL | ABC notation | The abc music standard 2.1 (December 2011); abc 2.2 referenced as future work and never released | repos/woodshed — the theory/repertoire side (crates/woodshed-graph, the folded-in content graph; woodshed-core/src/song.rs). Not the fretboard side. |
+| SKIP | Guitar Pro file formats and alphaTex | Guitar Pro .gp3/.gp4/.gp5 (binary), .gpx (GP6 container), .gp (GP7/GP8 zip + Content/score.gpif XML); alphaTex markup | repos/woodshed — would be an import path only. No export could ever be responsible. |
+| PULL | RIFF/WAVE, Broadcast Wave Format and BW64 | Microsoft/IBM RIFF + WAVE; EBU Tech 3285 v2 (20 May 2011) "Specification of the Broadcast Wave Format"; ITU-R BS.2088 (BW64), which supersedes EBU Tech 3306 (RF64) | repos/hocket — crates/hocket-engine export path (stereo f32 RIFF/WAVE) and the per-phrase mono f32 WAVs inside the .hock zip. repos/woodshed — Looper … |
+| ADOPT | FLAC | RFC 9639, "Free Lossless Audio Codec (FLAC)", Proposed Standard, December 2024 (IETF CELLAR WG) | repos/hocket — the .hock container's media entries (currently WAV, with wavicle .wv wired in) and loop export. repos/woodshed — Looper export. … |
+| PULL | Opus | RFC 6716 (Definition of the Opus Audio Codec, Standards Track, Sep 2012); RFC 8251 (Updates to the Opus Audio Codec, Standards Track, Oct 2017); RFC 7845 (Ogg Encapsulation for Opus); RFC 7587 (RTP Payload Format for Opus, Proposed Standard, Jun 2015); container RFC 3533 / RFC 5334 (Ogg) | repos/pipit — the tier above its own codecs, for links that are fat enough not to need a 1.6–2.5 kbps vocoder. repos/mere ports/moot — "murmur" … |
+| ADOPT | Loudness measurement and normalisation | Recommendation ITU-R BS.1770-5 (11/2023), "Algorithms to measure audio programme loudness and true-peak audio level"; EBU R 128 v5.0 (November 2023); EBU Tech 3341 (metering) and Tech 3342 (loudness range) | repos/hocket — crates/audio-primitives (which already owns "configurable normalized meter ballistics" per the landed 2026-07-11 plan) and … |
+| PULL | ReplayGain 2.0 | ReplayGain 2.0 specification (HydrogenAudio Knowledgebase wiki) | repos/hocket — export path, and the .hock media entries if they gain tags. repos/wavicle — would be written into an APEv2 tag, WavPack's native tag … |
+| PULL | Audio metadata tag formats | APEv2 (HydrogenAudio spec); Vorbis comments, now normatively defined in RFC 9639 §8.6; ID3v2.4.0 (informal standard, Martin Nilsson, 2000) | repos/wavicle — .wv files, whose native tag format is APEv2 and which currently writes and reads no tags at all. repos/hocket — .hock media entries … |
+| PULL | Open Sound Control | OSC 1.0 specification (2002); OSC 1.1 (2009, described in a NIME conference paper rather than a spec document) | repos/hocket — transport control and session state for a loop recorder that a performer drives from a foot controller or tablet. repos/woodshed — … |
+| SKIP | Ableton Link | Ableton Link (github.com/Ableton/link) — a C++ library, with no published protocol specification | repos/hocket — this is exactly what a cross-platform loop recorder wants: automatic tempo, beat and phase sync with every other Link-enabled app and … |
+| PULL | CLAP (CLever Audio Plug-in) | CLAP 1.2.10 (tagged 13 July 2026); MIT licence | None today, by doctrine. Would be repos/hocket (as host, for effects on loop layers) or repos/woodshed (as host, for backing-instrument plugins) — or … |
+| WATCH | VST3 and ASIO (Steinberg SDKs) | VST 3 SDK, MIT licence since SDK version 3.8; ASIO SDK, now GPLv3+ / proprietary dual | repos/hocket — Windows is the primary platform (per the user's testing hardware) and ASIO is the conventional low-latency path there; hocket … |
+| ADOPT | Subjective speech quality testing | ITU-T P.800 (08/1996), "Methods for subjective determination of transmission quality"; ITU-T P.808 (06/2021), "Subjective evaluation of speech quality with a crowdsourcing approach" | repos/pipit — the only crate in the lane making codec quality claims. Its README currently reports 34.8 dB SNR (ADPCM), 1.97 dB mean log spectral … |
+| SKIP | Objective speech quality metrics — PESQ, POLQA, ViSQOL | ITU-T P.862 (02/2001) PESQ — **withdrawn 5 January 2024**; ITU-T P.863 (03/2018) POLQA + Amendment 1 (04/2020) — in force; ViSQOL v3 (Google, Apache-2.0) | repos/pipit — the objective half of any quality claim, paired with the P.800/P.808 subjective half. |
+| PULL | International Phonetic Alphabet and its Unicode encoding | IPA chart (revised to 2015, itself a minor revision of 2005; re-issued annually since 2025 with updated copyright and a revision note); Unicode blocks IPA Extensions U+0250–U+02AF, Spacing Modifier Letters U+02B0–U+02FF, Combining Diacritical Marks U+0300–U+036F, Latin Extended-F/G | repos/mora — src/phone.rs (the language-neutral phone model) and src/english.rs (currently a 39-entry ARPAbet table). repos/sonance — the reserved … |
+| ADOPT | Language identification tags | BCP 47 — currently RFC 5646 ("Tags for Identifying Languages", Sep 2009) and RFC 4647 ("Matching of Language Tags", Sep 2006), both Best Current Practice | repos/mora — src/lib.rs and the module structure. Today a language is selected by Rust path (mora::english::SYLLABLE_RULE, WEIGHT_RULE, pronounce), … |
+| PULL | Unicode Text Segmentation | Unicode Standard Annex #29, "Unicode Text Segmentation", Revision 47, for Unicode 17.0.0, dated 2025-08-17 | Not mora itself. repos/mora reads phones, not spelling, and is no_std with zero dependencies — UAX #29 has no place inside it. The consumers are … |
+| SKIP | Speech Synthesis Markup Language | SSML Version 1.1, W3C Recommendation, 7 September 2010 | repos/mora — the question the lane brief asks directly: is SSML the right emission target for a prosody engine? Also potentially repos/pipit's … |
+| PULL | Praat TextGrid and ToBI prosodic annotation | Praat TextGrid file format (long text, short text, and binary variants — defined by the Praat manual, not by a specification); ToBI (Tones and Break Indices), Ohio State "Guidelines for ToBI Labelling" | repos/mora — an import path if mora ever wants time-aligned corpora to validate its syllabification and weight rules against real speech. … |
+| PULL | FITS (Flexible Image Transport System) | FITS Standard Version 4.0 | turquet — but there is no consumer today. A repo-wide grep for FITS/VOTable/IVOA/HiPS returns zero real hits; the apparent 'hips'/'samp'/'iers' … |
+| PULL | FITS World Coordinate System (WCS) | WCS Paper I (Greisen & Calabretta 2002), Paper II (Calabretta & Greisen 2002), Paper III (Greisen, Calabretta, Valdes & Allen 2006), Paper IV (Rots, Bunclark, Calabretta, Allen, Manchester & Thompson 2015) | turquet, if it ever grows a sky view or chart renderer. netrender/isometry have no stake. |
+| PULL | IVOA VOTable | IVOA Recommendation VOTable 1.5 | turquet, only if it grows a catalogue-query or table-export surface. None exists today. |
+| PULL | IVOA SAMP (Simple Application Messaging Protocol) | IVOA Recommendation SAMP 1.3 | turquet, and any turquet-backed viewer in pelt or graphshell. This is the single IVOA standard whose architecture matches the house posture rather … |
+| SKIP | IVOA HiPS and Simple Cone Search | IVOA Recommendation HiPS 1.0 (Hierarchical Progressive Survey); IVOA Recommendation Simple Cone Search 1.03 | None. turquet computes positions and returns typed states; it has no pixel surface and no query service. |
+| ADOPT | ICRS / ICRF3 celestial reference frame | IAU 2018 Resolution B2 (ICRF3); ICRS per IAU 1997 Resolution B2 and IAU 2000 Resolution B1.2 | turquet — already the implicit frame at the head of its typed Direction/Rotation chain. |
+| WATCH | Continuous UTC — the leap second decision | CGPM 27th meeting (2022) Resolution 4; 28th CGPM Draft Resolution C, 'On the technical actions needed to ensure the continuity of UTC', Draft Resolutions Version 5, 13 July 2026 | turquet (hifitime's leap-second table, every UTC-TAI-TT conversion), cleromancy through turquet, and anything in the house that timestamps a receipt. |
+| PULL | CCSDS Orbit Data Messages (OMM), and TLE/SGP4 | CCSDS 502.0-B-3, 'Orbit Data Messages', Recommended Standard (Blue Book), Issue 3, April 2023 (Errata 1 issued). Legacy: Spacetrack Report No. 3 (1980) and Vallado et al., 'Revisiting Spacetrack Report #3', AIAA 2006-6753. | turquet, if Earth satellites ever join the ten solar-system bodies. Nothing today — turquet's existing 'satellite calculations' are the inherited … |
+| PULL | IAU constellation boundaries and star nomenclature | IAU constellation boundaries per Delporte (1930), following the IAU's 1928 adoption of 88 constellations; IAU Catalog of Star Names (IAU-CSN), maintained by the IAU Working Group on Star Names (WGSN) | turquet if it answers 'which constellation is this position in'; cleromancy directly, since astrological context wants named stars and a … |
+| ADOPT | NAIF SPICE kernels and JPL DE ephemerides | NASA/NAIF SPICE Toolkit N0067; SPK (Spacecraft and Planet Kernel) file format per NAIF required-reading documents; JPL DE440 / DE441 / DE440s | turquet — and this is already decided, landed, and should not be reopened. |
+| ADOPT | W3C WebGPU and WGSL | W3C WebGPU; W3C WebGPU Shading Language (WGSL) | netrender (261 WGSL and 149 SPIR-V references), wgpu-graft, wgpu-scry, wgpu-weld, isometry, paredros — all via wgpu. |
+| ADOPT | SPIR-V and Vulkan | SPIR-V Specification version 1.6, Revision 7 (12 March 2026); Vulkan 1.4 (spec build 1.4.360) | netrender (SPIR-V is what WGSL lowers to on the Vulkan backend), wgpu-graft's Vulkan image import path, and crates/rust-gpu + crates/cargo-gpu in the … |
+| ADOPT | CSS Color Module Level 4 | W3C CSS Color Module Level 4 | netrender, livery (NOT genet-livery, which is only the integration wrapper), the tinct crate, and tabard. |
+| WATCH | ICC profiles, BT.2100 HDR, and Display P3 | ICC.1:2022 (profile v4.4), published as ISO 15076-1:2025 Ed. 3; ISO 20677:2019 (iccMAX); ITU-R BT.2100-3 | netrender — but deliberately deferred, with the trigger already written down. |
+| ADOPT | OpenType and COLRv1 colour fonts | OpenType specification version 1.9.1 (page dated 2024-05-14); ISO/IEC 14496-22 'Open Font Format'; COLR table version 1 (COLRv1) with CPAL | netrender (netrender_text, skrifa — NOT swash, which is absent from the lockfile; COLR appears 15 times in the repo), genet's font stack, and tabard's icon story. |
+| ADOPT | Design Tokens Format Module | Design Tokens Format Module, version 2025.10 | tabard — repos/genet/ports/tabard/README.md line 14 names 'W3C Design Tokens' as '(the non-negotiable interchange form)'. tabard is currently a name … |
+| PULL | IconVG | IconVG specification, spec/iconvg-spec.md at nigeltao/iconvg, Apache-2.0. The house decoder is pinned to spec commit 1864c0573e6b. | repos/iconvg itself. The motivating downstream is 'a graph interface where nodes wear icon faces' (graphshell), and tabard's 'icons whose format … |
+| PULL | SVG 1.1 / SVG 2 / SVG Tiny | SVG 1.1 (Second Edition), W3C Recommendation, 16 August 2011; SVG 2, W3C Candidate Recommendation, 4 October 2018; SVG Tiny 1.2, W3C Recommendation, 22 December 2008 | genet — an SVG-capable engine must eventually. iconvg only as a comparison point; tabard not at all. |
+| SKIP | Lottie | Lottie Specification version 1.0.1 | None. No repo in this lane has an animated-vector consumer, and iconvg is deliberately scriptless and static. |
+| PULL | Tiled TMX map format | TMX Map Format version 1.8 (documented against Tiled 1.10+, with the reference describing features through Tiled 1.12); TSX tilesets; TMJ JSON serialisation | isometry. |
+| PULL | Universal VTT (dd2vtt / uvtt / df2vtt) | 'Universal VTT' export format — .dd2vtt, .uvtt, .df2vtt. **No document number exists.** | isometry — this is the format a GM's existing purchased and downloaded maps actually arrive in. |
+| SKIP | WebRTC and the data channel | W3C 'WebRTC: Real-Time Communication in Browsers', REC 13 March 2025 (amended, no longer titled 1.0); RFC 8831/8832/8834 | isometry's 'one player hosts, the group joins peer-to-peer' session model — the obvious candidate on paper. |
+| ADOPT | Gemini protocol and gemtext | Gemini network protocol specification v0.24.1; Gemini hypertext format ('gemtext') specification — two separate documents since the March 2024 refactor | repos/smolweb/crates/gemini-protocol — implemented, published to crates.io, and consumed downstream by genet's errand client and nematic capsule … |
+| ADOPT | The RFC-backed small-web protocols: gopher, finger, DICT | RFC 1436 (The Internet Gopher Protocol, March 1993); RFC 4266 (The gopher URI Scheme, November 2005); RFC 1288 (The Finger User Information Protocol, December 1991); RFC 7033 (WebFinger, September 2013); RFC 2229 (A Dictionary Server Protocol, October 1997) | smolweb/crates/{gopher,finger,dict}-protocol — all implemented and published, with servers for gopher and finger behind a server feature. |
+| ADOPT | The nine unspecified small-web protocols | **No standard designator exists for any of these.** Nex (spec at nex://nightfall.city/nex/info/specification.txt); Spartan (github.com/michael-lazar/spartan); Guppy v0.4.4 (github.com/dimkr/guppy-protocol); Scroll and scrolltext (Christian Lee Seibold); Text Protocol (textprotocol.org); Scorpion (github.com/zzo38/scorpion); Kepler (github.com/kevinboone/kepler-protocol); Misfin prototype B (misfin.org, JCLemme); FSP (fsp.sourceforge.net) | Nine smolweb crates, all implemented and published to crates.io under MIT. |
+| ADOPT | URI and IRI syntax | RFC 3986 (STD 66), 'Uniform Resource Identifier (URI): Generic Syntax', January 2005; RFC 3987, 'Internationalized Resource Identifiers (IRIs)', January 2005 | Every smolweb crate — scorpion-protocol/src/request.rs cites RFC 3986 directly; text-protocol requires IRIs specifically; genet's errand client. |
+| ADOPT | TLS 1.3 | RFC 9846 (July 2026; obsoletes RFC 8446/5077/5246/6961/7627/8422) | gemini, titan, misfin, kepler (keplers://), scorpion (scorpions://) and gopher (gophers://) — six of thirteen smolweb protocols, all through rustls. |
+| SKIP | glTF 2.0 — and the games standards vacuum | Khronos glTF 2.0; ISO/IEC 12113:2022, 'Information technology — Runtime 3D asset delivery format — Khronos glTF 2.0' | mesocosm, paredros, isometry — and the honest answer is that none of them wants it. |
 
 ---
 
@@ -816,6 +858,47 @@ do not quote a figure. And when citing DTCG, use the pinned
 `designtokens.org/tr/2025.10/` rather than the rolling draft URL, or the version
 claim silently drifts to whatever is current.
 
+
+**Second pass, same day: a code-level verification of this document's own
+claims.** Three further agents were run against the tree after the first draft
+was committed, and they corrected this brief rather than the world:
+
+- **§2.1's framing was wrong on cost and on coupling**, and is now revised in
+  place with a banner. The original called the fix "a v2-root decision, not a
+  patch"; a pass over the actual call graph found the two halves have nearly
+  disjoint blast radii, no passphrase-ladder data exists on disk, and the
+  read-old/write-new pattern is already house style in
+  `sealed_record_storage.rs`. The claim was repeated from the survey without
+  being tested. Testing it made the work cheaper, not more expensive — which is
+  the argument for testing framing claims rather than inheriting them.
+- **The §7 Consumer column was truncated mid-sentence in 151 of 174 rows**, an
+  artifact of how the table was generated rather than of the survey. Regenerated
+  at word boundaries. Anyone re-generating it should check that first — and
+  should re-apply the hand corrections afterwards. Doing so once silently
+  reverted four designator fixes (TLS 1.3, Lottie, WebRTC, ICC/ISO) already made
+  by hand, leaving the prose asserting a correction the table no longer carried.
+  A generated table and hand-edited rows do not compose: the corrections belong
+  in the generator, or in a diff applied after it, never only in the output.
+- **Five ADOPT rows named the wrong consumer** and are corrected in place: MLS
+  pointed at `ports/moot` (a 43-line reservation that explicitly disclaims the
+  role), VC 2.0 and RFC 5869 HKDF were listed against reservations and candidate
+  future sites as though they were shipped dependencies, CSS Color 4 named
+  `genet-livery` (an integration wrapper with zero colour code) where the same
+  table elsewhere correctly names `livery`, and OpenType/COLRv1 cited `swash`
+  where netrender uses `skrifa`.
+
+The generalisation worth keeping: the survey's *standards* research held up well
+under adversarial checking, but its claims about **this codebase** — which crate
+owns what, how expensive a change is — were the weakest part and needed a
+separate pass with the code open. A standards brief written from READMEs will be
+right about the world and wrong about home.
+
+A note on the sweep instrument, because it nearly produced a false clean bill:
+recursive `grep` over this workspace silently times out mid-traversal and returns
+empty, which reads exactly like "no matches". The reliable instrument is
+`git grep` per repo (it uses the index and skips `target/`). Any negative result
+in a workspace-wide sweep should be accompanied by a positive control in the same
+run, or it means nothing.
 This brief should be re-checked against primary sources before it is used to
 justify work, and certainly before 2027 — §1 exists because the last inventory
 went stale in nine months.
@@ -827,34 +910,52 @@ went stale in nine months.
 Recorded here rather than resolved, because each has more than one defensible
 answer and the choice is Mark's.
 
-1. **The v2-root question (§2.1).** Recording KDF parameters in the vault format
-   and giving `derive_child` a versioned context are one decision, not two, and
-   both are format changes. Take them now, before the vault holds real
-   credentials, or defer and accept that the migration gets harder monotonically?
-   If taken: which RFC 9106 §4 option — the second recommended (m=64 MiB, t=3,
-   p=4) is the realistic target for a once-per-session unlock, but it is a
-   perceptible pause on weak hardware, and the current 19 MiB is a deliberate
-   floor rather than an accident.
-2. **CXF import policy (§2.3).** CXF v1.0 defines 17 credential types including
+1. **The vault format and its parameters (§2.1).** Revised: this is *not* one
+   decision with `derive_child`, and it is not a v2 root. It is a self-contained
+   change to one crate with no data in the wild and an in-repo read-old/write-new
+   precedent. The open forks are: which format shape — explicit `m_cost`/`t_cost`/
+   `p_cost` fields with `FILE_VERSION` bumped to 2, a PHC string descriptor, or a
+   shared `UnlockProfile` type that makes the "one unlock ladder" rule a type
+   invariant rather than a comment? And which parameter target — RFC 9106's second
+   recommended option (m=64 MiB, t=3) at ~5.1x current cost, or a lower number
+   recorded explicitly as a deviation? The first recommended option (2 GiB) is
+   unallocatable on wasm and should be ruled out on the record rather than left
+   open.
+2. **Should the manifest enforce the `argon2` hold?** `crates/dramatis/personae/
+   Cargo.toml:44` reads `argon2 = "0.5"`; the 0.5.3 pin lives only in
+   `Cargo.lock`. The crypto stack decision says the crate is held because a
+   password-hash change is a stored-format change — but nothing stops a
+   `cargo update` from moving it to 0.6, which changes the default parameters.
+3. **The derivation context (§2.1), on its own timeline.** BLAKE3 `derive_key`
+   (already a dependency, no RFC) or RFC 5869 HKDF (an RFC, but adding it to
+   personae re-opens the digest-row question the crypto stack decision closed)?
+   And are you willing to pay its real costs: a rollout where every peer ships a
+   v2-aware verifier before any peer mints a v2 key, plus manual re-enrollment of
+   the SSH CA on every host that holds it?
+4. **Does the `passphrase_root` ladder have a future?** It has no consumers today
+   and `StartupUnlockMode::Prompt` is unimplemented (`startup_unlock.rs:29-33`).
+   If it is the non-Windows story, it belongs in scope for everything above. If
+   it is speculative, deleting it shrinks the whole decision.
+5. **CXF import policy (§2.3).** CXF v1.0 defines 17 credential types including
    `Passport`, `DriversLicense` and `CreditCard`. Which does castellan store,
    which does it drop on the floor, and which does it quarantine and tell the
    user about? This is a product decision that blocks the parser, not a
    consequence of it.
-3. **Whether a `dtcg` crate gets founded (§3.2).** There is no Rust
+6. **Whether a `dtcg` crate gets founded (§3.2).** There is no Rust
    implementation of a now-stable W3C-CG format that tabard needs anyway. That
    is either a small well-scoped piece of leverage or a distraction from tabard
    itself. Naming-ledger territory if the answer is yes.
-4. **Where mDNS/DNS-SD lands (§4).** It is the largest hole in the stack and it
+7. **Where mDNS/DNS-SD lands (§4).** It is the largest hole in the stack and it
    has no obvious owner: distillery's ring, moot's places and turnstone's shared
    places all need it, which is an argument for a shared crate rather than three
    implementations, and an argument that it belongs to none of them.
-5. **Emblem versus Verifiable Credentials 2.0 (§5).** VC 2.0 is close to what
+8. **Emblem versus Verifiable Credentials 2.0 (§5).** VC 2.0 is close to what
    emblem already is. Adopting it buys interoperability and costs a large
    specification surface plus a JSON-LD dependency; staying proprietary keeps
    emblem small. Worth deciding before emblem's shape is fixed rather than after.
-6. **Djot's wire identity (§5).** There is no registered media type. Serve
+9. **Djot's wire identity (§5).** There is no registered media type. Serve
    `text/x-djot` and accept an unregistered name, serve rendered HTML, or pursue
    registration. Any of the three is defensible; drifting into one is not.
-7. **One out-of-scope one-liner.** `smolweb/crates/scorpion-protocol/src/tls.rs:29`
+10. **One out-of-scope one-liner.** `smolweb/crates/scorpion-protocol/src/tls.rs:29`
    cites RFC 8446, now obsoleted by RFC 9846. Flagged, not fixed — smolweb was
    outside this pass's scope.
