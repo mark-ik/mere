@@ -1,8 +1,9 @@
 # Knot Shared Surface and Port Contribution Plan
 
 **Date:** 2026-08-24
-**Status:** in progress; G0 and K0 implemented, primary contract review
-complete, reusable Knot surface running
+**Status:** in progress; current-origin G0 published; K0, reusable Knot
+surface, desktop wrapper, and semantic host receipt implemented; Mere
+published-source verification and publication open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -136,6 +137,36 @@ build its concrete `GenetAppRunner`, consume Knot intents inside its own view,
 then return `Box<dyn RetainedSurfaceSession>`. Standalone Knot may use the same
 concrete state and view directly with Rootstock's generic host, while Turnstone
 holds the erased form.
+
+### 2026-08-24: surface effects belong with the retained runtime
+
+The shared Genet checkout was behind current `origin/main`. Current
+`genet-host-api` has intentionally removed its older raw host-input and
+`HostEffect` vocabulary. Reintroducing that vocabulary for surfaces would
+reverse the cleanup and mix a data contract with a live Cambium runtime.
+
+The current-origin G0 keeps descriptors and typed availability in
+`genet-host-api`. Cambium owns the object-safe runner session and its present
+minimum effect, `SurfaceEffect::Redraw`. Native input still enters through the
+existing Rootstock adapters, and commands, settings, navigation, and cursor
+policy stay in their existing seams until a real surface consumer requires a
+generic runtime effect.
+
+### 2026-08-25: the small surface still pays for the broad port graph
+
+An external verification crate depending only on `ports/knot` and the desktop
+host still spends dependency resolution on Knot's full ordinary dependency
+set. Both the branch-sourced Genet run and an exact clean-current-origin
+checkout run remained in Cargo resolution without reaching `rustc` inside the
+verification bound. This is not a code failure, but it leaves the Mere
+published-source receipt open and exposes a packaging cost.
+
+Do not create another document model to fix that cost. If a lock-seeded
+published-source rerun does not clear it, extract the reusable document
+surface and thin desktop wrapper into a narrow Knot UI package that depends on
+the existing `KnotDocumentSession`. Turnstone should not inherit unrelated
+vault, inference, replication, or endpoint dependencies merely to mount one
+document surface.
 
 ## 3. Boundary
 
@@ -351,9 +382,10 @@ through UI admission.
   repository indexes, root manifests, lockfiles, or Turnstone.
 - The primary lane reviews both implementations before either becomes a
   cross-repository dependency.
-- Turnstone integration waits because its `Cargo.toml`, `cambium_pane.rs`,
-  `chrome_view.rs`, `content.rs`, and `ui.rs` currently contain unrelated
-  work. T0 begins after those changes have a clear owner or land.
+- The earlier Turnstone overlap in `Cargo.toml`, `cambium_pane.rs`,
+  `chrome_view.rs`, `content.rs`, and `ui.rs` has cleared. T0 may begin after
+  S0b and a fresh status check; those paths are still rechecked before any
+  assignment because they are shared integration seams.
 - Each repository is staged by explicit owned path after a fresh status check.
   Unrelated dirty work is preserved.
 - A published-source or cross-repository build is required before changing a
@@ -388,6 +420,40 @@ through UI admission.
   the reusable component and its dependent desktop wrapper. The component is
   assigned as the first real erased-session consumer; the desktop wrapper
   follows its concrete API.
+- 2026-08-24: live-origin review found the shared Genet checkout behind current
+  `origin/main` and rejected publication of its stale `HostEffect` dependency.
+  G0 was reapplied on current origin with data-only host contracts and the
+  minimal `SurfaceEffect::Redraw` in Cambium. Its focused current-origin tests
+  and publication are recorded below.
+- 2026-08-24: S0a implemented the reusable status header, single-buffer Djot
+  editor, product-owned save action, plain refusal/failure presentation,
+  descriptor, concrete state/view pair, and erased-session constructor. S0b1
+  wires that same concrete component to the existing Genet desktop host; S0b2
+  proves the semantic host path below.
+- 2026-08-24: current-origin G0 tests passed for `genet-host-api` and Cambium,
+  including two explicitly named concrete runner view types in one erased
+  collection. Genet commit `bbd09062804` published the four-file contract.
+  S0b1 now opens a CLI-selected Djot file or honest scratch session through
+  `cambium-genet-winit-host`, maps focused-text borrowing only to the actual
+  textarea, and consumes Ctrl/Cmd+S inside Knot product state.
+- 2026-08-24: S0b2 uses the existing Genet host `Harness`, not a product test
+  driver. It resolves the editor by textbox role and label, focuses the actual
+  textarea, injects text through Rootstock's key path, saves through the real
+  Ctrl+S intercept, delivers the native close request, drops the host, and
+  reopens the real Djot file clean. The actual winit/GPU presentation receipt
+  remains a separate visual gate; it is not required to prove product state or
+  input routing.
+- 2026-08-24: Turnstone commit `f3cb758` records the corrected lane boundary:
+  A2 owns the graph runtime pool and this plan owns port surface admission.
+  The earlier overlapping Turnstone worktree paths are clear, so T0 is gated
+  by the shared Knot publication rather than file ownership.
+- 2026-08-25: an external consumer checked out current Genet `main` at
+  `1ac3727`, which contains G0, in a private Cargo Git cache. A strict
+  branch-source run and a second run using exact paths from that clean checkout
+  both remained in dependency resolution without reaching `rustc` inside the
+  verification bound. The implementation remains local for focused
+  publication; the published-source receipt and the dependency-breadth choice
+  remain open before T0.
 
 ## 8. Final done conditions
 

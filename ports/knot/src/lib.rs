@@ -11,6 +11,7 @@ mod content_classes;
 mod directory;
 mod djot_merge;
 mod document_surface;
+mod document_view;
 mod editor;
 mod endpoint;
 mod mark;
@@ -43,6 +44,10 @@ pub use document_surface::{
     KnotDocumentSaveFailureV1, KnotDocumentSaveOutcomeV1, KnotDocumentSession,
     KnotDocumentSnapshotV1, KnotDocumentSourceKindV1, KnotDocumentSourceV1,
     KnotDocumentWritePostureV1,
+};
+pub use document_view::{
+    KNOT_DOCUMENT_CSS, KnotDocumentSurfaceState, KnotDocumentView, knot_document_descriptor,
+    knot_document_surface, knot_document_view,
 };
 pub use editor::{EditOutcome, KnotEditor};
 pub use endpoint::{
