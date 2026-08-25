@@ -1,20 +1,17 @@
-//! Cambium-backed source editing with a derived Knot readout.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use cambium::{CaretSelection, TextCommand, TextInput};
+#[cfg(feature = "engine")]
 use illume::{Fold, OutlineItem, Span};
+#[cfg(feature = "engine")]
 use inker::EngineDocument;
 pub use knot_editor_host::EditOutcome;
 use knot_editor_host::KnotEditor as SharedKnotEditor;
 
-use crate::writer::{DocumentFormat, SaveOutcome, file_address, write_if_distinct};
+use crate::{DocumentFormat, SaveOutcome, write_if_distinct};
 
-/// One Djot or legacy `.knot` editor session.
-///
-/// Cambium's [`TextInput`] owns the sole source buffer. Highlighting, outline,
-/// folds, and preview are re-derived by the shared editor model.
+/// One Djot or legacy `.knot` session. Its Cambium input is the only source buffer.
 pub struct KnotEditor {
     path: Option<PathBuf>,
     address: String,
@@ -23,7 +20,6 @@ pub struct KnotEditor {
 }
 
 impl KnotEditor {
-    /// Open a file-backed Djot or legacy Knot source.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, String> {
         let path = path.into();
         let format = DocumentFormat::from_path(&path)
@@ -34,11 +30,12 @@ impl KnotEditor {
                     path.display()
                 )
             })?;
-        let original = fs::read(&path)
-            .map_err(|error| format!("could not read {}: {error}", path.display()))?;
-        let source = String::from_utf8(original)
-            .map_err(|error| format!("{} is not UTF-8: {error}", path.display()))?;
-        let address = file_address(&path)?;
+        let source = String::from_utf8(
+            fs::read(&path)
+                .map_err(|error| format!("could not read {}: {error}", path.display()))?,
+        )
+        .map_err(|error| format!("{} is not UTF-8: {error}", path.display()))?;
+        let address = crate::writer::file_address(&path)?;
         Ok(Self {
             path: Some(path),
             editor: SharedKnotEditor::scratch(address.clone(), source),
@@ -47,9 +44,7 @@ impl KnotEditor {
         })
     }
 
-    /// Start an unsaved editor with a caller-selected address.
     pub fn scratch(address: impl Into<String>, source: impl Into<String>) -> Self {
-        let source = source.into();
         let address = address.into();
         Self {
             path: None,
@@ -62,65 +57,39 @@ impl KnotEditor {
     pub fn input(&self) -> &TextInput {
         self.editor.input()
     }
-
     pub fn input_mut(&mut self) -> &mut TextInput {
         self.editor.input_mut()
     }
-
     pub fn source(&self) -> &str {
         self.editor.source()
     }
-
-    /// The stable source address used by the editor readout.
     pub fn address(&self) -> &str {
         &self.address
     }
-
     pub fn format(&self) -> DocumentFormat {
         self.format
     }
-
     pub fn selection(&self) -> CaretSelection {
         self.editor.selection()
     }
-
-    /// Apply a logical edit, motion, undo, or IME command through Cambium's
-    /// single mutation path.
     pub fn apply(&mut self, command: TextCommand) -> EditOutcome {
         self.editor.apply(command)
     }
-
-    /// Apply the byte-plus-affinity selection returned by a layout host.
     pub fn apply_layout_selection(&mut self, selection: CaretSelection) -> EditOutcome {
         self.apply(TextCommand::SetSelection(selection))
     }
-
-    pub fn highlights(&self) -> Vec<Span> {
-        self.editor.highlights()
-    }
-
-    pub fn outline(&self) -> Vec<OutlineItem> {
-        self.editor.outline()
-    }
-
-    pub fn folds(&self) -> Vec<Fold> {
-        self.editor.folds()
-    }
-
-    pub fn preview(&self) -> Result<EngineDocument, String> {
-        self.editor.preview()
-    }
-
     pub fn is_dirty(&self) -> bool {
         self.editor.is_dirty()
     }
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
 
-    /// Write the committed source bytes back to the opened file.
     pub fn save(&mut self) -> Result<SaveOutcome, String> {
         let path = self
             .path
             .as_deref()
-            .ok_or_else(|| "scratch Knot editor has no save path".to_string())?;
+            .ok_or_else(|| "scratch Knot editor has no save path".to_owned())?;
         if !self.editor.is_dirty() {
             return Ok(SaveOutcome::Unchanged);
         }
@@ -132,8 +101,21 @@ impl KnotEditor {
         Ok(outcome)
     }
 
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
+    #[cfg(feature = "engine")]
+    pub fn highlights(&self) -> Vec<Span> {
+        self.editor.highlights()
+    }
+    #[cfg(feature = "engine")]
+    pub fn outline(&self) -> Vec<OutlineItem> {
+        self.editor.outline()
+    }
+    #[cfg(feature = "engine")]
+    pub fn folds(&self) -> Vec<Fold> {
+        self.editor.folds()
+    }
+    #[cfg(feature = "engine")]
+    pub fn preview(&self) -> Result<EngineDocument, String> {
+        self.editor.preview()
     }
 }
 
@@ -146,6 +128,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "engine")]
     #[test]
     fn commands_drive_the_one_source_used_by_every_readout() {
         let mut editor = KnotEditor::scratch("memory:note", "# One\n");
@@ -185,6 +168,7 @@ mod tests {
         assert_eq!(editor.selection(), selection);
     }
 
+    #[cfg(feature = "engine")]
     #[test]
     fn ime_preedit_is_not_committed_or_fed_to_the_readout() {
         let mut editor = KnotEditor::scratch("memory:note", "# One\n");
@@ -203,7 +187,7 @@ mod tests {
     #[test]
     fn committed_commands_write_back_to_the_native_file() {
         let temp = tempdir().unwrap();
-        let path = temp.path().join("note.knot");
+        let path = temp.path().join("note.djot");
         fs::write(&path, "# One\n").unwrap();
         let mut editor = KnotEditor::open(&path).unwrap();
         editor.apply(TextCommand::Insert("\n## Two\n".into()));

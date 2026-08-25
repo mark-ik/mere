@@ -1,0 +1,18 @@
+[package]
+name = "knot-desktop"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "knot"
+path = "src/main.rs"
+
+[dependencies]
+cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+knot-document = { path = "../../knot-document" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+
+[dev-dependencies]
+genet-probe = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+tempfile = "3"

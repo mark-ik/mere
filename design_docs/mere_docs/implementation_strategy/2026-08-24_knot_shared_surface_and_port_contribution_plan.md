@@ -2,8 +2,9 @@
 
 **Date:** 2026-08-24
 **Status:** in progress; current-origin G0 published; K0, reusable Knot
-surface, desktop wrapper, and semantic host receipt implemented; Mere
-published-source verification and publication open
+surface, narrow `knot-document` package, desktop wrapper, and semantic host
+receipt implemented and independently green; Mere publication and Turnstone T0
+open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -167,6 +168,24 @@ surface and thin desktop wrapper into a narrow Knot UI package that depends on
 the existing `KnotDocumentSession`. Turnstone should not inherit unrelated
 vault, inference, replication, or endpoint dependencies merely to mount one
 document surface.
+
+### 2026-08-25: the document surface now has its own dependency boundary
+
+`knot-document` now owns the existing editor wrapper, one-document session,
+writer, Cambium component, and erased-session constructor. Its default feature
+set keeps the one `TextInput`, native file writes, status, and surface while
+leaving parsing, preview, canonicalization, Inker, and Nematic behind `engine`.
+The broad `knot-editor` port enables that feature and re-exports the old API;
+the standalone binary lives in an excluded `knot-desktop` wrapper so ordinary
+Mere resolution no longer acquires the Winit host.
+
+An independent package mirror using exact current-origin Genet sources reached
+`rustc` and passed five default tests. The engine-feature pass passed eleven
+tests, including the restored conversion and preview receipts. Nematic's HTML
+fragment default is disabled for this dependency because Knot uses only its
+Djot and Markdown engines. The remaining engine cost is Nematic's current
+unconditional Errand dependency, not Knot vault, replication, inference, or
+endpoint code.
 
 ## 3. Boundary
 
@@ -454,6 +473,13 @@ through UI admission.
   verification bound. The implementation remains local for focused
   publication; the published-source receipt and the dependency-breadth choice
   remain open before T0.
+- 2026-08-25: extracted `ports/knot-document` and the excluded
+  `ports/knot/desktop` wrapper. The broad port preserves its API through
+  re-exports and enables the optional engine conversion layer. An independent
+  exact-current-origin verifier passed five default tests and eleven engine
+  tests. This closes the dependency-breadth choice and local source receipt;
+  publishing Mere remains the cross-repository gate before Turnstone imports
+  the new package.
 
 ## 8. Final done conditions
 
