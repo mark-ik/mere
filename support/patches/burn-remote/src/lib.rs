@@ -370,14 +370,17 @@ mod tests {
         });
         assert_eq!(session.device_index, 0);
         assert_eq!(&*session.credential, credential.as_slice());
-        assert!(rt.block_on(async {
-            tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                control.close_session(session.id),
-            )
-            .await
-            .expect("targeted close reaches teardown")
-        }));
+        assert!(
+            rt.block_on(async {
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    control.close_session(session.id),
+                )
+                .await
+                .expect("targeted close reaches teardown")
+            })
+            .unwrap()
+        );
         assert!(rt.block_on(control.sessions()).is_empty());
 
         let runtime = rt.handle().clone();
@@ -489,7 +492,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(50));
         release.wait();
 
-        assert!(rt.block_on(closer).unwrap());
+        assert!(rt.block_on(closer).unwrap().unwrap());
         assert!(rt.block_on(control.sessions()).is_empty());
         drop(send);
         drop(node);

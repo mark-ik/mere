@@ -57,7 +57,7 @@ where
         .await?;
 
     if let Err(error) = authorize(&init) {
-        service.finish_session(init.session_id).await;
+        service.finish_session(init.session_id).await?;
         return Err(error);
     }
 
@@ -69,7 +69,7 @@ where
     } = match service.bind_session(init.session_id).await {
         Ok(binding) => binding,
         Err(error) => {
-            service.finish_session(init.session_id).await;
+            service.finish_session(init.session_id).await?;
             return Err(error);
         }
     };
@@ -89,7 +89,7 @@ where
         .map_err(|err| format!("Failed to encode session handshake response: {err}"))?;
     if let Err(error) = sink.send(info.into()).await {
         drop(task_sender);
-        service.finish_session(init.session_id).await;
+        service.finish_session(init.session_id).await?;
         return Err(error);
     }
 
@@ -115,7 +115,17 @@ where
                 };
                 let bytes = rmp_serde::to_vec(&response)
                     .map_err(|err| format!("Failed to encode task response: {err}"))?;
-                sink.send(bytes.into()).await?;
+                let sent = tokio::select! {
+                    biased;
+                    changed = writer_close.changed() => {
+                        if changed.is_err() || *writer_close.borrow() {
+                            break;
+                        }
+                        continue;
+                    }
+                    sent = sink.send(bytes.into()) => sent,
+                };
+                sent?;
             }
             sink.close().await
         }
@@ -180,11 +190,11 @@ where
         }
     };
 
-    // Teardown: drop our task sender and close the session so its worker drains and exits, which
-    // closes the response queue and ends the writer; then await the writer so we don't tear the
-    // runtime down mid-send.
+    // Teardown: drop our task sender and finish the session. `finish_session` waits until the
+    // worker drains, syncs, drops its interpreter, and releases backend allocations. That closes
+    // the response queue and ends the writer; await it so we don't tear the runtime down mid-send.
     drop(task_sender);
-    service.finish_session(init.session_id).await;
+    service.finish_session(init.session_id).await?;
     match writer_result.await {
         Ok(Ok(())) => {}
         Ok(Err(err)) => log::warn!("Session response writer failed: {err}"),

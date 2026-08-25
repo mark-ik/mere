@@ -32,7 +32,11 @@
 
 use std::collections::HashMap;
 
-use sceno::{HeldPlacement, InstanceId, Representation, Scene, SourceRef};
+use sceno::{
+    HeldPlacement, InstanceId, ProjectedItem, Representation, RoutedRelation, Scene, SourceIx,
+    SourceRef,
+};
+use scenotime::SceneSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// What kind of thing a reader is being told about.
@@ -113,15 +117,69 @@ impl FrozenScene {
     /// presents, and an item the interactive realization does not draw is not
     /// something a reader is missing.
     pub fn freeze(scene: &Scene, name: &str, names: &HashMap<SourceRef, String>) -> Self {
+        Self::freeze_parts(
+            name,
+            names,
+            scene
+                .items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| (InstanceId(index as u32), item)),
+            |source| scene.sources.get(source.0 as usize),
+            scene.relations.iter(),
+            &scene.unmet_holds,
+        )
+    }
+
+    /// Freeze the sparse table snapshot a Graphshell viewer actually owns.
+    ///
+    /// Snapshot slots are preserved as instance identities. Active items are
+    /// never compacted into a dense scene, because doing that would renumber
+    /// every item after a tombstone and break source-to-instance parity across
+    /// a remote session.
+    pub fn freeze_snapshot(
+        snapshot: &SceneSnapshot,
+        name: &str,
+        names: &HashMap<SourceRef, String>,
+    ) -> Self {
+        Self::freeze_parts(
+            name,
+            names,
+            snapshot
+                .tables
+                .items
+                .iter()
+                .enumerate()
+                .filter_map(|(index, item)| Some((InstanceId(index as u32), item.as_ref()?))),
+            |source| {
+                snapshot
+                    .tables
+                    .sources
+                    .get(source.0 as usize)
+                    .and_then(Option::as_ref)
+            },
+            snapshot.tables.relations.iter().filter_map(Option::as_ref),
+            &snapshot.tables.unmet_holds,
+        )
+    }
+
+    fn freeze_parts<'a>(
+        name: &str,
+        names: &HashMap<SourceRef, String>,
+        items: impl IntoIterator<Item = (InstanceId, &'a ProjectedItem)>,
+        source_at: impl Fn(SourceIx) -> Option<&'a SourceRef>,
+        relations: impl IntoIterator<Item = &'a RoutedRelation>,
+        unmet_holds: &[HeldPlacement],
+    ) -> Self {
         let mut instances = Vec::new();
         let mut name_by_instance = HashMap::new();
         let mut unnamed = 0;
 
-        for (index, item) in scene.items.iter().enumerate() {
+        for (instance, item) in items {
             if !item.visible {
                 continue;
             }
-            let Some(source) = scene.sources.get(item.source.0 as usize) else {
+            let Some(source) = source_at(item.source) else {
                 continue;
             };
             let supplied = names.get(source);
@@ -129,7 +187,6 @@ impl FrozenScene {
                 unnamed += 1;
             }
             let resolved = supplied.cloned().unwrap_or_else(|| source.id.clone());
-            let instance = InstanceId(index as u32);
             name_by_instance.insert(instance, resolved.clone());
             instances.push(FrozenInstance {
                 instance,
@@ -140,9 +197,8 @@ impl FrozenScene {
             });
         }
 
-        let relations = scene
-            .relations
-            .iter()
+        let relations = relations
+            .into_iter()
             .filter_map(|relation| {
                 Some(FrozenRelation {
                     from: name_by_instance.get(&relation.from)?.clone(),
@@ -152,14 +208,14 @@ impl FrozenScene {
             })
             .collect::<Vec<_>>();
 
-        let summary = summarize(instances.len(), relations.len(), scene.unmet_holds.len());
+        let summary = summarize(instances.len(), relations.len(), unmet_holds.len());
 
         Self {
             name: name.to_owned(),
             summary,
             instances,
             relations,
-            unmet_holds: scene.unmet_holds.clone(),
+            unmet_holds: unmet_holds.to_vec(),
             unnamed,
         }
     }
@@ -298,9 +354,11 @@ impl FrozenScene {
         html.push_str("<ul class=\"frozen-instances\">");
         for instance in &self.instances {
             html.push_str(&format!(
-                "<li role=\"{}\" aria-label=\"{}\" data-source-id=\"{}\">{}</li>",
+                "<li role=\"{}\" aria-label=\"{}\" data-projection-instance=\"{}\" data-source-adapter=\"{}\" data-source-id=\"{}\">{}</li>",
                 instance.role.aria_role(),
                 escape(&instance.name),
+                instance.instance.0,
+                escape(&instance.source.adapter),
                 escape(&instance.source.id),
                 escape(&instance.name)
             ));
@@ -330,12 +388,37 @@ impl FrozenScene {
         html.push_str("<table class=\"frozen-alternate\">");
         html.push_str("<caption>Every item and relationship in this projection</caption>");
         html.push_str("<thead><tr><th scope=\"col\">Kind</th><th scope=\"col\">Name</th><th scope=\"col\">Detail</th></tr></thead><tbody>");
-        for (kind, name, detail) in self.rows() {
+        for instance in &self.instances {
+            let detail = match instance.role {
+                FrozenRole::Symbol => "symbol",
+                FrozenRole::Object => "object",
+                FrozenRole::LiveContent => "live content",
+            };
             html.push_str(&format!(
-                "<tr><td>{}</td><th scope=\"row\">{}</th><td>{}</td></tr>",
-                escape(&kind),
-                escape(&name),
-                escape(&detail)
+                "<tr data-projection-instance=\"{}\" data-source-adapter=\"{}\" data-source-id=\"{}\"><td>instance</td><th scope=\"row\">{}</th><td>{}</td></tr>",
+                instance.instance.0,
+                escape(&instance.source.adapter),
+                escape(&instance.source.id),
+                escape(&instance.name),
+                detail
+            ));
+        }
+        for relation in &self.relations {
+            html.push_str(&format!(
+                "<tr><td>relation</td><th scope=\"row\">{} to {}</th><td>{}</td></tr>",
+                escape(&relation.from),
+                escape(&relation.to),
+                escape(relation.kind.as_deref().unwrap_or("related"))
+            ));
+        }
+        for held in &self.unmet_holds {
+            html.push_str(&format!(
+                "<tr data-source-adapter=\"{}\" data-source-id=\"{}\"><td>unmet placement</td><th scope=\"row\">{}</th><td>asked for ({}, {})</td></tr>",
+                escape(&held.source.adapter),
+                escape(&held.source.id),
+                escape(&held.source.id),
+                held.at.x,
+                held.at.y
             ));
         }
         html.push_str("</tbody></table></figure>");
@@ -370,7 +453,10 @@ mod tree {
 
             let mut instance_ids = Vec::new();
             for instance in &self.instances {
-                let id = node_id_for_path(&format!("{path}/instance/{}", instance.source.id));
+                let id = node_id_for_path(&format!(
+                    "{path}/instance/{}/{}/{}",
+                    instance.instance.0, instance.source.adapter, instance.source.id
+                ));
                 let mut node = Node::new(match instance.role {
                     FrozenRole::Symbol => Role::Image,
                     FrozenRole::Object => Role::ListItem,
@@ -551,6 +637,60 @@ mod tests {
                 .iter()
                 .any(|i| i.named_by_fallback && i.name == "coastal-outline")
         );
+    }
+
+    #[test]
+    fn snapshot_freeze_preserves_sparse_instances_and_full_source_mapping() {
+        use scenotime::{Revision, SceneEpoch, SceneSnapshot};
+
+        let template = coastal().items[0].clone();
+        let mut scene = Scene::new();
+        let shared = scene.intern_source(SourceRef::new("fixture.alpha", "shared"));
+        let colliding = scene.intern_source(SourceRef::new("fixture.beta", "shared"));
+        for source in [shared, shared, colliding, shared] {
+            scene.items.push(ProjectedItem {
+                source,
+                ..template.clone()
+            });
+        }
+        let mut snapshot =
+            SceneSnapshot::from_dense(SceneEpoch(8), Revision(3), scene).expect("snapshot");
+        snapshot.tables.items[0] = None;
+        snapshot.tables.item_order[0] = None;
+        snapshot.validate().expect("sparse snapshot remains valid");
+
+        let names = named(&[
+            ("fixture.alpha", "shared", "Alpha shared"),
+            ("fixture.beta", "shared", "Beta shared"),
+        ]);
+        let frozen = FrozenScene::freeze_snapshot(&snapshot, "Sparse projection", &names);
+        let mapping = frozen
+            .instances
+            .iter()
+            .map(|instance| (instance.instance, instance.source.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            mapping,
+            vec![
+                (InstanceId(1), SourceRef::new("fixture.alpha", "shared")),
+                (InstanceId(2), SourceRef::new("fixture.beta", "shared")),
+                (InstanceId(3), SourceRef::new("fixture.alpha", "shared")),
+            ],
+            "tombstones do not renumber instances and repeated sources stay repeated"
+        );
+
+        let html = frozen.to_html("sparse");
+        for (instance, source) in mapping {
+            let carried = format!(
+                "data-projection-instance=\"{}\" data-source-adapter=\"{}\" data-source-id=\"{}\"",
+                instance.0, source.adapter, source.id
+            );
+            assert_eq!(
+                html.matches(&carried).count(),
+                2,
+                "the navigable list and table both carry {carried}"
+            );
+        }
     }
 
     #[test]
@@ -797,6 +937,23 @@ mod tests {
         assert_eq!(
             labels[0], "Coastal map",
             "the document announces itself first"
+        );
+    }
+
+    #[cfg(feature = "accesskit")]
+    #[test]
+    fn repeated_source_instances_keep_distinct_accessibility_nodes() {
+        use std::collections::HashSet;
+
+        let mut scene = coastal();
+        scene.items.push(scene.items[1].clone());
+        let frozen = FrozenScene::freeze(&scene, "Repeated source", &HashMap::new());
+        let tree = frozen.to_ux_tree("repeated");
+        let ids = tree.nodes.iter().map(|(id, _)| *id).collect::<HashSet<_>>();
+        assert_eq!(
+            ids.len(),
+            tree.nodes.len(),
+            "two appearances of one source need separate accessibility nodes"
         );
     }
 

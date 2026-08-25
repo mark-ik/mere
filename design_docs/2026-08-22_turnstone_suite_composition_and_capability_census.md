@@ -191,25 +191,28 @@ still closed:
 This permits a clean internal pane inventory but does not yet let a port offer
 one reusable surface to its standalone host and Turnstone.
 
-This seam is half-planned already (cross-reference added 2026-08-22): the
+The source half is planned already (lane correction 2026-08-24): the
 [pane registry and graph panes plan](../../turnstone/design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md)
-(lane A2 open) removes `System` and replaces `Custom(String)` with a
-namespaced `External` pane source, which covers source identity. What A2 does
-not yet carry is the rest of the record below — the provider's retained
-component or admitted-session factory, command and settings contributions,
-and capability/unavailability facts. The contract here extends that lane
-rather than starting beside it.
+(landed A1) removes `System` and replaces `Custom(String)` with a namespaced
+`External` pane source, which covers source identity. A2 is the graph runtime
+pool and `PaneId` / `graph_id` propagation lane. It does not own provider
+admission. The dedicated
+[Knot shared-surface plan](mere_docs/implementation_strategy/2026-08-24_knot_shared_surface_and_port_contribution_plan.md)
+owns that seam and uses A2 only for a surface that needs multi-graph context.
 
-The missing seam is a narrow surface contribution record containing:
+The corrected seam separates a data-only surface description containing:
 
 - provider and stable surface id;
 - supported source and surface roles;
 - source schema and typed snapshot version;
 - multiplicity and placement hints;
-- command contributions;
-- settings contribution, if any;
-- a retained component factory or admitted-session factory;
-- capability and unavailability facts.
+- potential capabilities.
+
+An application-owned provider admits a source and returns an object-safe
+retained session or a typed unavailable reason. Current capabilities belong to
+that live session. Commands continue through Turnstone's shell provider
+registry, and settings continue through `SettingsProvider` / `SettingsRef`, so
+the surface contract does not duplicate either registry.
 
 The host remains responsible for window placement, focus, theme, accessibility
 hosting, and command aggregation. The provider remains responsible for its
@@ -530,4 +533,3 @@ The suite composition is real when:
 - Signalman remains usable for recovery with Turnstone absent;
 - handler selection, status, errors, accessibility, commands, and settings
   survive both sovereign and composed hosts.
-

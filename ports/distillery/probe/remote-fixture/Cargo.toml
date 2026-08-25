@@ -9,28 +9,33 @@ description = "Two-peer native WGPU receipt for Distillery's lease-bound Burn Re
 [workspace]
 
 [dependencies]
-burn = { version = "0.22.0-pre.2", default-features = false, features = ["remote", "std"] }
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["remote", "std", "wgpu"] }
 burn-wgpu = { version = "=0.22.0-pre.2", default-features = false, features = ["std"] }
+cubecl = { version = "=0.11.0-pre.2", default-features = false }
 distillery = { path = "../..", features = ["remote"] }
 esp = { path = "../../../../crates/intel/esp", features = ["bert"] }
 identity = { package = "personae", path = "../../../../crates/dramatis/personae" }
 mesh = { package = "mere-mesh", path = "../../../../crates/mesh/mesh" }
 mesh-host = { package = "mere-mesh-host", path = "../../../../crates/mesh/host" }
 muniment = { path = "../../../../crates/eidetic/muniment" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 transport = { package = "mere-transport", path = "../../../../crates/murm/transport" }
+
+[features]
+default = []
+fusion = ["burn-wgpu/fusion"]
+autotune = ["burn-wgpu/autotune"]
+fusion-autotune = ["fusion", "autotune"]
 
 [patch.crates-io]
 burn-cubecl = { path = "../../../../support/patches/burn-cubecl" }
 burn-remote = { path = "../../../../support/patches/burn-remote" }
 cubecl-runtime = { path = "../../../../support/patches/cubecl-runtime" }
 cubek-reduce = { path = "../../../../support/patches/cubek-reduce" }
-p2panda-auth = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 p2panda-core = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 p2panda-discovery = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 p2panda-encryption = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-net = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 p2panda-store = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-stream = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
 p2panda-sync = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }

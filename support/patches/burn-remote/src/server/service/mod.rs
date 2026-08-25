@@ -55,6 +55,10 @@ pub(crate) trait SessionService: Send + Sync + 'static {
     /// enumerate every device behind the address.
     fn device_count(&self) -> u32;
 
-    /// Remove a finished session and acknowledge server-requested closure.
-    fn finish_session(&self, session_id: SessionId) -> impl Future<Output = ()> + Send;
+    /// Remove a finished session and acknowledge closure after its worker has released backend
+    /// state.
+    fn finish_session(
+        &self,
+        session_id: SessionId,
+    ) -> impl Future<Output = Result<(), String>> + Send;
 }

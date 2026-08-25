@@ -40,7 +40,7 @@ use burn_router::{Graph, TensorInterpreter};
 use burn_std::id::StreamId;
 #[cfg(not(target_family = "wasm"))]
 use tokio::runtime::Handle;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::server::local_comm::LocalCommService;
 use crate::server::spawn::spawn_detached;
@@ -92,7 +92,7 @@ where
     T: TensorTransfer<B>,
 {
     /// Start the session worker; the worker runs until every clone of the returned sender is
-    /// dropped, then flushes and exits.
+    /// dropped, then flushes, releases its backend allocations, and signals completion.
     pub(crate) fn spawn(
         session_id: SessionId,
         runner: TensorInterpreter<B>,
@@ -100,7 +100,7 @@ where
         transfer: Arc<T>,
         local_comm: Arc<LocalCommService<B>>,
         probe: TelemetryProbe,
-    ) -> mpsc::Sender<Task> {
+    ) -> (mpsc::Sender<Task>, oneshot::Receiver<()>) {
         let handler = SessionHandler {
             session_id,
             runner,
@@ -111,24 +111,31 @@ where
             probe,
         };
         let (sender, receiver) = mpsc::channel(TASK_CHANNEL_CAPACITY);
-        handler.drive(receiver);
-        sender
+        let (finished, completion) = oneshot::channel();
+        handler.drive(receiver, finished);
+        (sender, completion)
     }
 
     // Must be called from within the runtime that owns the endpoint: it captures `Handle::current`.
     #[cfg(not(target_family = "wasm"))]
-    fn drive(self, receiver: mpsc::Receiver<Task>) {
+    fn drive(self, receiver: mpsc::Receiver<Task>, finished: oneshot::Sender<()>) {
         let handle = Handle::current();
         let session_id = self.session_id;
         std::thread::Builder::new()
             .name(format!("burn-remote-session-{session_id}"))
-            .spawn(move || handle.block_on(self.run(receiver)))
+            .spawn(move || {
+                handle.block_on(self.run(receiver));
+                let _ = finished.send(());
+            })
             .expect("Failed to spawn session worker thread");
     }
 
     #[cfg(target_family = "wasm")]
-    fn drive(self, receiver: mpsc::Receiver<Task>) {
-        spawn_detached(self.run(receiver));
+    fn drive(self, receiver: mpsc::Receiver<Task>, finished: oneshot::Sender<()>) {
+        spawn_detached(async move {
+            self.run(receiver).await;
+            let _ = finished.send(());
+        });
     }
 
     /// Drain the task channel, running each task to completion in arrival order, then tear the

@@ -240,7 +240,7 @@ impl<B: BackendIr> RemoteSessionService<B> {
         self.matching_sessions(RunKey { job, lease }).await
     }
 
-    async fn close_run(&self, key: RunKey) {
+    async fn close_run(&self, key: RunKey) -> Result<(), String> {
         if let Ok(mut state) = self.state.write() {
             state.active.remove(&key);
         }
@@ -259,9 +259,10 @@ impl<B: BackendIr> RemoteSessionService<B> {
                 break;
             }
             for session in sessions {
-                self.protocol.close_session(session.id).await;
+                self.protocol.close_session(session.id).await?;
             }
         }
+        Ok(())
     }
 
     async fn matching_sessions(&self, key: RunKey) -> usize {
@@ -346,7 +347,10 @@ impl<B: BackendIr> MeshResource for RemoteBurnResource<B> {
             let mut observed = false;
             loop {
                 if control.is_cancelled() {
-                    self.service.close_run(key).await;
+                    self.service
+                        .close_run(key)
+                        .await
+                        .map_err(ResourceError::Backend)?;
                     return Err(mesh::Cancelled.into());
                 }
                 let sessions = self.service.matching_sessions(key).await;

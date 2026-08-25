@@ -40,24 +40,32 @@ The native remote fixture is a separate two-peer forcing proof for the same
 MiniLM row. It mounts Distillery's production Burn protocol on one real
 p2panda/Iroh endpoint, connects from a second, loads ESP's BERT model onto an
 authorized remote device, and runs the server on native WGPU. The receipt uses
-plain WGPU with Fusion and autotune disabled; the first forcing run found a
-separate Burn Fusion executor crash in the MiniLM graph, which is retained as
-an upstream/backend sidequest rather than confused with lease cancellation:
+plain WGPU with Fusion and autotune disabled. It also observes CubeCL's
+process-local allocator across all server-device streams. The default command
+keeps the passing lease/reclaim/recovery proof small:
 
 ```powershell
 ports/distillery/probe/run-remote-minilm.ps1
 ```
 
+`-Matrix` builds plain and Fusion/autotune profiles separately, then runs local
+and remote MiniLM once each in fresh processes. Every row has a configurable
+outer timeout and separate stdout/stderr capture. A failing combined remote row
+automatically adds local/remote Fusion-only and autotune-only diagnostics.
+
 The fixture compares all 384 remote values with ESP's native control and the
 first eight with this probe's pinned BrowserWebGpu reference. It then reclaims
 the lease while a configurable model batch is still in flight, requires the
-request to fail without hanging, and repeats the numerical proof under a fresh
-lease and session. Like `run-probe.ps1`, its nested workspace cannot use
-Cargo's `--locked` flag because inherited path-workspace patch tables reorder
-unused entries. The checked-in lockfile still pins the selected graph, and the
-fixture explicitly patches to Mere's production Burn Remote and CubeCL sources.
-It also restates Mere's p2panda fork patch because nested workspaces do not
-inherit the root patch table. The passing machine receipt is
+request to fail without hanging, requires active CubeCL allocations and bytes
+in use to return exactly to baseline, and repeats the numerical and cleanup
+proof under a fresh lease and session. Reserved allocator bytes are recorded
+but are not a live-allocation gate; driver VRAM remains outside the claim.
+Unlike the browser workspace, this nested fixture has a stable committed lock
+and runs Cargo from outside the checkout with `--locked`, so gitignored local
+patch redirects cannot contaminate the receipt. It explicitly patches to
+Mere's production Burn Remote and CubeCL sources and restates Mere's p2panda
+fork because nested workspaces do not inherit the root patch table. The first
+passing machine receipt is
 [`receipts/2026-08-23_remote_minilm.json`](receipts/2026-08-23_remote_minilm.json).
 
 ## Claim boundary
