@@ -159,6 +159,7 @@ impl ViewIntent {
             && self.camera.is_none()
             && self.focus.is_none()
             && self.strategy.is_none()
+            && !self.mirror_tiles
     }
 }
 
@@ -327,6 +328,23 @@ mod tests {
         save_view_intent(&dir, &frame, 1, &intent).unwrap();
         let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
         assert_eq!(restored.strategy.as_deref(), Some("phyllotaxis.default"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn mirror_tiles_round_trip_and_count_as_nonempty() {
+        let dir = temp_session_dir("mirror-tiles");
+        let frame = fixture_frame();
+        let mut intent = ViewIntent::new();
+        intent.mirror_tiles = true;
+        assert!(
+            !intent.is_empty(),
+            "mirror mode alone is durable pane scope"
+        );
+        save_view_intent(&dir, &frame, 1, &intent).unwrap();
+        let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
+        assert!(restored.mirror_tiles);
+        assert_eq!(restored, intent);
         fs::remove_dir_all(&dir).ok();
     }
 
