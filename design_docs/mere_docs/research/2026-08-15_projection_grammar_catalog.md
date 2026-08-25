@@ -296,6 +296,11 @@ This reclassification keeps the evocative scene names available to Turnstone and
 - Canvas separates face, body, collider, placement, and behavior concerns.
 - Numen defines fields with global, regional, node-attached, and polygon extents plus lifecycle.
 - Platen is the projection compiler in Mere's composition spine. It is not graph authority.
+- Cambium's `graph_canvas` can derive Sprigging paint and aligned retained
+  semantic targets from one swatch. Retinue Signalman `8cea8f9` proves those
+  realizations share one focus order, pointer-capture and action route,
+  AccessKit tree, and genet-probe address space. This is realization evidence,
+  not a new portable grammar primitive.
 
 ### Contract gaps exposed by the catalog
 

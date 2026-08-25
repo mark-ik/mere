@@ -1,10 +1,10 @@
 # Projection Receipts Plan
 
 **Date:** 2026-08-23  
-**Status:** active; Wave 1 receipts landed 2026-08-23. Mer3ly is the headed
-first consumer and gazette Ledger the heterogeneous second; the Gazette port
-promotion and this plan landed at `0da3b8ba`. Wave 2 FT6 and FT7 closed
-2026-08-25; FT8 is next, and wave 3 remains explicitly gated.
+**Status:** active; Waves 1 and 2 are complete. Mer3ly is the headed first
+consumer and gazette Ledger the heterogeneous second; the Gazette port
+promotion and this plan landed at `0da3b8ba`. FT6, FT7, and FT8 closed
+2026-08-25. Wave 3 remains explicitly gated.
 **Scope:** sequence the nine acceptance receipts of the
 [projection-scenes direction note](../../2026-08-23_projection_scenes_and_graph_native_platform.md)
 §8 into feature targets with named forcing consumers and done-conditions.
@@ -207,21 +207,25 @@ preserved in all three realizations. The Mere platform seam is at
 `4c42847272489c41a20dc515884e83f3b413059a`.
 Done when: receipt 5 holds verbatim. **Met.**
 
-**FT8. Mixed realization (receipt 4).**
+**FT8. Mixed realization (receipt 4) — complete 2026-08-25.**
 Context: genet-side — one focus and pointer-capture model across DOM content
 and custom leaves (web-platform host contract, meristem component contract),
 Sprigging or GPU marks, AccessKit and genet-probe addressability (B2's
-precedent). This target is also the natural forcing site for Cambium's
-scene-hosting and keyboard-navigable Matrix components: the reusable
-component work lands here, forced by a genet-hosted consumer, rather than
-speculatively in wave 1 where the sandbox realization is web-side.
-Tasks: one genet-hosted scene combining DOM controls, Sprigging or GPU marks,
-accessible semantic targets, and automation addressing under a single focus
-and action model.
-Forcing consumer: candidate only — a Turnstone pane or a Knot surface; named
-at execution. The census's pane-contribution seam is its own lane and is not
-assumed here.
-Done when: receipt 4 holds verbatim.
+precedent).
+Receipt: Retinue Signalman's Network face is the forcing consumer. One
+`GraphCanvasSwatch` supplies the shipping Sprigging leaf and Cambium's aligned
+retained semantic targets. The focused
+`mixed_realization_uses_one_scene_focus_and_action_model` test proves GPU-ready
+node marks beside an ordinary DOM control, one Tab order, one AccessKit tree,
+one pointer-capture route across the two realizations, genet-probe addressing,
+and actions from both surfaces updating the same `DesktopState`. Retinue
+commit: `8cea8f9`.
+Boundary: this receipt forced the product paint builder out of the binary and
+reused Cambium's existing `graph_canvas`; it did not force a new scene-hosting
+abstraction or a keyboard-navigable Cambium Matrix. Those richer component
+questions remain consumer-gated. The Turnstone pane-contribution and Knot
+surface lanes remain separate work.
+Done when: receipt 4 holds verbatim. **Met.**
 
 ## 5. Wave 3 — field receipts (gated)
 
@@ -254,8 +258,10 @@ radio model for Current.
   and probe-drivable projections serve FT1, FT7, and FT8 without new
   machinery.
 - The mer3ly sandbox realization is web-side; Cambium components are
-  genet-side. Wave 1 proofs ride the sandbox; Cambium's Matrix and
-  scene-hosting components wait for FT8's genet-hosted consumer.
+  genet-side. Signalman supplied FT8's genet-hosted consumer through the
+  existing `graph_canvas`. The receipt forced a reusable product paint
+  builder, not a new generic scene-hosting abstraction or a keyboard-navigable
+  Matrix component.
 - Gazette: the resolver was promoted to `ports/gazette` on 2026-08-23; picker
   and feed surfaces are unbuilt; `gaz` is the contact-store home.
 - The collapse audit found no emitted collapsed-name registry id. Mer3ly's
@@ -309,8 +315,7 @@ radio model for Current.
   using Notochord/personae policy to a source-free viewer, and the
   `FrozenScene` semantic-table realization. The Mere platform implementation
   is `302bbe72d7597b7573e14199ce926bd3b03eea7f`; the Mer3ly consumer is
-  `4c42847272489c41a20dc515884e83f3b413059a`. FT8 is next;
-  A3 stage two and A5 remain gated by their own consumer rules.
+  `4c42847272489c41a20dc515884e83f3b413059a`.
   Verification: all 29 `mer3ly-repo-graph` tests pass against Mere's pushed
   revision, and the generated `/repos/` page exposes 116 instance-mapped
   Matrix controls. Repeated `Mere` and `Turnstone` sources keep distinct
@@ -319,3 +324,11 @@ radio model for Current.
   contract passes with the active firmware-data lane. On clean origin, its
   asset-only test passes under `--locked`; the other three tests stop at the
   pre-existing retained-firmware digest mismatch before exercising FT7.
+- 2026-08-25: FT8 closed in Retinue Signalman at `8cea8f9`. Its Network face
+  derives the shipping Sprigging leaf and Cambium's retained semantic targets
+  from one `GraphCanvasSwatch`. The focused receipt proves GPU-ready marks and
+  an ordinary DOM control share one Tab order, AccessKit tree, pointer-capture
+  route, genet-probe address space, and `DesktopState` action model. The full
+  locked, offline Signalman suite passes 50 tests with `-j 1`. This is a
+  deterministic mixed-realization contract receipt, not a headed hardware or
+  owner-interaction receipt. It does not open A3 stage two, A5, or wave 3.

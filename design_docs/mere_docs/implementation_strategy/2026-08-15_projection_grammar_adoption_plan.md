@@ -6,7 +6,8 @@ one, A4+C2, and A2 are closed. Turnstone `648bf19` is B1's definitive close,
 including routed screen-reader interaction. The Projection Receipts Plan's
 coordinated spatial/Matrix views close A2's resolution half. A3 stage two and
 A5 retain their entrance gates. FT7 is closed through the local, admitted
-remote, and frozen Matrix parity receipt; FT8 is next.
+remote, and frozen Matrix parity receipt. FT8 is closed through Retinue
+Signalman's mixed-realization receipt at `8cea8f9`.
 The Scenograph family is now on an unpublished 0.0.4 development line with
 Score v4. Mer3ly ruled an authority-grade consumer 2026-08-16. This plan turns the projection grammar report's
 findings (the claude.ai design artifact "Projection Grammar Report", two
@@ -894,5 +895,13 @@ not settled without it.
   using Notochord/personae policy to a source-free viewer, and the
   `FrozenScene` semantic-table realization. The Mere platform implementation
   is `302bbe72d7597b7573e14199ce926bd3b03eea7f`; the Mer3ly consumer is
-  `4c42847272489c41a20dc515884e83f3b413059a`. FT8 is next. A3 stage two and A5
-  remain gated by their own consumer rules.
+  `4c42847272489c41a20dc515884e83f3b413059a`.
+- 2026-08-25: **FT8 closed.** Retinue Signalman's Network face derives its
+  Sprigging marks and Cambium retained semantic targets from one
+  `GraphCanvasSwatch`. Its focused receipt proves those marks and ordinary DOM
+  controls share one focus order, pointer-capture route, AccessKit tree,
+  genet-probe address space, and `DesktopState` action model. The full locked,
+  offline Signalman suite passes 50 tests at Retinue `8cea8f9`. The receipt
+  reused Cambium's existing `graph_canvas`; it did not force a generic
+  scene-hosting abstraction or keyboard-navigable Cambium Matrix. A3 stage two
+  and A5 remain gated by their own consumer rules.
