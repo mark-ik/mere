@@ -389,7 +389,7 @@ fn document_text(content_type: Option<&str>, body: &str) -> String {
         .unwrap_or(false)
     {
         let doc = genet_static_dom::StaticDocument::parse(body);
-        if let Some(text) = genet_extract::extract_main_text(&doc) {
+        if let Some(text) = fleece::extract_main_text(&doc) {
             return text;
         }
     }

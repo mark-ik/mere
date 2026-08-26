@@ -18,7 +18,7 @@ kernel = { workspace = true }
 nematic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-genet-extract = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+fleece = { workspace = true }
 genet-static-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
 url = "2.5"
 
