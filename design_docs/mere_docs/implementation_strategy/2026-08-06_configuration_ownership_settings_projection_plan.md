@@ -148,7 +148,9 @@ so Pandect now owns the narrow `write_bytes_with_backup` replacement mechanism.
 Notochord and Distillery use it; their paths, schemas, and validation remain
 product-owned. Knot's local remove-then-rename write must migrate to this
 mechanism once the WebRTC lane releases `ports/knot/src/settings.rs`; this
-slice deliberately leaves that file and manifest untouched.
+slice deliberately leaves that file and manifest untouched. Three focused
+Pandect tests prove replacement cleanup, interrupted-backup recovery, and
+restoration after a failed final rename.
 
 ## Carried forward from the superseded plan
 

@@ -541,8 +541,11 @@ through UI admission.
   adds no host abstraction, command, scheduler, device policy, or second
   resident model. P0 is not frozen: Turnstone still needs to register/admit
   this provider through its existing dynamic map and prove that no
-  provider-specific renderer arm was added. The full-shell build and the
-  focused Mere surface compiler gate remain open.
+  provider-specific renderer arm was added. The full-shell build remains open.
+  An exact-source Distillery harness passed all
+  five library tests, including the surface snapshot and exact receipt render;
+  the installed configure/inspect binary check and package Clippy with warnings
+  denied passed against the same integrated source graph.
 
 ## 8. Final done conditions
 

@@ -97,6 +97,13 @@ plus caller-supplied resident settings and receipts. Turnstone registration,
 an operational product composition, model manifest browsing, the streaming
 console, and the first deterministic trainer remain later slices.
 
+The installed library path passes five exact-source tests covering explicit
+settings replacement, stable profile reopen and private paths, caller-owned
+resident binding, surface snapshot rendering, and exact resident receipt
+rendering. The configure/inspect binary check and package Clippy with warnings
+denied also pass against the exact-source graph. The full workspace and
+Turnstone composition gates remain separate.
+
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/distillery`.
 

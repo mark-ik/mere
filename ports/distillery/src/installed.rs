@@ -149,6 +149,15 @@ impl DistilleryPaths {
         &self.root
     }
 
+    /// Create the product-private directory before the mesh owner opens its
+    /// caller-configured store there.
+    ///
+    /// This is filesystem mechanism only. It does not choose a retention or
+    /// admission policy and does not open either store.
+    pub fn prepare(&self) -> std::io::Result<()> {
+        fs::create_dir_all(&self.root)
+    }
+
     /// The redb database path a mesh-policy owner may open.
     pub fn mesh_store_path(&self) -> PathBuf {
         self.root.join(MESH_STORE_FILENAME)
@@ -434,9 +443,9 @@ mod tests {
             },
             lease: LeasePolicy { max_skew_ms: 0 },
         };
-        let store =
-            MeshStore::at_path_with_retention(authority.paths(MESH).mesh_store_path(), policy)
-                .unwrap();
+        let paths = authority.paths(MESH);
+        paths.prepare().unwrap();
+        let store = MeshStore::at_path_with_retention(paths.mesh_store_path(), policy).unwrap();
         let settings = ResidentSettings {
             tick_every: Duration::from_secs(1),
             maintenance_every: None,

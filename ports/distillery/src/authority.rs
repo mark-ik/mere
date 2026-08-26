@@ -7,7 +7,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use mesh::{BlobRef, JobBoard, MeshStoreError, RetentionCheckpoint, RetentionEffect};
+#[cfg(feature = "remote")]
+use mesh::JobBoard;
+use mesh::{BlobRef, MeshStoreError, RetentionCheckpoint, RetentionEffect};
 use mesh_host::{HostError, MeshHost, Step, TransportBlobSpace};
 use muniment::Backend;
 

@@ -2,9 +2,10 @@
 
 **Date**: 2026-08-12  
 **Status**: D0 complete; D1 resident authority lifecycle complete. Its installed
-Personae/settings binding and read-only Cambium surface are implemented pending
-the focused Cargo gate, operational host composition, and Turnstone
-registration. D2's configured browser embedding matrix, first exact decoder row, lease-bound
+Personae/settings binding, configure/inspect binary, and read-only Cambium
+surface pass an exact-source focused Cargo gate; operational host composition,
+Turnstone registration, and the full workspace gate remain open. D2's
+configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
@@ -188,9 +189,10 @@ operational standalone host. Its `configure` verb persists the explicit
 profile; `inspect` proves that it opens from Personae and reports protection.
 Starting a resident remains gated on a product composition owner supplying a
 real mesh retention/admission policy and device `HostConfig`/`ResidentSettings`.
-Those constructors exist through `InstalledAuthority`; the focused installed
-compiler gate remains open. A CLI default here would be fabricated
-scheduler/device authority.
+Those constructors exist through `InstalledAuthority`; the installed library
+tests and configure/inspect binary now compile against the exact integrated
+source graph. A CLI default here would be fabricated scheduler/device
+authority.
 
 Distillery now also homes D2's standalone browser development probe without
 making it product chrome. The recovered BrowserWebGpu path now passes four
@@ -280,8 +282,11 @@ it exists.
   a resident only from caller-owned mesh and device facts. The
   `distillery-installed` binary is the configure/inspect bootstrap boundary;
   it records the deliberate resident-start gate instead of hiding it behind a
-  permissive device or cadence default. Formatting and diff checks passed;
-  focused compilation and Clippy remain open after package-cache contention.
+  permissive device or cadence default. An isolated exact-source harness passed
+  all five Distillery library tests, the installed binary check passed, and
+  package Clippy passed with warnings denied against the same integrated source
+  graph. The full workspace gate remains open while C0/C1 owns the primary
+  checkout.
 - **2026-08-26, artifact foundation**: Eidetic gained typed `TrainingCorpus`
   and `EvalReport` payloads with fixed schema references, validating
   serialization, and typed-store round trips. The corpus uses separate,
@@ -297,5 +302,6 @@ it exists.
   `ResidentReceipt`). It opens no authority and has no mutable controls. This
   is the second product half of the Knot contribution seam; a Turnstone
   registration/admission receipt remains P0 work, along with generic AccessKit
-  projection and a full-shell build. Focused surface compilation and Clippy are
-  pending the same shared Cargo package-cache lock.
+  projection and a full-shell build. The surface is included in the green
+  five-test exact-source Distillery library receipt; package Clippy also passes
+  with warnings denied.
