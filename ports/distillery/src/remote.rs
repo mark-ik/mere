@@ -382,13 +382,13 @@ mod tests {
     use burn_backend::{TensorData, ops::FloatTensorOps};
     use burn_flex::Flex;
     use burn_remote::{RemoteBackend, RemoteDevice};
-    use personae::{IdentityProvider, InMemoryProvider};
     use mesh::{
         DeterminismClass, DeviceConditions, HostFacts, JobSpec, LeaseTerms, MESH_AUTHOR_SALT,
         MemoryBlobSpace, MeshEvent, MeshStore, ResourceRegistry, RunError, SyncedMesh, run_job_for,
         to_operation,
     };
     use mesh_host::{HostConfig, ManualClock, MeshHost, ObservedConditions, Step};
+    use personae::{IdentityProvider, InMemoryProvider};
 
     use crate::{BlobCustody, Distillery, RetentionSettings};
 

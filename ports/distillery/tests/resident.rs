@@ -9,13 +9,13 @@ use std::time::Duration;
 use distillery::{
     ResidentAuthority, ResidentReceipt, ResidentSettings, ResidentStorage, RetentionSettings,
 };
-use personae::{IdentityProvider, InMemoryProvider};
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{
     AvailabilityPolicy, ErasurePolicy, KeepBound, LeasePolicy, MESH_AUTHOR_SALT, MeshEvent,
     MeshRetentionPolicy, MeshStore, PayloadRule, PolicyRevision, ResourceId, SyncedMesh,
 };
 use mesh_host::{HostConfig, MeshHost, Step};
+use personae::{IdentityProvider, InMemoryProvider};
 use transport::{BlobHash, BlobStore, P2pandaTransport};
 
 const MESH: [u8; 32] = [0xd2; 32];

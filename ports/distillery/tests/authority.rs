@@ -8,13 +8,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use distillery::{Distillery, RetentionSettings};
-use personae::{IdentityProvider, InMemoryProvider};
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{
     AvailabilityPolicy, ErasurePolicy, KeepBound, LeasePolicy, MESH_AUTHOR_SALT, MeshEvent,
     MeshRetentionPolicy, MeshStore, PayloadRule, PolicyRevision, ResourceId, SyncedMesh,
 };
 use mesh_host::{HostConfig, ManualClock, MeshHost, Step, TransportBlobSpace};
+use personae::{IdentityProvider, InMemoryProvider};
 use transport::{BlobStore, P2pandaTransport};
 
 const MESH: [u8; 32] = [0xd1; 32];

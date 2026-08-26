@@ -11,11 +11,14 @@ cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
 parity are proven. Driver-level release is proven for the supported plain
 remote profile. The immutable TrainingCorpus and EvalReport artifact contract
-now carries the first local trainer receipt: the deterministic trainer
-forcing fixture trains a real PEFT LoRA adapter from a stored corpus's
-training partition and strictly beats the unchanged baseline on the held-out
-partition. Browser-level physical GPU allocation release remains unobservable
-through current browser APIs rather than an actionable implementation gate.
+carries the first local trainer receipt, and the trainer resource that
+receipt decided now runs as a real mesh job: `esp.train.peft-lora/v1`
+trains from a stored corpus's training partition, publishes the adapter
+blobs, manifest, and evaluation report into the composed Eidetic store, and
+commits an integer-only receipt in which the adapter strictly beats the
+unchanged baseline. Browser-level physical GPU allocation release remains
+unobservable through current browser APIs rather than an actionable
+implementation gate.
 
 ## 1. Purpose
 
@@ -281,10 +284,14 @@ resource input/output shape:
   under one explicit metric.
 
 A trainer resource is a function from the input refs to the output refs, and
-the mesh job carrying it owns none of the artifact truth. The follow-on work
-is that resource itself, plus stronger models when a consumer asks; the
-Turnstone admission, operational host-policy composition, and full workspace
-gates continue to track in §8.
+the mesh job carrying it owns none of the artifact truth. That resource now
+exists as `esp.train.peft-lora/v1` (`ports/distillery/src/trainer.rs`, the
+`trainer` feature): the job's one input slot carries an explicit
+`TrainRequest`, its committed output is the integer-only `TrainReceipt`
+naming the published refs, and the artifacts land in the Eidetic store the
+embedder composed the resource over. Stronger models wait for a consumer;
+the Turnstone admission, operational host-policy composition, and full
+workspace gates continue to track in §8.
 
 ### Progress
 
@@ -315,9 +322,10 @@ gates continue to track in §8.
   eidetic model corridor, saves twelve ranking cases as `OpaqueBlob` engrams,
   and materializes a canonical disjoint `TrainingCorpus`. A deterministic
   trainer — full-batch central finite differences with a backtracking line
-  search over rank-1 `v_proj` LoRA factors — reads only the training
-  partition back out of the store and evaluates loss through the real
-  safetensors loader using the exact PEFT merge formula. The published
+  search over rank-1 `v_proj` LoRA factors, now shared as
+  `esp::infer::decoder::train` — reads only the training partition back out
+  of the store and evaluates every loss through the real decoder forward
+  with the adapter loader's own delta composition. The published
   adapter (PEFT-named safetensors, `adapter_config.json`, manifest with
   `training_corpus_root` and explicit `training_method`) loads through the
   real `PeftLoraAdapterLoader` alongside the unchanged baseline; on the six
@@ -338,3 +346,23 @@ gates continue to track in §8.
   projection and a full-shell build. The surface is included in the green
   five-test exact-source Distillery library receipt; package Clippy also passes
   with warnings denied.
+- **2026-08-26, trainer resource**: The forcing receipt's shape now runs as a
+  real mesh job. The shared trainer moved into `esp::infer::decoder::train`
+  (the fixture consumes it and reproduces its receipt exactly), and
+  Distillery's new `trainer` feature registers `TrainerResource` at
+  `esp.train.peft-lora/v1` through the ordinary `ResourceRegistry` seam —
+  composed by its embedder over an Eidetic store and a host-selected device,
+  declared `VerificationClass::ProducerOnly` because no cross-device bit
+  receipt has been earned. The whole run executes on one blocking thread:
+  explicit-ref loads (base manifest, tokenizer cross-check, validated
+  corpus), training from the training partition only, evaluation of both
+  sessions through the real `PeftLoraAdapterLoader`, then publication, with
+  enforced equality between the manifest's content addresses and what the
+  store landed. The integration receipt posts one staged `TrainRequest`,
+  drives the host to `Step::Completed`, reads the committed integer-only
+  `TrainReceipt` from the board's output blob, and finds the adapter
+  manifest, blobs, and `EvalReport` in the composed store under exactly the
+  receipt's refs — baseline 0/6 versus adapter 4/6 at `RankingAt{3}`, the
+  fixture's numbers, via a mesh job. Verified from a clean `origin/main`
+  worktree: the receipt, both distillery feature sets' tests, the full esp
+  `decoder-lora` suite, and package Clippy with warnings denied.

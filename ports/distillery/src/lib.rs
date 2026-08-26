@@ -44,6 +44,8 @@ mod installed;
 mod remote;
 mod resident;
 mod surface;
+#[cfg(feature = "trainer")]
+mod trainer;
 
 pub use authority::{
     BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
@@ -64,6 +66,10 @@ pub use surface::{
     DISTILLERY_INSTALLED_CSS, DistilleryInstalledSnapshotV1, DistilleryInstalledSurfaceState,
     DistilleryResidentSnapshotV1, distillery_installed_descriptor, distillery_installed_surface,
     distillery_installed_view,
+};
+#[cfg(feature = "trainer")]
+pub use trainer::{
+    TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt, TrainRequest, TrainerResource,
 };
 
 /// Crate version.
