@@ -49,7 +49,7 @@ anchor embed's lib.rs cites).
   **Fleece boundary audit (2026-08-26):** the live host capture path supplies
   extracted page text to the trace corpus. `mere-eidetic-search` consumes those
   traces rather than a DOM, so its direct Fleece dependency is unused and is
-  removed by `genet/design_docs/2026-08-26_fleece_followthrough_plan.md`.
+  now removed under `genet/design_docs/2026-08-26_fleece_followthrough_plan.md`.
 - **W4 — canvas semantic search.** Wire `canvas::canvas_search` +
   `canvas::field_bridge` into the canvas's live surface: a query becomes a
   similarity field over the canvas through quint, with
