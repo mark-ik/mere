@@ -832,6 +832,24 @@ mod tests {
     }
 
     #[test]
+    fn html_fallback_extracts_main_text_through_fleece() {
+        let clip = fragment_from_body(
+            "https://example.test/article",
+            Some("Fallback title".to_string()),
+            Some("text/html; charset=utf-8"),
+            r#"<nav>Site chrome</nav><main><h1>Article heading</h1><p>The retained article paragraph.</p></main><footer>Footer chrome</footer>"#,
+            &EngineRegistry::new(),
+            &EngineRoutePolicy::default(),
+        );
+
+        assert!(clip.blocks.is_none());
+        assert!(clip.text.contains("Article heading"));
+        assert!(clip.text.contains("The retained article paragraph."));
+        assert!(!clip.text.contains("Site chrome"));
+        assert!(!clip.text.contains("Footer chrome"));
+    }
+
+    #[test]
     fn submission_target_is_not_imported_as_a_navigation_link() {
         let blocks = vec![Block::Paragraph {
             spans: vec![InlineSpan::Submit {

@@ -48,14 +48,17 @@ pub fn enqueue_fetched_html_links(
     depth: u32,
     fetched: &Fetched,
 ) -> usize {
-    if !is_html_content_type(fetched.content_type.as_deref()) {
+    let Some(syntax) = html_syntax(fetched.content_type.as_deref()) else {
         return 0;
-    }
+    };
 
     let Ok(base) = url::Url::parse(page_url) else {
         return 0;
     };
-    let document = genet_static_dom::StaticDocument::parse_auto(&fetched.body);
+    let document = match syntax {
+        HtmlSyntax::Html => genet_static_dom::StaticDocument::parse(&fetched.body),
+        HtmlSyntax::Xhtml => genet_static_dom::StaticDocument::parse_xml(&fetched.body),
+    };
     let links = fleece::extract_links(&document)
         .into_iter()
         .filter_map(|link| base.join(&link.href).ok().map(|url| url.to_string()))
@@ -63,14 +66,21 @@ pub fn enqueue_fetched_html_links(
     frontier.enqueue(&links, depth)
 }
 
-fn is_html_content_type(content_type: Option<&str>) -> bool {
-    content_type.is_some_and(|content_type| {
-        content_type.split(';').next().is_some_and(|media_type| {
-            let media_type = media_type.trim();
-            media_type.eq_ignore_ascii_case("text/html")
-                || media_type.eq_ignore_ascii_case("application/xhtml+xml")
-        })
-    })
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HtmlSyntax {
+    Html,
+    Xhtml,
+}
+
+fn html_syntax(content_type: Option<&str>) -> Option<HtmlSyntax> {
+    let media_type = content_type?.split(';').next()?.trim();
+    if media_type.eq_ignore_ascii_case("text/html") {
+        Some(HtmlSyntax::Html)
+    } else if media_type.eq_ignore_ascii_case("application/xhtml+xml") {
+        Some(HtmlSyntax::Xhtml)
+    } else {
+        None
+    }
 }
 
 /// The minimum interval between fetches to the same host.

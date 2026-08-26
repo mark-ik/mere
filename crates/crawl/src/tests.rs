@@ -256,6 +256,28 @@ fn fetched_non_html_response_bypasses_fleece() {
 }
 
 #[test]
+fn fetched_xhtml_uses_the_declared_xml_syntax() {
+    assert_eq!(
+        html_syntax(Some("application/xhtml+xml; charset=utf-8")),
+        Some(HtmlSyntax::Xhtml),
+    );
+    let mut f = Frontier::new("https://example.test/", CrawlPolicy::default());
+    let _ = f.next();
+    let fetched = Fetched::text(
+        Some("application/xhtml+xml".to_string()),
+        r#"<html xmlns="http://www.w3.org/1999/xhtml"><body><a href="/xhtml">link</a></body></html>"#,
+    );
+    assert_eq!(
+        enqueue_fetched_html_links(&mut f, "https://example.test/", 0, &fetched),
+        1,
+    );
+    assert_eq!(
+        f.next(),
+        Some(("https://example.test/xhtml".to_string(), 1)),
+    );
+}
+
+#[test]
 fn fetched_html_links_respect_the_depth_cap() {
     let mut f = Frontier::new(
         "https://example.test/",

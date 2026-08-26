@@ -74,21 +74,28 @@ const WEBFINGER_ACCEPT: &str = "application/jrd+json, application/json;q=0.9";
 /// only admits declared HTML, parses it through the static DOM, and asks Fleece
 /// whether the document has a readable article.
 pub fn article_from_html(content_type: Option<&str>, html: &str) -> Option<fleece::Article> {
-    if !is_html_content_type(content_type) {
-        return None;
-    }
-    let document = genet_static_dom::StaticDocument::parse_auto(html);
+    let document = match html_syntax(content_type)? {
+        HtmlSyntax::Html => genet_static_dom::StaticDocument::parse(html),
+        HtmlSyntax::Xhtml => genet_static_dom::StaticDocument::parse_xml(html),
+    };
     fleece::extract_article(&document)
 }
 
-fn is_html_content_type(content_type: Option<&str>) -> bool {
-    content_type.is_some_and(|content_type| {
-        content_type.split(';').next().is_some_and(|media_type| {
-            let media_type = media_type.trim();
-            media_type.eq_ignore_ascii_case("text/html")
-                || media_type.eq_ignore_ascii_case("application/xhtml+xml")
-        })
-    })
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HtmlSyntax {
+    Html,
+    Xhtml,
+}
+
+fn html_syntax(content_type: Option<&str>) -> Option<HtmlSyntax> {
+    let media_type = content_type?.split(';').next()?.trim();
+    if media_type.eq_ignore_ascii_case("text/html") {
+        Some(HtmlSyntax::Html)
+    } else if media_type.eq_ignore_ascii_case("application/xhtml+xml") {
+        Some(HtmlSyntax::Xhtml)
+    } else {
+        None
+    }
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -499,6 +506,20 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn supplied_xhtml_uses_the_declared_xml_syntax() {
+        assert_eq!(
+            html_syntax(Some("application/xhtml+xml; charset=utf-8")),
+            Some(HtmlSyntax::Xhtml),
+        );
+        let article = article_from_html(
+            Some("application/xhtml+xml"),
+            r#"<html xmlns="http://www.w3.org/1999/xhtml"><head><title>XML field notes</title></head><body><main><article><h1>XML field notes</h1><p>The first paragraph carries enough prose to be a reader article.</p><p>The second paragraph confirms this is structured XHTML content.</p></article></main></body></html>"#,
+        )
+        .expect("declared XHTML should produce an article without a sniff marker");
+        assert_eq!(article.title.as_deref(), Some("XML field notes"));
     }
 
     #[test]
