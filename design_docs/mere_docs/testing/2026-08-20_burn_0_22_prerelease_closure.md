@@ -131,10 +131,10 @@ manifest or full feature-matrix pass, and the temporary pins were reverted.
 
 The corresponding temporary `cargo check -p distillery --features remote
 -j 1` could not reach rustc: Cargo stopped while updating the shared `genet`
-checkout because another process held its packfile. A dependency-only
-pre.3 Burn Remote probe is running separately; until a clean Distillery
+checkout because another process held its packfile. Until a clean Distillery
 workspace check completes, Distillery pre.3 source compatibility remains
-unverified.
+unverified. A dependency-only probe was not completed and contributes no
+receipt.
 
 Patch disposition against the pre.3 published sources:
 

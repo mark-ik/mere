@@ -60,7 +60,7 @@ The same closure passed `cargo package -p esp` from a detached clean worktree;
 Cargo built and verified the extracted package. Repeat that receipt after the
 stable repin because dependency packaging is part of the release gate.
 
-Stable Burn 0.22 is still unpublished as of the 2026-08-22 crates.io recheck,
+Stable Burn 0.22 is still unpublished as of the 2026-08-26 pre.3 audit,
 so stable publication closure remains open. Remote-adapter acceptance no
 longer shares that gate: Mark explicitly reopened the prerelease row, the
 targeted close patch and Distillery adapter landed 2026-08-23, and a clean

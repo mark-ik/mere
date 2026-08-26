@@ -1,17 +1,18 @@
 # Distillery v0 Plan
 
 **Date**: 2026-08-12  
-**Status**: D0 complete; D1 resident authority lifecycle complete and its
-installed Personae/settings binding implemented pending the focused Cargo gate;
-D2's
-configured browser embedding matrix, first exact decoder row, lease-bound
+**Status**: D0 complete; D1 resident authority lifecycle complete. Its installed
+Personae/settings binding and read-only Cambium surface are implemented pending
+the focused Cargo gate, operational host composition, and Turnstone
+registration. D2's configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
 parity are proven. Driver-level release is proven for the supported plain
 remote profile. The immutable TrainingCorpus and EvalReport artifact contract
-is now ready for the first local trainer receipt. The installed-port authority
-and browser-level physical GPU telemetry remain open.
+is ready for the first local trainer receipt. Browser-level physical GPU
+allocation release remains unobservable through current browser APIs rather
+than an actionable implementation gate.
 
 ## 1. Purpose
 

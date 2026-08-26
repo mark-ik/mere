@@ -10,7 +10,10 @@ the first draft written in `repos/esp/design_docs/`; that file is now a pointer
 here. D2's configured embedding matrix and first exact browser decoder row now
 pass, including cooperative token-boundary cancellation, explicit browser
 device teardown, and exact recovery in a fresh worker. Physical GPU-allocation
-release remains unobservable in Chromium.
+release remains unobservable in Chromium. Immutable ModelSession plus the real
+PEFT LoRA row are complete, and Eidetic's training/evaluation artifact boundary
+has landed. The next model execution gate is one deterministic local trainer
+fixture; communal compute remains later.
 **Scope**: fold `vates` and `sibylla` into one crate named `esp` inside mere,
 retire the two names, and connect the crate to the intention corpus it serves.
 The lanes themselves keep their own plans; this doc consolidates the code and
@@ -272,14 +275,16 @@ completes into: not a chat box, a bounded resident with a scoped faculty. The
 thoughtform words (servitor, tulpa, egregore) stay product language, not a
 runtime type hierarchy.
 
-**Sequence after E4:** steps 1 through 4 have executable prerelease receipts:
+**Sequence after E4:** steps 1 through 5 have executable prerelease receipts:
 M2's versioned namespace and registry, M3's lease projection and owner reclaim,
 the chosen Burn 0.22 prerelease migration, and Burn Remote as a Distillery
-resource on the shared endpoint. Stable repinning remains release-gated. The
-next model-facing step is 5. immutable model sessions plus one real adapter,
-then 6. local training and communal compute. D2's headed-browser track remains
-independent evidence, now also the numerical reference for the remote MiniLM
-forcing receipt.
+resource on the shared endpoint, followed by immutable ModelSession plus one
+real adapter. Stable repinning remains release-gated. Lane 4 now has immutable
+corpus and evaluation artifacts; the next model-facing step is the local
+deterministic trainer receipt, not another session abstraction. Communal
+compute follows only after that local receipt and portable checkpoints. D2's
+headed-browser track remains independent evidence, now also the numerical
+reference for the remote MiniLM forcing receipt.
 
 ## 5. Posture (does this necessitate going beyond mere?)
 

@@ -65,7 +65,10 @@ artifact. A first 269,060,552-byte BF16 SmolLM2 decoder row also passes exact
 Transformers and ESP NdArray token references, cold/warm worker streaming,
 cooperative token-boundary cancellation, explicit `GPUDevice.destroy()`, and
 exact recovery in a fresh worker. The upper model boundaries and physical GPU
-allocation release remain unmeasured.
+allocation release remain outside the browser API's observable surface and are
+not actionable browser gates. The separate native Windows driver receipt proves
+the two supported plain-WGPU remote cycles release their model allocations with
+zero retained growth; larger browser rows remain consumer-gated.
 
 The lease-bound Burn Remote adapter is now live behind Distillery's `remote`
 feature. It mounts on the resident p2panda/Iroh endpoint, admits only a signed
@@ -88,8 +91,11 @@ that selection. `inspect` opens it and reports the selected profile and
 Personae protection, but intentionally does not start a resident. A real start
 still requires a mesh owner to supply its store and retention policy, and a
 device owner to supply `HostConfig` and `ResidentSettings`; Distillery must not
-invent scheduler or device-policy authority. Cambium views, model manifest
-browsing, physical GPU-allocation telemetry, and training remain later slices.
+invent scheduler or device-policy authority. The read-only
+`distillery.installed.v1` Cambium surface projects this same profile/path model
+plus caller-supplied resident settings and receipts. Turnstone registration,
+an operational product composition, model manifest browsing, the streaming
+console, and the first deterministic trainer remain later slices.
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/distillery`.
