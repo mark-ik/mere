@@ -19,7 +19,7 @@ nematic = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 fleece = { workspace = true }
-genet-static-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-static-dom = { workspace = true }
 url = "2.5"
 
 [dev-dependencies]
