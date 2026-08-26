@@ -11,9 +11,11 @@ cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
 parity are proven. Driver-level release is proven for the supported plain
 remote profile. The immutable TrainingCorpus and EvalReport artifact contract
-is ready for the first local trainer receipt. Browser-level physical GPU
-allocation release remains unobservable through current browser APIs rather
-than an actionable implementation gate.
+now carries the first local trainer receipt: the deterministic trainer
+forcing fixture trains a real PEFT LoRA adapter from a stored corpus's
+training partition and strictly beats the unchanged baseline on the held-out
+partition. Browser-level physical GPU allocation release remains unobservable
+through current browser APIs rather than an actionable implementation gate.
 
 ## 1. Purpose
 
@@ -265,12 +267,24 @@ Mesh, and the host scheduler's authorities.
 
 ### Next forcing task
 
-Run one local, deterministic recall or ranking fixture that materializes a
-canonical `TrainingCorpus`, publishes an adapter manifest with that corpus as
-its provenance, then writes an `EvalReport` showing the adapter strictly beats
-the unchanged baseline on the same fixed cases. That receipt decides the first
-trainer resource input/output shape; no trainer framework is justified before
-it exists.
+Complete (2026-08-26): `crates/intel/esp/tests/trainer_forcing.rs` is the
+local, deterministic ranking fixture. The receipt decides the first trainer
+resource input/output shape:
+
+- **Inputs**: the base `ModelManifest` ref, its tokenizer blob ref, the
+  `TrainingCorpus` ref (only `training_source_engrams` may be read while
+  training), and explicit hyperparameters recorded in the manifest's
+  `training_method`. Nothing is defaulted or inferred from job facts.
+- **Outputs**: the adapter weight blob, the adapter config blob, the
+  `ModelAdapterManifest` whose `training_corpus_root` names the corpus, and
+  the `EvalReport` comparing baseline and adapter on the held-out partition
+  under one explicit metric.
+
+A trainer resource is a function from the input refs to the output refs, and
+the mesh job carrying it owns none of the artifact truth. The follow-on work
+is that resource itself, plus stronger models when a consumer asks; the
+Turnstone admission, operational host-policy composition, and full workspace
+gates continue to track in §8.
 
 ### Progress
 
@@ -295,6 +309,25 @@ it exists.
   plus the provenance links already reserved by `ModelAdapterManifest`. No
   training, evaluation runtime, Mesh job, lease, checkpoint, or Distillery
   authority was added.
+- **2026-08-26, trainer forcing fixture**: The always-run ESP integration
+  receipt (`cargo test -p esp --features decoder-lora`, fixture
+  `trainer_forcing.rs`) stores the tiny synthetic llama triple through the
+  eidetic model corridor, saves twelve ranking cases as `OpaqueBlob` engrams,
+  and materializes a canonical disjoint `TrainingCorpus`. A deterministic
+  trainer — full-batch central finite differences with a backtracking line
+  search over rank-1 `v_proj` LoRA factors — reads only the training
+  partition back out of the store and evaluates loss through the real
+  safetensors loader using the exact PEFT merge formula. The published
+  adapter (PEFT-named safetensors, `adapter_config.json`, manifest with
+  `training_corpus_root` and explicit `training_method`) loads through the
+  real `PeftLoraAdapterLoader` alongside the unchanged baseline; on the six
+  held-out cases the expected-token rank moves from 7–8 to [3, 2, 2, 6, 2,
+  4], a 0/6-versus-4/6 `RankingAt{limit: 3}` receipt (training loss 3.4603 →
+  3.4581). The stored `EvalReport` round-trips, reports the strict
+  improvement, and passes `validate_for_adapter` against the stored manifest.
+  Verified from a clean `origin/main` worktree with an isolated target dir:
+  the fixture, the full esp `decoder-lora` suite, and package Clippy with
+  warnings denied.
 - **2026-08-26, read-only contributed surface**: The
   `distillery.installed.v1` descriptor and erased Cambium session consume the
   installed authority's profile/path projection and only resident facts the
