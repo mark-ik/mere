@@ -5,7 +5,7 @@
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
 host receipt implemented and independently green; Turnstone T0 consumer core
 and user invocation landed, including explicit read-only admission; generic
-accessibility and the full shell build receipt remain open
+accessibility landed; the full shell build receipt remains open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -368,8 +368,11 @@ input routes refuse without mutation. Turnstone `a37e6a1` adds editable and
 read-only file-choice commands, mints the selected path into the versioned
 provider source, and inserts the legacy pane and matching blueprint atomically.
 Source-bearing actions remain host-only because a pane grant must not imply
-local-file authority. The generic DOM is not yet joined to Turnstone's
-AccessKit projection.
+local-file authority. Genet `b8de627` and `4e60f93`, plus Turnstone `0c105a7`,
+join each laid-out generic DOM to the shell's AccessKit tree with namespaced
+identity, pane-translated painted bounds, real DOM focus, distinct Focus and
+Click routing, hidden-node omission, live-region state, disabled-state
+suppression, and Knot's editable versus read-only semantics.
 
 Reuse A6 for commands and A7's `SettingsProvider` direction. Do not add command
 or settings arrays to the surface descriptor. Preserve all existing Knot
@@ -516,6 +519,19 @@ through UI admission.
   read-only admission. A concurrent Cargo package-cache lock and the existing
   broad resolver prevented a full-shell compile from reaching `rustc`; generic
   AccessKit projection and that build receipt remain open T0 gates.
+- 2026-08-26: Genet `b8de627` published retained document roles, read-only
+  state, and distinct Focus and Click actions; `4e60f93` then excluded hidden
+  nodes, retained live-region and disabled state, suppressed actions on
+  disabled controls, and repaired focus fallback. Turnstone `0c105a7`
+  published the generic contribution bridge: independent DOM ids are
+  namespaced per pane, exact retained bounds are translated into window space,
+  contributed subtrees join the same tree used by the OS adapter and scenario
+  assertions, and Focus and Click route back to their original DOM nodes.
+  The exact Genet source harness passed nine tests and the exact Turnstone
+  composition harness passed three after exposing and correcting one type
+  inference error. The broad workspace check again spent its bounded run in
+  dependency resolution without reaching `rustc`; the full-shell build receipt
+  therefore remains open rather than being inferred from the focused gates.
 
 ## 8. Final done conditions
 
