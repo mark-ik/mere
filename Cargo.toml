@@ -238,31 +238,31 @@ register-theme = { path = "crates/system/registry/register-theme" }
 # like the rest of the genet components. Local edit loop: the gitignored
 # .cargo/config.toml patches these to the genet working copy; copy it from
 # the committed .cargo/config.toml.example, whose paths are relative.
-inker = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-document-canvas = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-nematic = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b", default-features = false }
-fleece = { version = "0.4.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-knot-editor-host = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b", default-features = false }
-illume = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-cambium = { version = "0.3.3", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-scrying-engine = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-graft-engine = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-weld-engine = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
+inker = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+document-canvas = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+nematic = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03", default-features = false }
+fleece = { version = "0.4.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+knot-editor-host = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03", default-features = false }
+illume = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+cambium = { version = "0.3.3", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+scrying-engine = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+graft-engine = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+weld-engine = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
 
 # Centralized 2026-08-26. These were previously restated in each member with a
 # full git spec, so a genet bump meant editing fifteen files and a missed one
 # silently forked the lineage. Stated once here; members inherit with
 # `foo.workspace = true` and add only their own features/optional flags.
-genet-scripted-dom = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-layout-dom-api = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-layout_dom_api = { package = "layout-dom-api", version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-genet-livery = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-genet-probe = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-genet-static-dom = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-errand = { version = "0.3.4", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-netfetcher = { version = "0.1.1", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
-verso-tile = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
+genet-scripted-dom = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+layout-dom-api = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+layout_dom_api = { package = "layout-dom-api", version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+genet-livery = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+genet-probe = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+genet-static-dom = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+errand = { version = "0.3.4", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+netfetcher = { version = "0.1.1", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+verso-tile = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
 netrender = { version = "=0.1.2", git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 paint_list_api = { version = "=0.1.2", git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 paint_list_render = { version = "=0.1.2", git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
@@ -476,17 +476,17 @@ burn-cubecl = { path = "support/patches/burn-cubecl" }
 # read-only active-session receipt. Delete it when an upstream release exposes
 # equivalent control and passes the lease-reclaim receipt.
 burn-remote = { path = "support/patches/burn-remote" }
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b", version = "=0.1.0" }
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b", version = "=0.1.0" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03", version = "=0.1.0" }
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
 # inherited by consumers, so Mere restates the same immutable Genet revision.
-taffy = { package = "genet-taffy", version = "=0.13.1", git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
+taffy = { package = "genet-taffy", version = "=0.13.1", git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
 # Same restatement, same reason: genet-livery is built against Genet's Parley
 # fork (its `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`
 # do not exist in published parley 0.10.0, which carries the same version
 # number). Missing this is invisible while a consumer resolves a *published*
 # genet-livery, and a compile error the moment it resolves the working copy.
-parley = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
+parley = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
 # The published `mere-p2panda-net =0.7.2` owns the exact-ALPN net crate. Its
 # seven sibling packages still come from the owned fork for the dalek-3 port;
 # pin them to the matching immutable release tag. There is deliberately no
@@ -531,7 +531,7 @@ swarm-discovery = { git = "https://github.com/mark-ik/swarm-discovery.git", bran
 # to its built-in force-inprocess backend and makes the OS deps optional, dropping
 # the windows 0.61 pin that let gpu-allocator latch onto 0.61.3 while wgpu-hal forced
 # 0.62.2, breaking the dx12 suballocator. With it gone, gpu-allocator unifies on 0.62.
-ipc-channel = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b" }
+ipc-channel = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
 
 # Boa JS engine, for the meerkat `scripted` render rung (the `genet.scripted` lane
 # runs page JS through `ScriptedDocument` on Boa). Mirrors genet's own patch
