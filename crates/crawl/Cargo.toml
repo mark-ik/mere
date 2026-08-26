@@ -17,6 +17,7 @@ fetch.workspace = true
 incipit.workspace = true
 linked-data.workspace = true
 fleece.workspace = true
+genet-static-dom.workspace = true
 tokio = { version = "1", features = ["rt", "time"] }
 tracing.workspace = true
 url = "2"

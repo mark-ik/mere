@@ -2,8 +2,8 @@
 
 Host-neutral crawl frontier and bounded crawl runtime for Mere.
 
-**Fleece intent receipt (2026-08-23; audited 2026-08-26):** `mere-crawl` names
-`fleece`, but no production source calls it yet. The implementation packet in
-`genet/design_docs/2026-08-26_fleece_followthrough_plan.md` adds a supplied-HTML
-helper that extracts raw links, then leaves URL resolution, deduplication,
-scope, depth, and host policy here in crawl.
+`enqueue_fetched_html_links` accepts an already fetched HTML response, extracts
+raw links through Fleece's static DOM path, resolves them against the supplied
+page URL, and passes them to the frontier. URL resolution, deduplication, scope,
+depth, fan-out, and host policy remain crawl-owned. It does not fetch documents
+or treat non-HTML responses as crawlable markup.

@@ -10,38 +10,13 @@ fn policy(max_depth: u32, max_pages: usize, max_fanout: usize, scope: HostScope)
     }
 }
 
-fn extract_links(base: &str, body: &str) -> Vec<String> {
-    let mut links = Vec::new();
-    let mut rest = body;
-    while let Some(idx) = rest.find("href='").or_else(|| rest.find("href=\"")) {
-        let quote = rest.as_bytes()[idx + 5] as char;
-        let after = &rest[idx + 6..];
-        let Some(end) = after.find(quote) else {
-            break;
-        };
-        let href = &after[..end];
-        let resolved = if let Ok(url) = url::Url::parse(href) {
-            url.to_string()
-        } else if let Ok(url) = url::Url::parse(base).and_then(|b| b.join(href)) {
-            url.to_string()
-        } else {
-            href.to_string()
-        };
-        links.push(resolved);
-        rest = &after[end + 1..];
-    }
-    links
-}
-
 fn test_process_page(
     frontier: &mut Frontier,
     url: &str,
     depth: u32,
     fetched: &Fetched,
 ) -> Vec<GraphContribution> {
-    let targets = extract_links(url, &fetched.body);
-    frontier.enqueue(&targets, depth);
-    if targets.is_empty() {
+    if enqueue_fetched_html_links(frontier, url, depth, fetched) == 0 {
         Vec::new()
     } else {
         vec![GraphContribution::default()]
@@ -234,6 +209,69 @@ fn process_page_enqueues_links_and_emits_a_contribution() {
     // The two same-host targets are now queued at depth 1.
     assert_eq!(f.next(), Some(("https://s.test/a".to_string(), 1)));
     assert_eq!(f.next(), Some(("https://s.test/b".to_string(), 1)));
+}
+
+#[test]
+fn fetched_html_links_resolve_then_apply_frontier_policy() {
+    let mut f = Frontier::new(
+        "https://example.test/guide/index.html",
+        policy(1, 100, 10, HostScope::SameHost),
+    );
+    let _ = f.next();
+    let fetched = Fetched::text(
+        Some("text/html; charset=utf-8".to_string()),
+        r#"<a href="chapter.html">chapter</a>
+           <a href="/guide/index.html#again">duplicate seed</a>
+           <a href="https://elsewhere.test/outside">outside</a>
+           <a href="mailto:editor@example.test">mail</a>
+           <a href="chapter.html#section">duplicate chapter</a>"#,
+    );
+
+    assert_eq!(
+        enqueue_fetched_html_links(&mut f, "https://example.test/guide/index.html", 0, &fetched),
+        1,
+        "relative links resolve before Frontier rejects off-scope, non-http, and duplicate URLs",
+    );
+    assert_eq!(
+        f.next(),
+        Some(("https://example.test/guide/chapter.html".to_string(), 1)),
+    );
+    assert_eq!(f.next(), None);
+}
+
+#[test]
+fn fetched_non_html_response_bypasses_fleece() {
+    let mut f = Frontier::new("https://example.test/", CrawlPolicy::default());
+    let _ = f.next();
+    let fetched = Fetched::text(
+        Some("application/json".to_string()),
+        r#"{"href":"/not-a-document-link"}"#,
+    );
+
+    assert_eq!(
+        enqueue_fetched_html_links(&mut f, "https://example.test/", 0, &fetched),
+        0,
+    );
+    assert_eq!(f.next(), None);
+}
+
+#[test]
+fn fetched_html_links_respect_the_depth_cap() {
+    let mut f = Frontier::new(
+        "https://example.test/",
+        policy(0, 100, 10, HostScope::SameHost),
+    );
+    let _ = f.next();
+    let fetched = Fetched::text(
+        Some("text/html".to_string()),
+        "<a href='/beyond-the-cap'>too deep</a>",
+    );
+
+    assert_eq!(
+        enqueue_fetched_html_links(&mut f, "https://example.test/", 0, &fetched),
+        0,
+    );
+    assert_eq!(f.next(), None);
 }
 
 #[test]

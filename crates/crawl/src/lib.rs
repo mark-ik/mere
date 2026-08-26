@@ -36,6 +36,43 @@ use robots::RobotsRules;
 
 mod sitemap;
 
+/// Enqueue HTML links from a fetched response. Fleece reports raw anchor values;
+/// crawl resolves them against `page_url`, then [`Frontier`] applies its own depth,
+/// fan-out, host-scope, scheme, and deduplication policy.
+///
+/// Non-HTML responses are intentionally bypassed. This is a supplied-response
+/// seam: it neither fetches nor changes the frontier's admission policy.
+pub fn enqueue_fetched_html_links(
+    frontier: &mut Frontier,
+    page_url: &str,
+    depth: u32,
+    fetched: &Fetched,
+) -> usize {
+    if !is_html_content_type(fetched.content_type.as_deref()) {
+        return 0;
+    }
+
+    let Ok(base) = url::Url::parse(page_url) else {
+        return 0;
+    };
+    let document = genet_static_dom::StaticDocument::parse_auto(&fetched.body);
+    let links = fleece::extract_links(&document)
+        .into_iter()
+        .filter_map(|link| base.join(&link.href).ok().map(|url| url.to_string()))
+        .collect::<Vec<_>>();
+    frontier.enqueue(&links, depth)
+}
+
+fn is_html_content_type(content_type: Option<&str>) -> bool {
+    content_type.is_some_and(|content_type| {
+        content_type.split(';').next().is_some_and(|media_type| {
+            let media_type = media_type.trim();
+            media_type.eq_ignore_ascii_case("text/html")
+                || media_type.eq_ignore_ascii_case("application/xhtml+xml")
+        })
+    })
+}
+
 /// The minimum interval between fetches to the same host.
 const POLITE_DELAY: Duration = Duration::from_secs(1);
 

@@ -68,6 +68,29 @@ use std::sync::{Mutex, OnceLock};
 const WEBFINGER_TIMEOUT: Duration = Duration::from_secs(10);
 const WEBFINGER_ACCEPT: &str = "application/jrd+json, application/json;q=0.9";
 
+/// Extract a reader article from supplied HTML without fetching or storing it.
+///
+/// Gazette's future poller owns response acquisition and persistence. This helper
+/// only admits declared HTML, parses it through the static DOM, and asks Fleece
+/// whether the document has a readable article.
+pub fn article_from_html(content_type: Option<&str>, html: &str) -> Option<fleece::Article> {
+    if !is_html_content_type(content_type) {
+        return None;
+    }
+    let document = genet_static_dom::StaticDocument::parse_auto(html);
+    fleece::extract_article(&document)
+}
+
+fn is_html_content_type(content_type: Option<&str>) -> bool {
+    content_type.is_some_and(|content_type| {
+        content_type.split(';').next().is_some_and(|media_type| {
+            let media_type = media_type.trim();
+            media_type.eq_ignore_ascii_case("text/html")
+                || media_type.eq_ignore_ascii_case("application/xhtml+xml")
+        })
+    })
+}
+
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone)]
 struct TestFetchImportOverride {
@@ -447,6 +470,34 @@ mod tests {
                 .activitypub_actors
                 .iter()
                 .any(|value| value == "https://example.net/users/mark")
+        );
+    }
+
+    #[test]
+    fn supplied_html_article_extraction_is_readable_only() {
+        let article = article_from_html(
+            Some("text/html; charset=utf-8"),
+            r#"<!doctype html><title>Field notes</title><main><article>
+                <h1>Field notes</h1>
+                <p>The first paragraph carries enough prose to be a reader article.</p>
+                <p>The second paragraph confirms this is content, not site chrome.</p>
+            </article></main>"#,
+        )
+        .expect("readable supplied HTML should produce an article");
+        assert_eq!(article.title.as_deref(), Some("Field notes"));
+        assert!(!article.blocks.is_empty());
+
+        assert!(article_from_html(Some("text/html"), "<nav><a href='/'>Home</a></nav>").is_none());
+    }
+
+    #[test]
+    fn supplied_non_html_never_enters_the_reader_extractor() {
+        assert!(
+            article_from_html(
+                Some("application/json"),
+                r#"{"title":"not HTML","body":"<main>not parsed</main>"}"#,
+            )
+            .is_none()
         );
     }
 

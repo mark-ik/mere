@@ -23,6 +23,7 @@ serde_json = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 url = "2.5"
 fleece.workspace = true
+genet-static-dom.workspace = true
 
 [lib]
 name = "gazette"
