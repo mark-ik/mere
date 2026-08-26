@@ -9,7 +9,7 @@ use std::time::Duration;
 use distillery::{
     ResidentAuthority, ResidentReceipt, ResidentSettings, ResidentStorage, RetentionSettings,
 };
-use identity::{IdentityProvider, InMemoryProvider};
+use personae::{IdentityProvider, InMemoryProvider};
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{
     AvailabilityPolicy, ErasurePolicy, KeepBound, LeasePolicy, MESH_AUTHOR_SALT, MeshEvent,

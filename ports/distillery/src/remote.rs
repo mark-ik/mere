@@ -382,7 +382,7 @@ mod tests {
     use burn_backend::{TensorData, ops::FloatTensorOps};
     use burn_flex::Flex;
     use burn_remote::{RemoteBackend, RemoteDevice};
-    use identity::{IdentityProvider, InMemoryProvider};
+    use personae::{IdentityProvider, InMemoryProvider};
     use mesh::{
         DeterminismClass, DeviceConditions, HostFacts, JobSpec, LeaseTerms, MESH_AUTHOR_SALT,
         MemoryBlobSpace, MeshEvent, MeshStore, ResourceRegistry, RunError, SyncedMesh, run_job_for,

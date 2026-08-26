@@ -34,7 +34,6 @@ remote = ["dep:burn-backend", "dep:burn-ir", "dep:burn-remote", "dep:iroh"]
 
 [dev-dependencies]
 burn-flex = { version = "=0.22.0-pre.2", features = ["default"] }
-identity.workspace = true
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 tempfile = "3"
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "e60fc879f4cfb3198ccdc3ff5713d02165af262b", version = "=0.1.0" }

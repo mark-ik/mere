@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use distillery::{Distillery, RetentionSettings};
-use identity::{IdentityProvider, InMemoryProvider};
+use personae::{IdentityProvider, InMemoryProvider};
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{
     AvailabilityPolicy, ErasurePolicy, KeepBound, LeasePolicy, MESH_AUTHOR_SALT, MeshEvent,
