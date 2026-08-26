@@ -4,8 +4,10 @@
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
 host receipt implemented and independently green; Turnstone T0 consumer core
-and user invocation landed, including explicit read-only admission; generic
-accessibility landed; the full shell build receipt remains open
+and user invocation landed, including explicit read-only admission; Distillery
+now supplies P0's second product descriptor/erased-session half; generic
+accessibility landed, while Distillery's Turnstone registration/admission
+receipt and the full shell build receipt remain open
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -532,6 +534,15 @@ through UI admission.
   inference error. The broad workspace check again spent its bounded run in
   dependency resolution without reaching `rustc`; the full-shell build receipt
   therefore remains open rather than being inferred from the focused gates.
+- 2026-08-26: Distillery's installed authority surface provides the independent
+  P0 product half: `distillery.installed.v1` has a data-only descriptor and an
+  erased Cambium session, rendering installed profile/protection, mesh-local
+  paths, bound resident settings, and the exact latest `ResidentReceipt`. It
+  adds no host abstraction, command, scheduler, device policy, or second
+  resident model. P0 is not frozen: Turnstone still needs to register/admit
+  this provider through its existing dynamic map and prove that no
+  provider-specific renderer arm was added. The full-shell build and the
+  focused Mere surface compiler gate remain open.
 
 ## 8. Final done conditions
 

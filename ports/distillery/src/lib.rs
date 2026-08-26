@@ -43,6 +43,7 @@ mod installed;
 #[cfg(feature = "remote")]
 mod remote;
 mod resident;
+mod surface;
 
 pub use authority::{
     BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
@@ -58,6 +59,11 @@ pub use remote::{
 };
 pub use resident::{
     ResidentAuthority, ResidentError, ResidentReceipt, ResidentSettings, ResidentStorage,
+};
+pub use surface::{
+    DISTILLERY_INSTALLED_CSS, DistilleryInstalledSnapshotV1, DistilleryInstalledSurfaceState,
+    DistilleryResidentSnapshotV1, distillery_installed_descriptor, distillery_installed_surface,
+    distillery_installed_view,
 };
 
 /// Crate version.

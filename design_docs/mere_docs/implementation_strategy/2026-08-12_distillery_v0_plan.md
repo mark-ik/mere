@@ -211,8 +211,12 @@ the exact output in a fresh worker. Physical GPU-allocation release remains
 unobservable. The upper embedding and decoder boundaries do not need larger
 rows until a consumer asks for them.
 
-Cambium views should follow `ResidentReceipt` after the installed authority
-selects its Personae profile and settings location. The prerelease Burn 0.22
+The first Cambium surface now follows `ResidentReceipt` after the installed
+authority selects its Personae profile and settings location. It renders only
+the selected profile/protection, mesh-local paths, bound resident settings, and
+the latest exact observer receipt; it owns no scheduler, retention, device,
+job-board, or session copy. Broad job/device/session projection waits for each
+authority to expose an equally truthful snapshot. The prerelease Burn 0.22
 migration has executed for ESP and Quint; stable repinning and package closure
 remain release-gated. The lease-bound Burn Remote source audit and targeted
 session-close seam are complete, including live-request interruption,
@@ -285,3 +289,12 @@ it exists.
   plus the provenance links already reserved by `ModelAdapterManifest`. No
   training, evaluation runtime, Mesh job, lease, checkpoint, or Distillery
   authority was added.
+- **2026-08-26, read-only contributed surface**: The
+  `distillery.installed.v1` descriptor and erased Cambium session consume the
+  installed authority's profile/path projection and only resident facts the
+  caller supplies from the real resident (`ResidentSettings` plus its latest
+  `ResidentReceipt`). It opens no authority and has no mutable controls. This
+  is the second product half of the Knot contribution seam; a Turnstone
+  registration/admission receipt remains P0 work, along with generic AccessKit
+  projection and a full-shell build. Focused surface compilation and Clippy are
+  pending the same shared Cargo package-cache lock.
