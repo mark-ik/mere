@@ -1,12 +1,19 @@
 # net-media Plan — a portable media organ for the Mere ecosystem
 
-**2026-05-26.** Plan for **`net-media`**: the Mere ecosystem's **media organ** —
-WebRTC (data channels + media tracks) and audio/video **decode** (everything we
-can get *shy of being blessed by the censors* — i.e. no DRM/EME). Sibling to
-[`netfetcher`](2026-05-25_netfetcher_plan.md) (network), `netrender`
+**2026-05-26.** Plan for **`net-media`**: the Mere ecosystem's **media organ**:
+WebRTC media tracks and audio/video **decode** (everything we can get *shy of
+being blessed by the censors*, i.e. no DRM/EME). Sibling to
+[`netfetcher`](../../archive_docs/2026-06-09_completed_plans/2026-05-25_netfetcher_plan.md)
+(network), `netrender`
 (paint→GPU), and genet (render). **Mere owns it; genet consumes decoded
 frames** through a byte/frame seam, the same way it consumes fetched bytes.
 
+> **2026-08-25 scope correction:** browser/native WebRTC data-channel carriage
+> now belongs to the [browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md)
+> under Murm transport and Notochord. This plan retains media tracks, media
+> session integration, and decode. Shared peer-connection mechanics may be
+> consumed later; admission and Graphshell carriage do not live here.
+>
 > Status: **plan-only.** No `net-media` crate exists yet. Bucket #3 of the
 > networking/web-API/media triage (bucket #1 netfetcher ✓ implemented, bucket #2
 > web-API shared-middle planned). This fixes scope, the decode-tier policy (the
@@ -15,12 +22,12 @@ frames** through a byte/frame seam, the same way it consumes fetched bytes.
 
 ## 1. Two halves, one organ
 
-net-media is two related-but-distinct capabilities:
+net-media is two related capabilities:
 
-1. **WebRTC** — via [`webrtc-rs`](https://github.com/webrtc-rs/webrtc) (pure
-   Rust). The **data-channel** half is *core to Mere's p2p / smolweb thesis*
-   (peer-to-peer protocol experiences) — arguably more load-bearing than media.
-   The **media-track** half (audio/video calls) rides the same stack.
+1. **WebRTC media sessions** — audio/video calls and track plumbing over a
+   native peer-connection implementation selected when this plan starts. The
+   browser uses its platform WebRTC API. Data-channel application carriage is
+   owned by the separate Murm carrier plan.
 2. **Media decode** — `<video>`/`<audio>` and WebRTC media need codecs. This is
    the "deep but not bottomless" half: a codec-registry + decoders, with a
    deliberate **decode-tier policy** (§3) that keeps the default build clean.
@@ -98,7 +105,7 @@ net-media
 ├── codec-audio      # Symphonia adapters (mp3/aac/flac/…)
 ├── demux            # mp4parse / matroska / ogg adapters
 ├── hwdecode         # cros-codecs / Vulkan-Video adapter (tier 1)
-└── webrtc           # webrtc-rs: data channels (core) + media tracks
+└── webrtc-media     # media tracks over a selected native WebRTC stack
 ```
 
 The registry mirrors the **engine-neutral organ pattern** the ecosystem already
@@ -120,10 +127,10 @@ netfetcher's transport selection.
 - **JS `<video>`/`<audio>`/`MediaSource`/WebRTC APIs** (genet's scripting tier)
   bind to net-media through the host — never linking it directly (same discipline
   as netfetcher).
-- **WebRTC data channels** serve the **p2p/smolweb** lane directly (Mere's
-  protocol experiences), distinct from the render path. (Mere's *transport*
-  identity is iroh; webrtc-rs is for *browser-interop* p2p where a peer speaks
-  WebRTC. The two coexist — flag for the murm/transport owners.)
+- **WebRTC data channels** are consumed through the product-neutral Murm
+  browser carrier. Net-media may share lower peer-connection setup later, but
+  it does not own application admission, Graphshell framing, or transport
+  identity.
 
 ## 6. Increment ladder
 
@@ -136,8 +143,9 @@ netfetcher's transport selection.
    consumer. Proves end-to-end decode on the safe tier.
 3. **Hardware decode seam.** `cros-codecs`/Vulkan-Video adapter (tier 1); the
    GPU-texture frame path + netrender composite.
-4. **WebRTC data channels.** `webrtc-rs` data channels — the p2p-thesis core.
-5. **WebRTC media tracks + opt-in asm decode.** Media-track plumbing; the
+4. **WebRTC media tracks.** Bind media-track plumbing to the chosen native
+   peer-connection implementation and the host frame/audio seams.
+5. **Opt-in asm decode.** The
    isolated asm-accelerated decode feature (tier 3).
 
 ## 7. Open questions
@@ -146,8 +154,9 @@ netfetcher's transport selection.
    NASM (it should); design the asm feature so it never leaks into the default
    workspace build (a separate crate + explicit feature, like the boa fork's
    pattern).
-2. **`webrtc-rs` maturity/version** — verify current release + how heavy its
-   tree is; whether data-channels-only can be feature-gated from media tracks.
+2. **Native WebRTC implementation** — consume the browser-carrier dependency
+   receipt if its selected stack exposes a sound media-track seam; otherwise
+   compare it with the current alternatives without coupling the two plans.
 3. **Frame seam shape** — what genet's media seam looks like (CPU `Frame` vs
    GPU texture handle); reuse the External-layer / `wgpu` interop from the genet
    viewer + `wgpu-scry`/`grafting` work rather than inventing.
@@ -157,9 +166,10 @@ netfetcher's transport selection.
 5. **Shared vocabulary with netfetcher** — net-media takes *streams of bytes*
    (which netfetcher can supply); is there a shared `Stream`/`Bytes` seam, or are
    they just composed at the call site? Likely composed; don't over-unify.
-6. **Native-only, like netfetcher** — codecs + hardware decode + webrtc-rs are
-   native; the wasm/PWA path uses the browser's `<video>`/WebRTC. Same platform
-   split as netfetcher (§3 there) and scripting.
+6. **Native-only, like netfetcher** — codecs, hardware decode, and the selected
+   native peer-connection implementation are native; the wasm/PWA path uses the
+   browser's `<video>`/WebRTC. Same platform split as netfetcher (§3 there) and
+   scripting.
 
 ## 8. Relationship to other plans
 
@@ -167,12 +177,16 @@ netfetcher's transport selection.
   seeking); net-media decodes them. Composed, not coupled.
 - **netrender** composites decoded frames (GPU textures) into the scene.
 - **genet** consumes frames via a media seam (parallel to `ImageLoader`).
-- **murm/transport** — WebRTC data channels are a *browser-interop* p2p path
-  beside Mere's iroh transport; coordinate ownership.
+- **murm/transport** — owns browser-interop data channels, connection-bound
+  Notochord admission, and Graphshell carriage. Net-media owns media tracks.
 - **Conformance** — WPT `media-source/`/`webcodecs/` deferred; manual playback +
   demuxer fuzzing first.
 
 ## Findings
+
+- **2026-08-25:** WebRTC data channels and media decode have different
+  authority, portability, and acceptance consumers. The data-channel lane is
+  split into the browser carrier plan; this plan remains the media organ.
 
 - AV1 (rav1d/rav1e) is the only ship-today pure-Rust codec bet; H.26x pure-Rust
   is real but young (watch). The asm-vs-compiler gap is permanent → the decode-
@@ -187,3 +201,5 @@ netfetcher's transport selection.
 - **2026-05-26** — plan created. Scope (WebRTC + decode, no DRM), the three-tier
   asm-isolated decode policy, codec-registry shape, layering (Mere owns; genet
   consumes frames), increment ladder, and open questions fixed. No code yet.
+- **2026-08-25** — removed data-channel carriage from this plan and linked the
+  browser WebRTC carrier plan. Media tracks and decode remain plan-only.

@@ -605,6 +605,22 @@ reorganization.
 
 ## Findings
 
+### 2026-08-25: browser carrier feasibility is green; the profile remains open
+
+The [browser/native WebRTC probe](../research/2026-08-25_browser_native_webrtc_carrier_probe.md)
+physically passed a headed Chromium-to-native data-channel ping using an
+external donor. A separate external consumer compiled Notochord and Personae's
+sans-I/O issue/encode/decode/verify path for Wasm with explicit JavaScript
+randomness features. This closes the basic feasibility question and selects a
+direct WebRTC carrier below Notochord as the first implementation route.
+
+It does not satisfy this plan's browser-profile claim yet. The donor receipt
+contains neither Mere admission nor TURN, and it does not reconnect a real
+Graphshell session. Forced relay, host-authenticated DTLS fingerprint binding,
+replay refusal, snapshot-or-diff resume, and a headed projection/intent receipt
+remain the gates. Their ordered implementation now lives in the
+[browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md).
+
 ### 2026-07-25: G5 readiness, measured — the identity substrate arrived from another lane
 
 Examined because the capability round wanted the projection endpoint to
