@@ -236,18 +236,36 @@ register-theme = { path = "crates/system/registry/register-theme" }
 # The engine-management family moved to genet 2026-07-10 (genet
 # docs/2026-07-09_inker_genet_adoption_plan.md); consumed as git siblings
 # like the rest of the genet components. Local edit loop: the gitignored
-# .cargo/config.toml patches these to the genet working copy.
-inker = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-document-canvas = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-nematic = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-fleece = "0.4.0"
-genet-static-dom = "=0.1.0"
-knot-editor-host = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-illume = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", branch = "main" }
-cambium = { version = "0.3.3", git = "https://github.com/merely-made/genet.git", branch = "main" }
-scrying-engine = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-graft-engine = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-weld-engine = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+# .cargo/config.toml patches these to the genet working copy; copy it from
+# the committed .cargo/config.toml.example, whose paths are relative.
+inker = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+document-canvas = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+nematic = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4", default-features = false }
+fleece = { version = "0.4.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+knot-editor-host = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4", default-features = false }
+illume = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+cambium = { version = "0.3.3", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+scrying-engine = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+graft-engine = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+weld-engine = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+
+# Centralized 2026-08-26. These were previously restated in each member with a
+# full git spec, so a genet bump meant editing fifteen files and a missed one
+# silently forked the lineage. Stated once here; members inherit with
+# `foo.workspace = true` and add only their own features/optional flags.
+genet-scripted-dom = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+layout-dom-api = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+layout_dom_api = { package = "layout-dom-api", version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+genet-livery = { version = "0.0.2", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+genet-probe = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+genet-static-dom = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+errand = { version = "0.3.4", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+netfetcher = { version = "0.1.1", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+verso-tile = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+netrender = { version = "=0.1.2", git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
+paint_list_api = { version = "=0.1.2", git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
+paint_list_render = { version = "=0.1.2", git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 
 # Published as `mere-forme`: the crates.io name `forme` is owned by someone else
 # (an HTML template engine). The `package =` alias keeps every `use forme::...`
@@ -381,8 +399,8 @@ tincture = { package = "tinct", version = "=0.1.2" }
 # with RNS 1.3.x (it replaces the stale Beechat `reticulum` 0.1 crate, which
 # could not parse ratcheted announces from real RNS). Since the 2026-07-23 radio
 # merge the repo is one workspace (retinue, tulle, sennet, tucket, firmware), so
-# this is a branch pin rather than a relative path.
-retinue = { version = "0.1.1", git = "https://github.com/merely-made/retinue.git", branch = "main" }
+# this is an immutable source-revision pin rather than a relative path.
+retinue = { version = "0.1.1", git = "https://github.com/merely-made/retinue.git", rev = "8cea8f9a12469947ac8d2756c1c32ec24fbb6dea" }
 
 # Reticulum identity derivation: HKDF-SHA256 stretches Mere's 32-byte master seed
 # into retinue's 64-byte dual-key private identity. retinue owns the X25519/RNG
@@ -406,7 +424,7 @@ all = "warn"
 # changes in linebender/vello#1754. `[patch]` is not inherited from genet or
 # netrender, so this workspace restates it. Retires by deletion when upstream
 # ships a wgpu-30 vello.
-vello = { git = "https://github.com/mark-ik/vello.git", branch = "mark-ik/wgpu-30" }
+vello = { git = "https://github.com/mark-ik/vello.git", tag = "vello-0.10.0" }
 # cubecl-wgpu 0.10.0, vendored from the registry and moved to wgpu 30. This is
 # the "narrow CubeCL backport" of the 2026-08-15 wgpu 30 unification: it is the
 # ONLY crate in the burn 0.21 / cubecl 0.10 stack that names wgpu at all, so
@@ -458,27 +476,29 @@ burn-cubecl = { path = "support/patches/burn-cubecl" }
 # read-only active-session receipt. Delete it when an upstream release exposes
 # equivalent control and passes the lease-reclaim receipt.
 burn-remote = { path = "support/patches/burn-remote" }
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4", version = "=0.1.0" }
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
-# inherited by consumers, so Mere restates the branch-tracked source here. The
-# fork publishes as `genet-taffy`; the patch key remains the upstream crate name.
-taffy = { package = "genet-taffy", version = "=0.13.1", git = "https://github.com/merely-made/genet.git", branch = "main" }
-# p2panda repointed to the owned fork (branch-tracked, same rule as above) for
-# the dalek-3 unification: the fork's core/encryption are ported to
-# ed25519/x25519-dalek 3 + curve25519-dalek 5, unifying with iroh >=1.0.3 and
-# personae so one dalek per major resolves across the graph. The whole family
-# moves together — the fork is one workspace. Drop this block when upstream
-# p2panda releases the port. (hpke-rs still carries an x25519-dalek 2 copy
-# inside p2panda-encryption; that residual retires with an hpke dalek-3 release.)
-p2panda-auth = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-core = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-discovery = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-encryption = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-net = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-store = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-stream = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
-p2panda-sync = { git = "https://github.com/mark-ik/p2panda.git", branch = "main" }
+# inherited by consumers, so Mere restates the same immutable Genet revision.
+taffy = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+# Same restatement, same reason: genet-livery is built against Genet's Parley
+# fork (its `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`
+# do not exist in published parley 0.10.0, which carries the same version
+# number). Missing this is invisible while a consumer resolves a *published*
+# genet-livery, and a compile error the moment it resolves the working copy.
+parley = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
+# The published `mere-p2panda-net =0.7.2` owns the exact-ALPN net crate. Its
+# seven sibling packages still come from the owned fork for the dalek-3 port;
+# pin them to the matching immutable release tag. There is deliberately no
+# `p2panda-net` patch: that package name is not consumed and the old entry was
+# permanently unused after the published crate rename.
+p2panda-auth = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
+p2panda-core = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
+p2panda-discovery = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
+p2panda-encryption = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
+p2panda-store = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
+p2panda-stream = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
+p2panda-sync = { git = "https://github.com/mark-ik/p2panda.git", tag = "mere-p2panda-net-0.7.2" }
 
 # ─── LAN peer discovery (H10): one real mDNS fix, one dead theory ────────────
 # iroh-mdns-address-lookup 0.4.0 joins the multicast group only on the
@@ -511,7 +531,7 @@ swarm-discovery = { git = "https://github.com/mark-ik/swarm-discovery.git", bran
 # to its built-in force-inprocess backend and makes the OS deps optional, dropping
 # the windows 0.61 pin that let gpu-allocator latch onto 0.61.3 while wgpu-hal forced
 # 0.62.2, breaking the dx12 suballocator. With it gone, gpu-allocator unifies on 0.62.
-ipc-channel = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+ipc-channel = { git = "https://github.com/merely-made/genet.git", rev = "a7d410c1ca8799eb737a10bb83324025427bf9b4" }
 
 # Boa JS engine, for the meerkat `scripted` render rung (the `genet.scripted` lane
 # runs page JS through `ScriptedDocument` on Boa). Mirrors genet's own patch

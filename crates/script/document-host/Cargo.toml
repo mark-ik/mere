@@ -27,8 +27,8 @@ wasmtime-wasi = "45"
 # genet's live scripted DOM, via the same git dep meerkat uses (so they unify on
 # one rev). genet-scripted-dom is light — markup5ever + layout-dom-api +
 # genet-static-dom; no stylo/taffy, so the workspace patches do not touch it.
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main" }
-layout_dom_api = { package = "layout-dom-api", git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-scripted-dom = { workspace = true }
+layout_dom_api = { workspace = true }
 # The mod-loader DI seam (P2.4): we *implement* its `WasmModRuntime` trait, never
 # edit it (that crate stays runtime-free). Intra-workspace path dep, matching the
 # sibling register-* crates' own cross-references.

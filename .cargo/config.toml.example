@@ -1,0 +1,106 @@
+# EXAMPLE local Cargo config. Copy to .cargo/config.toml to enable the
+# sibling-checkout edit loop; the live file is gitignored and optional.
+#
+# Paths are RELATIVE to this file's parent directory (the repo root), not to
+# .cargo/ — verified empirically: `../genet` resolves to Code/repos/genet.
+# They therefore assume the standard layout, with the owned repos checked out
+# as siblings under Code/repos and the p2panda fork under Code/crates.
+#
+# Mere's committed manifests resolve owned sibling repos from GitHub so a clean
+# checkout builds anywhere. This local file redirects those git sources to the
+# sibling working copies under C:/Users/mark_/Code/repos for cross-repo edits.
+#
+# Use source-specific [patch] entries, not Cargo's global `paths` override. The
+# old `paths` form worked, but Cargo warned whenever a sibling checkout changed a
+# dependency list. These patches name the git source and package explicitly, so
+# the local edit loop stays live without the path-override warning storm.
+#
+# 2026-07-23 repo consolidation: personae, armillary, the eidetic four,
+# servitor, vates, sibylla, conatus, scenograph, and graphshell are now mere's
+# own workspace members, so every patch that used to redirect them is gone —
+# patching a crates.io/git source at a path that is ALSO a workspace member is
+# a hard lockfile collision, not a warning. cambium and netfetcher became genet
+# components the same day, so their redirects moved into the genet section.
+#
+# 2026-08-24 dead-entry prune. Eleven entries removed after resolving all four
+# consumers of this file and taking the union of what they actually pull: the
+# root workspace (with --all-features), ports/graphshell/web, ports/signalman,
+# and the crates/probes tree. Removed: script-engine-boa, genet-winit-host,
+# scrying-engine, graft-engine, weld-engine, genet-documents, script-engine-api,
+# netrender_text, cambium-winit, and the sole entries of the wgpu-scry and
+# wgpu-graft tables (scrying, grafting), which left both tables empty.
+#
+# Do NOT prune from a single workspace build's "patch was not used" warnings.
+# Sixteen entries look unused that way; five of them are load-bearing for crates
+# outside the workspace. genet-render-host is the sharpest case — used only by
+# ports/graphshell/web, which is why the note above it exists.
+
+[patch."https://github.com/merely-made/genet.git"]
+"engine-observables-api" = { path = "../genet/components/shared/engine-observables-api" }
+"layout-dom-api" = { path = "../genet/components/shared/layout-dom" }
+"genet-host-api" = { path = "../genet/components/genet-host-api" }
+fleece = { path = "../genet/components/fleece" }
+"genet-livery" = { path = "../genet/components/genet-livery" }
+"genet-scripted-dom" = { path = "../genet/components/genet-scripted-dom" }
+"genet-static-dom" = { path = "../genet/components/genet-static-dom" }
+# ports/graphshell/web git-deps this one. A patch table that redirects a git
+# source to path sources must carry EVERY package the graph pulls from it, or
+# cargo fails with "failed to find <pkg> in path source" — the missing-entry
+# trap, not a network problem.
+"genet-render-host" = { path = "../genet/components/genet-render-host" }
+"verso-tile" = { path = "../genet/components/verso-tile" }
+# The inker family, adopted into genet 2026-07-10. The family patches
+# together or not at all: knot-editor-host was the one member left off, so
+# it kept resolving off the branch tip and drifted the lock the moment genet
+# published 0.1.1, while its siblings tracked the working copy.
+inker = { path = "../genet/components/inker" }
+nematic = { path = "../genet/components/nematic" }
+knot-editor-host = { path = "../genet/components/inker/knot-editor-host" }
+# Moved here from [patch.crates-io] 2026-08-24: mere git-deps illume from
+# genet.git, so the crates-io entry never bound and cargo reported it as an
+# unused patch while the build silently used the git checkout.
+illume = { path = "../genet/components/illume" }
+"document-canvas" = { path = "../genet/components/inker/document-canvas" }
+errand = { path = "../genet/components/errand" }
+# Adopted into genet 2026-07-23 (repo consolidation).
+netfetcher = { path = "../genet/components/netfetcher" }
+cambium = { path = "../genet/components/cambium/cambium" }
+sprigging = { path = "../genet/components/cambium/sprigging" }
+
+[patch."https://github.com/merely-made/netrender.git"]
+netrender = { path = "../netrender/netrender" }
+netrender_device = { path = "../netrender/netrender_device" }
+paint_list_api = { path = "../netrender/paint_list_api" }
+paint_list_render = { path = "../netrender/paint_list_render" }
+
+[patch.crates-io]
+# ─── p2panda fork, local working copy (lane-ALPN fix in flight) ────────────
+# The manifest patches these crates-io names to the mark-ik git fork; this
+# config-level entry overrides that at the local clone, same pattern as taffy.
+# Patch the seven sibling packages together so the local dalek-3 family stays
+# source-identical. The net crate is the published `mere-p2panda-net =0.7.2`;
+# its former `p2panda-net` override never matched that renamed package.
+p2panda-auth = { path = "../../crates/p2panda/p2panda-auth" }
+p2panda-core = { path = "../../crates/p2panda/p2panda-core" }
+p2panda-discovery = { path = "../../crates/p2panda/p2panda-discovery" }
+p2panda-encryption = { path = "../../crates/p2panda/p2panda-encryption" }
+p2panda-store = { path = "../../crates/p2panda/p2panda-store" }
+p2panda-stream = { path = "../../crates/p2panda/p2panda-stream" }
+p2panda-sync = { path = "../../crates/p2panda/p2panda-sync" }
+layout-dom-api = { path = "../genet/components/shared/layout-dom" }
+tinct = { path = "../genet/components/tinct" }
+# pelt-desktop consumes the PUBLISHED cambium stack, which the git-source patch
+# above cannot catch; the published chain drags a second Stylo lineage that
+# collides with genet-stylo on `links = "servo_style_crate"`. Redirect the
+# crates.io source at genet's own copies so exactly one Stylo is in the graph.
+cambium = { path = "../genet/components/cambium/cambium" }
+sprigging = { path = "../genet/components/cambium/sprigging" }
+
+# Every entry below is live: signalman consumes this whole family from the
+# neighbouring Retinue checkout. They read as unused in any ordinary workspace
+# build because signalman sits outside the workspace.
+[patch."https://github.com/merely-made/retinue.git"]
+retinue = { path = "../retinue/crates/retinue" }
+postilion = { path = "../retinue/crates/postilion" }
+outrider = { path = "../retinue/crates/outrider" }
+tulle = { path = "../retinue/crates/tulle" }

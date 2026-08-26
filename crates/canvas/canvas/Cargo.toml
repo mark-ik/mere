@@ -54,17 +54,20 @@ signals.workspace = true
 armillary.workspace = true
 
 # Compose the underlay (+ the node-children document) into one Scene, and
-# present it. Path deps on the sibling netrender checkout, like meerkat's.
-paint_list_render = "=0.1.2"
-paint_list_api = "=0.1.2"
-netrender = "=0.1.2"
+# present it. Git deps on the sibling netrender checkout, like meerkat's;
+# .cargo/config.toml redirects the source to the local working copy. Naming
+# them from crates.io instead put a second netrender lineage in the graph
+# that the git patch table could not catch.
+paint_list_render = { workspace = true }
+paint_list_api = { workspace = true }
+netrender = { workspace = true }
 
 # The node-children layer: a retained Livery document over a persistent Genet
 # ScriptedDom (abs-pos node subtrees under the camera-transformed container),
 # painted through Buckram and composited with the underlay.
-genet-scripted-dom = "0.1.0"
-genet-livery = "0.0.2"
-layout_dom_api = { version = "0.1.0", package = "layout-dom-api" }
+genet-scripted-dom = { workspace = true }
+genet-livery = { workspace = true }
+layout_dom_api = { workspace = true }
 
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

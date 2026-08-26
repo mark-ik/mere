@@ -27,8 +27,8 @@ scenomise.workspace = true
 serde_json = "1"
 # Test-only: parse the rendered markup back into a real tree, so the frozen
 # realization is proven to be a DOM a host can traverse, not a hopeful string.
-genet-scripted-dom = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
-layout_dom_api = { package = "layout-dom-api", version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-scripted-dom = { workspace = true }
+layout_dom_api = { workspace = true }
 # Test-only: proves the frozen realization is resolvable through the identity
 # the DOM carries, which is the only way genet-probe can drive anything.
-genet-probe = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", branch = "main" }
+genet-probe = { workspace = true }
