@@ -7,8 +7,9 @@ remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
 parity are proven. Driver-level release is proven for the supported plain
-remote profile. The installed-port authority and browser-level physical GPU
-telemetry remain open.
+remote profile. The immutable TrainingCorpus and EvalReport artifact contract
+is now ready for the first local trainer receipt. The installed-port authority
+and browser-level physical GPU telemetry remain open.
 
 ## 1. Purpose
 
@@ -214,3 +215,40 @@ gate. Plain WGPU remains the supported remote profile.
 Model manifest browsing, streaming console, portable remote checkpoints,
 tolerant comparators, a real stacked-adapter row, and training remain separate
 slices.
+
+## 9. Training artifact boundary
+
+The first local trainer vertical needs three immutable Eidetic artifacts:
+`ModelAdapterManifest`, `TrainingCorpus`, and `EvalReport`. The first is
+already the ModelSession provenance envelope. `TrainingCorpus` now separates
+non-empty, strictly manifest-id-ordered training and held-out evaluation source
+partitions; overlap is rejected before the artifact is stored. `EvalReport` is
+a fixed-corpus baseline-versus-adapter `RecallAt` or `RankingAt` receipt using
+integer passes and total cases. It rejects zero limits, impossible tallies, and
+comparisons over different case counts; it also validates the adapter manifest
+itself and then checks its model, adapter, and corpus links.
+
+This is Eidetic's artifact contract only. It does not create a trainer, pick a
+runtime or optimizer, assign a Mesh resource, record a lease/checkpoint, or
+make Distillery infer device policy. Those facts remain respectively ESP,
+Mesh, and the host scheduler's authorities.
+
+### Next forcing task
+
+Run one local, deterministic recall or ranking fixture that materializes a
+canonical `TrainingCorpus`, publishes an adapter manifest with that corpus as
+its provenance, then writes an `EvalReport` showing the adapter strictly beats
+the unchanged baseline on the same fixed cases. That receipt decides the first
+trainer resource input/output shape; no trainer framework is justified before
+it exists.
+
+### Progress
+
+- **2026-08-26, artifact foundation**: Eidetic gained typed `TrainingCorpus`
+  and `EvalReport` payloads with fixed schema references, validating
+  serialization, and typed-store round trips. The corpus uses separate,
+  disjoint training and evaluation partitions; the report deliberately records
+  only deterministic ranking/recall counts and validates a well-formed adapter
+  plus the provenance links already reserved by `ModelAdapterManifest`. No
+  training, evaluation runtime, Mesh job, lease, checkpoint, or Distillery
+  authority was added.

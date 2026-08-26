@@ -428,3 +428,13 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
   profile. A clean Windows per-PID driver-memory receipt now closes physical
   allocation release for that plain profile while leaving optional remote
   Fusion/autotune unclaimed.
+- **2026-08-26, Lane 4 artifact foundation**: Eidetic now owns the typed,
+  immutable `TrainingCorpus` and `EvalReport` artifacts the Lane 4 triple
+  named. The corpus has canonically ordered, non-empty, disjoint training and
+  held-out evaluation partitions; the report is only a fixed-corpus,
+  integer-counted `RecallAt` or `RankingAt` comparison of the declared base
+  and adapter, with full adapter validation plus corpus-provenance validation.
+  This adds neither tensor execution to Eidetic nor a
+  training resource to ESP or Mesh. The next forcing act is one local,
+  deterministic baseline-versus-adapter receipt; its actual resource seam and
+  trainer choice remain uncommitted until then.

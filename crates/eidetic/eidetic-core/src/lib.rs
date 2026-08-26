@@ -82,8 +82,9 @@ pub use deleted::{DeletedNode, clear_deleted, list_deleted, purge_deleted, recor
 pub use engram::{Engram, TimeBounds};
 pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher, delete_manifest};
 pub use models::{
-    AdapterRuntimeCompat, MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest, ModelComponents,
-    ModelLibrary, ModelManifest,
+    AdapterRuntimeCompat, EVAL_REPORT_SCHEMA_REF, EvalMetric, EvalReport, EvalTally,
+    MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest, ModelComponents, ModelLibrary,
+    ModelManifest, TRAINING_CORPUS_SCHEMA_REF, TrainingCorpus,
 };
 pub use schema::{
     Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,

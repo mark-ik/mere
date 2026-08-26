@@ -9,10 +9,15 @@
 
 pub mod adapter;
 pub mod library;
+pub mod training;
 
 pub use adapter::{AdapterRuntimeCompat, MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest};
 pub use library::{ModelComponents, ModelLibrary, ResolvedModel};
 use serde::{Deserialize, Serialize};
+pub use training::{
+    EVAL_REPORT_SCHEMA_REF, EvalMetric, EvalReport, EvalTally, TRAINING_CORPUS_SCHEMA_REF,
+    TrainingCorpus,
+};
 
 use crate::schema::ManifestId;
 use crate::schema::{Hash, SchemaRef};
