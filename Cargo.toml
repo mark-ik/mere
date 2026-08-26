@@ -83,6 +83,7 @@ members = [
     "crates/conatus/quint",
     "crates/conatus/seiche",
     "crates/conatus/voxel",
+    "crates/conatus/brick",
     "crates/conatus/conatus",
     "crates/scenograph/sceno",
     "crates/scenograph/scenomise",
@@ -145,6 +146,7 @@ authors = ["Mark AB (markik)"]
 quint = { version = "0.0.4", path = "crates/conatus/quint" }
 seiche = { version = "0.0.5", path = "crates/conatus/seiche" }
 conatus-voxel = { version = "0.1.0", path = "crates/conatus/voxel" }
+conatus-brick = { version = "0.1.0", path = "crates/conatus/brick" }
 conatus = { path = "crates/conatus/conatus" }
 cartography = { package = "mere-cartography", version = "0.0.2", path = "crates/canvas/cartography" }
 linked-data = { package = "mere-linked-data", version = "0.0.1", path = "crates/graph/linked-data" }

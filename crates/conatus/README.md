@@ -1,8 +1,7 @@
 # conatus
 
-The portable canvas-physics family: three crates that define fields, evaluate
-them, and integrate the forces they produce. This directory is not itself a
-crate; the three below are separate members of mere's workspace.
+The portable spatial-runtime family. This directory is not itself a crate;
+each row below is a separate member of Mere's workspace with one narrow owner.
 
 | Crate | Contents | Depends on |
 |---|---|---|
@@ -10,6 +9,9 @@ crate; the three below are separate members of mere's workspace.
 | [`quint`](quint) | The runtime algebra: `FieldRegistry`, `FieldProjection`, `eval_scalar` / `eval_vector` / `grad_scalar`, optional Rhai authoring, and two GPU lanes: Burn lowering (`field-burn`) and the **resident lane** (`field-gpu`), whose kernels advance positions that never leave the device. | numen, serde, uuid, optional burn + rhai + wgpu |
 | [`quint-shaders`](quint-shaders) | The resident lane's kernels in Rust, for rust-gpu. Not built today; see its README for the toolchain blocker and what ships instead. | spirv-std |
 | [`seiche`](seiche) | Force integration: a rapier `Simulation`, built-in layout forces, field couplings, scenes, fluid. | rapier2d, petgraph, quint, numen, euclid, tracing |
+| [`voxel`](voxel) | Generic revisioned voxel chunks, bounded patches, dirty regions, and occupancy lowering. Product identity and material meaning stay outside. | serde |
+| [`conatus`](conatus) | Host-neutral 3D bodies, collision, queries, fixed-step advancement, and voxel-collider realization. | conatus-voxel, rapier3d, serde |
+| [`brick`](brick) | Product-neutral sparse pointer/atlas ABI and ray-in WGSL voxel DDA. Camera, appearance, and composition stay in product lenses. | bytemuck |
 
 The resident lane is the explicit-regime half of the spatial compute
 plan (`design_docs/mere_docs/technical_architecture/2026-08-13_spatial_compute_plan.md`):
@@ -22,9 +24,12 @@ intermediates are the wrong shape. The device is always the host's:
 quint never boots one, because a second device on the same adapter
 cannot share a buffer with the renderer.
 
-Dependency direction is numen to quint to seiche. Each crate publishes under its
-own name and stays independent of any graph kernel or renderer. All three are
-MIT OR Apache-2.0.
+The field lane runs numen to quint to seiche. `conatus-voxel`, `conatus`, and
+`conatus-brick` are sibling organs rather than another chain: value mechanics,
+body runtime, and presentation traversal respectively. Each package stays
+independent of product authority. Existing portable mechanics retain their
+MIT OR Apache-2.0 grants; new product-neutral brick traversal follows Mere's
+MPL-2.0 default.
 
 Fields are treated as a third canvas primitive beside nodes and edges. Node and
 edge truth lives in the content substrate
