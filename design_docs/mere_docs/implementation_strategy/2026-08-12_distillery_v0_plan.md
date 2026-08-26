@@ -1,7 +1,9 @@
 # Distillery v0 Plan
 
 **Date**: 2026-08-12  
-**Status**: D0 complete; D1 resident authority lifecycle implemented; D2's
+**Status**: D0 complete; D1 resident authority lifecycle complete and its
+installed Personae/settings binding implemented pending the focused Cargo gate;
+D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
@@ -160,12 +162,34 @@ the changed `p2panda-net` library. Shared Cargo cache contention required an
 isolated manifest over the exact source files; the source and test targets were
 unchanged.
 
-## 8. Remaining boundary
+## 8. Installed authority boundary
 
-D1 is a resident service, not yet an installed Distillery binary. The latter
-needs one explicit product decision about which Personae profile owns the mesh
-author and where its persisted settings live; an environment seed would be a
-bad substitute for that authority.
+The first installed slice persists one explicit Personae `ProfileId` at
+`<data-root>/distillery/settings.json`. It is a product-owned, local-only,
+restart-required ordinary setting. It has no default and does not consult a
+Distillery profile environment variable: an absent record is unconfigured, an
+empty or unknown field is refused, and an absent selected profile fails rather
+than minting a second face. The profile's mesh author derives under
+`mesh::MESH_AUTHOR_SALT`; its master key supplies the transport identity. The
+settings record carries neither seed nor vault secret.
+
+Per-mesh private persistence sits at
+`<data-root>/distillery/meshes/<mesh-id>/{mesh.redb,blobs}`. The reusable
+`InstalledAuthority` layer opens the persisted profile, derives the author and
+attestation, and binds a `ResidentAuthority` only when a caller supplies the
+`MeshStore`, `HostConfig`, and `ResidentSettings` it owns. The mesh caller
+therefore retains admission/retention truth; the device caller retains
+resources, scheduler, conditions, and device policy. Distillery does not make
+defaults for any of those facts.
+
+`distillery-installed` is an executable bootstrap boundary, not yet a fully
+operational standalone host. Its `configure` verb persists the explicit
+profile; `inspect` proves that it opens from Personae and reports protection.
+Starting a resident remains gated on a product composition owner supplying a
+real mesh retention/admission policy and device `HostConfig`/`ResidentSettings`.
+Those constructors exist through `InstalledAuthority`; the focused installed
+compiler gate remains open. A CLI default here would be fabricated
+scheduler/device authority.
 
 Distillery now also homes D2's standalone browser development probe without
 making it product chrome. The recovered BrowserWebGpu path now passes four
@@ -215,7 +239,6 @@ gate. Plain WGPU remains the supported remote profile.
 Model manifest browsing, streaming console, portable remote checkpoints,
 tolerant comparators, a real stacked-adapter row, and training remain separate
 slices.
-
 ## 9. Training artifact boundary
 
 The first local trainer vertical needs three immutable Eidetic artifacts:
@@ -244,6 +267,16 @@ it exists.
 
 ### Progress
 
+- **2026-08-26, installed authority/settings slice**: Distillery now stores an
+  explicit Personae profile selection under its private data root and refuses
+  a missing or malformed selection. `InstalledAuthority` opens that existing
+  profile from Personae, derives the stable mesh author and attestation, uses
+  the profile master for p2p transport, names private mesh paths, and composes
+  a resident only from caller-owned mesh and device facts. The
+  `distillery-installed` binary is the configure/inspect bootstrap boundary;
+  it records the deliberate resident-start gate instead of hiding it behind a
+  permissive device or cadence default. Formatting and diff checks passed;
+  focused compilation and Clippy remain open after package-cache contention.
 - **2026-08-26, artifact foundation**: Eidetic gained typed `TrainingCorpus`
   and `EvalReport` payloads with fixed schema references, validating
   serialization, and typed-store round trips. The corpus uses separate,

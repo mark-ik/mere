@@ -75,10 +75,21 @@ fixture under `probe/remote-fixture` exercises ESP over that adapter on WGPU;
 the checked-in receipt records the numerical, cancellation, and fresh-session
 recovery boundaries.
 
-There is not yet an installed standalone binary because Distillery still needs
-a product-level choice of Personae profile and persisted settings authority.
-Cambium views, model manifest browsing, physical GPU-allocation telemetry, and
-training remain later slices.
+The installed-authority slice now persists one explicit Personae profile at
+`<data-root>/distillery/settings.json`. The record contains no seed, vault
+secret, scheduler cadence, device policy, or mesh-retention policy. Opening it
+requires that selected profile to already exist in the shared Personae vault;
+the mesh author is derived under `mesh::MESH_AUTHOR_SALT` and the transport
+uses that profile's master identity. Per-mesh private paths live below
+`<data-root>/distillery/meshes/<mesh-id>/`.
+
+`distillery-installed configure --data-root <path> --profile <id>` persists
+that selection. `inspect` opens it and reports the selected profile and
+Personae protection, but intentionally does not start a resident. A real start
+still requires a mesh owner to supply its store and retention policy, and a
+device owner to supply `HostConfig` and `ResidentSettings`; Distillery must not
+invent scheduler or device-policy authority. Cambium views, model manifest
+browsing, physical GPU-allocation telemetry, and training remain later slices.
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/distillery`.
