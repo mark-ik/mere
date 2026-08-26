@@ -106,7 +106,7 @@ private invitation can still enter the existing authority grammar rather than
 adding a bearer bypass.
 
 `InviteV1` carries the rendezvous reference, a random redemption secret, the
-expected host key, permitted action, expiry, and application release identity.
+expected host key, permitted action, expiry, and a Luggage `ReleaseRefV1`.
 It is encoded in the URL fragment. The browser removes the fragment from
 visible history, generates its own ephemeral Personae subject locally, and
 proves possession of the redemption secret over the host-authenticated data
@@ -126,6 +126,72 @@ The join page needs a strict first-party CSP and must avoid third-party script,
 analytics, and referrer-producing subresources before the fragment is cleared.
 The rendezvous service receives only the public invite reference and opaque
 signaling envelopes.
+
+## Release identity and adoption
+
+The release named by an invitation is a separate authority question from the
+session the invitation admits. [Luggage](../../../crates/system/luggage/README.md)
+owns it.
+
+```rust
+pub struct ReleaseRefV1 {
+    pub manifest_blake3: [u8; 32],
+    pub publisher_key_id: [u8; 32],
+}
+```
+
+`manifest_blake3` identifies the exact signed `luggage.json` bytes. Hashing the
+bytes that were signed avoids inventing canonical JSON. `publisher_key_id` is a
+domain-separated digest of the canonical decoded minisign public-key bytes,
+not minisign's short key id or a text box whose comments can change. The
+reference contains neither a feed nor a public key. A loader resolves the
+manifest and detached signature from the native host, an HTTPS mirror, or
+another content source, then looks up the publisher in its own trust store and
+verifies the exact bytes.
+
+The next Luggage manifest revision needs to name one cross-platform release,
+not only one updater response. Its signed fields include application id,
+version, source revision, supported invitation and Graphshell wire versions,
+and artifacts by kind and target. Windows, Linux, macOS, and browser artifacts
+have different hashes and signatures while sharing the manifest identity. The
+source revision is a signed publisher assertion; reproducible-build evidence
+remains a separate receipt.
+
+Artifact locations do not belong in the signed content identity. A disposable
+`ReleaseOfferV1` pairs `ReleaseRefV1` with URL, native-host, or peer locators.
+Changing mirrors leaves the release reference unchanged, and a locator never
+makes mismatching bytes acceptable. The current updater manifest combines
+identity and URL; its next version must split those roles while retaining a
+reader for already-published v1 feeds.
+
+The stable `mer3ly.net` bootstrap loader verifies the signed manifest and the
+selected browser bundle before importing JavaScript or instantiating Wasm. An
+official publisher key may be pre-trusted by that loader. A fork's unknown key
+is displayed as unknown. The generic compatible Graphshell client may still
+join its live session, but executing the fork's client bundle or adopting its
+native release requires an explicit publisher-key decision.
+
+An ordinary first visit still trusts the `mer3ly.net` HTTPS origin to deliver
+that verifier honestly. Luggage prevents the native host, signaling service,
+mirror, or peer from substituting a release once the loader is running; it
+cannot stop a compromised web origin from replacing the loader with code that
+skips verification. An installed or previously pinned loader can provide
+stronger continuity after first use. This is web delivery authority, not graph
+or application-state authority, but it is real.
+
+After joining, “Install this release” names the same `ReleaseRefV1` and exact
+platform artifact. Existing native installations hand the verified offer to
+Luggage and Djinn's configured update policy. An ordinary browser can verify
+and download a platform installer, while operating-system installation remains
+an explicit action. Joining never changes a trusted publisher, configured
+feed, update channel, or executable.
+
+This pulls the release-reference and verification half of Luggage's P2P
+direction forward. General peer distribution remains later. The current
+[Djinn resident plan](../implementation_strategy/2026-08-22_djinn_family_resident_services_plan.md)
+already owns the prerequisite that a staged Luggage offer persist and reverify
+the signed manifest, application id, target, version, artifact signature, and
+digest without retaining an ephemeral feed response.
 
 ## Binding admission to the WebRTC connection
 
@@ -189,11 +255,14 @@ carrier profile. That claim requires:
 - one disclosed Graphshell projection and one admitted intent in a headed
   ordinary browser;
 - a receipt showing the signaling service cannot authorize a session or read
-  Graphshell application payloads.
+  Graphshell application payloads;
+- signed-manifest and exact browser-bundle verification before client code
+  executes;
+- unknown-publisher, compatible-client, and explicit publisher-adoption cases.
 
-Artifact seeding, native release adoption, media tracks, and Gemini publishing
-remain separate work. They should not enter this carrier until the live-session
-boundary closes.
+Artifact seeding and native release adoption are the first successor after the
+live-session boundary closes. Media tracks and Gemini publishing remain
+separate work.
 
 ## Sources
 

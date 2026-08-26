@@ -3,6 +3,12 @@
 **Status:** planned, gated on the `djinn 0.0.2` release
 **Date:** 2026-08-22
 
+**Related:**
+
+- [auto-update brief](../../2026-07-22_auto-update_brief.md)
+- [browser WebRTC carrier](2026-08-25_browser_webrtc_carrier_plan.md)
+- [browser/native carrier research](../research/2026-08-25_browser_native_webrtc_carrier_probe.md)
+
 ## 1. Decision
 
 Djinn is the product-neutral desktop resident for the Merely family. It owns
@@ -68,6 +74,10 @@ the `0.0.2` release.
    persona, vault, place, document, or release key.
 10. Firmware may use the signed artifact envelope, but Djinn never flashes a
     device. Linkboy owns compatibility checks, consent, transfer, and apply.
+11. A release reference is a signed-manifest hash plus publisher-key identity.
+    It carries neither a feed nor authority to trust that publisher.
+12. Advertising, resolving, or joining a release never changes an installed
+    application's trusted publisher, feed, channel, or update policy.
 
 ## 4. Phase A: make Luggage a durable resident boundary
 
@@ -141,6 +151,68 @@ Older signed releases remain authentic but are refused as automatic updates.
 An explicit rollback, if later wanted, requires a separate user-authorized
 operation and receipt.
 
+### A4. Name a release independently of its feed and target
+
+The browser/native session is the second consumer that forces Luggage's signed
+manifest to become a portable release identity. Add a Wasm-clean release
+envelope, owned and re-exported by Luggage:
+
+```rust
+pub struct ReleaseRefV1 {
+    pub manifest_blake3: [u8; 32],
+    pub publisher_key_id: [u8; 32],
+}
+```
+
+`manifest_blake3` hashes the exact manifest bytes covered by the detached
+signature. `publisher_key_id` is a domain-separated BLAKE3 digest of the
+canonical decoded minisign public-key bytes. It is a lookup and display
+identity, not a trust grant. A resolver accepts manifest bytes and their
+detached signature from any carrier, then verifies them against a separately
+trusted publisher key.
+
+Version the signed manifest and add the cross-platform facts the current
+updater-only shape lacks:
+
+- stable application id and release version;
+- source repository and revision;
+- supported invitation and application-protocol versions;
+- artifacts keyed by kind and target, including native installer, browser
+  bundle, and later firmware;
+- BLAKE3 digest, minisign signature, and format per artifact.
+
+One manifest names one release family. Its Windows, Linux, macOS, and browser
+artifacts have different hashes. The source revision is a signed publisher
+claim, not reproducible-build proof.
+
+Keep byte locations outside that identity. `ReleaseOfferV1` pairs a
+`ReleaseRefV1` with disposable per-artifact locators supplied by a feed, native
+host, HTTPS mirror, or peer. Changing mirrors must not change the release
+reference. The offer is never trusted: only bytes matching an artifact in the
+verified manifest may advance. The current v1 `luggage.json` embeds artifact
+URLs, so v2 needs a compatibility reader and a split writer rather than
+silently reinterpreting old manifests.
+
+Keep the envelope verifier free of filesystem, HTTP, installer, Djinn,
+Graphshell, and Genet dependencies so the stable `mer3ly.net` bootstrap loader
+can verify a browser bundle before executing it. The native Luggage crate keeps
+feed polling, staging, and platform apply around that core.
+
+Done conditions:
+
+- native and `wasm32-unknown-unknown` consumers derive the same
+  `ReleaseRefV1` from frozen signed-manifest vectors;
+- changing application id, source revision, compatibility, or artifact digest
+  invalidates the manifest signature and reference;
+- changing only `ReleaseOfferV1` locators leaves the reference unchanged and
+  cannot make mismatching bytes verify;
+- a reference carrying an unknown publisher id remains resolvable but is never
+  described as trusted;
+- the same verified artifact bytes are accepted from HTTP, a directory, and an
+  injected in-memory source without changing the verifier;
+- selecting a browser artifact cannot select a native installer or firmware
+  entry with the same target spelling.
+
 ## 5. Phase B: add the family update resident to Djinn
 
 ### B1. Installed-app inventory
@@ -158,6 +230,11 @@ Each record carries at least:
 - stable release-key identity;
 - feed per configured channel;
 - per-app update policy and stage directory.
+
+An offered `ReleaseRefV1` may use an existing record only when its verified
+application id and publisher key match. Adopting a fork is an explicit change
+to both the trusted publisher key and configured feed; accepting its live
+session is not that change.
 
 Paths are canonicalized and constrained to the registering installation. A
 record cannot contain an arbitrary command line for Djinn to execute.
@@ -337,7 +414,8 @@ release:
    feeds;
 2. run Hocket's installed update cycle on Windows, macOS, and Linux;
 3. review canonical-path handling, signed-offer reconstruction, anti-rollback,
-   local caller admission, stage permissions, and launcher privilege;
+   release-reference resolution, publisher-key changes, local caller admission,
+   stage permissions, and launcher privilege;
 4. inspect packaged crate contents and verify every public dependency resolves
    from the registry;
 5. retain app-authored receipts for applied version and resident-authored

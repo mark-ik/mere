@@ -14,6 +14,9 @@ proof before adding public rendezvous infrastructure.
 - [Graphshell reference host](2026-07-27_graphshell_reference_host_plan.md)
 - [reachability rungs and privacy lanes](2026-08-03_reachability_rungs_and_privacy_lanes_plan.md)
 - [net-media plan](2026-05-26_net_media_plan.md)
+- [Djinn family resident services](2026-08-22_djinn_family_resident_services_plan.md)
+- [auto-update brief](../../2026-07-22_auto-update_brief.md)
+- [Luggage current API](../../../crates/system/luggage/README.md)
 
 ## 1. Ruling
 
@@ -61,6 +64,14 @@ The following rules hold through every phase:
   it.
 - `InviteV1` grants only a named service action, has a bounded expiry, and does
   not alter executable trust.
+- Its Luggage release reference is a claim until a separately trusted publisher
+  key verifies the exact signed manifest. Neither the host's Personae key nor a
+  feed location grants that trust.
+- The ordinary first visit still trusts the `mer3ly.net` HTTPS origin to deliver
+  the bootstrap verifier honestly. Luggage constrains later manifest and
+  artifact substitution; it does not erase initial web-origin trust.
+- Joining never installs a release or changes publisher, feed, channel, or
+  update policy.
 - A refused stream never reaches Graphshell.
 - Browser and native share wire types and test vectors, not one runtime.
 - The current bilateral `Transport` trait remains intact until a second
@@ -136,7 +147,14 @@ Define `InviteV1` as a versioned, bounded fragment payload containing:
 - network and profile references;
 - permitted service action;
 - expiry and one configurable session-use ceiling;
-- signed application release identity for display, not executable adoption.
+- `ReleaseRefV1 { manifest_blake3, publisher_key_id }` from Luggage.
+
+The release reference identifies the exact signed manifest bytes and the
+publisher-key identity used to look up trust. It carries neither the manifest,
+public key, nor feed. The host-signed invite descriptor binds the reference so
+signaling cannot substitute a different release claim. Publisher verification
+remains a separate loader decision and never contributes to Notochord
+admission.
 
 The browser imports the invitation into memory and clears the fragment from
 visible history before loading any optional resource, then generates an
@@ -166,7 +184,9 @@ Graphshell opens.
   host challenge and shared link differ;
 - a refused session cannot send `SessionOpen` successfully;
 - browser logs, server logs, referrers, and signaling records contain neither
-  the fragment nor its redemption secret.
+  the fragment nor its redemption secret;
+- altering the bound release reference is rejected, while an unknown publisher
+  remains joinable only through a compatible already-trusted generic client.
 
 ## 6. C3: forced relay and reconnect
 
@@ -222,15 +242,22 @@ an embed.
 ## 8. C5: public rendezvous
 
 Deploy `https://mer3ly.net/join/<rendezvous>#<private-capability>` only after C4.
-The join route serves a pinned client manifest and security headers. A small
-Worker brokers opaque offer, answer, and ICE messages and mints short-lived
-TURN credentials. A Durable Object is permissible for bounded rendezvous
-mailboxes and presence; it does not hold application state or decide admission.
+The join route serves a small pinned bootstrap loader and security headers. The
+loader resolves the invitation's `ReleaseRefV1`, verifies the detached manifest
+signature against its own publisher trust store, selects the browser artifact,
+and verifies its digest and signature before importing JavaScript or
+instantiating Wasm. A small Worker brokers opaque offer, answer, and ICE
+messages and mints short-lived TURN credentials. A Durable Object is
+permissible for bounded rendezvous mailboxes and presence; it does not hold
+application state or decide admission.
 
 The service stores only operationally necessary, expiring rendezvous material.
 Rate, size, and lifetime limits are user-configurable at the native host within
-safe protocol ceilings. The page displays host publisher, source revision,
-release identity, requested action, and invite expiry before joining.
+safe protocol ceilings. The page displays verified or unknown publisher,
+source revision, release identity, client selection, requested action, and
+invite expiry before joining. Exact-release client selection is preferred.
+A separately trusted generic Graphshell client may join a signed-compatible
+wire version without claiming to be the host's exact release.
 
 **Done when:**
 
@@ -239,9 +266,55 @@ release identity, requested action, and invite expiry before joining.
 - signaling substitution cannot impersonate the signed native host;
 - destroying or revoking the invite prevents a later join;
 - direct and TURN paths both close the C4 receipt through the public service;
+- official release manifests and browser bundles verify before client code
+  executes, while an altered bundle is refused before import;
+- an unknown fork publisher is never described as Merely-signed and cannot add
+  itself to the trust store through the invitation;
 - service deletion leaves the native application state intact.
 
-## 9. C6: optional Iroh adapter
+## 9. C6: Luggage release offer and native adoption
+
+Once the public live-session receipt closes, make the release reference useful
+beyond display. Luggage owns a Wasm-clean signed-envelope core; its native side
+keeps feed polling, verified staging, update policy, and platform apply. The
+signed manifest names application id, version, source revision, supported
+invitation and Graphshell wire versions, and artifacts by kind and target.
+
+Artifact locators live in a disposable `ReleaseOfferV1`, outside the signed
+content manifest. A mirror, native host, or peer may change without changing
+the release identity. The source revision inside the manifest is a publisher
+claim; a reproducible-build receipt remains separate.
+
+“Install this release” offers the same `ReleaseRefV1` plus the exact platform
+artifact selected from its verified manifest. Artifact bytes may arrive from
+`assets.mer3ly.net`, the native host over the admitted session, or an Iroh peer.
+The source does not affect verification. Existing installations hand a
+verified self-sufficient offer to Luggage and Djinn's configured policy. A
+fresh browser may verify and download an OS installer, but installation remains
+an explicit operating-system action.
+
+Adopting a fork requires two visible changes: its trusted publisher key and its
+configured update feed. Joining the fork's live session performs neither.
+
+**Done when:**
+
+- one signed manifest names distinct browser, Windows, Linux, and macOS hashes
+  under one release identity and source revision;
+- native and browser verifiers derive the same `ReleaseRefV1` from frozen
+  vectors;
+- corrupted manifests and artifacts fail identically whether bytes came from
+  HTTPS, WebRTC, or Iroh;
+- changing only offer locators preserves the release reference, while changing
+  any signed content fact changes it;
+- the host can seed an exact platform artifact by content hash without becoming
+  publisher authority;
+- an installed app stages and applies the offer through Luggage's
+  self-sufficient signed stage, while a browser download produces a verification
+  receipt and waits for explicit installation;
+- accepting a session leaves publisher trust, feeds, channels, and update
+  policy byte-for-byte unchanged.
+
+## 10. C7: optional Iroh adapter
 
 After the direct carrier is stable, port the external Iroh custom transport only
 if a concrete consumer needs Iroh stream compatibility inside the browser. Pin
@@ -257,13 +330,12 @@ carrier as fallback, and compare:
 Adopt it only if those receipts beat the direct carrier for a named consumer.
 The direct WebRTC/Notochord path remains valid regardless of that result.
 
-## 10. Outside this plan
+## 11. Outside this plan
 
-- signed native artifact seeding and installation;
-- repository/update-feed adoption;
 - Gemini or HTML projection from Knot;
 - WebRTC audio/video tracks and media decode;
-- multi-host fanout, SFU operation, and cloud-held graph state.
+- multi-host fanout, SFU operation, and cloud-held graph state;
+- operating-system code-signing procurement and unattended first installation.
 
 Each becomes separate work after the live browser session closes its authority,
 relay, and reconnect receipts.
@@ -283,6 +355,15 @@ relay, and reconnect receipts.
   redeeming into a delegation for a browser-generated ephemeral subject.
 - WebRTC needs an explicit host-signed fingerprint challenge to supply
   Notochord's connection-specific link binding.
+- Luggage, rather than `InviteV1`, owns release meaning. The invite carries only
+  a signed-manifest hash and publisher-key identity; release trust stays in the
+  loader or installed application's publisher store.
+- Exact release identity and protocol compatibility are related but distinct.
+  Exact artifacts make receipts reproducible; a compatible trusted generic
+  client preserves interoperability without pretending to be that release.
+- Luggage narrows byte-source authority but cannot secure an ordinary browser
+  against a compromised first-load web origin that replaces the verifier
+  itself. That bootstrap trust stays explicit.
 
 ## Progress
 
@@ -290,3 +371,8 @@ relay, and reconnect receipts.
   headed browser/native ping passed; donor benchmark mismatch identified;
   Notochord/Personae external Wasm compile passed; architecture and gates
   recorded. Production code remains untouched.
+- **2026-08-26: Luggage integration ruled.** `InviteV1` now carries a
+  `ReleaseRefV1`, C5 verifies the exact browser bundle before execution, and C6
+  turns that same signed release into an explicit native adoption offer. The
+  prerequisite portable release envelope and self-sufficient stage remain open
+  in the Djinn resident plan; no release or trust code landed in this slice.

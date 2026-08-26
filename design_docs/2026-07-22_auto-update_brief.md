@@ -210,8 +210,11 @@ Rust, but `vpk` needs a .NET runtime wherever releases are packed). Ruled:
   intact), local directory holding `luggage.json`, and `github:owner/repo` —
   plus an optional per-platform **BLAKE3 digest in the manifest**, verified
   before the signature. The digest is the content-addressing seam for T3.
-- **T2 (planned):** staged-swap apply mechanics (Velopack-grade `current/` +
-  applier rename dance, portable Rust) replacing installer-over-yourself.
+- **T2 (partially landed):** verified artifact staging survives restart and
+  rechecks BLAKE3 before apply. The self-sufficient signed offer and portable
+  staged-swap mechanics remain open in the
+  [Djinn resident plan](mere_docs/implementation_strategy/2026-08-22_djinn_family_resident_services_plan.md)
+  A2.
 - **T3 (planned, design constraint carried from day one):** update
   distribution as signed manifests + content-addressed artifacts over
   iroh-blobs (mere-transport's `BlobStore` already speaks the ALPN), so
@@ -231,6 +234,28 @@ replay any previously signed artifact: a downgrade attack. This makes T3's
 than a nicety, and it means the manifest itself must be signed. Recorded in
 luggage's README; until then feed integrity (HTTPS/GitHub over an untrusted
 share) is load-bearing.
+
+**Closed since that finding:** Luggage now verifies `luggage.json.sig` against
+the configured publisher key and requires a signed manifest by default. The
+remaining stage gap is different: the persisted stage does not yet carry and
+reverify the complete signed offer in a fresh process, which the Djinn plan A2
+owns.
+
+**Finding 2026-08-26: a live native session creates the first release-reference
+consumer outside the updater.** An invitation must say which signed native and
+browser release it represents without making its rendezvous host, byte source,
+or Personae key into release authority. Luggage therefore owns a compact
+`ReleaseRefV1` made from the exact signed-manifest BLAKE3 plus publisher-key
+identity, and a Wasm-clean verifier over the shared release envelope. This
+pulls reference and verification out of T3 now. General P2P distribution stays
+deferred until the browser carrier closes its direct, TURN, admission, and
+reconnect receipts.
+
+The signed content manifest does not carry feed or artifact locations. A
+separate disposable `ReleaseOfferV1` supplies URLs or peer locators for a
+`ReleaseRefV1`; moving a release to another mirror cannot change its identity.
+The current v1 manifest combines those roles through each platform's `url`, so
+the split is a versioned format change with a compatibility reader.
 
 Velopack stays wired in hocket as the selectable A/B alternative
 (`HOCKET_UPDATE_TRANSPORT=velopack`) and retires if luggage's H4 cycles hold
@@ -252,8 +277,10 @@ Still open before this is load-bearing:
 
 ## Non-goals now
 
-Omaha-class update servers, staged percentage rollouts, mobile, and P2P
-distribution. Recorded so they are chosen later, not drifted into.
+Omaha-class update servers, staged percentage rollouts, mobile, and general P2P
+distribution. Content-addressed release references and carrier-neutral
+verification are current because the browser/native session now consumes them;
+peer distribution remains chosen later rather than drifted into.
 
 ## Sources
 
