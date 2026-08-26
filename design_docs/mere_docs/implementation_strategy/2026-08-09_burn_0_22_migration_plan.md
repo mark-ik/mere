@@ -396,3 +396,15 @@ Stop on any of these conditions:
   lease. Plain WGPU passes; Burn Fusion's remote MiniLM autotune/ordering panic
   is a separate backend sidequest. Stable repinning and package publication
   remain release-gated.
+- **2026-08-26**: `0.22.0-pre.3` and the matching CubeCL/Cubek prerelease
+  packages are published. A bounded isolated ESP source probe compiled the
+  selected BERT/WGPU and index-WGPU rows through Burn, burn-wgpu, burn-cubecl,
+  cubecl-runtime, burn-ir, and burn-pack with `-j 1`; temporary manifest pins
+  were reverted. Pre.3 contains the two cubecl-runtime packaging fixes, so that
+  patch is removable at repin. It does not contain the Mere-owned
+  same-allocation burn-cubecl fix or targeted burn-remote pump-close/lifecycle
+  control, so both remain required and must be rebased before any repin.
+  Remote Fusion/autotune remains unsupported by the existing receipts. Pre.3's
+  LoRA dtype/allocation and Burnpack streaming fixes are concrete follow-up
+  probes, not production scope. A full Distillery pre.3 check was blocked
+  before rustc by a shared genet checkout lock and remains open.

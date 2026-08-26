@@ -2,10 +2,13 @@
 
 **Date:** 2026-08-20
 
-**Status:** The explicitly chosen `0.22.0-pre.2` migration is green on native,
+**Status:** The explicitly chosen `0.22.0-pre.2` migration remains the production
+row and is green on native,
 wasm compile, real WGPU, host-owned existing-device adoption, and clean
-extracted-package verification. Stable 0.22 is still unpublished, so
-publication and Burn Remote remain gated.
+extracted-package verification. Burn `0.22.0-pre.3` is now published and has
+passed the bounded source/package checks below; this is an audit, not a
+production repin. Stable 0.22 is still unpublished, so publication remains
+gated.
 
 ## Dependency repair
 
@@ -98,7 +101,53 @@ workspace source in place.
 
 ## Remaining gate
 
-The official Burn release list still ends at `v0.22.0-pre.2`. Stable repinning,
-the stable-row package rerun, and Burn Remote integration remain serial work
-after stable 0.22 is published. The temporary CubeCL runtime patch should be
-deleted during that repin if the release contains the upstream fixes above.
+The production row remains `0.22.0-pre.2` until a separately authorized stable
+repin. The temporary CubeCL runtime patch should be deleted at repin because
+pre.3 contains the two upstream packaging fixes above. The Mere-owned
+same-allocation `burn-cubecl` patch and targeted `burn-remote` lifecycle patch
+still need a source rebase and fresh receipts on whichever row is selected.
+
+## 2026-08-26 pre.3 compatibility audit
+
+The crates.io API reports the exact prerelease packages needed by the current
+roots: `burn`, `burn-remote`, and `burn-cubecl` `0.22.0-pre.3`, plus
+`cubecl`, `cubecl-runtime` `0.11.0-pre.3`, and `cubek` `0.3.0-pre.3`. The
+published Burn source is the `v0.22.0-pre.3` release. The package is named
+`burn-pack`, not `burnpack`.
+
+An isolated ESP source probe copied the crate, removed only unrelated local
+workspace/path dependencies and feature rows, then ran:
+
+```text
+cargo check --manifest-path C:\t\esp-pre3-probe-0826\Cargo.toml \
+  --features "bert-validation bert-wgpu decoder-wgpu index-burn-wgpu" -j 1
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 16m 08s
+```
+
+The selected ESP model/WGPU rows compiled through Burn, burn-wgpu,
+burn-cubecl, cubecl-runtime, burn-ir, burn-pack, and the pre.3 CubeCL graph.
+This is a bounded source-compatibility receipt. It is not a production
+manifest or full feature-matrix pass, and the temporary pins were reverted.
+
+The corresponding temporary `cargo check -p distillery --features remote
+-j 1` could not reach rustc: Cargo stopped while updating the shared `genet`
+checkout because another process held its packfile. A dependency-only
+pre.3 Burn Remote probe is running separately; until a clean Distillery
+workspace check completes, Distillery pre.3 source compatibility remains
+unverified.
+
+Patch disposition against the pre.3 published sources:
+
+| Area | Result | Disposition |
+| --- | --- | --- |
+| `cubecl-runtime` wasm manifest fixes | Direct `wasm-bindgen-futures` and unconditional `cubecl-common` serde/hash requirements are present upstream | Remove the packaging patch at repin; rebase only Mere identity helpers if still required |
+| `burn-cubecl` same-allocation binary launch | pre.3 has alias launch helpers but still chooses the mutable broadcast path before checking shared allocation | Keep and rebase the Mere patch; require headed same-allocation and LayerNorm receipts |
+| `burn-remote` lifecycle | pre.3 exposes service close but `SessionManager::close` still only removes the map entry; no targeted pump drain/session reservation API is upstream | Keep and rebase the Mere lease-bound close patch |
+| Remote Fusion/autotune | No pre.3 source evidence removes the existing remote allocation/ordering hazards; the pre.2 plain-WGPU result remains the supported lane | Keep Fusion/autotune out of production remote defaults; rerun only as a separately gated sidequest |
+
+Pre.3 has concrete follow-up value for later work: the release notes include
+LoRA persistent-allocation and explicit-dtype fixes, dtype preservation during
+composition, and on-demand Burnpack tensor streaming. These justify a fresh
+native LoRA receipt and a bounded `burn-pack` streaming probe when portable
+checkpoint export becomes an active requirement. They do not change the
+current ModelSession/ordinary PEFT claim or authorize a production repin.
