@@ -78,6 +78,9 @@ pub mod schema_facets;
 // first; size/sprite/hull/material/face follow) as facets in facets.json —
 // born as facets, since the bespoke cartography sidecar was never wired.
 pub mod arrangement_facets;
+// Recoverable replacement mechanics shared by product-owned settings stores.
+// Paths, schemas, and validation remain with the configured product.
+pub mod atomic_file;
 // The scene.* facet namespace: the graph-scene's own view settings (sizing
 // mode, importance metric, physics damping) as facets of the CONTAINER node
 // (keyed by the session's root_graph_id) — scene-scoped, not per-node.
@@ -152,6 +155,7 @@ pub use arrangement_facets::{
     write_arrangement_positions, write_arrangement_sizes, write_arrangement_sprite_hulls,
     write_arrangement_sprites,
 };
+pub use atomic_file::write_bytes_with_backup;
 pub use denizen_facets::{
     DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
     read_denizen_bindings, remove_denizen_binding, write_denizen_binding,

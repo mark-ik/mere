@@ -143,6 +143,13 @@ demands one.
 - The ledger above stays a document. No runtime registry of all settings, no
   universal JSON store, no framework crate.
 
+2026-08-26 follow-up: Distillery became the third concrete settings consumer,
+so Pandect now owns the narrow `write_bytes_with_backup` replacement mechanism.
+Notochord and Distillery use it; their paths, schemas, and validation remain
+product-owned. Knot's local remove-then-rename write must migrate to this
+mechanism once the WebRTC lane releases `ports/knot/src/settings.rs`; this
+slice deliberately leaves that file and manifest untouched.
+
 ## Carried forward from the superseded plan
 
 - The pelt `SettingsRef` lane as the projection address space, with the

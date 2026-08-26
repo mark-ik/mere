@@ -83,25 +83,15 @@ impl InstalledSettings {
         Ok(Some(settings))
     }
 
-    /// Save through a sibling temporary file. Windows does not replace an
-    /// existing destination on rename, so its replace path follows Knot's
-    /// established remove-then-rename fallback.
+    /// Save through Pandect's recoverable temporary/backup replacement.
     pub fn save(&self, data_root: &Path) -> Result<(), InstalledSettingsError> {
         self.validate()?;
         let path = distillery_settings_path(data_root);
-        let parent = path
-            .parent()
-            .expect("settings path has a product directory");
-        fs::create_dir_all(parent).map_err(|error| InstalledSettingsError::file(&path, error))?;
         let mut json = serde_json::to_string_pretty(self)
             .map_err(|error| InstalledSettingsError::file(&path, error))?;
         json.push('\n');
-        let temporary = path.with_extension("json.tmp");
-        fs::write(&temporary, json).map_err(|error| InstalledSettingsError::file(&path, error))?;
-        if path.exists() {
-            fs::remove_file(&path).map_err(|error| InstalledSettingsError::file(&path, error))?;
-        }
-        fs::rename(&temporary, &path).map_err(|error| InstalledSettingsError::file(&path, error))
+        pandect::write_bytes_with_backup(&path, json.as_bytes())
+            .map_err(|error| InstalledSettingsError::file(&path, error))
     }
 }
 
@@ -382,8 +372,11 @@ mod tests {
 
         let path = distillery_settings_path(directory.path());
         let json = fs::read_to_string(&path).unwrap();
-        assert!(json.contains("research"));
+        assert!(json.contains("\"profile\": \"work\""));
+        assert!(!json.contains("research"));
         assert!(!json.contains("seed"));
+        assert!(!path.with_extension("json.tmp").exists());
+        assert!(!path.with_extension("json.previous").exists());
         fs::write(&path, r#"{"profile":"research","tick_every_ms":5}"#).unwrap();
         assert!(InstalledSettings::load(directory.path()).is_err());
     }

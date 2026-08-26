@@ -45,9 +45,7 @@ pub fn load_notochord_policy(
 /// Persist owner policy beside the persona's other settings.
 ///
 /// The temporary file is fully written before it replaces the previous
-/// document. On Windows an existing destination cannot be renamed over, so a
-/// short-lived backup keeps the prior policy recoverable until the new one is
-/// in place.
+/// document through Pandect's recoverable replacement mechanism.
 pub fn save_notochord_policy(
     data_root: &Path,
     persona: PersonaId,
@@ -57,34 +55,9 @@ pub fn save_notochord_policy(
         .validate()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let target = notochord_policy_path(data_root, persona);
-    let directory = target
-        .parent()
-        .expect("a settings filename always has a parent");
-    fs::create_dir_all(directory)?;
-
     let json = serde_json::to_string_pretty(policies)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let temporary = target.with_extension("json.tmp");
-    let backup = target.with_extension("json.previous");
-    fs::write(&temporary, json)?;
-
-    if !target.exists() {
-        return fs::rename(temporary, target);
-    }
-    if backup.exists() {
-        fs::remove_file(&backup)?;
-    }
-    fs::rename(&target, &backup)?;
-    match fs::rename(&temporary, &target) {
-        Ok(()) => {
-            fs::remove_file(backup)?;
-            Ok(())
-        }
-        Err(error) => {
-            let _ = fs::rename(&backup, &target);
-            Err(error)
-        }
-    }
+    crate::write_bytes_with_backup(&target, json.as_bytes())
 }
 
 #[cfg(test)]
