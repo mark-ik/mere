@@ -2,6 +2,8 @@
 
 Host-neutral crawl frontier and bounded crawl runtime for Mere.
 
-**Fleece receipt (2026-08-23):** `mere-crawl` names `fleece` directly. Its page
-processor will use `PageExtract.links` as the frontier source; Fleece remains
-the extractor and crawl retains frontier policy.
+**Fleece intent receipt (2026-08-23; audited 2026-08-26):** `mere-crawl` names
+`fleece`, but no production source calls it yet. The implementation packet in
+`genet/design_docs/2026-08-26_fleece_followthrough_plan.md` adds a supplied-HTML
+helper that extracts raw links, then leaves URL resolution, deduplication,
+scope, depth, and host policy here in crawl.

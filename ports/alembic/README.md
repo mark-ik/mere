@@ -35,8 +35,9 @@ Foundation's VFX-format binding; the library keeps the product name.
 Lives in the [mere](https://github.com/merely-made/mere) workspace at
 `ports/alembic`. No implementation yet.
 
-The distillation plan is wired to `fleece`: a page engram will supply its
-extracted `Article` to Athanor instead of raw page bytes.
+The distillation plan intends to accept a Fleece `Article` rather than raw page
+bytes, but the reservation has no Article-consuming code and deliberately has
+no Fleece dependency. Re-add it only with the Athanor consumer.
 
 ## License
 

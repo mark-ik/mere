@@ -96,8 +96,10 @@ a per-node last-session stamp the snapshot does not yet carry.
 
 ### D — Athanor, the distillation daemon
 
-**Fleece receipt (2026-08-23):** `mere-alembic` names `fleece` directly; a page
-engram will supply the extracted `Article` to Athanor instead of raw page bytes.
+**Deferred Fleece intent (audited 2026-08-26):** the Alembic reservation does
+not depend on Fleece and has no Article-consuming code. A future page engram
+should supply the extracted `Article` to Athanor instead of raw page bytes, but
+the dependency lands with that consumer rather than as a manifest receipt.
 
 An armillary actor (steady-heat: throttled at idle, yields to foreground): forgetting (evict expired
 short-term), consolidation (dedup by `content_hash`, relate version chains, maintain indices), facet

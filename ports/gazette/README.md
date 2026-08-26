@@ -44,8 +44,11 @@ same facade.
 `mere-crawl`), and the reading room over extracted articles. The blocking
 `reqwest` needs an async port before a resident polls with it.
 
-The feed plan is wired to `fleece`: the linked page will be extracted into an
-`Article` at poll time and stored as the feed item's body.
+The feed plan names `fleece`, but this is still dependency intent rather than a
+live poll path. The implementation packet in
+`genet/design_docs/2026-08-26_fleece_followthrough_plan.md` first adds a narrow
+supplied-HTML-to-`Article` helper. Polling, storage, and the reading-room surface
+remain unbuilt Gazette work.
 
 ## Boundaries
 
