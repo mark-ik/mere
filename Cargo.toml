@@ -461,8 +461,9 @@ burn-remote = { path = "support/patches/burn-remote" }
 layout-dom-api = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", branch = "main", version = "=0.1.0" }
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
-# inherited by consumers, so Mere restates the branch-tracked source here.
-taffy = { git = "https://github.com/merely-made/genet.git", branch = "main" }
+# inherited by consumers, so Mere restates the branch-tracked source here. The
+# fork publishes as `genet-taffy`; the patch key remains the upstream crate name.
+taffy = { package = "genet-taffy", version = "=0.13.1", git = "https://github.com/merely-made/genet.git", branch = "main" }
 # p2panda repointed to the owned fork (branch-tracked, same rule as above) for
 # the dalek-3 unification: the fork's core/encryption are ported to
 # ed25519/x25519-dalek 3 + curve25519-dalek 5, unifying with iroh >=1.0.3 and
