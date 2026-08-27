@@ -49,13 +49,15 @@ pub mod application_settings_store;
 // images dedup. The pixels live here; the kernel Node holds only an ImageRef.
 pub mod image_store;
 // Per-node browser-state working set (scroll / form draft / viewer override /
-// compat mode / content-on) — browser-runtime state that doesn't belong in
-// graph truth (boundary pass slice C). Persistence converged onto web.* facets
-// (web_facets); the module's browser_nodes.json IO remains as legacy read-only.
+// compat mode / content-on / page-zoom scale) — browser-runtime state that
+// doesn't belong in graph truth (boundary pass slice C). Persistence converged
+// onto web.* facets (web_facets); the module's browser_nodes.json IO remains
+// as legacy read-only.
 pub mod browser_node_state;
 // The web.* facet namespace: browser_node_state's persistence boundary — one
-// atomic facet per field (web.scroll / form_draft / viewer / compat / content)
-// in facets.json, replacing the bespoke browser_nodes.json document.
+// atomic facet per field (web.scroll / form_draft / viewer / compat / content
+// / page_scale) in facets.json, replacing the bespoke browser_nodes.json
+// document.
 pub mod web_facets;
 // The denizen.* facet namespace: which graph nodes are denizens (servitor /
 // agent / peer / scenario / pack) and where each one's nested graph lives —
@@ -264,6 +266,6 @@ pub use wallet_store::{
     wallet_local_secrets_locked,
 };
 pub use web_facets::{
-    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_SCROLL, WEB_VIEWER, read_web_states,
-    write_web_state, write_web_states,
+    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_PAGE_SCALE, WEB_SCROLL, WEB_VIEWER,
+    read_web_states, write_web_state, write_web_states,
 };

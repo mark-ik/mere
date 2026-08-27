@@ -67,6 +67,13 @@ pub struct BrowserNodeState {
     /// sidecars load unchanged.
     #[serde(default)]
     pub content_on: bool,
+    /// Requested page-zoom scale for the node (`1.0` = 100%) — a document
+    /// scale, distinct from UI zoom and from the canvas camera zoom. The
+    /// owning engine applies its own quantization and bounds; the effective
+    /// applied value is engine business and is never stored here. `None`
+    /// means the node has never had zoom set (default scale).
+    #[serde(default)]
+    pub page_scale: Option<f32>,
 }
 
 impl BrowserNodeState {
@@ -78,6 +85,7 @@ impl BrowserNodeState {
             && self.viewer_override.is_none()
             && !self.compat_mode
             && !self.content_on
+            && self.page_scale.is_none()
     }
 }
 
@@ -236,6 +244,7 @@ mod tests {
         let b = states.entry(Uuid::from_u128(0xb));
         b.viewer_override = Some("viewer:note".to_string());
         b.compat_mode = true;
+        b.page_scale = Some(1.5);
         states
     }
 

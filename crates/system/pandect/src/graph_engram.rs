@@ -158,6 +158,7 @@ impl RedactionPolicy {
             "web.viewer",
             "web.compat",
             "web.content",
+            "web.page_scale",
         ];
         let nodes = facets.iter().map(|(node, _)| *node).collect::<Vec<_>>();
         for node in nodes {
@@ -557,6 +558,15 @@ mod tests {
                 .facets_mut()
                 .set(
                     node_id,
+                    chartulary::FacetId::new("web.page_scale"),
+                    serde_json::json!(1.5),
+                    &chartulary::AcceptAll,
+                )
+                .unwrap();
+            graph
+                .facets_mut()
+                .set(
+                    node_id,
                     chartulary::FacetId::new("foreign.keep"),
                     serde_json::json!({"portable": true}),
                     &chartulary::AcceptAll,
@@ -575,6 +585,12 @@ mod tests {
                 opened
                     .facets()
                     .get(&node_id, &chartulary::FacetId::new("web.form_draft"))
+                    .is_none()
+            );
+            assert!(
+                opened
+                    .facets()
+                    .get(&node_id, &chartulary::FacetId::new("web.page_scale"))
                     .is_none()
             );
             assert_eq!(

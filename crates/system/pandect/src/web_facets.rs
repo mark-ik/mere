@@ -30,6 +30,7 @@
 //! | `web.viewer` | string | viewer override (absent = automatic) |
 //! | `web.compat` | `true` | platform-WebView compat mode |
 //! | `web.content` | `true` | live content was ON at save |
+//! | `web.page_scale` | f32 | requested page-zoom scale (1.0 = 100%) |
 
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -47,15 +48,19 @@ pub const WEB_VIEWER: &str = "web.viewer";
 pub const WEB_COMPAT: &str = "web.compat";
 /// Facet id: live content was ON at save (rung-6 respawn). Payload: `true`.
 pub const WEB_CONTENT: &str = "web.content";
+/// Facet id: requested page-zoom scale (1.0 = 100%). Payload: f32 (absent =
+/// default scale). See [`BrowserNodeState::page_scale`] for the contract.
+pub const WEB_PAGE_SCALE: &str = "web.page_scale";
 
-/// The five `web.*` facet ids, the set this module owns (used by the rewrite
+/// The six `web.*` facet ids, the set this module owns (used by the rewrite
 /// to clear stale fields).
-const WEB_FACETS: [&str; 5] = [
+const WEB_FACETS: [&str; 6] = [
     WEB_SCROLL,
     WEB_FORM_DRAFT,
     WEB_VIEWER,
     WEB_COMPAT,
     WEB_CONTENT,
+    WEB_PAGE_SCALE,
 ];
 
 /// Replace the store's `web.*` facets with `states` — the save-time write.
@@ -101,6 +106,9 @@ pub fn write_web_state(store: &mut NodeFacetStore, node: Uuid, state: &BrowserNo
     if state.content_on {
         set(WEB_CONTENT, json!(true));
     }
+    if let Some(scale) = state.page_scale {
+        set(WEB_PAGE_SCALE, json!(scale));
+    }
 }
 
 /// Read every node's `web.*` facets back into the host's working map — the
@@ -114,6 +122,7 @@ pub fn read_web_states(store: &NodeFacetStore) -> BrowserNodeStates {
     let viewer = FacetId::new(WEB_VIEWER);
     let compat = FacetId::new(WEB_COMPAT);
     let content = FacetId::new(WEB_CONTENT);
+    let scale = FacetId::new(WEB_PAGE_SCALE);
     for (id, facets) in store.iter() {
         let state = BrowserNodeState {
             scroll: facets.get(&scroll).and_then(|v| {
@@ -137,6 +146,10 @@ pub fn read_web_states(store: &NodeFacetStore) -> BrowserNodeStates {
                 .get(&content)
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            page_scale: facets.get(&scale).and_then(|v| {
+                let s = v.as_f64()? as f32;
+                s.is_finite().then_some(s)
+            }),
         };
         if !state.is_empty() {
             states.nodes.insert(*id, state);
@@ -155,6 +168,7 @@ mod tests {
         a.scroll = Some((0.0, 420.5));
         a.viewer_override = Some("reader".to_string());
         a.content_on = true;
+        a.page_scale = Some(1.25);
         let b = states.entry(Uuid::from_u128(0xb));
         b.compat_mode = true;
         b.form_draft = Some("dear sir".to_string());
@@ -177,6 +191,7 @@ mod tests {
         assert!(store.get(&a, &FacetId::new(WEB_COMPAT)).is_none());
         assert!(store.get(&a, &FacetId::new(WEB_FORM_DRAFT)).is_none());
         assert!(store.get(&a, &FacetId::new(WEB_CONTENT)).is_some());
+        assert!(store.get(&a, &FacetId::new(WEB_PAGE_SCALE)).is_some());
     }
 
     #[test]
@@ -205,11 +220,15 @@ mod tests {
             .set(a, FacetId::new(WEB_SCROLL), json!("nope"), &AcceptAll)
             .unwrap();
         store
+            .set(a, FacetId::new(WEB_PAGE_SCALE), json!("nope"), &AcceptAll)
+            .unwrap();
+        store
             .set(a, FacetId::new(WEB_CONTENT), json!(true), &AcceptAll)
             .unwrap();
         let states = read_web_states(&store);
         let state = states.get(a).expect("the node still reads");
         assert!(state.scroll.is_none(), "garbage scroll defaults");
+        assert!(state.page_scale.is_none(), "garbage page_scale defaults");
         assert!(state.content_on, "the good field survives");
     }
 }
