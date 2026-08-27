@@ -64,4 +64,4 @@ and are not restated here: the module table above is what the crate actually
 ships, and a phase ladder copied into a README drifts from it.
 See [`design_docs/`](design_docs/).
 
-License: dual MIT OR Apache-2.0, at your option.
+License: MPL-2.0 (see LICENSE).

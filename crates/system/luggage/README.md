@@ -118,3 +118,18 @@ Defaults: `--target` is the host triple, `--signature` is `<artifact>.sig`,
 `tempfile`, `percent-encoding`, `base64`, `log`, `thiserror`, and upstream's
 `cargo-packager-utils` for `current_exe` resolution. macOS additionally pulls
 `flate2` and `tar` for `.app.tar.gz`. Tests use `minisign` to sign in-process.
+
+## License
+
+MPL-2.0 (see [`LICENSE`](../../../LICENSE)).
+
+A substantial derivative of
+[`cargo-packager-updater`](https://crates.io/crates/cargo-packager-updater)
+(Tauri Programme within The Commons Conservancy / CrabNebula Ltd,
+MIT OR Apache-2.0), relicensed under the 2026-08-22 license posture ruling
+with the upstream copyright notices retained verbatim on every derived file.
+Both MIT and Apache-2.0 permit this provided the notice travels with the work.
+Recorded in [`LICENSES.md`](../../../LICENSES.md).
+
+Published version 0.1.0 carries MIT OR Apache-2.0 permanently; MPL-2.0 ships
+at the next functional bump.

@@ -38,4 +38,4 @@ eidetic lane's plans live in the repo-level `design_docs/mere_docs/`.
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

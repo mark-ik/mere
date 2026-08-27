@@ -5,7 +5,7 @@ name = "chartulary"
 # bare counter reads back as `WriterId::LOCAL`.
 version = "0.2.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "The generic content-addressed container graph (aka chart). Graph<N, E> on petgraph with capability traits (Identified, Addressed, ContentBearing, Labeled, Classified, Predicated) and default Container/Relation payloads. The substrate that binds muniment's blobs and codicil's log into an app-agnostic graph. Carries the lineage layer (`chartulary::stemma`): owner-scoped descent of content through branching visits."
 repository = "https://github.com/merely-made/mere"
 keywords = ["graph", "content-addressed", "knowledge-graph", "petgraph"]

@@ -2,7 +2,7 @@
 name = "seiche"
 version = "0.0.5"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "Kernel-free, rapier-backed force-directed graph layout: bodies bound to node keys, themable forces (exclusion, springs, boundary), and quint field couplings. A host feeds node keys + positions; seiche integrates."
 repository = "https://github.com/merely-made/mere"
 keywords = ["physics", "layout", "graph", "force-directed", "rapier"]

@@ -1,3 +1,9 @@
+# Copyright 2026 Mark Alan Boykin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+# SPDX-License-Identifier: MPL-2.0
+
 # Build and (re)install the personae SSH agent + vault CLI on Windows.
 #
 # Interim scaffolding per the 2026-07-22 identity-vault-ssh-agent plan: the

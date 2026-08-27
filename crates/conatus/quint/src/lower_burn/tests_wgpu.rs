@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Wgpu ↔ NdArray parity and timing for the burn lowering (burn brief
 //! Lane 1, `field-burn-wgpu`). Parity tests need a working GPU adapter;
 //! the timing test is `#[ignore]`d — run it explicitly:

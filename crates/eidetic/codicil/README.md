@@ -53,4 +53,4 @@ Dependencies: `muniment` (path), `serde`.
 Built alongside muniment from a survey of four consumers (woodshed, hocket,
 isometry, mere). See [`design_docs/`](design_docs/).
 
-License: dual MIT OR Apache-2.0, at your option.
+License: MPL-2.0 (see LICENSE).

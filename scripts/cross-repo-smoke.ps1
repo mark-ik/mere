@@ -1,3 +1,9 @@
+# Copyright 2026 Mark Alan Boykin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+# SPDX-License-Identifier: MPL-2.0
+
 # Cross-repo smoke for the path-dep lattice (mere <- genet <- netrender, + turnstone).
 #
 # The lattice has no CI; a `git pull` (or an agent edit) in any sibling can break

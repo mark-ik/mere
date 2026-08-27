@@ -1,10 +1,15 @@
 # License Sweep Plan
 
 **Date:** 2026-08-22
-**Status:** planned; P0 not started. Both P0 confirmations are settled
-(2026-08-22): header shape C and the copyright notice `Mark Alan Boykin`, with
-no exceptions to the default. The remaining gate is per-repository: a clean
-tree, and for mere the retired `genet-layout` patch entry.
+**Status:** **P0 and P1 landed 2026-08-27**; P2-P7 remain. mere is MPL-2.0 by
+default with correct provenance — receipt in §6's Progress. Both P0
+confirmations were settled 2026-08-22 (header shape C, the notice
+`Mark Alan Boykin`, no exceptions); P0's tooling and ledger were built
+2026-08-27, and its two open verifications are answered there. Two rulings
+were taken during the work: `crates/system/luggage` carries MPL-2.0 with the
+Tauri/CrabNebula notices retained, and published crates ship no license text
+file (root `LICENSE` only), which struck one P1 done-condition. The remaining
+gate for each later phase is unchanged: a clean tree in that repository.
 **Scope:** Carry the 2026-08-22 ruling, MPL-2.0 by default with correct
 provenance, into every owned repository: manifests, source headers, LICENSE
 files, READMEs, and a provenance ledger per repository. No code changes, no
@@ -145,7 +150,16 @@ Done when:
 - `git grep -L 'Mozilla Public' -- '*.rs'` returns only ledger paths;
 - `git grep -l 'Incompatible With Secondary'` returns nothing;
 - `ls LICENSE*` at the root prints `LICENSE` alone;
-- `cargo package --list -p personae` includes `LICENSE`;
+- ~~`cargo package --list -p personae` includes `LICENSE`~~ — **struck
+  2026-08-27.** P0 verified against retinue, which already has the target
+  layout, that Cargo does *not* copy a workspace-root `LICENSE` into a member
+  package: retinue's root carries one, `linkboy` carries none, and
+  `cargo package --list -p linkboy` includes no license text. This
+  done-condition and invariant 4 could not both hold. Mark ruled for
+  invariant 4: **one `LICENSE` per repository, and published crates ship the
+  SPDX field plus Exhibit A in every source, with no license text file** —
+  which is what retinue's published crates already do. Licit, since §1.4
+  makes Exhibit A in the file the operative act;
 - `cargo check -p castellan -p personae -p notochord -p sceno` is green;
 - `--audit` for mere reports zero unheaded owned sources.
 
@@ -337,3 +351,40 @@ never before that repository's ledger is written.
   owned sources, 0 with Exhibit A, 0 Exhibit B. isometry 129 owned; turnstone
   121; woodshed 78; hocket 31; wavicle 14; mora 7. Every one of them carries a
   `LICENSE-APACHE`/`LICENSE-MIT` pair and zero Exhibit B hits.
+- **2026-08-27, P1 LANDED.** mere is MPL-2.0 by default with correct
+  provenance. What changed: `[workspace.package] license = "MPL-2.0"`; 37
+  permissive manifest lines rewritten (23 to `license.workspace = true` where
+  the crate is a workspace member, 14 to explicit `MPL-2.0` where it is not);
+  the root `LICENSE` restored from `a9902e3c^:LICENSE-MPL` (350 lines) and 46
+  owned `LICENSE-MIT`/`LICENSE-APACHE` files removed, with support/patches'
+  8 kept; shape-C headers written to **1050 owned sources**; 39 markdown files
+  moved to `MPL-2.0 (see LICENSE)`, and luggage given a License section it
+  never had.
+  **Receipt (`--audit`, after):** manifests `{MIT OR Apache-2.0: 5,
+  MPL-2.0: 18, workspace: 100, (none): 2}` — the 5 permissive are
+  support/patches' own; owned sources 1050, **0 without Exhibit A**,
+  **0 Exhibit B hits**; root prints `LICENSE` alone beside `LICENSES.md`;
+  5 ledger paths. `cargo check -p castellan -p personae -p sceno` (pulling
+  notochord) green in 5m08s, so invariant 6 holds — the headers are comments
+  and changed no behaviour.
+  **luggage** took MPL-2.0 with the upstream notice retained, per Mark's
+  2026-08-27 ruling on the brief's substantial-derivative precedent: all 7
+  derived files keep `Copyright 2019-2023 Tauri Programme within The Commons
+  Conservancy` and `Copyright 2023-2023 CrabNebula Ltd.` verbatim above Mark's
+  line, verified one occurrence per file with no duplication. `staging.rs` and
+  `bin/luggage-manifest.rs` are Mark's own and carry no upstream notice, which
+  the tool classified correctly per file.
+  **Two greps still report matches, both correct:** `MIT OR Apache-2.0` in
+  `crates/system/luggage/Cargo.toml` is a comment naming the upstream's
+  license, and the Exhibit B string appears in this plan and the posture brief
+  because both quote the rule. Neither is a violation, and P1's done-condition
+  wording should say so.
+  **Tooling note:** `--retain-notice` was added during P1 for exactly the
+  luggage case; without it the header stripper would have deleted the upstream
+  copyright lines. The Exhibit B literal in the tool is built by concatenation
+  so the tool never matches itself.
+- **2026-08-27, remaining:** P2 genet (its `--audit` needs a longer budget than
+  two minutes; consider an index-based check), P3 isometry, P4 the
+  applications, P5 standalones, P6 documents, P7 the already-MPL repositories.
+  Baseline counts for P3-P5 were taken 2026-08-27 and are in the P0 entry.
+  **No crate was republished for the license change**, per invariant 8.

@@ -24,7 +24,7 @@ cannot share a buffer with the renderer.
 
 Dependency direction is numen to quint to seiche. Each crate publishes under its
 own name and stays independent of any graph kernel or renderer. All three are
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).
 
 Fields are treated as a third canvas primitive beside nodes and edges. Node and
 edge truth lives in the content substrate

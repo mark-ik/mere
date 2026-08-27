@@ -75,4 +75,4 @@ rapier2d 0.33, petgraph 0.8, quint (default features), numen, euclid, tracing.
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

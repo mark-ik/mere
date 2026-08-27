@@ -15,7 +15,7 @@
 name = "quint-shaders"
 version = "0.0.1"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 description = "Explicit-regime GPU kernels for quint's resident field lane: repulsion, springs, and integration, in Rust via rust-gpu."
 repository = "https://github.com/merely-made/mere"
 publish = false

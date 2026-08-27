@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The Sans-IO driver: the loop str0m does not write for you.
 //!
 //! str0m owns no socket, no runtime, and no timer. Everything below is the part

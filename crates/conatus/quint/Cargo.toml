@@ -2,7 +2,7 @@
 name = "quint"
 version = "0.0.4"
 authors = ["@mark-ik"]
-license = "MIT OR Apache-2.0"
+license.workspace = true
 edition = "2024"
 rust-version = "1.92.0"
 description = "Field algebra for graph canvases — scalar/vector fields over canvas space, node/edge couplings, and evaluation (Rhai authoring, Burn lowering). The portable field source whose forces `seiche` integrates."

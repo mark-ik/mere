@@ -2,7 +2,7 @@
 name = "codicil"
 version = "0.1.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "An append-only, replayable log: immutable ordered entries you append and replay to rebuild state, persisted through muniment. The event-source and nondestructive-history primitive. Sibling to muniment (the store)."
 repository = "https://github.com/merely-made/mere"
 keywords = ["append-only", "log", "event-sourcing", "history", "persistence"]

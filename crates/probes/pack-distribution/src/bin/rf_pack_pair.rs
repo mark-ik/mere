@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The B5 physical receipt: a signed `mere.pack/v1` pack crosses the REAL
 //! RF pair (two RNode radios on COM ports) as a retinue resource, and the
 //! subscriber re-verifies the personae signature on arrival.

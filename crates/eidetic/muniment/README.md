@@ -60,4 +60,4 @@ what muniment stores. See [`design_docs/`](design_docs/).
 The name: a muniment room is where a household keeps its deeds and records, the
 documents preserved as evidence.
 
-License: dual MIT OR Apache-2.0, at your option.
+License: MPL-2.0 (see LICENSE).

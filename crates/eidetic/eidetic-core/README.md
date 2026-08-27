@@ -58,6 +58,6 @@ stores return ready futures.
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).
 
 [`muniment::Backend`]: https://docs.rs/muniment/latest/muniment/trait.Backend.html

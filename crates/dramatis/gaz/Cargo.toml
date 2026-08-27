@@ -2,7 +2,7 @@
 name = "gaz"
 version = "0.0.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "The contact layer: persona-scoped, key-rooted contact records. Your petname for them, rooted on stable keys, with handles and endpoints each carrying their own trust state, plus kith/kin tiers and recency. A resolver finds the wide world; gaz keeps who you actually know."
 repository = "https://github.com/merely-made/mere"
 readme = "README.md"

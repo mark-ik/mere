@@ -48,4 +48,4 @@ Background:
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+# Copyright 2026 Mark Alan Boykin
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+# SPDX-License-Identifier: MPL-2.0
+
 """Apply the house MPL-2.0 header (shape C) to owned source files.
 
 Carries the 2026-08-22 license ruling into a repository's sources. See
@@ -35,7 +42,11 @@ EXHIBIT_A = [
     "file, You can obtain one at https://mozilla.org/MPL/2.0/.",
 ]
 SPDX = "SPDX-License-Identifier: MPL-2.0"
-EXHIBIT_B = "Incompatible With Secondary Licenses"
+# Built by concatenation, and never written contiguously anywhere in this
+# file (comments included). Otherwise the tool matches itself: --audit counts
+# it as a violation of invariant 2, and the sweep plan's grep for the Exhibit
+# B notice reports the tool instead of real hits.
+EXHIBIT_B = "Incompatible With " + "Secondary Licenses"
 
 # extension -> line-comment token
 COMMENT = {
@@ -77,21 +88,34 @@ def git_tracked(repo, exts):
     return files
 
 
-def load_ledger(repo):
-    """Paths to skip: the first column of LICENSES.md's table rows.
+SKIP_SECTION = "retained licenses"
 
-    Deliberately narrow. An earlier version took any backtick-quoted string
-    containing a slash, which swept up prose, upstream URLs, and the tool's
-    own path. Only a leading `path` cell in a table row counts.
+
+def load_ledger(repo):
+    """Paths to skip: first-column cells of the Retained licenses table.
+
+    Deliberately narrow on two axes, each for a reason found in testing:
+
+    - Only the *first column* of a table row counts. An earlier version took
+      any backtick-quoted string containing a slash, which swept up prose,
+      upstream URLs, and the tool's own path.
+    - Only rows under the `## Retained licenses` heading count. Other
+      sections document dispositions that are not skips: a substantial
+      derivative (luggage) keeps its upstream notice *and* receives Exhibit A,
+      so it must not be skipped, but it must still be recorded.
     """
     led = repo / "LICENSES.md"
     if not led.exists():
         return []
     skips = []
+    in_section = False
     text = led.read_text(encoding="utf-8", errors="replace")
     for line in text.splitlines():
         s = line.strip()
-        if not s.startswith("|"):
+        if s.startswith("#"):
+            in_section = s.lstrip("#").strip().lower() == SKIP_SECTION
+            continue
+        if not in_section or not s.startswith("|"):
             continue
         cells = [c.strip() for c in s.strip("|").split("|")]
         if not cells:
@@ -127,8 +151,16 @@ def build_header(tok, bare):
     return lines
 
 
+#: a copyright line that is Mark's own, in either the July or the current form
+OWN_NOTICE = re.compile(r"Copyright\b.*\bMark\b", re.IGNORECASE)
+
+
 def restrip(body):
-    """Split off a leading shebang, then drop an existing licence header."""
+    """Split off a shebang, then drop an existing licence header.
+
+    Returns (lead, stripped, rest) so a caller running with --retain-notice
+    can put third-party copyright lines back above the new header.
+    """
     lead = []
     i = 0
     if body and body[0].startswith("#!"):
@@ -140,13 +172,14 @@ def restrip(body):
     while i < len(body) and HEADER_PAT.match(body[i]):
         i += 1
     if i == start:
-        return lead, body[len(lead):]
+        return lead, [], body[len(lead):]
+    stripped = body[start:i]
     if i < len(body) and not body[i].strip():
         i += 1
-    return lead, body[i:]
+    return lead, stripped, body[i:]
 
 
-def process(path, tok, bare):
+def process(path, tok, bare, retain=False):
     raw = path.read_bytes()
     eol = detect_eol(raw)
     enc = "utf-8-sig" if raw[:3] == b"\xef\xbb\xbf" else "utf-8"
@@ -155,12 +188,22 @@ def process(path, tok, bare):
     body = [l[:-1] if l.endswith("\r") else l for l in body]
 
     had = any(HEADER_PAT.match(l) for l in body[:8])
-    lead, rest = restrip(body)
+    lead, stripped, rest = restrip(body)
+
+    # Provenance: upstream copyright lines are never removed. Mark's own line
+    # is dropped, because build_header emits the current form of it.
+    foreign = []
+    if retain:
+        foreign = [l for l in stripped
+                   if "Copyright" in l and not OWN_NOTICE.search(l)]
+
     header = build_header(tok, bare)
-    new = lead + ([""] if lead else []) + header + [""] + rest
+    new = lead + ([""] if lead else []) + foreign + header + [""] + rest
     out = eol.join(new)
     changed = out.encode("utf-8") != raw
     why = "replace existing header" if had else "add header"
+    if foreign:
+        why += " (+%d retained)" % len(foreign)
     return changed, why, out
 
 
@@ -219,6 +262,10 @@ def main():
     g.add_argument("--audit", action="store_true")
     ap.add_argument("--bare", action="store_true",
                     help="Exhibit A with no copyright line (third-party-derived)")
+    ap.add_argument("--retain-notice", action="store_true",
+                    help="keep third-party copyright lines above the new "
+                         "header (substantial derivatives: luggage, tucket, "
+                         "cambium, meristem)")
     ap.add_argument("--only", default=None,
                     help="limit to paths under this prefix")
     args = ap.parse_args()
@@ -240,7 +287,7 @@ def main():
         tok = COMMENT[rel.suffix]
         path = repo / rel
         try:
-            did, why, out = process(path, tok, args.bare)
+            did, why, out = process(path, tok, args.bare, args.retain_notice)
         except (UnicodeDecodeError, OSError) as e:
             print("  SKIP (unreadable) %s: %s" % (rel, e))
             continue

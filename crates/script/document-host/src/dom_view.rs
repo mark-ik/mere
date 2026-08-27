@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! P2.1: the genet-coupled adapter. Projects a live `ScriptedDom` into
 //! document-core view-nodes (`inspect`) and applies id-targeted mutations back via
 //! `LayoutDomMut` (`apply`) — the §11.3 wiring.

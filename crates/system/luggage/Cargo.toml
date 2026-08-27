@@ -2,7 +2,7 @@
 name = "luggage"
 version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "Self-update for packaged apps: signed manifests over pluggable feeds (HTTP, directory, GitHub Releases). A fork of cargo-packager-updater carrying the Merely family's update posture."
 repository = "https://github.com/merely-made/mere"
 

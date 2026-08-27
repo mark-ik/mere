@@ -26,11 +26,27 @@ relicensed, and nothing here receives a Merely copyright line.
 384 tracked files. These are vendored patch trees consumed through
 `[patch]`; they are upstream's work carrying upstream's terms.
 
-## Pending a ruling
+## Derivatives carrying MPL-2.0 with an upstream notice retained
 
-| Path | Today | Question |
+These are **not** skipped. Each file receives Exhibit A and Mark's copyright
+line, and every upstream copyright line above it is kept verbatim. Apply with
+`--retain-notice`, which preserves foreign copyright lines while replacing
+Mark's own.
+
+| Path | Upstream | Notices kept |
 |---|---|---|
-| `crates/system/luggage` | MIT OR Apache-2.0, published 0.1.0 | A fork of Tauri/CrabNebula's `cargo-packager-updater`. Eight source files carry `Copyright 2019-2023 Tauri Programme within The Commons Conservancy` and `Copyright 2023-2023 CrabNebula Ltd.` alongside Mark's own line. The brief's rule for a substantial derivative taken into the household (tucket, cambium, meristem) is MPL-2.0 **with the upstream notice retained** — but luggage is named in neither the brief nor the sweep plan, and whether Mark's work on top is "substantial" is the open question. Skipped by the tool until ruled. |
+| `crates/system/luggage` | [cargo-packager-updater](https://github.com/crabnebula-dev/cargo-packager), MIT OR Apache-2.0 | `Copyright 2019-2023 Tauri Programme within The Commons Conservancy`; `Copyright 2023-2023 CrabNebula Ltd.` |
+
+Ruled 2026-08-27, on the brief's substantial-derivative precedent: tucket keeps
+MeshCore's MIT notice, and cambium and meristem go MPL-2.0 with the Apache
+notice retained. Both MIT and Apache-2.0 permit relicensing a derivative so
+long as the notice travels with it. luggage is published (0.1.0, MIT OR
+Apache-2.0); that version keeps its grant permanently and MPL-2.0 ships at its
+next functional bump, per the sweep plan's invariant 8.
+
+**This section is deliberately not the skip list.** The tool reads only the
+`## Retained licenses` table above. Adding a path here documents a disposition;
+it does not exempt the path from receiving a header.
 
 ## Exceptions under the fork/vendor criterion
 

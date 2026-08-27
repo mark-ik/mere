@@ -123,7 +123,7 @@ exclude = [
 [workspace.package]
 version = "0.0.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/merely-made/mere"
 # The scenograph crates inherit this; it matches what their own workspace
 # declared before the 2026-07-23 absorption.

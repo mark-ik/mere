@@ -2,7 +2,7 @@
 name = "sibylla"
 version = "0.1.2"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "Deprecated compatibility shim for esp::embed; new code should depend on esp."
 repository = "https://github.com/merely-made/mere"
 readme = "README.md"

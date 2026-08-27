@@ -17,6 +17,16 @@ use mesh_host::{HostConfig, ManualClock, MeshHost, Step, TransportBlobSpace};
 use personae::{IdentityProvider, InMemoryProvider};
 use transport::{BlobStore, P2pandaTransport};
 
+
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+//! Distillery v0's projection proof: the port drives a real mesh host and
+//! releases the blob custody that an accepted checkpoint settles.
+};
+
 const MESH: [u8; 32] = [0xd1; 32];
 
 fn retention(authority: [u8; 32]) -> MeshRetentionPolicy {

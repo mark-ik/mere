@@ -2,7 +2,7 @@
 name = "pandect"
 version = "0.1.1"
 authors = ["@mark-ik"]
-license = "MIT OR Apache-2.0"
+license.workspace = true
 edition = "2024"
 # Publishable from 2026-08-14 as `pandect`.
 publish = true

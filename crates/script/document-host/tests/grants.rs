@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! P2.3 verification: the capability grant drives which imports get linked, and a
 //! denied *required* capability makes instantiation fail — the capability boundary
 //! enforced by the runtime (§10.4 / §11.4). The document-core guest imports

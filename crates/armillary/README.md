@@ -47,4 +47,4 @@ command that caused them without defining the outcome vocabulary.
 - Consumers in this workspace: `crates/system/fetch`, `crates/crawl`,
   `crates/canvas/canvas`, and `crates/intel/esp` under its `actor` feature.
 
-License: dual MIT OR Apache-2.0, at your option.
+License: MPL-2.0 (see LICENSE).

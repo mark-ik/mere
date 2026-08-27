@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The canvas test suite, split by subject into `src/tests/` so no single file
 //! carries the whole surface (the workspace keeps files under 600 LOC). This
 //! root holds only what the subject modules share: the imports they glob
