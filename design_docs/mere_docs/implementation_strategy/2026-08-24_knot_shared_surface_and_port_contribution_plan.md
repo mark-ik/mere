@@ -5,11 +5,11 @@
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
 host receipt implemented and independently green; Turnstone T0 consumer core
 and user invocation landed, including explicit read-only admission; generic
-accessibility landed; P0's second-provider proof is complete — Turnstone
-admits `distillery.installed.v1` through the existing registry with no
-provider-specific renderer arm, and the full shell binary builds from
-published sources — leaving the P0 contract reduction and freeze as the
-open step
+accessibility landed; P0 is complete — Turnstone admits
+`distillery.installed.v1` through the existing registry with no
+provider-specific renderer arm, the full shell binary builds from published
+sources, and the contract is reduced and frozen at v1 (Genet `001448d55`,
+Turnstone `3f63671`); F0 is the next gated lane
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -672,6 +672,21 @@ through UI admission.
   methods erase real shipped host machinery — and surfaced the
   pointer-capture routing gap in Turnstone's contributed pane path. F-2
   through F-4 remain open for ruling.
+- 2026-08-26: all four decisions ruled (F-1 unify; F-2 cut all four; F-3
+  keep all three; F-4 keep all eight) and the freeze landed. Genet
+  `001448d55` reduces the descriptor to identity, `label`, and
+  `accepted_source`, documents `accepted_source` as the admission truth,
+  keeps the fourteen-method trait, and stamps both modules frozen at v1
+  (additive until a v2), with a Cambium changelog entry; `genet-host-api`
+  21 and `cambium` 179 tests pass. Turnstone `3f63671` lands the F-1
+  invariant: `SurfaceRegistrationError::SourceShapeMismatch` refuses a
+  provider whose declared source kind disagrees with its admission
+  schema, and all four provider suites pass against it. Follow-through
+  rides the next Genet pin bumps: the descriptor literals in
+  `knot-document`, `distillery`, Turnstone's Sky provider, and Turnstone's
+  test fixtures drop the removed fields when each repo aligns past
+  `001448d55`; the pointer-capture routing gap stays noted for the T lane.
+  P0 is complete.
 
 ## 8. Final done conditions
 
