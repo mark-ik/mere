@@ -15,8 +15,7 @@ use cambium::{
     AnyView, DomHandle, GenetAppRunner, GenetCtx, GenetElement, RunnerSurfaceSession, div, el, span,
 };
 use genet_host_api::{
-    PlacementHint, ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId,
-    SurfaceMultiplicity, SurfaceRole, SurfaceSourceShape,
+    ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId, SurfaceSourceShape,
 };
 use muniment::Backend;
 
@@ -183,10 +182,6 @@ pub fn distillery_installed_descriptor() -> SurfaceDescriptor {
         surface_id: SurfaceId::from(SURFACE_ID),
         label: "Distillery".to_owned(),
         accepted_source: SurfaceSourceShape::One(SourceKindId::from(SURFACE_ID)),
-        roles: vec![SurfaceRole::from("pane"), SurfaceRole::from("status")],
-        multiplicity: SurfaceMultiplicity::PerSource,
-        placement_hint: PlacementHint::from("main"),
-        potential_capabilities: Vec::new(),
     }
 }
 
