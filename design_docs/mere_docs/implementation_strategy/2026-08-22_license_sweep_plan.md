@@ -287,3 +287,53 @@ never before that repository's ledger is written.
   probe), so invariant 7 blocks P1 regardless. The §6 counts are as-measured
   on 2026-08-22 and will drift when that lane lands; re-run `--audit` before
   P1 rather than trusting them.
+- **2026-08-27, P0 built and largely done.** `scripts/relicense_headers.py`
+  written and verified against every P0 done-condition: `--dry-run` lists 1040
+  owned sources against 363 ledger-skipped; `--apply` twice produces an empty
+  diff; a CRLF file (`crates/armillary/src/lib.rs`) and an LF file
+  (`scripts/check_port_boundaries.py`) each round-trip with their endings
+  intact; a shebang keeps its first line; a July-headed file has
+  `Mark AB (markik)` + the permissive SPDX replaced by shape C with its `//!`
+  docs preserved. `LICENSES.md` written at the root, and the tool reads its
+  table rows' first column as the skip list. `--audit` prints the §4 receipt
+  for mere, isometry, turnstone, woodshed, hocket, wavicle and mora; genet's
+  run exceeds two minutes and needs a longer budget or an index-based check.
+  Test edits were reverted; only the two new files remain.
+- **2026-08-27, five P0 findings, three of which change P1.**
+  1. **Invariant 1's discovery pattern is wrong.** It greps `Copyright (c)`,
+     but `crates/system/luggage` writes bare `Copyright 2019-2023 <holder>`
+     with no parenthesised `(c)`, so the plan's own mechanical discovery finds
+     nothing there. Running P1 as written would have stripped
+     `Copyright 2019-2023 Tauri Programme within The Commons Conservancy` and
+     `Copyright 2023-2023 CrabNebula Ltd.` and relicensed their code to
+     MPL-2.0 under Mark's notice. Grep `Copyright` unqualified, then read.
+  2. **`crates/system/luggage` is a fork of Tauri/CrabNebula's
+     `cargo-packager-updater`**, published 0.1.0, named in neither the brief
+     nor this plan. Eight files carry upstream copyright beside Mark's.
+     Ledgered as pending; the brief's substantial-derivative rule (tucket,
+     cambium, meristem) would make it MPL-2.0 with the upstream notice
+     retained, but that is Mark's call, not an inference.
+  3. **`support/patches` holds five third-party trees, not the two listed:**
+     `cubecl-runtime`, `cubecl-wgpu`, `cubek-reduce`, `burn-cubecl`,
+     `burn-remote` (tracel-ai, MIT OR Apache-2.0), 384 tracked files.
+  4. **Cargo does not copy a workspace-root `LICENSE` into a member package.**
+     Verified on retinue, which already has the target layout: root `LICENSE`
+     present, `linkboy` carries none, and `cargo package --list -p linkboy`
+     includes no license text at all. So invariant 4 ("one `LICENSE` per
+     repository; the per-crate files go") and P1's done-condition
+     ("`cargo package --list -p personae` includes `LICENSE`") cannot both
+     hold. Retinue's published crates ship today with the SPDX field and no
+     license text, which is licit — Exhibit A in each source is the operative
+     act under §1.4 — but it is a posture to choose deliberately, not to
+     inherit by deleting files. **Open for Mark.**
+  5. **`crates/probes` are tracked** (9 files); the July memory saying they
+     were gitignored is stale. P0's fourth task is closed.
+- **2026-08-27, P1's preconditions:** the `genet-layout` patch entry no longer
+  blocks — `cargo metadata` over mere resolves cleanly and repeatedly. The tree
+  was cleaned by commit `83615038`. Both gates in the Status line are now
+  clear; P1 waits only on findings 2 and 4 above.
+- **2026-08-27, baseline `--audit` before P1** (compare after): mere 125
+  manifests (77 workspace, 42 `MIT OR Apache-2.0`, 4 MPL-2.0, 2 none), 1040
+  owned sources, 0 with Exhibit A, 0 Exhibit B. isometry 129 owned; turnstone
+  121; woodshed 78; hocket 31; wavicle 14; mora 7. Every one of them carries a
+  `LICENSE-APACHE`/`LICENSE-MIT` pair and zero Exhibit B hits.
