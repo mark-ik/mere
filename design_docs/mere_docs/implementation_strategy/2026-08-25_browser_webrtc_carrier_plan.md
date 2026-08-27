@@ -1,8 +1,9 @@
 # Browser WebRTC Carrier Plan
 
 **Date:** 2026-08-25
-**Status:** planned; bounded feasibility research is complete, implementation
-has not started.
+**Status:** in progress. C0-C2 landed 2026-08-26; C3's code landed 2026-08-26,
+its forced-relay and reconnect RECEIPTS await a live TURN service (Mark to
+supply). C4 is otherwise the next code phase.
 **Scope:** Let an ordinary browser join a bounded live Graphshell session whose
 native application retains state and authority. Build the carrier and admission
 proof before adding public rendezvous infrastructure.
@@ -34,8 +35,10 @@ distinct:
 6. Graphshell carries projections, diffs, resources, and admitted intents.
 7. The native application remains authoritative for state and action.
 
-The Iroh custom-transport donor is a later optional adapter. This plan does not
-make it the browser join path.
+The Iroh custom-transport donor is superseded as a candidate: iroh 1.1 ships
+first-party browser support that needs no port and carries no version skew
+(Findings, 2026-08-26). That path is the **second lane** of §9, for networks
+where WebRTC is blocked. Neither is the browser join path.
 
 ## 2. Boundaries
 
@@ -108,6 +111,8 @@ after `transport.accept`. The WebRTC listener calls it directly.
 - existing Graphshell carrier tests pass through the extracted function;
 - a WebRTC acceptance fixture reaches the same function with `peer: None` and
   a nonempty shared link.
+
+**Landed 2026-08-26.** All five conditions met; see Findings and Progress.
 
 ## 4. C1: direct data channel
 
@@ -187,6 +192,11 @@ Graphshell opens.
   the fragment nor its redemption secret;
 - altering the bound release reference is rejected, while an unknown publisher
   remains joinable only through a compatible already-trusted generic client.
+
+**Landed 2026-08-26** except the headed browser-log/referrer/signaling hygiene
+check, which needs a real browser and travels with C4's client work; the
+structural half (redacted `Debug`, no secret in any log path, `#`-tolerant
+fragment parsing) is in. See Findings and Progress.
 
 ## 6. C3: forced relay and reconnect
 
@@ -314,21 +324,44 @@ configured update feed. Joining the fork's live session performs neither.
 - accepting a session leaves publisher trust, feeds, channels, and update
   policy byte-for-byte unchanged.
 
-## 10. C7: optional Iroh adapter
+## 10. C7: the iroh browser relay as a second lane
 
-After the direct carrier is stable, port the external Iroh custom transport only
-if a concrete consumer needs Iroh stream compatibility inside the browser. Pin
-it to the workspace's current Iroh line, add explicit TURN or retain the direct
-carrier as fallback, and compare:
+Direct WebRTC is the join path. This phase exists for the case it cannot serve:
+a network that blocks WebRTC outright, where a relayed session beats no session.
+It is a **fallback, not a competitor** — it does not start until C4 closes, and
+it does not dilute the direct carrier's receipts.
 
-- incremental Wasm and native size;
-- connection setup and resume latency;
-- browser memory and queued-byte behaviour;
-- relay dependencies and failure modes;
-- whether it removes application code rather than merely relocating it.
+The candidate is **iroh 1.1's own browser support, not the external donor**. It
+needs no port, no version bump, and no new manifest entry: `iroh-relay` 1.1.0
+declares a `wasm32-unknown-unknown` target block using `ws_stream_wasm`, and that
+crate is already in this workspace's lock. A browser `Endpoint` binds with
+`presets::N0` and dials by `EndpointId` over an ALPN — the shape
+`mere-transport::Transport` already has, so the identity plane is preserved
+rather than rebuilt.
 
-Adopt it only if those receipts beat the direct carrier for a named consumer.
-The direct WebRTC/Notochord path remains valid regardless of that result.
+Two properties are settled and need no re-litigating (Findings, 2026-08-26):
+
+- it is **relay-only**. A browser tab cannot hole-punch, so this lane always
+  carries traffic through a relay. That is the price of the fallback, not a
+  defect to engineer away.
+- it costs **10.8x the browser payload** of the direct carrier, because iroh
+  compiles into the wasm rather than being supplied by the browser. That is why
+  it is the second lane and not the first.
+
+What must be proven before adopting it, per lane rather than per crate:
+
+- a headed browser reaches a native host through a relay, and Notochord admits
+  the session on facts the relay cannot forge;
+- `shared_link` binds iroh's connection identity — there are no DTLS
+  fingerprints here, so the C0 transcript survives but `fingerprint.rs` does not;
+- reconnect runs fresh admission, exactly as C3 requires of the direct lane;
+- the relay operator learns no Graphshell key and no application capability;
+- setup and resume latency measured against the direct carrier, and the payload
+  cost re-measured optimised (`wasm-opt`, `opt-level="z"`, LTO, `panic="abort"`),
+  since both current figures are unoptimised floors.
+
+Adopt it only for a named consumer the direct carrier cannot reach. The direct
+WebRTC/Notochord path remains the product path regardless of the result.
 
 ## 11. Outside this plan
 
@@ -364,6 +397,193 @@ relay, and reconnect receipts.
 - Luggage narrows byte-source authority but cannot secure an ordinary browser
   against a compromised first-load web origin that replaces the verifier
   itself. That bootstrap trust stays explicit.
+- **2026-08-26:** WebRTC is structurally the Reticulum case, not a new proof
+  shape. `IngressContext::webrtc(shared_link)` fills the same
+  `ingress.link` slot Reticulum uses, and the derived
+  `SessionFacts::proof_binding()` is equal to
+  `transport::initiator_link_binding(&alpn, link)` — asserted in
+  `crates/murm/transport/src/notochord.rs`
+  (`a_webrtc_binding_pins_the_link_and_names_no_peer`). C2 therefore redeems
+  into the existing Personae delegation grammar rather than adding one.
+- **2026-08-26:** the carrier vocabulary has exactly one mapping site.
+  `carrier_of` in `crates/murm/transport/src/notochord.rs` is the only match on
+  `TransportKind` in the workspace; `notochord/src/facts.rs:19` mirrors the
+  enum in prose only. Adding a carrier is a one-file change, and the
+  exhaustiveness guarantee is real rather than assumed.
+- **2026-08-26:** Graphshell's accept path splits cleanly at the accept call.
+  `admit_accepted_session` in `ports/graphshell/src/carrier.rs` takes
+  `AcceptedSession<S>` where `S: AsyncRead + AsyncWrite + Unpin` — the bounds
+  `notochord::admit_session` already requires, with no `Send`/`'static` added,
+  which a browser-side stream could not have satisfied. All five existing call
+  sites compile unchanged.
+- **2026-08-26:** a transcript-link derivation already existed.
+  `ports/graphshell/src/browser_carrier.rs` derives a 16-byte link for the same
+  Notochord slot over the WebExtensions bridge. `webrtc-carrier` was written
+  against SHA-256 and was unified onto browser_carrier's discipline — blake3,
+  domain raw at the front, `u64` little-endian length prefixes — so one
+  derivation convention holds across carriers. The frozen vector moved from
+  `383d1883…5960` (SHA-256, `u32be`) to `4692c88e70470f7e4b7ba46b7fce78b2`
+  (blake3, `u64le`, 280-byte transcript).
+- **2026-08-26:** the browser payload decides this, and the donor's size was
+  never an argument against WebRTC. Three routes, built release for
+  `wasm32-unknown-unknown` the same unoptimised way and each verified to contain
+  its transport rather than having been dead-code-eliminated:
+
+  | route | raw | gzipped |
+  |---|---|---|
+  | direct WebRTC (C0 core + `web-sys`) | 540,025 | 116 KB |
+  | iroh 1.1 first-party browser client | 5,828,687 | 1.57 MB |
+  | donor `iroh-webrtc-transport` example | 7,060,115 | — |
+
+  The browser *is* a WebRTC implementation, so a direct carrier ships only the
+  C0 core and bindings; iroh must be compiled into the payload. "Already in the
+  dependency graph" is a native saving that inverts in the browser. The donor's
+  7 MB indicted putting Iroh in a browser, not WebRTC.
+- **2026-08-26:** iroh 1.1 has first-party browser support, which the 2026-08-25
+  probe never tested — it evaluated the donor instead. `Endpoint`,
+  `builder(presets::N0)`, `bind()` and `connect(EndpointId, alpn)` all
+  type-check for `wasm32-unknown-unknown` with **no addition to this
+  workspace's manifests**: `iroh-relay` 1.1.0 declares a wasm target block
+  using `ws_stream_wasm`, already resolved in `Cargo.lock`. It is relay-only —
+  a browser cannot hole-punch — and carries no version skew, unlike the donor.
+- **2026-08-26:** the dual-target receipt was not reproducible as written.
+  `rust-toolchain.toml` declared only `wasm32-wasip2`, so C0's
+  `wasm32-unknown-unknown` check passed only on machines that happened to have
+  the target installed. The target is now declared.
+- **2026-08-26 (C1 stack choice):** measured, not asserted. Against a
+  tokio-only baseline, `webrtc` 0.20.3 adds 199 crates and ~329 MB of compiled
+  code; `str0m` 0.23.1 adds 76 crates and ~214 MB. str0m selected — also for
+  its Sans-IO shape, which matches Notochord's sans-I/O handshake core and the
+  deliberately I/O-free carrier core. Features: `default-features = false,
+  features = ["rust-crypto"]`, avoiding `aws-lc-sys` (C/asm, needs cmake and a
+  C toolchain on every validation target). Native feature delta measured:
+  12 -> 114 crates, +314,752,494 bytes of release artifacts. Per the plan's own
+  rule this is an evidence result, not a permanent product rule.
+- **2026-08-26 (C1 headed receipt, session 2):** a real Chrome and the native
+  str0m answerer: ICE `checking -> connected` on a direct host pair
+  (7 binding round trips), 200 frames echoed both ways, 3,277,600 bytes each
+  way (payload + exactly 200 x 4-byte headers), `malformed_datagrams: 0`,
+  clean close ("peer closed the channel"), both DTLS fingerprints captured.
+  Fingerprints are read on `Event::Connected` — the certificate actually
+  presented, not the SDP's claim (str0m fills `remote_dtls_fingerprint` only
+  after verifying the presented certificate). C2 binds the stronger value.
+- **2026-08-26 (headed-only defects):** the headed run found four defects that
+  compile checks, unit tests, and the loopback suite all passed over:
+  `create_offer` treated the `RTCSessionDescriptionInit` *dictionary* that
+  `createOffer()` resolves to as a failed prototype cast, reporting every
+  valid offer as an error; two browser handlers held a `RefMut` across user
+  callbacks and tripped wasm-bindgen's reentrancy guard during ICE gathering;
+  `Driver` handed its 0.0.0.0 bind address to `Receive::new`, so str0m
+  discarded every inbound datagram as addressed to no local candidate
+  (signature: 78 STUN requests sent, zero answered, both sides parked in
+  `checking`); and a peer vanishing mid-transfer (browser refresh with ~400 KiB
+  buffered) crashed the native process with a tokio worker stack overflow.
+  The first two are fixed; the last two are in repair as this is written.
+- **2026-08-26 (constraint for C2/C5):** default Chrome emits ONLY
+  mDNS-obfuscated `.local` host candidates, and str0m has no mDNS resolver, so
+  a candidate-bearing offer requires either an mDNS answer path, an ICE/TURN
+  server, or a browser flag no ordinary user will set. str0m also performs no
+  peer-reflexive discovery from an empty remote candidate list — an offer
+  stripped of candidates hangs both ends in `checking` with no error. The C5
+  rendezvous design must treat "at least one resolvable remote candidate" as a
+  hard precondition, and the probe now refuses to signal a candidate-free
+  offer rather than letting it fail silently.
+- **2026-08-26 (C2 redemption scheme):** the redemption secret is an ed25519
+  seed. The browser derives the redemption keypair and signs
+  `redemption_signing_bytes(challenge, subject)`; the host stores only the
+  redemption PUBLIC key plus use-state and expiry, so a stolen host store
+  cannot mint redemptions. A refused redemption costs the invitation nothing
+  (`a_refused_redemption_costs_the_invitation_nothing`), and the proof binds
+  both the challenge transcript and the ephemeral subject, so it neither
+  crosses connections nor transfers between subjects.
+- **2026-08-26 (C2 signing discipline):** no bare master key signs anything —
+  both host signatures (invite descriptor, challenge transcript) use one
+  derived key under `mere.graphshell/webrtc-host-signing/v1` with a
+  `DerivedKeyAttestation` traveling alongside, the same shape
+  `SignedDelegationCertificate` and `SessionHello` already use. Message-level
+  separation lives in three frozen wire domains:
+  `mere.webrtc-carrier/invite-descriptor/v1`,
+  `mere.webrtc-carrier/host-challenge-signature/v1`,
+  `mere.webrtc-carrier/redemption-proof/v1`.
+- **2026-08-26 (C2 authority boundaries):** `mint_delegation` takes the trust
+  root as an explicit host-side parameter — an invitation carrying its own
+  root would choose which authority admits it. The mint reads the HOST's copy
+  of the invite (a client-presented copy could choose its own scope), the
+  minted scope is the invitation's exact action triple at delegation depth 0,
+  and the grant's expiry is clamped to `min(now + ttl, invite expiry)` — the
+  owner's bound on the offer beats the host's bound on one session.
+- **2026-08-26 (C2 matrix):** 26 fail-closed rows in
+  `ports/graphshell/src/webrtc_door.rs`, each asserting the exact
+  `DenyReason`/`ChainFault`/`RedemptionRefusal` variant with positive controls
+  first, plus one integration receipt over the real str0m loopback using
+  certificate-actually-presented fingerprints
+  (`a_real_webrtc_channel_admits_an_invited_browser`). Cost worth knowing: the
+  loopback test's dev-dependency feature pulls str0m (~76 crates) into every
+  graphshell test build.
+- **2026-08-26 (C3 relay is browser-side):** str0m accepts a remote relay
+  candidate unconditionally (`add_remote_candidate` never inspects kind,
+  is-0.11.0/agent.rs:729), so forcing relay is entirely the browser's
+  `iceTransportPolicy: "relay"`. The native side needs no relay config. TURN
+  credentials are minted server-side by the coturn REST convention
+  (`username = "<expiry>:<name>"`, `credential = base64(HMAC-SHA1(secret,
+  username))`) at the answerer's `/turn-credentials` endpoint; the long-term
+  secret never reaches the browser. The HMAC is verified against RFC 2202 and
+  a coturn interop vector, so a live TURN server will accept a minted
+  credential because the bytes already match the reference.
+- **2026-08-26 (C3 reconnect = re-admission, not restart):** two distinct
+  events. An ICE RESTART (browser `create_restart_offer`, str0m detects the new
+  ufrag/pwd in `accept_offer` and restarts transparently, change/sdp.rs:715)
+  keeps the DTLS connection, so it is the SAME carrier link and needs no
+  re-admission. A NEW DTLS connection is a new link and runs the full host
+  challenge + Notochord admission again — the plan's rule. The browser retains
+  its C2-minted delegation across a drop (only a page refresh loses it), so
+  reconnect reuses that delegation in a fresh hello; the invite stays one-use
+  and the C2 TTL clamp bounds the reconnect window. No re-redemption path is
+  needed.
+- **2026-08-26 (C3 no-Failed-state constraint):** is-0.11.0's
+  `IceConnectionState` has no `Failed` or `Closed` variant by design —
+  `Disconnected` can self-heal if new candidates arrive (agent.rs:185). So the
+  "credential expiry causes refresh or a clean failure, not an infinite retry"
+  done-condition cannot key off an ICE state; it needs a bounded timer. Any
+  reconnect trigger must be timer-bounded rather than state-watched.
+- **2026-08-26 (C3 driver placement, window default = Mark's call):**
+  `DriverPlacement::DedicatedThread` moves the driver off tokio's shared
+  runtime onto a std::thread with an explicit 8 MiB stack, measured to survive
+  str0m's full 128 KiB SCTP window (a 2 MiB tokio worker overflows it). The
+  dedicated SCTP window default was set to **64 KiB** (Mark, 2026-08-26):
+  below str0m's own 128 KiB ceiling, so this crate's `window_holds` guard stays
+  the primary defense and the stack is margin, not the sole line. Correction to
+  an earlier claim: the 65x throughput penalty is a LATENCY effect (one round
+  trip per frame) and does NOT reproduce on loopback — there the raised window
+  is ~2.6x SLOWER; the LAN figure is inherited, unverified here, and only the
+  machine-independent mechanism (`window_holds` 410-524 -> 0) is asserted.
+- **2026-08-26 (C3 application hazard, unowned):** a naive read-then-write
+  echo loop wedges a session on BOTH driver placements — parked in
+  `send_frame` the end stops reading, its queue fills, SCTP retransmits, the
+  session dies mid-transfer. The loopback tests split reader/writer to avoid
+  it; a real application (C4) must not couple the directions head-to-head.
+- **2026-08-26 (str0m upstream defect, mitigated):** the refresh crash was
+  str0m's own recursion — `Rtc::do_poll_output` (str0m 0.23.1, lib.rs:1719 and
+  1734) self-calls once per queued SCTP packet in its `SctpEvent::Transmit`
+  arm, so on teardown the stack depth equals the outstanding SCTP window in
+  packets; str0m's own 128 KiB `MAX_BUFFERED_ACROSS_STREAMS` overflows a 2 MiB
+  tokio worker stack. Proven by dose-response (halving the window halves the
+  required stack), not by reading. Mitigated here by
+  `CarrierConfig::sctp_window_bytes` (default 16 KiB): `try_flush` declines to
+  hand SCTP a frame past that mark, the same contract as SCTP declining a
+  write, observable via `CarrierStats::window_holds`. Two consequences worth
+  keeping visible: (1) the default caps throughput at ~16 KiB per RTT, fine on
+  LAN, wrong for long links — it is a config field with the measured stack
+  table in its doc comment, and C3's relay work should revisit the default;
+  (2) this is an upstream-filing candidate against str0m — the recursion, the
+  repro shape (vanished peer with a full send buffer), and the dose-response
+  table are all in `tests/native_loopback.rs` and the driver comments.
+- **2026-08-26 (frame ceiling):** `MAX_FRAME_BYTES` was 4 + 65,536 = 65,540 —
+  over a 64 KiB SCTP `max-message-size` peer by exactly the header. Browsers
+  advertise 262,144 (confirmed in the live SDP), so C1 passed on luck. The
+  payload ceiling is being corrected to `65,536 - FRAME_HEADER_BYTES` so the
+  whole frame fits a default peer; the frozen shared-link vector binds the
+  transcript, not frame sizes, and does not move.
 
 ## Progress
 
@@ -371,8 +591,75 @@ relay, and reconnect receipts.
   headed browser/native ping passed; donor benchmark mismatch identified;
   Notochord/Personae external Wasm compile passed; architecture and gates
   recorded. Production code remains untouched.
+- **2026-08-26: C0 landed.** New Wasm-clean `crates/murm/webrtc-carrier`
+  (bounded frames, `InviteId`, role-tagged DTLS fingerprints, the link-challenge
+  transcript, `shared_link` derivation); `TransportKind::WebRtc` +
+  `IngressContext::webrtc` mapped honestly to `CarrierKind::Other`;
+  `admit_accepted_session` extracted in Graphshell with every call site
+  unchanged; and an acceptance fixture
+  (`a_webrtc_session_is_admitted_with_no_authenticated_peer`) that derives its
+  link through the core rather than pasting a constant, so a transcript change
+  fails admission too. Verified: `mere-transport` 56 tests with the `notochord`
+  feature on (the default feature set does not compile that module — a green
+  run without it proves nothing), `webrtc-carrier` 29 on native and a clean
+  `--all-targets` check for `wasm32-unknown-unknown`, `graphshell` 110.
+  Open, deliberately: the SDP fingerprint parser accepts uppercase hex only
+  (RFC 8122's grammar, and what Chrome and Firefox emit) — correct per spec,
+  but it makes a nonconforming stack fail loudly rather than interoperate, and
+  that posture should be revisited when C1 meets a real browser.
 - **2026-08-26: Luggage integration ruled.** `InviteV1` now carries a
   `ReleaseRefV1`, C5 verifies the exact browser bundle before execution, and C6
   turns that same signed release into an explicit native adoption offer. The
   prerequisite portable release envelope and self-sufficient stage remain open
   in the Djinn resident plan; no release or trust code landed in this slice.
+- **2026-08-26: C1 substantially landed.** str0m answerer (Sans-IO driver:
+  single-mutation turn loop, dual-source backpressure gauge, fingerprint
+  capture on `Event::Connected`) and web-sys browser initiator (event-driven
+  backpressure off `bufferedamountlow`, one-shot terminal-error funnel) behind
+  `native`/`browser` features, both off by default; the Wasm-clean default
+  core and its frozen vector are untouched. Water marks observed 14 up /
+  14 down over 400 loopback frames with str0m's own `low_water_events: 39`
+  confirming the engine sees the threshold. Headed receipt: session 2 green
+  end-to-end (200/200 frames, byte-exact framing, fingerprints captured,
+  clean close); the refresh condition initially failed by crashing the answerer
+  (stack overflow) — both that and the 0.0.0.0 `local_addr` defect were fixed
+  with negative-control regression tests, and the refresh re-run passed: the
+  answerer survived a peer vanishing with ~525 KB buffered, printed an honest
+  receipt (`ended: "echo write failed: the data channel is closed"`, 0 dropped,
+  0 malformed), and served a fresh session on the same process. Full receipt:
+  `Code/testing/mere/webrtc_ping_receipt.md` (RESULT ok, 7 runs, 5 defects).
+  Open items carried out of C1: the `sctp_window_bytes` default (16 KiB) costs
+  ~65x on a LAN echo workload because the window is smaller than one maximum
+  frame — revisit at C3; wildcard bind with a MULTI-address advertise list
+  still mislabels inbound datagrams as `advertise[0]` (single-declared-address
+  assumption is documented but the probe violates it) — either the probe
+  advertises one address or the carrier learns per-packet destinations; and
+  the str0m `do_poll_output` recursion is an upstream-filing candidate.
+  Harness: `crates/probes/webrtc-ping` (standalone, `wasm-bindgen` pinned
+  =0.2.126 to match the installed CLI — an unpinned range resolves 0.2.127
+  and fails binding generation after a clean compile).
+- **2026-08-26: C2 landed.** Core: `InviteV1` (bounded canonical encoding,
+  strict hand-rolled base64url fragment codec, seed-redacting `Debug`, three
+  frozen signing domains) in `webrtc-carrier` — 44 unit tests, no new
+  dependencies, frozen vector untouched. Door: `webrtc_door.rs` beside the
+  native-messaging precedent — invite issue/redeem/mint on the derived-key
+  pattern, sans-I/O admission through the audited N1 facts adapter, pure
+  client half a wasm build can reuse. Verified independently: graphshell 136
+  lib tests (26 new matrix rows), the real-WebRTC loopback receipt, carrier
+  58, C0 wasm receipt, and `cargo check --workspace --all-targets`, all exit
+  0. Deferred to C4: the headed fragment-hygiene row.
+- **2026-08-26: C3 code landed; receipts gated on live TURN.** Carrier:
+  `DriverPlacement::DedicatedThread` (8 MiB stack, 64 KiB window default) with
+  13 loopback tests across both placements; browser `IceServer`+credentials,
+  `IceTransportPolicy::Relay`, `create_restart_offer`; the shared `lib.rs`
+  re-export edited once against a settled file. Probe: `/turn-credentials`
+  coturn-REST minting (HMAC verified against RFC 2202 + a coturn vector, and
+  the running endpoint cross-checked against an independent implementation),
+  forced-relay toggle, reconnect button, and a revisioned diff-vs-snapshot
+  resume stand-in above the carrier — 17 probe tests. Verified independently:
+  carrier 44+13+8+1 native, browser+default wasm clean, probe green.
+  AWAITING a live TURN URL+secret from Mark for the three receipts that need
+  a real relay: relay-only candidate pair, TURN-carries-encrypted-packets-but-
+  no-Graphshell-key, and credential-expiry clean give-up; plus the headed
+  reconnect resume run. The plan's stop line (no product wiring until a forced
+  relay is demonstrated) holds until those pass.

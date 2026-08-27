@@ -92,7 +92,7 @@ impl ImportanceWeights {
 /// Per-node 2D embedding coordinates from an external projection
 /// (UMAP / t-SNE / PCA / similar). Hosts that have a projection
 /// pipeline populate this; the
-/// [`graph_layout::adapters::SemanticEmbeddingAdapter`]
+/// [`crate::adapters::SemanticEmbeddingAdapter`]
 /// strategy reads it to place nodes at embedded positions directly.
 ///
 /// Coordinates are typically in a host-chosen range (`[-1, 1]` or

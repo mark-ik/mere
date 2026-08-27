@@ -14,7 +14,7 @@ The vocabulary it keeps, per the dramatis tier model:
 
 - **chatelaine**: the secrets. Passwords, 2FA seeds, tokens, foreign key
   material. Never presented, only exercised.
-- **emblem**: the proofs. Graded presentations of identity a persona hands
+- **insigne**: the proofs. Graded presentations of identity a persona hands
   out, from a bare handle to signed cross-attestations. Made to be shown; what
   lands in someone else's gaz.
 

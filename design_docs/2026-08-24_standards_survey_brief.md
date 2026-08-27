@@ -463,9 +463,9 @@ Three more cross-cutting items:
 - **gazette.** **RFC 9553 JSContact** (with RFC 9554/9555 for vCard conversion)
   supersedes the vCard/jCard question: a modern JSON data model rather than a
   line-folded 1998 format. ADOPT over vCard 4.0's PULL. WebFinger (RFC 7033)
-  stays ADOPT. **Verifiable Credentials 2.0** is the standard the house "emblem"
+  stays ADOPT. **Verifiable Credentials 2.0** is the standard the house "insigne"
   concept most closely already is — graded public-key presentations made to be
-  shown — and is worth reading before emblem's own shape is fixed. DIDs are PULL,
+  shown — and is worth reading before insigne's own shape is fixed. DIDs are PULL,
   not ADOPT: `did:key` and `did:web` are the only two methods worth carrying.
   CardDAV and JMAP: SKIP, both server-tenancy. **Nostr NIP-01 is the load-bearing
   document, not NIP-05** — NIP-05 maps a name to a hex pubkey and is meaningless
@@ -728,8 +728,8 @@ recorded in §1, §3.3, §5, §6 and §8.
 | ADOPT | JSContact | RFC 9553 (data model), with RFC 9554 (vCard extensions for JSContact) and RFC 9555 (vCard conversion) | crates/dramatis/gaz (the contact store), ports/gazette Ledger projection and recipient picker |
 | PULL | vCard 4.0 and jCard | RFC 6350 (vCard 4.0), RFC 7095 (jCard) | gaz import/export; ports/gazette contact-import UX (the brief names 'WebFinger paste, QR, ticket' as open UX questions) |
 | SKIP | CardDAV, JMAP Core/Mail/Contacts | RFC 6352 (CardDAV); RFC 8620 (JMAP Core), RFC 8621 (JMAP Mail), RFC 9610 (JMAP Contacts) | None. gazette explicitly disclaims delivery ('not a delivery layer — private grants, cross-service posting, and inboxes are moot and murm territory'). |
-| PULL | Decentralized Identifiers (DIDs), with did:key and did:web | W3C DID Core 1.1; did:key and did:web method specs (W3C CCG) | crates/dramatis/gaz (HandleKind::Did already exists, carrying did:web and did:plc), ports/gazette resolver facade, emblem |
-| ADOPT | Verifiable Credentials Data Model 2.0 | W3C VC Data Model 2.0 | CORRECTED 2026-08-24: no current consumer. crates/dramatis/emblem is a 23-line 0.0.1 name reservation; VC 2.0 is its plausible eventual shape, not a shipped dependency |
+| PULL | Decentralized Identifiers (DIDs), with did:key and did:web | W3C DID Core 1.1; did:key and did:web method specs (W3C CCG) | crates/dramatis/gaz (HandleKind::Did already exists, carrying did:web and did:plc), ports/gazette resolver facade, insigne |
+| ADOPT | Verifiable Credentials Data Model 2.0 | W3C VC Data Model 2.0 | CORRECTED 2026-08-24: no current consumer. crates/dramatis/insigne is a 23-line 0.0.1 name reservation; VC 2.0 is its plausible eventual shape, not a shipped dependency |
 | PULL | Nostr NIP-05 (DNS-based internet identifiers) | NIP-05 | ports/gazette (README names NIP-05 as landing 'beside' WebFinger behind the same facade), gaz HandleKind::Nostr |
 | PULL | ActivityPub (with Activity Streams 2.0) | W3C ActivityPub; W3C Activity Streams 2.0 | ports/gazette (already classifies ActivityPub actor links out of WebFinger JRDs); ports/moot as a future publish target |
 | PULL | HTTP Message Signatures | RFC 9421 | Only if gazette or moot ever writes to the fediverse. No current consumer. |
@@ -949,10 +949,10 @@ answer and the choice is Mark's.
    has no obvious owner: distillery's ring, moot's places and turnstone's shared
    places all need it, which is an argument for a shared crate rather than three
    implementations, and an argument that it belongs to none of them.
-8. **Emblem versus Verifiable Credentials 2.0 (§5).** VC 2.0 is close to what
-   emblem already is. Adopting it buys interoperability and costs a large
+8. **Insigne versus Verifiable Credentials 2.0 (§5).** VC 2.0 is close to what
+   insigne already is. Adopting it buys interoperability and costs a large
    specification surface plus a JSON-LD dependency; staying proprietary keeps
-   emblem small. Worth deciding before emblem's shape is fixed rather than after.
+   insigne small. Worth deciding before insigne's shape is fixed rather than after.
 9. **Djot's wire identity (§5).** There is no registered media type. Serve
    `text/x-djot` and accept an unregistered name, serve rendered HTML, or pursue
    registration. Any of the three is defensible; drifting into one is not.

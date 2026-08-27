@@ -196,13 +196,13 @@ analytic_adapter!(
     Arrangement::Kanban
 );
 
-analytic_adapter!(
-    /// Layered stack. Reads `ViewIntent::axis_values` for the layer index.
-    StackAdapter,
-    "stack.default",
-    sceno::Stack,
-    Arrangement::Stack
-);
+// No `StackAdapter`. `sceno::Stack` exists and is solved by `scenomise`, but
+// nothing on this side asks for it: `stack.default` is absent from the canvas's
+// `CANVAS_LAYOUT_STRATEGIES`, and mer3ly builds its own score with its own
+// topological-rank producer rather than going through a cartography adapter. An
+// adapter with no caller is a guess about a future one, and it would have to be
+// re-derived against whatever that caller actually needs. Add it when something
+// asks.
 
 /// Placement at coordinates a dimensionality reduction produced.
 ///

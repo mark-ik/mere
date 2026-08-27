@@ -61,8 +61,8 @@ vocabulary:
   common principal under Google's authority; this gives independently held
   stores recognition under the participant's authority) is the persona model's
   standing claim. Its "prove authorized relationships without learning
-  unrelated identity material" is the **emblem** grammar: graded proofs made
-  to be shown, where your emblem is what someone else's gaz keeps.
+  unrelated identity material" is the **insigne** grammar: graded proofs made
+  to be shown, where your insigne is what someone else's gaz keeps.
 - **"P2p substrate, network, and system"** → stickleback replicated spaces
   under murm/moot domains, retinue's mesh, iroh/p2panda beneath, with the
   standing rule that the substrate never infers authority from transport

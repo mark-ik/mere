@@ -65,7 +65,7 @@ tier under construction).
 
 By-design zeros, no action: ports and stubs (castellan, graphshell-web),
 deprecated shims (vates, sibylla), the young dramatis tier
-(dramatis facade, chatelaine, emblem, gaz, gazette), tulpa (just homed).
+(dramatis facade, chatelaine, insigne, gaz, gazette), tulpa (just homed).
 
 ## 3. True zeros, genet
 

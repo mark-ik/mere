@@ -53,11 +53,12 @@ members = [
     "crates/murm/transport",
     "crates/dramatis/chatelaine",
     "crates/dramatis/dramatis",
-    "crates/dramatis/emblem",
+    "crates/dramatis/insigne",
     "crates/dramatis/gaz",
     "crates/dramatis/persona-picker",
     "crates/moot/commons",
     "crates/moot/gemot",
+    "crates/moot/mien",
     "crates/moot/moothold",
     "crates/moot/mooting",
     "crates/mesh/mesh",
@@ -311,11 +312,18 @@ misfin = { version = "0.0.4", features = ["ring"] }
 stickleback = { version = "0.1.1", path = "crates/stickleback" }
 murm = { path = "crates/murm/murm" }
 transport = { package = "mere-transport", version = "0.0.2", path = "crates/murm/transport" }
+# The Wasm-clean half of the browser WebRTC carrier: bounded frames, invite
+# ids, role-tagged DTLS fingerprints, and the link-challenge transcript that
+# derives Notochord's `shared_link`. It depends on neither `transport` nor
+# `notochord` on purpose; the browser build stays free of both, and the
+# admission layers receive only a `[u8; 16]`.
+webrtc-carrier = { package = "mere-webrtc-carrier", version = "0.0.1", path = "crates/murm/webrtc-carrier" }
 
 gemot = { version = "0.1.1", path = "crates/moot/gemot" }
 commons-spine = { path = "crates/moot/commons" }
 moothold = { version = "0.1.0", path = "crates/moot/moothold" }
 mooting = { version = "0.1.0", path = "crates/moot/mooting" }
+mien = { version = "0.0.1", path = "crates/moot/mien" }
 
 # The personal-space compute mesh (resource-coordination M1): signed job ops
 # over the tessera-proven LogSync lane + the deterministic job board.
@@ -349,8 +357,8 @@ gaz = { version = "0.0.1", path = "crates/dramatis/gaz" }
 # The cast-list tier's facade reservation; empty until something imports it.
 dramatis = { version = "0.0.2", path = "crates/dramatis/dramatis" }
 # The graded identity proofs and the never-shown secrets; reservations, no code.
-emblem = { version = "0.0.1", path = "crates/dramatis/emblem" }
-chatelaine = { version = "0.0.1", path = "crates/dramatis/chatelaine" }
+insigne = { version = "0.0.1", path = "crates/dramatis/insigne" }
+chatelaine = { version = "0.0.2", path = "crates/dramatis/chatelaine" }
 # The shared "which persona am I?" list. A Cambium view over the personae
 # roster, so the four applications with a GUI draw one picker rather than four.
 persona-picker = { package = "mere-persona-picker", path = "crates/dramatis/persona-picker" }

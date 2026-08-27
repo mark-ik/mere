@@ -21,7 +21,7 @@ recall = []
 
 [dependencies]
 # Deliberately empty, as for the other reservation stubs (chatelaine,
-# emblem). A `fleece` dependency was added here 2026-08-23 as the fleece
+# insigne). A `fleece` dependency was added here 2026-08-23 as the fleece
 # scope's F5 alembic receipt and removed 2026-08-24: nothing in this crate
 # calls it yet, and an unused dep made the reservation unpublishable
 # (fleece is carried as a branch-git dep with no version). Re-add it, with

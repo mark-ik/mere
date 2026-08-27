@@ -510,7 +510,7 @@ incumbent application.
    `fleece.workspace = true` to the stub, which nothing in it calls, and an
    unused dep on a versionless branch-git entry cannot be published at all.
    Ruled with Mark: drop the dep, since a reservation stub ships empty
-   `[dependencies]` as chatelaine and emblem do, and re-add it with a version
+   `[dependencies]` as chatelaine and insigne do, and re-add it with a version
    when alembic has distillation code that consumes an `Article`. The other
    three F5 consumers — crawl, eidetic-search, gazette — are untouched.)*
 

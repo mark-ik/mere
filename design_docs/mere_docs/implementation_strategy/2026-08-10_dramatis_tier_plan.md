@@ -119,7 +119,7 @@ to read for technique, not adopt wholesale: IOTA Stronghold, keyring-rs.
 The port is **castellan** (ratified 2026-08-10; 0.0.1 claimed from
 ports/castellan, where it will found). Tiring-house is retired: its meaning is
 personae's, not the port's. The round also promoted **chatelaine** (the
-secrets, exercised never shown) and **emblem** (the graded proofs, made to be
+secrets, exercised never shown) and **insigne** (the graded proofs, made to be
 shown; what lands in someone else's gaz) to tier vocabulary; both claimed
 same day (0.0.1 reservations under crates/dramatis, Mark authorized).
 
@@ -148,3 +148,28 @@ supersede it.
   castellan's C1-C2 completed 2026-08-21 (see the [OTP plan](2026-08-10_castellan_otp_plan.md));
   the header and the D4 checklist now say so. Only the empty `dramatis`
   facade reservation remains, still waiting for an importing consumer.
+- 2026-08-27: **`emblem` renamed `insigne`**, and the name `emblem` reassigned
+  to the IconVG decoder (`repos/emblem`, formerly `repos/iconvg`). Mark's call,
+  on fit asymmetry: here `emblem` worked by one metaphorical hop (an identity
+  proof is *like* a heraldic badge), whereas an icon simply *is* an emblem —
+  that is the older word for the thing — and Greek *emblēma* means inlaid work,
+  a figure set into a larger surface, which is exactly what a decoder emitting
+  path segments for a host paint-list does. The literal reading takes the word.
+  **`insigne`** is the Latin singular of *insignia*, a plural whose singular
+  English has dropped: one badge of office or rank, graded by construction
+  (which badge you wear is chosen for the occasion), and it keeps the heraldic
+  register the surrounding prose already used. Mechanically cheap: the crate
+  was a pure reservation (doc comments only), with zero dependency edges in the
+  workspace and zero reverse dependencies on crates.io, so the change was 57
+  prose mentions across 19 files plus the two workspace lines. Plural mentions
+  became *insignia* without strain. Follow-on: `chatelaine` needs a 0.0.2
+  republish, since its live 0.0.1 description names `emblem` as the proofs
+  half. Also decided this session: `mien` reserved for reputation (it means the
+  impression others form of you, which is what reputation is), and the crates.io
+  name `iconvg` deliberately left unclaimed rather than held in stewardship.
+  Naming-ledger note: this is the first reclamation of a name already spent
+  *and* claimed with a real publish. The rule it produces — a claimed name may
+  be reclaimed when the fit is literal on one side and merely metaphorical on
+  the other, and the losing side has no implementation and no dependents — has
+  to be written down, or the ledger's record of what is spent stops being
+  trustworthy.
