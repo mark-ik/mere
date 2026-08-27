@@ -3,8 +3,9 @@
 **Date**: 2026-08-12  
 **Status**: D0 complete; D1 resident authority lifecycle complete. Its installed
 Personae/settings binding, configure/inspect binary, and read-only Cambium
-surface pass an exact-source focused Cargo gate; operational host composition,
-Turnstone registration, and the full workspace gate remain open. D2's
+surface pass an exact-source focused Cargo gate, and Turnstone admits the
+surface as the contribution seam's second provider; operational host
+composition and the full workspace gate remain open. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
@@ -290,8 +291,9 @@ exists as `esp.train.peft-lora/v1` (`ports/distillery/src/trainer.rs`, the
 `TrainRequest`, its committed output is the integer-only `TrainReceipt`
 naming the published refs, and the artifacts land in the Eidetic store the
 embedder composed the resource over. Stronger models wait for a consumer;
-the Turnstone admission, operational host-policy composition, and full
-workspace gates continue to track in §8.
+the Turnstone admission landed (Turnstone `9d3a7d8`), and operational
+host-policy composition plus the full workspace gate continue to track in
+§8.
 
 ### Progress
 
@@ -341,9 +343,10 @@ workspace gates continue to track in §8.
   installed authority's profile/path projection and only resident facts the
   caller supplies from the real resident (`ResidentSettings` plus its latest
   `ResidentReceipt`). It opens no authority and has no mutable controls. This
-  is the second product half of the Knot contribution seam; a Turnstone
-  registration/admission receipt remains P0 work, along with generic AccessKit
-  projection and a full-shell build. The surface is included in the green
+  is the second product half of the Knot contribution seam; Turnstone
+  `9d3a7d8` now admits it through the shared registry with no
+  provider-specific renderer arm, generic AccessKit projection landed, and
+  the Turnstone full-shell binary builds from published sources. The surface is included in the green
   five-test exact-source Distillery library receipt; package Clippy also passes
   with warnings denied.
 - **2026-08-26, trainer resource**: The forcing receipt's shape now runs as a

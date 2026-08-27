@@ -4,10 +4,12 @@
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
 host receipt implemented and independently green; Turnstone T0 consumer core
-and user invocation landed, including explicit read-only admission; Distillery
-now supplies P0's second product descriptor/erased-session half; generic
-accessibility landed, while Distillery's Turnstone registration/admission
-receipt and the full shell build receipt remain open
+and user invocation landed, including explicit read-only admission; generic
+accessibility landed; P0's second-provider proof is complete — Turnstone
+admits `distillery.installed.v1` through the existing registry with no
+provider-specific renderer arm, and the full shell binary builds from
+published sources — leaving the P0 contract reduction and freeze as the
+open step
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -546,6 +548,22 @@ through UI admission.
   five library tests, including the surface snapshot and exact receipt render;
   the installed configure/inspect binary check and package Clippy with warnings
   denied passed against the same integrated source graph.
+- 2026-08-26: Turnstone `9d3a7d8` admits `distillery.installed.v1` — the P0
+  second-provider proof. `DistilleryInstalledProvider` registers through the
+  same `SurfaceProviderRegistry` as Knot and Sky with no Distillery-specific
+  renderer arm; its versioned source carries only installed-bootstrap
+  projection facts (profile, protection, mesh id, private paths, optional
+  resident cadences), so a pane grant conveys projection, never Distillery
+  authority. Malformed mesh ids, spinning cadences, and unknown payload
+  versions are refused before admission. Receipts ran from a clean Turnstone
+  worktree resolving the published mere pin with no local patch config: six
+  provider tests (rendered projection, resident cadence round trip, generic
+  AccessKit `Status` role), the seven existing contributed-surface registry
+  tests, an all-targets check, and — closing the long-open gate — the full
+  shell binary build reaching and completing `rustc`. The full lib suite
+  passes 394 tests; its two failures (chrome_view document find, place lane
+  partition heal) reproduce identically on `origin/main` without the change.
+  P0's remaining step is the contract reduction and freeze.
 
 ## 8. Final done conditions
 
