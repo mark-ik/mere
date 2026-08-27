@@ -234,26 +234,52 @@ provider), rendered through one `Debug` format rather than per-variant
 branches; `Locked` is test-only; `Stale`, `Unconfigured`, and `Unhealthy`
 are unexercised but are exactly the states §F0 names for future snapshots.
 
-**The freeze decisions this forces** (open until ruled):
+**The freeze decisions this forces** (F-1 ruled 2026-08-26: unify; the
+rest scoped below and open until ruled):
 
-- **F-1, `accepted_source`**: unify — registration asserts the descriptor's
-  declared source kind equals the provider's admission schema, making the
-  descriptor the stated truth the host enforces — or cut the field and let
-  the host-local schema stand alone. Unifying is recommended: stable
-  admission facts are the descriptor's whole purpose, and the assertion
-  turns today's silent redundancy into a checked invariant.
-- **F-2, the unread descriptor tail**: cut `potential_capabilities` and
-  `CapabilityId`, `placement_hint`, `roles`, and `multiplicity` with its
-  enum from the frozen v1, leaving identity, `label`, and
-  `accepted_source`. Reintroduction after the freeze is additive and cheap;
-  carrying speculative fields into a frozen contract is how it rots.
-- **F-3, the dead trait methods**: cut `root()`, `focusables()`, and
-  `pointer_capture()` from `RetainedSurfaceSession`. `RunnerSurfaceSession`
-  is the only implementation, so no product code changes.
-- **F-4, unavailable-reason breadth**: keep all eight variants on the
-  strength of §F0's named states, or trim to the produced four and let F0
-  restore the rest additively. Keeping is recommended: the plan already
-  names the consumer.
+- **F-1, `accepted_source` — ruled: unify.** Registration asserts the
+  descriptor's declared source kind equals the provider's admission schema,
+  making the descriptor the stated truth the host enforces and turning
+  today's silent redundancy into a checked invariant.
+- **F-2, the unread descriptor tail.** Provenance of each field's intended
+  consumer, traced 2026-08-26:
+  - `potential_capabilities`/`CapabilityId` and `roles`/`SurfaceRole` were
+    seeded for the suite-composition census's routing pipeline (address →
+    advertised capabilities → compatible surface offers) and its §8
+    per-role handler preference. That scheme was never assigned a lane, and
+    its explicit role vocabulary (`view, edit, manage, …`) was adopted by
+    neither real provider (Knot says `document`/`editor`, Distillery says
+    `pane`/`status`).
+  - `placement_hint` has no consumer beyond a one-line "host owns
+    placement" aspiration; Turnstone's own hardcoded `PlacementPolicy` per
+    pane definition governs in practice and never reads it.
+  - `multiplicity`/`SurfaceMultiplicity` is a parallel invention of
+    Turnstone's `PaneMultiplicity` (A1, landed, hardened by the 2026-08-16
+    duplicate-pane incident); no bridge between the two was ever proposed.
+  Recommendation stands: cut all four from v1, leaving identity, `label`,
+  and `accepted_source`. If the capability-routing pipeline ever gets a
+  lane, capabilities and roles return additively with it.
+- **F-3, the uncalled trait methods — recommendation revised by scoping.**
+  All three mirror load-bearing concrete-host machinery, not speculation:
+  `pointer_capture()` is how `cambium-rootstock` computes correct local
+  coordinates mid-drag (`input.rs` reads it before every captured
+  move/up), and an erased host must consult it before building
+  `PointerMove` events the moment a contributed surface carries any
+  `on_pointer` widget (slider, split, resize handle, reorderable list,
+  graph canvas); `focusables()` is the runner's half of the shipped
+  spatial 2D focus navigation, which geometry-blind `focus_traverse()`
+  structurally cannot replace; `root()` names the runner's own subtree in
+  a shared document, the question two production hosts already answer with
+  the concrete counterpart. Revised recommendation: keep all three.
+  Corollary finding: Turnstone's contributed pane path currently forwards
+  pointer moves without consulting `pointer_capture()`, a latent
+  correctness gap for the first drag-widget surface — noted for T-lane
+  follow-up rather than fixed here.
+- **F-4, unavailable-reason breadth**: the four unproduced variants map
+  variant-for-variant onto §F0's named snapshot states (locked vault,
+  stale resident snapshot, unconfigured provider, unhealthy resident), and
+  F0 is live gated work now that P0's proof is complete. Recommendation
+  stands: keep all eight.
 
 Reduction is a breaking Genet change: one commit over the two contract
 modules and their tests, module docs declaring the v1 freeze (additive-only
@@ -639,6 +665,13 @@ through UI admission.
   through F-4): unify or cut `accepted_source`, cut the unread descriptor
   tail, cut the three uncalled trait methods, and keep or trim the
   unavailable-reason set. The reduction itself waits on those rulings.
+- 2026-08-26: F-1 ruled (unify), and the remaining decisions were scoped by
+  tracing each item's intended consumer through the suite-composition
+  census, the pane-registry plan, and the concrete-host call graph. The
+  scoping flipped F-3's recommendation from cut to keep — the three
+  methods erase real shipped host machinery — and surfaced the
+  pointer-capture routing gap in Turnstone's contributed pane path. F-2
+  through F-4 remain open for ruling.
 
 ## 8. Final done conditions
 
