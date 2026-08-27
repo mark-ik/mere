@@ -192,6 +192,76 @@ Djot and Markdown engines. The remaining engine cost is Nematic's current
 unconditional Errand dependency, not Knot vault, replication, inference, or
 endpoint code.
 
+### 2026-08-26: the pre-freeze census
+
+With both providers admitted, every contract item was censused across its
+three homes: the Genet definitions (`genet-host-api/surface.rs` and
+`cambium/src/surface.rs`, untouched since founding commit `bbd0906`, with no
+consumer inside Genet), the two mere providers (`knot-document`,
+`distillery`), and the one erased host (Turnstone's `contributed_surface`).
+Standalone Knot bypasses the erasure by design and consumes the concrete
+state/view directly, so Turnstone is the seam's only host.
+
+**Load-bearing on both sides** — eleven of the fourteen
+`RetainedSurfaceSession` methods (`descriptor`, `availability`, `dom`,
+`focus`, `set_focus`, `focus_traverse`, `pointer_target`, `hover_target`,
+`wheel_target`, `sync_viewport`, `dispatch`); all seven
+`ResolvedSurfaceEvent` variants through Turnstone's one dispatch funnel;
+`RunnerSurfaceSession::new` with its five product-owned parts;
+`SurfaceEffect::Redraw` (the sole variant, matched at the host);
+`SurfaceViewport` width/height (Sky reads them; `scale_factor` is consulted
+only by Cambium's own dedup); and the descriptor identity trio the host
+actually reads: `provider_id` and `surface_id` (registry dedup) plus `label`
+(AccessKit root name and the unavailable view).
+
+**Dead trait surface** — `root()`, `focusables()`, and `pointer_capture()`
+have no caller in any repository.
+
+**Descriptor fields set but never read** — `accepted_source` (admission is
+gated by Turnstone's `SurfaceProvider::source_schema()` instead, a second
+source of truth for the same fact), `roles`, `multiplicity` (shadowed by
+Turnstone's own `PaneMultiplicity`), `placement_hint` (all three providers
+say `"main"`), and `potential_capabilities` with `CapabilityId` (read only
+by one Sky unit test). `SurfaceSourceShape::None`/`Many` and every
+`SurfaceMultiplicity` variant except `PerSource` are never constructed.
+
+**Availability in practice** — all three providers' live availability
+closures return `Available` unconditionally; production unavailability
+exists only as admission-time error translation into the generic
+unavailable session. Four of the eight `SurfaceUnavailableReason` variants
+are produced (`Absent`, `Denied`, `Unsupported`, `Other`, all by the Knot
+provider), rendered through one `Debug` format rather than per-variant
+branches; `Locked` is test-only; `Stale`, `Unconfigured`, and `Unhealthy`
+are unexercised but are exactly the states §F0 names for future snapshots.
+
+**The freeze decisions this forces** (open until ruled):
+
+- **F-1, `accepted_source`**: unify — registration asserts the descriptor's
+  declared source kind equals the provider's admission schema, making the
+  descriptor the stated truth the host enforces — or cut the field and let
+  the host-local schema stand alone. Unifying is recommended: stable
+  admission facts are the descriptor's whole purpose, and the assertion
+  turns today's silent redundancy into a checked invariant.
+- **F-2, the unread descriptor tail**: cut `potential_capabilities` and
+  `CapabilityId`, `placement_hint`, `roles`, and `multiplicity` with its
+  enum from the frozen v1, leaving identity, `label`, and
+  `accepted_source`. Reintroduction after the freeze is additive and cheap;
+  carrying speculative fields into a frozen contract is how it rots.
+- **F-3, the dead trait methods**: cut `root()`, `focusables()`, and
+  `pointer_capture()` from `RetainedSurfaceSession`. `RunnerSurfaceSession`
+  is the only implementation, so no product code changes.
+- **F-4, unavailable-reason breadth**: keep all eight variants on the
+  strength of §F0's named states, or trim to the produced four and let F0
+  restore the rest additively. Keeping is recommended: the plan already
+  names the consumer.
+
+Reduction is a breaking Genet change: one commit over the two contract
+modules and their tests, module docs declaring the v1 freeze (additive-only
+until a v2), a Cambium changelog entry, then a Genet rev bump consumed by
+mere and Turnstone through the established alignment cadence. Expected
+churn outside Genet: the two mere descriptor literals shrink; Turnstone
+needs nothing beyond the rev bump.
+
 ## 3. Boundary
 
 ```text
@@ -564,6 +634,11 @@ through UI admission.
   passes 394 tests; its two failures (chrome_view document find, place lane
   partition heal) reproduce identically on `origin/main` without the change.
   P0's remaining step is the contract reduction and freeze.
+- 2026-08-26: the pre-freeze census ran across Genet, mere, and Turnstone and
+  is recorded as a finding above, with four open freeze decisions (F-1
+  through F-4): unify or cut `accepted_source`, cut the unread descriptor
+  tail, cut the three uncalled trait methods, and keep or trim the
+  unavailable-reason set. The reduction itself waits on those rulings.
 
 ## 8. Final done conditions
 
