@@ -4,7 +4,12 @@
 **Status:** active; body/runtime foundation, private-backend integrity, first
 profile-local resident body-position publication, and first product renderer
 tenant implemented; Nexus admission probe blocked at its upstream Windows
-shader build; scope corrected 2026-08-23
+shader build; scope corrected 2026-08-23. 2026-08-26: Mesocosm's runtime
+became the first product tactile consumer (terrarium picking over
+`BodyWorld`, Rapier private), quint's `ResidentChunk` join was proven with
+per-brick patches, tracer-validated read epochs, and allocator-observed
+bytes (V1b), and `conatus-brick` — the shared sparse-brick ABI both game
+vessels pin — advanced on `codex/conatus-brick-lift` to `bd8f0044`.
 **Scope:** Build the shared spatial runtime. Mesocosm, Paredros, Isometry,
 and Mere projections consume it through product-owned runtime profiles
 instead of incubating spatial machinery in product-local probes.
@@ -79,7 +84,7 @@ changes the engine path itself.
 | `conatus` | Shared 3D body world and host-neutral runtime |
 | Netrender | One-device tenancy and final frame composition |
 | Renderling | 3D scene/render implementation, consumed as a tenant |
-| Mesocosm voxel types | First source material for generic voxel storage, revision, dirty-region, collision, and meshing features |
+| Mesocosm voxel types | First source material for generic voxel storage, revision, dirty-region, collision, and meshing features; since 2026-08-26 Mesocosm is also a runtime consumer, holding `BodyWorld` tactile advice through its own `mesocosm-runtime` adapter |
 
 The dependency direction is runtime to implementation only. Product crates
 depend on Conatus. Conatus must not depend on a game.
@@ -263,8 +268,9 @@ removals, contacts, activity, sleeping and residency changes, voxel and
 geometry revisions, and resident products. No cameras, no lights, no sprites,
 no visibility or presentation policy: those belong to the product's rendering
 profile, which selects and configures tenants — Scenograph lanes for semantic
-2D, Renderling for 3D bodies, brick DDA for live volumes, several composed by
-Netrender.
+2D, Renderling for 3D bodies, brick DDA for live volumes (owned by
+`conatus-brick`, currently on the `codex/conatus-brick-lift` branch and
+consumed by pinned rev), several composed by Netrender.
 
 The first realized adapter is Isometry's product-local, fixed-isometric body
 marker tenant at commit `7d45c40`. It binds the stamped Quint position

@@ -18,6 +18,7 @@ host's graph.
 | `lower_burn` (`field-burn`) | `lower_scalar`, `lower_vector`, `LowerError` | Lowers an AST to a Burn tensor program over rank-1 `xs` / `ys` batches, with the execution device chosen at runtime. |
 | `forces` (`field-burn`) | `repulsion`, `node_exclusion`, parameter types | Tensorized N-body laws: smooth field repulsion and the exact hard-floor/cutoff layout law. `*_wgpu_roundtrip` helpers are explicit CPU-GPU-CPU staging paths, not resident simulation. |
 | `rhai_bindings` (`field-rhai`) | `build_engine`, `build_from_script`, `BuildError` | Rhai authoring surface; a script's final expression must be a `FieldProjection`. |
+| `resident` (`field-gpu`) | `Resident`, `ResidentClient`, `ResidentChunk`, `RawKernelView`, `BurnTensorView`, `SpatialLease`, `ChunkStamp`, `ReadEpoch`, `PlanePatch`, `commit_plane_patch(es)` | The resident lane: positions and typed world-chunk planes held in retained CubeCL allocations on the host's device. `ResidentChunk` carries stamped, dirty-region-published planes that accept validated in-place patches without reallocating; `SpatialLease` hands a plane to a renderer (the wing's brick tracer consumes it as a leased atlas, validating the stamp's read epoch). |
 
 `FieldId`s minted by `FieldRegistry` are registry-local, assigned from a counter
 via `Uuid::from_u128`; `insert_with_id` seeds the registry with a host's own
@@ -35,6 +36,7 @@ preset constructors.
 | `field-burn` | Pulls Burn 0.22.0-pre.2 with the NdArray backend; enables `lower_burn` and `forces`. |
 | `field-burn-wgpu` | `field-burn` plus `burn/wgpu` for GPU evaluation, and getrandom's `wasm_js` backend on wasm. |
 | `field-rhai` | Pulls rhai 1.20 and enables `rhai_bindings`. |
+| `field-gpu` | Pulls wgpu, cubecl, and bytemuck; enables the `resident` lane. |
 
 ## Dependencies
 
