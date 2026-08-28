@@ -388,6 +388,59 @@ Eleven systems reviewed against this catalog in the projection grammar report (2
 
 **Name collisions.** Two systems on this shelf share a name with a variant in [Arrangement families](#6-arrangement-families) and mean something unrelated. CMU's Penrose is a diagram specification language; Mere's is `graph_layout:penrose`, the aperiodic tiling arrangement (P2 kite-dart or P3 rhombus via Robinson subdivision) registered in `crates/canvas/arrangements`, reached through `PenroseAdapter` under the projection id `penrose.default`. UW IDL's Mosaic is a view-coordination architecture; "Mosaic" in the tiling row is a packing variant with no implementation in the tree. Both names stay, because both are established in their own domain. Cite the shelf when the specification language is meant.
 
+### Material systems and dynamic documents (Ink & Switch, read 2026-08-28)
+
+A third shelf, added 2026-08-28 from an Ink & Switch harvest. These systems are
+prior art for neither the renderer nor the compiler but for the **intent
+column**: what it looks like when readings, bindings, and overrides are
+tangible, manipulable objects in the scene rather than host-only state. Mosaic
+(specification shelf) made selections serializable data; these make them
+*material*. The collaboration and merge half of the same harvest lands in the
+[knot lane brief](2026-08-19_knot_lane_brief.md) rather than here.
+
+- **PlayBook** ([project 032](https://www.inkandswitch.com/project/playbook/),
+  plus the internal-draft *User's Guide Volume I* — the system was designed by
+  writing its manual first, a use-case-first instrument worth copying as a doc
+  genre). Five materials (ink, paper, pin, beam, flux) with physics: paper
+  carries ink and composes by size; pin/beam are couplers and linear/radial
+  actuators; ink drawn on a beam follows the beam. Transfers, four:
+  **flux** is a drawn material whose `contents` property is a live, spreading
+  selection — a reading reified as a scene object with properties, the spatial
+  cousin of Mosaic's selection-as-clauses, and the first concrete answer this
+  shelf has to "what does a first-class reading look like on screen".
+  **Slot/card/whisker** is binding vocabulary: a slot is the binding site that
+  establishes a property's meaning, a card is a value object that *copies* when
+  dragged out, and copying a slot leaves a whisker — a visible live-binding
+  edge along which changes propagate, i.e. provenance drawn in the scene.
+  **Overriding** is reversible intent: dropping a compatible slot atop another
+  substitutes its value temporarily and pulling it away restores the original —
+  a "change encoding parameter" intent whose reversal is spatial, never a
+  silent scene mutation. And **selections are non-exclusive**: the same
+  material may belong to several selections at once, which is this catalog's
+  instance/source split stated as a UX principle. Also self-hosting as a test:
+  every PlayBook panel is made of the same materials it manipulates.
+- **[Drawdeck](https://www.inkandswitch.com/ink/notes/drawdeck/)** (lab note):
+  piles (proximity grouping), runestones (behavior tiles), and *curses* —
+  temporary modifiers that revert naturally, an independent rediscovery of
+  override-and-revert. Side finding: visual-model spatial queries answer
+  spatial predicates directly, where indirect metrics struggle.
+- **[Portemine](https://www.inkandswitch.com/ink/notes/portemine/)** (lab
+  note): propagator networks as PlayBook's candidate compute model —
+  bidirectional constraints, explicit monotonic time against cycles, constraint
+  solving in userspace. Transfers: prior art for any future reactive or
+  constraint lane, sitting beside Penrose's ensure/encourage on the solver
+  question rather than replacing it.
+- **[Potluck](https://www.inkandswitch.com/potluck/)** (essay): gradual
+  enrichment of plain text — named, composable live searches (`{number}`
+  referenced by later patterns) act as readings over a text authority,
+  spreadsheet-style computations derive values, and dynamic annotations
+  overlay the document without ever mutating it. Transfers: the reading shape
+  for the document/text projection family — a Potluck search is a selection
+  reading over spans, and its annotations are derived marks whose provenance
+  is a span. Their stated limitations (fuzzy parsing, maintenance of heavy
+  enrichments) are the argument for coverage reporting, which Knot's lens
+  doctrine already requires.
+
 ## Related Mere research
 
 - [`2026-08-18_scenograph_content_catalog.md`](2026-08-18_scenograph_content_catalog.md): the dependent catalog of complete scenes composed from this grammar.
