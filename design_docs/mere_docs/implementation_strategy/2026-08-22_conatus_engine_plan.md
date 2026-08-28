@@ -434,7 +434,7 @@ contract declared in advance.
   frame, source, lease, tenant, and conductor vocabulary still waits for a
   second product.
 
-## Consolidation map and the Nexus decomposition (ruled 2026-08-27, Mark)
+## Consolidation map and the Nexus decomposition (ruled 2026-08-28, Mark)
 
 The consolidation goal, stated plainly: functional, modular, nonredundant
 components, consolidated by decomposing incumbents into owned organs behind

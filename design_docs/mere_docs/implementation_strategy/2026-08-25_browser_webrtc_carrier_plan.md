@@ -3,8 +3,8 @@
 **Date:** 2026-08-25
 **Status:** in progress. C0-C2 landed 2026-08-26. C3 landed 2026-08-28: the
 forced relay is physically proven over a TURN relay on a second machine, so the
-stop line is CLEARED. Two follow-ups carried (a `reconnect` ordering defect and
-the snapshot resume branch). C4 is the next phase.
+stop line is CLEARED. The `reconnect` defect is fixed and headed-verified
+2026-08-28; the snapshot resume branch stays carried. C4 is the next phase.
 **Scope:** Let an ordinary browser join a bounded live Graphshell session whose
 native application retains state and authority. Build the carrier and admission
 proof before adding public rendezvous infrastructure.
@@ -685,9 +685,30 @@ relay, and reconnect receipts.
   §11.2; a short host-side credential kills the allocation at first Refresh
   (RFC 5766 §4 binds it to the creating username); and `reconnect` writes its
   resume HELLO into the channel its own new offer just preempted.
-  CARRIED: the `reconnect` ordering fix, the snapshot resume branch (needs a
-  revision aged out of the retained window), and a packet capture if the
-  relay-carries-ciphertext-only claim should be evidenced rather than reasoned.
+  CARRIED: the snapshot resume branch (needs a revision aged out of the
+  retained window), and a packet capture if the relay-carries-ciphertext-only
+  claim should be evidenced rather than reasoned.
+
+- **2026-08-28 (`reconnect` fixed — and it is a rebuild, not an ordering
+  tweak):** the carried `reconnect` defect is closed, but not the way the C3
+  receipt predicted. Waiting for the channel to reopen cannot work: the fixture
+  answers every offer from a freshly bound answerer with a new DTLS
+  certificate, which tears the SCTP association down, and an `RTCDataChannel`
+  is not recreated when SCTP restarts — `BrowserInitiator` opens its channel
+  once, in `new`. There is no new channel on that peer connection to wait for.
+  `reconnect` now stands up a whole new initiator, waits for *its* channel, and
+  carries only the revision across; `create_restart_offer` is consequently
+  unused by the probe, though it remains exported and tested on the carrier.
+  This is §6's rule earning itself rather than being worked around: a reconnect
+  here really is a new DTLS connection, so it really does need fresh admission.
+  Two things the rebuild required that the ordering framing would have missed —
+  stats-writing callbacks are now gated per session, because a retired
+  session's `onclose` otherwise stamps `terminal` onto the session that
+  replaced it; and the offer POST is the point of no return, so the old session
+  is released exactly there, leaving a reconnect that fails while gathering
+  with its predecessor intact. RECONNECT also now works on an already-closed
+  session, which is when you most want it. Headed receipt:
+  `Code/testing/mere/webrtc_reconnect_receipt.md`.
   ALSO CARRIED from Mark's review: `ReleaseRefV1` is defined in the carrier but
   the plan assigns release identity to Luggage; ruled 2026-08-28 to make
   `crates/system/luggage` Wasm-clean by feature (its release-identity core

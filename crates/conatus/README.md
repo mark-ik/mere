@@ -12,11 +12,11 @@ workspace.
 | [`quint-shaders`](quint-shaders) | The resident lane's kernels in Rust, for rust-gpu. Retired for compute 2026-08-16 — the resident lane's kernels moved to CubeCL; see its README. | spirv-std |
 | [`seiche`](seiche) | Force integration: a rapier `Simulation`, built-in layout forces, field couplings, scenes, fluid. | rapier2d, petgraph, quint, numen, euclid, tracing |
 | [`conatus`](conatus) | Host-neutral 3D body, collision, query, and fixed-step runtime: `BodyWorld` with voxel-grid colliders, sparse `edit_voxels`, ray/overlap queries, and a character mover, with Rapier 3D private inside so products hold Conatus ids and arrays only. Mesocosm's runtime became its first product tactile consumer 2026-08-26. | nisus, rapier3d, serde |
-| [`nisus`](nisus) | Generic revisioned voxel chunk and edit mechanics — the *nisus formativus*, the striving by which the world's matter takes and re-takes shape; consumed by Mesocosm's `GroundVoxelProfile` as the disposable view beside its record. Renamed from `conatus-voxel` and claimed on crates.io 2026-08-27. | serde |
+| [`nisus`](nisus) | Generic revisioned voxel chunk and edit mechanics — the *nisus formativus*, the striving by which the world's matter takes and re-takes shape; consumed by Mesocosm's `GroundVoxelProfile` as the disposable view beside its record. Renamed from `conatus-voxel` and claimed on crates.io 2026-08-28. | serde |
 
 A sixth member is staged on the `codex/conatus-brick-lift` branch:
 `modulus` (renamed from `conatus-brick` and claimed on crates.io
-2026-08-27 — the classical architect's base unit of measure, and the
+2026-08-28 — the classical architect's base unit of measure, and the
 layout math is literally modular arithmetic), the shared sparse-brick
 presentation ABI (deterministic
 `BrickMap`, `BrickTraceSpace`, the camera-neutral `BRICK_DDA_WGSL`, and a
