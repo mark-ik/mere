@@ -1,4 +1,9 @@
-# conatus-brick
+# modulus
+
+Renamed from `conatus-brick` and claimed on crates.io 2026-08-27: the
+classical architect's *modulus* is the base unit of measure from which a
+building's proportions derive, and this crate's slot and pointer layout
+is literally modular arithmetic.
 
 The shared sparse-brick presentation ABI: a 3D pointer volume whose zero
 value means air and whose other values select dense 8-cubed material slots
