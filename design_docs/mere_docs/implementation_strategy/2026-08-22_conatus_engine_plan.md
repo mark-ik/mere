@@ -433,3 +433,41 @@ contract declared in advance.
   and Genet migration. Renderling remains a later 3D candidate, and shared
   frame, source, lease, tenant, and conductor vocabulary still waits for a
   second product.
+
+## Consolidation map and the Nexus decomposition (ruled 2026-08-27, Mark)
+
+The consolidation goal, stated plainly: functional, modular, nonredundant
+components, consolidated by decomposing incumbents into owned organs behind
+stable vocabularies — never by umbrella crates (the acceptance plan's
+posture, now with a map). The stack resolves into three engines plus one
+spine woven through all of them:
+
+- **The voxel engine** — a product's Ground-pattern authority, `nisus`
+  (revisioned voxel value mechanics), `conatus` (bodies, collision, queries,
+  fixed step; Rapier private), and quint's resident chunks (retained,
+  stamped, patch-committed GPU state). The world's matter and touch.
+- **The projection engine** — `modulus` (the sparse-brick ABI and
+  camera-neutral DDA), the product tracers over it, Renderling tenancy,
+  Netrender composition, and the Scenograph lane. The world's appearances.
+- **The graph engine** — `numen`, quint's evaluator, and `seiche` (2D
+  dynamics; quint's `z_field` is the 2.5D rung). Canvases.
+- **Inference, woven through** — quint's Burn lanes, the
+  propose-constrain-commit pattern the resident-ground receipt proved, and
+  bounded policies at product seams (Mesocosm B1's shape).
+
+**Nexus is decomposed, never adopted.** The runtime's body vocabulary
+already keeps its backend private precisely so "a later Nexus or
+resident-GPU backend can replace that machinery" — the ruling sharpens
+that seam: when the first vessel gate needs dynamic bodies (Paredros F5
+material life and F7 danger are the expected pulls), Nexus's useful parts
+arrive as a Conatus backend behind the same `BodyWorld` vocabulary, on the
+one-device CubeCL/wgpu lane the mesocosm R2 receipt proved. Nexus never
+becomes a peer engine with its own vocabulary. This retires both standing
+hazards at once: the upstream Windows shader-build blocker stops mattering
+(only the kernels that serve this stack are taken), and the Parry-`Voxels`
+admission gap closes from our side (its solver meets the world through
+Conatus's voxel colliders rather than its own geometry path). The missing
+quadrant this fills is GPU *dynamics*: the family already has GPU fields
+and GPU residency, and its rigid bodies are CPU-only until then. License
+diligence on the upstream source happens at decomposition time, before any
+kernel is taken.

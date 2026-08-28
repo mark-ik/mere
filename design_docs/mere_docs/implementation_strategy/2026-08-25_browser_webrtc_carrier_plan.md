@@ -1,9 +1,10 @@
 # Browser WebRTC Carrier Plan
 
 **Date:** 2026-08-25
-**Status:** in progress. C0-C2 landed 2026-08-26; C3's code landed 2026-08-26,
-its forced-relay and reconnect RECEIPTS await a live TURN service (Mark to
-supply). C4 is otherwise the next code phase.
+**Status:** in progress. C0-C2 landed 2026-08-26. C3 landed 2026-08-28: the
+forced relay is physically proven over a TURN relay on a second machine, so the
+stop line is CLEARED. Two follow-ups carried (a `reconnect` ordering defect and
+the snapshot resume branch). C4 is the next phase.
 **Scope:** Let an ordinary browser join a bounded live Graphshell session whose
 native application retains state and authority. Build the carrier and admission
 proof before adding public rendezvous infrastructure.
@@ -663,3 +664,32 @@ relay, and reconnect receipts.
   no-Graphshell-key, and credential-expiry clean give-up; plus the headed
   reconnect resume run. The plan's stop line (no product wiring until a forced
   relay is demonstrated) holds until those pass.
+- **2026-08-28: C3 landed; the stop line is cleared.** Forced relay proven
+  across two machines: coturn 4.17.2 on the Fedora ThinkPad (`192.168.4.28`,
+  unprivileged, no sudo — FedoraWorkstation already opens 1025-65535/udp),
+  Chrome and the answerer on the Windows box. The probe's coturn-REST minted
+  credential was accepted by the real server (Allocate 401 -> `0x0103`,
+  `XOR-RELAYED-ADDRESS 192.168.4.28:49195`); Chrome under
+  `iceTransportPolicy:"relay"` gathered exactly one relay candidate; and with
+  the new native TURN client offering `typ relay`, a session opened in 366 ms
+  and echoed 50/50 frames with the answerer seeing its peer at the RELAY
+  address, not the browser's. Credential expiry fails clean in 169 ms with a
+  positive control in the same run. Resume-by-diff proven over the relay
+  (`rev 1..=20, 81920 B`) on a new DTLS link with fresh admission. Receipt:
+  `Code/testing/mere/webrtc_forced_relay_receipt.md`.
+  Four defects the live run caught, all recorded there: the answerer could not
+  offer a relay candidate at all (str0m does no TURN allocation and
+  `AnswererConfig::advertise` forces `typ host` at the carrier's own port —
+  fixed with a hand-rolled TURN client plus per-peer shim sockets, so str0m
+  never learns a relay exists); per-session channel numbers violate RFC 5766
+  §11.2; a short host-side credential kills the allocation at first Refresh
+  (RFC 5766 §4 binds it to the creating username); and `reconnect` writes its
+  resume HELLO into the channel its own new offer just preempted.
+  CARRIED: the `reconnect` ordering fix, the snapshot resume branch (needs a
+  revision aged out of the retained window), and a packet capture if the
+  relay-carries-ciphertext-only claim should be evidenced rather than reasoned.
+  ALSO CARRIED from Mark's review: `ReleaseRefV1` is defined in the carrier but
+  the plan assigns release identity to Luggage; ruled 2026-08-28 to make
+  `crates/system/luggage` Wasm-clean by feature (its release-identity core
+  compiling for wasm32 with default-features off) and have the carrier consume
+  it rather than define it.
