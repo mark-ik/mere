@@ -4,6 +4,7 @@ members = [
     "crates/mere",
     "crates/canvas/canvas",
     "crates/canvas/cartography",
+    "crates/canvas/pictograph",
     "crates/graph/glossary",
     "crates/graph/graphlets",
     "crates/graph/graph-kernel",
@@ -154,6 +155,7 @@ graphlets = { version = "0.0.1", path = "crates/graph/graphlets" }
 # The graph-canvas content-root (was `orrery`; that name retired to the Merely
 # product tier ladder, 2026-07-09 — see the boundary pass plan amendments).
 canvas = { package = "mere-canvas", version = "0.0.1", path = "crates/canvas/canvas" }
+pictograph = { version = "0.0.1", path = "crates/canvas/pictograph" }
 # Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
 glossary = { package = "mere-glossary", version = "0.0.1", path = "crates/graph/glossary" }
 
