@@ -1,0 +1,5 @@
+This commit's subject covers only the conatus engine plan addition.
+It also swept concurrent in-flight edits to the browser-webrtc carrier
+plan and its DOC_README row that belonged to another active session;
+they were caught by git add -A between a status check and the commit.
+Content preserved as-was; nothing was altered.
