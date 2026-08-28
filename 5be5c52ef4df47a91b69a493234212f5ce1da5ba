@@ -1,0 +1,5 @@
+Subject covers the nisus/modulus date corrections only. This commit
+also swept further in-flight edits to the browser-webrtc carrier plan
+belonging to another active session (second occurrence; git add -A is
+now abandoned for this repo in favor of path-scoped commits). Content
+preserved as-was.
