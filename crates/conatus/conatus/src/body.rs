@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use conatus_voxel::VoxelEdit;
+use nisus::VoxelEdit;
 
 /// Stable, generational identity for one simulated body.
 ///

@@ -31,7 +31,7 @@ pub use body::{
 };
 pub use clock::{ClockAdvance, ClockError, FixedClock};
 pub use command::{BodyCommand, CommandEffect, CommandId, CommandResult};
-pub use conatus_voxel::{
+pub use nisus::{
     VoxelAddress, VoxelCellChange, VoxelCellEdit, VoxelChunk, VoxelChunkError, VoxelEdit,
     VoxelPatch, VoxelRegion, split_voxel_address,
 };
