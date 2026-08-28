@@ -61,14 +61,18 @@ a keepsake.
 ## 4. Where the pieces live
 
 - **emblem stays format-pure**: decoder + encoder, no generator, no rules.
-- **The generator is a new mere crate with a plain name** (tier rule:
-  unpublished support crates take plain descriptive names; a product-tier
-  name round happens if and when it publishes). Working name `face-derive`,
-  under `crates/canvas/` beside its consumer. Depends on emblem (git/path
-  dep) and the kurbo-shaped middle; emits palette indices in tinct's slot
-  vocabulary.
+- **The generator is `pictograph`** (`crates/canvas/pictograph`), named by
+  Mark 2026-08-28 and claimed the same day as a 0.0.1 reservation on
+  crates.io (MPL-2.0 — the first crate founded after the license sweep).
+  The word carries the mechanism twice: a pictorial sign bearing meaning by
+  convention, and the statistical sense — data encoded as a picture, which is
+  what rule-driven faces are. It joins the `-graph` vein beside `chirograph`.
+  Verified free on both API and sparse index; near-name `pictogram` is taken
+  by a compile-time SVG icon resolver (same vertical), flagged and judged
+  survivable. Depends on emblem (git/path dep) and the kurbo-shaped middle;
+  emits palette indices in tinct's slot vocabulary.
 - **The sink bridge** (emblem `Sink` → vello scene, via netrender's vello) is
-  a small module inside `face-derive` in v1; it moves out only when a second
+  a small module inside `pictograph` in v1; it moves out only when a second
   consumer forces the wall (module-first doctrine).
 - **Canvas grows the `Derived` face arm**; rule-driven variation (by node
   kind, state, degree) is parameters into the same generator, upstream of it.
@@ -84,7 +88,7 @@ appearance). Golden byte-vector fixtures pin the mapping: a committed table of
 
 ## 6. Phases
 
-### D1. `face-derive` v1: hash → face bytes
+### D1. `pictograph` v1: hash → face bytes
 
 Seeded parameter extraction, a first motif grammar (symmetry, density, a small
 family of forms), palette-indexed fills only, two LOD arms, emblem encoding.
@@ -157,3 +161,6 @@ conservative rollout. Both defensible; not decided here.
 
 - 2026-08-28: plan written; scope ruled with Mark (encoder + derivation,
   editing deferred; doc split — encoder plan in emblem, this plan here).
+- 2026-08-28: generator named **pictograph** (Mark's pick) and claimed as a
+  0.0.1 stub on crates.io the same day; workspace wiring committed
+  (`42731a59`). The plan's `face-derive` working name is retired.
