@@ -434,26 +434,38 @@ contract declared in advance.
   frame, source, lease, tenant, and conductor vocabulary still waits for a
   second product.
 
-## Consolidation map and the Nexus decomposition (ruled 2026-08-28, Mark)
+## Consolidation map (ruled 2026-08-28, Mark; amended the same day from a three-engines sketch)
 
 The consolidation goal, stated plainly: functional, modular, nonredundant
 components, consolidated by decomposing incumbents into owned organs behind
-stable vocabularies — never by umbrella crates (the acceptance plan's
-posture, now with a map). The stack resolves into three engines plus one
-spine woven through all of them:
+stable vocabularies — never by umbrella crates. The map:
 
-- **The voxel engine** — a product's Ground-pattern authority, `nisus`
-  (revisioned voxel value mechanics), `conatus` (bodies, collision, queries,
-  fixed step; Rapier private), and quint's resident chunks (retained,
-  stamped, patch-committed GPU state). The world's matter and touch.
-- **The projection engine** — `modulus` (the sparse-brick ABI and
-  camera-neutral DDA), the product tracers over it, Renderling tenancy,
-  Netrender composition, and the Scenograph lane. The world's appearances.
-- **The graph engine** — `numen`, quint's evaluator, and `seiche` (2D
-  dynamics; quint's `z_field` is the 2.5D rung). Canvases.
-- **Inference, woven through** — quint's Burn lanes, the
-  propose-constrain-commit pattern the resident-ground receipt proved, and
-  bounded policies at product seams (Mesocosm B1's shape).
+- **Realms own truth.** Chartulary is the graph realm; the Ground-pattern
+  with `nisus` is the voxel realm; esp's corpora are the semantic realm.
+  Each realm owns authority, revision, and edit mechanics, and nothing else
+  does. Analytic products form **derived realms** beside authority —
+  revisioned, disposable, refusal-gated, the `GroundVoxelProfile` and
+  tactile-advice shape — never a second authority.
+- **Two engines operate over realms.** The **projection engine** shows
+  realms, primary or derived: sceno/scenomise, the graph canvas (a graph is
+  a projection of data — the earlier sketch's "graph engine" dissolves here
+  as chartulary's lens), `modulus` with the product tracers over it,
+  Renderling tenancy, Netrender composition. The **inference engine**
+  (esp's semantic lane plus quint's Burn lanes) couples twice and only
+  twice: **analytically**, reading realms into derived data; and
+  **generatively**, writing proposals into realms under
+  propose-constrain-commit with authority disposing (the resident-ground
+  receipt and Mesocosm's B1 bounded policy are the standing proofs at two
+  scales). Inference never renders; a lens that "depends on the inferences
+  upon the data" is just projection over a derived realm, in games and in
+  turnstone alike.
+- **Physics is a stratified capacity, not an engine.** In-projection
+  dynamics (`seiche` over layout space; quint's `z_field` at the 2.5D
+  rung), in-realm dynamics (`conatus`, and the decomposed Nexus backend
+  when its consumer fires), and fields serving either altitude (quint).
+- **The host grows out of genet/cambium.** The game runtime shell is the
+  same lane as Isometry's pending Genet host migration; the hand-rolled
+  winit hosts in the vessel receipts retire into it.
 
 **Nexus is decomposed, never adopted.** The runtime's body vocabulary
 already keeps its backend private precisely so "a later Nexus or
