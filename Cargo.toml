@@ -155,7 +155,9 @@ graphlets = { version = "0.0.1", path = "crates/graph/graphlets" }
 # The graph-canvas content-root (was `orrery`; that name retired to the Merely
 # product tier ladder, 2026-07-09 — see the boundary pass plan amendments).
 canvas = { package = "mere-canvas", version = "0.0.1", path = "crates/canvas/canvas" }
-pictograph = { version = "0.0.1", path = "crates/canvas/pictograph" }
+pictograph = { version = "0.1.0", path = "crates/canvas/pictograph" }
+# The IconVG implementation pictograph encodes faces with (repos/emblem).
+emblem = "0.2.0"
 # Graph digest projections (djot outline, metrics) — `glossary` (was `mere-orrery`).
 glossary = { package = "mere-glossary", version = "0.0.1", path = "crates/graph/glossary" }
 

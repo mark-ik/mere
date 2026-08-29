@@ -1,9 +1,9 @@
 # Derived Faces Plan
 
 **Date:** 2026-08-28
-**Status:** plan. Gated on emblem's encoder
-(`repos/emblem/design_docs/2026-08-28_encoder_plan.md`, E1–E3 at minimum;
-E4 for the LOD arm).
+**Status:** **D1 landed 2026-08-29**; D2 (vello bridge) and D3 (canvas arm) open. Was gated on emblem's encoder
+(`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed and
+shipped as emblem 0.2.0 on 2026-08-29.
 **Scope:** procedural node faces for content that has no favicon: derive a
 compact vector face from the node's content address, deterministic across
 peers, themed at render time by the seed palette, with level-of-detail
@@ -164,3 +164,51 @@ conservative rollout. Both defensible; not decided here.
 - 2026-08-28: generator named **pictograph** (Mark's pick) and claimed as a
   0.0.1 stub on crates.io the same day; workspace wiring committed
   (`42731a59`). The plan's `face-derive` working name is retired.
+
+### D1 receipt (2026-08-29)
+
+`pictograph` 0.1.0 derives a face from a content address. 13 tests green,
+clippy clean (the only warnings under `-p pictograph` are mere's pre-existing
+unused-patch notices). Faces measure **91 to 179 bytes** across the test
+corpus.
+
+**The grammar, v1:** a 5x5 grid over the default ViewBox, cell side 12 from
+origin -30 — chosen so every coordinate is an integer in `[-30, 30]` and
+therefore encodes in **one byte**. Three symmetries (mirror-X, mirror-both,
+rotate-180), two forms (block, diamond), three densities, and two distinct
+palette entries per face. Only the independent region is drawn from the
+stream; symmetry supplies the rest, which is what makes a face read as
+designed rather than noisy. Each cell is a single parallelogram op, and each
+colour group is one path with one fill.
+
+**The theming mechanism turned out cleaner than the plan assumed.** The plan
+expected register writes carrying palette indices. In fact IconVG pre-loads
+registers from the caller's palette, and at the starting `SEL` of 56 slot
+`8 + k` lands on entry `k` — so a face names palette entries with **no
+register ops in the file at all**. Fills are palette-indexed by construction;
+a literal colour is not merely discouraged here, it is unreachable.
+
+**Determinism:** FNV-1a over the address seeds a SplitMix64 stream, both
+exactly specified, with integer arithmetic throughout and no hash-map
+iteration. `DERIVATION_VERSION` is folded into the seed.
+
+Done-conditions met:
+- **golden fixtures pass** — committed (address, length, digest, filled-cell)
+  literals for four addresses, byte-exact and stable across repeated runs;
+- **theming proved** — one face's identical bytes decoded against two palettes
+  give two colours, and a sweep asserts that *every* fill across the corpus at
+  both LOD heights resolves to a palette entry, never a literal;
+- **LOD proved** — the small arm is exactly one shape and one fill for every
+  address, the arms differ at the threshold, and most faces genuinely simplify;
+- **fuzz** — 300 random addresses decode without panic at four heights.
+
+**A note on the golden test, which was wrong first.** The initial version
+recomputed both sides of the comparison, so it would have passed no matter how
+the grammar changed — the same non-discriminating shape as the emblem test
+that let the SEL bug through. It now carries committed literals, and its doc
+comment says that a failure means bumping `DERIVATION_VERSION` deliberately,
+never quietly updating the table. A companion test asserts the grammar does
+not collapse: all three symmetries, both forms, and at least six distinct
+primary colours must occur across the corpus.
+
+**Not yet published.** 0.1.0 is ready; publishing is a separate step.
