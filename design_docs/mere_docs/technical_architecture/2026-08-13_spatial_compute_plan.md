@@ -227,7 +227,7 @@ fact log without comparing positions.
 seiche proposes geometric truth and owns no facts) plus
 `tests/contact_to_fact.rs` holding the five receipts. The commitment
 and the fact type live with the caller, which is the boundary: the
-record is the host's organ, never the physics engine's.
+record is the host's organ, never the physics capacity's.
 
 ### P2. Resident mere graph
 
@@ -451,8 +451,9 @@ positive case.
   explicit commitment (the projection ruling amendment, 2026-08-13).
 - Authority stays CPU and integer where the games wing constitution
   says so; this plan computes projections and ambience only.
-- No second dynamics engine beside rapier in the tactile tier without a
-  proven constraint need.
+- No second dynamics backend beside rapier in the tactile tier without a
+  proven constraint need. (The Nexus-decomposition ruling in the conatus
+  engine plan's consolidation map, 2026-08-28, is this rule's descendant.)
 - The lease is not shared, published, or depended on across domains
   before P4.
 

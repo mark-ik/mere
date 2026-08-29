@@ -11,7 +11,10 @@ shared contract.
 ## Direction
 
 The engine is the composition a product runtime profile conducts. It is not a
-crate and does not need one universal owner. A profile chooses its clocks,
+crate and does not need one universal owner. ("Engine" here is the
+product-level assembly; it is distinct from the platform's two engines —
+projection and inference — in the consolidation map ruled 2026-08-28 in
+`2026-08-22_conatus_engine_plan.md`.) A profile chooses its clocks,
 triggers, input-to-intent mapping, authorization, source bindings, spatial and
 inference organs, render tenants, audio adapters, persistence route, and
 diagnostics. Each organ retains its own state and authority boundary.

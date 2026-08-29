@@ -41,8 +41,10 @@ are MPL-2.0 (see LICENSE).
 
 Fields are treated as a third canvas primitive beside nodes and edges. Node and
 edge truth lives in the content substrate
-([chartulary](../eidetic/chartulary)); field truth lives here because a field
-reads positions.
+([chartulary](../eidetic/chartulary)); the field *vocabulary* lives here
+because a field is spatial, while field truth itself belongs to the graph
+realm, persisted beside nodes and edges (the consolidation map's realms
+clause in the conatus engine plan).
 
 The name: a conatus is the instantaneous striving that, integrated over time,
 becomes motion. Definition, evaluation, integration.

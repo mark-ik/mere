@@ -9,7 +9,7 @@ definitions; [`seiche`](../seiche) integrates the forces they produce.
 | Module | Public items | Contents |
 |---|---|---|
 | `field_ast` | `ScalarField`, `VectorField`, `Falloff` | The field algebra as recursive data (`f: R² → R` and `f: R² → R²`), with `Sample(FieldId)` references to other fields. Constructors like `ScalarField::gaussian_at` / `disk_at`. |
-| `field` | `Field`, `FieldId`, `CouplingId`, `FieldDefinition`, `FieldExtent`, `FieldLifecycle` | A field as truth: identity, definition, extent, lifecycle. |
+| `field` | `Field`, `FieldId`, `CouplingId`, `FieldDefinition`, `FieldExtent`, `FieldLifecycle` | The field vocabulary the graph realm persists as truth: identity, definition, extent, lifecycle. |
 | `coupling` | `Coupling`, `CouplingResponse`, `NodeSelector`, `COUPLING_VOCAB` | One coupling rule: `id`, `field`, `selector`, `response`, `strength`. |
 | `edge_path` | `EdgePath`, `EdgePathRule` | Per edge-kind curve generation: `Straight`, `Spline { tension }`, `FieldLine { field, max_steps, step_size }`. |
 

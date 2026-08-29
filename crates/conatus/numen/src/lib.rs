@@ -16,8 +16,8 @@
 //! Fields are the third graph primitive, beside nodes and edges. Where the node and
 //! edge primitives live in the content substrate ([`chartulary`](https://github.com/mark-ik/chartulary)),
 //! the field primitives live here, at the same portable tier, because a field is
-//! *spatial* (it reads positions) and so stays out of the position-free content
-//! graph.
+//! *spatial* (it reads positions). The types are numen's; the truth is the
+//! graph realm's, persisted beside nodes and edges as content.
 //!
 //! - [`ScalarField`] / [`VectorField`] — the field algebra, `f: R^2 -> R` and
 //!   `f: R^2 -> R^2`, as recursive data with `Sample` references to other fields by
