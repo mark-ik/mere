@@ -628,6 +628,53 @@ active rules rest on neither. A device that cannot read thermals therefore
 disables the thermal ceiling rather than feeding an invented temperature
 into a live check.
 
+### The storage layers, and where artifacts live
+
+The first pass through Assemble asked only about physical job bytes and
+missed the layer that matters most for what Distillery produces. Three
+layers are in play, and they are not alternatives:
+
+- `transport::BlobStore` holds physical content-addressed bytes. Mesh job
+  inputs and outputs live here, custody-tagged and released by maintenance.
+- `muniment::Backend` (redb) holds operations and engrams. A running Djinn
+  already opens several distinct ones: one per personal graph, plus Knot's
+  sync store. Distillery's `MeshStore` is another. There is no single
+  canonical persona store today; it is per-lane.
+- Eidetic is not a store. It is the typed-payload and schema layer over any
+  muniment `Backend`, so engrams live in whichever store a caller hands it.
+
+`TrainerResource` takes an Eidetic store handle separately from the mesh
+blob space, and that is where everything the port produces lands: the
+corpus, the adapter manifest, the evaluation report, and the adapter
+weights as opaque blob engrams. Job bytes and artifacts have different
+lifetimes — one is collectable, the other is meant to be found later — so
+they are separate stores by construction, and the artifact store is the
+product decision.
+
+**Ruled 2026-08-30.** Artifacts live in a persona-scoped model library: a
+muniment store under the persona's data root, distinct from both the
+personal graph and any one mesh. Adapters outlive the mesh that trained
+them and stay findable across lanes, without coupling Distillery's writes
+to the personal-graph replica's lifecycle. A bridge that also publishes an
+adapter as a graph engram, so it travels the same privacy, provenance, and
+trust envelope as any other engram, remains available later and is not
+required now.
+
+**Job bytes stay Distillery's own.** Sharing Djinn's `transport::BlobStore`
+buys little for ephemeral mesh-tagged bytes and costs the `Arc` unwrap that
+breaks Djinn's shutdown plus the read-authorizer bypass. Djinn still owns
+identity, settings, lifecycle, and shutdown ordering.
+
+**The backend generic resolves concretely.** Both stores are `RedbBackend`
+— the mesh operation log at `mesh.redb`, the model library at its own file
+— so `DjinnResident` stays non-generic and no other lane is disturbed.
+
+**Thermal is out of the first sensor.** Battery, idle, and network class
+all come from the `windows` crate without COM; deferring thermal keeps COM
+out of the resident entirely, and by the composition rule above a device
+that does not sense thermals runs with the thermal ceiling disabled rather
+than with an invented temperature.
+
 ### Done conditions
 
 An installed Distillery starts a resident on this machine from stated policy,
