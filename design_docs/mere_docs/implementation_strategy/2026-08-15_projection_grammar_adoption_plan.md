@@ -920,10 +920,11 @@ not settled without it.
   scene-hosting abstraction or keyboard-navigable Cambium Matrix. A3 stage two
   and A5 remain gated by their own consumer rules.
 - 2026-08-29: **governing documents reconciled against landed code and the
-  promotion rule.** The catalog now describes Score v4's actual arrangement
-  surface, distinguishes C3's closed minimum backdrop contract from richer
-  raster and scalar field work, and states that the promotion suite is an
-  evidence harness rather than a forcing consumer. A5 now waits for a named
-  first proof consumer and still requires a second heterogeneous consumer for
-  every portable addition. The shelfmark/index ruling is labeled resolved;
-  the embedded-app question remains open.
+  promotion rule** at Mere `caf19a014766ae08e3231d9963d5edfaec945dd7`. The
+  catalog now describes Score v4's actual arrangement surface, distinguishes
+  C3's closed minimum backdrop contract from richer raster and scalar field
+  work, and states that the promotion suite is an evidence harness rather than
+  a forcing consumer. A5 now waits for a named first proof consumer and still
+  requires a second heterogeneous consumer for every portable addition. The
+  shelfmark/index ruling is labeled resolved; the embedded-app question
+  remains open.

@@ -167,10 +167,10 @@ conservative rollout. Both defensible; not decided here.
 
 ### D1 receipt (2026-08-29)
 
-`pictograph` 0.1.0 derives a face from a content address. 13 tests green,
-clippy clean (the only warnings under `-p pictograph` are mere's pre-existing
-unused-patch notices). Faces measure **91 to 179 bytes** across the test
-corpus.
+`pictograph` 0.1.0 derives a face from a content address, landed in Mere commit
+`d42fd1fbc81ba1ae6a3548c4e5f4e5759e7fa64f`. 13 tests green, clippy clean (the
+only warnings under `-p pictograph` are mere's pre-existing unused-patch
+notices). Faces measure **91 to 179 bytes** across the test corpus.
 
 **The grammar, v1:** a 5x5 grid over the default ViewBox, cell side 12 from
 origin -30 — chosen so every coordinate is an integer in `[-30, 30]` and
