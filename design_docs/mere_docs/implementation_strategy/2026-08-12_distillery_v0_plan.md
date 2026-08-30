@@ -5,8 +5,10 @@
 Personae/settings binding, configure/inspect binary, and read-only Cambium
 surface pass an exact-source focused Cargo gate, and Turnstone admits the
 surface as the contribution seam's second provider; operational host
-composition is assessed in §10 with four decisions open, and the full
-workspace gate remains open. D2's
+composition is assessed in §10 and its four decisions are ruled (Djinn
+composes; conditions sensed where possible and stated where not;
+a derived personal mesh; single-device first), leaving implementation and
+the full workspace gate open. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
@@ -463,7 +465,39 @@ follow a graph session or silently become persona truth." Distillery's own
 `InstalledSettings` is persona-scoped and `deny_unknown_fields`, which is the
 wrong scope for a device's lending policy.
 
-### The decisions this forces
+### The decisions, as ruled 2026-08-30
+
+- **O-1, the composition owner — Djinn lane now.** Djinn gains a Distillery
+  block in its `OwnerSettings`, absent by default, and supplies the shared
+  blob custody and a transport. The mesh stack enters the resident for the
+  first time; `ResidentStorage` must gain a way to adopt an injected
+  `BlobStore` rather than opening its own, and mesh-scoped custody tags keep
+  the lanes disjoint inside it, which is what D0's finding intended.
+- **O-2, device conditions — sensed where possible, stated where not, never
+  fabricated.** Djinn owns the `ConditionSource`, which is the right home for
+  a signal shared by rendering, inference, and embedding: it sits above all
+  three, so ESP's D1 concern about one consumer owning shared policy does not
+  apply. Sensing is in-stack — `netwatch` and `wmi` are already compiled into
+  the Distillery build through iroh, `windows` supplies `GetLastInputInfo`,
+  and `sysinfo` plus wgpu adapter enumeration supply real `HostFacts` — so
+  Windows needs no new dependency. Other platforms degrade to owner-stated
+  values rather than to the fixed snapshot `ObservedConditions::spare()`
+  reports today, which lends a device unconditionally by claiming facts it
+  never observed.
+- **O-3, mesh identity — a derived personal mesh.** The id derives from the
+  Personae profile under its own salt, the way the mesh author already does.
+  No invitation flow, and the identity is stable across reinstalls of the
+  same profile.
+- **O-4, reach — single-device first.** Poster and runner are the same
+  process, so `NoCourier` is truthful rather than a silent limitation,
+  checkpoint authority stays the local key, and no receipt claims a
+  multi-device governance shape that has never been exercised. Wiring
+  `TransportCourier::for_mesh` and answering the checkpoint-authority
+  question stay together, in a later slice.
+
+### What each decision leaves open
+
+The original options, for the record, were:
 
 - **O-1, the composition owner**: Distillery's own binary gains a `run` verb
   over device-scoped settings; or Djinn adds a Distillery lane and supplies
@@ -481,6 +515,17 @@ wrong scope for a device's lending policy.
 - **O-4, reach**: single-device (keep `NoCourier`) or multi-device (wire
   `TransportCourier::for_mesh`, and face the checkpoint-authority question
   that no receipt has exercised).
+
+### Assemble, before any of this is built
+
+The rulings name three things whose shape has to be verified in the live
+tree before implementation, not assumed: Djinn's actual injection points for
+a fourth resident lane and whether its blob custody hands out what
+`ResidentStorage` would need; whether `ResidentStorage` can adopt an injected
+store without loosening the cadence agreement `ResidentAuthority::new`
+enforces; and the concrete `wmi`/`netwatch` query surfaces for battery,
+thermal, and interface class at the versions already in the build. A gap
+found there returns here rather than being patched over in the implementation.
 
 ### Done conditions
 
