@@ -468,11 +468,11 @@ wrong scope for a device's lending policy.
 ### The decisions, as ruled 2026-08-30
 
 - **O-1, the composition owner — Djinn lane now.** Djinn gains a Distillery
-  block in its `OwnerSettings`, absent by default, and supplies the shared
-  blob custody and a transport. The mesh stack enters the resident for the
-  first time; `ResidentStorage` must gain a way to adopt an injected
-  `BlobStore` rather than opening its own, and mesh-scoped custody tags keep
-  the lanes disjoint inside it, which is what D0's finding intended.
+  block in its `OwnerSettings`, absent by default. The mesh stack enters the
+  resident for the first time. Assemble corrected two parts of this: Djinn
+  owns no transport to share, so the lane keeps building its own, and
+  sharing the blob store costs more than expected, which reopens whether it
+  should be shared at all.
 - **O-2, device conditions — sensed where possible, stated where not, never
   fabricated.** Djinn owns the `ConditionSource`, which is the right home for
   a signal shared by rendering, inference, and embedding: it sits above all
@@ -526,6 +526,107 @@ store without loosening the cadence agreement `ResidentAuthority::new`
 enforces; and the concrete `wmi`/`netwatch` query surfaces for battery,
 thermal, and interface class at the versions already in the build. A gap
 found there returns here rather than being patched over in the implementation.
+
+### Assemble, run 2026-08-30
+
+The three verifications ran. Two returned clean with named change sites; the
+third invalidated part of O-1 and raised decisions that belong back with the
+ruling rather than in the implementation.
+
+**Storage adoption is feasible, and the cadence invariant must not be
+loosened.** `ResidentStorage` needs a constructor that adopts an existing
+`Arc<BlobStore>` and builds the same `TransportBlobSpace::for_mesh` over it,
+so mesh-scoped tags keep lanes disjoint inside one store. Shutdown is the
+hazard: `ResidentStorage::shutdown` calls `BlobStore::shutdown`, which syncs
+and closes the whole iroh-blobs store, and running that on a shared store
+would close it under Djinn's other lanes. An adopted storage must drop its
+space handle and stop there. The `blob_gc_every` agreement in
+`ResidentAuthority::new` stays exactly as written: the field is a fact about
+the store rather than a Distillery preference, so Djinn states its own
+`gc_interval_seconds` and the assertion catches a divergence, which is the
+same stated-truth-asserted-at-composition shape the surface contract's F-1
+ruling established. A fourth site nobody had named:
+`DistilleryInstalledSnapshotV1::from_installed` derives `blob_store_root`
+from `DistilleryPaths` rather than from the store in use, so under an
+adopted store the Turnstone pane would report a path the bytes do not live
+at. `ResidentAuthority::storage()` and `ResidentStorage::root()` already
+exist to correct it.
+
+**The mesh identity derives with no new primitive.** Personae exposes only
+`derive_keypair(salt)`, which is enough: derive under a product-owned salt
+and take the public key as the 32-byte mesh id, exactly as the mesh author
+already derives. No `derive_bytes` addition to the identity crate.
+
+**Djinn owns no transport.** It never constructs a `P2pandaTransport`, iroh
+endpoint, or router anywhere; the Knot lane hands a signing seed and relay
+URLs to `knot-editor`, which builds its own transport internally, and
+Distillery's `bind_resident` does the same from the profile master key. O-1
+as recorded said Djinn supplies the shared blob custody and a transport. It
+cannot supply a transport, and the Distillery lane keeps building its own.
+Djinn supplies identity, settings, and policy facts.
+
+**Sharing the blob store costs more than the assessment predicted.** Three
+findings, none visible before reading the lane:
+
+- Djinn's `ResidentBlobCustody::shutdown` unwraps the `Arc<BlobStore>` to
+  close it. A Distillery lane holding a clone makes Djinn's own shutdown
+  fail, so ownership-aware teardown is not a nicety; the shared path does
+  not work without it.
+- The two custody conventions do not reconcile. Djinn scopes bytes with
+  `BlobScope` and `BlobLease` under a `mere/blob-lease/v1` tag prefix and
+  gates reads through `BlobReadAuthorizer`; Distillery tags with a
+  hand-rolled `mere/mesh/blob/v1` prefix through `TransportBlobSpace` and
+  never touches the authorizer. They cannot collide, but mesh bytes in a
+  shared store would sit outside Djinn's read authorization entirely.
+- `DjinnResident` is not generic and `ResidentAuthority<B>` is, so the lane
+  forces either one concrete backend for the whole resident or a generic
+  parameter threaded through Djinn.
+
+**Djinn's run loop has no shutdown signal.** `ResidentAuthority::run_until`
+requires a future that resolves when it is time to stop; Djinn's loop ends
+today only when one of its three broker futures returns. Knot needs no such
+signal because its sync work runs in `KnotSyncHost`'s own background tasks
+and the loop only ticks a settings refresh. A Distillery lane is the first
+owning loop in that process and must be a fourth `select!` arm, so a
+cancellation signal has to be added to `run()` before it can stop cleanly on
+the way to `resident.shutdown()`.
+
+**Sensing is reachable, but not the way O-2 recorded it.** `netwatch`
+exposes only `is_up`, `name`, and `addrs` on an interface; it discards the
+adapter type its own `netdev` dependency carries, and its `is_expensive`
+field is hardcoded false on every platform, so it can answer neither network
+class nor metered. `wmi` is `!Send` and `!Sync` by construction, initializes
+COM per-thread, and `netwatch` itself routes every WMI call through
+`spawn_blocking` because COM can deadlock on a tokio worker thread.
+
+What actually covers the four signals is the `windows` crate, already in the
+build at 0.62.2, with features added to our own dependency on it, which is
+additive under feature unification and needs no version change:
+
+| Signal | Source | COM |
+|---|---|---|
+| Battery and mains | `GetSystemPowerStatus` | no |
+| Idle | `GetLastInputInfo` with `GetTickCount64` | no |
+| Network class | `GetAdaptersAddresses`, reading `IfType` | no |
+| Metered | WinRT `NetworkInformation` connection cost | yes |
+| Thermal | `MSAcpi_ThermalZoneTemperature` over `wmi` | yes |
+
+Thermal is the only signal that needs `wmi`, and it is the least dependable:
+the ACPI class is frequently absent, stale, or access-restricted on modern
+laptops, and no first-party Windows API replaces it.
+
+**Never fabricating needs a mechanism, because `DeviceConditions` cannot say
+unknown.** Every field is a plain value, `thermal_c: u16` and
+`battery_pct: u8` among them, so a sensor must supply a number even for a
+signal it cannot read. The distinction that survives is between a value
+nobody asserted and a value the owner did: `ObservedConditions::spare()`
+inventing 40 degrees and full battery is fabrication, while an owner-stated
+fallback is a claim someone made. The rule that makes O-2 checkable rather
+than aspirational is that a policy rule may be active only when its signal
+is sensed or explicitly stated, and composition refuses a policy whose
+active rules rest on neither. A device that cannot read thermals therefore
+disables the thermal ceiling rather than feeding an invented temperature
+into a live check.
 
 ### Done conditions
 
