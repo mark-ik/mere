@@ -1,11 +1,13 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status (reconciled 2026-08-25)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
+**Status (reconciled 2026-08-29)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
 one, A4+C2, and A2 are closed. Turnstone `648bf19` is B1's definitive close,
 including routed screen-reader interaction. The Projection Receipts Plan's
 coordinated spatial/Matrix views close A2's resolution half. A3 stage two and
-A5 retain their entrance gates. FT7 is closed through the local, admitted
+A5 retain their entrance gates. A5 waits for a named product consumer to open
+its first proof; the promotion suite begins with that proof and is an evidence
+harness rather than a consumer. FT7 is closed through the local, admitted
 remote, and frozen Matrix parity receipt. FT8 is closed through Retinue
 Signalman's mixed-realization receipt at `8cea8f9`.
 The Scenograph family is now on an unpublished 0.0.4 development line with
@@ -108,7 +110,7 @@ Validation: catalog cites all eleven; DOC_README updated.
 Done when: a reader of the catalog can find every system the report verified
 without leaving the repo.
 
-**A6. The placement seam (numbered late, sequenced first).**
+**A6. The placement seam (numbered late, sequenced first) - CLOSED 2026-08-16.**
 Context: mer3ly consumes the stack along two disjoint paths. The portable path
 builds a `Score` with `Placement::Ordinal` and solves it; the live path runs a
 seiche simulation with `pin_node`, three-way mobility, and backdrops. `Score`
@@ -241,10 +243,13 @@ stays out of arrangement types (the catalog's motion taxonomy holds).
 Done when: a projection switch reads as a staged transition, specified as
 data, on at least one consumer, with snapping still the default elsewhere.
 
-**A5. Gap proofs adopt named anatomies (gated on the promotion suite).**
-Context: the catalog's first promotion suite (one heterogeneous fixture as
-orrery, matrix, Cartesian chart, hierarchy, schematic) will force contract
-material. The report's job was to make sure none of it is invented fresh.
+**A5. Gap proofs adopt named anatomies (gated on a named first proof consumer).**
+Context: the catalog's promotion suite is an evidence harness, not a consumer.
+It begins when a named product needs one of these proofs. Reusing one
+heterogeneous fixture as orrery, matrix, Cartesian chart, hierarchy, and
+schematic then tests whether the resulting contract material composes beyond
+that first ask. The report's job was to make sure none of that material is
+invented fresh.
 Tasks, each strictly behind its proof:
 - Chart proof (gap 1): scales, axes, legends filled by rule with derivation
   recoverable, per Vega-Lite; the unit/aggregate distinction per ATOM ("a bar
@@ -262,9 +267,16 @@ Tasks, each strictly behind its proof:
 - Every proof: an accessible static realization in the receipt (B1 defines
   the shape). Read GoFish in full before the facet and flow proofs; it is the
   chart-side proof of the catalog's central bet.
+Forcing consumer: unassigned. Entrance gate: a named product consumer needs
+one proof strongly enough to state its task, source facts, interaction, and
+accessible output. Found the suite around that proof. Any portable addition
+still needs the catalog's second heterogeneous consumer; the other suite views
+do not count as substitutes merely because they share a fixture.
 Validation: per the catalog's promotion checklist, unchanged.
-Done when: each gap's contract addition cites the anatomy it lifted and the
-proof that forced it.
+Per-proof done when: the contract addition cites the anatomy it lifted, the
+first proof that forced it, and the second heterogeneous consumer that proves
+it portable. A5 stays open until every A5 proof family is either promoted
+through that evidence or ruled unnecessary by a forcing proof.
 
 ### Track B: genet (realization receipts)
 
@@ -291,12 +303,14 @@ DOM lane; verify with the AccessKit lane precedent
 (accesskit_screen_reader_verification, 2026-06-09) and a genet-probe scenario
 asserting the semantic tree (apps self-drive via genet-probe; never synthetic
 OS input).
-Forcing consumer: the promotion suite itself; every proof's receipt cites this
-shape. Mer3ly is the standing argument for it: its sandbox is JavaScript-only,
-shipping `data-graph-interface` hidden with a runtime-built node list and a
-no-script status reading "Graphshell sandbox not initialized", so the site
-serves accessibility by rendering an entirely separate authority-derived static
-index instead. That workaround is what B1 retires.
+Forcing consumers: Mer3ly's shipping accessibility gap opened the static form,
+and Turnstone `648bf19` supplied the definitive headed traversal and routed
+interaction close. The promotion suite reuses this receipt shape; it is the
+harness that made the need visible, not a substitute consumer. Mer3ly's sandbox
+was JavaScript-only, shipping `data-graph-interface` hidden with a runtime-built
+node list and a no-script status reading "Graphshell sandbox not initialized",
+so the site served accessibility by rendering an entirely separate
+authority-derived static index instead. That workaround is what B1 retires.
 Validation: a screen-reader traversal of the static projection enumerates
 instances and relations with names; a probe scenario asserts structure
 deterministically; the same scene still produces its interactive realization.
@@ -407,8 +421,8 @@ Closed: **A0**, **A6**, **A1**, **C1**, **B1**, **B2**, **B3**, **C3**, **A2**,
 Turnstone `648bf19` closes B1's readable and routed-interaction receipts.
 
 The remaining implementation targets keep their entrance gates. **A3 stage
-two** waits for a remote re-selection consumer. **A5** stays behind the
-promotion suite.
+two** waits for a remote re-selection consumer. **A5** waits for a named first
+proof consumer; the promotion suite is founded with that proof.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -418,9 +432,9 @@ its proof); no new grammar DSL (the score is the spec; the report's
 what-a-spec-means table describes meanings the score may adopt, not syntaxes
 to build).
 
-## Open rulings
+## Resolved ruling and open question
 
-**The site's wire as an index.** Mark's framing, 2026-08-16: the wire has its
+**The site's wire as an index - ruled 2026-08-16.** Mark's framing, 2026-08-16: the wire has its
 own utility as an index, and that may be a better way to think about it than
 promotion. The argument in its favor is already in the code. `score.generation`
 is derived from the authority's SHA-256, so a score is a pure function of its
@@ -440,7 +454,7 @@ with chirograph the fallback; checkability (`expects.generation`) is required in
 v1. The [scene citation index brief](../research/2026-08-16_scene_citation_index_brief.md)
 holds the reasoning.
 
-**Apps embedded in the site.** Mark, 2026-08-16: if he could embed full
+**Apps embedded in the site - open.** Mark, 2026-08-16: if he could embed full
 versions of all his apps in the site, he would. That is a larger scope question
 than this plan carries, but it bears on the index ruling directly. An index is
 exactly the addressing an embedded app needs for a deep link, and under that
@@ -905,3 +919,11 @@ not settled without it.
   reused Cambium's existing `graph_canvas`; it did not force a generic
   scene-hosting abstraction or keyboard-navigable Cambium Matrix. A3 stage two
   and A5 remain gated by their own consumer rules.
+- 2026-08-29: **governing documents reconciled against landed code and the
+  promotion rule.** The catalog now describes Score v4's actual arrangement
+  surface, distinguishes C3's closed minimum backdrop contract from richer
+  raster and scalar field work, and states that the promotion suite is an
+  evidence harness rather than a forcing consumer. A5 now waits for a named
+  first proof consumer and still requires a second heterogeneous consumer for
+  every portable addition. The shelfmark/index ruling is labeled resolved;
+  the embedded-app question remains open.
