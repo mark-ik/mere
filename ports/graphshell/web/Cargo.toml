@@ -31,14 +31,14 @@ graphshell-client = { path = "../../../crates/graphshell/graphshell-client" }
 sceno = { path = "../../../crates/scenograph/sceno" }
 scenotime = { path = "../../../crates/scenograph/scenotime" }
 serde = { version = "1", features = ["derive"] }
-cambium = { git = "https://github.com/merely-made/genet.git", rev = "6b65d8df3276b01b0c2d5d622716ec2ce5bc0089" }
-genet-render = { git = "https://github.com/merely-made/genet.git", rev = "6b65d8df3276b01b0c2d5d622716ec2ce5bc0089" }
+cambium = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+genet-render = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 # The present core, shared with every winit host. Booting wgpu, picking a
 # non-sRGB surface format, and rasterizing a Scene are not browser-specific, so
 # this crate no longer hand-rolls them; only the canvas target and the
 # content-over-chrome composition below are ours.
-genet-render-host = { git = "https://github.com/merely-made/genet.git", rev = "6b65d8df3276b01b0c2d5d622716ec2ce5bc0089" }
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "6b65d8df3276b01b0c2d5d622716ec2ce5bc0089", version = "=0.1.0" }
+genet-render-host = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
 js-sys = "0.3"
 netrender = { git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 netrender_device = { git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
