@@ -5,7 +5,8 @@
 Personae/settings binding, configure/inspect binary, and read-only Cambium
 surface pass an exact-source focused Cargo gate, and Turnstone admits the
 surface as the contribution seam's second provider; operational host
-composition and the full workspace gate remain open. D2's
+composition is assessed in §10 with four decisions open, and the full
+workspace gate remains open. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
@@ -369,3 +370,123 @@ host-policy composition plus the full workspace gate continue to track in
   fixture's numbers, via a mesh job. Verified from a clean `origin/main`
   worktree: the receipt, both distillery feature sets' tests, the full esp
   `decoder-lora` suite, and package Clippy with warnings denied.
+
+## 10. Operational host-policy composition (assessment)
+
+### What the gate actually is
+
+`InstalledAuthority::bind_resident` is the composition seam and it takes no
+defaults by design: the caller hands it a `MeshStore` with its retention
+policy, a `HostConfig`, and `ResidentSettings`. The runtime above it is
+finished — `ResidentAuthority::run_until` drives cadenced ticks, maintenance,
+receipts, and ordered shutdown, and three integration receipts exercise it.
+What is missing is not machinery. It is that nobody has ever supplied real
+values, and four of the values a product must supply have no real
+implementation anywhere in the workspace.
+
+Of `HostConfig`'s eight fields, `HostConfig::supervised` defaults three to
+something a product could ship — `ResourceRegistry::builtin()` as a floor to
+extend, `SystemClock`, and `LeasePolicy`'s 60s skew — and four to documented
+placeholders no product may ship:
+
+- `courier: NoCourier` — every job must already hold its own inputs.
+- `policy: DevicePolicy::permissive()` — lends everything, always, under any
+  condition; the only refusal it can express is `unsupervised()`, which
+  declines leased jobs entirely.
+- `conditions: ObservedConditions::spare()` — a fixed snapshot (idle, 100%
+  battery, on mains, 40°C, wired, 14:00) that observes nothing.
+- `facts: HostFacts::cpu(4096)` — a fixed 4 GiB, no-GPU claim regardless of
+  the machine, and the value `ResourceRequirements::satisfied_by` gates
+  every job against.
+
+`MeshRetentionPolicy` has no constructor, preset, or `Default` at all.
+
+### Findings
+
+**The device-sensing seam is unimplemented workspace-wide.** `ConditionSource`
+has exactly one implementation, `ObservedConditions`, a `Mutex`-backed manual
+stub whose module doc says a real host implements the trait "over whatever it
+can actually observe." Nothing in Mere reads battery, thermal, network class,
+or foreground activity from any operating system. `DevicePolicy` can express
+rich withholding rules — idle floors, battery floors unless on mains, thermal
+ceilings, network-class floors, bandwidth ceilings, quiet hours, concurrency
+caps, resource allow-lists, accepted checkpoint classes — and every one of
+them is inert without a source that senses. `conservative()` exists as a
+plausible preset (120s idle, 40% battery, 85°C, Wifi minimum, 22:00–08:00
+quiet hours, one job at a time); it is used by the remote probe binary and one
+test, and never by a product.
+
+**Delivery is proven but unadopted.** `TransportCourier::for_mesh` is
+constructed exactly once in the tree, in the mesh-host `blob_delivery`
+receipt that closed H1 with a disjoint-store two-host proof. No product path
+wires it; every `HostConfig` in the workspace keeps `NoCourier`. This matters
+only for a multi-device mesh: when the poster and the runner are the same
+process, inputs are always local and `NoCourier` is honest. A single-device
+operational resident therefore does not need the courier, and a multi-device
+one cannot work without it. Which of those the installed product is has never
+been decided.
+
+**Retention policy has no starting point.** Five call sites hand-build the
+identical literal: an arbitrary revision, `checkpoint_authority` set to the
+local mesh author's own key, `promised_floor: Forever`, `privacy_ceiling:
+UntilCheckpoint`, `terminal_job_payload: EraseTerminalAtCheckpoint`,
+`max_skew_ms: 0`. Nothing in the tree demonstrates a checkpoint authority
+distinct from the device running it, so the multi-device governance shape is
+unexercised as well as unwritten.
+
+**Nothing provisions a mesh identity.** `bind_resident` takes `mesh_id: [u8;
+32]` and every caller hardcodes a test constant. An installed product has no
+way to answer "which mesh is this?" — neither a derived personal mesh nor a
+join from an invitation exists.
+
+**The resident composition owner already exists, and it is not Distillery.**
+`ports/djinn` is the local-first desktop resident composition: it owns the
+selected Personae profile, the resident lifecycle, endpoint ownership, and an
+`OwnerSettings` record whose `Option<KnotResidentSettings>` means exactly
+"absent means this device host does not compose a resident Knot route" — the
+shape a Distillery block would take. But Djinn has never touched `mesh_host`;
+neither has Graphshell, Knot, or Signalman. Their personal-sync stack is
+Stickleback-based and unrelated. Adding Distillery to Djinn therefore
+introduces the mesh stack to the resident for the first time, and collides on
+two resident-wide singletons: Djinn's `ResidentBlobCustody` opens a collecting
+`BlobStore` and re-uses it "for every composed content lane," while
+Distillery's `ResidentStorage` opens its own; and `bind_resident` builds its
+own `P2pandaTransport` from the profile master key, the only production site
+in the workspace that builds one. D0's own finding — custody is not physical
+ownership, and mesh-scoped named tags let subsystems share one store — is the
+argument that sharing is the intended shape.
+
+**A device-scoped settings home already exists.** `pandect::device_settings_store`
+persists device-scoped, local-only settings under `<data-root>/device/`, with
+the doctrine device policy needs already stated: "Device policy must not
+follow a graph session or silently become persona truth." Distillery's own
+`InstalledSettings` is persona-scoped and `deny_unknown_fields`, which is the
+wrong scope for a device's lending policy.
+
+### The decisions this forces
+
+- **O-1, the composition owner**: Distillery's own binary gains a `run` verb
+  over device-scoped settings; or Djinn adds a Distillery lane and supplies
+  the shared store and transport; or a library composition entry both can
+  use, with Distillery's binary as its first consumer.
+- **O-2, device conditions**: owner-stated static conditions recorded in
+  settings (honest, small, states rather than invents); or a real OS-sensing
+  `ConditionSource` (a cross-platform project of its own, and per the ESP
+  consolidation plan's D1 a decision shared by render, inference, and
+  embedding rather than Distillery's to make); or ship `unsupervised()` and
+  decline leased work.
+- **O-3, mesh identity**: a personal mesh derived from the profile; an
+  explicit owner-supplied id in settings; or real provisioning with
+  create/join.
+- **O-4, reach**: single-device (keep `NoCourier`) or multi-device (wire
+  `TransportCourier::for_mesh`, and face the checkpoint-authority question
+  that no receipt has exercised).
+
+### Done conditions
+
+An installed Distillery starts a resident on this machine from stated policy,
+runs a real job to completion through cadenced ticks on `SystemClock`, emits
+its receipts, and shuts down clean — with every policy fact traceable to an
+explicit owner choice rather than a placeholder, and no `permissive()`,
+`NoCourier`-by-omission, or fixed-snapshot condition surviving into the
+product path.
