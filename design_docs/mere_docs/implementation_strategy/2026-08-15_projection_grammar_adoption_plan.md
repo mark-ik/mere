@@ -938,8 +938,8 @@ not settled without it.
   requires a second heterogeneous consumer for every portable addition. The
   shelfmark/index ruling is labeled resolved; the embedded-app question
   remains open.
-- 2026-08-31: **Graphshell Projection Editor component landed on the feature
-  branch.** The
+- 2026-08-31: **Graphshell Projection Editor component and first authoring
+  loop landed through Mere `77369f6f0c03b301c398ad65107114080c4ba630`.** The
   host-neutral `ports/graphshell/src/projection_editor.rs` now models source
   and domain binding, reading, encoding, arrangement, interaction,
   appearance/realization, and provenance as an editable definition with
@@ -949,8 +949,12 @@ not settled without it.
   reducer without granting graph or endpoint authority. A focused standalone
   cross-repo harness passed eight tests, including Platen projection, editor
   activation, tearout custody, validation, provenance, serialization, and sink
-  refusal. The full Mere workspace test remains behind the pre-existing
-  `genet-taffy =0.13.1` patch mismatch and resolver fan-out. The component follows the
-  component seam in `genet/design_docs/2026-08-31_workbench_component_plan.md`;
-  a named headed product consumer and the second heterogeneous proof required
-  for promotion remain open under A5.
+  refusal. The standalone web manifest now restates its inherited immutable
+  Genet patches, and the host `x86_64-pc-windows-msvc` cargo check passes
+  offline with only the cached Workbench path override. The browser/Wasm
+  headed receipt remains blocked by the environment's missing C++/WASI sysroot,
+  so headed verification and A5 remain open. Woodshed is Workbench's second
+  heterogeneous consumer, but it is not itself A5's named portable projection
+  proof; A5 still needs a named proof consumer and its per-proof evidence. The
+  component follows the component seam in
+  `genet/design_docs/2026-08-31_workbench_component_plan.md`.
