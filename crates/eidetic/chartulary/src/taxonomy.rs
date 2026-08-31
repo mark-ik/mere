@@ -18,13 +18,14 @@
 //! The family registry is the "compact core + open app namespace" shape (plan
 //! section 4, option a): a fixed recognized enum, plus a `(family, kind)` pair
 //! for app relations. Standard-vocabulary alignment (mapping [`Recognized`] to
-//! schema.org / CiTO / SKOS) is `scholia`'s job at G4, not the substrate's.
+//! schema.org / CiTO / SKOS) belongs to the [`rdf`](crate::rdf) projection,
+//! not the substrate taxonomy.
 
 use serde::{Deserialize, Serialize};
 
 /// The chartulary namespace for recognized-core predicate IRIs. `urn:`-scoped so
-/// the substrate claims no domain; `scholia` aligns these to standard vocabularies
-/// downstream.
+/// the substrate claims no domain; [`rdf`](crate::rdf) can align them to standard
+/// vocabularies downstream.
 pub const REL_NS: &str = "urn:chart:rel:";
 
 /// The class of a relation: which ring it belongs to.

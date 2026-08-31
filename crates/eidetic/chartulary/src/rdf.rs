@@ -4,12 +4,30 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Projecting a chartulary graph into RDF.
+//! RDF projection over a chartulary graph's semantic ring.
+//!
+//! Scholia are the annotations written in a manuscript's margins: the commentary
+//! layer over the text. This module projects the shared semantic ring into RDF so
+//! it can be shared and queried as linked data. It was folded from the standalone
+//! `scholia` crate; consumers use `chartulary::rdf` directly.
+//!
+//! The projection is driven entirely by the graph's capability traits:
+//!
+//! - an [`Addressed`](crate::Addressed) node becomes an RDF subject (its primary
+//!   address is the `@id`; a node without one gets a `urn:chart:` skolem IRI),
+//! - a [`Labeled`](crate::Labeled) node contributes `schema:name` (title) and
+//!   `schema:keywords` (tags) literals,
+//! - a [`Predicated`](crate::Predicated) edge with a predicate IRI becomes a
+//!   triple; an app-private relation (no predicate) is not projected.
+//!
+//! Output is expanded [`to_jsonld`] and [`to_nquads`]. Compact JSON-LD with an
+//! `@context`, ingest and round-trip, named-graph scopes, RDF 1.2 reified
+//! statement metadata, vocabulary alignment, and SPARQL remain future work.
 
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
-use chartulary::{Addressed, Graph, Identified, Labeled, NodeKey, Predicated};
+use crate::{Addressed, Graph, Identified, Labeled, NodeKey, Predicated};
 use serde_json::{Map, Value, json};
 
 /// `schema:name` — the curated mapping target for a node's title.
@@ -218,7 +236,7 @@ fn object_nq(term: &Term) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chartulary::{Container, Graph, Recognized, Relation, RelationClass};
+    use crate::{Container, Graph, Recognized, Relation, RelationClass};
 
     fn seed() -> Graph<Container, Relation> {
         let mut graph = Graph::new();
@@ -229,9 +247,7 @@ mod tests {
                 .with_tag("research"),
         );
         let b = graph.insert(Container::new("b").with_address("https://b.example/"));
-        // c has no address: it must skolemize.
         let c = graph.insert(Container::new("c"));
-        // A semantic-ring edge (projects) and an app-private edge (does not).
         graph.connect(
             a,
             b,
@@ -264,7 +280,6 @@ mod tests {
     #[test]
     fn app_private_edges_do_not_project() {
         let quads = to_quads(&seed());
-        // The a -> c edge is an app family; no triple points at c's skolem IRI.
         assert!(
             !quads
                 .iter()

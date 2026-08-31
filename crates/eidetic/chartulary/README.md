@@ -37,6 +37,7 @@ an app that needs more implements the traits on its own types.
 | `graph` | `Graph<N, E>`, `NodeKey`, `EdgeKey` |
 | `container` | `Container`, `ContainerAddress`, `Relation` |
 | `taxonomy` | `RelationClass`, `Recognized`, `Semantic`, `REL_NS` |
+| `rdf` | RDF export of the semantic ring: `to_quads`, `to_jsonld`, `to_nquads`, `Quad`, `Term` |
 | `edit` | `GraphEdit`, `EdgeId`, `WriterId`, `DerivationKind`, `DerivationRecord` |
 | `spine` | `GraphLog`: graph edits as a muniment journal, with snapshots for checkpoint-plus-tail loading |
 | `commit` | `Batch`, `BatchId`, `Author`, `EditSpec`, `Committed`, `CommitError` |
@@ -56,7 +57,8 @@ The name: a chartulary is the register a house kept its charters and muniments i
 `chart = { package = "chartulary" }` in a consumer workspace for the short name.
 
 The standalone `stemma` crate was folded in as `chartulary::stemma` on
-2026-07-12. The RDF projection is the sibling `scholia` crate.
+2026-07-12. The RDF projection followed as `chartulary::rdf`; it projects only
+the semantic relation ring, leaving app-private families out of the export.
 
 Build phases and their done conditions live in the canonical plan, mere's
 `design_docs/mere_docs/technical_architecture/2026-07-08_generic_graph_substrate_plan.md`,

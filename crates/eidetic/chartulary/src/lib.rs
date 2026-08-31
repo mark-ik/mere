@@ -29,8 +29,8 @@
 //! are attributed [`Batch`] entries in a journal (each batch a group of
 //! [`GraphEdit`]s that applied atomically, committed against an expected
 //! revision — see [`commit`]), the graph is the replay, and muniment
-//! snapshots give checkpoint-plus-tail loading. Lineage (stemma) and the RDF
-//! projection (scholia) are later phases. The canonical plan is mere's
+//! snapshots give checkpoint-plus-tail loading. The [`stemma`] lineage layer and
+//! [`rdf`] semantic-ring projection are part of the crate. The canonical plan is mere's
 //! `design_docs/.../2026-07-08_generic_graph_substrate_plan.md`.
 //!
 //! **Facets** ([`facet`]) are the runtime tier of node metadata, complementing
@@ -53,6 +53,9 @@ pub mod edit;
 pub mod facet;
 pub mod graph;
 pub mod nested;
+/// RDF export of the semantic relation ring, folded from the standalone
+/// `scholia` crate. See [`rdf`] for expanded JSON-LD and N-Quads output.
+pub mod rdf;
 
 pub mod spine;
 /// The lineage layer: owner-scoped descent of content through branching visits

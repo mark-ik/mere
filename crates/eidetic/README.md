@@ -11,7 +11,7 @@ Published under their own names. Formerly four sibling repos, merged into one
 | Directory | Package | Contents |
 |---|---|---|
 | [`muniment`](muniment) | `muniment` | The storage floor: host-supplied backends, mutable typed slots, immutable content-addressed blobs, and `Journal<T>` append-only histories addressed by `Seq`. Ships memory, redb, zip, and IndexedDB backends. |
-| [`chartulary`](chartulary) | `chartulary` | The content-addressed container graph. `Graph<N, E>` on petgraph with capability traits, default `Container`/`Relation` payloads, the `GraphLog` edit spine, runtime `facet` metadata, `content_class`, and the `stemma` lineage layer. |
+| [`chartulary`](chartulary) | `chartulary` | The content-addressed container graph. `Graph<N, E>` on petgraph with capability traits, default `Container`/`Relation` payloads, the `GraphLog` edit spine, runtime `facet` metadata, `content_class`, the `stemma` lineage layer, and the semantic-ring RDF projection at `chartulary::rdf`. |
 
 ## The eidetic lane
 

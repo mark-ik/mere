@@ -74,7 +74,6 @@ members = [
     "crates/armillary",
     "crates/eidetic/muniment",
     "crates/eidetic/chartulary",
-    "crates/eidetic/scholia",
     "crates/eidetic/tulpa",
     "crates/servitor",
     "crates/intel/vates",
@@ -176,7 +175,6 @@ scenotime = { version = "0.0.4", path = "crates/scenograph/scenotime" }
 personae = { version = "0.2.1", path = "crates/dramatis/personae" }
 notochord = { version = "0.1.0", path = "crates/system/notochord" }
 chartulary = { version = "0.2.1", path = "crates/eidetic/chartulary" }
-scholia = { path = "crates/eidetic/scholia" }
 # The legend/memorial view over a codicil log; reservation, no implementation.
 tulpa = { version = "0.0.2", path = "crates/eidetic/tulpa" }
 numen = { version = "0.2.0", path = "crates/conatus/numen" }
