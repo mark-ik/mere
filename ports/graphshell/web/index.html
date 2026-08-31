@@ -100,8 +100,37 @@
           <label for="address-title">Title</label>
           <input id="address-title" value="New research object">
           <button data-command="add-address">Add address</button>
+          <button data-command="open-projection-editor">Edit projection</button>
           <label class="file-picker" for="file-input">Choose a file</label>
           <input id="file-input" type="file">
+        </section>
+
+        <section
+          id="projection-editor"
+          aria-label="Projection editor"
+          aria-hidden="true"
+          hidden
+        >
+          <h2>Projection editor</h2>
+          <p id="projection-editor-status" role="status">Draft ready · unsaved</p>
+          <p id="projection-editor-validation" role="status">Valid draft</p>
+          <p id="projection-editor-lane">ContentSource::Open · graphshell.projection-editor.panel · source</p>
+          <div id="projection-editor-panels" role="tablist" aria-label="Projection editor panels">
+            <button id="projection-panel-source" type="button" role="tab" data-projection-panel="source" aria-selected="true">Source</button>
+            <button id="projection-panel-reading" type="button" role="tab" data-projection-panel="reading" aria-selected="false">Reading</button>
+            <button id="projection-panel-encoding" type="button" role="tab" data-projection-panel="encoding" aria-selected="false">Encoding</button>
+            <button id="projection-panel-arrangement" type="button" role="tab" data-projection-panel="arrangement" aria-selected="false">Arrangement</button>
+            <button id="projection-panel-interaction" type="button" role="tab" data-projection-panel="interaction" aria-selected="false">Interaction</button>
+            <button id="projection-panel-preview" type="button" role="tab" data-projection-panel="preview" aria-selected="false">Preview</button>
+            <button id="projection-panel-provenance" type="button" role="tab" data-projection-panel="provenance" aria-selected="false">Provenance</button>
+          </div>
+          <p><strong>Source</strong> <span id="projection-editor-source"></span></p>
+          <p><strong>Provenance</strong> <span id="projection-editor-provenance"></span></p>
+          <div class="button-row">
+            <button type="button" data-command="save-projection">Save projection</button>
+            <button type="button" data-command="reload-projection">Reload saved</button>
+            <button type="button" data-command="close-projection-editor">Close</button>
+          </div>
         </section>
 
         <section>

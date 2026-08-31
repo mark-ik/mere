@@ -113,6 +113,12 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         else {
             return;
         };
+        if let Some(panel) = target.get_attribute("data-projection-panel") {
+            let mut host = click_state.borrow_mut();
+            host.select_projection_panel(&panel);
+            let _ = update_semantics(&mut host);
+            return;
+        }
         if target.has_attribute("data-action-draft-submit") {
             let mut host = click_state.borrow_mut();
             host.run_command("submit-action-draft");

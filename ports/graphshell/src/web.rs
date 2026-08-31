@@ -56,6 +56,11 @@ use graphshell::mere_host::{
     FIXTURE_DEVICE_TWO_ADDRESS, FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef,
 };
 use graphshell::product::{ProjectionClock, RelationFamilyFilter, SavedSceneV1};
+use graphshell::projection_editor::{
+    Appearance, Channel, EditorAction, Encoding, Interaction, ProjectionDefinition,
+    ProjectionDefinitionSink, ProjectionDraft, ProjectionEditor, ProjectionPanel, Provenance,
+    Reading, SelectionMode, SourceBinding,
+};
 use graphshell::view::ProjectionLayoutView;
 use graphshell_client::frozen::Satisfaction;
 use muniment::IndexedDbBackend;
@@ -70,6 +75,7 @@ const CAPTURE_POLICY_GLOBAL: &str = "graphshellCapturePolicyJson";
 const CAPTURE_VISITS_GLOBAL: &str = "graphshellInitialVisitsJson";
 const HISTORY_FILTER_GLOBAL: &str = "graphshellHistoryFilterJson";
 const HISTORY_FORGET_GLOBAL: &str = "graphshellHistoryForgetJson";
+const PROJECTION_EDITOR_STORAGE_KEY: &str = "graphshellProjectionDefinitionV1";
 
 /// Stable fallback paint for an open backdrop kind. Product hosts can replace
 /// this with native art; an unfamiliar remote scene still gets a distinct,
@@ -305,6 +311,90 @@ struct BrowserHost {
     arrangement_transition: Option<CanvasTransition>,
     primary_member: Option<Uuid>,
     last_detail_member: Option<Uuid>,
+    projection_editor: ProjectionEditor,
+    projection_editor_open: bool,
+    projection_editor_status: String,
+    projection_editor_save_count: u32,
+}
+
+struct BrowserProjectionSink;
+
+impl ProjectionDefinitionSink for BrowserProjectionSink {
+    type Error = String;
+
+    fn save(&mut self, definition: &ProjectionDefinition) -> Result<(), Self::Error> {
+        let bytes = definition
+            .to_json_bytes()
+            .map_err(|error| format!("could not serialize projection definition: {error}"))?;
+        let storage = window()?
+            .local_storage()
+            .map_err(|_| "could not access browser local storage".to_string())?
+            .ok_or_else(|| "browser local storage is unavailable".to_string())?;
+        let value = String::from_utf8(bytes)
+            .map_err(|error| format!("projection definition was not UTF-8: {error}"))?;
+        storage
+            .set_item(PROJECTION_EDITOR_STORAGE_KEY, &value)
+            .map_err(|_| "could not save projection definition".to_string())
+    }
+}
+
+fn initial_projection_draft() -> ProjectionDraft {
+    ProjectionDraft {
+        version: graphshell::projection_editor::PROJECTION_DEFINITION_VERSION,
+        id: "graphshell-reference".to_string(),
+        label: "Graphshell reference projection".to_string(),
+        source: SourceBinding {
+            authority: "graphshell-reference-host".to_string(),
+            domain: "mere.graph".to_string(),
+            resource: "fixture.graphshell/reference".to_string(),
+        },
+        reading: Reading {
+            kind: "nodes".to_string(),
+            key: "title".to_string(),
+            value: None,
+        },
+        encoding: Encoding {
+            x: Channel::Field("x".to_string()),
+            y: Channel::Field("y".to_string()),
+            color: Some(Channel::Field("kind".to_string())),
+            label: Some(Channel::Field("title".to_string())),
+        },
+        arrangement: graphshell::projection_editor::Arrangement {
+            kind: "phyllotaxis.default".to_string(),
+            direction: "horizontal".to_string(),
+            spacing: 16,
+        },
+        interaction: Interaction {
+            selection: SelectionMode::Single,
+            pan: true,
+            zoom: true,
+        },
+        appearance: Appearance {
+            realization: "canvas".to_string(),
+            title: "Graphshell reference projection".to_string(),
+            theme: "dark".to_string(),
+        },
+        provenance: Provenance {
+            author: "Graphshell reference host".to_string(),
+            source_revision: "fixture-v1".to_string(),
+            note: "Host-owned editor fixture".to_string(),
+        },
+    }
+}
+
+fn draft_from_definition(definition: &ProjectionDefinition) -> ProjectionDraft {
+    ProjectionDraft {
+        version: definition.version,
+        id: definition.id.clone(),
+        label: definition.label.clone(),
+        source: definition.source.clone(),
+        reading: definition.reading.clone(),
+        encoding: definition.encoding.clone(),
+        arrangement: definition.arrangement.clone(),
+        interaction: definition.interaction.clone(),
+        appearance: definition.appearance.clone(),
+        provenance: definition.provenance.clone(),
+    }
 }
 
 impl BrowserHost {
@@ -511,6 +601,15 @@ impl BrowserHost {
 
     fn run_command(&mut self, command: &str) {
         match command {
+            "open-projection-editor" => {
+                self.projection_editor_open = true;
+                self.projection_editor_status = "Draft ready · unsaved".to_string();
+            }
+            "close-projection-editor" => {
+                self.projection_editor_open = false;
+            }
+            "save-projection" => self.save_projection(),
+            "reload-projection" => self.reload_projection(),
             "session-local" => {
                 self.active = ActiveSession::Local;
                 self.detail_open = false;
@@ -550,6 +649,94 @@ impl BrowserHost {
         if self.active == ActiveSession::Local {
             self.refresh_representation_score();
         }
+        self.chrome_dirty = true;
+    }
+
+    fn select_projection_panel(&mut self, panel: &str) {
+        let Some(panel) = projection_panel(panel) else {
+            self.projection_editor_status = format!("Unknown editor panel: {panel}");
+            return;
+        };
+        self.projection_editor
+            .reduce(EditorAction::SelectPanel(panel));
+        self.projection_editor_open = true;
+        self.projection_editor_status = format!("Editing {}", panel.label());
+        self.chrome_dirty = true;
+    }
+
+    fn save_projection(&mut self) {
+        let mut sink = BrowserProjectionSink;
+        match self.projection_editor.save(&mut sink) {
+            Ok(()) => {
+                self.projection_editor_save_count =
+                    self.projection_editor_save_count.saturating_add(1);
+                self.projection_editor_status = format!(
+                    "Saved · {} · {} save(s)",
+                    self.projection_editor.draft().provenance.source_revision,
+                    self.projection_editor_save_count
+                );
+            }
+            Err(graphshell::projection_editor::SaveError::Invalid(issues)) => {
+                let summary = issues
+                    .first()
+                    .map(|issue| format!("{}: {}", issue.field, issue.message))
+                    .unwrap_or_else(|| "invalid projection draft".to_string());
+                self.projection_editor_status = format!("Invalid · {summary}");
+            }
+            Err(graphshell::projection_editor::SaveError::Sink(error)) => {
+                self.projection_editor_status = format!("Save failed · {error}");
+            }
+        }
+        self.projection_editor_open = true;
+        self.chrome_dirty = true;
+    }
+
+    fn reload_projection(&mut self) {
+        let result = (|| -> Result<Option<ProjectionDefinition>, String> {
+            let storage = window()?
+                .local_storage()
+                .map_err(|_| "could not access browser local storage".to_string())?;
+            let Some(storage) = storage else {
+                return Ok(None);
+            };
+            let Some(value) = storage
+                .get_item(PROJECTION_EDITOR_STORAGE_KEY)
+                .map_err(|_| "could not read saved projection definition".to_string())?
+            else {
+                return Ok(None);
+            };
+            serde_json::from_str(&value)
+                .map(Some)
+                .map_err(|error| format!("could not decode saved projection definition: {error}"))
+        })();
+        match result {
+            Ok(Some(definition)) => {
+                let draft = draft_from_definition(&definition);
+                match draft.to_definition() {
+                    Ok(_) => {
+                        self.projection_editor = ProjectionEditor::new(draft);
+                        self.projection_editor_status = format!(
+                            "Reloaded · {} · {}",
+                            definition.id, definition.provenance.source_revision
+                        );
+                    }
+                    Err(issues) => {
+                        self.projection_editor_status = format!(
+                            "Reload failed · {}",
+                            issues
+                                .first()
+                                .map(|issue| issue.message.as_str())
+                                .unwrap_or("invalid saved definition")
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                self.projection_editor_status = "Reload skipped · no saved definition".to_string();
+            }
+            Err(error) => self.projection_editor_status = format!("Reload failed · {error}"),
+        }
+        self.projection_editor_open = true;
         self.chrome_dirty = true;
     }
 
@@ -793,6 +980,19 @@ fn document() -> Result<Document, String> {
         .ok_or_else(|| "browser document is unavailable".to_string())
 }
 
+fn projection_panel(value: &str) -> Option<ProjectionPanel> {
+    match value {
+        "source" => Some(ProjectionPanel::Source),
+        "reading" => Some(ProjectionPanel::Reading),
+        "encoding" => Some(ProjectionPanel::Encoding),
+        "arrangement" => Some(ProjectionPanel::Arrangement),
+        "interaction" => Some(ProjectionPanel::Interaction),
+        "preview" => Some(ProjectionPanel::Preview),
+        "provenance" => Some(ProjectionPanel::Provenance),
+        _ => None,
+    }
+}
+
 fn element(document: &Document, id: &str) -> Result<Element, String> {
     document
         .get_element_by_id(id)
@@ -980,6 +1180,119 @@ fn update_action_draft_semantics(
         body.remove_attribute("data-action-draft-error")
             .map_err(|_| "could not clear action draft error")?;
     }
+    Ok(())
+}
+
+fn projection_panel_key(panel: ProjectionPanel) -> &'static str {
+    match panel {
+        ProjectionPanel::Source => "source",
+        ProjectionPanel::Reading => "reading",
+        ProjectionPanel::Encoding => "encoding",
+        ProjectionPanel::Arrangement => "arrangement",
+        ProjectionPanel::Interaction => "interaction",
+        ProjectionPanel::Preview => "preview",
+        ProjectionPanel::Provenance => "provenance",
+    }
+}
+
+fn update_projection_editor_semantics(
+    host: &BrowserHost,
+    document: &Document,
+) -> Result<(), String> {
+    let surface = element(document, "projection-editor")?;
+    if host.projection_editor_open {
+        surface
+            .remove_attribute("hidden")
+            .map_err(|_| "could not show projection editor")?;
+        surface
+            .set_attribute("aria-hidden", "false")
+            .map_err(|_| "could not expose projection editor")?;
+    } else {
+        surface
+            .set_attribute("hidden", "")
+            .map_err(|_| "could not hide projection editor")?;
+        surface
+            .set_attribute("aria-hidden", "true")
+            .map_err(|_| "could not hide projection editor semantics")?;
+    }
+    let draft = host.projection_editor.draft();
+    let validation = host.projection_editor.validate();
+    let (validation_token, error_count) = match &validation {
+        Ok(()) => ("valid", 0),
+        Err(issues) => ("invalid", issues.len()),
+    };
+    let panel = projection_panel_key(host.projection_editor.panel());
+    let content_id = host.projection_editor.panel().content_id();
+    set_text(
+        document,
+        "projection-editor-status",
+        &host.projection_editor_status,
+    );
+    set_text(
+        document,
+        "projection-editor-source",
+        &format!(
+            "{} / {} / {}",
+            draft.source.authority, draft.source.domain, draft.source.resource
+        ),
+    );
+    set_text(
+        document,
+        "projection-editor-provenance",
+        &format!(
+            "{} · source {} · {}",
+            draft.provenance.author, draft.provenance.source_revision, draft.provenance.note
+        ),
+    );
+    set_text(
+        document,
+        "projection-editor-validation",
+        &match &validation {
+            Ok(()) => "Valid draft".to_string(),
+            Err(_) => format!("{error_count} validation issue(s)"),
+        },
+    );
+    set_text(
+        document,
+        "projection-editor-lane",
+        &format!("ContentSource::Open · graphshell.projection-editor.panel · {content_id}"),
+    );
+    for candidate in ProjectionPanel::ALL {
+        let button = element(
+            document,
+            &format!("projection-panel-{}", projection_panel_key(candidate)),
+        )?;
+        button
+            .set_attribute(
+                "aria-selected",
+                (candidate == host.projection_editor.panel())
+                    .then_some("true")
+                    .unwrap_or("false"),
+            )
+            .map_err(|_| "could not expose selected projection panel")?;
+    }
+    let body = document.body().ok_or("document has no body")?;
+    body.set_attribute(
+        "data-projection-editor-open",
+        &host.projection_editor_open.to_string(),
+    )
+    .map_err(|_| "could not expose projection editor state")?;
+    body.set_attribute("data-projection-editor-panel", panel)
+        .map_err(|_| "could not expose projection editor panel")?;
+    body.set_attribute(
+        "data-projection-editor-content",
+        &format!("open:graphshell.projection-editor.panel:{content_id}"),
+    )
+    .map_err(|_| "could not expose projection editor content lane")?;
+    body.set_attribute("data-projection-editor-validation", validation_token)
+        .map_err(|_| "could not expose projection editor validation")?;
+    body.set_attribute("data-projection-editor-errors", &error_count.to_string())
+        .map_err(|_| "could not expose projection editor errors")?;
+    body.set_attribute(
+        "data-projection-editor-save-count",
+        &host.projection_editor_save_count.to_string(),
+    )
+    .map_err(|_| "could not expose projection editor save count")?;
     Ok(())
 }
 
@@ -1215,6 +1528,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         host.rendered_action_draft = model.action_draft.clone();
         host.action_draft_semantics_ready = true;
     }
+    update_projection_editor_semantics(host, &document)?;
     set_text(
         &document,
         "capture-attribution",
@@ -1443,6 +1757,10 @@ async fn run() -> Result<(), String> {
         arrangement_transition: None,
         primary_member,
         last_detail_member: None,
+        projection_editor: ProjectionEditor::new(initial_projection_draft()),
+        projection_editor_open: false,
+        projection_editor_status: "Draft ready · unsaved".to_string(),
+        projection_editor_save_count: 0,
     }));
     install_events(&state)?;
     web_product::install_product_events(&state)?;
