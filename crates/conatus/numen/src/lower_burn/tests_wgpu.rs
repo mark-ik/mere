@@ -9,7 +9,7 @@
 //! the timing test is `#[ignore]`d — run it explicitly:
 //!
 //! ```bash
-//! cargo test -p quint --features field-burn-wgpu --release \
+//! cargo test -p numen --features field-burn-wgpu --release \
 //!     -- --ignored timing --nocapture
 //! ```
 

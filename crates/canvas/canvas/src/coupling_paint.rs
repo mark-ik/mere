@@ -32,10 +32,10 @@ use std::collections::HashMap;
 use cartography::Projection;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{COUPLING_VOCAB, FieldDefinition, Graph, NodeKey};
+use numen::{FieldRegistry, eval_scalar};
 use paint_list_api::{
     ColorF, CommonPlacement, DeviceIntSize, LayoutPoint, LayoutRect, PaintCmd, RectItem,
 };
-use quint::{FieldRegistry, eval_scalar};
 
 use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle, paint_projection};
 

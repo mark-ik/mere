@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Rhai composition surface for the field algebra.
+//! Rhai composition surface for the numen field algebra.
 //!
 //! Hosts call [`build_from_script`] with a Rhai script; the script's final
 //! expression must be a [`FieldProjection`]. The script body composes
@@ -49,11 +49,12 @@
 use rhai::{Engine, ImmutableString};
 use uuid::Uuid;
 
+use crate::CouplingId;
 use crate::ast::{ScalarField, VectorField};
-use crate::coupling::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};
+use crate::coupling::{Coupling, CouplingResponse, NodeSelector};
+use crate::edge_path::{EdgePath, EdgePathRule};
 use crate::projection::FieldProjection;
 use crate::registry::FieldId;
-use numen::CouplingId;
 
 // Scripts address fields by an `i64` handle. Registry ids are UUID-backed but
 // minted from a small `u64` counter (`Uuid::from_u128`), so the handle is just

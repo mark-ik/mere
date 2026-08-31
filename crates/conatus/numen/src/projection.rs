@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! `FieldProjection` — per-canvas bundle of fields, couplings, and edge-path
-//! rules.
+//! rules with an evaluation registry.
 //!
 //! Generalises the legacy z-derivation enum: that enum produced one scalar
 //! per node for z; a `FieldProjection` produces an arbitrary collection of
@@ -16,7 +16,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ast::{ScalarField, VectorField};
-use crate::coupling::{Coupling, EdgePathRule};
+use crate::coupling::Coupling;
+use crate::edge_path::EdgePathRule;
 use crate::registry::{FieldId, FieldRegistry};
 
 /// Per-canvas field-driven projection state.
@@ -60,11 +61,10 @@ impl FieldProjection {
 }
 
 // The inverse bridge (writing a projection's fields/couplings into a mere
-// `Graph`) lived here as `commit_to_graph` behind `kernel-bridge`. It left when
-// quint became a portable, publishable crate (no mere `kernel` dep): a graph
-// write is a mere-side concern, a short `apply_graph_delta` loop the host adds
-// when the authoring surface needs it. quint stays the field algebra; committing
-// to a graph is the host's job.
+// `Graph`) lived here as `commit_to_graph` behind `kernel-bridge`. A graph
+// write remains a mere-side concern: a short `apply_graph_delta` loop the host
+// adds when the authoring surface needs it. Numen stays graph-kernel-free;
+// committing to a graph is the host's job.
 
 /// Builder helpers retained as a hook for future shapes (e.g.
 /// `FieldProjectionBuilder::standard_force_directed()` etc.). Today this is
@@ -74,7 +74,8 @@ pub struct FieldProjectionBuilder;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::coupling::{CouplingResponse, EdgePath, NodeSelector};
+    use crate::coupling::{CouplingResponse, NodeSelector};
+    use crate::edge_path::EdgePath;
 
     #[test]
     fn new_projection_is_empty() {
@@ -97,7 +98,7 @@ mod tests {
         let mut p = FieldProjection::new();
         let id = p.add_scalar("f", ScalarField::Const(1.0));
         p.add_coupling(Coupling::new(
-            numen::CouplingId::from_uuid(uuid::Uuid::from_u128(0)),
+            crate::CouplingId::from_uuid(uuid::Uuid::from_u128(0)),
             id,
             NodeSelector::All,
             CouplingResponse::AttractToMin,
@@ -122,7 +123,7 @@ mod tests {
         let id = p.add_scalar("focus", ScalarField::gaussian_at(0.0, 0.0, 10.0));
         p.z_field = Some(id);
         p.add_coupling(Coupling::new(
-            numen::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
+            crate::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
             id,
             NodeSelector::Kind("paper".into()),
             CouplingResponse::AttractToMin,

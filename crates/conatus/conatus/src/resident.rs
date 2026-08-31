@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The resident field lane: positions that never come home.
+//! The resident spatial lane: positions that never come home.
 //!
 //! Promoted from the spatial compute plan's P2 and P3 probes
 //! (`2026-08-13_spatial_compute_plan.md`). Positions and velocities
@@ -16,9 +16,9 @@
 //!
 //! # Which lane this is
 //!
-//! quint has two GPU lanes now, and they are not rivals:
+//! The spatial stack has two GPU lanes, and they are not rivals:
 //!
-//! - the **tensor lane** ([`crate::forces::repulsion`], Burn), for
+//! - the **tensor lane** ([`seiche::repulsion`], Burn), for
 //!   dense field evaluation, semantic couplings, and anything that
 //!   benefits from fusion;
 //! - the **explicit lane**, here, for the resident n-body step, where
@@ -44,10 +44,9 @@ pub mod kernels;
 
 pub use chunk::*;
 
-/// One step's constants. Mirrors `quint-shaders`'s `Params` word for
-/// word; [`Resident::new`] asserts the sizes agree, so a field added on
-/// one side and forgotten on the other fails at construction rather
-/// than by reading garbage.
+/// One step's constants. [`Resident::new`] owns the matching CubeCL argument
+/// order, so a field added on one side and forgotten on the other fails at
+/// construction rather than by reading garbage.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Params {

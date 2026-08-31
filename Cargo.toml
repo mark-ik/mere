@@ -79,7 +79,6 @@ members = [
     "crates/intel/vates",
     "crates/intel/sibylla",
     "crates/conatus/numen",
-    "crates/conatus/quint",
     "crates/conatus/seiche",
     "crates/conatus/nisus",
     "crates/conatus/conatus",
@@ -138,10 +137,9 @@ authors = ["Mark AB (markik)"]
 # so only the root Cargo.toml knows where each crate lives. Package names
 # below are the *current* names — rename passes (drop mere-* prefix etc.)
 # update both this list and consumer references in one shot.
-# quint + seiche extracted to sibling repos + published 2026-07-18 (portable,
-# MIT/Apache); crates.io deps, local checkout via the gitignored
-# `.cargo/config.toml` `[patch.crates-io]`. (numen the same, on graph-kernel.)
-quint = { version = "0.0.4", path = "crates/conatus/quint" }
+# Seiche and numen are workspace-owned field/runtime components. The default
+# field evaluation path stays portable; optional Burn/Rhai/Resident carriage is
+# selected at the owning crate.
 seiche = { version = "0.0.5", path = "crates/conatus/seiche" }
 nisus = { version = "0.1.0", path = "crates/conatus/nisus" }
 conatus = { path = "crates/conatus/conatus" }

@@ -4,19 +4,19 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Tensorized N-body forces (burn brief Lane 5).
+//! Tensorized N-body force laws.
 //!
 //! A repulsion pass computed on burn: for N canvas positions, the force on
 //! each body is the softened inverse-square repulsion summed over every other
 //! body. This does **not** fit the field-algebra AST (whose kernels take fixed
 //! parameters — one Gaussian center, one Linear normal); an N-body force is
 //! parameterized by all N *dynamic* source positions, so it is a dedicated
-//! burn kernel living beside [`lower_burn`](crate::lower_burn), backend-generic
-//! the same way (ndarray CPU, or wgpu GPU under `field-burn-wgpu`).
+//! Burn kernel, backend-generic (ndarray CPU, or wgpu GPU under
+//! `tensor-burn-wgpu`).
 //!
 //! This module has two separate consumers:
 //!
-//! - a resident host can pass tensors backed by its own [`crate::resident`] planes
+//! - a resident host can pass tensors backed by `conatus::resident` planes
 //!   and keep the result on that device;
 //! - [`repulsion_wgpu_roundtrip`] and
 //!   [`node_exclusion_wgpu_roundtrip`] are explicit staging helpers for experiments
@@ -27,7 +27,7 @@
 //! for small and mid-sized semantic batches; the explicit resident kernel remains
 //! the large-body simulation lane.
 
-#[cfg(any(feature = "field-burn", feature = "field-gpu"))]
+#[cfg(feature = "tensor-burn")]
 use burn::tensor::Tensor;
 
 /// Input rejected before a staging helper creates a tensor program.
@@ -100,7 +100,7 @@ impl Default for NodeExclusionParams {
 /// `[N]` force components `(fx, fy)`. Force on body i:
 /// `strength · Σ_{j} (p_i − p_j) / (|p_i − p_j|² + ε²)^{3/2}`. The `j = i` term
 /// vanishes (numerator zero), so it is summed over all j including self.
-#[cfg(any(feature = "field-burn", feature = "field-gpu"))]
+#[cfg(feature = "tensor-burn")]
 pub fn repulsion(xs: Tensor<1>, ys: Tensor<1>, params: RepulsionParams) -> (Tensor<1>, Tensor<1>) {
     let n = xs.dims()[0];
 
@@ -128,9 +128,9 @@ pub fn repulsion(xs: Tensor<1>, ys: Tensor<1>, params: RepulsionParams) -> (Tens
 /// The exact hard-floor and cutoff law represented by [`NodeExclusionParams`].
 ///
 /// The returned tensors stay on their backend. In particular, a host may pass
-/// [`crate::resident::ResidentTensor`] inputs and publish the output buffer to its
+/// [`conatus::resident::ResidentTensor`] inputs and publish the output buffer to its
 /// next resident consumer without bringing force bytes to the CPU.
-#[cfg(any(feature = "field-burn", feature = "field-gpu"))]
+#[cfg(feature = "tensor-burn")]
 pub fn node_exclusion(
     xs: Tensor<1>,
     ys: Tensor<1>,
@@ -164,7 +164,7 @@ pub fn node_exclusion(
 /// This is intentionally named for the CPU→GPU→CPU round trip it performs. It is
 /// useful for a benchmark or a downlevel experiment, but a renderer cannot share
 /// the default device or these returned vectors as resident state.
-#[cfg(feature = "field-burn-wgpu")]
+#[cfg(feature = "tensor-burn-wgpu")]
 pub fn repulsion_wgpu_roundtrip(
     xs: &[f32],
     ys: &[f32],
@@ -194,7 +194,7 @@ pub fn repulsion_wgpu_roundtrip(
 /// Prefer [`node_exclusion`] with resident tensors when the simulation itself is
 /// GPU-owned. This function exists so a staging adapter cannot accidentally swap
 /// the layout law for smooth all-pairs repulsion.
-#[cfg(feature = "field-burn-wgpu")]
+#[cfg(feature = "tensor-burn-wgpu")]
 pub fn node_exclusion_wgpu_roundtrip(
     xs: &[f32],
     ys: &[f32],
@@ -283,7 +283,7 @@ pub fn node_exclusion_reference(
 // Every test in here drives the burn lane; the burn-free anchor they
 // compare against is exercised by the resident lane's receipt in
 // `tests/resident.rs`, which needs no burn at all.
-#[cfg(all(test, feature = "field-burn"))]
+#[cfg(all(test, feature = "tensor-burn"))]
 mod tests {
     use super::*;
 
@@ -384,7 +384,7 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "field-burn-wgpu"))]
+#[cfg(all(test, feature = "tensor-burn-wgpu"))]
 mod tests_wgpu {
     use super::*;
 
@@ -482,7 +482,7 @@ mod tests_wgpu {
     /// This measures only the smooth all-pairs helper, not a resident or
     /// Barnes–Hut crossover. The cap prevents an ignored receipt from allocating
     /// multi-gibibyte pairwise intermediates. Run:
-    /// `cargo test -p quint --features field-burn-wgpu --release -- --ignored timing --nocapture`
+    /// `cargo test -p seiche --features tensor-burn-wgpu --release -- --ignored timing --nocapture`
     #[test]
     #[ignore]
     fn timing_repulsion_cpu_vs_gpu() {

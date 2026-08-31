@@ -21,14 +21,12 @@
 //! tuning parameter (smaller = sharper peaks, larger = smoother field).
 //!
 //! Crucially this composes inside the existing field-algebra AST — no new
-//! AST variant is required. The quint evaluator handles it.
+//! AST variant is required. The numen evaluator handles it.
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use quint::ast::ScalarField;
-use quint::projection::FieldProjection;
-use quint::registry::FieldId;
+use numen::{FieldId, FieldProjection, ScalarField};
 
 use esp::embed::VectorIndex;
 use esp::embed::provider::SimilarityMetric;
@@ -112,8 +110,7 @@ mod tests {
     use super::*;
     use esp::embed::StubEmbeddingProvider;
     use esp::embed::provider::EmbeddingProvider;
-    use quint::eval::eval_scalar;
-    use quint::registry::FieldRegistry;
+    use numen::{FieldRegistry, eval_scalar};
 
     fn approx(a: f32, b: f32, eps: f32) -> bool {
         (a - b).abs() < eps

@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Burn-backed lowering of the field algebra.
+//! Burn-backed lowering of the numen field algebra.
 //!
 //! Walks a [`ScalarField`] / [`VectorField`] AST and emits a Burn tensor
 //! program evaluated at a batch of positions, returning the per-position

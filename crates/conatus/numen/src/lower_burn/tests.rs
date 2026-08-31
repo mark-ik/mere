@@ -9,7 +9,7 @@ use crate::ast::{ScalarField, VectorField};
 use crate::eval;
 use burn::tensor::Tensor;
 
-// backend chosen per call site via Device
+// Backend chosen per call site via Device.
 
 fn device() -> burn::tensor::Device {
     Default::default()

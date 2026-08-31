@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The resident lane's receipt: the kernel computes quint's own force
+//! The resident lane's receipt: the kernel computes Seiche's force
 //! law, and the lane settles.
 //!
 //! The anchor is `forces::repulsion_reference`, the naive host loop
@@ -16,10 +16,10 @@
 //! Needs a real adapter, so it skips rather than fails where there is
 //! none (CI without a GPU, a headless box with no software rasterizer).
 
-#![cfg(feature = "field-gpu")]
+#![cfg(feature = "resident")]
 
-use quint::forces::{RepulsionParams, repulsion_reference};
-use quint::resident::{Adjacency, Params, Resident, ResidentClient};
+use conatus::resident::{Adjacency, Params, Resident, ResidentClient};
+use seiche::{RepulsionParams, repulsion_reference};
 
 /// A deterministic scatter, seeded: the same cloud every run.
 fn scatter(n: usize, extent: f32) -> Vec<[f32; 4]> {
@@ -39,7 +39,7 @@ fn scatter(n: usize, extent: f32) -> Vec<[f32; 4]> {
 ///
 /// The lane allocates through CubeCL now, so a test needs the client
 /// rather than a device pair. Booting it from an explicit setup keeps
-/// the "device is the host's, never this crate's" rule visible: quint
+/// the "device is the host's, never this crate's" rule visible: Conatus
 /// adopts what it is handed.
 fn client() -> Option<ResidentClient> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -59,7 +59,7 @@ fn client() -> Option<ResidentClient> {
     .ok()?;
     let backend = adapter.get_info().backend;
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("quint resident lane receipt"),
+        label: Some("conatus resident lane receipt"),
         ..Default::default()
     }))
     .ok()?;
@@ -77,7 +77,7 @@ fn no_edges(n: usize) -> Vec<u32> {
 }
 
 #[test]
-fn the_kernel_computes_quints_own_force_law() {
+fn the_kernel_computes_seiches_force_law() {
     let Some(client) = client() else {
         eprintln!("no wgpu adapter: skipping the resident lane receipt");
         return;
@@ -101,7 +101,7 @@ fn the_kernel_computes_quints_own_force_law() {
         },
         params,
     );
-    println!("kernel source: CubeCL, authored in quint::resident::kernels");
+    println!("kernel source: CubeCL, authored in conatus::resident::kernels");
     resident.repulse_only();
     let theirs = resident.read_forces();
 
@@ -134,7 +134,7 @@ fn the_kernel_computes_quints_own_force_law() {
 
     assert!(
         mean < 1e-3,
-        "the kernel disagrees with quint's own law: mean relative error {mean:.2e}, worst {worst:.2e}"
+        "the kernel disagrees with Seiche's law: mean relative error {mean:.2e}, worst {worst:.2e}"
     );
     // The z column must stay zero: these are 2D positions in a padded
     // 3D layout, and a force leaking into the spare axis would mean the

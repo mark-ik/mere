@@ -120,7 +120,7 @@ pub use types::{CameraView, EdgeCell, Face, NodeShape, NodeState, PointerButton,
 // presentation library):
 /// Cartography projection-request derivation + the layout-strategy catalog.
 pub mod cartography_scene;
-/// Visual couplings → paint overlays (the quint field paint pass).
+/// Visual couplings → paint overlays (the numen field paint pass).
 pub mod coupling_paint;
 /// Cartography geometry: the settled-layout sidecar the host persists.
 pub mod geometry;
@@ -146,9 +146,9 @@ pub use geometry::CartographyGeometry;
 pub mod palette;
 pub use palette::DerivedFacePalette;
 
-/// Query similarity over the canvas: the embedding→quint field bridge and the
+/// Query similarity over the canvas: the embedding→numen field bridge and the
 /// search surface built on it. Homed here in the 2026-08-12 eidetic reorg —
-/// they are canvas glue (quint fields over placed nodes) that had been parked
+/// they are canvas glue (numen fields over placed nodes) that had been parked
 /// in the intel tier, where nothing consumed them.
 pub mod canvas_search;
 mod edge_cells;

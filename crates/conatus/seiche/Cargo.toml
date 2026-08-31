@@ -3,7 +3,7 @@ name = "seiche"
 version = "0.0.5"
 edition = "2024"
 license.workspace = true
-description = "Kernel-free, rapier-backed force-directed graph layout: bodies bound to node keys, themable forces (exclusion, springs, boundary), and quint field couplings. A host feeds node keys + positions; seiche integrates."
+description = "Kernel-free, rapier-backed force-directed graph layout: bodies bound to node keys, themable and tensorized force laws, and numen field couplings. A host feeds node keys + positions; seiche integrates."
 repository = "https://github.com/merely-made/mere"
 keywords = ["physics", "layout", "graph", "force-directed", "rapier"]
 categories = ["graphics", "simulation"]
@@ -21,14 +21,16 @@ rapier2d = "0.33"
 # kernel and chartulary use, so seiche stays graph-agnostic without depending on
 # either; a consumer feeds its own node keys + positions in.
 petgraph = "0.8"
-# Field algebra: seiche's CouplingForce evaluates quint fields (closed-form +
-# finite-difference gradients) to drive rapier bodies. quint (default features only,
-# no rhai/burn) is the portable field source, seiche the integrator. numen supplies
-# the field-definition types the CouplingForce carries.
-quint = { path = "../quint", version = "0.0.4" }
+# Field algebra: CouplingForce evaluates numen's default analytic path to drive
+# Rapier bodies. Burn is local and opt-in for tensorized force laws only.
 numen = { path = "../numen", version = "0.2" }
 euclid = "0.22"
 tracing = "0.1"
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["std"], optional = true }
+burn-wgpu = { version = "0.22.0-pre.2", default-features = false, features = ["std", "autotune"], optional = true }
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
 # No mere `kernel` dep: seiche is the kernel-free physics core. The graph glue that
 # read/wrote a mere `Graph` (the former `kernel-bridge` wrappers) lives host-side now
 # (mere-canvas's `build` adapters); the graph-free sync_nodes / sync_edges / positions
@@ -36,10 +38,11 @@ tracing = "0.1"
 
 [features]
 default = []
-# Benchmark-only: pulls quint's WGPU round-trip helper so the ignored bench can
-# stage the exact NodeExclusion law through a `RepulsionSolver`. Off by default;
-# the shipped seiche lib never compiles Burn and remains the burn-free integrator.
-gpu-bench = ["quint/field-burn-wgpu"]
+# Tensor laws are opt-in. The default integrator stays Burn-free.
+tensor-burn = ["dep:burn", "burn/ndarray", "dep:getrandom"]
+tensor-burn-wgpu = ["tensor-burn", "burn/wgpu", "burn/extension", "dep:burn-wgpu", "dep:getrandom"]
+# Benchmark-only staging helper for the exact NodeExclusion law.
+gpu-bench = ["tensor-burn-wgpu"]
 
 [dev-dependencies]
 uuid = "1"

@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The resident lane's kernels, authored in CubeCL.
+//! Conatus resident kernels, authored in CubeCL.
 //!
 //! The three dispatches the field tier advances by (repulsion, springs,
 //! integration) plus the settle reduction, written once here and
@@ -13,8 +13,8 @@
 //! buffers they run over are the same CubeCL allocations Burn
 //! addresses, so a tensor pass and a kernel pass meet with no bridge.
 //!
-//! The force laws are the ones `quint::forces` states on the CPU, and
-//! `forces::repulsion_reference` remains the anchor they are checked
+//! The force laws are the ones Seiche states on the CPU, and
+//! `seiche::repulsion_reference` remains the anchor they are checked
 //! against.
 //!
 //! Positions and velocities are padded 3D throughout, per the spatial

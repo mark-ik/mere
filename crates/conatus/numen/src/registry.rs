@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Per-canvas field registry.
+//! Per-projection field registry.
 //!
 //! A [`FieldRegistry`] owns a set of named scalar and vector fields,
 //! addressable by opaque [`FieldId`]s. Composition surfaces (Rhai,
@@ -23,7 +23,7 @@ use crate::ast::{ScalarField, VectorField};
 // are minted deterministically from a counter (`Uuid::from_u128`) so the type
 // stays WASM-clean; once fields are sourced from the `Graph` (field-system
 // Phase 3b) kernel ids flow in directly and this minting falls away.
-pub use numen::{FieldDefinition as FieldDef, FieldId};
+pub use crate::{FieldDefinition as FieldDef, FieldId};
 
 /// Per-canvas field registry.
 ///

@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Pure-Rust evaluator for field expressions.
+//! Pure-Rust evaluator for numen field expressions.
 //!
 //! Walks the AST recursively. Closed forms are used for known kernels
 //! (Gaussian, Linear, Disk, analytic gradient where available); arbitrary

@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Shared resident chunk planes and their zero-copy consumer views.
+//! Shared Conatus resident chunk planes and their zero-copy consumer views.
 //!
 //! Allocation has one direction here: [`ResidentClient`] allocates each
 //! plane through CubeCL, then [`ResidentChunk`] lends Burn and raw wgpu
@@ -26,7 +26,7 @@ pub type ResidentTensor = Tensor<3>;
 /// The host schedule epoch in which a materialized chunk is safe to read.
 ///
 /// This is intentionally a host-issued number, not a frame counter hidden
-/// inside quint. The shared device scheduler decides when a submitted write
+/// inside Conatus. The shared device scheduler decides when a submitted write
 /// becomes visible to its reader tenants.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ReadEpoch(u64);
@@ -435,7 +435,7 @@ struct ResidentPlane {
 
 /// A bundle of typed, GPU-resident channel planes for one world chunk.
 ///
-/// `I` is the world's own chunk identity type. quint does not mint a parallel
+/// `I` is the world's own chunk identity type. Conatus does not mint a parallel
 /// identity model; the wing can carry its existing region key here directly.
 #[derive(Debug)]
 pub struct ResidentChunk<I> {

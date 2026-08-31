@@ -4,15 +4,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Lane A receipt for the resident chunk seam.
+//! Receipt for the resident chunk seam.
 //!
 //! The load-bearing assertion is allocation identity: the Burn tensor's
 //! CubeCL handle resolves to the same wgpu buffer range as the raw-kernel
 //! view. No plane contents are read back to establish that fact.
 
-#![cfg(feature = "field-gpu")]
+#![cfg(feature = "resident")]
 
-use quint::resident::{
+use conatus::resident::{
     ChunkBounds, ChunkStamp, DirtyRegion, PlaneClass, PlaneElementType, PlaneId, PlanePatch,
     RawKernelView, ReadEpoch, ResidentChunk, ResidentChunkError, ResidentClient,
 };
@@ -35,7 +35,7 @@ fn setup() -> Option<burn::backend::wgpu::WgpuSetup> {
     .ok()?;
     let backend = adapter.get_info().backend;
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("quint resident chunk receipt"),
+        label: Some("conatus resident chunk receipt"),
         ..Default::default()
     }))
     .ok()?;
@@ -51,13 +51,13 @@ fn setup() -> Option<burn::backend::wgpu::WgpuSetup> {
 fn readback(device: &wgpu::Device, queue: &wgpu::Queue, view: &RawKernelView) -> Vec<u8> {
     let lease = view.lease();
     let staging = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("quint resident patch readback"),
+        label: Some("conatus resident patch readback"),
         size: lease.byte_len(),
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("quint resident patch readback"),
+        label: Some("conatus resident patch readback"),
     });
     encoder.copy_buffer_to_buffer(lease.buffer, lease.offset, &staging, 0, lease.byte_len());
     let submission = queue.submit([encoder.finish()]);
@@ -120,7 +120,7 @@ fn burn_and_raw_views_are_the_same_cubecl_allocation() {
     assert_eq!(raw.stamp(), burn.stamp());
 
     // Resolve the primitive carried by the public Burn tensor, rather than
-    // trusting two metadata values both minted by quint. Its CubeCL handle
+    // trusting two metadata values both minted by Conatus. Its CubeCL handle
     // must resolve to the exact raw buffer range.
     let primitive = burn
         .into_tensor()
@@ -210,7 +210,7 @@ fn a_lease_reports_the_bytes_its_shape_describes() {
 
     // The guard's negative case: a shape larger than the leased range
     // must report that it does not fit, rather than being copied.
-    let overshot = quint::resident::SpatialLease {
+    let overshot = conatus::resident::SpatialLease {
         shape: [4, 3, 4],
         ..lease
     };
