@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Wallet-backed engram sealer — the concrete [`PayloadSealer`] for the private
+//! Wallet-backed codicil sealer — the concrete [`PayloadSealer`] for the private
 //! lane (persona-wallet gap #2, host side).
 //!
 //! `eidetic::seal` defines the boundary but owns no keys; this is the host
@@ -25,15 +25,17 @@ use rand_core::{OsRng, RngCore};
 use crate::manifest::PersonaId;
 use crate::wallet_store::{KeyEpochId, load_current_private_epoch};
 
-/// At-rest seal format for engram payloads. Same AEAD family as the wallet's
+/// At-rest seal format for codicil payloads. Same AEAD family as the wallet's
 /// wrapped-epoch format so one primitive covers key wrapping and payload sealing.
-const ENGRAM_SEAL_FORMAT_V1: &str = "xchacha20poly1305-v1";
+const CODICIL_SEAL_FORMAT_V1: &str = "xchacha20poly1305-v1";
 /// BLAKE3 derive-key context turning a variable-length epoch secret into the
 /// 32-byte payload-sealing key. Distinct from any wallet wrapping context.
-const ENGRAM_SEAL_KEY_CONTEXT: &str = "mere.pandect.engram_seal.key.v1";
+// The value is a persisted cryptographic domain separator and intentionally
+// retains the legacy spelling. Changing it would make existing payloads unreadable.
+const CODICIL_SEAL_KEY_CONTEXT: &str = "mere.pandect.engram_seal.key.v1";
 
-fn derive_engram_key(epoch_secret: &[u8]) -> [u8; 32] {
-    blake3::derive_key(ENGRAM_SEAL_KEY_CONTEXT, epoch_secret)
+fn derive_codicil_key(epoch_secret: &[u8]) -> [u8; 32] {
+    blake3::derive_key(CODICIL_SEAL_KEY_CONTEXT, epoch_secret)
 }
 
 fn epoch_to_seal_id(epoch: KeyEpochId) -> SealEpochId {
@@ -60,7 +62,7 @@ impl WalletEpochSealer {
     pub fn from_epoch(persona: PersonaId, epoch_id: KeyEpochId, epoch_secret: &[u8]) -> Self {
         let current = epoch_to_seal_id(epoch_id);
         let mut keys = HashMap::new();
-        keys.insert(current, derive_engram_key(epoch_secret));
+        keys.insert(current, derive_codicil_key(epoch_secret));
         Self {
             persona,
             current,
@@ -85,7 +87,7 @@ impl WalletEpochSealer {
     /// Add another epoch's key (e.g. a pre-rotation epoch, for historical reads).
     pub fn with_epoch(mut self, epoch_id: KeyEpochId, epoch_secret: &[u8]) -> Self {
         self.keys
-            .insert(epoch_to_seal_id(epoch_id), derive_engram_key(epoch_secret));
+            .insert(epoch_to_seal_id(epoch_id), derive_codicil_key(epoch_secret));
         self
     }
 
@@ -120,14 +122,14 @@ impl PayloadSealer for WalletEpochSealer {
                     aad: &self.aad(content_hash, &self.current),
                 },
             )
-            .map_err(|_| eidetic::Error::new("engram seal encryption failed"))?;
+            .map_err(|_| eidetic::Error::new("codicil seal encryption failed"))?;
         let mut sealed = nonce.to_vec();
         sealed.extend_from_slice(&ciphertext);
         Ok((
             sealed,
             SealedBlobRef {
                 epoch: self.current,
-                format: ENGRAM_SEAL_FORMAT_V1.to_string(),
+                format: CODICIL_SEAL_FORMAT_V1.to_string(),
             },
         ))
     }
@@ -138,15 +140,15 @@ impl PayloadSealer for WalletEpochSealer {
         marker: &SealedBlobRef,
         sealed: &[u8],
     ) -> eidetic::Result<Vec<u8>> {
-        if marker.format != ENGRAM_SEAL_FORMAT_V1 {
+        if marker.format != CODICIL_SEAL_FORMAT_V1 {
             return Err(eidetic::Error::new(format!(
-                "unsupported engram seal format: {}",
+                "unsupported codicil seal format: {}",
                 marker.format
             )));
         }
         if sealed.len() < 24 {
             return Err(eidetic::Error::new(
-                "sealed engram is shorter than the XChaCha20 nonce",
+                "sealed codicil is shorter than the XChaCha20 nonce",
             ));
         }
         let key = self.keys.get(&marker.epoch).ok_or_else(|| {
@@ -163,7 +165,7 @@ impl PayloadSealer for WalletEpochSealer {
                     aad: &self.aad(content_hash, &marker.epoch),
                 },
             )
-            .map_err(|_| eidetic::Error::new("engram unseal decryption failed"))
+            .map_err(|_| eidetic::Error::new("codicil unseal decryption failed"))
     }
 }
 
@@ -179,12 +181,12 @@ mod tests {
     fn seal_then_unseal_round_trips() {
         let persona = PersonaId::new();
         let sealer = WalletEpochSealer::from_epoch(persona, epoch(1), b"epoch-secret-material");
-        let cleartext = b"a private engram payload";
+        let cleartext = b"a private codicil payload";
         let hash = Hash::of(cleartext);
 
         let (sealed, marker) = sealer.seal(&hash, cleartext).unwrap();
         assert_ne!(sealed.as_slice(), cleartext);
-        assert_eq!(marker.format, ENGRAM_SEAL_FORMAT_V1);
+        assert_eq!(marker.format, CODICIL_SEAL_FORMAT_V1);
         let back = sealer.unseal(&hash, &marker, &sealed).unwrap();
         assert_eq!(back, cleartext);
     }
@@ -243,7 +245,7 @@ mod tests {
     fn for_persona_is_none_without_a_staged_epoch() {
         // No wallet state on this path, so there is no epoch to seal under and
         // the host stays in the cleartext lane rather than erroring.
-        let dir = std::env::temp_dir().join("mere-engram-seal-none-probe");
+        let dir = std::env::temp_dir().join("mere-codicil-seal-none-probe");
         let _ = std::fs::remove_dir_all(&dir);
         let sealer = WalletEpochSealer::for_persona(&dir, PersonaId::new()).unwrap();
         assert!(sealer.is_none());
@@ -258,7 +260,7 @@ mod tests {
         };
 
         let dir = std::env::temp_dir().join(format!(
-            "mere-engram-seal-forpersona-{}",
+            "mere-codicil-seal-forpersona-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

@@ -79,14 +79,18 @@ impl Graph {
     /// component copy itself deliberately drops `nested` so two LIVE nodes
     /// never share one world). Journaled edits go through
     /// `GraphDelta::SetNodeNested` instead.
-    pub fn bear_nested(&mut self, key: NodeKey, nested: Option<codicil::LogId>) -> bool {
+    pub fn bear_nested(&mut self, key: NodeKey, nested: Option<muniment::LogId>) -> bool {
         self.set_node_nested(key, nested)
     }
 
     /// Set or clear the node's borne graph (`Node.nested`). Structural
     /// containment per the one-node ruling; journals as
     /// `ReplaySetNodeNestedById` so installs replay attributed.
-    pub(crate) fn set_node_nested(&mut self, key: NodeKey, nested: Option<codicil::LogId>) -> bool {
+    pub(crate) fn set_node_nested(
+        &mut self,
+        key: NodeKey,
+        nested: Option<muniment::LogId>,
+    ) -> bool {
         let Some(node) = self.inner.node_mut(key) else {
             return false;
         };

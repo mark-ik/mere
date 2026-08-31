@@ -4,7 +4,7 @@ The generic content-addressed container graph (aka **chart**). A `Graph<N, E>`
 where nodes are content-addressed containers and edges are typed relations, over
 one shared, app-agnostic model. The substrate that binds
 [muniment](https://github.com/merely-made/mere)'s blobs and
-[codicil](https://github.com/merely-made/mere)'s log into a graph.
+muniment's append-only journal into a graph.
 
 Fully generic: a node needs one capability, `Identified`, to live in the graph.
 Everything else is an opt-in trait that unlocks a feature.
@@ -38,18 +38,18 @@ an app that needs more implements the traits on its own types.
 | `container` | `Container`, `ContainerAddress`, `Relation` |
 | `taxonomy` | `RelationClass`, `Recognized`, `Semantic`, `REL_NS` |
 | `edit` | `GraphEdit`, `EdgeId`, `WriterId`, `DerivationKind`, `DerivationRecord` |
-| `spine` | `GraphLog`: graph edits as a codicil log, with muniment snapshots for checkpoint-plus-tail loading |
+| `spine` | `GraphLog`: graph edits as a muniment journal, with snapshots for checkpoint-plus-tail loading |
 | `commit` | `Batch`, `BatchId`, `Author`, `EditSpec`, `Committed`, `CommitError` |
 | `facet` | `NodeFacets`, `FacetStore`, `FacetId`, `FacetValidator`, `AcceptAll`, `FacetError`, `ExpiringFacet`. Runtime typed node metadata, validated through an injected seam; revision-indexed shelf life stays a read predicate and never mutates stored state |
 | `content_class` | `ContentClass`, `ClassId`, `ClassRegistry`, `ClassMembership`, `CLASS_FACET`, `ClassError` |
 | `stemma` | `Stemma`, `StemmaSnapshot`, `EntryRecord`, `VisitRecord`, `OwnerRecord`, `TransitionKind`, `EntryPrivacy`, `OwnerBranchProjection`, `GcReport`. Owner-scoped descent of content through branching visits |
 | `nested` | Slot-name helpers: `log_slot`, `snap_slot`, `archived_log_slot`, `archived_snap_slot` |
 
-`codicil::LogId` and `codicil::Provenance` are re-exported so a consumer can fork
-a log and inspect provenance without depending on codicil directly.
+`muniment::LogId` and `muniment::Provenance` are re-exported so a consumer can
+fork a log and inspect provenance through the same storage floor.
 
 Dependencies: `petgraph` (with `serde-1`), `muniment` (default features off, for
-the blake3 `Hash`), `codicil`, `rkyv` and `slotmap` (the stemma snapshot and visit
+the blake3 `Hash` and append-only journal), `rkyv` and `slotmap` (the stemma snapshot and visit
 arena), `serde`, `serde_json`.
 
 The name: a chartulary is the register a house kept its charters and muniments in.

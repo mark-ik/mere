@@ -73,7 +73,6 @@ members = [
     "crates/dramatis/personae",
     "crates/armillary",
     "crates/eidetic/muniment",
-    "crates/eidetic/codicil",
     "crates/eidetic/chartulary",
     "crates/eidetic/scholia",
     "crates/eidetic/tulpa",
@@ -176,7 +175,6 @@ scenotime = { version = "0.0.4", path = "crates/scenograph/scenotime" }
 # `<dep>.workspace = true`, so only this block knows where each one lives.
 personae = { version = "0.2.1", path = "crates/dramatis/personae" }
 notochord = { version = "0.1.0", path = "crates/system/notochord" }
-codicil = { version = "0.1.1", path = "crates/eidetic/codicil" }
 chartulary = { version = "0.2.1", path = "crates/eidetic/chartulary" }
 scholia = { path = "crates/eidetic/scholia" }
 # The legend/memorial view over a codicil log; reservation, no implementation.

@@ -26,7 +26,9 @@
 
 use std::sync::Arc;
 
-use eidetic::models::{EvalMetric, EvalReport, EvalTally, OpaqueBlob, TrainingCorpus};
+use eidetic::models::{
+    EvalMetric, EvalReport, EvalTally, OpaqueBlob, TrainingCorpus, load_training_corpus,
+};
 use eidetic::typed::{load_typed, save_typed};
 use eidetic::{
     AdapterRuntimeCompat, Hash, ManifestId, ModelAdapterManifest, ModelLibrary, NoFetcher,
@@ -221,13 +223,16 @@ fn run_train_job<B: Store>(
             "request tokenizer_ref does not match the base model manifest",
         ));
     }
-    let corpus: TrainingCorpus =
-        pollster::block_on(load_typed(store, &mut NoFetcher, request.corpus_ref))
-            .map_err(backend)?
-            .ok_or_else(|| backend("training corpus is missing"))?;
+    let corpus: TrainingCorpus = pollster::block_on(load_training_corpus(
+        store,
+        &mut NoFetcher,
+        request.corpus_ref,
+    ))
+    .map_err(backend)?
+    .ok_or_else(|| backend("training corpus is missing"))?;
     corpus.validate().map_err(backend)?;
-    let train_cases = load_cases(store, &corpus.training_source_engrams, "training")?;
-    let eval_cases = load_cases(store, &corpus.evaluation_source_engrams, "evaluation")?;
+    let train_cases = load_cases(store, &corpus.training_source_codicils, "training")?;
+    let eval_cases = load_cases(store, &corpus.evaluation_source_codicils, "evaluation")?;
     control.check()?;
 
     // The shared deterministic trainer, over the training partition only.
@@ -273,7 +278,7 @@ fn run_train_job<B: Store>(
             "inputs": {
                 "base_model_ref": request.base_model_ref.to_string(),
                 "tokenizer_ref": request.tokenizer_ref.to_string(),
-                "corpus_partition": "training_source_engrams",
+                "corpus_partition": "training_source_codicils",
                 "model_id": model_id,
             },
             "outputs": ["adapter_blob", "adapter_config_blob", "eval_report"],

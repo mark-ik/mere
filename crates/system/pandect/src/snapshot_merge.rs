@@ -4,16 +4,16 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Snapshot-level merge for engram compose (Alembic tail B7 / decision #1).
+//! Snapshot-level merge for codicil compose (Alembic tail B7 / decision #1).
 //!
 //! Unions two [`GraphSnapshot`]s by URL identity, with the first (`a`) canonical.
 //! Pure and deterministic. It lives here, not in `graph-kernel`, so it works
 //! directly on the public `GraphSnapshot` structs without the kernel graph API:
 //! [`PersistedEdge`] keys its endpoints by `from_node_id` / `to_node_id`
 //! (stable `String`s), so a merge is plain Vec surgery (the audited
-//! `engram_compose_merge_plan`). A kernel `Graph::merge_from` is a later, optional
-//! promotion. This is what first populates the engram lineage
-//! (`ProvenanceRecord.upstream`, via [`crate::graph_engram::compose_graph_engrams`])
+//! `codicil_compose_merge_plan`). A kernel `Graph::merge_from` is a later, optional
+//! promotion. This is what first populates the codicil lineage
+//! (`ProvenanceRecord.upstream`, via [`crate::graph_codicil::compose_graph_codicils`])
 //! that the consolidation pass will read.
 
 use std::collections::{HashMap, HashSet};
@@ -54,7 +54,7 @@ pub fn merge_snapshots(a: &GraphSnapshot, b: &GraphSnapshot) -> (GraphSnapshot, 
 
 /// The merge plus `b` node id -> canonical merged node id.
 ///
-/// Graph engram composition uses this to carry the separate facet store
+/// Graph codicil composition uses this to carry the separate facet store
 /// through the same URL-identity remap as the graph snapshot.
 pub(crate) fn merge_snapshots_with_remap(
     a: &GraphSnapshot,

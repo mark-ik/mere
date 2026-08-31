@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The position of an entry in a [`Codicil`](crate::Codicil). Zero-based: the
+/// The position of an entry in a [`Journal`](super::Journal). Zero-based: the
 /// first appended entry is `Seq(0)`.
 ///
 /// Monotonic and stable. Because entries are never removed or reordered, a

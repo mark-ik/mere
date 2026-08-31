@@ -30,7 +30,7 @@
 //! # The property that makes it free
 //!
 //! An entry may only cite parents that already exist, which
-//! [`Codicil::append_caused_by`] enforces rather than assumes. So a parent's
+//! [`Journal::append_caused_by`] enforces rather than assumes. So a parent's
 //! `Seq` is always lower than its child's, which means:
 //!
 //! > **The stored sequence is always a valid topological order of the graph.**
@@ -49,15 +49,15 @@
 //!
 //! # Ordinary appends stay ordinary
 //!
-//! [`Codicil::append`] records no parents. That is not a chain by omission, it
+//! [`Journal::append`] records no parents. That is not a chain by omission, it
 //! is an honest absence: a log that never claimed causality does not acquire
 //! any by being loaded into a newer build. Existing logs keep working, and
-//! [`effects`](Codicil::effects) on them correctly returns nothing.
+//! [`effects`](Journal::effects) on them correctly returns nothing.
 
 use std::collections::{BTreeSet, VecDeque};
 
-use crate::log::Codicil;
-use crate::seq::Seq;
+use super::log::Journal;
+use super::seq::Seq;
 
 /// Why an entry could not be appended with the causes it named.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,7 +70,7 @@ pub enum CausalError {
     UnknownParent(Seq),
 }
 
-impl<T> Codicil<T> {
+impl<T> Journal<T> {
     /// Appends an entry that was caused by existing ones.
     ///
     /// Parents are deduplicated and stored in ascending order, so two appends
@@ -167,8 +167,8 @@ impl<T> Codicil<T> {
 mod tests {
     use super::*;
 
-    fn chain() -> Codicil<&'static str> {
-        let mut log = Codicil::new();
+    fn chain() -> Journal<&'static str> {
+        let mut log = Journal::new();
         let a = log.append("a");
         let b = log.append_caused_by([a], "b").unwrap();
         log.append_caused_by([b], "c").unwrap();
@@ -179,7 +179,7 @@ mod tests {
     fn an_ordinary_append_claims_no_cause() {
         // A log that never recorded causality does not acquire any by being
         // loaded into a newer build.
-        let mut log: Codicil<u8> = Codicil::new();
+        let mut log: Journal<u8> = Journal::new();
         let a = log.append(1);
         let b = log.append(2);
 
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn an_entry_may_have_several_causes() {
         // The thing a list cannot represent: a confluence.
-        let mut log = Codicil::new();
+        let mut log = Journal::new();
         let a = log.append("a");
         let b = log.append("b");
         let merged = log.append_caused_by([a, b], "both").unwrap();
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn independent_entries_are_concurrent() {
-        let mut log = Codicil::new();
+        let mut log = Journal::new();
         let a = log.append("a");
         let b = log.append("b");
         let after_a = log.append_caused_by([a], "after a").unwrap();
@@ -234,7 +234,7 @@ mod tests {
     fn the_sequence_is_always_a_topological_order() {
         // The property the whole design rests on, and the reason replay needs
         // no sorting step: a parent is always stored before its child.
-        let mut log = Codicil::new();
+        let mut log = Journal::new();
         let a = log.append("a");
         let b = log.append_caused_by([a], "b").unwrap();
         let c = log.append_caused_by([a, b], "c").unwrap();
@@ -254,7 +254,7 @@ mod tests {
         // Refused rather than tolerated. If this were allowed the sequence
         // would stop being a topological order and cycles would become
         // representable, which is the one thing this design must not permit.
-        let mut log: Codicil<u8> = Codicil::new();
+        let mut log: Journal<u8> = Journal::new();
         log.append(1);
 
         assert_eq!(
@@ -268,7 +268,7 @@ mod tests {
     fn an_entry_cannot_cite_itself() {
         // The degenerate cycle, caught by the same rule: the entry being
         // appended does not exist yet.
-        let mut log: Codicil<u8> = Codicil::new();
+        let mut log: Journal<u8> = Journal::new();
         assert_eq!(
             log.append_caused_by([Seq(0)], 1),
             Err(CausalError::UnknownParent(Seq(0)))
@@ -279,12 +279,12 @@ mod tests {
     fn repeated_causes_collapse() {
         // Two appends naming the same causes in different orders must produce
         // identical logs, or replay equality and hashing stop working.
-        let mut left = Codicil::new();
+        let mut left = Journal::new();
         let a = left.append("a");
         let b = left.append("b");
         left.append_caused_by([a, b, a], "c").unwrap();
 
-        let mut right = Codicil::new();
+        let mut right = Journal::new();
         right.append("a");
         right.append("b");
         right.append_caused_by([b, a], "c").unwrap();
@@ -328,7 +328,7 @@ mod compatibility {
     fn a_log_written_before_causality_still_loads() {
         // Four crates persist these through muniment slots. A field that could
         // not be absent would have broken every stored log in the stack.
-        let log: Codicil<String> = serde_json::from_str(OLD).expect("old logs load");
+        let log: Journal<String> = serde_json::from_str(OLD).expect("old logs load");
 
         assert_eq!(log.len(), 2);
         assert!(log.parents(Seq(0)).is_empty());
@@ -340,7 +340,7 @@ mod compatibility {
     fn a_log_that_claims_no_causes_stays_small() {
         // Adding the field must not bloat logs that do not use it. An empty
         // vec is a length prefix, which is the honest floor.
-        let mut log: Codicil<String> = Codicil::new();
+        let mut log: Journal<String> = Journal::new();
         log.append("a".into());
         log.append("b".into());
 
@@ -353,22 +353,22 @@ mod compatibility {
         // reads four, which a self-describing codec forgives and postcard does
         // not. muniment's codec is pluggable, so this was live for anyone
         // persisting a causeless log as postcard.
-        let mut log: Codicil<String> = Codicil::new();
+        let mut log: Journal<String> = Journal::new();
         log.append("a".into());
 
         let bytes = postcard::to_allocvec(&log).expect("encodes");
-        let back: Codicil<String> = postcard::from_bytes(&bytes).expect("and decodes");
+        let back: Journal<String> = postcard::from_bytes(&bytes).expect("and decodes");
         assert_eq!(back, log);
     }
 
     #[test]
     fn causality_survives_a_round_trip() {
-        let mut log: Codicil<String> = Codicil::new();
+        let mut log: Journal<String> = Journal::new();
         let a = log.append("a".into());
         log.append_caused_by([a], "b".into()).unwrap();
 
         let text = serde_json::to_string(&log).unwrap();
-        let back: Codicil<String> = serde_json::from_str(&text).unwrap();
+        let back: Journal<String> = serde_json::from_str(&text).unwrap();
 
         assert_eq!(back, log);
         assert_eq!(back.parents(Seq(1)), &[a]);

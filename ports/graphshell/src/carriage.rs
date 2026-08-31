@@ -8,7 +8,7 @@
 //!
 //! Implements the lane grammar (design_docs, 2026-08-18). Carriage rides a
 //! sibling topic beside a personal graph's own, so key delivery never enters
-//! the engram grammar; every fact a replica must check rides in the header
+//! the codicil grammar; every fact a replica must check rides in the header
 //! extension, so a peer can accept, refuse, and prune without decoding a body
 //! it is not expected to be able to open; and supersession is the protocol's
 //! own prune (`Admission::prune_before_current` plus payload erasure), so the

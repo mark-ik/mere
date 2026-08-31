@@ -66,12 +66,8 @@ strum = { version = "0.28", features = ["derive"] }
 # onto chartulary. Git sibling; local checkout via the gitignored
 # `.cargo/config.toml` patch.
 chartulary.workspace = true
-# The append-only log primitive (codicil) and its store (muniment): mere's
-# captured-delta stream persists as a codicil, the edit spine over the substrate
-# (see graph/journal.rs). Both already build in the tree via chartulary; these are
-# direct deps so the journal can name them. Git siblings; local checkouts via
-# the gitignored `.cargo/config.toml` patches.
-codicil.workspace = true
+# The captured-delta stream persists as a muniment journal, the edit spine over
+# the substrate (see graph/journal.rs). This is direct so the kernel can name it.
 muniment.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

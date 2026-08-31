@@ -210,8 +210,8 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
             .expect("load model manifest")
             .expect("model manifest present");
         let corpus = TrainingCorpus {
-            training_source_engrams: save_cases(&mut store, &TRAIN_PREFIXES).await,
-            evaluation_source_engrams: save_cases(&mut store, &EVAL_PREFIXES).await,
+            training_source_codicils: save_cases(&mut store, &TRAIN_PREFIXES).await,
+            evaluation_source_codicils: save_cases(&mut store, &EVAL_PREFIXES).await,
         };
         let corpus_ref = save_typed(
             &mut *store,

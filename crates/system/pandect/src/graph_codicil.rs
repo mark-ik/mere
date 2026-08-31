@@ -4,15 +4,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Graph engrams — freezing a live graph into an immutable, content-addressed
-//! eidetic engram, and thawing one back into a live graph.
+//! Graph codicils — freezing a live graph into an immutable, content-addressed
+//! eidetic codicil, and thawing one back into a live graph.
 //!
 //! This is the spine of the Alembic memory subsystem (slice A of
 //! `design_docs/mere_docs/implementation_strategy/2026-06-24_alembic_implementation_plan.md`):
-//! "Save as graph engram" freezes a [`Graph`] to its [`GraphSnapshot`] plus
+//! "Save as graph codicil" freezes a [`Graph`] to its [`GraphSnapshot`] plus
 //! atomic facet store, redacts private / heavy state, and writes it through the
 //! eidetic typed-payload layer under the `mere.graph-snapshot/v2` schema; "Open
-//! as session" thaws an engram back into a [`Graph`]. Browsing an engram is
+//! as session" thaws a codicil back into a [`Graph`]. Browsing a codicil is
 //! read-only (immutability holds); editing forks a thaw.
 //!
 //! The graph binding lives here rather than in eidetic-core because eidetic is
@@ -34,16 +34,16 @@ use uuid::Uuid;
 use crate::NodeFacetStore;
 use eidetic::manifest::load_manifest;
 
-/// Schema id bytes for the graph-snapshot engram schema. The [`SchemaRef`] is the
+/// Schema id bytes for the graph-snapshot codicil schema. The [`SchemaRef`] is the
 /// BLAKE3 of these bytes, so it is stable across builds and machines.
 pub const GRAPH_SNAPSHOT_SCHEMA_ID: &[u8] = b"mere.graph-snapshot/v2";
 const LEGACY_GRAPH_SNAPSHOT_SCHEMA_ID: &[u8] = b"mere.graph-snapshot/v1";
 
-/// The content-addressed schema reference every graph engram is tagged with.
+/// The content-addressed schema reference every graph codicil is tagged with.
 ///
 /// The eidetic typed layer uses this as an identity tag — checked on load so a
 /// mistyped read errors rather than deserializing garbage. Registering a full
-/// schema-definition engram (with validators, for cross-language / federation
+/// schema-definition codicil (with validators, for cross-language / federation
 /// reads) is a later, optional step; the freeze/thaw spine does not need it.
 pub fn graph_snapshot_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::of_blob(GRAPH_SNAPSHOT_SCHEMA_ID))
@@ -53,19 +53,19 @@ fn legacy_graph_snapshot_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::of_blob(LEGACY_GRAPH_SNAPSHOT_SCHEMA_ID))
 }
 
-/// A graph snapshot and its one live facet store, bound to the graph-engram
+/// A graph snapshot and its one live facet store, bound to the graph-codicil
 /// schema.
 ///
 /// Version 1 carried a bare [`GraphSnapshot`]. Version 2 adds the sidecar because
 /// optional node metadata no longer lives in snapshot columns.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct GraphEngram {
+pub struct GraphCodicil {
     pub snapshot: GraphSnapshot,
     #[serde(default)]
     pub facets: NodeFacetStore,
 }
 
-impl TypedPayload for GraphEngram {
+impl TypedPayload for GraphCodicil {
     fn schema_ref() -> SchemaRef {
         graph_snapshot_schema_ref()
     }
@@ -77,15 +77,15 @@ impl TypedPayload for GraphEngram {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
-struct LegacyGraphEngram(GraphSnapshot);
+struct LegacyGraphCodicil(GraphSnapshot);
 
-impl TypedPayload for LegacyGraphEngram {
+impl TypedPayload for LegacyGraphCodicil {
     fn schema_ref() -> SchemaRef {
         legacy_graph_snapshot_schema_ref()
     }
 }
 
-impl GraphEngram {
+impl GraphCodicil {
     fn into_graph(self) -> Graph {
         let mut graph = Graph::from_snapshot(&self.snapshot);
         graph.overlay_facets(self.facets);
@@ -93,13 +93,13 @@ impl GraphEngram {
     }
 }
 
-/// What a graph engram keeps from the live snapshot.
+/// What a graph codicil keeps from the live snapshot.
 ///
 /// The default is conservative (Alembic plan open decision #7): private / heavy
 /// per-node state is stripped, leaving graph structure, addresses, titles,
 /// tags, classifications, provenance, properties, and other portable facets.
 /// Callers opt state back in explicitly with [`RedactionPolicy::include_all`]
-/// or by setting a flag, so a shareable engram does not leak screenshots,
+/// or by setting a flag, so a shareable codicil does not leak screenshots,
 /// drafts, or browser-runtime facets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RedactionPolicy {
@@ -123,7 +123,7 @@ impl Default for RedactionPolicy {
 
 impl RedactionPolicy {
     /// Include everything — no redaction. For a local, trusted freeze where the
-    /// heavy / private fields are wanted; never for a shareable engram.
+    /// heavy / private fields are wanted; never for a shareable codicil.
     pub fn include_all() -> Self {
         Self {
             include_thumbnails: true,
@@ -136,7 +136,7 @@ impl RedactionPolicy {
     pub fn apply(&self, snapshot: &mut GraphSnapshot) {
         for node in &mut snapshot.nodes {
             // Redaction drops the *reference*; the blob is the orphan sweep's
-            // business. An exported engram therefore names no image the
+            // business. An exported codicil therefore names no image the
             // recipient could resolve, which is what redaction owes.
             if !self.include_thumbnails {
                 node.images.remove(&ImageRole::Preview);
@@ -172,48 +172,48 @@ impl RedactionPolicy {
     }
 }
 
-/// Provenance for a locally-frozen graph engram: generated by this tool at the
+/// Provenance for a locally-frozen graph codicil: generated by this tool at the
 /// freeze time, no upstream ancestry (composition / merge fills `upstream` later).
-fn graph_engram_provenance(created_at: Timestamp) -> ProvenanceRecord {
+fn graph_codicil_provenance(created_at: Timestamp) -> ProvenanceRecord {
     ProvenanceRecord {
         origin: ProvenanceOrigin::Generated,
         upstream: Vec::new(),
-        tooling: Some(concat!("pandect/graph-engram@", env!("CARGO_PKG_VERSION")).to_string()),
+        tooling: Some(concat!("pandect/graph-codicil@", env!("CARGO_PKG_VERSION")).to_string()),
         generated_at: created_at,
     }
 }
 
-/// Freeze a live `graph` into a content-addressed graph engram, returning its
+/// Freeze a live `graph` into a content-addressed graph codicil, returning its
 /// manifest id.
 ///
 /// The snapshot is redacted per `redaction` (default conservative) before
-/// serialization; the engram is `LocalOnly` and self-asserted — promotion to a
+/// serialization; the codicil is `LocalOnly` and self-asserted — promotion to a
 /// wider audience is always an explicit later act. `created_at` is the freeze
 /// time in Unix milliseconds (the host passes "now"; tests pass a fixed value so
 /// the call stays pure).
-pub async fn save_graph_engram(
+pub async fn save_graph_codicil(
     store: &mut dyn Store,
     graph: &Graph,
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    save_graph_engram_sealed(store, None, graph, redaction, created_at).await
+    save_graph_codicil_sealed(store, None, graph, redaction, created_at).await
 }
 
-/// As [`save_graph_engram`], but sealing the engram at rest under `sealer`.
+/// As [`save_graph_codicil`], but sealing the codicil at rest under `sealer`.
 ///
-/// A graph engram is `LocalOnly` (the private lane), so with a `Some(sealer)` its
+/// A graph codicil is `LocalOnly` (the private lane), so with a `Some(sealer)` its
 /// stored bytes are sealed under the persona epoch and unreadable at rest without
 /// the wallet. `None` keeps the cleartext behavior. Read back with
-/// [`open_engram_as_session_sealed`].
-pub async fn save_graph_engram_sealed(
+/// [`open_codicil_as_session_sealed`].
+pub async fn save_graph_codicil_sealed(
     store: &mut dyn Store,
     sealer: Option<&dyn PayloadSealer>,
     graph: &Graph,
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    save_graph_snapshot_engram_sealed(
+    save_graph_snapshot_codicil_sealed(
         store,
         sealer,
         graph.to_snapshot(),
@@ -224,7 +224,7 @@ pub async fn save_graph_engram_sealed(
     .await
 }
 
-/// As [`save_graph_engram`], but from an already-materialized snapshot and
+/// As [`save_graph_codicil`], but from an already-materialized snapshot and
 /// facet store.
 ///
 /// The primitive a host uses when it has snapshotted the graph already — taking
@@ -232,19 +232,19 @@ pub async fn save_graph_engram_sealed(
 /// from the same owner can follow without a conflict. Also the entry the
 /// Timeline's "distil this past state" reuses (slice E). Both parts are
 /// redacted in place per `redaction`.
-pub async fn save_graph_snapshot_engram(
+pub async fn save_graph_snapshot_codicil(
     store: &mut dyn Store,
     snapshot: GraphSnapshot,
     facets: NodeFacetStore,
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    save_graph_snapshot_engram_sealed(store, None, snapshot, facets, redaction, created_at).await
+    save_graph_snapshot_codicil_sealed(store, None, snapshot, facets, redaction, created_at).await
 }
 
-/// As [`save_graph_snapshot_engram`], but sealing the engram at rest under
+/// As [`save_graph_snapshot_codicil`], but sealing the codicil at rest under
 /// `sealer` (private-lane encrypt-at-rest for the graph snapshot).
-pub async fn save_graph_snapshot_engram_sealed(
+pub async fn save_graph_snapshot_codicil_sealed(
     store: &mut dyn Store,
     sealer: Option<&dyn PayloadSealer>,
     mut snapshot: GraphSnapshot,
@@ -257,44 +257,44 @@ pub async fn save_graph_snapshot_engram_sealed(
     save_typed_sealed(
         store,
         sealer,
-        &GraphEngram { snapshot, facets },
+        &GraphCodicil { snapshot, facets },
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
-        graph_engram_provenance(created_at),
+        graph_codicil_provenance(created_at),
         TrustEnvelope::self_asserted(),
         created_at,
     )
     .await
 }
 
-/// Thaw a stored graph engram back into a live [`Graph`]. `Ok(None)` if no engram
+/// Thaw a stored graph codicil back into a live [`Graph`]. `Ok(None)` if no codicil
 /// is stored under `id`.
 ///
-/// The store is read-only here (eidetic replay-isolation), so opening an engram
+/// The store is read-only here (eidetic replay-isolation), so opening a codicil
 /// never mutates it; editing the returned graph forks a thaw and only persists if
-/// re-saved as a new engram.
-pub async fn open_engram_as_session(
+/// re-saved as a new codicil.
+pub async fn open_codicil_as_session(
     store: &mut dyn Store,
     id: ManifestId,
 ) -> Result<Option<Graph>> {
-    open_engram_as_session_sealed(store, None, id).await
+    open_codicil_as_session_sealed(store, None, id).await
 }
 
-/// Load the persisted graph-engram payload without materializing a live graph.
+/// Load the persisted graph-codicil payload without materializing a live graph.
 ///
 /// Legacy v1 payloads are upgraded in memory to the v2 snapshot + facet-store
 /// shape.
-pub async fn load_graph_engram(
+pub async fn load_graph_codicil(
     store: &mut dyn Store,
     id: ManifestId,
-) -> Result<Option<GraphEngram>> {
-    load_graph_engram_sealed(store, None, id).await
+) -> Result<Option<GraphCodicil>> {
+    load_graph_codicil_sealed(store, None, id).await
 }
 
-/// As [`open_engram_as_session`], but unsealing a sealed engram with `sealer`.
-/// A sealed engram opened with `sealer = None` is a hard error (from the eidetic
+/// As [`open_codicil_as_session`], but unsealing a sealed codicil with `sealer`.
+/// A sealed codicil opened with `sealer = None` is a hard error (from the eidetic
 /// seal seam), never a silent failure.
-pub async fn open_engram_as_session_sealed(
+pub async fn open_codicil_as_session_sealed(
     store: &mut dyn Store,
     sealer: Option<&dyn PayloadSealer>,
     id: ManifestId,
@@ -304,49 +304,52 @@ pub async fn open_engram_as_session_sealed(
         return Ok(None);
     };
     if manifest.schema == graph_snapshot_schema_ref() {
-        let payload = load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, id).await?;
-        return Ok(payload.map(GraphEngram::into_graph));
+        let payload = load_typed_sealed::<GraphCodicil>(store, &mut fetcher, sealer, id).await?;
+        return Ok(payload.map(GraphCodicil::into_graph));
     }
     if manifest.schema == legacy_graph_snapshot_schema_ref() {
         let payload =
-            load_typed_sealed::<LegacyGraphEngram>(store, &mut fetcher, sealer, id).await?;
-        return Ok(payload.map(|engram| Graph::from_snapshot(&engram.0)));
+            load_typed_sealed::<LegacyGraphCodicil>(store, &mut fetcher, sealer, id).await?;
+        return Ok(payload.map(|codicil| Graph::from_snapshot(&codicil.0)));
     }
-    Err(Error::new(format!("manifest {} is not a graph engram", id)))
+    Err(Error::new(format!(
+        "manifest {} is not a graph codicil",
+        id
+    )))
 }
 
-/// List manifests for current v2 and readable legacy v1 graph engrams. Order is
+/// List manifests for current v2 and readable legacy v1 graph codicils. Order is
 /// store-defined; callers that want newest-first should sort on `created_at`.
-pub async fn list_graph_engrams(store: &mut dyn Store) -> Result<Vec<BlobManifest>> {
-    let mut manifests = list_typed::<GraphEngram>(store).await?;
-    manifests.extend(list_typed::<LegacyGraphEngram>(store).await?);
+pub async fn list_graph_codicils(store: &mut dyn Store) -> Result<Vec<BlobManifest>> {
+    let mut manifests = list_typed::<GraphCodicil>(store).await?;
+    manifests.extend(list_typed::<LegacyGraphCodicil>(store).await?);
     Ok(manifests)
 }
 
-/// Compose several graph engrams into one by URL-identity merge (Alembic tail B7 /
+/// Compose several graph codicils into one by URL-identity merge (Alembic tail B7 /
 /// decision #1). Thaws each id's snapshot, folds them with
 /// [`merge_snapshots`](crate::snapshot_merge::merge_snapshots) (the first id is the
-/// canonical base), and saves the union as a new engram.
+/// canonical base), and saves the union as a new codicil.
 ///
-/// The new engram is `Derived` and its `ProvenanceRecord.upstream` records the source
+/// The new codicil is `Derived` and its `ProvenanceRecord.upstream` records the source
 /// ids — the lineage `upstream` (empty on every freeze until now) finally populated,
 /// which is what the consolidation pass reads to relate version chains. `Ok(None)` if
 /// `ids` is empty or any id is missing (a partial compose would silently lose a source,
 /// so it aborts instead). Like a freeze, the result is `LocalOnly` + self-asserted.
-pub async fn compose_graph_engrams(
+pub async fn compose_graph_codicils(
     store: &mut dyn Store,
     ids: &[ManifestId],
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<Option<ManifestId>> {
-    compose_graph_engrams_sealed(store, None, ids, redaction, created_at).await
+    compose_graph_codicils_sealed(store, None, ids, redaction, created_at).await
 }
 
-/// As [`compose_graph_engrams`], but sealer-aware: unseals sealed sources on read
-/// and seals the composed result at rest. All source engrams must be readable
+/// As [`compose_graph_codicils`], but sealer-aware: unseals sealed sources on read
+/// and seals the composed result at rest. All source codicils must be readable
 /// with `sealer` (they share the persona's epoch history); without this variant a
 /// compose over sealed sources would fail at the first sealed read.
-pub async fn compose_graph_engrams_sealed(
+pub async fn compose_graph_codicils_sealed(
     store: &mut dyn Store,
     sealer: Option<&dyn PayloadSealer>,
     ids: &[ManifestId],
@@ -356,31 +359,31 @@ pub async fn compose_graph_engrams_sealed(
     if ids.is_empty() {
         return Ok(None);
     }
-    let mut acc: Option<GraphEngram> = None;
+    let mut acc: Option<GraphCodicil> = None;
     for id in ids {
-        let Some(engram) = load_graph_engram_sealed(store, sealer, *id).await? else {
+        let Some(codicil) = load_graph_codicil_sealed(store, sealer, *id).await? else {
             return Ok(None);
         };
         acc = Some(match acc {
-            None => engram,
-            Some(base) => merge_graph_engrams(base, engram),
+            None => codicil,
+            Some(base) => merge_graph_codicils(base, codicil),
         });
     }
-    let mut engram = acc.expect("ids is non-empty, so acc is Some");
-    redaction.apply(&mut engram.snapshot);
-    redaction.apply_facets(&mut engram.facets);
+    let mut codicil = acc.expect("ids is non-empty, so acc is Some");
+    redaction.apply(&mut codicil.snapshot);
+    redaction.apply_facets(&mut codicil.facets);
     let provenance = ProvenanceRecord {
         origin: ProvenanceOrigin::Derived,
         upstream: ids.to_vec(),
         tooling: Some(
-            concat!("pandect/graph-engram-compose@", env!("CARGO_PKG_VERSION")).to_string(),
+            concat!("pandect/graph-codicil-compose@", env!("CARGO_PKG_VERSION")).to_string(),
         ),
         generated_at: created_at,
     };
     let id = save_typed_sealed(
         store,
         sealer,
-        &engram,
+        &codicil,
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
         provenance,
@@ -391,35 +394,38 @@ pub async fn compose_graph_engrams_sealed(
     Ok(Some(id))
 }
 
-async fn load_graph_engram_sealed(
+async fn load_graph_codicil_sealed(
     store: &mut dyn Store,
     sealer: Option<&dyn PayloadSealer>,
     id: ManifestId,
-) -> Result<Option<GraphEngram>> {
+) -> Result<Option<GraphCodicil>> {
     let Some(manifest) = load_manifest(store, id).await? else {
         return Ok(None);
     };
     let mut fetcher = NoFetcher;
     if manifest.schema == graph_snapshot_schema_ref() {
-        return load_typed_sealed::<GraphEngram>(store, &mut fetcher, sealer, id).await;
+        return load_typed_sealed::<GraphCodicil>(store, &mut fetcher, sealer, id).await;
     }
     if manifest.schema == legacy_graph_snapshot_schema_ref() {
         return Ok(
-            load_typed_sealed::<LegacyGraphEngram>(store, &mut fetcher, sealer, id)
+            load_typed_sealed::<LegacyGraphCodicil>(store, &mut fetcher, sealer, id)
                 .await?
                 .map(|legacy| {
                     let graph = Graph::from_snapshot(&legacy.0);
-                    GraphEngram {
+                    GraphCodicil {
                         snapshot: graph.to_snapshot(),
                         facets: graph.facets().clone(),
                     }
                 }),
         );
     }
-    Err(Error::new(format!("manifest {} is not a graph engram", id)))
+    Err(Error::new(format!(
+        "manifest {} is not a graph codicil",
+        id
+    )))
 }
 
-fn merge_graph_engrams(a: GraphEngram, b: GraphEngram) -> GraphEngram {
+fn merge_graph_codicils(a: GraphCodicil, b: GraphCodicil) -> GraphCodicil {
     let (snapshot, _, remap) =
         crate::snapshot_merge::merge_snapshots_with_remap(&a.snapshot, &b.snapshot);
     let mut facets = a.facets;
@@ -441,7 +447,7 @@ fn merge_graph_engrams(a: GraphEngram, b: GraphEngram) -> GraphEngram {
             }
         }
     }
-    GraphEngram { snapshot, facets }
+    GraphCodicil { snapshot, facets }
 }
 
 #[cfg(test)]
@@ -486,7 +492,7 @@ mod tests {
     fn save_then_open_round_trips_the_graph() {
         pollster::block_on(async {
             let mut store = InMemoryStore::default();
-            let id = save_graph_engram(
+            let id = save_graph_codicil(
                 &mut store,
                 &sample_graph(),
                 RedactionPolicy::default(),
@@ -495,10 +501,10 @@ mod tests {
             .await
             .expect("save");
 
-            let opened = open_engram_as_session(&mut store, id)
+            let opened = open_codicil_as_session(&mut store, id)
                 .await
                 .expect("load ok")
-                .expect("engram present after save");
+                .expect("codicil present after save");
             assert_eq!(opened.nodes().count(), 2, "both nodes survive freeze/thaw");
             assert!(
                 opened.get_node_by_url("https://a.example").is_some(),
@@ -514,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_v1_engram_loads_and_imports_its_inline_metadata() {
+    fn legacy_v1_codicil_loads_and_imports_its_inline_metadata() {
         pollster::block_on(async {
             let mut store = InMemoryStore::default();
             let mut snapshot = sample_graph().to_snapshot();
@@ -522,17 +528,17 @@ mod tests {
             let id = save_typed_sealed(
                 &mut store,
                 None,
-                &LegacyGraphEngram(snapshot),
+                &LegacyGraphCodicil(snapshot),
                 Vec::<BlobSource>::new(),
                 PrivacyClass::LocalOnly,
-                graph_engram_provenance(Timestamp(1)),
+                graph_codicil_provenance(Timestamp(1)),
                 TrustEnvelope::self_asserted(),
                 Timestamp(1),
             )
             .await
             .unwrap();
 
-            let opened = open_engram_as_session(&mut store, id)
+            let opened = open_codicil_as_session(&mut store, id)
                 .await
                 .unwrap()
                 .unwrap();
@@ -577,10 +583,10 @@ mod tests {
                 .unwrap();
 
             let id =
-                save_graph_engram(&mut store, &graph, RedactionPolicy::default(), Timestamp(1))
+                save_graph_codicil(&mut store, &graph, RedactionPolicy::default(), Timestamp(1))
                     .await
                     .unwrap();
-            let opened = open_engram_as_session(&mut store, id)
+            let opened = open_codicil_as_session(&mut store, id)
                 .await
                 .unwrap()
                 .unwrap();
@@ -662,10 +668,10 @@ mod tests {
     }
 
     #[test]
-    fn list_graph_engrams_finds_saved_engrams_tagged_with_the_schema() {
+    fn list_graph_codicils_finds_saved_codicils_tagged_with_the_schema() {
         pollster::block_on(async {
             let mut store = InMemoryStore::default();
-            save_graph_engram(
+            save_graph_codicil(
                 &mut store,
                 &sample_graph(),
                 RedactionPolicy::default(),
@@ -674,10 +680,10 @@ mod tests {
             .await
             .expect("save");
 
-            let engrams = list_graph_engrams(&mut store).await.expect("list");
-            assert_eq!(engrams.len(), 1, "the saved engram is listed");
+            let codicils = list_graph_codicils(&mut store).await.expect("list");
+            assert_eq!(codicils.len(), 1, "the saved codicil is listed");
             assert_eq!(
-                engrams[0].schema,
+                codicils[0].schema,
                 graph_snapshot_schema_ref(),
                 "tagged with the graph-snapshot schema",
             );
@@ -685,17 +691,17 @@ mod tests {
     }
 
     #[test]
-    fn engram_survives_a_store_close_and_reopen() {
+    fn codicil_survives_a_store_close_and_reopen() {
         // The faithful "survives restart" proof: save through a real fjall store,
         // drop it (shutdown), reopen at the same path, and thaw the same graph.
         use eidetic_fjall::FjallStore;
 
-        let dir = std::env::temp_dir().join("mere_graph_engram_fjall_reopen");
+        let dir = std::env::temp_dir().join("mere_graph_codicil_fjall_reopen");
         let _ = std::fs::remove_dir_all(&dir);
 
         let id = pollster::block_on(async {
             let mut store = FjallStore::open(&dir).expect("open store");
-            save_graph_engram(
+            save_graph_codicil(
                 &mut store,
                 &sample_graph(),
                 RedactionPolicy::default(),
@@ -708,11 +714,11 @@ mod tests {
 
         let opened = pollster::block_on(async {
             let mut store = FjallStore::open(&dir).expect("reopen store");
-            open_engram_as_session(&mut store, id)
+            open_codicil_as_session(&mut store, id)
                 .await
                 .expect("load ok")
         })
-        .expect("the engram is present after a store reopen");
+        .expect("the codicil is present after a store reopen");
         assert_eq!(
             opened.nodes().count(),
             2,
@@ -728,7 +734,7 @@ mod tests {
             let mut store = InMemoryStore::default();
             let unknown = ManifestId::of_blob(b"never-saved");
             assert!(
-                open_engram_as_session(&mut store, unknown)
+                open_codicil_as_session(&mut store, unknown)
                     .await
                     .expect("load ok")
                     .is_none(),
@@ -738,10 +744,10 @@ mod tests {
     }
 
     #[test]
-    fn compose_unions_two_engrams_and_records_the_upstream_lineage() {
+    fn compose_unions_two_codicils_and_records_the_upstream_lineage() {
         pollster::block_on(async {
             let mut store = InMemoryStore::default();
-            // Engram A: x, y. Engram B: y (shared url), z.
+            // Codicil A: x, y. Codicil B: y (shared url), z.
             let mut ga = Graph::new();
             ga.add_node("https://x.example".to_string(), Point2D::new(0.0, 0.0));
             ga.add_node("https://y.example".to_string(), Point2D::new(1.0, 0.0));
@@ -752,14 +758,16 @@ mod tests {
             set_pinned(&mut gb, "https://y.example", true);
             set_pinned(&mut gb, "https://z.example", true);
 
-            let id_a = save_graph_engram(&mut store, &ga, RedactionPolicy::default(), Timestamp(1))
-                .await
-                .expect("save a");
-            let id_b = save_graph_engram(&mut store, &gb, RedactionPolicy::default(), Timestamp(2))
-                .await
-                .expect("save b");
+            let id_a =
+                save_graph_codicil(&mut store, &ga, RedactionPolicy::default(), Timestamp(1))
+                    .await
+                    .expect("save a");
+            let id_b =
+                save_graph_codicil(&mut store, &gb, RedactionPolicy::default(), Timestamp(2))
+                    .await
+                    .expect("save b");
 
-            let composed = compose_graph_engrams(
+            let composed = compose_graph_codicils(
                 &mut store,
                 &[id_a, id_b],
                 RedactionPolicy::default(),
@@ -767,13 +775,13 @@ mod tests {
             )
             .await
             .expect("compose ok")
-            .expect("a non-empty id list composes an engram");
+            .expect("a non-empty id list composes a codicil");
 
             // The thawed union carries x, y, z — the shared y is not doubled.
-            let graph = open_engram_as_session(&mut store, composed)
+            let graph = open_codicil_as_session(&mut store, composed)
                 .await
                 .expect("load ok")
-                .expect("the composed engram is present");
+                .expect("the composed codicil is present");
             assert_eq!(
                 graph.nodes().count(),
                 3,
@@ -794,9 +802,9 @@ mod tests {
                 "facets on an added node are remapped into the union"
             );
 
-            // The lineage: the composed engram is `Derived` and names both sources —
+            // The lineage: the composed codicil is `Derived` and names both sources —
             // the `upstream` Vec that is empty on every freeze, finally populated.
-            let manifests = list_graph_engrams(&mut store).await.expect("list");
+            let manifests = list_graph_codicils(&mut store).await.expect("list");
             let m = manifests
                 .iter()
                 .find(|m| m.id == composed)
@@ -804,12 +812,12 @@ mod tests {
             assert_eq!(
                 m.provenance.origin,
                 ProvenanceOrigin::Derived,
-                "a composed engram is Derived"
+                "a composed codicil is Derived"
             );
             assert_eq!(
                 m.provenance.upstream,
                 vec![id_a, id_b],
-                "upstream records the source engrams",
+                "upstream records the source codicils",
             );
         });
     }
@@ -819,7 +827,7 @@ mod tests {
         pollster::block_on(async {
             let mut store = InMemoryStore::default();
             assert!(
-                compose_graph_engrams(&mut store, &[], RedactionPolicy::default(), Timestamp(1))
+                compose_graph_codicils(&mut store, &[], RedactionPolicy::default(), Timestamp(1))
                     .await
                     .expect("ok")
                     .is_none(),

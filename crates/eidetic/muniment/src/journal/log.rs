@@ -8,8 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::fork::{LogId, Provenance};
-use crate::seq::Seq;
+use super::fork::{LogId, Provenance};
+use super::seq::Seq;
 
 /// A linear, append-only log of immutable entries.
 ///
@@ -24,12 +24,12 @@ use crate::seq::Seq;
 /// linear; a branching edit-tree (undo/redo) is a shape a consumer can layer on,
 /// or a later extension.
 ///
-/// `Codicil<T>` is `Serialize`/`Deserialize` when `T` is, so it persists whole
-/// through a [`muniment`] slot (see the crate's persistence methods).
+/// `Journal<T>` is `Serialize`/`Deserialize` when `T` is, so it persists whole
+/// through a muniment slot (see the module's persistence methods).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Codicil<T> {
-    /// This log's stable identity, if it has one. Set by [`with_id`](Codicil::with_id)
-    /// or [`fork`](Codicil::fork); `None` for an anonymous log.
+pub struct Journal<T> {
+    /// This log's stable identity, if it has one. Set by [`with_id`](Journal::with_id)
+    /// or [`fork`](Journal::fork); `None` for an anonymous log.
     #[serde(default)]
     id: Option<LogId>,
     /// Where this log forked from, if it is a fork.
@@ -41,7 +41,7 @@ pub struct Codicil<T> {
     /// **Stored as a sequence, shaped as a graph.** Entries stay a flat `Vec`
     /// so append, replay, and persistence are unchanged; the causal structure
     /// rides alongside for anything that wants to ask about it. See
-    /// [`crate::causal`] for why that is enough, and for the invariant that
+    /// [`super::causal`] for why that is enough, and for the invariant that
     /// makes the stored order a topological one for free.
     ///
     /// Defaulted, so every log written before this existed still loads with no
@@ -55,7 +55,7 @@ pub struct Codicil<T> {
     parents: Vec<Vec<Seq>>,
 }
 
-impl<T> Default for Codicil<T> {
+impl<T> Default for Journal<T> {
     fn default() -> Self {
         Self {
             id: None,
@@ -66,7 +66,7 @@ impl<T> Default for Codicil<T> {
     }
 }
 
-impl<T> Codicil<T> {
+impl<T> Journal<T> {
     /// A fresh, empty log.
     pub fn new() -> Self {
         Self::default()
@@ -169,7 +169,7 @@ impl<T> Codicil<T> {
     }
 }
 
-impl<T: Clone> Codicil<T> {
+impl<T: Clone> Journal<T> {
     /// Fork this log under a new identity. The fork copies the current entries and
     /// records where it branched from (the source's id and the seq at the fork
     /// point), then diverges independently. Duplication across the fork is tracked
@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn append_stamps_monotonic_sequences() {
-        let mut log = Codicil::new();
+        let mut log = Journal::new();
         assert_eq!(log.append("a"), Seq(0));
         assert_eq!(log.append("b"), Seq(1));
         assert_eq!(log.append("c"), Seq(2));
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn get_addresses_stable_entries() {
-        let mut log = Codicil::new();
+        let mut log = Journal::new();
         log.append(10);
         log.append(20);
         assert_eq!(log.get(Seq(0)), Some(&10));
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn fork_copies_history_and_records_provenance() {
-        let mut source = Codicil::with_id(LogId::new("source"));
+        let mut source = Journal::with_id(LogId::new("source"));
         source.append("a");
         source.append("b");
 
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn from_returns_only_newer_entries() {
-        let mut log = Codicil::new();
+        let mut log = Journal::new();
         for n in 0..5 {
             log.append(n);
         }
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn replay_folds_entries_into_state() {
         // Entries are edits; replay materializes the state they describe.
-        let mut log: Codicil<i64> = Codicil::new();
+        let mut log: Journal<i64> = Journal::new();
         log.append(5);
         log.append(-2);
         log.append(10);
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn replay_from_advances_an_existing_state() {
-        let mut log: Codicil<i64> = Codicil::new();
+        let mut log: Journal<i64> = Journal::new();
         log.append(5);
         log.append(-2);
         let partial = log.replay(0, |s, d| s + d); // 3, holder is at next_seq = 2

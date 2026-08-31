@@ -489,13 +489,13 @@ fn find_schema_by_id_locates_matching_engram() {
 }
 
 #[test]
-fn meta_schema_engram_id_is_stable_and_self_describing() {
-    // The meta-schema engram's id depends only on META_SCHEMA_PAYLOAD,
+fn meta_schema_codicil_id_is_stable_and_self_describing() {
+    // The meta-schema codicil's id depends only on META_SCHEMA_PAYLOAD,
     // so it's stable across runs and instances.
-    let engram = meta_schema_engram();
-    assert_eq!(engram.schema, *META_SCHEMA_REF);
-    assert_eq!(engram.id(), (*META_SCHEMA_REF).0);
-    engram.verify_integrity().unwrap();
+    let codicil = meta_schema_codicil();
+    assert_eq!(codicil.schema, *META_SCHEMA_REF);
+    assert_eq!(codicil.id(), (*META_SCHEMA_REF).0);
+    codicil.verify_integrity().unwrap();
 }
 
 #[test]

@@ -7,25 +7,36 @@
 //! Immutable training-corpus and evaluation-report artifacts.
 //!
 //! The artifacts stop at the Eidetic boundary: they name the exact source
-//! engrams and the deterministic baseline-versus-adapter result. ESP owns any
+//! codicils and the deterministic baseline-versus-adapter result. ESP owns any
 //! model or tensor execution, Mesh owns a training job's lease and checkpoint
 //! facts, and Distillery composes those pieces into a run.
 
 use serde::{Deserialize, Serialize};
 
+use crate::manifest::{BlobFetcher, load_manifest};
 use crate::schema::{Hash, ManifestId, SchemaRef};
-use crate::typed::TypedPayload;
+use crate::typed::{TypedPayload, load_typed};
+use crate::{Error, Result as EideticResult, Store};
 
 use super::ModelAdapterManifest;
 
-/// Canonical bytes of the `TrainingCorpus` schema engram payload.
-const TRAINING_CORPUS_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.TrainingCorpus/v1","body":{"version":1,"description":"Immutable, canonically ordered, disjoint training and evaluation source engrams.","required":["training_source_engrams","evaluation_source_engrams"],"fields":{"training_source_engrams":{"type":"array"},"evaluation_source_engrams":{"type":"array"}}}}"#;
+/// Canonical bytes of the current `TrainingCorpus` schema codicil payload.
+const TRAINING_CORPUS_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.TrainingCorpus/v2","body":{"version":2,"description":"Immutable, canonically ordered, disjoint training and evaluation source codicils.","required":["training_source_codicils","evaluation_source_codicils"],"fields":{"training_source_codicils":{"type":"array"},"evaluation_source_codicils":{"type":"array"}}}}"#;
+const LEGACY_TRAINING_CORPUS_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.TrainingCorpus/v1","body":{"version":1,"description":"Immutable, canonically ordered, disjoint training and evaluation source engrams.","required":["training_source_engrams","evaluation_source_engrams"],"fields":{"training_source_engrams":{"type":"array"},"evaluation_source_engrams":{"type":"array"}}}}"#;
 
-/// The well-known schema reference for `TrainingCorpus` engrams.
+/// The well-known schema reference for current `TrainingCorpus` codicils.
 pub static TRAINING_CORPUS_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(|| {
         SchemaRef::from_id(ManifestId::from_hash(Hash::of(
             TRAINING_CORPUS_SCHEMA_PAYLOAD,
+        )))
+    });
+
+/// Read-only schema reference for v1 corpora written with the former field names.
+pub static LEGACY_TRAINING_CORPUS_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
+    std::sync::LazyLock::new(|| {
+        SchemaRef::from_id(ManifestId::from_hash(Hash::of(
+            LEGACY_TRAINING_CORPUS_SCHEMA_PAYLOAD,
         )))
     });
 
@@ -46,33 +57,35 @@ pub static EVAL_REPORT_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
 /// invalid at the artifact boundary.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrainingCorpus {
-    /// Every source engram included in training, in canonical order.
-    pub training_source_engrams: Vec<ManifestId>,
-    /// Held-out source engrams used only to evaluate the resulting adapter.
-    pub evaluation_source_engrams: Vec<ManifestId>,
+    /// Every source codicil included in training, in canonical order.
+    #[serde(alias = "training_source_engrams")]
+    pub training_source_codicils: Vec<ManifestId>,
+    /// Held-out source codicils used only to evaluate the resulting adapter.
+    #[serde(alias = "evaluation_source_engrams")]
+    pub evaluation_source_codicils: Vec<ManifestId>,
 }
 
 impl TrainingCorpus {
     /// Validate the immutable corpus identity before it is stored or used.
     pub fn validate(&self) -> Result<(), String> {
         for (label, sources) in [
-            ("training", &self.training_source_engrams),
-            ("evaluation", &self.evaluation_source_engrams),
+            ("training", &self.training_source_codicils),
+            ("evaluation", &self.evaluation_source_codicils),
         ] {
             if sources.is_empty() {
-                return Err(format!("training corpus has no {label} source engrams"));
+                return Err(format!("training corpus has no {label} source codicils"));
             }
             if sources
                 .windows(2)
                 .any(|pair| pair[0].to_string() >= pair[1].to_string())
             {
                 return Err(format!(
-                    "training corpus {label} source engrams must be strictly ordered by manifest id"
+                    "training corpus {label} source codicils must be strictly ordered by manifest id"
                 ));
             }
         }
-        if self.training_source_engrams.iter().any(|training| {
-            self.evaluation_source_engrams
+        if self.training_source_codicils.iter().any(|training| {
+            self.evaluation_source_codicils
                 .iter()
                 .any(|evaluation| evaluation == training)
         }) {
@@ -102,6 +115,47 @@ impl TypedPayload for TrainingCorpus {
             .map_err(|error| crate::Error::new(format!("training corpus: {error}")))?;
         Ok(value)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct LegacyTrainingCorpus {
+    training_source_engrams: Vec<ManifestId>,
+    evaluation_source_engrams: Vec<ManifestId>,
+}
+
+impl TypedPayload for LegacyTrainingCorpus {
+    fn schema_ref() -> SchemaRef {
+        *LEGACY_TRAINING_CORPUS_SCHEMA_REF
+    }
+}
+
+/// Load a training corpus through the current v2 schema or the retained v1
+/// reader. New writes always use v2 through [`crate::save_typed`].
+pub async fn load_training_corpus(
+    store: &mut dyn Store,
+    fetcher: &mut dyn BlobFetcher,
+    id: ManifestId,
+) -> EideticResult<Option<TrainingCorpus>> {
+    let Some(manifest) = load_manifest(store, id).await? else {
+        return Ok(None);
+    };
+    if manifest.schema == *TRAINING_CORPUS_SCHEMA_REF {
+        return load_typed::<TrainingCorpus>(store, fetcher, id).await;
+    }
+    if manifest.schema == *LEGACY_TRAINING_CORPUS_SCHEMA_REF {
+        return load_typed::<LegacyTrainingCorpus>(store, fetcher, id)
+            .await
+            .map(|legacy| {
+                legacy.map(|legacy| TrainingCorpus {
+                    training_source_codicils: legacy.training_source_engrams,
+                    evaluation_source_codicils: legacy.evaluation_source_engrams,
+                })
+            });
+    }
+    Err(Error::new(format!(
+        "schema mismatch loading training corpus {id}: declared {}",
+        manifest.schema
+    )))
 }
 
 /// The deterministic task family a receipt measured.
@@ -247,13 +301,13 @@ mod tests {
     }
 
     fn corpus() -> TrainingCorpus {
-        let mut training_source_engrams = vec![id(b"train-b"), id(b"train-a")];
-        training_source_engrams.sort_by_key(ToString::to_string);
-        let mut evaluation_source_engrams = vec![id(b"eval-b"), id(b"eval-a")];
-        evaluation_source_engrams.sort_by_key(ToString::to_string);
+        let mut training_source_codicils = vec![id(b"train-b"), id(b"train-a")];
+        training_source_codicils.sort_by_key(ToString::to_string);
+        let mut evaluation_source_codicils = vec![id(b"eval-b"), id(b"eval-a")];
+        evaluation_source_codicils.sort_by_key(ToString::to_string);
         TrainingCorpus {
-            training_source_engrams,
-            evaluation_source_engrams,
+            training_source_codicils,
+            evaluation_source_codicils,
         }
     }
 
@@ -298,6 +352,11 @@ mod tests {
             Timestamp(1),
         ))
         .unwrap();
+        let loaded_corpus =
+            pollster::block_on(load_training_corpus(&mut store, &mut NoFetcher, corpus_ref))
+                .unwrap()
+                .unwrap();
+        assert_eq!(loaded_corpus, corpus);
         let expected = report(corpus_ref, id(b"adapter-manifest"));
         let report_ref = pollster::block_on(save_typed(
             &mut store,
@@ -321,18 +380,50 @@ mod tests {
     }
 
     #[test]
+    fn v1_training_corpus_schema_and_fields_remain_readable() {
+        let mut store = MemoryBackend::default();
+        let legacy = LegacyTrainingCorpus {
+            training_source_engrams: vec![id(b"legacy-train")],
+            evaluation_source_engrams: vec![id(b"legacy-eval")],
+        };
+        let legacy_ref = pollster::block_on(save_typed(
+            &mut store,
+            &legacy,
+            vec![],
+            PrivacyClass::LocalOnly,
+            provenance(),
+            TrustEnvelope::self_asserted(),
+            Timestamp(1),
+        ))
+        .unwrap();
+
+        let restored =
+            pollster::block_on(load_training_corpus(&mut store, &mut NoFetcher, legacy_ref))
+                .unwrap()
+                .unwrap();
+        assert_eq!(
+            restored.training_source_codicils,
+            legacy.training_source_engrams
+        );
+        assert_eq!(
+            restored.evaluation_source_codicils,
+            legacy.evaluation_source_engrams
+        );
+    }
+
+    #[test]
     fn rejects_ambiguous_corpora_and_incomparable_reports() {
         let duplicated = id(b"same-source");
         let corpus = TrainingCorpus {
-            training_source_engrams: vec![duplicated, duplicated],
-            evaluation_source_engrams: vec![id(b"held-out")],
+            training_source_codicils: vec![duplicated, duplicated],
+            evaluation_source_codicils: vec![id(b"held-out")],
         };
         assert!(corpus.validate().unwrap_err().contains("strictly ordered"));
 
         let overlap = id(b"overlap");
         let corpus = TrainingCorpus {
-            training_source_engrams: vec![overlap],
-            evaluation_source_engrams: vec![overlap],
+            training_source_codicils: vec![overlap],
+            evaluation_source_codicils: vec![overlap],
         };
         assert!(corpus.validate().unwrap_err().contains("overlap"));
 

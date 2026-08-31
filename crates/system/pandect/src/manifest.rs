@@ -30,12 +30,12 @@ use serde::{Deserialize, Serialize};
 /// fields does **not** require a bump.
 pub const MANIFEST_SCHEMA_VERSION: u32 = 1;
 
-/// Reference to a consolidated engram (eidetic). v0 placeholder —
-/// eidetic's surface for engram identity will land when the
+/// Reference to a consolidated codicil (eidetic). v0 placeholder —
+/// eidetic's surface for codicil identity will land when the
 /// consolidation gesture is wired. String form keeps it
 /// hand-inspectable in the meantime.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EngramId(pub String);
+pub struct CodicilId(pub String);
 
 /// Where the engine's user-data folder lives for this session.
 /// Persona-scoped is the default; sessions/graphs can escalate when
@@ -74,7 +74,7 @@ pub enum WorkerKind {
     /// populate the embed store.
     Embedder,
     /// Indexer that walks document content into the `SearchIndex`
-    /// engram referenced by the framing brief §3.
+    /// codicil referenced by the framing brief §3.
     Indexer,
     /// Intelligence-signal producer — clusters, affinity, recency
     /// signals consumed by cartography strategies.
@@ -133,10 +133,10 @@ pub struct GraphSessionManifest {
     /// child).
     #[serde(default)]
     pub parent_session: Option<SessionId>,
-    /// Engrams produced from this session by consolidation. See
+    /// Codicils produced from this session by consolidation. See
     /// `design_docs/mere_docs/research/2026-05-11_memory_tiers_brief.md`.
-    #[serde(default)]
-    pub consolidated_engrams: Vec<EngramId>,
+    #[serde(default, alias = "consolidated_engrams")]
+    pub consolidated_codicils: Vec<CodicilId>,
     /// Most recent consolidation timestamp. Drives "consolidate on
     /// idle" policies (when opted in). `None` = never consolidated.
     #[serde(default)]
@@ -174,7 +174,7 @@ impl GraphSessionManifest {
             created_at: now,
             updated_at: now,
             parent_session: None,
-            consolidated_engrams: Vec::new(),
+            consolidated_codicils: Vec::new(),
             last_consolidated_at: None,
             active_workers: Vec::new(),
             engine_profile: EngineProfileBinding::default(),
@@ -199,8 +199,8 @@ impl GraphSessionManifest {
 
     /// Append a consolidation receipt. Bumps `last_consolidated_at`
     /// to now.
-    pub fn record_consolidation(&mut self, engram: EngramId) {
-        self.consolidated_engrams.push(engram);
+    pub fn record_consolidation(&mut self, codicil: CodicilId) {
+        self.consolidated_codicils.push(codicil);
         self.last_consolidated_at = Some(SystemTime::now());
     }
 }
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(m.root_graph_id, fixture_graph());
         assert!(m.sub_graph_refs.is_empty());
         assert!(m.parent_session.is_none());
-        assert!(m.consolidated_engrams.is_empty());
+        assert!(m.consolidated_codicils.is_empty());
         assert_eq!(m.persona_id, PersonaId::default_persona());
         assert_eq!(m.engine_profile, EngineProfileBinding::PersonaScoped);
     }
@@ -236,7 +236,7 @@ mod tests {
         let mut m = GraphSessionManifest::new(fixture_session(), fixture_graph());
         m.display_name = Some("research-session".to_string());
         m.set_parent(SessionId::from_uuid(Uuid::from_u128(0xdeadbeef)));
-        m.record_consolidation(EngramId("engram-hash-abc123".to_string()));
+        m.record_consolidation(CodicilId("codicil-hash-abc123".to_string()));
         m.engine_profile = EngineProfileBinding::SessionScoped;
 
         let json = serde_json::to_string(&m).expect("serialize");
@@ -246,13 +246,29 @@ mod tests {
         assert_eq!(restored.root_graph_id, m.root_graph_id);
         assert_eq!(restored.display_name, m.display_name);
         assert_eq!(restored.parent_session, m.parent_session);
-        assert_eq!(restored.consolidated_engrams, m.consolidated_engrams);
+        assert_eq!(restored.consolidated_codicils, m.consolidated_codicils);
         assert_eq!(restored.engine_profile, m.engine_profile);
     }
 
     #[test]
+    fn manifest_reads_the_legacy_consolidated_engrams_field() {
+        let mut manifest = GraphSessionManifest::new(fixture_session(), fixture_graph());
+        manifest.record_consolidation(CodicilId("legacy-id".to_string()));
+        let mut value = serde_json::to_value(&manifest).unwrap();
+        let object = value.as_object_mut().unwrap();
+        let codicils = object.remove("consolidated_codicils").unwrap();
+        object.insert("consolidated_engrams".to_string(), codicils);
+
+        let restored: GraphSessionManifest = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            restored.consolidated_codicils,
+            vec![CodicilId("legacy-id".to_string())]
+        );
+    }
+
+    #[test]
     fn manifest_loads_minimal_legacy_shape_via_serde_default() {
-        // Older manifests written before the `consolidated_engrams`,
+        // Older manifests written before the consolidation list,
         // `last_consolidated_at`, `active_workers`, `engine_profile`,
         // `policy`, `parent_session`, `sub_graph_refs`,
         // `display_name`, `storage_path`, and `persona_id` fields
@@ -274,7 +290,7 @@ mod tests {
         assert_eq!(restored.session_id, fixture_session());
         assert_eq!(restored.root_graph_id, fixture_graph());
         assert!(restored.sub_graph_refs.is_empty());
-        assert!(restored.consolidated_engrams.is_empty());
+        assert!(restored.consolidated_codicils.is_empty());
         assert_eq!(restored.engine_profile, EngineProfileBinding::PersonaScoped);
         assert_eq!(restored.persona_id, PersonaId::default_persona());
     }
@@ -292,9 +308,9 @@ mod tests {
     fn record_consolidation_bumps_last_consolidated_at() {
         let mut m = GraphSessionManifest::new(fixture_session(), fixture_graph());
         assert!(m.last_consolidated_at.is_none());
-        m.record_consolidation(EngramId("e1".to_string()));
+        m.record_consolidation(CodicilId("e1".to_string()));
         assert!(m.last_consolidated_at.is_some());
-        assert_eq!(m.consolidated_engrams.len(), 1);
+        assert_eq!(m.consolidated_codicils.len(), 1);
     }
 
     #[test]

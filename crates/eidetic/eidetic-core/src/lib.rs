@@ -44,17 +44,17 @@
 //! [adoption roadmap](../../../../design_docs/mere_docs/implementation_strategy/2026-05-27_adoption_roadmap.md)
 //! R0; the same contract binds the navigation side in
 //! [`node-lineage`](https://docs.rs/node-lineage)). Three invariants, already
-//! embodied by [`engram::Engram`] and the [`Store`] trait, named here so they
+//! embodied by [`codicil::Codicil`] and the [`Store`] trait, named here so they
 //! hold as backends and tiers are added:
 //!
-//! 1. **Temporal-integrity** — an [`engram::Engram`] is immutable and
-//!    content-hashed; edits do not exist. A refresh produces a *new* engram
+//! 1. **Temporal-integrity** — a [`codicil::Codicil`] is immutable and
+//!    content-hashed; edits do not exist. A refresh produces a *new* codicil
 //!    with a fresh hash; a stored blob is never mutated in place.
 //! 2. **Replay-isolation** — reading or replaying stored memory does not mutate
 //!    the store. A [`Store`] read leaves history untouched, so re-deriving a
 //!    past state is side-effect-free.
 //! 3. **Shared-projection** — derived views ("recent", caches, indices) are
-//!    projections over the single engram store, never a second authoritative
+//!    projections over the single codicil store, never a second authoritative
 //!    store.
 
 #![doc(html_root_url = "https://docs.rs/eidetic/0.0.1")]
@@ -63,8 +63,13 @@ use serde::{Deserialize, Serialize};
 
 pub mod browsing;
 pub mod bundle;
+pub mod codicil;
 pub mod deleted;
-pub mod engram;
+/// Compatibility surface for pre-rename readers. New code uses [`crate::codicil`].
+#[deprecated(since = "0.0.3", note = "renamed to eidetic::codicil")]
+pub mod engram {
+    pub use crate::codicil::{Codicil as Engram, TimeBounds};
+}
 pub mod manifest;
 pub mod models;
 pub mod pack;
@@ -81,23 +86,30 @@ pub use bundle::{
     BUNDLE_SCHEMA_REF, Bundle, BundleMember, bundle_schema_ref, load_bundle, save_bundle,
     verify_required_members,
 };
+pub use codicil::{Codicil, TimeBounds};
 pub use deleted::{DeletedNode, clear_deleted, list_deleted, purge_deleted, record_deleted};
-pub use engram::{Engram, TimeBounds};
+/// Compatibility name for serialized and source consumers written before the
+/// Engram-to-Codicil migration. The serialized representation is unchanged.
+#[deprecated(since = "0.0.3", note = "use eidetic::Codicil")]
+pub type Engram = Codicil;
 pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher, delete_manifest};
 pub use models::{
     AdapterRuntimeCompat, EVAL_REPORT_SCHEMA_REF, EvalMetric, EvalReport, EvalTally,
-    MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest, ModelComponents, ModelLibrary,
-    ModelManifest, TRAINING_CORPUS_SCHEMA_REF, TrainingCorpus,
+    LEGACY_TRAINING_CORPUS_SCHEMA_REF, MODEL_ADAPTER_MANIFEST_SCHEMA_REF, ModelAdapterManifest,
+    ModelComponents, ModelLibrary, ModelManifest, TRAINING_CORPUS_SCHEMA_REF, TrainingCorpus,
+    load_training_corpus,
 };
 pub use schema::{
     Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
     SignatureRef, Timestamp, TrustEnvelope, TrustLevel,
 };
+#[allow(deprecated)]
 pub use schema_def::{
     JsonLdValidator, JsonSchemaValidator, META_SCHEMA_REF, MereNativeFieldSpec,
     MereNativeSchemaBody, MereNativeSchemaBuilder, MereNativeValidator, SchemaDefinition,
     SchemaFormat, SchemaValidator, bootstrap_meta_schema, find_schema_by_id, load_schema,
-    meta_schema_engram, meta_schema_ref, save_schema, validate_against_schema, validate_payload,
+    meta_schema_codicil, meta_schema_engram, meta_schema_ref, save_schema, validate_against_schema,
+    validate_payload,
 };
 pub use seal::{
     PayloadSealer, SealEpochId, SealedBlobRef, is_private_lane, resolve_sealed_blob, seal_marker,
@@ -158,7 +170,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// `&str -> Vec<u8>`, async, one method per operation. That was
 /// [`muniment::Backend`] written twice: eidetic poured its own floor before
 /// muniment existed. It now consumes the real one, and `Store` remains as an
-/// alias so every layer above (manifests, schemas, sealing, engrams) reads
+/// alias so every layer above (manifests, schemas, sealing, codicils) reads
 /// unchanged.
 ///
 /// What the swap buys beyond deleting a duplicate: backends take `&self`,

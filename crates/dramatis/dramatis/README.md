@@ -15,7 +15,7 @@ cast list rather than any one role:
 
 The boundaries are the point:
 
-- **Not the data plane.** Persistence is the eidetic family (muniment, codicil,
+- **Not the data plane.** Persistence is the eidetic family (muniment journals,
   chartulary). The planes bond at the seal seam and the sync gate; dramatis
   holds keys and trust, never the bytes they seal.
 - **Not a product.** *Persona* is an in-product term for a face; dramatis names

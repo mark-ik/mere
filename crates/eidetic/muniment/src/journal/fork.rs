@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::seq::Seq;
+use super::seq::Seq;
 
 /// A stable identity for a log. Caller-chosen (a name, a URN, a hash you already
 /// hold), so identity is deterministic and needs no randomness source.
