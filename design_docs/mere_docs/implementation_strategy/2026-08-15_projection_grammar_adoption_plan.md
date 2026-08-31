@@ -937,3 +937,12 @@ not settled without it.
   requires a second heterogeneous consumer for every portable addition. The
   shelfmark/index ruling is labeled resolved; the embedded-app question
   remains open.
+- 2026-08-31: **Graphshell Projection Editor boundary in progress.** The
+  host-neutral `ports/graphshell/src/projection_editor.rs` now models source
+  and domain binding, reading, encoding, arrangement, interaction,
+  appearance/realization, and provenance as an editable definition with
+  field-level validation, panel taxonomy, reducer actions, deterministic JSON,
+  and a sink-only save boundary. The component follows the proposed
+  component seam in `genet/design_docs/2026-08-31_workbench_component_plan.md`;
+  it does not own graph or endpoint authority. A named product consumer and
+  the second heterogeneous proof required for promotion remain open under A5.
