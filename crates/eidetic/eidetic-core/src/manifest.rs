@@ -75,7 +75,7 @@ impl BlobSource {
 pub struct BlobManifest {
     /// Stable identifier — equals the blob's BLAKE3 content hash.
     pub id: ManifestId,
-    /// Schema reference — content-addressed pointer to a schema engram.
+    /// Schema reference — content-addressed pointer to a schema codicil.
     pub schema: SchemaRef,
     /// BLAKE3 hash of the blob bytes (matches `id.0` for `Local` /
     /// `Embedded` sources; held separately so out-of-band sources can

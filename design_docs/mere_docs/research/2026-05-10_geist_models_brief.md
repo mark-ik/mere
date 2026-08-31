@@ -3,6 +3,19 @@
 **Date**: 2026-05-10
 **Status**: Proposal (design probe)
 **Scope**: Defines the architectural shape for community-trained and personally-trained inference models in mere. A *geist model* is an open-weight base model plus one or more LoRA-style adapters trained on a defined corpus (a person's flora, a moot's flora, or both, composed at inference). Treats personal-geist (orrery-scope) and moot-geist (moot-and-up scope) as one architecture with shared substrate (eidetic engrams, persona-derived scopes, Distillery, tessera). Distinct from but adjacent to the existing local-intelligence-integration research, which scopes tier-1 embeddings and defers tier-3+ LLM serving — this brief is the tier-3+ shape that picks up where that defer leaves off.
+
+**Implementation correction (2026-08-31):** this remains useful background,
+but its key vocabulary and aggregation account are superseded. **FLORA** means
+federated LoRA, specifically the exact FLoRA stack: participant A factors
+concatenate vertically, B factors concatenate horizontally, scaling is applied
+once to B, heterogeneous ranks sum to the global rank, and a signed explicit
+budget bounds that rank. The lower-case *flora* corpus sense in this brief was
+a capitalization-driven misunderstanding. **Codicil** replaces Engram,
+**Standing** replaces Tessera, and a community-adopted adapter can become a
+**Tulpa** through Gemot's frozen-electorate recognition lane. The former
+memorial Tulpa meaning is now **Hagiograph**. Generic inference-time summing of
+independent adapters is a separate composition technique and must not be cited
+as the implemented FLORA protocol.
 **Related**:
 
 - [`../research/2026-05-08_local_intelligence_integration_research.md`](2026-05-08_local_intelligence_integration_research.md) — tier-1 embeddings landed; tier-3+ LLM serving deferred behind Distillation Boundary + AWAL prerequisites. This brief is the architectural sketch for that deferred tier.

@@ -34,8 +34,8 @@
 //!
 //! - [`transport`](https://crates.io/crates/transport) (peer
 //!   transport state — networked, not local-private),
-//! - [`gemot`](https://crates.io/crates/gemot) (community/federation
-//!   flora — shared, not private),
+//! - [`gemot`](https://crates.io/crates/gemot) (community governance,
+//!   shared records, Standing, Tulpa, and FLORA),
 //! - host UI state (transient, not durable).
 //!
 //! ## Temporal-integrity contract (R0 invariant)

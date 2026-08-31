@@ -264,7 +264,7 @@ mod tests {
     const MESH: [u8; 32] = [0x77; 32];
 
     /// Two bound transports tagged with each other on the mesh's overlay
-    /// topic (the tessera two-peer bootstrap, verbatim).
+    /// topic (the Standing two-peer bootstrap, verbatim).
     async fn two_peers() -> (P2pandaTransport, P2pandaTransport) {
         let alice_provider = StdArc::new(InMemoryProvider::from_seed([60; 32]));
         let bob_provider = StdArc::new(InMemoryProvider::from_seed([61; 32]));

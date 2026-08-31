@@ -81,7 +81,7 @@ impl SchemaValidator for JsonSchemaValidator {
 ///    listed property must be present in the payload as a non-null value.
 ///
 /// Full SHACL / RDF vocabulary-checking still lands when a concrete
-/// schema.org-shaped payload pulls on it (e.g. clip-of-Article engrams);
+/// schema.org-shaped payload pulls on it (e.g. clip-of-Article codicils);
 /// this validator stays in the structural + nominal-type tier and pulls
 /// in no RDF dependency.
 pub struct JsonLdValidator;

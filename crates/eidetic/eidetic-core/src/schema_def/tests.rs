@@ -275,7 +275,7 @@ fn json_ld_rejects_type_mismatch() {
 // --- Recursion / round-trip ------------------------------------------
 
 #[test]
-fn schema_engram_round_trips_through_save_and_load() {
+fn schema_codicil_round_trips_through_save_and_load() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let mut fetcher = NoFetcher;
@@ -303,13 +303,13 @@ fn schema_engram_round_trips_through_save_and_load() {
         let loaded = load_schema(&mut store, &mut fetcher, schema_id)
             .await
             .unwrap()
-            .expect("schema engram present after save");
+            .expect("schema codicil present after save");
         assert_eq!(loaded, definition);
     });
 }
 
 #[test]
-fn validate_against_schema_resolves_engram_and_runs_validator() {
+fn validate_against_schema_resolves_codicil_and_runs_validator() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let mut fetcher = NoFetcher;
@@ -362,7 +362,7 @@ fn validate_against_unknown_schema_is_tolerant() {
 }
 
 #[test]
-fn bootstrap_meta_schema_seeds_engram_idempotently() {
+fn bootstrap_meta_schema_seeds_codicil_idempotently() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
 
@@ -440,7 +440,7 @@ fn mere_native_builder_produces_validating_schema() {
 }
 
 #[test]
-fn find_schema_by_id_locates_matching_engram() {
+fn find_schema_by_id_locates_matching_codicil() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let mut fetcher = NoFetcher;

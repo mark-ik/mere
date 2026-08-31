@@ -15,7 +15,7 @@
 //!
 //! The model (Alembic plan, decision #2, confirmed with Mark): **a tag or a pin
 //! promotes a node to long-term**, retained and never evicted. Everything else is
-//! short-term working memory, subject to the eviction policy. Engrams (slice A) are
+//! short-term working memory, subject to the eviction policy. Codicils (slice A) are
 //! the third level and are not nodes, so they are out of scope here.
 
 use std::collections::HashMap;

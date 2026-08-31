@@ -74,7 +74,7 @@ members = [
     "crates/armillary",
     "crates/eidetic/muniment",
     "crates/eidetic/chartulary",
-    "crates/eidetic/tulpa",
+    "crates/eidetic/hagiograph",
     "crates/servitor",
     "crates/intel/vates",
     "crates/intel/sibylla",
@@ -174,7 +174,7 @@ personae = { version = "0.2.1", path = "crates/dramatis/personae" }
 notochord = { version = "0.1.0", path = "crates/system/notochord" }
 chartulary = { version = "0.2.1", path = "crates/eidetic/chartulary" }
 # The legend/memorial view over a codicil log; reservation, no implementation.
-tulpa = { version = "0.0.2", path = "crates/eidetic/tulpa" }
+hagiograph = { version = "0.0.1", path = "crates/eidetic/hagiograph" }
 numen = { version = "0.2.0", path = "crates/conatus/numen" }
 vates = { path = "crates/intel/vates" }
 sibylla = { path = "crates/intel/sibylla" }
@@ -331,7 +331,7 @@ mooting = { version = "0.1.0", path = "crates/moot/mooting" }
 mien = { version = "0.0.1", path = "crates/moot/mien" }
 
 # The personal-space compute mesh (resource-coordination M1): signed job ops
-# over the tessera-proven LogSync lane + the deterministic job board.
+# over the Standing-proven LogSync lane + the deterministic job board.
 mesh = { package = "mere-mesh", path = "crates/mesh/mesh" }
 # The host supervisor above the mesh (host lanes plan, gate H0): owns in-flight
 # jobs, their control handles, and the OS-facing condition/clock seams that

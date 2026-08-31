@@ -40,10 +40,10 @@ pub static LEGACY_TRAINING_CORPUS_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
         )))
     });
 
-/// Canonical bytes of the `EvalReport` schema engram payload.
+/// Canonical bytes of the `EvalReport` schema codicil payload.
 const EVAL_REPORT_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.EvalReport/v1","body":{"version":1,"description":"Deterministic baseline-versus-adapter ranking or recall receipt.","required":["base_model_ref","adapter_ref","corpus_ref","metric","baseline","adapter"],"fields":{"base_model_ref":{"type":"string"},"adapter_ref":{"type":"string"},"corpus_ref":{"type":"string"},"metric":{"type":"object"},"baseline":{"type":"object"},"adapter":{"type":"object"}}}}"#;
 
-/// The well-known schema reference for `EvalReport` engrams.
+/// The well-known schema reference for `EvalReport` codicils.
 pub static EVAL_REPORT_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(|| {
         SchemaRef::from_id(ManifestId::from_hash(Hash::of(EVAL_REPORT_SCHEMA_PAYLOAD)))

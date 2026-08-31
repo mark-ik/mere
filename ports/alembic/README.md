@@ -10,7 +10,7 @@ own work — the memory it accretes, and the bounded actors that run over it.
 It splits in the [castellan](https://crates.io/crates/castellan) mold:
 
 - **the embeddable half** (feature `recall`): the memory surface — three
-  levels (short-term, long-term, engram), promotion and eviction, the engram
+  levels (short-term, long-term, codicil), promotion and eviction, the codicil
   browser, and lexical and embedding recall over a mere's traces. A host that
   wants memory and no agents takes this alone.
 - **the authority half**: the workshop — agent identity and purpose, granted
@@ -25,7 +25,7 @@ beside it.
 
 The boundaries are the point: not
 [distillery](https://crates.io/crates/distillery) (the model works — it runs
-models, alembic runs work), not the store (engrams and retention are
+models, alembic runs work), not the store (codicils and retention are
 eidetic's), and not the grant algebra (that is servitor's, over personae's
 identity).
 

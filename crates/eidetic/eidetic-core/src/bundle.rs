@@ -5,23 +5,23 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! `Bundle` — a typed payload that carries a list of typed memory
-//! references. The composite-engram pattern from the inherited
+//! references. The composite-codicil pattern from the inherited
 //! `engram_spec.md` `TransferProfile`, narrowed to a stable Mere shape.
 //!
 //! ## Why a generic Bundle
 //!
-//! A bundle is what you reach for when an engram naturally decomposes
-//! into multiple sub-engrams that share a common envelope:
+//! A bundle is what you reach for when a codicil naturally decomposes
+//! into multiple sub-codicils that share a common envelope:
 //!
-//! - A model engram (config, weights, tokenizer)
-//! - A moot-snapshot engram (member set, accepted schemas, content corpus)
+//! - A model codicil (config, weights, tokenizer)
+//! - A Moot-snapshot codicil (member set, accepted schemas, content corpus)
 //! - A federated `SearchIndex` contribution (segments, ranking config,
 //!   eval receipt)
 //!
 //! Rather than each domain inventing its own ad-hoc composite struct, the
 //! shared `Bundle` schema lets a recipient that knows nothing about
 //! "models" or "moots" still inspect the structure: walk the member list,
-//! verify required members exist, fetch each sub-engram. Domain semantics
+//! verify required members exist, fetch each sub-codicil. Domain semantics
 //! land in the `kind` field on each member and in the bundle's
 //! `bundle_kind`.
 //!
@@ -42,9 +42,11 @@ use crate::schema::{
 use crate::typed::{TypedPayload, load_typed, save_typed};
 use crate::{Error, Result, Store};
 
-/// Canonical bytes of the `Bundle` schema engram payload.
+/// Canonical bytes of the `Bundle` schema codicil payload.
 ///
-/// Mere-native schema. Stable; its BLAKE3 hash is [`BUNDLE_SCHEMA_REF`].
+/// Mere-native schema. Stable; its BLAKE3 hash is [`BUNDLE_SCHEMA_REF`]. The
+/// v1 description retains the former word "engram" so existing schema refs do
+/// not change.
 const BUNDLE_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.Bundle/v1","body":{"version":1,"description":"A composite engram referencing other engrams by manifest id.","required":["bundle_id","bundle_kind","members"],"fields":{"bundle_id":{"type":"string"},"bundle_kind":{"type":"string"},"description":{"type":"string"},"members":{"type":"array"}}}}"#;
 
 /// Compute the well-known `Bundle` schema reference (lazy).
@@ -52,7 +54,7 @@ pub fn bundle_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::from_hash(Hash::of(BUNDLE_SCHEMA_PAYLOAD)))
 }
 
-/// The well-known schema reference for `Bundle` engrams.
+/// The well-known schema reference for `Bundle` codicils.
 pub static BUNDLE_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(bundle_schema_ref);
 
@@ -62,7 +64,7 @@ pub struct BundleMember {
     /// Domain-level kind tag (e.g. `"weights"`, `"tokenizer"`,
     /// `"ranking-policy"`). Free-form; consumers branch on it.
     pub kind: String,
-    /// Pointer to the sub-engram's manifest.
+    /// Pointer to the sub-codicil's manifest.
     pub manifest: ManifestId,
     /// Whether the bundle is unusable without this member (per the
     /// engram_spec "required_for_application" rule).
@@ -73,12 +75,12 @@ pub struct BundleMember {
     pub note: Option<String>,
 }
 
-/// Composite engram payload. Carries a list of typed memory references
+/// Composite codicil payload. Carries a list of typed memory references
 /// under a shared envelope.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Bundle {
     /// Human-readable id. Diagnostics-only; identity comes from the
-    /// engram's content hash.
+    /// codicil's content hash.
     pub bundle_id: String,
     /// Domain category (e.g. `"model"`, `"moot-snapshot"`,
     /// `"search-index"`). Free-form; consumers route on it.

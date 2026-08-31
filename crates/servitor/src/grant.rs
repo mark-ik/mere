@@ -81,7 +81,7 @@ impl Grant {
 /// Mirrors `gemot::MootAuthorizationProvider`. The gate depends on this trait,
 /// never on a concrete grant store, so authority can come from a local grant
 /// table now and a meadowcap-shaped structural-cap provider (over
-/// graph-cluster-derived namespaces, layered with tessera policy facts) later,
+/// graph-cluster-derived namespaces, layered with Standing policy facts) later,
 /// with no gate change.
 pub trait AuthorityProvider {
     /// Whether `subject` may act under `needed` at `mode`.

@@ -15,7 +15,7 @@
 //!
 //! This is the M1 plan's step-0 seam, now over the shared substrate: where the
 //! mesh once carried p2panda-store's own SQLite store, it rides the same
-//! muniment-backed adapter murm and tessera converge on, so all three share one
+//! muniment-backed adapter Murm and Standing converge on, so all three share one
 //! store family (redb desktop, IndexedDB + OPFS in the browser).
 //!
 //! Each author has an event log and a checkpoint log under the mesh topic. An

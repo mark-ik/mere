@@ -8,7 +8,7 @@
 //!
 //! A blob is stored under the blake3 hash of its bytes, so identical content is
 //! stored once and every reference is by hash. This is the strophe-media,
-//! eidetic-engram pattern: immutable chunks that never change in place. A new
+//! eidetic-codicil pattern: immutable chunks that never change in place. A new
 //! version is new bytes with a new hash, never a mutation of the old.
 
 use serde::{Deserialize, Serialize};

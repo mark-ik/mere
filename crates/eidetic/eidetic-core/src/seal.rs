@@ -6,7 +6,7 @@
 
 //! Encrypt-at-rest seam for the private lane (persona-wallet gap #2).
 //!
-//! Today an engram's payload is stored cleartext and [`PrivacyClass`] is a
+//! Today a codicil's payload is stored cleartext and [`PrivacyClass`] is a
 //! metadata tag. This module is the boundary that turns the tag into a real
 //! at-rest encryption boundary: `LocalOnly` / `TrustedPeersOnly` payloads seal
 //! under a persona epoch key before they hit the [`Store`], and unseal on read;
