@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn serde_round_trips_with_a_custom_method() {
         let state = TrustState::Verified {
-            method: ProofMethod::Other("tessera".into()),
+            method: ProofMethod::Other("standing".into()),
             at_ms: 42,
         };
         let json = serde_json::to_string(&state).unwrap();
