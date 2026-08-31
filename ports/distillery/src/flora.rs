@@ -8,9 +8,10 @@
 //!
 //! This module is a pure artifact transformer. Gemot owns round membership,
 //! weights, governance, and durable receipts; Eidetic owns persistence. The
-//! caller supplies contributions in their already-governed order, and receives
-//! ordinary PEFT artifacts plus a deterministic description suitable for an
-//! Eidetic record.
+//! caller supplies stable contribution ids. Aggregation canonicalizes them
+//! lexicographically, so every peer with the same governed set emits identical
+//! bytes regardless of arrival order. The result is an ordinary PEFT artifact
+//! plus a deterministic description suitable for an Eidetic record.
 //!
 //! For a participant `i` with PEFT factors `A_i [r_i, in]`, `B_i [out, r_i]`,
 //! contribution weight `w_i`, and PEFT scale `alpha_i / r_i`, the emitted
@@ -44,10 +45,24 @@ pub const FLORA_METHOD: &str = "flora-exact-factor-stacking/v1";
 /// Schema name callers may store with a [`FloraReceipt`].
 pub const FLORA_RECEIPT_SCHEMA: &str = "distillery.flora/v1";
 
+/// Exact rational contribution weight from a governed FLoRA round.
+///
+/// Distillery converts this ratio to the adapter tensor dtype, combines it with
+/// the source adapter's `alpha / rank`, and applies that effective scale to `B`
+/// exactly once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FloraWeight {
+    /// Positive numerator of the governed round weight.
+    pub numerator: u32,
+    /// Positive denominator of the governed round weight.
+    pub denominator: u32,
+}
+
 /// One adapter accepted into a caller-governed FLoRA contribution order.
 #[derive(Clone, Debug)]
 pub struct FloraContribution {
-    /// Stable caller-selected id; it must be unique within a request.
+    /// Stable governed participant id; it must be unique within a request and
+    /// its lexical order is the canonical factor order.
     pub contribution_id: String,
     /// Content id of the source [`ModelAdapterManifest`].
     pub manifest_ref: ManifestId,
@@ -57,8 +72,8 @@ pub struct FloraContribution {
     pub adapter_config_json: Vec<u8>,
     /// Exact source `adapter_model.safetensors` bytes.
     pub adapter_safetensors: Vec<u8>,
-    /// Caller-governed positive finite aggregation coefficient.
-    pub weight: f32,
+    /// Caller-governed positive rational round weight.
+    pub weight: FloraWeight,
 }
 
 /// The complete exact aggregation request.
@@ -68,7 +83,7 @@ pub struct FloraRequest {
     pub output_name: String,
     /// Hard cap on `sum(r_i)`; exact aggregation rejects rather than compresses.
     pub rank_budget: u16,
-    /// Explicit deterministic contribution order. This function never sorts it.
+    /// Contributions; aggregation canonicalizes them by `contribution_id`.
     pub contributions: Vec<FloraContribution>,
 }
 
@@ -94,7 +109,7 @@ pub struct FloraReceipt {
     pub method: String,
     /// The factor receiving each participant's effective scale.
     pub scaled_factor: String,
-    /// The source contribution order, preserved exactly from the request.
+    /// Canonical lexicographic contribution-id order used for the output bytes.
     pub contribution_order: Vec<FloraContributionReceipt>,
     /// Caller-provided upper bound that guarded aggregation.
     pub rank_budget: u16,
@@ -115,8 +130,10 @@ pub struct FloraContributionReceipt {
     pub manifest_ref: ManifestId,
     /// PEFT rank carried by the source adapter.
     pub rank: u16,
-    /// IEEE-754 bits of the caller's accepted aggregation coefficient.
-    pub weight_bits: u32,
+    /// Exact numerator of the caller's accepted round weight.
+    pub weight_numerator: u32,
+    /// Exact denominator of the caller's accepted round weight.
+    pub weight_denominator: u32,
     /// IEEE-754 bits of the source PEFT alpha.
     pub source_alpha_bits: u32,
     /// IEEE-754 bits of `weight * alpha / rank`, applied only to `B`.
@@ -195,10 +212,10 @@ fn invalid(message: impl Into<String>) -> FloraError {
 
 /// Aggregate ordinary ESP-compatible PEFT LoRA adapters exactly.
 ///
-/// Contributions remain in the request's explicit order. The function rejects
-/// every source it cannot prove compatible, including a rank-budget overflow,
-/// rather than substituting a lossy merge or a best-effort conversion.
-pub fn aggregate_exact(request: FloraRequest) -> Result<FloraAggregate, FloraError> {
+/// Contributions are ordered canonically by their stable ids. The function
+/// rejects every source it cannot prove compatible, including a rank-budget
+/// overflow, rather than substituting a lossy merge or best-effort conversion.
+pub fn aggregate_exact(mut request: FloraRequest) -> Result<FloraAggregate, FloraError> {
     if request.output_name.trim().is_empty() {
         return Err(invalid("output_name is empty"));
     }
@@ -208,6 +225,10 @@ pub fn aggregate_exact(request: FloraRequest) -> Result<FloraAggregate, FloraErr
     if request.contributions.is_empty() {
         return Err(invalid("at least one contribution is required"));
     }
+
+    request
+        .contributions
+        .sort_by(|left, right| left.contribution_id.cmp(&right.contribution_id));
 
     let mut ids = HashSet::with_capacity(request.contributions.len());
     let mut manifests = HashSet::with_capacity(request.contributions.len());
@@ -230,10 +251,10 @@ pub fn aggregate_exact(request: FloraRequest) -> Result<FloraAggregate, FloraErr
                 contribution.manifest_ref
             )));
         }
-        if !contribution.weight.is_finite() || contribution.weight <= 0.0 {
+        if contribution.weight.numerator == 0 || contribution.weight.denominator == 0 {
             return Err(invalid(format!(
-                "contribution {} has non-finite or non-positive weight {}",
-                contribution.contribution_id, contribution.weight
+                "contribution {} has a zero weight numerator or denominator",
+                contribution.contribution_id
             )));
         }
         contribution.manifest.validate().map_err(|error| {
@@ -380,7 +401,8 @@ pub fn aggregate_exact(request: FloraRequest) -> Result<FloraAggregate, FloraErr
                 contribution_id: contribution.contribution_id.clone(),
                 manifest_ref: contribution.manifest_ref,
                 rank: contribution.manifest.rank,
-                weight_bits: contribution.weight.to_bits(),
+                weight_numerator: contribution.weight.numerator,
+                weight_denominator: contribution.weight.denominator,
                 source_alpha_bits: contribution.manifest.alpha.to_bits(),
                 effective_scale_bits: parsed.effective_scale.to_bits(),
             })
@@ -491,7 +513,9 @@ fn parse_contribution(contribution: &FloraContribution) -> Result<ParsedContribu
             ))
         })?;
     validate_config(contribution, &config)?;
-    let effective_scale = contribution.weight * manifest.alpha / f32::from(manifest.rank);
+    let round_weight =
+        contribution.weight.numerator as f32 / contribution.weight.denominator as f32;
+    let effective_scale = round_weight * manifest.alpha / f32::from(manifest.rank);
     if !effective_scale.is_finite() || effective_scale <= 0.0 {
         return Err(invalid(format!(
             "contribution {} effective scale is non-finite or non-positive",
@@ -788,6 +812,13 @@ mod tests {
     const MODEL_ID: &str = "fixture/flora";
     const TEMPLATE: &[u8] = b"{{ prompt }}";
 
+    fn weight(numerator: u32, denominator: u32) -> FloraWeight {
+        FloraWeight {
+            numerator,
+            denominator,
+        }
+    }
+
     fn config_bytes(rank: u16, alpha: f32) -> Vec<u8> {
         serde_json::to_vec(&serde_json::json!({
             "base_model_name_or_path": MODEL_ID,
@@ -845,7 +876,7 @@ mod tests {
         id: &str,
         rank: u16,
         alpha: f32,
-        weight: f32,
+        weight: FloraWeight,
         in_features: usize,
         out_features: usize,
         layers: usize,
@@ -915,8 +946,8 @@ mod tests {
 
     #[test]
     fn heterogeneous_ranks_stack_exact_factors_and_apply_scale_only_to_b() {
-        let first = contribution("first", 1, 2.0, 0.5, 2, 3, 1, 1.0);
-        let second = contribution("second", 2, 6.0, 0.25, 2, 3, 1, 6.0);
+        let first = contribution("first", 1, 2.0, weight(1, 2), 2, 3, 1, 1.0);
+        let second = contribution("second", 2, 6.0, weight(1, 4), 2, 3, 1, 6.0);
         let aggregate = aggregate(vec![first, second]);
         let a = matrix(
             &aggregate.adapter_safetensors,
@@ -941,8 +972,8 @@ mod tests {
 
     #[test]
     fn stacked_product_equals_the_weighted_source_products() {
-        let first = contribution("first", 1, 2.0, 0.5, 2, 3, 1, 1.0);
-        let second = contribution("second", 2, 6.0, 0.25, 2, 3, 1, 6.0);
+        let first = contribution("first", 1, 2.0, weight(1, 2), 2, 3, 1, 1.0);
+        let second = contribution("second", 2, 6.0, weight(1, 4), 2, 3, 1, 6.0);
         let first_a = matrix(
             &first.adapter_safetensors,
             "base_model.model.model.layers.0.self_attn.q_proj.lora_A.weight",
@@ -983,11 +1014,11 @@ mod tests {
     }
 
     #[test]
-    fn explicit_contribution_order_is_preserved_and_deterministic() {
-        let first = contribution("first", 1, 2.0, 0.5, 2, 3, 1, 1.0);
-        let second = contribution("second", 2, 6.0, 0.25, 2, 3, 1, 6.0);
+    fn contribution_arrival_order_cannot_change_output_bytes() {
+        let first = contribution("first", 1, 2.0, weight(1, 2), 2, 3, 1, 1.0);
+        let second = contribution("second", 2, 6.0, weight(1, 4), 2, 3, 1, 6.0);
         let once = aggregate(vec![first.clone(), second.clone()]);
-        let twice = aggregate(vec![first, second]);
+        let twice = aggregate(vec![second, first]);
         assert_eq!(once.adapter_config_json, twice.adapter_config_json);
         assert_eq!(once.adapter_safetensors, twice.adapter_safetensors);
         assert_eq!(once.receipt, twice.receipt);
@@ -1003,8 +1034,8 @@ mod tests {
 
     #[test]
     fn rank_budget_and_compatibility_failures_are_rejected() {
-        let first = contribution("first", 1, 2.0, 0.5, 2, 3, 1, 1.0);
-        let second = contribution("second", 2, 6.0, 0.25, 2, 3, 1, 6.0);
+        let first = contribution("first", 1, 2.0, weight(1, 2), 2, 3, 1, 1.0);
+        let second = contribution("second", 2, 6.0, weight(1, 4), 2, 3, 1, 6.0);
         let err = aggregate_exact(FloraRequest {
             output_name: "aggregate".into(),
             rank_budget: 2,
@@ -1024,11 +1055,22 @@ mod tests {
         })
         .unwrap_err();
         assert!(err.to_string().contains("tokenizer_ref"));
+
+        let mut invalid_weight = contribution("invalid-weight", 1, 2.0, weight(0, 1), 2, 3, 1, 1.0);
+        invalid_weight.manifest_ref =
+            ManifestId::of_blob(&serde_json::to_vec(&invalid_weight.manifest).unwrap());
+        let err = aggregate_exact(FloraRequest {
+            output_name: "aggregate".into(),
+            rank_budget: 16,
+            contributions: vec![invalid_weight],
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("zero weight"));
     }
 
     #[test]
     fn malformed_pairs_and_non_f32_tensors_are_rejected() {
-        let mut broken = contribution("broken", 1, 1.0, 1.0, 2, 3, 1, 1.0);
+        let mut broken = contribution("broken", 1, 1.0, weight(1, 1), 2, 3, 1, 1.0);
         let bytes = vec![0u8; 8];
         let view = TensorView::new(Dtype::I64, vec![1, 1], &bytes).unwrap();
         broken.adapter_safetensors = safetensors::serialize(
@@ -1107,8 +1149,8 @@ mod tests {
 
     #[test]
     fn emitted_adapter_loads_through_the_esp_peft_loader() {
-        let mut first = contribution("first", 1, 2.0, 0.5, 4, 4, 1, 1.0);
-        let mut second = contribution("second", 2, 6.0, 0.25, 4, 4, 1, 6.0);
+        let mut first = contribution("first", 1, 2.0, weight(1, 2), 4, 4, 1, 1.0);
+        let mut second = contribution("second", 2, 6.0, weight(1, 4), 4, 4, 1, 6.0);
         for contribution in [&mut first, &mut second] {
             contribution.manifest.base_model_ref = ManifestId::of_blob(b"loader base");
             contribution.manifest.tokenizer_ref = ManifestId::of_blob(b"loader tokenizer");
