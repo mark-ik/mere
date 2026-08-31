@@ -29,7 +29,7 @@ Root re-exports: `build_document_scene`, `Axis`, `TreeBranch`, `TreeGeometry`,
 | Item | Signature / role |
 | --- | --- |
 | `project_tree(&Arrangement) -> WorkbenchPlan` | Root-level tile-bearing members into ordered slots; `StackedWith` members collapse into a tab-stack. |
-| `tile_tree_from_plan(&WorkbenchPlan, impl FnMut(&TilePlan) -> Tile) -> Option<TileTree>` | Projects a plan onto `genet_host_api::tile::TileTree`. One slot maps to a bare stack; several map to an even `Row` split. |
+| `tile_tree_from_plan(&WorkbenchPlan, impl FnMut(&TilePlan) -> Tile) -> Option<TileTree>` | Projects a plan onto `workbench::TileTree`. One slot maps to a bare stack; several map to an even `Row` split. |
 | `TileLayout::to_tile_tree(impl FnMut(GraphMemberId) -> Tile) -> Option<TileTree>` | Same seam from the live split tree, preserving nesting and fractions. |
 | `TileLayout::slot_views() -> impl Iterator<Item = SlotView<'_>>` | Flattened leaf stacks (members, active index, parent fraction) for the a11y / automation projection. |
 | `TileLayout::to_arrangement() -> (Arrangement, Option<TreeGeometry>)` | Derives the canonical persisted pair; `from_arrangement` rebuilds the tree from it. |
@@ -50,7 +50,7 @@ the divider reads/writes `weights` / `set_weights` / `split_fractions` /
 | Crate | Why |
 | --- | --- |
 | `forme` | Owns the `Arrangement` platen projects. Platen never mutates it. |
-| `genet-host-api` (git, genet `main`) | `tile::{Tile, TileTree, TileBranch, SplitAxis, TileId, ContentSource}`, the host tile-surface contract platen projects onto. |
+| `workbench` (git, immutable Genet revision) | `Tile`, `TileTree`, `TileBranch`, `SplitAxis`, `TileId`, and `ContentSource`, the reusable workspace contract Platen projects onto. |
 | `document-canvas` (git, genet `main`) | Document layout behind `build_document_scene`. |
 | `inker` (git, genet `main`) | `EngineDocument`, the document scene input. |
 | `serde` / `serde_json` | Plans and persisted `(Arrangement, TreeGeometry)` pairs. |

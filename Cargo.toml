@@ -37,7 +37,6 @@ members = [
     "crates/domain/gloss",
     "crates/domain/roster",
     "crates/domain/trail",
-    "crates/platen/domain/workbench",
     "crates/platen/platen",
     "crates/eidetic/eidetic-core",
     "crates/eidetic/eidetic-fjall",
@@ -265,6 +264,7 @@ genet-livery = { version = "0.0.2", git = "https://github.com/merely-made/genet.
 genet-probe = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 genet-static-dom = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+workbench = { version = "=0.1.0", git = "https://github.com/merely-made/genet.git", rev = "d25ef444d216cc71f6897d122c55a92530d5a6ca" }
 errand = { version = "0.3.4", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 netfetcher = { version = "0.1.1", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 verso-tile = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
@@ -283,8 +283,6 @@ apparatus = { package = "mere-apparatus", version = "0.0.1", path = "crates/doma
 gloss = { package = "mere-gloss", version = "0.0.1", path = "crates/domain/gloss" }
 roster = { package = "mere-roster", version = "0.0.1", path = "crates/domain/roster" }
 trail = { package = "mere-trail", version = "0.0.1", path = "crates/domain/trail" }
-workbench = { version = "0.0.1", path = "crates/platen/domain/workbench" }
-
 eidetic = { package = "mere-eidetic", version = "0.0.2", path = "crates/eidetic/eidetic-core", default-features = false }
 eidetic-fjall = { package = "mere-eidetic-fjall", path = "crates/eidetic/eidetic-fjall" }
 eidetic-https-fetcher = { package = "mere-eidetic-https-fetcher", path = "crates/eidetic/eidetic-https-fetcher" }

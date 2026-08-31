@@ -25,7 +25,7 @@
 //! pane-binding workbench), per the 2026-06-04 platen taffy-retarget plan.
 
 use forme::GraphMemberId;
-use genet_host_api::tile::SplitAxis;
+use workbench::SplitAxis;
 
 use crate::ProjectionKind;
 
@@ -335,19 +335,19 @@ impl TileLayout {
         self.root = None;
     }
 
-    /// Project this tile layout onto Genet's [`TileTree`](genet_host_api::tile::TileTree)
+    /// Project this tile layout onto Genet's [`TileTree`](workbench::TileTree)
     /// contract (V5/V6) — the builder meerkat uses to render the workbench through the
     /// Genet tile surface. The **structure** is the split tree (nested
     /// `Row`/`Column` splits with their fractions, each leaf a stack with its active
     /// tab); the host supplies `tile_for`, resolving each member to its
-    /// [`Tile`](genet_host_api::tile::Tile). An empty layout yields `None`. A projection,
+    /// [`Tile`](workbench::Tile). An empty layout yields `None`. A projection,
     /// never a second authority: the layout stays the tiling truth, and the surface
     /// is driven entirely through the contract (the host applies tile events back and
     /// re-projects).
     pub fn to_tile_tree(
         &self,
-        mut tile_for: impl FnMut(GraphMemberId) -> genet_host_api::tile::Tile,
-    ) -> Option<genet_host_api::tile::TileTree> {
+        mut tile_for: impl FnMut(GraphMemberId) -> workbench::Tile,
+    ) -> Option<workbench::TileTree> {
         self.root.as_ref().map(|r| r.to_tile_tree(&mut tile_for))
     }
 

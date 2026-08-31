@@ -31,10 +31,10 @@
 //! arrangement's default flat projection ([`crate::project_tree`]).
 
 use forme::GraphMemberId;
-use genet_host_api::tile::SplitAxis;
 use serde::{Deserialize, Serialize};
+use workbench::SplitAxis;
 
-/// Split orientation. Mirrors [`genet_host_api::tile::SplitAxis`] with a serde impl —
+/// Split orientation. Mirrors [`workbench::SplitAxis`] with a serde impl —
 /// Genet's axis is a render contract and is deliberately serde-free, while
 /// projection geometry persists (the `(FormeRef, ProjectionKind)` store).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -229,7 +229,7 @@ fn flat_pane(arrangement: &Arrangement) -> Option<Pane> {
         n => {
             let fraction = 1.0 / n as f32;
             Some(Pane::Split {
-                axis: genet_host_api::tile::SplitAxis::Row,
+                axis: workbench::SplitAxis::Row,
                 children: cells
                     .into_iter()
                     .map(|pane| Branch { fraction, pane })
@@ -242,8 +242,8 @@ fn flat_pane(arrangement: &Arrangement) -> Option<Pane> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use genet_host_api::tile::SplitAxis;
     use uuid::Uuid;
+    use workbench::SplitAxis;
 
     fn m(n: u128) -> GraphMemberId {
         Uuid::from_u128(n)

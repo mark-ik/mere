@@ -7,11 +7,14 @@
 //! Host-neutral projection authoring state.
 //!
 //! The editor owns a draft and the validation needed to turn it into a
-//! definition. It deliberately has no graph, endpoint, or authority handle.
-//! A host supplies [`ProjectionDefinitionSink`] when it elects to persist a
-//! valid definition.
+//! definition. Its panels are ordinary [`workbench::Tile`]s, so Graphshell can
+//! split, stack, and tear them out through the same reusable workspace contract
+//! as another Genet host. It deliberately has no graph, endpoint, or authority
+//! handle. A host supplies [`ProjectionDefinitionSink`] when it elects to
+//! persist a valid definition.
 
 use serde::{Deserialize, Serialize};
+use workbench::{ContentSource, Tile, TileEvent, TileId, TileTree, Workbench, WorkbenchOutcome};
 
 /// The stable schema version for definitions emitted by this editor.
 pub const PROJECTION_DEFINITION_VERSION: u16 = 1;
@@ -52,6 +55,64 @@ impl ProjectionPanel {
             Self::Provenance => "Provenance",
         }
     }
+
+    /// Stable Workbench identity for this editor tool.
+    pub const fn tile_id(self) -> TileId {
+        TileId(match self {
+            Self::Source => 1,
+            Self::Reading => 2,
+            Self::Encoding => 3,
+            Self::Arrangement => 4,
+            Self::Interaction => 5,
+            Self::Preview => 6,
+            Self::Provenance => 7,
+        })
+    }
+
+    /// Open content-lane id resolved by the Graphshell host.
+    pub const fn content_id(self) -> &'static str {
+        match self {
+            Self::Source => "source",
+            Self::Reading => "reading",
+            Self::Encoding => "encoding",
+            Self::Arrangement => "arrangement",
+            Self::Interaction => "interaction",
+            Self::Preview => "preview",
+            Self::Provenance => "provenance",
+        }
+    }
+
+    /// Recover the editor tool represented by a Workbench tile.
+    pub const fn from_tile_id(id: TileId) -> Option<Self> {
+        match id.0 {
+            1 => Some(Self::Source),
+            2 => Some(Self::Reading),
+            3 => Some(Self::Encoding),
+            4 => Some(Self::Arrangement),
+            5 => Some(Self::Interaction),
+            6 => Some(Self::Preview),
+            7 => Some(Self::Provenance),
+            _ => None,
+        }
+    }
+}
+
+const PROJECTION_EDITOR_PANEL_KIND: &str = "graphshell.projection-editor.panel";
+
+fn projection_editor_workbench() -> Workbench {
+    let tabs = ProjectionPanel::ALL
+        .into_iter()
+        .map(|panel| Tile {
+            id: panel.tile_id(),
+            title: panel.label().to_owned(),
+            content: ContentSource::Open {
+                kind: PROJECTION_EDITOR_PANEL_KIND.to_owned(),
+                id: panel.content_id().to_owned(),
+            },
+            accent: None,
+        })
+        .collect();
+    Workbench::new(TileTree::stack(tabs, 0))
 }
 
 /// A source and domain binding selected by the author.
@@ -418,10 +479,11 @@ pub enum ReduceResult {
 }
 
 /// Stateful editor boundary, independent of a widget toolkit or host.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProjectionEditor {
     draft: ProjectionDraft,
     panel: ProjectionPanel,
+    workspace: Workbench,
 }
 
 impl ProjectionEditor {
@@ -429,6 +491,7 @@ impl ProjectionEditor {
         Self {
             draft,
             panel: ProjectionPanel::default(),
+            workspace: projection_editor_workbench(),
         }
     }
 
@@ -440,9 +503,36 @@ impl ProjectionEditor {
         self.panel
     }
 
+    /// The reusable split/tab arrangement for the editor's tool panels.
+    pub fn workspace(&self) -> &Workbench {
+        &self.workspace
+    }
+
+    /// Apply a Workbench gesture without granting graph or persistence authority.
+    ///
+    /// A valid outside drop is returned as a typed host effect and retains the
+    /// panel until Graphshell accepts tearout custody.
+    pub fn apply_workspace(&mut self, event: &TileEvent) -> WorkbenchOutcome {
+        let outcome = self.workspace.apply(event);
+        if outcome.changed() {
+            if let TileEvent::Activated(id) = event
+                && let Some(panel) = ProjectionPanel::from_tile_id(*id)
+            {
+                self.panel = panel;
+            }
+            if self.workspace.tree().find(self.panel.tile_id()).is_none()
+                && let Some(panel) = first_active_panel(self.workspace.tree())
+            {
+                self.panel = panel;
+            }
+        }
+        outcome
+    }
+
     pub fn reduce(&mut self, action: EditorAction) -> ReduceResult {
         match action {
             EditorAction::SelectPanel(panel) => {
+                let _ = self.workspace.apply(&TileEvent::Activated(panel.tile_id()));
                 self.panel = panel;
                 ReduceResult::PanelChanged
             }
@@ -499,6 +589,18 @@ impl ProjectionEditor {
     }
 }
 
+fn first_active_panel(tree: &TileTree) -> Option<ProjectionPanel> {
+    match tree {
+        TileTree::Stack(stack) => stack
+            .tabs
+            .get(stack.active)
+            .and_then(|tile| ProjectionPanel::from_tile_id(tile.id)),
+        TileTree::Split { children, .. } => children
+            .iter()
+            .find_map(|branch| first_active_panel(&branch.tree)),
+    }
+}
+
 /// Host persistence is the only effect exposed by the editor.
 pub trait ProjectionDefinitionSink {
     type Error;
@@ -515,6 +617,7 @@ pub enum SaveError<E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use workbench::{DropTarget, WorkbenchEffect};
 
     fn valid_draft() -> ProjectionDraft {
         ProjectionDraft {
@@ -568,6 +671,51 @@ mod tests {
     }
 
     #[test]
+    fn editor_panels_are_open_workbench_tiles() {
+        let editor = ProjectionEditor::new(valid_draft());
+        let tiles = editor.workspace().tree().tiles();
+        assert_eq!(tiles.len(), ProjectionPanel::ALL.len());
+        for panel in ProjectionPanel::ALL {
+            let tile = editor
+                .workspace()
+                .tree()
+                .find(panel.tile_id())
+                .expect("every editor panel has a tile");
+            assert_eq!(tile.title, panel.label());
+            assert_eq!(
+                tile.content,
+                ContentSource::Open {
+                    kind: PROJECTION_EDITOR_PANEL_KIND.to_owned(),
+                    id: panel.content_id().to_owned(),
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn workspace_activation_selects_panel_and_tearout_preserves_it() {
+        let mut editor = ProjectionEditor::new(valid_draft());
+        assert_eq!(
+            editor.apply_workspace(&TileEvent::Activated(ProjectionPanel::Preview.tile_id())),
+            WorkbenchOutcome::Applied
+        );
+        assert_eq!(editor.panel(), ProjectionPanel::Preview);
+
+        let before = editor.workspace().tree().clone();
+        assert_eq!(
+            editor.apply_workspace(&TileEvent::Dragged {
+                tile: ProjectionPanel::Preview.tile_id(),
+                to: DropTarget::Outside,
+            }),
+            WorkbenchOutcome::Effect(WorkbenchEffect::TearOut {
+                tile: ProjectionPanel::Preview.tile_id(),
+            })
+        );
+        assert_eq!(editor.workspace().tree(), &before);
+        assert_eq!(editor.panel(), ProjectionPanel::Preview);
+    }
+
+    #[test]
     fn validation_reports_useful_fields() {
         let mut draft = valid_draft();
         draft.source.domain.clear();
@@ -615,7 +763,9 @@ mod tests {
         editor.save(&mut sink).expect("valid draft saves");
         assert_eq!(sink.saved[0].id, valid_draft().id);
         let definition = editor.draft().to_definition().expect("valid definition");
-        assert_eq!(definition.to_json_bytes(), definition.to_json_bytes());
+        let first = definition.to_json_bytes().expect("definition serializes");
+        let second = definition.to_json_bytes().expect("definition serializes");
+        assert_eq!(first, second);
     }
 
     #[test]

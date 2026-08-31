@@ -11,7 +11,7 @@
 //! a `Column` is stacked top-to-bottom), each child carrying its fractional share of
 //! the split. Splits nest freely, so the tree expresses every variation: horizontal,
 //! vertical, and combinations. It mirrors Genet's
-//! [`TileTree`](genet_host_api::tile::TileTree)
+//! [`TileTree`](workbench::TileTree)
 //! shape (the surface that renders it), so [`Pane::to_tile_tree`] is a direct map.
 //!
 //! The tree holds [`GraphMemberId`]s; the host resolves each to renderable content. The
@@ -19,7 +19,7 @@
 //! the geometry-free tiling logic; layout is the host's genet/taffy job.
 
 use forme::GraphMemberId;
-use genet_host_api::tile::SplitAxis;
+use workbench::SplitAxis;
 
 /// A tab group: members sharing one cell, `active` the visible one.
 #[derive(Clone, Debug, PartialEq)]
@@ -323,9 +323,9 @@ impl Pane {
     /// Map this pane onto Genet's [`TileTree`], resolving each member through `tile_for`.
     pub(super) fn to_tile_tree(
         &self,
-        tile_for: &mut impl FnMut(GraphMemberId) -> genet_host_api::tile::Tile,
-    ) -> genet_host_api::tile::TileTree {
-        use genet_host_api::tile::{TileBranch, TileTree};
+        tile_for: &mut impl FnMut(GraphMemberId) -> workbench::Tile,
+    ) -> workbench::TileTree {
+        use workbench::{TileBranch, TileTree};
         match self {
             Pane::Stack(s) if s.members.len() == 1 => TileTree::single(tile_for(s.members[0])),
             Pane::Stack(s) => {
