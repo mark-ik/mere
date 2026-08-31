@@ -1,8 +1,8 @@
 # Terminology and crate folds plan
 
-**Status (2026-08-31):** In progress on `codex/0831-integration`. The provider
-changes and consumer migrations are implemented; integrated validation and the
-final receipt remain.
+**Status (2026-08-31):** Complete on `codex/0831-integration`. Provider changes,
+consumer migrations, compatibility readers, active-vocabulary audit, and the
+integrated receipt are implemented.
 
 ## Scope and rulings
 
@@ -115,4 +115,15 @@ Done conditions:
 - **2026-08-31:** migrated Turnstone (`b079e3f`), Retinue (`3c6ff79`), Isometry
   (`0b17fe9`), and Mesocosm (`cff9b71`) on isolated consumer branches.
 - **2026-08-31:** Muniment's 37 tests and Eidetic's 95 default-feature tests
-  pass in the disposable provider workspace. Integrated gates remain open.
+  pass in the disposable provider workspace. Chartulary's 59 tests, Woodshed's
+  14 tests, Mora's 37 tests, and the focused owner checks and Clippy gates also
+  pass.
+- **2026-08-31:** active manifests contain none of the removed `codicil`,
+  `scholia`, `quint`, or `quint-shaders` packages. Remaining Engram, Tessera,
+  and Scholia spellings are explicit legacy readers, stable schema or crypto
+  bytes, deprecated aliases, historical receipts, or fold notes. Sonance is a
+  current Mora module.
+- **2026-08-31:** the integrated FLORA, Tulpa, and Standing receipt is green.
+  Normal root-workspace Cargo entry remains blocked before compilation by the
+  inherited Genet patch mismatch described above; validation used a detached
+  checkout with only that unrelated patch line omitted.

@@ -174,7 +174,7 @@ async fn save_cases(store: &mut MemoryBackend, prefixes: &[&str]) -> Vec<Manifes
                 Timestamp(0),
             )
             .await
-            .expect("save case engram"),
+            .expect("save case codicil"),
         );
     }
     ids.sort_by_key(ToString::to_string);

@@ -34,7 +34,7 @@ path = "src/lib.rs"
 # near-verbatim (GraphMemory -> Stemma), so the nav model is unchanged. Git
 # sibling; local checkout via the gitignored `.cargo/config.toml` patch.
 # The portable field-primitive definitions (Field / Coupling / the scalar & vector
-# field AST / EdgePath) that the kernel's field store and quint both consume.
+# field AST / EdgePath) that the kernel's field store and numen evaluator consume.
 # Promoted out of this kernel so the third graph primitive sits at the portable tier
 # beside chartulary's nodes/edges. On crates.io; local checkout via the gitignored
 # `.cargo/config.toml` `[patch.crates-io]`.

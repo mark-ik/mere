@@ -526,7 +526,7 @@ impl<I> ResidentChunk<I> {
 
     /// Apply one authority-approved patch without replacing the CubeCL allocation.
     ///
-    /// The caller owns the record and the shared-device schedule. Quint checks that
+    /// The caller owns the record and the shared-device schedule. Conatus checks that
     /// the patch was derived from the resident stamp still being replaced, writes
     /// only the supplied aligned range, then publishes the committed stamp and dirty
     /// regions together. Views minted before this call retain their old stamp and

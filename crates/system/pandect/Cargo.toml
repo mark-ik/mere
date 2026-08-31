@@ -53,5 +53,5 @@ euclid = "0.22"
 async-trait = "0.1"
 pollster = "0.4"
 # The real fjall-backed Store, for the graph-codicil persistence test that proves
-# an codicil survives a store close + reopen (the "survives restart" condition).
+# a codicil survives a store close + reopen (the "survives restart" condition).
 eidetic-fjall.workspace = true

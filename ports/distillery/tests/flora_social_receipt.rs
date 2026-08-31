@@ -21,8 +21,8 @@ use gemot::moot::{
     FloraParticipant, FloraRoundId, FloraRoundSpec, FloraWeight as SocialWeight, TulpaEvent,
     TulpaFileStore, TulpaId, TulpaProposal, TulpaProposalId, TulpaVersion,
 };
-use identity::Ed25519Keypair;
 use mooting::{ElectorateSnapshot, RecognitionContext, RecognitionPolicy};
+use personae::Ed25519Keypair;
 use safetensors::tensor::{Dtype, TensorView};
 
 const MOOT: [u8; 32] = [0x31; 32];

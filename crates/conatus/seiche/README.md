@@ -3,7 +3,7 @@
 Kernel-free, rapier-backed force integration for graph canvases. A host feeds
 `(NodeKey, position)` pairs and edge pairs; `Simulation` owns the rapier world
 that settles them and the host reads the positions back. Fields come from
-[`quint`](../quint) and [`numen`](../numen); the graph itself stays host-side.
+[`numen`](../numen); the graph itself stays host-side.
 
 `NodeKey` is `petgraph::stable_graph::NodeIndex`, so a consumer supplies keys
 from any graph or mints them directly. seiche never inspects them.
@@ -29,7 +29,7 @@ and `view` are private modules, so those types are reachable only as
 |---|---|---|
 | `forces` | `NodeExclusion`, `EdgeSpring`, `Boundary` | The built-in layout forces. |
 | `barnes_hut` | `BarnesHutRepulsion`, `BarnesHutConfig`, `repulsion_forces` | Quadtree O(n log n) approximate n-body repulsion. `BarnesHutRepulsion` implements `Force`. |
-| `coupling_force` | `CouplingForce` | Compiles an already-resolved field plus target set into a `Force`; quint evaluates, seiche applies. Built via `CouplingForce::new` and `with_registry`. |
+| `coupling_force` | `CouplingForce` | Compiles an already-resolved field plus target set into a `Force`; numen evaluates, seiche applies. Built via `CouplingForce::new` and `with_registry`. |
 | `affinity_force` | `AffinitySpring`, `DEFAULT_AFFINITY_STIFFNESS`, `DEFAULT_AFFINITY_REST_LENGTH` | Weighted attract-only spring over `(a, b, weight)` triples. |
 | `anchor_force` | `AnchorSpring`, `DEFAULT_ANCHOR_STIFFNESS`, `DEFAULT_ANCHOR_SLACK` | Per-node springs toward arrangement-chosen slots. |
 | `fluid` | `Fluid`, `FluidParams`, `Basin`, `FluidContact`, `ContactShape` | Position-Based Fluids solver, stepped after the rigid world and coupled two ways. |
@@ -64,14 +64,15 @@ Writing settled positions back into the host's own graph is the host's job.
 
 ## Features
 
-`gpu-bench` pulls `quint/field-burn-wgpu` so an ignored benchmark can stage the
-exact `NodeExclusion` law through a WGPU CPU-GPU-CPU round trip. It is not the
-resident simulation path. Off by default; the shipped library does not compile
-Burn.
+`gpu-bench` enables seiche's `tensor-burn-wgpu` path so an ignored benchmark can
+stage the exact `NodeExclusion` law through a WGPU CPU-GPU-CPU round trip. It is
+not the resident simulation path. Off by default; the shipped library does not
+compile Burn.
 
 ## Dependencies
 
-rapier2d 0.33, petgraph 0.8, quint (default features), numen, euclid, tracing.
+rapier2d 0.33, petgraph 0.8, numen, euclid, tracing, with Burn and Burn-WGPU as
+optional tensor-law backends.
 
 ## License
 

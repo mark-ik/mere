@@ -59,7 +59,7 @@ pub const TRAINER_REQUEST_INPUT: &str = "request";
 /// Everything one training run is allowed to consume, stated explicitly.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TrainRequest {
-    /// The exact base `ModelManifest` engram.
+    /// The exact base `ModelManifest` codicil.
     pub base_model_ref: ManifestId,
     /// The tokenizer blob the base manifest must name.
     pub tokenizer_ref: ManifestId,
@@ -171,10 +171,10 @@ fn load_cases(
     for id in ids {
         let blob = pollster::block_on(load_typed::<OpaqueBlob>(store, &mut NoFetcher, *id))
             .map_err(backend)?
-            .ok_or_else(|| backend(format!("{partition} case engram {id} is missing")))?;
+            .ok_or_else(|| backend(format!("{partition} case codicil {id} is missing")))?;
         cases.push(
             serde_json::from_slice(&blob.0)
-                .map_err(|error| backend(format!("{partition} case engram {id}: {error}")))?,
+                .map_err(|error| backend(format!("{partition} case codicil {id}: {error}")))?,
         );
     }
     Ok(cases)

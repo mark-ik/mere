@@ -1,8 +1,8 @@
 # FLORA, Tulpa, and Standing plan
 
-**Status (2026-08-31):** In progress on `codex/0831-integration`. Gemot's
-social protocol is implemented; Distillery tensor execution and the integrated
-receipt remain.
+**Status (2026-08-31):** Complete on `codex/0831-integration`. Gemot owns the
+social protocol, Distillery owns exact tensor execution, and the integrated
+signed, replicated, restart-durable receipt is green.
 
 ## Rulings and ownership
 
@@ -119,5 +119,17 @@ Done conditions:
   `244b66be` (source lane `7fddd485`).
 - **2026-08-31:** implemented the Hagiograph reservation move and canonical
   terminology amendments on the integration branch.
-- **2026-08-31:** exact Distillery aggregation and the final integrated receipt
-  remain in progress.
+- **2026-08-31:** implemented exact heterogeneous-rank FLoRA stacking in
+  Distillery at `b806acf0`. Contributions sort by governed contribution id;
+  their exact rational round weight and `alpha / rank` coefficient apply once
+  to B, while A is concatenated vertically and B horizontally.
+- **2026-08-31:** bound the social and tensor layers in `0738b709`. The receipt
+  signs and replicates Standing, FLORA, and Tulpa facts, resolves exact factor
+  references, aggregates reversed arrivals to stable bytes, publishes and
+  adopts the candidate, records follow-through, reopens three redb stores, and
+  proves the same projections after restart.
+- **2026-08-31:** measured 1/1 integrated receipt, 11/11 Distillery library
+  tests, and 122/122 Gemot library tests green. Package-scoped strict Clippy is
+  recorded in the companion receipt. The root workspace's inherited
+  `genet-taffy = =0.13.1` patch still stops normal Cargo entry before
+  compilation and was not changed by this plan.

@@ -372,7 +372,7 @@ mod tests {
     fn seals_private_lane_and_round_trips_to_cleartext() {
         pollster::block_on(async {
             let sealer = TestSealer::new([1u8; 16], [9u8; 32]);
-            let cleartext = b"a private engram payload";
+            let cleartext = b"a private codicil payload";
             let mut manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
 
             let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
@@ -393,7 +393,7 @@ mod tests {
     fn public_lane_stays_cleartext() {
         pollster::block_on(async {
             let sealer = TestSealer::new([2u8; 16], [8u8; 32]);
-            let cleartext = b"a public moot engram";
+            let cleartext = b"a public moot codicil";
             let mut manifest = manifest_for(cleartext, PrivacyClass::MootScoped);
 
             let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
