@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Workbench layout tests.
+//! TileLayout layout tests.
 
 use uuid::Uuid;
 
@@ -16,7 +16,7 @@ fn m(n: u128) -> GraphMemberId {
 
 #[test]
 fn new_workbench_is_cartography_and_empty() {
-    let wb = Workbench::new();
+    let wb = TileLayout::new();
     assert_eq!(wb.mode(), ProjectionKind::Cartography);
     assert!(!wb.is_tiled());
     assert_eq!(wb.tile_count(), 0);
@@ -25,7 +25,7 @@ fn new_workbench_is_cartography_and_empty() {
 
 #[test]
 fn open_tile_appends_single_slots_and_dedups() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     assert!(wb.open_tile(m(1)), "first open is new");
     assert!(wb.open_tile(m(2)), "a distinct member is new");
     assert!(!wb.open_tile(m(1)), "re-opening an open member is a no-op");
@@ -36,7 +36,7 @@ fn open_tile_appends_single_slots_and_dedups() {
 
 #[test]
 fn stack_all_then_split_all_separates() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     wb.open_tile(m(2));
     wb.open_tile(m(3));
@@ -49,7 +49,7 @@ fn stack_all_then_split_all_separates() {
 
 #[test]
 fn activate_switches_the_visible_tab_in_a_stack() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     wb.open_tile(m(2));
     wb.open_tile(m(3));
@@ -72,7 +72,7 @@ fn activate_switches_the_visible_tab_in_a_stack() {
 
 #[test]
 fn open_split_opens_each_as_its_own_slot_and_dedups() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     assert_eq!(wb.open_split(&[m(1), m(2), m(3)]), 3, "all three are new");
     assert_eq!(wb.slot_count(), 3, "one column per member");
     assert_eq!(
@@ -85,14 +85,14 @@ fn open_split_opens_each_as_its_own_slot_and_dedups() {
 
 #[test]
 fn open_stack_gathers_into_one_slot_and_rehomes_open_members() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2)]); // two single columns
     wb.open_stack(&[m(2), m(3)]); // m(2) is pulled out of its column into the stack
     assert_eq!(wb.slot_count(), 2, "m(1)'s column + the new [2,3] stack");
     assert_eq!(wb.tile_count(), 3, "no member is lost or duplicated");
     assert!(wb.activate(m(3)));
     assert!(wb.has_tile(m(2)) && wb.has_tile(m(3)));
-    let mut wb2 = Workbench::new();
+    let mut wb2 = TileLayout::new();
     wb2.open_stack(&[m(7), m(7), m(8)]);
     assert_eq!(wb2.slot_count(), 1);
     assert_eq!(wb2.tile_count(), 2, "the repeat collapses");
@@ -100,7 +100,7 @@ fn open_stack_gathers_into_one_slot_and_rehomes_open_members() {
 
 #[test]
 fn ensure_tiled_switches_once() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     assert!(wb.ensure_tiled(), "first call flips Cartography → Tree");
     assert!(wb.is_tiled());
     assert!(!wb.ensure_tiled(), "already tiled → no change");
@@ -108,7 +108,7 @@ fn ensure_tiled_switches_once() {
 
 #[test]
 fn close_tab_drops_it_and_removes_an_empty_slot() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     wb.open_tile(m(2));
     wb.stack_all();
@@ -121,7 +121,7 @@ fn close_tab_drops_it_and_removes_an_empty_slot() {
 
 #[test]
 fn move_to_slot_of_moves_across_and_reorders_within() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2), m(3)]);
     assert!(wb.move_to_slot_of(m(1), m(3)));
     assert_eq!(wb.slot_count(), 2, "m(1)'s column emptied + dropped");
@@ -142,7 +142,7 @@ fn move_to_slot_of_moves_across_and_reorders_within() {
 
 #[test]
 fn open_in_slot_of_stacks_a_new_tab_and_activates_it() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2)]);
     assert!(wb.open_in_slot_of(m(3), m(1)));
     assert_eq!(wb.slot_count(), 2, "no new column — it joined m(1)'s");
@@ -157,7 +157,7 @@ fn open_in_slot_of_stacks_a_new_tab_and_activates_it() {
 
 #[test]
 fn split_beside_pulls_a_tab_into_its_own_slot() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     wb.open_tile(m(2));
     wb.stack_all(); // one stack [1, 2]
@@ -179,7 +179,7 @@ fn split_beside_pulls_a_tab_into_its_own_slot() {
 
 #[test]
 fn split_beside_axis_makes_a_vertical_split() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2)]); // [1 | 2] (top-level Row)
     // Split m(2) below m(1) along Column: m(1)'s column nests a Column [1 / 2].
     assert!(wb.split_beside_axis(m(2), m(1), SplitAxis::Column, true));
@@ -199,7 +199,7 @@ fn split_beside_axis_makes_a_vertical_split() {
 
 #[test]
 fn split_out_pulls_a_tab_out_of_its_own_stack() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     wb.open_tile(m(2));
     wb.stack_all(); // one stack [1, 2]
@@ -211,7 +211,7 @@ fn split_out_pulls_a_tab_out_of_its_own_stack() {
     assert_eq!(wb.slot_count(), 2);
     assert_eq!(wb.tile_count(), 2, "no tab lost");
     // A tab alone in its cell has no sibling to anchor on — a no-op.
-    let mut wb2 = Workbench::new();
+    let mut wb2 = TileLayout::new();
     wb2.open_tile(m(5));
     assert!(
         !wb2.split_out(m(5), SplitAxis::Column, false),
@@ -221,7 +221,7 @@ fn split_out_pulls_a_tab_out_of_its_own_stack() {
 
 #[test]
 fn weights_are_fractions_default_equal_and_set_renormalizes() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2)]);
     assert_eq!(wb.weights(), vec![0.5, 0.5], "equal fractions by default");
     wb.set_weights(&[3.0, 1.0]);
@@ -240,7 +240,7 @@ fn weights_are_fractions_default_equal_and_set_renormalizes() {
 
 #[test]
 fn nested_split_fractions_addressed_by_path() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2), m(3)]); // [1 | 2 | 3]
     wb.split_beside_axis(m(3), m(2), SplitAxis::Column, true); // [1 | (2 / 3)]
     // The top-level row has two children; child 1 is the nested column.
@@ -255,7 +255,7 @@ fn nested_split_fractions_addressed_by_path() {
     assert!((nested[0] - 0.7).abs() < 1e-5 && (nested[1] - 0.3).abs() < 1e-5);
 }
 
-// ── Workbench -> Genet TileTree projection (the V6 surface builder) ──
+// ── TileLayout -> Genet TileTree projection (the V6 surface builder) ──
 
 use genet_host_api::tile::{ContentSource, SplitAxis as Axis, TextureKey, Tile, TileId, TileTree};
 
@@ -273,12 +273,12 @@ fn actor_tile_for(member: GraphMemberId) -> Tile {
 
 #[test]
 fn to_tile_tree_empty_is_none() {
-    assert!(Workbench::new().to_tile_tree(actor_tile_for).is_none());
+    assert!(TileLayout::new().to_tile_tree(actor_tile_for).is_none());
 }
 
 #[test]
 fn to_tile_tree_single_slot_is_a_stack() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     let tree = wb.to_tile_tree(actor_tile_for).expect("one slot");
     assert!(
@@ -290,7 +290,7 @@ fn to_tile_tree_single_slot_is_a_stack() {
 
 #[test]
 fn to_tile_tree_stacked_slot_keeps_active() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_tile(m(1));
     wb.open_tile(m(2));
     wb.open_tile(m(3));
@@ -308,7 +308,7 @@ fn to_tile_tree_stacked_slot_keeps_active() {
 
 #[test]
 fn to_tile_tree_slots_become_a_weighted_row_split() {
-    let mut wb = Workbench::new();
+    let mut wb = TileLayout::new();
     wb.open_split(&[m(1), m(2)]);
     wb.set_weights(&[3.0, 1.0]);
     let tree = wb.to_tile_tree(actor_tile_for).expect("tree");

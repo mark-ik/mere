@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The workbench's recursive split tree: the internal model behind [`Workbench`].
+//! The TileLayout's recursive split tree: the internal model behind [`TileLayout`].
 //!
 //! A [`Pane`] is either a [`Stack`] (a tab group of one or more members, one visible)
 //! or a [`Split`](Pane::Split) of children laid along an axis (a `Row` is side-by-side,
@@ -56,7 +56,7 @@ pub(super) struct Branch {
     pub pane: Pane,
 }
 
-/// A node in the workbench tree.
+/// A node in the TileLayout tree.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Pane {
     Stack(Stack),

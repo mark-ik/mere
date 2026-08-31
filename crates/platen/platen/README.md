@@ -14,13 +14,15 @@ platen emits structure and ratios.
 | Module | Contents |
 | --- | --- |
 | `tree_projection` | `ProjectionKind`, `TilePlan`, `PlanSlot`, `WorkbenchPlan`, `project_tree`, `tile_tree_from_plan` |
-| `workbench` | `Workbench`, `SlotView`; the live split tree, plus the forme bridge |
+| `workbench` | `TileLayout`, `SlotView`; the live split tree, plus the forme bridge. `Workbench` is a compatibility alias. |
+| `accessibility` | `project_tile_layout`; AccessKit/uxtree structural projection of the live layout |
 | `projection_geometry` | `Axis`, `TreeGeometry`, `TreeBranch` |
 | `document_scene` | `build_document_scene` |
 
 Root re-exports: `build_document_scene`, `Axis`, `TreeBranch`, `TreeGeometry`,
 `PlanSlot`, `ProjectionKind`, `TilePlan`, `WorkbenchPlan`, `project_tree`,
-`SlotView`, `Workbench`, plus the `VERSION` and `STAGE` consts.
+`SlotView`, `TileLayout`, the compatibility `Workbench` alias, `project_tile_layout`, plus the
+`VERSION` and `STAGE` consts.
 
 ## Key entry points
 
@@ -28,13 +30,14 @@ Root re-exports: `build_document_scene`, `Axis`, `TreeBranch`, `TreeGeometry`,
 | --- | --- |
 | `project_tree(&Arrangement) -> WorkbenchPlan` | Root-level tile-bearing members into ordered slots; `StackedWith` members collapse into a tab-stack. |
 | `tile_tree_from_plan(&WorkbenchPlan, impl FnMut(&TilePlan) -> Tile) -> Option<TileTree>` | Projects a plan onto `genet_host_api::tile::TileTree`. One slot maps to a bare stack; several map to an even `Row` split. |
-| `Workbench::to_tile_tree(impl FnMut(GraphMemberId) -> Tile) -> Option<TileTree>` | Same seam from the live split tree, preserving nesting and fractions. |
-| `Workbench::slot_views() -> impl Iterator<Item = SlotView<'_>>` | Flattened leaf stacks (members, active index, parent fraction) for the a11y / automation projection. |
-| `Workbench::to_arrangement() -> (Arrangement, Option<TreeGeometry>)` | Derives the canonical persisted pair; `from_arrangement` rebuilds the tree from it. |
-| `Workbench::to_persisted_json` / `from_persisted_json` | JSON form of that pair, written beside the session graph. |
+| `TileLayout::to_tile_tree(impl FnMut(GraphMemberId) -> Tile) -> Option<TileTree>` | Same seam from the live split tree, preserving nesting and fractions. |
+| `TileLayout::slot_views() -> impl Iterator<Item = SlotView<'_>>` | Flattened leaf stacks (members, active index, parent fraction) for the a11y / automation projection. |
+| `TileLayout::to_arrangement() -> (Arrangement, Option<TreeGeometry>)` | Derives the canonical persisted pair; `from_arrangement` rebuilds the tree from it. |
+| `TileLayout::to_persisted_json` / `from_persisted_json` | JSON form of that pair, written beside the session graph. |
+| `accessibility::project_tile_layout(&TileLayout) -> UxTree` | Structural AccessKit/uxtree projection. Graph-resolved labels and bounds stay host-owned. |
 | `build_document_scene(&EngineDocument, Viewport, &DocumentStyleSheet) -> LaidOutDocument` | Wraps `document_canvas::layout_document` for a pane holding a document tile. |
 
-`Workbench` mutation API covers `open_tile`, `open_split`, `open_stack`,
+`TileLayout` mutation API covers `open_tile`, `open_split`, `open_stack`,
 `open_in_slot_of`, `close_tile`, `activate`, `move_to_slot_of`, `split_beside`,
 `split_beside_axis`, `split_out`, `stack_all`, `split_all`, `clear_tiles`, and
 the divider reads/writes `weights` / `set_weights` / `split_fractions` /

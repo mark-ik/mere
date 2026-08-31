@@ -31,6 +31,15 @@ scene contract note
 
 ## Ruling context
 
+### Workbench component preparation (2026-08-31)
+
+Platen now names its geometry-free split/tab cache `TileLayout`; `Workbench` is a compatibility
+alias while the standalone `workbench` package is reduced to an API shim. Its structural
+AccessKit projection now lives at `platen::accessibility::project_tile_layout`, keeping a
+realization projection beside the layout it reads. This is preparation only: it does not add a
+Genet revision or repurpose the future Workbench authoring component. The component boundary and
+follow-up are in `genet/design_docs/2026-08-31_workbench_component_plan.md`.
+
 The report reviewed the catalog against eleven external systems (Vega-Lite,
 Draco, SetCoLa, Gemini, GoTree, ATOM; then Mosaic, Gosling, Penrose, Bluefish,
 GoFish) and returned three results this plan acts on: the catalog's stack

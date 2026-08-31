@@ -21,9 +21,11 @@
 //! *forked formes*, not one bench in two views). Leaves are **member-keyed** so a
 //! saved geometry survives re-projection and reconciles against the arrangement.
 //!
-//! A [`TreeGeometry`] is a structural mirror of the workbench's live split tree
-//! (platen's `Workbench`): the bridge ([`Workbench::to_arrangement`] /
-//! [`Workbench::from_arrangement`]) derives an `(Arrangement, TreeGeometry)` pair
+//! A [`TreeGeometry`] is a structural mirror of the tiled layout's live split tree
+//! (platen's [`TileLayout`](crate::TileLayout)): the bridge
+//! ([`TileLayout::to_arrangement`](crate::TileLayout::to_arrangement) /
+//! [`TileLayout::from_arrangement`](crate::TileLayout::from_arrangement)) derives an
+//! `(Arrangement, TreeGeometry)` pair
 //! from a tree and rebuilds the tree from the pair, losslessly. The arrangement
 //! is the semantic + re-projection truth; this is the layout refinement over the
 //! arrangement's default flat projection ([`crate::project_tree`]).

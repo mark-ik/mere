@@ -4,21 +4,21 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The tiled-workbench model (S4): platen's canonical tiling state.
+//! The tiled layout model (S4): platen's canonical tiling state.
 //!
 //! The orrery and the tiled workbench are two **projections of one arrangement**
 //! (the composition spine): the orrery is the [`ProjectionKind::Cartography`]
-//! projection (graph members positioned spatially), the tiled workbench the
+//! projection (graph members positioned spatially), the tiled layout the
 //! [`ProjectionKind::Tree`] one. This module owns the tiling state (the split tree of
 //! tab-stacks, the active tab per stack, the projection mode) and turns it into placed,
 //! content-resolved tiles a host renders.
 //!
-//! The workbench is a **recursive split tree** (see [`tree`]): a leaf is a tab-stack
+//! The layout is a **recursive split tree** (see [`tree`]): a leaf is a tab-stack
 //! (one or more members, one visible), and a split lays its children along an axis (a
 //! `Row` side-by-side, a `Column` top-to-bottom), each with a fractional share. Splits
 //! nest, so the tree expresses every variation: horizontal, vertical, and combinations.
 //! It is geometry-free; layout is the host's genet/taffy job, reached through
-//! [`Workbench::to_tile_tree`] (the Genet tile surface) and [`Workbench::slot_views`] (the
+//! [`TileLayout::to_tile_tree`] (the Genet tile surface) and [`TileLayout::slot_views`] (the
 //! a11y / automation projection).
 //!
 //! Replaces the legacy `FrameState` / `PaneBinding` frame model (the pre-spine
@@ -44,22 +44,22 @@ pub struct SlotView<'a> {
     pub weight: f32,
 }
 
-/// The host's tiled-workbench composition: the split tree and the projection mode.
+/// The host's tiled composition: the split tree and the projection mode.
 /// Cartography (the orrery) is the default; the host flips to Tree for tiles.
 #[derive(Clone, Debug)]
-pub struct Workbench {
+pub struct TileLayout {
     mode: ProjectionKind,
     root: Option<Pane>,
 }
 
-impl Default for Workbench {
+impl Default for TileLayout {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Workbench {
-    /// A new workbench: empty, in Cartography (orrery) mode.
+impl TileLayout {
+    /// A new tile layout: empty, in Cartography (orrery) mode.
     pub fn new() -> Self {
         Self {
             mode: ProjectionKind::Cartography,
@@ -335,13 +335,13 @@ impl Workbench {
         self.root = None;
     }
 
-    /// Project this workbench onto Genet's [`TileTree`](genet_host_api::tile::TileTree)
+    /// Project this tile layout onto Genet's [`TileTree`](genet_host_api::tile::TileTree)
     /// contract (V5/V6) — the builder meerkat uses to render the workbench through the
     /// Genet tile surface. The **structure** is the split tree (nested
     /// `Row`/`Column` splits with their fractions, each leaf a stack with its active
     /// tab); the host supplies `tile_for`, resolving each member to its
-    /// [`Tile`](genet_host_api::tile::Tile). An empty workbench yields `None`. A projection,
-    /// never a second authority: the workbench stays the tiling truth, and the surface
+    /// [`Tile`](genet_host_api::tile::Tile). An empty layout yields `None`. A projection,
+    /// never a second authority: the layout stays the tiling truth, and the surface
     /// is driven entirely through the contract (the host applies tile events back and
     /// re-projects).
     pub fn to_tile_tree(
@@ -402,6 +402,12 @@ impl Workbench {
         }
     }
 }
+
+/// Compatibility name for the pre-projection-authoring tiled layout API.
+///
+/// `Workbench` will be reused by the future projection-authoring component. New code should
+/// name this geometry-free split/tab state [`TileLayout`].
+pub type Workbench = TileLayout;
 
 /// Walk the tree's leaves in order, pushing a [`SlotView`] per stack with its parent
 /// fraction as the weight.

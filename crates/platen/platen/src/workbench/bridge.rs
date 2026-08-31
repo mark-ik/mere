@@ -4,18 +4,18 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The Workbench ⇄ forme bridge: derive a geometry-free [`Arrangement`] plus a
+//! The TileLayout ⇄ forme bridge: derive a geometry-free [`Arrangement`] plus a
 //! Tree-projection [`TreeGeometry`] from the live split tree, and rebuild the
 //! split tree from that pair — losslessly.
 //!
 //! Per the composition spine (§9): the `(Arrangement, TreeGeometry)` pair is the
 //! *persisted / canonical* form (forme owns the semantic arrangement, the
-//! geometry store owns the per-projection layout), and the [`Workbench`]'s `Pane`
+//! geometry store owns the per-projection layout), and the [`TileLayout`]'s `Pane`
 //! split tree is the *live working model* — the derived cache the host mutates
-//! (the verified tiling logic in [`super::tree`]). [`Workbench::to_arrangement`]
-//! derives the canonical pair after an edit (to persist); [`Workbench::from_arrangement`]
+//! (the verified tiling logic in [`super::tree`]). [`TileLayout::to_arrangement`]
+//! derives the canonical pair after an edit (to persist); [`TileLayout::from_arrangement`]
 //! rebuilds the working tree on load. With the geometry present the rebuild is
-//! exact; without it the workbench falls back to the arrangement's default flat
+//! exact; without it the TileLayout falls back to the arrangement's default flat
 //! projection ([`project_tree`]) — the "responsive from one saved geometry" story.
 //!
 //! Boundary: forme's arrangement stays honestly semantic — membership
@@ -28,28 +28,28 @@ use std::collections::{HashMap, HashSet};
 use forme::{Arrangement, ArrangementNodeId, GraphMemberId};
 use serde::{Deserialize, Serialize};
 
-use super::Workbench;
+use super::TileLayout;
 use super::tree::{Branch, Pane, Stack};
 use crate::ProjectionKind;
 use crate::projection_geometry::{TreeBranch, TreeGeometry};
 use crate::tree_projection::{PlanSlot, project_tree};
 
-/// The on-disk form of a tiled workbench: the canonical `(Arrangement, geometry)`
+/// The on-disk form of a tiled layout: the canonical `(Arrangement, geometry)`
 /// pair the bridge derives, written beside the session graph so split shape, tab
 /// stacks, and the active tab survive a restart. The live `Pane` tree itself is
 /// not serde - it is the derived working model, rebuilt from this on load.
 #[derive(Serialize, Deserialize)]
-struct PersistedWorkbench {
+struct PersistedTileLayout {
     arrangement: Arrangement,
     geometry: Option<TreeGeometry>,
 }
 
-impl Workbench {
+impl TileLayout {
     /// Derive the canonical `(Arrangement, TreeGeometry)` pair from the live split
     /// tree: the arrangement is the semantic content (each open member a
     /// `MemberIntent`, members sharing a cell joined by `StackedWith`), the
     /// geometry is the Tree-projection layout (the split skeleton, fractions, and
-    /// active tab). The geometry is `None` for an empty workbench. The inverse of
+    /// active tab). The geometry is `None` for an empty TileLayout. The inverse of
     /// [`from_arrangement`](Self::from_arrangement); the two round-trip.
     pub fn to_arrangement(&self) -> (Arrangement, Option<TreeGeometry>) {
         let mut arr = Arrangement::new();
@@ -61,10 +61,10 @@ impl Workbench {
         (arr, geom)
     }
 
-    /// Rebuild a tiled (Tree-mode) workbench from a canonical pair. With `geom`
+    /// Rebuild a tiled (Tree-mode) TileLayout from a canonical pair. With `geom`
     /// present the split tree is reconstructed exactly (reconciled against the
     /// arrangement's membership — a geometry leaf the arrangement no longer
-    /// carries is dropped, its cell collapsed); with `geom` `None` the workbench
+    /// carries is dropped, its cell collapsed); with `geom` `None` the TileLayout
     /// takes the arrangement's default flat projection ([`project_tree`]: each
     /// root member a side-by-side cell, `StackedWith` members collapsed into a
     /// tab-stack). Always lands in [`ProjectionKind::Tree`].
@@ -89,7 +89,7 @@ impl Workbench {
             }
             None => flat_pane(arrangement),
         };
-        Workbench {
+        TileLayout {
             mode: ProjectionKind::Tree,
             root,
         }
@@ -99,36 +99,36 @@ impl Workbench {
     /// `(Arrangement, geometry)` pair cannot reproduce, i.e.
     /// `from_arrangement(to_arrangement(self))` rebuilds an identical split tree. This
     /// is what lets the Pane tree be a pure *derived working cache* over the canonical
-    /// pair (the workbench half of "two projections of one arrangement"). Fuzz-proven
+    /// pair (the TileLayout half of "two projections of one arrangement"). Fuzz-proven
     /// over random gesture sequences (see the property test) and asserted on every
     /// persist in debug builds.
     pub fn canonical_roundtrips(&self) -> bool {
         let (arrangement, geometry) = self.to_arrangement();
-        Workbench::from_arrangement(&arrangement, geometry.as_ref()).root == self.root
+        TileLayout::from_arrangement(&arrangement, geometry.as_ref()).root == self.root
     }
 
-    /// Serialize this workbench's canonical `(Arrangement, geometry)` pair to JSON for
-    /// session persistence. An empty workbench still round-trips (a `None` geometry).
+    /// Serialize this TileLayout's canonical `(Arrangement, geometry)` pair to JSON for
+    /// session persistence. An empty TileLayout still round-trips (a `None` geometry).
     /// The host writes the string beside the session graph.
     pub fn to_persisted_json(&self) -> Result<String, serde_json::Error> {
         debug_assert!(
             self.canonical_roundtrips(),
-            "workbench Pane tree is not canonical-derivable from its (Arrangement, geometry) pair",
+            "TileLayout Pane tree is not canonical-derivable from its (Arrangement, geometry) pair",
         );
         let (arrangement, geometry) = self.to_arrangement();
-        serde_json::to_string(&PersistedWorkbench {
+        serde_json::to_string(&PersistedTileLayout {
             arrangement,
             geometry,
         })
     }
 
-    /// Rebuild a tiled workbench from session-persisted JSON, keeping only members in
+    /// Rebuild a tiled TileLayout from session-persisted JSON, keeping only members in
     /// `present` (the live graph's members) so a tile whose node was deleted between
     /// sessions is reconciled away and its cell collapsed. `None` on a parse error -
-    /// the host falls back to an empty [`Workbench::new`].
+    /// the host falls back to an empty [`TileLayout::new`].
     pub fn from_persisted_json(json: &str, present: &HashSet<GraphMemberId>) -> Option<Self> {
-        let pw: PersistedWorkbench = serde_json::from_str(json).ok()?;
-        let mut wb = Workbench::from_arrangement(&pw.arrangement, pw.geometry.as_ref());
+        let pw: PersistedTileLayout = serde_json::from_str(json).ok()?;
+        let mut wb = TileLayout::from_arrangement(&pw.arrangement, pw.geometry.as_ref());
         for member in wb.open_members() {
             if !present.contains(&member) {
                 wb.close_tile(member);
@@ -249,18 +249,18 @@ mod tests {
         Uuid::from_u128(n)
     }
 
-    /// A workbench built from a raw root, in Tree mode (the bridge's target mode).
-    fn tiled(root: Pane) -> Workbench {
-        Workbench {
+    /// A TileLayout built from a raw root, in Tree mode (the bridge's target mode).
+    fn tiled(root: Pane) -> TileLayout {
+        TileLayout {
             mode: ProjectionKind::Tree,
             root: Some(root),
         }
     }
 
     /// `wb -> (arrangement, geometry) -> wb` reproduces the split tree exactly.
-    fn assert_round_trips(wb: &Workbench) {
+    fn assert_round_trips(wb: &TileLayout) {
         let (arr, geom) = wb.to_arrangement();
-        let back = Workbench::from_arrangement(&arr, geom.as_ref());
+        let back = TileLayout::from_arrangement(&arr, geom.as_ref());
         assert_eq!(back.root, wb.root, "split tree survives the round trip");
         assert_eq!(back.mode(), ProjectionKind::Tree);
     }
@@ -389,7 +389,7 @@ mod tests {
         let c = arr.add_member_intent(m(3));
         let _ = a;
         arr.stack(b, c);
-        let wb = Workbench::from_arrangement(&arr, None);
+        let wb = TileLayout::from_arrangement(&arr, None);
         assert_eq!(wb.slot_count(), 2, "the stacked pair collapses to one cell");
         assert_eq!(wb.tile_count(), 3);
         assert!(wb.is_tiled());
@@ -418,7 +418,7 @@ mod tests {
         let mut arr = Arrangement::new();
         arr.add_member_intent(m(1));
         arr.add_member_intent(m(3));
-        let wb = Workbench::from_arrangement(&arr, Some(&geom));
+        let wb = TileLayout::from_arrangement(&arr, Some(&geom));
         let mut open = wb.open_members();
         open.sort();
         assert_eq!(
@@ -436,7 +436,7 @@ mod tests {
         (*state >> 33) as u32
     }
 
-    /// Property: a workbench built by ANY sequence of public mutators round-trips
+    /// Property: a TileLayout built by ANY sequence of public mutators round-trips
     /// through `(Arrangement, geometry)` with its split tree bit-identical. Many
     /// seeds exercise the degenerate shapes the hand-written cases miss - single-
     /// child collapses, asymmetric nests, transient one-member stacks, nudged
@@ -450,7 +450,7 @@ mod tests {
             let mut st = seed
                 .wrapping_mul(0x9E37_79B9_7F4A_7C15)
                 .wrapping_add(0x0123_4567_89AB_CDEF);
-            let mut wb = Workbench::new();
+            let mut wb = TileLayout::new();
             wb.ensure_tiled();
             let steps = 4 + lcg(&mut st) % 16;
             for _ in 0..steps {
@@ -496,7 +496,7 @@ mod tests {
                 }
             }
             let (arr, geom) = wb.to_arrangement();
-            let back = Workbench::from_arrangement(&arr, geom.as_ref());
+            let back = TileLayout::from_arrangement(&arr, geom.as_ref());
             assert_eq!(
                 back.root, wb.root,
                 "seed {seed}: the split tree must survive (Arrangement, geometry) round trip",

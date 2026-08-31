@@ -14,6 +14,7 @@ categories = ["gui"]
 path = "src/lib.rs"
 
 [dependencies]
+accesskit.workspace = true
 document-canvas.workspace = true
 inker.workspace = true
 # Genet's host tile-tree contract (V5/V6): platen projects a forme arrangement's
@@ -26,7 +27,9 @@ genet-host-api = { workspace = true }
 # tree projection — its core role under the composition spine).
 forme.workspace = true
 serde = { version = "1.0", features = ["derive"] }
-# Workbench tiling persists as JSON (the bridge's (Arrangement, geometry) pair);
+# Tile-layout state persists as JSON (the bridge's (Arrangement, geometry) pair);
 # the host writes the string beside the session graph.
 serde_json = "1"
+tracing.workspace = true
+uxtree.workspace = true
 uuid = { version = "1", features = ["serde"] }
