@@ -74,3 +74,14 @@ web-sys = { version = "0.3", features = [
     "WheelEvent",
     "Window",
 ] }
+
+# Standalone manifests do not inherit Mere's root patch table. Keep the
+# published graph on the same immutable Genet revision as the host: livery
+# relies on the Parley and Taffy extensions carried there, while Genet's
+# in-process IPC backend and the wgpu-30 renderer use their corresponding
+# maintained forks. These are remote revision/tag patches, never local paths.
+[patch.crates-io]
+parley = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+ipc-channel = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+vello = { git = "https://github.com/mark-ik/vello.git", tag = "vello-0.10.0" }
