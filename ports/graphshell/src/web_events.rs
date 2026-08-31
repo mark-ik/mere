@@ -193,6 +193,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
             .is_some_and(|target| {
                 target.has_attribute("data-action-draft-field")
                     || target.has_attribute("data-action-draft-submit")
+                    || target.has_attribute("data-projection-field")
             })
         {
             return;
