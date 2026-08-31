@@ -45,6 +45,9 @@
 #![warn(missing_docs)]
 
 mod authority;
+
+#[cfg(feature = "flora")]
+pub mod flora;
 mod installed;
 #[cfg(feature = "remote")]
 mod remote;
