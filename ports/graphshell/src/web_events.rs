@@ -12,7 +12,8 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::Closure;
 use web_sys::{
-    Element, Event, HtmlSelectElement, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent,
+    Element, Event, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement, KeyboardEvent,
+    MouseEvent, PointerEvent, WheelEvent,
 };
 
 use super::{ActiveSession, BrowserHost, document, update_semantics, window};
@@ -156,6 +157,33 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         .add_event_listener_with_callback("change", change.as_ref().unchecked_ref())
         .map_err(|_| "could not attach action-draft change listener")?;
     change.forget();
+
+    let input_state = state.clone();
+    let input = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+        let Some(target) = event
+            .target()
+            .and_then(|target| target.dyn_into::<Element>().ok())
+        else {
+            return;
+        };
+        let Some(field) = target.get_attribute("data-projection-field") else {
+            return;
+        };
+        let value = if let Ok(input) = target.clone().dyn_into::<HtmlInputElement>() {
+            input.value()
+        } else if let Ok(textarea) = target.dyn_into::<HtmlTextAreaElement>() {
+            textarea.value()
+        } else {
+            return;
+        };
+        let mut host = input_state.borrow_mut();
+        host.update_projection_field(&field, &value);
+        let _ = update_semantics(&mut host);
+    });
+    document()?
+        .add_event_listener_with_callback("input", input.as_ref().unchecked_ref())
+        .map_err(|_| "could not attach projection editor input listener")?;
+    input.forget();
 
     let key_state = state.clone();
     let keydown = Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {

@@ -43,7 +43,9 @@ use serde::Deserialize;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Document, Element, HtmlCanvasElement, Window};
+use web_sys::{
+    Document, Element, HtmlCanvasElement, HtmlInputElement, HtmlTextAreaElement, Window,
+};
 
 use graphshell::access::{AccessRecord, AccessRecordFilter, query_access_records};
 use graphshell::app::GraphshellApp;
@@ -664,6 +666,82 @@ impl BrowserHost {
         self.chrome_dirty = true;
     }
 
+    fn update_projection_field(&mut self, field: &str, value: &str) {
+        let mut draft = self.projection_editor.draft().clone();
+        let action = match field {
+            "source.authority" => {
+                draft.source.authority = value.to_string();
+                EditorAction::SetSource(draft.source)
+            }
+            "source.domain" => {
+                draft.source.domain = value.to_string();
+                EditorAction::SetSource(draft.source)
+            }
+            "source.resource" => {
+                draft.source.resource = value.to_string();
+                EditorAction::SetSource(draft.source)
+            }
+            "reading.key" => {
+                draft.reading.key = value.to_string();
+                EditorAction::SetReading(draft.reading)
+            }
+            "encoding.x" => {
+                draft.encoding.x = Channel::Field(value.to_string());
+                EditorAction::SetEncoding(draft.encoding)
+            }
+            "encoding.y" => {
+                draft.encoding.y = Channel::Field(value.to_string());
+                EditorAction::SetEncoding(draft.encoding)
+            }
+            "arrangement.kind" => {
+                draft.arrangement.kind = value.to_string();
+                EditorAction::SetArrangement(draft.arrangement)
+            }
+            "arrangement.direction" => {
+                draft.arrangement.direction = value.to_string();
+                EditorAction::SetArrangement(draft.arrangement)
+            }
+            "arrangement.spacing" => match value.parse::<u32>() {
+                Ok(spacing) => {
+                    draft.arrangement.spacing = spacing;
+                    EditorAction::SetArrangement(draft.arrangement)
+                }
+                Err(_) => {
+                    self.projection_editor_status =
+                        "Invalid · arrangement.spacing must be a number".to_string();
+                    self.projection_editor_open = true;
+                    self.chrome_dirty = true;
+                    return;
+                }
+            },
+            "appearance.realization" => {
+                draft.appearance.realization = value.to_string();
+                EditorAction::SetAppearance(draft.appearance)
+            }
+            "appearance.title" => {
+                draft.appearance.title = value.to_string();
+                EditorAction::SetAppearance(draft.appearance)
+            }
+            "provenance.author" => {
+                draft.provenance.author = value.to_string();
+                EditorAction::SetProvenance(draft.provenance)
+            }
+            "provenance.source_revision" => {
+                draft.provenance.source_revision = value.to_string();
+                EditorAction::SetProvenance(draft.provenance)
+            }
+            "provenance.note" => {
+                draft.provenance.note = value.to_string();
+                EditorAction::SetProvenance(draft.provenance)
+            }
+            _ => return,
+        };
+        self.projection_editor.reduce(action);
+        self.projection_editor_status = format!("Edited · {field}");
+        self.projection_editor_open = true;
+        self.chrome_dirty = true;
+    }
+
     fn save_projection(&mut self) {
         let mut sink = BrowserProjectionSink;
         match self.projection_editor.save(&mut sink) {
@@ -1195,6 +1273,40 @@ fn projection_panel_key(panel: ProjectionPanel) -> &'static str {
     }
 }
 
+fn set_projection_input_value(document: &Document, id: &str, value: &str) -> Result<(), String> {
+    let node = element(document, id)?;
+    if let Ok(input) = node.clone().dyn_into::<HtmlInputElement>() {
+        input.set_value(value);
+        return Ok(());
+    }
+    if let Ok(textarea) = node.dyn_into::<HtmlTextAreaElement>() {
+        textarea.set_value(value);
+        return Ok(());
+    }
+    Err(format!("projection editor field #{id} is not an input"))
+}
+
+fn projection_preview(draft: &ProjectionDraft) -> String {
+    let x = match &draft.encoding.x {
+        Channel::Field(value) => value.as_str(),
+        Channel::Constant(value) => value.as_str(),
+    };
+    let y = match &draft.encoding.y {
+        Channel::Field(value) => value.as_str(),
+        Channel::Constant(value) => value.as_str(),
+    };
+    format!(
+        "{} · read {} by {} · {} · x={} y={} · {}",
+        draft.appearance.title,
+        draft.reading.kind,
+        draft.reading.key,
+        draft.arrangement.kind,
+        x,
+        y,
+        draft.appearance.realization
+    )
+}
+
 fn update_projection_editor_semantics(
     host: &BrowserHost,
     document: &Document,
@@ -1223,6 +1335,73 @@ fn update_projection_editor_semantics(
     };
     let panel = projection_panel_key(host.projection_editor.panel());
     let content_id = host.projection_editor.panel().content_id();
+    let preview = projection_preview(draft);
+    set_projection_input_value(
+        document,
+        "projection-source-authority",
+        &draft.source.authority,
+    )?;
+    set_projection_input_value(document, "projection-source-domain", &draft.source.domain)?;
+    set_projection_input_value(
+        document,
+        "projection-source-resource",
+        &draft.source.resource,
+    )?;
+    set_projection_input_value(document, "projection-reading-key", &draft.reading.key)?;
+    set_projection_input_value(
+        document,
+        "projection-encoding-x",
+        match &draft.encoding.x {
+            Channel::Field(value) | Channel::Constant(value) => value,
+        },
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-encoding-y",
+        match &draft.encoding.y {
+            Channel::Field(value) | Channel::Constant(value) => value,
+        },
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-arrangement-kind",
+        &draft.arrangement.kind,
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-arrangement-direction",
+        &draft.arrangement.direction,
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-arrangement-spacing",
+        &draft.arrangement.spacing.to_string(),
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-appearance-realization",
+        &draft.appearance.realization,
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-appearance-title",
+        &draft.appearance.title,
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-provenance-author",
+        &draft.provenance.author,
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-provenance-revision",
+        &draft.provenance.source_revision,
+    )?;
+    set_projection_input_value(
+        document,
+        "projection-provenance-note",
+        &draft.provenance.note,
+    )?;
     set_text(
         document,
         "projection-editor-status",
@@ -1257,6 +1436,12 @@ fn update_projection_editor_semantics(
         "projection-editor-lane",
         &format!("ContentSource::Open · graphshell.projection-editor.panel · {content_id}"),
     );
+    set_text(document, "projection-editor-preview", &preview);
+    set_attr(
+        &element(document, "projection-editor-preview")?,
+        "data-preview-value",
+        &preview,
+    )?;
     for candidate in ProjectionPanel::ALL {
         let button = element(
             document,
@@ -1270,6 +1455,19 @@ fn update_projection_editor_semantics(
                     .unwrap_or("false"),
             )
             .map_err(|_| "could not expose selected projection panel")?;
+        let group = element(
+            document,
+            &format!("projection-fields-{}", projection_panel_key(candidate)),
+        )?;
+        if candidate == host.projection_editor.panel() {
+            group
+                .remove_attribute("hidden")
+                .map_err(|_| "could not show projection editor panel")?;
+        } else {
+            group
+                .set_attribute("hidden", "")
+                .map_err(|_| "could not hide projection editor panel")?;
+        }
     }
     let body = document.body().ok_or("document has no body")?;
     body.set_attribute(
@@ -1284,6 +1482,8 @@ fn update_projection_editor_semantics(
         &format!("open:graphshell.projection-editor.panel:{content_id}"),
     )
     .map_err(|_| "could not expose projection editor content lane")?;
+    body.set_attribute("data-projection-editor-preview", &preview)
+        .map_err(|_| "could not expose projection editor preview")?;
     body.set_attribute("data-projection-editor-validation", validation_token)
         .map_err(|_| "could not expose projection editor validation")?;
     body.set_attribute("data-projection-editor-errors", &error_count.to_string())
