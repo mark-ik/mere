@@ -26,22 +26,54 @@ if let Some(update) = check_update("0.1.0".parse().unwrap(), config)? {
 ## Public API
 
 Every module is private; the whole surface is re-exported at the crate root, so
-a caller writes `luggage::Config`. The `Source` column names the source file.
+a caller writes `luggage::Config`. The `Source` column names the source file;
+`Feature` says whether the item survives `default-features = false` (see
+[Feature split](#feature-split)).
 
-| Item | Source | What it is |
+| Item | Source | Feature | What it is |
+| --- | --- | --- | --- |
+| `check_update(Version, Config)` | `lib.rs` | `native` | One call: build an `Updater`, check the feeds, return `Option<Update>` |
+| `Config` | `config` | `native` | `feeds`, `pubkey`, `windows`, `require_signed_manifest` (defaults to `true`) |
+| `Feed` | `config` | `native` | `Http(Url)`, `Directory(PathBuf)`, `GitHub { owner, repo }`; built by `Feed::parse` |
+| `WindowsConfig`, `WindowsUpdateInstallMode` | `config` | `native` | Extra installer args; `BasicUi` / `Quiet` / `Passive` (default), with `msiexec_args` and `nsis_args` |
+| `UpdaterBuilder`, `Updater`, `target()` | `updater` | `native` | Builder form: `version_comparator`, `pub_key`, `target`, `feeds`, `executable_path`, `header`, `timeout`, `installer_args`; `Updater::check` |
+| `Update` | `install` | `native` | `download`, `download_extended`, `install`, `download_and_install`, `download_and_install_extended`, plus `stage` and `install_staged` |
+| `StagedUpdate` | `staging` | `native` | `load`, `take_verified`, `version`, `format`, `extract_path`, `discard` |
+| `ReleaseRefV1` | `release` | **core** | A reference naming one signed release: `manifest_blake3` + `publisher_key_id`, and nothing else. Needs no dependency, so it reaches wasm32. Display and lookup only — never an authorization |
+| `RemoteRelease`, `RemoteReleaseData`, `ReleaseManifestPlatform`, `UpdateFormat`, `MANIFEST_NAME` | `release` | **core** | Manifest types. `UpdateFormat` is `Nsis` / `Wix` / `AppImage` / `App`; `MANIFEST_NAME` is `"luggage.json"` |
+| `Error`, `Result` | `error` | **core** | `thiserror` enum and the crate alias |
+
+`semver` and `url` are re-exported in every build, and `http` and `reqwest`
+under `native`, so a caller can name a `Url` or a `Version` without adding
+those crates.
+
+## Feature split
+
+`native` is on by default and carries the whole update pipeline — everything
+that touches the network, the filesystem, or the host process. Nothing changes
+for a caller who does not opt out.
+
+`default-features = false` leaves the **release-identity core**: the `release`
+module's manifest types and the error enum, with no I/O. It compiles for
+`wasm32-unknown-unknown`, which is what lets a browser build name a release
+without carrying an updater it could never run — and without a second,
+hand-maintained copy of the release types drifting against this one.
+
+| | Core | Native (default) |
 | --- | --- | --- |
-| `check_update(Version, Config)` | `lib.rs` | One call: build an `Updater`, check the feeds, return `Option<Update>` |
-| `Config` | `config` | `feeds`, `pubkey`, `windows`, `require_signed_manifest` (defaults to `true`) |
-| `Feed` | `config` | `Http(Url)`, `Directory(PathBuf)`, `GitHub { owner, repo }`; built by `Feed::parse` |
-| `WindowsConfig`, `WindowsUpdateInstallMode` | `config` | Extra installer args; `BasicUi` / `Quiet` / `Passive` (default), with `msiexec_args` and `nsis_args` |
-| `UpdaterBuilder`, `Updater`, `target()` | `updater` | Builder form: `version_comparator`, `pub_key`, `target`, `feeds`, `executable_path`, `header`, `timeout`, `installer_args`; `Updater::check` |
-| `Update` | `install` | `download`, `download_extended`, `install`, `download_and_install`, `download_and_install_extended`, plus `stage` and `install_staged` |
-| `StagedUpdate` | `staging` | `load`, `take_verified`, `version`, `format`, `extract_path`, `discard` |
-| `RemoteRelease`, `RemoteReleaseData`, `ReleaseManifestPlatform`, `UpdateFormat`, `MANIFEST_NAME` | `release` | Manifest types. `UpdateFormat` is `Nsis` / `Wix` / `AppImage` / `App`; `MANIFEST_NAME` is `"luggage.json"` |
-| `Error`, `Result` | `error` | `thiserror` enum and the crate alias |
+| modules | `error`, `release` | + `config`, `signing`, `install`, `staging`, `updater` |
+| direct deps | `semver`, `serde`, `serde_json`, `thiserror`, `time`, `url` | + 8 more |
+| crates resolved (wasm32 / host) | 103 | 261 |
+| `luggage-manifest` binary | no (`required-features`) | yes |
 
-`http`, `reqwest`, `semver` and `url` are re-exported too, so a caller can name
-a `Url` or a `Version` without adding those crates.
+The error enum is `#[non_exhaustive]`, and the five variants carrying
+native-only types (`Reqwest`, `Http`, `PersistError`, `Minisign`, `Base64`) are
+gated with the feature, so their absence cannot break a downstream match.
+
+Verification is **not** in the core. The minisign and BLAKE3 checks are
+`pub(crate)` helpers the native pipeline drives, so they stayed with it; a core
+consumer can name and compare a release but not verify one. Exporting a
+verification entry point is a public-API decision, deliberately left open.
 
 ## Feeds
 
@@ -113,11 +145,13 @@ Defaults: `--target` is the host triple, `--signature` is `<artifact>.sig`,
 
 ## Dependencies
 
-`reqwest` with `rustls-tls` and no default features, `minisign-verify`,
-`blake3`, `semver`, `serde` / `serde_json`, `url`, `http`, `time`, `dirs`,
-`tempfile`, `percent-encoding`, `base64`, `log`, `thiserror`, and upstream's
-`cargo-packager-utils` for `current_exe` resolution. macOS additionally pulls
-`flate2` and `tar` for `.app.tar.gz`. Tests use `minisign` to sign in-process.
+Core (always): `semver`, `serde` / `serde_json`, `thiserror`, `time`, `url`.
+
+Behind `native`: `reqwest` with `rustls-tls` and no default features,
+`minisign-verify`, `blake3`, `http`, `dirs`, `tempfile`, `percent-encoding`,
+`base64`, `log`, and upstream's `cargo-packager-utils` for `current_exe`
+resolution. macOS additionally pulls `flate2` and `tar` for `.app.tar.gz`.
+Tests use `minisign` to sign in-process.
 
 ## License
 

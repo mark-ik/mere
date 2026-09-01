@@ -7,10 +7,14 @@
 //! Transport-independent, endpoint-scoped projection state.
 
 pub mod action_draft;
+pub mod core;
+pub mod driver;
 pub mod frozen;
 pub mod session;
 
 pub use action_draft::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
+pub use core::{Outcome, Progress, RESUME_ATTEMPTS, SessionCore};
+pub use driver::{Advance, SessionDriver};
 pub use session::{
     RetainedEndpointSession, resume_after_notice, resume_request_for_notice, unexpected,
 };

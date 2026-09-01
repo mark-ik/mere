@@ -34,6 +34,18 @@ native = [
     "dep:webrtc-carrier",
     "dep:zeroize",
 ]
+# The live WebRTC lane: the join sequence over a real carrier and the pump
+# that presents its frames as the session stream. Separate from `native`
+# because it is what pulls str0m and the carrier's own tokio driver into the
+# build — every native Graphshell that is not yet serving browser joins keeps
+# not paying for them. The C4a fixture and its tests require this feature.
+webrtc-session = ["native", "webrtc-carrier/native"]
+
+# C4a's composition receipt: the join, admission, pump, serve loop and the
+# event-driven client over one real loopback WebRTC pair. `required-features`
+# rather than a cfg inside, so a default `cargo test` never reaches the file.
+
+
 # The browser reference-host cone. H0 proves the dependency boundary; H1 adds
 # the local Mere host adapter on top of this selected graph + canvas surface.
 #
@@ -202,4 +214,30 @@ required-features = ["native"]
 webrtc-carrier = { workspace = true, features = ["native"] }
 pollster = "0.4"
 tempfile = "3"
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "time"] }
+# `process` is the C4a signaling receipt: it spawns the fixture *binary* and
+# reads its stdout, because "the pieces compose in-process" and "the binary a
+# headed run launches works" are different claims.
+tokio = { version = "1", features = [
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "time",
+] }
+
+[[bin]]
+name = "c4_webrtc_host"
+path = "src/bin/c4_webrtc_host.rs"
+required-features = ["webrtc-session"]
+
+[[test]]
+name = "webrtc_join_loopback"
+required-features = ["webrtc-session"]
+
+# The fixture binary driven through its own HTTP signaling: what an in-process
+# composition cannot claim about the binary a headed run actually launches.
+[[test]]
+name = "c4_host_signaling"
+required-features = ["webrtc-session"]

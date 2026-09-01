@@ -233,7 +233,16 @@ mere-resident = { version = "0.0.1", path = "crates/system/resident" }
 # Self-update over signed manifests (the cargo-packager-updater fork; ruled
 # 2026-07-24: name luggage, home mere). Apps consume it via git dep like the
 # rest of the family; mere itself will when its own packaging lands.
-luggage = { path = "crates/system/luggage" }
+#
+# `default-features = false` here is the release-identity core only. Cargo
+# forbids a member turning a workspace dependency's defaults *off*, so the
+# workspace declaration has to be the minimal common denominator and each
+# member opts up. A member that wants the update pipeline writes
+# `luggage = { workspace = true, features = ["native"] }`; forgetting to is a
+# compile error naming the missing item, never a silently crippled updater.
+# The crate's own `default = ["native"]` still serves consumers outside this
+# workspace, which is who it is for.
+luggage = { path = "crates/system/luggage", default-features = false }
 ux-events = { path = "crates/system/ux-events" }
 register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
 register-theme = { path = "crates/system/registry/register-theme" }
@@ -492,7 +501,7 @@ layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "da87
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
 # inherited by consumers, so Mere restates the same immutable Genet revision.
-taffy = { package = "genet-taffy", version = "=0.13.1", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 # Same restatement, same reason: genet-livery is built against Genet's Parley
 # fork (its `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`
 # do not exist in published parley 0.10.0, which carries the same version

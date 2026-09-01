@@ -36,6 +36,7 @@ pub mod identity_endpoint;
 pub mod identity_projection;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod lifecycle;
+pub mod live_endpoint;
 #[cfg(feature = "web")]
 pub mod mere_host;
 #[cfg(feature = "web")]
@@ -70,6 +71,8 @@ pub mod transfer_offer;
 pub mod view;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod webrtc_door;
+#[cfg(all(feature = "webrtc-session", not(target_arch = "wasm32")))]
+pub mod webrtc_session;
 
 pub use chirograph as protocol;
 pub use graphshell_client as client;

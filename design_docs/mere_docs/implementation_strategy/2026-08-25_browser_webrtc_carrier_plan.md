@@ -250,6 +250,313 @@ an embed.
 - the browser carrier profile in the remote projection plan can be marked
   physically proven.
 
+### C4a / C4b, and how the browser drives the protocol
+
+C4 splits (ruled 2026-08-31). **C4a** earns the first three done-conditions: a
+headed browser rendering a native-owned projection over the real protocol, with
+snapshot, diff, reconnect, admitted intent and refused intent in one
+machine-readable receipt, and the native revision changing only for the
+admitted intent. **C4b** takes the embedded and full-page surfaces and their
+keyboard and accessibility-tree checks.
+
+Two findings from the C4 assessment reshaped the phase.
+
+**The shared Cambium web host is already in use**, so §7's sentence about it
+describes the present rather than a task. `web_view.rs` builds the chrome
+through `cambium::GenetAppRunner`/`GenetElement` into a netrender `Scene`, and
+`web_gpu.rs` presents it over `genet_render_host::RenderCore`. Graphshell's
+`BrowserHost` (`web.rs:272`) is the application-state struct — canvas, presenter,
+UI flags — and collides with the phrase "web host" in name only. There is no
+duplicate host to converge.
+
+**The browser cannot use `chirograph::Carrier`.** The trait is blocking, and its
+own doc defers the question to whoever writes a network carrier; C4 is that
+moment. The only stream implementation, `NetworkCarrier`, bridges the blocking
+shape with `tokio::runtime::Runtime::block_on`, which cannot run on a browser
+main thread — and blocking there would deadlock against the very data-channel
+callbacks delivering the bytes being waited on.
+
+A Web Worker does not rescue the blocking shape, which is worth recording
+because it looks like it should. `RTCDataChannel` *is* transferable to a
+`DedicatedWorker`, but a worker blocked in `request` has stopped the event loop
+that delivers the message it is blocked on — the same deadlock on a new thread.
+Blocking *and* receiving needs `Atomics.wait` on a `SharedArrayBuffer` fed by a
+second thread, `SharedArrayBuffer` needs cross-origin isolation (COOP
+`same-origin` + COEP `require-corp`), and a cross-origin iframe inherits
+isolation only when its embedder grants the `cross-origin-isolated` permission.
+That would impose COOP/COEP on anyone embedding Graphshell, which contradicts
+C4b's own requirement that one component serve as both the full application and
+an embed. `Document-Isolation-Policy` would have removed the COEP cost; it is a
+Chrome explainer and has not shipped. Rendering compounds it: `web_gpu.rs` takes
+an `HtmlCanvasElement`, so a client in a worker either ships scenes over
+`postMessage` per frame or moves rendering to `OffscreenCanvas`, which is a
+change in `genet-render-host` — the genet repo, outside this plan.
+
+**Ruled: a sans-I/O session core.** `RetainedEndpointSession`'s protocol
+sequencing moves into an I/O-free core; the blocking `Carrier` drives it on
+native and an event-driven adapter drives it in the browser. One protocol
+implementation with two thin adapters, which is the shape `notochord`'s
+handshake and this carrier's own core already have, and the reason str0m was
+chosen at C1. No cross-origin isolation, no genet change, and no second copy of
+the protocol to keep in step. The surface is bounded: of 22 methods on
+`RetainedEndpointSession`, 8 are pure state and **10 operations** touch the
+carrier — `over`, `mount`, `resnapshot`, `open_action_draft`,
+`submit_action_draft`, `resolve`, `invoke`, `wait_for_change`,
+`poll_for_change`, `close`. `RetainedEndpointSession` keeps its public API
+exactly and becomes the blocking adapter over the core, so no native consumer
+changes.
+
+**Landed 2026-08-31.** `graphshell_client::core::SessionCore` (559 lines) holds
+the sequencing; `session.rs` (412) is the blocking adapter over it, and its
+whole blocking surface is one loop, `drive`, which carries whatever the core
+asks for to the carrier until the core says the operation is finished. The
+count above was 10 by a doc-comment false match — `open_action_draft` reads the
+advertised accessibility tree and asks the endpoint nothing, so it stayed pure
+and the real figure is **9** I/O operations. The three multi-step ones are
+where the state machine earns itself: a resolve wanting a second resource, a
+resume answered with a resynchronize (bounded by `RESUME_ATTEMPTS`), and a poll
+draining queued notices each return `Progress::Ask` again rather than looping
+over a carrier they do not hold.
+
+The core names `CarrierRequestBody`, `CarrierResponseBody` and `CarrierNotice`
+— plain value types — and never the `Carrier` trait; its only mention of it is
+the doc paragraph saying why. Verified against the pre-refactor baseline:
+graphshell-client 30 tests before and after (36 with the core's own), knot-editor's
+`place_projection` and `rosette_projection` unchanged, `graphshell` and
+`knot-editor` compiling on all targets, rustdoc clean, and no warning anywhere
+in the crate. Six new tests cover the paths `session.rs` never had any for,
+each written without a carrier, which is the split demonstrating itself.
+
+**The event-driven adapter landed the same day.**
+`graphshell_client::driver::SessionDriver` (429 lines) is the second adapter:
+it turns what the core asks for into an NDJSON line, accepts lines coming back,
+and routes them. It is *not* browser code and has no browser dependency —
+nothing in it knows what a data channel is, so it compiles and its tests run on
+an ordinary `cargo test`. The browser glue left for the port is `send` and
+`onmessage`. That is the division the WebRTC probe already draws between its
+`sdp` module and its wasm half, for the same reason: a rule only exercisable in
+a browser is a rule nobody exercises.
+
+The wire is the one the native side already speaks — `CarrierRequest` out,
+`CarrierOutput` (untagged: response or notice) in, one JSON value per line, the
+same lines `graphshell-stdio` speaks and `serve_admitted_session` reads.
+
+It also carries a property the blocking adapter got free from its call stack and
+this one has to earn: **request identity**. A blocking carrier reads the answer
+to the question it just asked, so correlation is implicit. Here lines arrive
+whenever they arrive, so each request carries an id, only one may be in flight,
+and a response naming a different id is refused rather than folded into
+whatever happens to be pending. That is the difference between a stalled
+session and a silently wrong one, and it has its own test. Nine tests cover the
+adapter: discovery building the core, an answer to a request never sent, an
+answer naming the wrong request, a second request while one is in flight, an
+endpoint refusal clearing the in-flight slot without killing the session, a
+notice queueing without disturbing a pending answer, an unreadable line, a
+blank line, and a disconnect clearing what was in flight.
+
+graphshell-client now runs 45 tests (30 before this work), compiles for wasm32,
+and has no warning of any kind attributed to it, rustdoc included.
+
+**The frame pump landed 2026-08-31.** `serve_admitted_session` wants an
+`AsyncRead + AsyncWrite`; the carrier moves bounded frames; nothing between
+them should have to learn what a data channel is.
+`webrtc_carrier::native::stream_over_frames` is that seam — it returns a
+`DuplexStream` and runs a pump carrying frame payloads onto it and whatever is
+written to it back out as frames.
+
+A pump rather than a hand-written `AsyncRead`/`AsyncWrite`, for a reason worth
+recording: the carrier's backpressure policy is an `.await` on a watch channel
+between the high and low water marks, and there is no honest way to spell that
+as a `Poll::Pending` without a waker the channel does not expose. Awaiting
+`FrameWriter::send_frame` gets the policy already written and already tested.
+It is also the shape `graphshell::browser_carrier` uses on the native-messaging
+lane for the same reason: framing at the edge, a private duplex behind it.
+
+Two receipts, both over the same real DTLS loopback as the rest of the C1
+suite, not a mock. **Frame boundaries are invisible to a line reader** — a line
+three frames long arrives byte-for-byte as one line, and two short lines
+sharing a frame arrive as two lines, which is exactly what Graphshell's NDJSON
+rests on. And **dropping the stream ends its pump**, promptly and reporting a
+clean end, so a finished session cannot leave a task spinning on a carrier
+nobody reads.
+
+Cost: one tokio feature, `io-util`, on the already-native-gated dependency.
+Asserted rather than assumed — tokio still resolves to **0 crates** in the
+wasm32 tree, so the Wasm-clean core is untouched. Carrier suite now 68 tests
+(66 before), wasm32 core and `browser` both still clean, rustdoc clean.
+
+**The admission wiring landed 2026-08-31.** `graphshell::webrtc_session`
+(~1,000 lines with its tests, behind a new `webrtc-session` feature) is the
+live half of the door: the join sequence over a real channel, and the admitted
+session it produces. The door stays sans-I/O and keeps every rule; this module
+keeps none — what it owns is only that the messages travel in order and that
+every refusal is *written to the peer* before the channel closes.
+
+The join travels as carrier frames — four JSON messages (`Open`, `Challenge`,
+`Redeem`, `Grant`/`Refused`) and two binary ones (the Notochord hello and
+reply) — because frames give the door's bytes-in/bytes-out functions their
+message boundaries for free. Only after the admission reply does
+`stream_over_frames` start, which makes the plan's "a refused stream never
+reaches Graphshell" rule structural: before that point there is no stream for
+an application byte to be on. `serve_webrtc_join` composes the whole host
+side over a live `Carrier`; `JoinConclusion::admitted_over` assembles the
+`AdmittedSession` (claims re-decoded from the accepted hello, notochord's own
+precedent) over whatever stream carries the application.
+
+Both roles live in the module on purpose — `peer_join` is the sequence the
+browser's event glue drives and a future native client reuses, and keeping it
+beside `host_join` is what lets one test drive both ends and keeps them from
+drifting, exactly as the door already does with its client functions.
+
+Four tests over in-memory frames (frames-over-DTLS being already the carrier
+suite's receipt): the positive control with both ends agreeing on subject,
+session id and link; a spent invitation refused *with the reason told to the
+peer*; a wrong host refused before any secret crosses — the peer walks away
+after the challenge and the test asserts the use count is intact, which is
+what makes a relay-in-the-middle unable to exhaust an invitation it cannot
+sign for; and the flagship: **a completed join carries a real Graphshell
+session**, `serve_admitted_session` over a real `ResumeFixtureEndpoint` on the
+host end, the event-driven `SessionDriver` on the peer end, discover → mount →
+close, exactly three requests answered. That is every C4a seam except DTLS
+itself composed in one test.
+
+The feature is separate from `native` because it is what pulls str0m into the
+build; asserted rather than assumed — str0m resolves to **0 crates** in the
+default graphshell tree (positive control on the tree itself). Full graphshell
+lib suite: 140 tests green under the feature; default build untouched.
+
+**Rejoin, the exported loopback harness, and the composition receipt landed
+2026-08-31.** Three pieces, each proven as it went in:
+
+*Rejoin.* The join protocol gained `ToHost::Resume` and `peer_rejoin`: a
+reconnecting peer verifies the host over the new link (a new link is a new
+channel someone else could be terminating), then presents its retained
+delegation — carried in `PeerJoin` since the first join — and goes straight to
+admission. No redemption, so the invitation's use count belongs to first joins
+alone. The test does both halves at once: a one-use invitation, spent, then a
+rejoin over fresh fingerprints admitted with the count still at zero and a
+*different* shared link. C2's one-use ceiling and C3's fresh-admission rule
+holding simultaneously.
+
+*The harness.* The carrier's private loopback rig — str0m offerer, real ICE,
+real DTLS, real SCTP over two `127.0.0.1` sockets — moved to
+`webrtc_carrier::native::loopback` (`LoopbackOfferer`, `loopback_pair`), and
+the carrier's own 15-receipt suite now runs on the exported copy. One harness,
+however many crates take receipts over it.
+
+*The composition receipt.* `ports/graphshell/tests/webrtc_join_loopback.rs`:
+one real WebRTC pair carrying the join, Notochord admission, the frame pump,
+`serve_admitted_session` over a fixture endpoint, and the event-driven
+`SessionDriver` doing discover → mount → close. Everything the C4a fixture
+binary will do except HTTP signaling and the browser itself. Passes in ~0.3s
+of protocol time.
+
+That receipt caught a real lifetime bug, and it is the reason `ServedJoin`
+exists in the shape it does. `CarrierControl` cancels the driver when dropped
+— the deliberate dead-man's switch — so `serve_webrtc_join` returning a bare
+session meant the host cancelled its own carrier while the serve loop's final
+`Closed` reply was still in the pump; the peer's close reproducibly never
+answered. Worse, the failure was timing-shaped: it *passed* with debug prints
+in and failed 4-of-5 without them, and only per-phase timeouts pinned it to
+the close. The fix is `ServedJoin { session, pump, control }` plus
+`ServedJoin::finish()`, whose ordering is the whole function: drop the stream
+so the pump drains the final bytes and sees end-of-stream, await the pump,
+*then* the carrier's polite close flushes the outbound queue. Hammered six
+times green; the steady ~5s in the test is the carrier's own bounded polite
+close waiting out a peer that vanished, not a defect.
+
+graphshell lib under the feature: 141 tests. Default build untouched, docs
+clean.
+
+**Pre-admitted sessions, the live endpoint, and the intent receipt landed
+2026-09-01.** Mark ruled pre-admitted sessions in, so the WebRTC lane reaches
+the *product* host rather than a fixture beside it.
+
+`ResidentProjectionHost::serve_admitted` is the split: everything
+`accept_one` did after the decision — authority retained from the chain the
+conclusion was drawn from, the route opened from the catalog, the live-session
+count, the notifying loop — now takes an `AdmittedSession` somebody else
+produced. `accept_one` is that function plus its own admission. A pre-admitted
+session is served exactly as a dialled one, because after the decision there
+is no difference worth having. It deliberately does not consult
+`max_sessions`: the caller admitted this peer, so the ceiling was that
+decision's to apply, and `live_sessions()` is what a caller passes to its own
+admission to make the check.
+
+`graphshell::live_endpoint::LiveEndpoint` is the endpoint C4a's third
+done-condition needs. `ResumeFixtureEndpoint` has a history decided at
+construction, which is right for proving resume picks the correct branch and
+useless for proving *what makes* a revision. This one advances on invocation,
+and the interesting half is that it advertises a **refused** intent as
+visibly as the admitted one — a receipt row saying "an action the endpoint
+never offered was not performed" proves nothing about policy; the claim worth
+making is that a peer can see an action, invoke it correctly, and be told no
+with the revision standing still. Seven unit tests state the rule directly,
+including that a refusal rings no bell.
+
+The composition receipt gained the row that matters: over one real WebRTC
+pair, a browser-shaped peer joins, the **resident host** serves it through the
+same catalog route a dialled peer gets, and the peer invokes the refused
+intent then the admitted one — reading the native position back over the wire
+by resnapshot each time. Refused: revision unmoved. Admitted: **exactly one**.
+Five consecutive runs green.
+
+Two findings from writing it. The `CarrierControl`-drop hazard recurred
+immediately on the *peer* side (`let (reader, writer, _control) = …` cancels
+the driver the moment the binding falls), which says the hazard is easy to hit
+and worth a type-level fix if it appears a third time. And the capability
+profile is a real negotiation, not a formality: a default `CapabilityProfile`
+supports no offer, so every advertised action reads as unadvertised and
+`invoke` refuses before anything reaches the wire — the browser must declare
+what it can present.
+
+graphshell lib: 148 tests. Default build untouched, docs clean.
+
+**The host fixture binary landed 2026-09-01.** `c4_webrtc_host` is the last
+native piece: it prints an invite fragment, answers `POST /offer`, and runs
+the shipping path underneath — `serve_webrtc_join` for the door,
+`ResidentProjectionHost::serve_admitted` for the product host,
+`LiveEndpoint` on a catalog route. The signaling is deliberately the dumbest
+thing that works, one POST for the offer and one response for the answer, the
+same shape webrtc-ping established at C1; C5 replaces it with `mer3ly.net`.
+
+Two decisions worth keeping. The host identity is generated fresh from
+`OsRng` on every run rather than seeded from a constant — a fixture with a
+hard-coded seed is a private key in a repository, and the first person to
+reuse the shape inherits it; a restarted fixture is a different host and its
+old invitations correctly stop verifying. And `--advertise` is documented as
+not-optional-in-practice, with the C1 receipt's reason attached: the carrier
+labels inbound datagrams with the *first* advertised address, so advertising
+both loopback and a LAN address attributes a browser's packets to `127.0.0.1`
+and DTLS times out with no useful error.
+
+`tests/c4_host_signaling.rs` drives the **binary**, not the library: it spawns
+the real executable, waits for its `READY` line rather than polling a port,
+fetches the fragment over HTTP, and joins as a str0m peer through the real
+`POST /offer` — the browser's exact path minus the browser. It asserts the
+fragment served over HTTP is the one printed, that a projection mounts, that a
+*second* visitor is served rather than queued, and that an invitation this
+host never issued is refused by name (`unknown invitation`) with the serving
+test as its positive control. A `Drop` guard kills the child, verified by a
+leak check finding no surviving fixture after four consecutive runs.
+
+Three findings, all of which a headed run would otherwise have hit first.
+`InMemoryProvider` is deliberately not `Clone` (it holds a master private
+key), so the fixture shares one behind an `Arc` rather than handing out
+copies. Cargo runs integration tests in parallel, so two fixtures on one
+signaling port produced "the fixture exited before it was ready" — a port
+collision wearing a startup failure's clothes; each test now owns a port. And
+a fixture left running holds its own binary against the next `cargo build` on
+Windows, which is an argument for the `Drop` guard rather than manual cleanup.
+
+graphshell lib: 148 tests, plus 2 composition and 2 signaling receipts.
+Default build untouched; no warnings in any file this work added.
+
+Still open for C4a: the browser glue binding `SessionDriver` + `peer_join` to
+the data channel, replacing `canary::FixtureEndpoint` in the web client with
+the real mount, and the headed machine-readable receipt. The native half is
+complete: a browser now has a host to talk to.
+
 ## 8. C5: public rendezvous
 
 Deploy `https://mer3ly.net/join/<rendezvous>#<private-capability>` only after C4.
@@ -714,3 +1021,53 @@ relay, and reconnect receipts.
   `crates/system/luggage` Wasm-clean by feature (its release-identity core
   compiling for wasm32 with default-features off) and have the carrier consume
   it rather than define it.
+
+- **2026-08-28 (Luggage is Wasm-clean by feature):** first half of that ruling
+  done. `luggage` grew a `native` feature, on by default, carrying the whole
+  update pipeline; `default-features = false` leaves `error` + `release` — the
+  manifest types — and compiles for `wasm32-unknown-unknown`. Core is 103
+  crates against the native build's 261, on six direct deps (`semver`, `serde`,
+  `serde_json`, `thiserror`, `time`, `url`). Native build, all 36 tests, and
+  rustdoc are unchanged in both configurations. Divergence recorded in the
+  crate README per its fork convention.
+  Two scope calls made inside the ruling rather than by it, both reversible and
+  both flagged for Mark. First, `config` (`Config`/`Feed`) went to `native`,
+  not core: a feed is *where releases are fetched from*, an updater concern,
+  and its `file://` branch needs `Url::to_file_path`, which the `url` crate
+  does not provide on wasm32. Second, `signing` went with it, because every one
+  of its functions is `pub(crate)` and the core had no caller — the core can
+  name and compare a release but not verify one. Exporting a verification entry
+  point would add public API to a shipping crate, so it was left open.
+  Ruled 2026-08-30: a new small type, not a collapse into `RemoteRelease`.
+
+- **2026-08-30 (release identity has one definition):** `ReleaseRefV1` now
+  lives in `luggage::release` and the carrier consumes it. The type needs no
+  dependency at all, so it is reachable with `default-features = false` on
+  every target the crate builds for; its doc states the `V1` suffix is a wire
+  contract, so a different field set is a `ReleaseRefV2` and never an edit.
+  `invite.rs` imports it, `lib.rs` re-exports it so an `InviteV1` holder can
+  name what `release()` returns without depending on Luggage, and the
+  canonical encoding is untouched — it reads the same two fields in the same
+  order, so no vector moves.
+  Carrier verified in all four configurations: Wasm-clean core (no features,
+  wasm32), `browser` on wasm32, `native` all-targets, and 66 tests green.
+  The core's direct deps are now `blake3`, `luggage`, `thiserror`, and an
+  assertion over the resolved tree confirms none of Luggage's native pipeline
+  (reqwest, tokio, dirs, tempfile, minisign-verify, base64,
+  cargo-packager-utils) reaches it.
+  Bundle cost measured rather than assumed, against a baseline taken before
+  the change (970,489 B raw / 223,700 B gz). With the invite path dead —
+  webrtc-ping never names it — the delta is **zero raw bytes**: dead-code
+  elimination removes the whole of Luggage. With a throwaway export forcing
+  `InviteV1::parse_fragment` and `ReleaseRefV1` live, the cost is **+17,886 B
+  raw (+1.84%) and +5,221 B gzipped (+2.33%)**, and that figure carries
+  InviteV1's entire encode/decode/base64 machinery, not release identity
+  alone. Removing the throwaway restored the baseline byte-for-byte, which is
+  the control that makes the reading trustworthy.
+  One Cargo constraint worth recording, because it is invisible until it
+  bites: **a member cannot turn a workspace dependency's default features
+  off.** `luggage = { workspace = true, default-features = false }` is a hard
+  manifest error, so the workspace declaration carries
+  `default-features = false` and members opt *up* with
+  `features = ["native"]`. Forgetting to is a compile error naming the missing
+  item, not a silently crippled updater.

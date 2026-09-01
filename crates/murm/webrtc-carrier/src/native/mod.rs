@@ -86,10 +86,16 @@
 mod answerer;
 mod driver;
 mod error;
+mod loopback;
 mod session;
+mod stream;
 
 pub use crate::native::answerer::{Answerer, AnswererConfig, fingerprint_from_str0m};
 pub use crate::native::error::NativeError;
+pub use crate::native::loopback::{LoopbackOfferer, loopback_pair};
+pub use crate::native::stream::{
+    PumpEnd, STREAM_BUFFER_BYTES, stream_over_frames, stream_over_frames_with,
+};
 pub use crate::native::session::{
     Carrier, CarrierConfig, CarrierControl, CarrierStats, DEDICATED_DRIVER_STACK_BYTES,
     DEDICATED_SCTP_WINDOW_BYTES, DEFAULT_CHANNEL_LABEL, DEFAULT_IDLE_TIMEOUT,

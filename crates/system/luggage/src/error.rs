@@ -11,6 +11,12 @@
 use thiserror::Error;
 
 /// All errors that can occur while running the updater.
+///
+/// Five variants — `Reqwest`, `Http`, `PersistError`, `Minisign` and
+/// `Base64` — exist only
+/// under the `native` feature, because they carry types from crates the
+/// release-identity core does not depend on. The enum is `#[non_exhaustive]`,
+/// so their absence cannot break a downstream match.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -80,9 +86,11 @@ pub enum Error {
     #[error("`{0}`")]
     Network(String),
     /// `minisign_verify` errors.
+    #[cfg(feature = "native")]
     #[error(transparent)]
     Minisign(#[from] minisign_verify::Error),
     /// `base64` errors.
+    #[cfg(feature = "native")]
     #[error(transparent)]
     Base64(#[from] base64::DecodeError),
     /// UTF8 errors in the signature.
@@ -96,12 +104,15 @@ pub enum Error {
     #[error("temp directory is not on the same mount point as the AppImage")]
     TempDirNotOnSameMountPoint,
     /// The `reqwest` crate errors.
+    #[cfg(feature = "native")]
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
     /// The `http` crate errors.
+    #[cfg(feature = "native")]
     #[error(transparent)]
     Http(#[from] http::Error),
     /// Persisting a temporary file failed.
+    #[cfg(feature = "native")]
     #[error(transparent)]
     PersistError(#[from] tempfile::PersistError),
 }
