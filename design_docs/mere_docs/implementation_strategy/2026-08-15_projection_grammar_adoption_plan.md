@@ -955,8 +955,20 @@ not settled without it.
   policy closes the prior C++/WASI sysroot blocker for the wasm dependency
   cone. The standalone wasm build now passes with an isolated target and the
   matching `wasm-bindgen 0.2.126` package is generated under the ignored web
-  package directory. Browser-headed authoring evidence remains open, so headed
-  verification and A5 remain open. Woodshed is Workbench's second
+  package directory. The headed Graphshell browser receipt is now green:
+  localhost reported title `GRAPHSHELL H3 READY` and `ready=true`; the editor
+  opened the source panel, authored `local-workbench-receipt`,
+  `woodshed.practice`, `fixture.projection/workbench`, `practice_title`,
+  `tempo`/`difficulty`, `grid.default`/vertical/24, `canvas.points`, title
+  `Workbench projection receipt`, and provenance
+  `Projection Editor receipt` / `workbench-w4` / `Saved and reloaded in the Graphshell browser receipt`. The deterministic preview was `Workbench projection receipt · read nodes by practice_title · grid.default · x=tempo y=difficulty · canvas.points`. Save reported `saveCount=1`,
+  `validation=valid`, `errors=0`, and `Saved · workbench-w4 · 1 save(s)`;
+  after mutation, reload restored every authored field and reported
+  `Reloaded · graphshell-reference · workbench-w4`. The bound stripped artifact
+  is 34,679,440 bytes with SHA256
+  `A6A43EA0D1FB510E9EEF897B6C9232BB66F5D1F5927DF54DADE3463F55D3DB85`.
+  This closes the browser authoring receipt, while broader headed verification
+  and A5 remain open. Woodshed is Workbench's second
   heterogeneous consumer, but it is not itself A5's named portable projection
   proof; A5 still needs a named proof consumer and its per-proof evidence. The
   component follows the component seam in
