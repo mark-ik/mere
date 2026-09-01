@@ -15,7 +15,7 @@
 //! shutdown. Nothing in this file dials a broker or builds a graph session, so
 //! the extra path costs one Castellan claim and one blob-store open.
 //!
-//! Three properties are load-bearing, and each has its own refusal:
+//! Four properties are load-bearing, and each has its own refusal:
 //!
 //! 1. **No permissive default.** The installed policy is asserted to be the
 //!    converted device settings and asserted *not* to be
@@ -24,156 +24,38 @@
 //!    thermometer and no stated temperature refuses composition by name.
 //! 3. **No assumed lending posture.** An enabled lane on a device that has
 //!    never stated one refuses rather than lending everything.
+//! 4. **No feature the build does not carry.** A lane whose settings name a
+//!    trainer refuses on a build compiled without the `trainer` feature. That
+//!    test lives here, under `cfg(not(feature = "trainer"))`, so the gate has a
+//!    live assertion in *both* feature sets: the composed half is proved by
+//!    `distillery_trainer.rs`, the refusing half by this file.
 //!
 //! The clock is [`mesh_host::SystemClock`] throughout — there is no
 //! `ManualClock` here, because a lease is a wall-clock promise and a receipt
 //! taken on a hand-set clock would not be a receipt about this device.
 
-use std::path::{Path, PathBuf};
+mod common;
+
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::Duration;
 
+use common::{
+    lane, lending, now_ms, open_vault, owner, profile, refusal_from, unlock, write_device_settings,
+};
 use distillery::ResidentReceipt;
 use djinn::resident::DjinnResident;
-use djinn::settings::{DistilleryLaneSettings, OwnerSettings};
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{DevicePolicy, NetworkClass, ResourceId};
 use mesh_host::Step;
-use pandect::{DeviceSettings, MeshLendingSettings, StatedConditionSettings};
-use personae::bootstrap::{self, Unlock};
-use personae::{IdentityVault, ProfileId};
 use tokio::sync::Notify;
-
-const PASSPHRASE: &[u8] = b"djinn-distillery-lane-receipt-passphrase";
-
-fn unlock() -> Unlock {
-    Unlock::passphrase(PASSPHRASE)
-}
-
-fn profile() -> ProfileId {
-    ProfileId("works".into())
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-/// Open the shared Personae vault the way `bin/djinn.rs` does, and keep it
-/// open.
-///
-/// Holding it across [`DjinnResident::open`] is the point: the lane derives its
-/// mesh author from the same vault directory and therefore opens it a *second*
-/// time in this process. If Personae's storage opens were exclusive, every test
-/// below would fail at that second open rather than at its assertion.
-fn open_vault(root: &Path) -> (PathBuf, IdentityVault<Box<dyn personae::IdentityStorage>>) {
-    let vault_dir = root.join("vault");
-    let opened = bootstrap::open_storage(&vault_dir, unlock()).expect("open vault storage");
-    let (record, _created) =
-        bootstrap::load_or_create_profile(&*opened.storage, &profile()).expect("create profile");
-    (
-        vault_dir,
-        IdentityVault::with_profile(opened.storage, record),
-    )
-}
-
-/// A lending posture whose one enabled rule is idle time.
-///
-/// Every other check is switched off *by the owner*, and each `0` here is a
-/// statement rather than a shrug:
-///
-/// - `max_thermal_c: 0` because this build has no thermometer, which is
-///   precisely what the second test proves is refused when it is non-zero.
-/// - `min_network: "offline"` because a network floor cannot be rescued by a
-///   stated value: a sensed `Offline` is a real observation and beats the
-///   owner's word, so a machine with no default gateway (a CI box, a laptop on
-///   a plane) would withhold forever and this receipt would hang instead of
-///   failing. The floor is exercised by unit conversion, not by this run.
-/// - `quiet_hours: None` because a wall-clock window would make this receipt
-///   pass or fail depending on the hour it was run.
-///
-/// `min_idle_ms: 1` is the enabled rule the sensor genuinely covers: sensed
-/// from `GetLastInputInfo` on Windows, and stated below so the same settings
-/// are coverable anywhere.
-fn lending() -> MeshLendingSettings {
-    MeshLendingSettings {
-        min_idle_ms: 1,
-        min_battery_pct: 0,
-        max_thermal_c: 0,
-        min_network: "offline".into(),
-        max_bandwidth_in_use_kbps: 0,
-        quiet_hours: None,
-        max_concurrent_jobs: 1,
-        reclaim_grace_ms: 0,
-        supervises_leases: true,
-        stated: StatedConditionSettings {
-            idle_ms: Some(600_000),
-            battery_pct: None,
-            on_mains: None,
-            thermal_c: None,
-            network: Some("wired".into()),
-            bandwidth_in_use_kbps: None,
-        },
-    }
-}
-
-fn lane() -> DistilleryLaneSettings {
-    DistilleryLaneSettings {
-        tick_every_ms: 25,
-        // Explicit-only: this receipt is about running work, and a maintenance
-        // cadence firing mid-run would put a checkpoint between the job and the
-        // assertion about it.
-        maintenance_every_ms: None,
-        blob_gc_every_ms: 1_000,
-        collect_after_checkpoint: true,
-        retention_revision: "3f".repeat(32),
-        promised_floor: "forever".into(),
-        privacy_ceiling: "until-checkpoint".into(),
-        erase_terminal_at_checkpoint: true,
-        max_skew_ms: 0,
-    }
-}
-
-fn write_device_settings(data_root: &Path, mesh_lending: Option<MeshLendingSettings>) {
-    pandect::save_device_settings(
-        data_root,
-        &DeviceSettings {
-            mesh_lending,
-            ..DeviceSettings::default()
-        },
-    )
-    .expect("write device settings");
-}
-
-/// The refusal text, or a failure that closes the resident it should not have
-/// been handed. [`DjinnResident`] is not `Debug`, so `expect_err` cannot be
-/// used, and leaking an opened blob store on the failing path would bury the
-/// real message under a store-lock error in the next test.
-async fn refusal_from(opened: Result<DjinnResident, String>, why: &str) -> String {
-    match opened {
-        Err(refusal) => refusal,
-        Ok(resident) => {
-            let _ = resident.shutdown().await;
-            panic!("{why}");
-        }
-    }
-}
-
-fn owner(lane: Option<DistilleryLaneSettings>) -> OwnerSettings {
-    OwnerSettings {
-        distillery: lane,
-        ..OwnerSettings::default()
-    }
-}
 
 /// The whole receipt: stated policy in, completed job out, clean close.
 ///
 /// Windows-only, and the reason is itself part of the discipline: the lane
 /// reads `HostFacts::memory_mib` from the operating system and refuses to
 /// advertise a capacity it never measured. Only the Windows half of this crate
-/// can measure one today, so only Windows can produce this receipt. The two
+/// can measure one today, so only Windows can produce this receipt. The
 /// refusal tests below run everywhere, because they refuse before any fact is
 /// read.
 #[cfg(windows)]
@@ -212,8 +94,8 @@ async fn the_works_run_a_real_mesh_job_to_completion_and_close_clean() {
             max_bandwidth_in_use_kbps: 0,
             quiet_hours: None,
             max_concurrent_jobs: 1,
-            allowed_resources: Default::default(),
-            accepted_checkpoints: Default::default(),
+            allowed_resources: BTreeSet::from([ResourceId::parse("mesh.blake3/v1").unwrap()]),
+            accepted_checkpoints: BTreeSet::from([mesh::CheckpointClass::Restart]),
             reclaim_grace_ms: 0,
             supervises_leases: true,
         },
@@ -225,9 +107,18 @@ async fn the_works_run_a_real_mesh_job_to_completion_and_close_clean() {
         "a lane that fell back to permissive() would lend on nobody's authority"
     );
     assert_eq!(
+        installed.allowed_resources,
+        BTreeSet::from([ResourceId::parse("mesh.blake3/v1").unwrap()]),
+        "the stated allowed_resources must reach the installed policy, not just parse"
+    );
+    assert_eq!(
         works.authority().host().me(),
         works.author(),
         "the works speak as the profile's derived mesh author"
+    );
+    assert!(
+        works.model_library().is_none(),
+        "a lane that stated no trainer must not have opened a model library"
     );
 
     let input = works
@@ -394,4 +285,64 @@ async fn a_profile_with_no_lane_composes_no_works_at_all() {
     assert!(!resident.distillery_enabled());
     assert!(resident.distillery().is_none());
     resident.shutdown().await.expect("clean shutdown");
+}
+
+/// The gate's other half: this build carries no trainer, so a lane whose
+/// settings say it trains is refused rather than composed without one.
+///
+/// The failure this exists against is the quiet one. A composition that
+/// dropped the trainer and started anyway would leave the owner reading their
+/// own settings file as proof the device trains, and the ring reading a device
+/// advertising capacity for jobs it would then fail. The refusal is checked to
+/// name both ways out — recompile, or say `null` — because a refusal that does
+/// not say what to do next is a wall.
+///
+/// It runs everywhere, including off Windows: this refusal is raised before
+/// any host fact is read, so it does not need a machine that can measure its
+/// own memory.
+#[cfg(not(feature = "trainer"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_build_with_no_trainer_refuses_a_lane_that_states_one() {
+    use djinn::settings::TrainerLaneSettings;
+
+    let directory = tempfile::tempdir().expect("temporary resident root");
+    let data_root = directory.path().join("data");
+    let (vault_dir, identity) = open_vault(directory.path());
+    // A perfectly good lending posture: the refusal under test must be about
+    // the missing trainer, not about anything else being wrong.
+    write_device_settings(&data_root, Some(lending()));
+
+    let mut asks_for_a_trainer = lane();
+    asks_for_a_trainer.trainer = Some(TrainerLaneSettings {
+        device: "cpu".into(),
+        library_root: None,
+    });
+    // The settings themselves are valid; only this *build* cannot honour them.
+    assert_eq!(asks_for_a_trainer.validate(), Ok(()));
+
+    let refusal = refusal_from(
+        DjinnResident::open(
+            &identity,
+            &data_root,
+            &profile(),
+            owner(Some(asks_for_a_trainer)),
+            &vault_dir,
+            unlock(),
+        )
+        .await,
+        "a build with no trainer must refuse a lane that states one rather than \
+         composing a works that cannot do what its settings claim",
+    )
+    .await;
+
+    assert!(refusal.contains("distillery.trainer"), "{refusal}");
+    assert!(refusal.contains("carries no trainer"), "{refusal}");
+    assert!(
+        refusal.contains("`trainer` feature"),
+        "the refusal must name the way out: {refusal}"
+    );
+    assert!(
+        refusal.contains("null"),
+        "the refusal must name the other way out: {refusal}"
+    );
 }

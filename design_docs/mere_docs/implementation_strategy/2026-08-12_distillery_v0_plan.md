@@ -715,14 +715,34 @@ the converted settings and is not `permissive()`. Companion receipts prove
 the three refusals: no lending posture, an enabled thermal rule with no
 stated temperature, and an absent lane composing no works at all.
 
-Explicit deferrals, recorded rather than defaulted: the trainer resource is
-not wired into Djinn (it would pull the Burn stack into the desktop
-resident; it stays behind Distillery's `trainer` feature until wanted), so
-the persona model library has no code expression yet; `allowed_resources`
-and `accepted_checkpoints` have no settings fields yet, so they remain
-mesh's own empty-means-unrestricted; thermal and bandwidth are stated-only;
-the off-Windows path reports the UTC hour for `local_hour` and is
-stated-only territory.
+Two of the deferrals recorded here closed on 2026-09-01. `MeshLendingSettings`
+gained required `allowed_resources` and `accepted_checkpoints` fields — a
+written `[]` is the owner stating no restriction, while omission is refused
+— and the lane converts them through the real `ResourceId` grammar and
+`CheckpointClass` names, refusing by name; the receipt states
+`allowed_resources: ["mesh.blake3/v1"]` and asserts it reaches the installed
+host policy. And the trainer now runs in the resident behind djinn's
+`trainer` feature: `DistilleryLaneSettings.trainer` is a required
+`Option<TrainerLaneSettings>` whose `null` composes no trainer, whose
+`device` accepts only `cpu` while `HostFacts.gpu` is false, and whose
+presence on a build without the feature refuses `open` rather than
+composing a works that cannot do what its settings claim. The persona model
+library is a `RedbBackend` at `<data-root>/models/<profile>/library.redb`
+(overridable), deliberately neither the personal-graph store nor under the
+mesh root, so adapters outlive any one mesh. The trainer receipt
+(`ports/djinn/tests/distillery_trainer.rs`) authors the synthetic base
+model and corpus into that library through the lane, posts
+`esp.train.peft-lora/v1` under a posture that permits exactly that
+resource, observes completion on `SystemClock`, reads the committed
+`TrainReceipt` from the board, and finds the adapter manifest and
+`EvalReport` in the library under the receipt's refs — baseline
+0/6 versus adapter 4/6, the forcing fixture's numbers,
+now through the desktop resident.
+
+Remaining deferrals, recorded rather than defaulted: thermal and bandwidth
+are stated-only; the off-Windows path reports the UTC hour for `local_hour`
+and is stated-only territory; the trainer device is CPU until a GPU lane
+earns `HostFacts.gpu`.
 
 ### The full workspace gate, closed 2026-09-01
 

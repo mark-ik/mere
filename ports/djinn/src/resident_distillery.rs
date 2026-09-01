@@ -56,9 +56,10 @@ use mesh::{AvailabilityPolicy, DevicePolicy, ErasurePolicy, MeshRetentionPolicy}
 use muniment::RedbBackend;
 use personae::bootstrap::Unlock;
 use personae::{Ed25519Keypair, ProfileId};
+use tokio::sync::Mutex;
 
 use crate::conditions::{DeviceConditionSensor, StatedConditions, validate_policy_coverage};
-use crate::settings::{DistilleryLaneSettings, parse_keep_bound};
+use crate::settings::{DistilleryLaneSettings, parse_keep_bound, sanitize_profile};
 
 /// One resident Distillery works, bound to this profile's personal mesh.
 pub struct ResidentDistillery {
@@ -72,6 +73,13 @@ pub struct ResidentDistillery {
     mesh_id: [u8; 32],
     profile: String,
     mesh_root: PathBuf,
+    /// The persona-scoped model library the trainer writes artifacts into,
+    /// held for the lane's life so the resource and any reader see one handle
+    /// on one redb file. `None` when the owner stated no trainer — and, in a
+    /// build without the `trainer` feature, always `None`, because such a
+    /// build refuses a lane that asks for one rather than opening a store
+    /// nothing would ever write to.
+    model_library: Option<Arc<Mutex<RedbBackend>>>,
 }
 
 impl ResidentDistillery {
@@ -84,6 +92,22 @@ impl ResidentDistillery {
         lane: DistilleryLaneSettings,
     ) -> Result<Self, String> {
         lane.validate()?;
+
+        // The gate's honesty, checked before anything is opened: a build with
+        // no trainer compiled in cannot answer a lane whose settings say it
+        // trains. Composing anyway would leave a device advertising work it
+        // would then fail, which is the same sin as a permissive policy
+        // default, one layer up.
+        #[cfg(not(feature = "trainer"))]
+        if lane.trainer.is_some() {
+            return Err(
+                "distillery.trainer states this lane composes a trainer, but this build \
+                 carries no trainer; rebuild with the `trainer` feature or set \
+                 distillery.trainer to null. A works must not compose settings it cannot \
+                 honour."
+                    .into(),
+            );
+        }
 
         // Djinn already resolved which face this device speaks as, and that
         // resolution IS the owner's explicit choice; asking them to configure
@@ -147,6 +171,38 @@ impl ResidentDistillery {
         let profile_name = authority.profile().0;
         let mesh_root = paths.root().to_path_buf();
 
+        // The trainer's artifact store, opened before the host config closure
+        // so a failure to open it refuses composition rather than being
+        // swallowed inside a closure that can only return a config.
+        #[cfg(feature = "trainer")]
+        let model_library = match lane.trainer.as_ref() {
+            Some(trainer) => Some(open_model_library(
+                data_root,
+                &profile_name,
+                trainer.library_root.as_deref(),
+            )?),
+            None => None,
+        };
+        #[cfg(not(feature = "trainer"))]
+        let model_library: Option<Arc<Mutex<RedbBackend>>> = None;
+
+        // Registering is fallible, and the closure below cannot be, so the
+        // registry is assembled here and only *installed* there.
+        #[cfg(feature = "trainer")]
+        let registry = match model_library.as_ref() {
+            Some(store) => {
+                let mut registry = mesh::ResourceRegistry::builtin();
+                registry
+                    .register(Arc::new(distillery::TrainerResource::new(
+                        Arc::clone(store),
+                        distillery::TrainerDevice::ndarray(),
+                    )))
+                    .map_err(|error| format!("register the trainer resource: {error}"))?;
+                Some(registry)
+            }
+            None => None,
+        };
+
         let resident = authority
             .bind_resident(mesh_id, store, resident_settings(&lane), move |space| {
                 let mut config = mesh_host::HostConfig::supervised(space);
@@ -163,9 +219,18 @@ impl ResidentDistillery {
                 // and there is nobody to pull them from. A second device makes
                 // this a `TransportCourier`, not before.
                 //
-                // `ResourceRegistry::builtin()` stays. The trainer resource is
-                // not wired here: it would pull the burn stack into the desktop
-                // resident, which is a weight the works have not yet earned.
+                // `ResourceRegistry::builtin()` is the floor, and it is all a
+                // default build installs. Distillery's trainer resource is
+                // added on top only when the owner stated one *and* this build
+                // compiled the `trainer` feature, because the resource pulls
+                // the burn stack into the desktop resident: a weight every
+                // Djinn pays for otherwise, for a capability most of them never
+                // use. The two halves are kept honest together — settings that
+                // name a trainer a build cannot carry refuse `open` above.
+                #[cfg(feature = "trainer")]
+                if let Some(registry) = registry {
+                    config.registry = registry;
+                }
                 config
             })
             .await
@@ -177,6 +242,7 @@ impl ResidentDistillery {
             mesh_id,
             profile: profile_name,
             mesh_root,
+            model_library,
         })
     }
 
@@ -198,6 +264,18 @@ impl ResidentDistillery {
     /// This device's mesh author key, as the ring sees it.
     pub fn author(&self) -> [u8; 32] {
         self.author.public_key().to_bytes()
+    }
+
+    /// The persona-scoped model library the composed trainer publishes into,
+    /// or `None` when this lane composes no trainer.
+    ///
+    /// Handing the same handle out rather than a path is deliberate: redb is
+    /// single-writer, so a reader that opened the file itself would either
+    /// fail or read a stale snapshot. Everything that wants the adapter
+    /// manifests and evaluation reports this device produced goes through the
+    /// one open store the trainer is writing.
+    pub fn model_library(&self) -> Option<Arc<Mutex<RedbBackend>>> {
+        self.model_library.as_ref().map(Arc::clone)
     }
 
     /// The product authority, for read-only board and progress projections.
@@ -259,6 +337,64 @@ impl ResidentDistillery {
     }
 }
 
+/// Where this persona's trained artifacts live.
+///
+/// `override_root` is the owner's word and is taken as the file path itself;
+/// otherwise the path is derived as
+/// `<data_root>/models/<profile>/library.redb`.
+///
+/// The scoping is the ruling, and two places it deliberately is **not** are
+/// worth naming:
+///
+/// - **Not the personal-graph store.** Adapters are not the owner's notes.
+///   Folding them into the graph would put multi-megabyte tensors under a
+///   store whose retention, sync and privacy classes were written for a
+///   personal graph, and would sync them to every paired device by default.
+/// - **Not under the mesh root.** A mesh's root is governed by that mesh's
+///   retention policy, and its blob custody may collect at a checkpoint. A
+///   trained adapter is a durable possession of the persona; it must outlive
+///   any one mesh, including a mesh the owner leaves and rejoins under a new
+///   id.
+///
+/// The profile segment goes through the same [`sanitize_profile`] the settings
+/// filename uses, because a profile id reaches this process from an argument
+/// or an environment variable and is about to become a directory name.
+/// It is `pub` rather than crate-private because the answer is the owner's
+/// business: a host that wants to tell them where their trained adapters live,
+/// or to back that directory up, should not have to guess the derivation. It
+/// is also answerable in a build with no `trainer` feature — the path is where
+/// the library *would* be, and saying so costs nothing.
+pub fn model_library_path(
+    data_root: &Path,
+    profile: &str,
+    override_root: Option<&Path>,
+) -> PathBuf {
+    match override_root {
+        Some(stated) => stated.to_path_buf(),
+        None => data_root
+            .join("models")
+            .join(sanitize_profile(profile))
+            .join("library.redb"),
+    }
+}
+
+/// Open (creating if absent) the persona's model library.
+#[cfg(feature = "trainer")]
+fn open_model_library(
+    data_root: &Path,
+    profile: &str,
+    override_root: Option<&Path>,
+) -> Result<Arc<Mutex<RedbBackend>>, String> {
+    let path = model_library_path(data_root, profile, override_root);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("prepare {}: {error}", parent.display()))?;
+    }
+    let store = RedbBackend::open(&path)
+        .map_err(|error| format!("open the model library at {}: {error}", path.display()))?;
+    Ok(Arc::new(Mutex::new(store)))
+}
+
 /// The device's lending posture, or a refusal naming what is missing.
 fn load_lending(data_root: &Path) -> Result<pandect::MeshLendingSettings, String> {
     let settings = pandect::load_device_settings(data_root)
@@ -293,14 +429,15 @@ fn device_policy(lending: &pandect::MeshLendingSettings) -> Result<DevicePolicy,
             end_hour: hours.end_hour,
         }),
         max_concurrent_jobs: lending.max_concurrent_jobs,
-        // Empty is mesh's own word for "no restriction", and it is the only
-        // honest value available: the device settings block carries no resource
-        // allowlist and no accepted-checkpoint set, so there is nothing stated
-        // to narrow these to. Inventing a narrower set here would be a policy
-        // this lane made up; inventing a wider one is not possible. When the
-        // settings grow those fields, they convert here.
-        allowed_resources: BTreeSet::new(),
-        accepted_checkpoints: BTreeSet::new(),
+        // Empty is still mesh's own word for "no restriction" here, but it is
+        // now a value the owner chose rather than one this lane invented: an
+        // empty `allowed_resources` or `accepted_checkpoints` in the device
+        // settings block means the owner wrote `[]`, and pandect refuses a
+        // file that omits the field entirely. Each stated entry is converted
+        // into mesh's own type below, and a value that does not convert
+        // refuses composition rather than being dropped.
+        allowed_resources: resource_set(&lending.allowed_resources)?,
+        accepted_checkpoints: checkpoint_set(&lending.accepted_checkpoints)?,
         reclaim_grace_ms: lending.reclaim_grace_ms,
         supervises_leases: lending.supervises_leases,
     })
@@ -334,6 +471,46 @@ fn network_class(value: &str, field: &str) -> Result<mesh::NetworkClass, String>
             "{field} must be one of \"offline\", \"metered\", \"wifi\", \"wired\" (got {other:?})"
         )),
     }
+}
+
+/// Parse the owner's stated resource ids with mesh's real grammar. Pandect
+/// only checked that each entry could plausibly be an identifier; this is
+/// where a string that is syntactically plausible but not a valid
+/// `ResourceId` is actually caught, and it is refused by the parser's own
+/// message so the offending string is named rather than swallowed.
+fn resource_set(ids: &[String]) -> Result<BTreeSet<mesh::ResourceId>, String> {
+    ids.iter()
+        .map(|id| {
+            mesh::ResourceId::parse(id).map_err(|error| {
+                format!(
+                    "mesh_lending.allowed_resources: {id:?} is not a valid resource id: {error}"
+                )
+            })
+        })
+        .collect()
+}
+
+/// Convert the owner's stated checkpoint-class strings into mesh's enum.
+///
+/// Pandect's own `validate` already refuses any string outside the closed
+/// set before a device settings file can be saved or loaded, which makes an
+/// unknown value here unreachable through that path. This conversion is
+/// still not allowed to default or silently drop one: a caller that built
+/// `MeshLendingSettings` some other way (a test, a future importer) gets a
+/// named refusal instead of a policy that quietly accepted less than it was
+/// told to.
+fn checkpoint_set(values: &[String]) -> Result<BTreeSet<mesh::CheckpointClass>, String> {
+    values
+        .iter()
+        .map(|value| match value.as_str() {
+            "restart" => Ok(mesh::CheckpointClass::Restart),
+            "resumable" => Ok(mesh::CheckpointClass::Resumable),
+            "non-interruptible" => Ok(mesh::CheckpointClass::NonInterruptible),
+            other => Err(format!(
+                "mesh_lending.accepted_checkpoints: unknown checkpoint class {other:?}"
+            )),
+        })
+        .collect()
 }
 
 /// The cadences the owner stated, as Distillery's resident settings.
@@ -389,9 +566,11 @@ fn retention_policy(
 /// pressure is a later slice.
 ///
 /// `gpu` is `false`, and that is the honest answer rather than a placeholder:
-/// nothing in this composition can run a GPU job. The registry is
-/// `ResourceRegistry::builtin()` and the trainer resource is not wired, so
-/// claiming a GPU would advertise work this device would then fail.
+/// nothing in this composition can run a GPU job. The builtin resources are
+/// CPU work, and the one resource this lane may add on top — Distillery's
+/// trainer — is composed on `TrainerDevice::ndarray()`, which is why
+/// `distillery.trainer.device` refuses anything but `"cpu"`. Claiming a GPU
+/// would advertise work this device would then fail.
 fn host_facts() -> Result<mesh::HostFacts, String> {
     Ok(mesh::HostFacts {
         memory_mib: total_memory_mib().ok_or(
@@ -443,6 +622,8 @@ mod tests {
                 end_hour: 8,
             }),
             max_concurrent_jobs: 2,
+            allowed_resources: Vec::new(),
+            accepted_checkpoints: Vec::new(),
             reclaim_grace_ms: 5_000,
             supervises_leases: true,
             stated: StatedConditionSettings::default(),
@@ -460,6 +641,7 @@ mod tests {
             privacy_ceiling: "until-checkpoint".into(),
             erase_terminal_at_checkpoint: true,
             max_skew_ms: 0,
+            trainer: None,
         }
     }
 
@@ -498,6 +680,46 @@ mod tests {
         stated.stated.network = Some("fibre".into());
         let refusal = stated_conditions(&stated).expect_err("`fibre` is not a link class");
         assert!(refusal.contains("stated.network"), "{refusal}");
+    }
+
+    #[test]
+    fn allowed_resources_and_accepted_checkpoints_convert_into_mesh_types() {
+        let mut stated = lending();
+        stated.allowed_resources = vec!["mesh.blake3/v1".into(), "mesh.echo/v1".into()];
+        stated.accepted_checkpoints = vec!["restart".into(), "resumable".into()];
+
+        let policy = device_policy(&stated).unwrap();
+        assert_eq!(
+            policy.allowed_resources,
+            BTreeSet::from([
+                mesh::ResourceId::parse("mesh.blake3/v1").unwrap(),
+                mesh::ResourceId::parse("mesh.echo/v1").unwrap(),
+            ])
+        );
+        assert_eq!(
+            policy.accepted_checkpoints,
+            BTreeSet::from([
+                mesh::CheckpointClass::Restart,
+                mesh::CheckpointClass::Resumable,
+            ])
+        );
+    }
+
+    #[test]
+    fn an_unparseable_resource_id_is_refused_by_the_parsers_own_message() {
+        let mut stated = lending();
+        stated.allowed_resources = vec!["Not A Valid Id".into()];
+        let refusal =
+            device_policy(&stated).expect_err("`Not A Valid Id` is not a valid resource id");
+        assert!(refusal.contains("Not A Valid Id"), "{refusal}");
+    }
+
+    #[test]
+    fn an_unknown_checkpoint_string_is_refused_by_name() {
+        let mut stated = lending();
+        stated.accepted_checkpoints = vec!["paused".into()];
+        let refusal = device_policy(&stated).expect_err("`paused` is not a checkpoint class");
+        assert!(refusal.contains("paused"), "{refusal}");
     }
 
     #[test]
@@ -551,6 +773,53 @@ mod tests {
         assert_eq!(settings.blob_gc_every, Duration::from_millis(1_000));
         assert!(settings.retention.collect_after_checkpoint);
         assert!(settings.validate().is_ok());
+    }
+
+    #[test]
+    fn the_model_library_is_persona_scoped_and_lives_outside_every_mesh() {
+        let data_root = Path::new("C:").join("djinn").join("data");
+        let derived = model_library_path(&data_root, "works", None);
+        assert_eq!(
+            derived,
+            data_root.join("models").join("works").join("library.redb"),
+            "the derived path is <data_root>/models/<profile>/library.redb"
+        );
+        assert!(
+            !derived.starts_with(data_root.join("distillery")),
+            "a trained adapter must not sit under a mesh root whose retention \
+             policy could collect it: {}",
+            derived.display()
+        );
+        assert_ne!(
+            model_library_path(&data_root, "works", None),
+            model_library_path(&data_root, "burner", None),
+            "two faces on one device do not share a model library"
+        );
+    }
+
+    #[test]
+    fn a_profile_that_could_escape_the_data_root_is_sanitised_into_one_segment() {
+        let data_root = Path::new("C:").join("djinn").join("data");
+        let escaped = model_library_path(&data_root, "../../evil", None);
+        assert_eq!(
+            escaped,
+            data_root
+                .join("models")
+                .join("______evil")
+                .join("library.redb"),
+            "a profile id arrives from an argument and is about to be a directory name"
+        );
+    }
+
+    #[test]
+    fn a_stated_library_root_is_taken_as_the_owners_word() {
+        let data_root = Path::new("C:").join("djinn").join("data");
+        let stated = Path::new("D:").join("archive").join("adapters.redb");
+        assert_eq!(
+            model_library_path(&data_root, "works", Some(&stated)),
+            stated,
+            "an override is a path the owner chose, not a hint to be re-derived"
+        );
     }
 
     #[cfg(windows)]

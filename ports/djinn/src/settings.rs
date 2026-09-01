@@ -76,7 +76,7 @@ pub fn settings_path(app_dir: &Path, profile: &ProfileId) -> PathBuf {
 /// A profile id reaches this process from an argument or an environment
 /// variable and is about to become a filename, so it is constrained to
 /// characters that cannot escape the settings directory.
-fn sanitize_profile(profile: &str) -> String {
+pub(crate) fn sanitize_profile(profile: &str) -> String {
     let cleaned: String = profile
         .chars()
         .map(|c| {
@@ -174,6 +174,17 @@ pub struct DistilleryLaneSettings {
     /// Clock disagreement tolerated when deciding whether a checkpoint would
     /// strand a lease.
     pub max_skew_ms: u64,
+    /// Whether this lane composes Distillery's trainer resource, and on what.
+    ///
+    /// `null` is a statement, exactly as
+    /// [`maintenance_every_ms`](Self::maintenance_every_ms) is: *this lane
+    /// composes no trainer*. Omitting the field entirely is refused by the
+    /// same `deny_unknown_fields`/required-field behaviour every other field
+    /// here relies on, because "I forgot to say" and "I said no" must not
+    /// look alike when the answer decides whether a device advertises that it
+    /// can train.
+    #[serde(deserialize_with = "required_option")]
+    pub trainer: Option<TrainerLaneSettings>,
 }
 
 impl DistilleryLaneSettings {
@@ -201,6 +212,9 @@ impl DistilleryLaneSettings {
         self.retention_revision_bytes()?;
         parse_keep_bound(&self.promised_floor, "distillery.promised_floor")?;
         parse_keep_bound(&self.privacy_ceiling, "distillery.privacy_ceiling")?;
+        if let Some(trainer) = &self.trainer {
+            trainer.validate()?;
+        }
         Ok(())
     }
 
@@ -212,6 +226,64 @@ impl DistilleryLaneSettings {
                 self.retention_revision
             )
         })
+    }
+}
+
+/// Deserialize an `Option` field that is genuinely required to be *written*.
+///
+/// Serde's derive quietly supplies `None` for a missing `Option` field, so a
+/// field typed `Option<T>` normally cannot tell "the owner wrote null" from
+/// "the owner never wrote it". Naming a `deserialize_with` removes that
+/// implicit default — serde will not call a custom function for a field that
+/// is not there — which is exactly the distinction
+/// [`DistilleryLaneSettings::trainer`] needs: whether this device offers the
+/// ring a trainer is not a question a typo may answer.
+fn required_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::deserialize(deserializer)
+}
+
+/// The owner's statement that this lane composes Distillery's trainer, and of
+/// what it trains on and where the artifacts land.
+///
+/// **There is deliberately no `Default`**, for the same reason
+/// [`DistilleryLaneSettings`] has none: a trainer is a thing a device offers
+/// the ring, and nothing should acquire that offer by being left unwritten.
+///
+/// scope=profile; movement=local-only; mutability=restart-required;
+/// security=ordinary (a device word and a path, no key material).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TrainerLaneSettings {
+    /// What the trainer runs on. Today `"cpu"` is the only honest answer.
+    pub device: String,
+    /// Override the model library's location. `null` means the derived
+    /// persona-scoped path under the data root, which is what it should
+    /// normally be.
+    pub library_root: Option<PathBuf>,
+}
+
+impl TrainerLaneSettings {
+    /// Refuse a trainer this composition could not honestly run.
+    ///
+    /// The device vocabulary is closed and, for now, one word wide. A GPU
+    /// trainer is not composable while [`mesh::HostFacts::gpu`] is `false` on
+    /// this lane — the works would advertise a capability nothing behind it
+    /// can answer — so `"gpu"` is refused *by name* rather than quietly
+    /// falling back to the CPU the owner did not ask for.
+    pub fn validate(&self) -> Result<(), String> {
+        match self.device.trim() {
+            "cpu" => Ok(()),
+            other => Err(format!(
+                "distillery.trainer.device must be \"cpu\" (got {other:?}): this lane reports \
+                 HostFacts.gpu as false because nothing in it can run a GPU job, so a \
+                 GPU trainer would advertise work the device would then fail. Say \
+                 \"cpu\", or set distillery.trainer to null."
+            )),
+        }
     }
 }
 
@@ -1021,6 +1093,7 @@ mod tests {
             privacy_ceiling: "until-checkpoint".into(),
             erase_terminal_at_checkpoint: true,
             max_skew_ms: 60_000,
+            trainer: None,
         }
     }
 
@@ -1119,6 +1192,102 @@ mod tests {
             explicit_only.validate(),
             Ok(()),
             "`null` is a statement: maintenance stays an explicit command"
+        );
+    }
+
+    #[test]
+    fn a_trainer_lane_round_trips_and_is_absent_only_by_saying_so() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("trainer.json");
+        let mut lane = distillery_lane();
+        lane.trainer = Some(TrainerLaneSettings {
+            device: "cpu".into(),
+            library_root: None,
+        });
+        let settings = OwnerSettings {
+            distillery: Some(lane.clone()),
+            ..OwnerSettings::default()
+        };
+        settings.save(&path).unwrap();
+        assert_eq!(OwnerSettings::load(&path).unwrap(), settings);
+        assert_eq!(lane.validate(), Ok(()));
+
+        // An override path is the owner's word about where artifacts live, so
+        // it round-trips as itself rather than being normalised away.
+        let elsewhere = directory.path().join("elsewhere").join("library.redb");
+        lane.trainer = Some(TrainerLaneSettings {
+            device: "cpu".into(),
+            library_root: Some(elsewhere.clone()),
+        });
+        let overridden = OwnerSettings {
+            distillery: Some(lane),
+            ..OwnerSettings::default()
+        };
+        let with_root = directory.path().join("override.json");
+        overridden.save(&with_root).unwrap();
+        assert_eq!(
+            OwnerSettings::load(&with_root)
+                .unwrap()
+                .distillery
+                .and_then(|lane| lane.trainer)
+                .and_then(|trainer| trainer.library_root),
+            Some(elsewhere)
+        );
+    }
+
+    #[test]
+    fn a_lane_that_never_mentions_a_trainer_is_refused_rather_than_assumed_off() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("silent.json");
+        let mut json = serde_json::to_value(OwnerSettings {
+            distillery: Some(distillery_lane()),
+            ..OwnerSettings::default()
+        })
+        .unwrap();
+        assert!(
+            json["distillery"]
+                .as_object_mut()
+                .unwrap()
+                .remove("trainer")
+                .is_some(),
+            "`trainer` is serialised, so removing it models an owner who never wrote it"
+        );
+        std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
+        assert!(
+            OwnerSettings::load(&path).is_err(),
+            "forgetting to say and saying no must not look alike: an omitted \
+             `trainer` must fail loudly rather than default to off"
+        );
+    }
+
+    #[test]
+    fn a_trainer_device_this_lane_cannot_honour_is_refused_by_name() {
+        for device in ["gpu", "wgpu", "cuda", ""] {
+            let mut lane = distillery_lane();
+            lane.trainer = Some(TrainerLaneSettings {
+                device: device.into(),
+                library_root: None,
+            });
+            let refusal = lane
+                .validate()
+                .expect_err("only \"cpu\" is composable while HostFacts.gpu is false");
+            assert!(refusal.contains("distillery.trainer.device"), "{refusal}");
+            assert!(
+                refusal.contains(&format!("{device:?}")),
+                "the refusal must name the value it refused: {refusal}"
+            );
+            assert!(
+                refusal.contains("HostFacts.gpu"),
+                "the refusal must say why, not just that: {refusal}"
+            );
+        }
+
+        let mut lane = distillery_lane();
+        lane.trainer = None;
+        assert_eq!(
+            lane.validate(),
+            Ok(()),
+            "`null` is a statement: this lane composes no trainer"
         );
     }
 

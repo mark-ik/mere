@@ -10,6 +10,7 @@
 //! truth. The data root is the install-local persistence boundary supplied by
 //! the host.
 
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -106,6 +107,23 @@ pub struct MeshLendingSettings {
     pub quiet_hours: Option<QuietHoursSettings>,
     /// Must be at least 1.
     pub max_concurrent_jobs: u32,
+    /// Mesh resource ids this device will run work for. A written `[]` is
+    /// the owner stating "no restriction" — mesh reads an empty allowlist as
+    /// "every resource this device has registered", and that is exactly what
+    /// an owner who wrote `[]` meant. This field carries no
+    /// `#[serde(default)]`: a file that omits it entirely has not made that
+    /// statement, and the existing required-field behaviour refuses it
+    /// rather than guessing which the owner meant. Pandect stays mesh-free,
+    /// so `validate` checks only that each entry could plausibly be an
+    /// identifier (non-empty, no whitespace, no duplicates) — the consumer
+    /// parses each one with the real grammar.
+    pub allowed_resources: Vec<String>,
+    /// Which interruption promises this device is willing to take on, from
+    /// the closed set `"restart"`, `"resumable"`, `"non-interruptible"`. Same
+    /// absence discipline as `allowed_resources`: a written `[]` is the
+    /// owner's own "every class", and omitting the field is refused rather
+    /// than defaulted.
+    pub accepted_checkpoints: Vec<String>,
     /// How long a non-interruptible job may keep running after the owner
     /// asks for the device back.
     pub reclaim_grace_ms: u64,
@@ -126,12 +144,23 @@ fn validate_network_class(value: &str, field: &str) -> Result<(), String> {
     }
 }
 
+fn validate_checkpoint_class(value: &str, field: &str) -> Result<(), String> {
+    match value {
+        "restart" | "resumable" | "non-interruptible" => Ok(()),
+        other => Err(format!(
+            "{field} must be one of \"restart\", \"resumable\", \"non-interruptible\" (got {other:?})"
+        )),
+    }
+}
+
 impl MeshLendingSettings {
     /// Rejects a block that could not be an honest owner statement: a
     /// percentage over 100, an hour outside `0..24`, a network string
-    /// outside the closed set, a concurrency cap of `0`, or a stated
+    /// outside the closed set, a concurrency cap of `0`, a stated
     /// temperature of `0` (temperature is never stated as "disabled" the way
-    /// the live check is — `stated.thermal_c` absent already means that).
+    /// the live check is — `stated.thermal_c` absent already means that), a
+    /// resource id that is empty, contains whitespace, or repeats, or a
+    /// checkpoint-class string outside its closed set or repeated.
     pub fn validate(&self) -> Result<(), String> {
         if self.min_battery_pct > 100 {
             return Err(format!(
@@ -156,6 +185,39 @@ impl MeshLendingSettings {
         }
         if self.max_concurrent_jobs == 0 {
             return Err("max_concurrent_jobs must be at least 1".to_string());
+        }
+        for resource in &self.allowed_resources {
+            if resource.is_empty() {
+                return Err("allowed_resources entries must not be empty".to_string());
+            }
+            if resource.chars().any(char::is_whitespace) {
+                return Err(format!(
+                    "allowed_resources entry {resource:?} must not contain whitespace"
+                ));
+            }
+        }
+        {
+            let mut seen = HashSet::with_capacity(self.allowed_resources.len());
+            for resource in &self.allowed_resources {
+                if !seen.insert(resource) {
+                    return Err(format!(
+                        "allowed_resources contains a duplicate: {resource:?}"
+                    ));
+                }
+            }
+        }
+        for checkpoint in &self.accepted_checkpoints {
+            validate_checkpoint_class(checkpoint, "accepted_checkpoints")?;
+        }
+        {
+            let mut seen = HashSet::with_capacity(self.accepted_checkpoints.len());
+            for checkpoint in &self.accepted_checkpoints {
+                if !seen.insert(checkpoint) {
+                    return Err(format!(
+                        "accepted_checkpoints contains a duplicate: {checkpoint:?}"
+                    ));
+                }
+            }
         }
         if let Some(battery_pct) = self.stated.battery_pct
             && battery_pct > 100
@@ -255,6 +317,8 @@ mod tests {
                 end_hour: 8,
             }),
             max_concurrent_jobs: 2,
+            allowed_resources: vec!["mesh.blake3/v1".to_string(), "mesh.echo/v1".to_string()],
+            accepted_checkpoints: vec!["restart".to_string(), "resumable".to_string()],
             reclaim_grace_ms: 5_000,
             supervises_leases: true,
             stated: StatedConditionSettings {
@@ -313,6 +377,43 @@ mod tests {
             start_hour: 24,
             end_hour: 8,
         });
+        write_raw_mesh_lending(&root, &lending);
+
+        let error = load_device_settings(&root).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn an_unknown_checkpoint_string_is_refused_on_load() {
+        let root = temp_root("unknown-checkpoint");
+        let mut lending = fixture_mesh_lending();
+        lending.accepted_checkpoints = vec!["paused".to_string()];
+        write_raw_mesh_lending(&root, &lending);
+
+        let error = load_device_settings(&root).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_duplicate_resource_id_is_refused_on_load() {
+        let root = temp_root("duplicate-resource");
+        let mut lending = fixture_mesh_lending();
+        lending.allowed_resources =
+            vec!["mesh.blake3/v1".to_string(), "mesh.blake3/v1".to_string()];
+        write_raw_mesh_lending(&root, &lending);
+
+        let error = load_device_settings(&root).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_resource_id_with_whitespace_is_refused_on_load() {
+        let root = temp_root("whitespace-resource");
+        let mut lending = fixture_mesh_lending();
+        lending.allowed_resources = vec!["mesh.blake3 /v1".to_string()];
         write_raw_mesh_lending(&root, &lending);
 
         let error = load_device_settings(&root).unwrap_err();

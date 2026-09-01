@@ -12,14 +12,21 @@ categories = ["command-line-utilities", "authentication"]
 [features]
 default = ["personal-sync"]
 personal-sync = []
+# The Distillery trainer resource, composed into the works lane
+# (`src/resident_distillery.rs`). Gated because it pulls the burn stack into
+# the desktop resident: a default build must stay light, and a lane whose
+# settings name a trainer this build does not carry is refused loudly rather
+# than composed diminished.
+trainer = ["distillery/trainer"]
 
 [dependencies]
 blake3.workspace = true
 castellan = { workspace = true, features = ["keeper"] }
 chirograph.workspace = true
 # The operational works composed as this resident's fourth lane
-# (`src/resident_distillery.rs`). Default features only: `remote` and `trainer`
-# would pull the burn stack into the desktop resident.
+# (`src/resident_distillery.rs`). Default features only unless djinn's own
+# `trainer` feature is on: `remote` would pull the burn stack into the desktop
+# resident, and `trainer` pulls it deliberately and by the owner's request.
 distillery.workspace = true
 graphshell = { version = "0.0.2", path = "../graphshell", features = ["personal-sync"] }
 knot-editor = { version = "0.0.3", path = "../knot" }
@@ -67,7 +74,14 @@ path = "src/bin/djinn.rs"
 required-features = ["personal-sync"]
 
 [dev-dependencies]
+# The trainer receipt (`tests/distillery_trainer.rs`) authors the synthetic
+# base model and reads the published artifacts back out of the model library,
+# so the *test* names eidetic and safetensors. Production djinn does not:
+# `src/resident_distillery.rs` speaks only `muniment::RedbBackend` and
+# distillery's own re-exported trainer vocabulary.
+eidetic.workspace = true
 graphshell-endpoint.workspace = true
 p2panda-core = "0.7.0"
+safetensors = "0.4"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
