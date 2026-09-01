@@ -147,6 +147,9 @@ impl LegacySettingsFields {
                 // Not a legacy key: this migration reads pre-split files, and
                 // nothing wrote a cascade budget before it existed.
                 cascade_budget: defaults.cascade_budget,
+                // Phrase recall also post-dates the split settings store.
+                recall_ngram_max_order: defaults.recall_ngram_max_order,
+                recall_vector_weight: defaults.recall_vector_weight,
             }
         });
         let device = self

@@ -29,6 +29,10 @@ fn default_snapshot_idle_refresh() -> bool {
     true
 }
 
+fn default_recall_ngram_max_order() -> u8 {
+    2
+}
+
 /// Which window edge the application shellbar is docked to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -82,6 +86,19 @@ pub struct ApplicationSettings {
     /// behaviors working rather than silently disabling them.
     #[serde(default = "default_cascade_budget")]
     pub cascade_budget: u32,
+    /// Highest cumulative token n-gram order for the application's derived
+    /// phrase-recall vector space: 1 means words, 2 adds pairs, 3 adds triples.
+    /// Changing it re-mints derived vectors; browsing history remains authority.
+    ///
+    /// scope=application; movement=local-only; mutability=live; security=ordinary.
+    #[serde(default = "default_recall_ngram_max_order")]
+    pub recall_ngram_max_order: u8,
+    /// Phrase-vector weight relative to lexical BM25 during reciprocal-rank
+    /// fusion. Zero disables the vector input and preserves lexical-only recall.
+    ///
+    /// scope=application; movement=local-only; mutability=live; security=ordinary.
+    #[serde(default)]
+    pub recall_vector_weight: f32,
 }
 
 fn default_cascade_budget() -> u32 {
@@ -102,6 +119,8 @@ impl Default for ApplicationSettings {
             snapshot_idle_refresh: default_snapshot_idle_refresh(),
             snapshot_byte_cap_mb: None,
             cascade_budget: default_cascade_budget(),
+            recall_ngram_max_order: default_recall_ngram_max_order(),
+            recall_vector_weight: 0.0,
         }
     }
 }
@@ -181,11 +200,20 @@ mod tests {
             snapshot_idle_refresh: false,
             snapshot_byte_cap_mb: Some(32),
             cascade_budget: 2,
+            recall_ngram_max_order: 3,
+            recall_vector_weight: 1.5,
         };
         save_application_settings(&root, &original).unwrap();
         assert_eq!(load_application_settings(&root).unwrap(), Some(original));
         assert!(application_settings_exist(&root));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn older_json_receives_safe_recall_defaults() {
+        let settings: ApplicationSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings.recall_ngram_max_order, 2);
+        assert_eq!(settings.recall_vector_weight, 0.0);
     }
 
     fn unique_suffix() -> u128 {

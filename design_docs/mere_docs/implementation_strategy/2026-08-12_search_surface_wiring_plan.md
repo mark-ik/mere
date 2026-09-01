@@ -1,7 +1,9 @@
 # Search Surface Wiring Plan
 
 **Date**: 2026-08-12
-**Status**: open. Spun out of the
+**Status**: open. W4's lexical n-gram input probe, W5's deterministic fusion
+probe, and the V3 tokenized-URL repair completed 2026-08-31; W4 host wiring and
+W5 live fusion remain open. Spun out of the
 [leverage census](../../2026-08-10_leverage_census_brief.md) (step 2), and
 carries the census's audit answer for `mere-embed` inside it.
 
@@ -21,7 +23,8 @@ anchor embed's lib.rs cites).
   capability awaiting wiring, not deadness. Keep, and wire below.
 - **`eidetic-search` is the lexical half, ready.** `TrailIndex` minted
   *from* `BrowsingTrace` engrams (derived state, re-mintable, format
-  version carried with the index): BM25 recall over titles/URLs/domains,
+  version carried with the index): BM25 recall over tokenized titles/page
+  text/URL components plus exact URL/domain terms,
   fast-field reports (`top_domains`, `visits_histogram`), and `fuse()`,
   the engine-agnostic reciprocal-rank seam that deliberately takes both
   rankings from the caller.
@@ -104,3 +107,172 @@ store, not fixtures only.
   from the session's store; `search alpha` answered `mere://alpha` at 0.98
   with the capture-time timestamp. "Where did I read about X" answers from
   a real session's store. W1 is complete.
+
+- **2026-08-31: W4 lexical n-gram input probe complete.** ESP's cheap
+  `LexicalEmbeddingProvider` now accepts explicit token n-gram orders while
+  `new(dimensions)` remains byte-for-byte compatible unigram hashing. Orders
+  are positive, non-empty, sorted, and deduplicated. Higher orders hash token
+  windows without allocating joined strings. The decoder stack, Eidetic
+  artifacts, `TrailIndex`, and reciprocal-rank fusion seam are unchanged.
+  DeepSeek's [Engram paper](https://arxiv.org/abs/2601.07372) puts deterministic
+  hashed n-gram lookup, learned memory tables, and contextual gating inside a
+  Transformer. This probe borrows only the phrase-addressing idea at the
+  application retrieval layer. Mere's existing `Engram` envelope concept is
+  untouched.
+
+  The fixed receipt uses the existing `SemanticSearch` → dense `VectorIndex`
+  path over 28 derived records and 15 held-out queries: two each for browsing,
+  title, URL, entity, and command phrases, plus five unigram/order-insensitive
+  controls. Phrase targets compete with shorter records containing the same
+  unigrams in another order. This is a forcing corpus for phrase sensitivity,
+  not a claim about a production browsing corpus.
+
+  | token orders | Ranking@1 | phrase Ranking@1 | controls Ranking@1 |
+  |---|---:|---:|---:|
+  | `1` | 7/15 | 2/10 | 5/5 |
+  | `1+2` | 15/15 | 10/10 | 5/5 |
+  | `1+2+3` | 15/15 | 10/10 | 5/5 |
+
+  Optimized Windows x86-64 cost receipt, 4,096 dimensions, single test thread.
+  The ranges below cover three harness runs; each run reports the median of 11
+  order-rotated samples:
+
+  | token orders | build ns/document range | query ns range | dense vector bytes | JSON index bytes | occupied slots |
+  |---|---:|---:|---:|---:|---:|
+  | `1` | 3,914–4,374 | 232,099–244,752 | 458,752 | 459,936 | 125 |
+  | `1+2` | 3,987–4,340 | 226,749–248,814 | 458,752 | 460,924 | 222 |
+  | `1+2+3` | 3,936–4,495 | 227,815–248,751 | 458,752 | 461,569 | 291 |
+
+  The build and query ranges overlap, so this harness found no latency
+  regression distinguishable from run-to-run noise at this corpus size. Dense
+  storage is unchanged because the index remains fixed-width; JSON grew by 988
+  bytes for bigrams and 1,633 bytes for bigrams plus trigrams. The result
+  supports keeping `1+2` as an application setting for phrase-heavy surfaces
+  while retaining `1` as compatibility default. Trigrams earned no additional
+  ranking win here. Because orders are a vector-space input, changing the
+  setting must re-mint the derived index; the index never becomes authority.
+  Reproduce with:
+
+  ```text
+  cargo test -p esp --test lexical_ngram_recall --offline -j 1 -- --nocapture --test-threads=1
+  cargo test -p esp --release --test lexical_ngram_recall --offline -j 1 -- --ignored --nocapture --test-threads=1
+  ```
+
+  Final focused gates passed from the shared checkout with isolated
+  `CARGO_TARGET_DIR`: 65 ESP library tests plus two active held-out tests in the
+  integration target,
+  package-local Clippy over all targets with warnings denied, the default ESP
+  library check for `wasm32-unknown-unknown`, formatting, and `git diff --check`.
+  A broader Clippy invocation that linted dependencies stopped in seven
+  pre-existing Personae `redundant_slicing` warnings before ESP; the
+  `--no-deps` ESP gate passed. The checkout's unrelated carrier/Luggage work
+  and four incoming Distillery-plan commits were left untouched.
+
+- **2026-08-31: W5 deterministic fusion probe complete; live fusion remains
+  open.** The same 28 records and 15 held-out queries now pass through an actual
+  `BrowsingTrace` -> Tantivy `TrailIndex` BM25 ranking and the existing
+  reciprocal-rank `fuse()` seam. URL cases occupy the URL field and have no
+  title, so the projection does not hide field behavior. ESP names
+  `eidetic-search` only as a dev dependency for this consumer-side receipt;
+  neither production crate gains a dependency on the other.
+
+  | ranking | deterministic Ranking@1 | Ranking@3 | phrase Ranking@1 | control Ranking@1 | unique fused Ranking@1 | expected target tied at top |
+  |---|---:|---:|---:|---:|---:|---:|
+  | BM25 | 7/15 | 15/15 | 2/10 | 5/5 | - | - |
+  | unigram feature vector | 7/15 | 15/15 | 2/10 | 5/5 | - | - |
+  | `1+2` feature vector | 15/15 | 15/15 | 10/10 | 5/5 | - | - |
+  | BM25 + unigram RRF, weights `(1, 1)` | 7/15 | 15/15 | 2/10 | 5/5 | 7/15 | 0 |
+  | BM25 + `1+2` RRF, weights `(1, 1)` | 15/15 | 15/15 | 10/10 | 5/5 | 7/15 | 8 |
+  | BM25 + `1+2` RRF, weights `(1, 2)` | 15/15 | 15/15 | 10/10 | 5/5 | 15/15 | 0 |
+
+  The main stop sign matters more than the headline numbers. Equal-weight RRF
+  gives eight corrected phrase targets exactly the same score as their reversed
+  decoys; the documented URL tie-break happens to put the target first. Its
+  apparent 15/15 is therefore not a fusion win. Giving the vector input twice
+  the weight breaks those ties, but `(1, 2)` is only a probe of the existing
+  setting seam, not a recommended default. A real captured-trail partition must
+  select weights without reusing its held-out queries.
+
+  The titleless-URL gap found by the first fusion run is closed in field set V3.
+  The canonical `url` remains an exact stored `STRING`; a separate, non-stored
+  `url_text` field indexes the same canonical bytes with Tantivy's default
+  tokenizer. `TrailIndex::search` queries both representations. A single
+  absolute URL bypasses the query-string grammar and uses an exact `TermQuery`,
+  preventing `https:` from being misread as an unknown field. A V2 sidecar is
+  rejected before Tantivy opens its segments, and rebuilding from the trace
+  corpus writes V3 and restores component recall. Both titleless URL targets now
+  appear at rank 2 under BM25, raising its Ranking@3 from 13/15 to 15/15 while
+  preserving the useful contrast: bag-of-words BM25 still prefers the shorter
+  reversed-order decoy, and `1+2` supplies the ordering signal.
+
+  Direct gates passed in the isolated target: all 14 `eidetic-search` library
+  tests, including V2 rejection/re-mint, titleless URL-component recall, and
+  exact full-URL recall; the two active
+  ESP integration tests; package-local Clippy with warnings denied; formatting;
+  and `git diff --check`. The first direct `eidetic-search` test build took
+  34m14s on the loaded shared host because its existing dev dependencies enable
+  the BERT/WGPU example graph; the tests themselves ran in 0.35s. Pre-existing
+  warnings came from patched Burn, Genet Nematic, and `mere-kernel`, not these
+  crates.
+
+  This remains a lexical forcing receipt. It compares BM25, unigram feature
+  hashing, `1+2` feature hashing, and their actual RRF combinations. The fixed
+  learned-vector comparison below closes the model-baseline gap for this
+  fixture. W5 is done only when the live caller supplies both rankings over a
+  real held-out trail corpus and selects weights without reusing its evaluation
+  partition.
+
+- **2026-09-01: fixed MiniLM baseline complete; live W5 remains open.** The
+  ignored `learned_minilm_baseline` receipt runs the same 28 records and 15
+  queries through ESP's real Burn/NdArray CPU loader and `SemanticSearch`, then
+  brings that ranking to the same Eidetic BM25/RRF seam. It requires
+  `SIBYLLA_MINILM_DIR`; repository-ignored model data never becomes a silent CI
+  dependency. The test verifies every artifact before loading:
+
+  | artifact | bytes | SHA-256 |
+  |---|---:|---|
+  | `config.json` | 612 | `953f9c0d463486b10a6871cc2fd59f223b2c70184f49815e7efbcab5d8908b41` |
+  | `tokenizer.json` | 466,247 | `be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037` |
+  | `model.safetensors` | 90,868,376 | `53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db` |
+
+  This is `sentence-transformers/all-MiniLM-L6-v2`: 384 dimensions, mean
+  pooling, L2 normalization. Total artifact size is 91,335,235 bytes. Its
+  28-record vector index is 43,008 bytes, compared with 458,752 bytes for the
+  4,096-dimensional feature-hashed index; the dense model also carries its
+  weights and runtime.
+
+  | ranking | deterministic Ranking@1 | Ranking@3 | phrase Ranking@1 | control Ranking@1 | unique fused Ranking@1 | expected target tied at top |
+  |---|---:|---:|---:|---:|---:|---:|
+  | MiniLM | 12/15 | 15/15 | 7/10 | 5/5 | - | - |
+  | BM25 + MiniLM RRF, weights `(1, 1)` | 12/15 | 15/15 | 7/10 | 5/5 | 7/15 | 5 |
+  | BM25 + MiniLM RRF, weights `(1, 2)` | 12/15 | 15/15 | 7/10 | 5/5 | 12/15 | 0 |
+  | BM25 + `1+2` RRF, weights `(1, 2)` | 15/15 | 15/15 | 10/10 | 5/5 | 15/15 | 0 |
+
+  MiniLM leaves `graph query nodes`, `washington post company`, and
+  `open downloads folder` at rank 2. Equal weighting turns five of its wins
+  into exact BM25 ties. A 2x dense weight restores MiniLM's own 12 unique wins
+  but adds none. On this deliberately phrase-sensitive fixture, `1+2` feature
+  hashing therefore beats the learned model rather than merely beating a weak
+  unigram stand-in.
+
+  Optimized Windows x86-64 CPU measurements across nine runs on the loaded
+  shared host were 78-86 ms to load, 243-261 ms to embed all 28 records, and
+  323-349 ms for the 15-query sweep (21.5-23.3 ms/query). Three direct process
+  runs peaked at 194,674,688-194,699,264 bytes working set. The earlier lexical
+  cost harness measured 226,749-248,814 ns/query for `1+2`, but used repeated
+  rotated sweeps; the raw figures establish the cost separation without
+  pretending the protocols are identical. The first isolated release build
+  took 26m06s under concurrent host load; that is compile cost, not inference
+  latency.
+
+  Reproduce the learned baseline with:
+
+  ```text
+  SIBYLLA_MINILM_DIR=/path/to/all-MiniLM-L6-v2 cargo test -p esp --release --features bert --test lexical_ngram_recall --offline -j 1 learned_minilm_baseline -- --ignored --nocapture --test-threads=1
+  ```
+
+  The conclusion stays narrow: expose `1+2` as the phrase-sensitive derived
+  lookup setting and take it to a real captured-trail partition. Do not promote
+  a live fusion weight from this forcing fixture. A broader corpus with true
+  paraphrases is still required to judge the semantic value of MiniLM, while
+  live W5 still owns caller wiring and weight selection.

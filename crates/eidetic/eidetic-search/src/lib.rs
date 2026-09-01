@@ -18,8 +18,9 @@
 //!
 //! Three surfaces:
 //!
-//! - **Recall** — [`TrailIndex::search`]: BM25 over titles, URLs, and
-//!   domains. "Where did I read about X?"
+//! - **Recall** — [`TrailIndex::search`]: BM25 over tokenized titles, page
+//!   text, and URL components; a single absolute URL takes an exact canonical
+//!   URL path. "Where did I read about X?"
 //! - **Reports** — [`TrailIndex::top_domains`] /
 //!   [`TrailIndex::visits_histogram`] over the reserved fast-field columns
 //!   (domain / owner / time / transition are columnar from day one, so
