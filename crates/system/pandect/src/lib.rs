@@ -166,8 +166,9 @@ pub use denizen_facets::{
     read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
 };
 pub use device_settings_store::{
-    DEVICE_SETTINGS_DIR, DEVICE_SETTINGS_FILENAME, DeviceSettings, device_settings_exist,
-    device_settings_path, load_device_settings, save_device_settings,
+    DEVICE_SETTINGS_DIR, DEVICE_SETTINGS_FILENAME, DeviceSettings, MeshLendingSettings,
+    QuietHoursSettings, StatedConditionSettings, device_settings_exist, device_settings_path,
+    load_device_settings, save_device_settings,
 };
 pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,

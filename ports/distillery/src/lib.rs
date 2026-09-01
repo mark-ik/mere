@@ -57,8 +57,8 @@ pub use authority::{
     BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
 };
 pub use installed::{
-    DistilleryPaths, InstalledAuthority, InstalledError, InstalledSettings, InstalledSettingsError,
-    distillery_settings_path,
+    DISTILLERY_MESH_SALT, DistilleryPaths, InstalledAuthority, InstalledError, InstalledSettings,
+    InstalledSettingsError, distillery_settings_path,
 };
 #[cfg(feature = "remote")]
 pub use remote::{

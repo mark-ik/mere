@@ -252,6 +252,7 @@ mod tests {
             &root,
             &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Locked,
+                mesh_lending: None,
             },
         )
         .unwrap();
@@ -283,6 +284,7 @@ mod tests {
             &root,
             &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Prompt,
+                mesh_lending: None,
             },
         )
         .unwrap();
