@@ -186,7 +186,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The product host, with the live endpoint on one catalog route.
     let mut catalog = ResidentEndpointCatalog::new();
-    catalog.register_notifying("live", "C4 live board", |_context| Ok(LiveEndpoint::new()))?;
+    // `register_resumable_notifying`, not `register_notifying`: the plainer
+    // registration erases resume behind a default that refuses it, and the
+    // first headed run found exactly that — the bell rang, the browser asked
+    // to resume, and the host said the endpoint could not. An endpoint with a
+    // diff history has to be registered as one.
+    catalog.register_resumable_notifying("live", "C4 live board", |_context| {
+        Ok(LiveEndpoint::new())
+    })?;
     let route = ResidentEndpointRoute::new("live", Duration::from_millis(250))?;
     let host = Arc::new(Mutex::new(ResidentProjectionHost::new(
         policy.clone(), route, catalog,

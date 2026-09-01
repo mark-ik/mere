@@ -118,9 +118,19 @@ impl SessionDriver {
         self.inflight.is_some()
     }
 
-    /// Start discovery. The answer builds the core.
+    /// Start discovery.
+    ///
+    /// On a fresh driver the answer builds the core. On one that already has a
+    /// core — a reconnect — the core tracks the discovery itself, so the
+    /// descriptor is refreshed and everything mounted is kept.
     pub fn discover(&mut self) -> Result<Advance, String> {
-        self.send(SessionCore::discover_request())
+        match self.core.as_mut() {
+            None => self.send(SessionCore::discover_request()),
+            Some(core) => {
+                let progress = core.rediscover();
+                self.begin(progress)
+            }
+        }
     }
 
     /// Encode whatever the core just asked for.
@@ -317,6 +327,27 @@ mod tests {
         let advance = driver.on_line(&reply).expect("descriptor is readable");
         assert!(matches!(advance, Advance::Done(Outcome::Descriptor(_))));
         assert!(driver.core().is_some(), "the descriptor built the core");
+        assert!(!driver.is_awaiting());
+    }
+
+    /// The reconnect case: discovering again on a driver that already has a
+    /// core refreshes the descriptor and keeps the core — it must not arrive as
+    /// an answer nobody asked for. The first headed reconnect died exactly
+    /// there.
+    #[test]
+    fn discovering_again_on_a_live_core_is_answered_and_keeps_the_core() {
+        let mut driver = driver();
+        assert!(driver.core().is_some());
+        let line = sent(driver.discover().expect("a second discovery starts"));
+        let reply = line_of(CarrierResponse {
+            id: request_id(&line),
+            body: Ok(CarrierResponseBody::Descriptor(descriptor())),
+        });
+        let advance = driver
+            .on_line(&reply)
+            .expect("the descriptor is an answer the core was waiting for");
+        assert!(matches!(advance, Advance::Done(Outcome::Descriptor(_))), "{advance:?}");
+        assert!(driver.core().is_some(), "the core survives a rediscovery");
         assert!(!driver.is_awaiting());
     }
 

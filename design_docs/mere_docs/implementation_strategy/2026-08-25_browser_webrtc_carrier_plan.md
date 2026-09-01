@@ -552,10 +552,45 @@ Windows, which is an argument for the `Drop` guard rather than manual cleanup.
 graphshell lib: 148 tests, plus 2 composition and 2 signaling receipts.
 Default build untouched; no warnings in any file this work added.
 
-Still open for C4a: the browser glue binding `SessionDriver` + `peer_join` to
-the data channel, replacing `canary::FixtureEndpoint` in the web client with
-the real mount, and the headed machine-readable receipt. The native half is
-complete: a browser now has a host to talk to.
+**The browser glue and the headed receipt landed 2026-09-01. C4a is closed.**
+`graphshell::webrtc_browser` (behind `webrtc-browser`, wasm32 only) is the
+last seam: `BrowserFrames` adapts the carrier's `BrowserInitiator` to the
+join's `JoinFrames` — an inbox and a waker, `poll_fn` over both — and
+`BrowserJoin` runs `peer_join`/`peer_rejoin` over it, then hands the channel
+to `SessionDriver` as NDJSON lines through a `LineAssembler`. Fingerprints
+come from the `a=fingerprint:` line of each SDP, parsed with the carrier's own
+`DtlsFingerprint::parse_sdp_attribute`. The join sequence itself moved to
+`webrtc_join.rs`, wasm-clean, so the host half and the browser half share one
+protocol file and one set of tests; `webrtc_door` split the same way (the
+client functions ungated, the issuing side native). The identity stack builds
+for wasm32 — personae without `agent`, getrandom 0.3 on `wasm_js`, uuid on
+`js` — and the port's `native` feature implies `webrtc-join`, so the default
+build is unchanged.
+
+The receipt is `Code/testing/mere/webrtc_c4a_receipt.md`: real Chrome against
+the product host, one page load, five actions — invite, join, refused intent,
+admitted intent, reconnect — with every fact in one JSON line and a clean
+console. The revision moved exactly once, for the admitted intent, and the
+admitted change was read back *by diff* off the bell. The reconnect was a
+rejoin: same subject, second session id, invitation use count untouched.
+
+The headed run caught three defects no native test had reached, each fixed in
+shipping code with a test rather than in the page: the fixture registered its
+endpoint with `register_notifying`, which erases resume (now
+`register_resumable_notifying`, and the composition test resumes by diff);
+the session core had no model for discovering *again* on a live session, so a
+reconnect's first descriptor arrived as an answer nobody asked for (now
+`SessionCore::rediscover`, and `SessionDriver::discover` routes through the
+core when one exists); and the page dropped a retired `BrowserInitiator` while
+its own close was still delivering into it — the C1 never-drop rule, one layer
+up — so `BrowserSession::retire` now hands back a `RetiredSession` to park,
+making the rule a type rather than a convention.
+
+Deferred to C4b with the surfaces: replacing `canary::FixtureEndpoint` in
+`web.rs` with the real mount, which is the point at which the session meets
+the canvas. A row exercising resume-on-reconnect with a native change during
+the outage is also carried; the machinery it would use is the one the
+admitted-intent row proved.
 
 ## 8. C5: public rendezvous
 
@@ -1071,3 +1106,24 @@ relay, and reconnect receipts.
   `default-features = false` and members opt *up* with
   `features = ["native"]`. Forgetting to is a compile error naming the missing
   item, not a silently crippled updater.
+
+- **2026-08-31 → 2026-09-01: C4a landed.** In order: the sans-I/O
+  `SessionCore` with the blocking `RetainedEndpointSession` and the
+  event-driven `SessionDriver` as its two adapters; the carrier's frame pump
+  (`stream_over_frames`) and exported loopback harness; the join protocol over
+  frames with `host_join`/`peer_join`/`peer_rejoin` and `serve_webrtc_join`;
+  `ResidentProjectionHost::serve_admitted` so the WebRTC lane reaches the
+  product host; `LiveEndpoint` with an advertised-and-refused intent; the
+  `c4_webrtc_host` fixture with a test that drives the binary; and the browser
+  glue `webrtc_browser` on a wasm-clean `webrtc_join`. Headed receipt in real
+  Chrome: `Code/testing/mere/webrtc_c4a_receipt.md` — five actions, one JSON
+  line, clean console, revision moved once and read back by diff, reconnect as
+  a rejoin. Three defects caught only by the headed run (resume erased by the
+  registration, no model for a second discovery, a retired channel dropped
+  mid-close), all fixed in shipping code with tests. Recurring hazard worth a
+  type if it appears again: a `CarrierControl` dropped early cancels the
+  driver, found twice in the composition test and once as the page-side
+  never-drop rule. Native tally: graphshell lib 154 under `webrtc-session`
+  plus 2 composition and 2 signaling receipts; graphshell-client 46; carrier
+  68. CARRIED to C4b: the real mount in `web.rs` and the surfaces;
+  resume-on-reconnect with a change during the outage.

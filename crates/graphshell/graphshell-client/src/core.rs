@@ -112,6 +112,9 @@ pub enum Outcome {
 
 /// The operation in flight, and where it has got to.
 enum Pending {
+    /// A discovery on a live session: the descriptor is refreshed, nothing
+    /// mounted is touched.
+    Rediscover,
     Mount {
         request: ProjectionRequest,
     },
@@ -406,6 +409,20 @@ impl SessionCore {
         self.resume_step(notice, 0)
     }
 
+    /// Discover again on a session that already exists.
+    ///
+    /// A reconnect is a new link to the same endpoint, and the first thing
+    /// said on any link is discovery. Before this existed, discovery was only
+    /// modelled for the link that *built* the core, so a second one arrived
+    /// as an answer nobody was waiting for and the reconnect died there —
+    /// found by the first headed reconnect, not by any native test, because
+    /// none had ever discovered twice. The descriptor is refreshed; every
+    /// mounted session and its acknowledgement is kept, which is what lets the
+    /// bells that follow resume by diff rather than by snapshot.
+    pub fn rediscover(&mut self) -> Progress<Outcome> {
+        self.begin(Pending::Rediscover, CarrierRequestBody::Discover)
+    }
+
     /// Start the discovery round trip a polling host uses to let its carrier
     /// collect whatever notices the endpoint has already written.
     pub fn poll(&mut self) -> Progress<Outcome> {
@@ -430,6 +447,13 @@ impl SessionCore {
             .take()
             .ok_or_else(|| "Graphshell received an answer it did not ask for".to_string())?;
         match pending {
+            Pending::Rediscover => match body {
+                CarrierResponseBody::Descriptor(descriptor) => {
+                    self.descriptor = descriptor.clone();
+                    Ok(Progress::Done(Outcome::Descriptor(Box::new(descriptor))))
+                }
+                other => Err(unexpected("descriptor", &other)),
+            },
             Pending::Mount { request } => match body {
                 CarrierResponseBody::Snapshot(snapshot) => {
                     let session = self.apply_snapshot(*snapshot, request)?;

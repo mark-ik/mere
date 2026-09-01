@@ -47,23 +47,19 @@
 //! the frame after that is reply bytes, and neither is JSON. A peer that
 //! sends anything else where a message is expected is refused as malformed.
 //!
-//! ## Both roles, on purpose
+//! ## Where the other role went
 //!
-//! [`peer_join`] is not test scaffolding. The browser runs this same sequence
-//! through its event glue, and a *native* client joining over WebRTC is a
-//! lane the plan already contemplates; keeping the role beside [`host_join`]
-//! is what lets one test drive both ends of the real sequence and what keeps
-//! the two ends from drifting — the same reason the door's client functions
-//! live beside its host functions.
+//! The peer half — [`peer_join`], [`peer_rejoin`], the wire messages, and
+//! [`JoinFrames`] itself — lives in [`crate::webrtc_join`], with no runtime
+//! beneath it, so the browser can run it. It is re-exported here, and the
+//! tests below still drive both ends of the real sequence against each other,
+//! which is what keeps the two from drifting.
 
 use notochord::{
-    AdmittedPrincipal, AdmittedSession, DenyReason, HandshakeError, HandshakeLimits,
-    LocalNetworkPolicy, NetworkId, ProfileRef, RevocationLedger, SessionHello, SessionReply,
+    AdmittedPrincipal, AdmittedSession, LocalNetworkPolicy, RevocationLedger, SessionHello,
 };
 use personae::IdentityProvider;
-use personae::delegation::SignedDelegationCertificate;
 use rand_core::{OsRng, RngCore};
-use serde::{Deserialize, Serialize};
 use tokio::io::DuplexStream;
 use tokio::task::JoinHandle;
 use webrtc_carrier::native::{Carrier, CarrierControl, PumpEnd, stream_over_frames};
@@ -71,10 +67,14 @@ use webrtc_carrier::{DtlsFingerprint, InviteId, InviteV1, LinkChallenge};
 
 use crate::admission::PROJECTION_PROTOCOL;
 use crate::webrtc_door::{
-    DoorError, HostChallengeSignature, RedemptionRefusal, RedemptionState, admit_webrtc_session,
-    build_redemption_proof, mint_delegation, redeem, sign_challenge, verify_host_challenge,
+    RedemptionState, admit_webrtc_session, mint_delegation, redeem, sign_challenge,
     webrtc_session_facts,
 };
+use crate::webrtc_join::{ToHost, ToPeer, recv_binary, recv_json, send_json, unexpected_message};
+
+/// The peer half and the shared vocabulary, re-exported from where they now
+/// live so a caller that learned this module's name keeps working.
+pub use crate::webrtc_join::{JoinError, JoinFrames, PeerJoin, peer_join, peer_rejoin};
 
 /// One frame channel, whatever carries it.
 ///
@@ -82,18 +82,6 @@ use crate::webrtc_door::{
 /// keeps the sequence's rules runnable on every `cargo test` rather than only
 /// where a DTLS handshake can happen — frames-over-DTLS is already the
 /// carrier suite's receipt, and composing the two is the fixture's.
-// `async fn` in a public trait, on purpose: the join runs where it is called,
-// never inside a `tokio::spawn`, so nobody needs a `Send` bound on these
-// futures — and the browser adapter that eventually joins from wasm is
-// single-threaded by construction, which is the whole reason this lane exists.
-#[allow(async_fn_in_trait)]
-pub trait JoinFrames {
-    /// The next frame, or `None` when the channel closed.
-    async fn recv(&mut self) -> Result<Option<Vec<u8>>, String>;
-    /// Send one frame.
-    async fn send(&mut self, payload: &[u8]) -> Result<(), String>;
-}
-
 impl JoinFrames for Carrier {
     async fn recv(&mut self) -> Result<Option<Vec<u8>>, String> {
         self.recv_frame().await.map_err(|error| error.to_string())
@@ -104,51 +92,6 @@ impl JoinFrames for Carrier {
             .await
             .map_err(|error| error.to_string())
     }
-}
-
-/// What the joining end sends, one JSON value per frame.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "t", rename_all = "snake_case")]
-enum ToHost {
-    /// Names the invitation and contributes the client half of the transcript.
-    Open {
-        invite: [u8; 16],
-        client_nonce: [u8; 32],
-    },
-    /// Spends one use: the ephemeral subject and the seed's signature over
-    /// this transcript and that subject.
-    Redeem {
-        subject: [u8; 32],
-        /// 64 bytes; a `Vec` because serde arrays stop at 32.
-        proof: Vec<u8>,
-    },
-    /// A reconnecting peer that already holds its delegation.
-    ///
-    /// C3's ruling made reconnect a new DTLS link with fresh admission, and
-    /// C2's that the invitation stays one-use: the delegation minted at the
-    /// first join travels inside the new hello, so there is nothing to redeem
-    /// and no use to spend. The host skips straight to admission — which is
-    /// where a revoked or expired delegation is refused, exactly as it would
-    /// be mid-session.
-    Resume {},
-}
-
-/// What the host sends back, one JSON value per frame.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "t", rename_all = "snake_case")]
-enum ToPeer {
-    /// The host's half of the transcript, and its signature over the whole.
-    Challenge {
-        server_nonce: [u8; 32],
-        signature: HostChallengeSignature,
-    },
-    /// The redeemed delegation. The next two frames are binary: hello, reply.
-    Grant {
-        delegation: SignedDelegationCertificate,
-    },
-    /// The join stops here. Written before the host closes, so a refused peer
-    /// learns why rather than watching a channel die.
-    Refused { reason: String },
 }
 
 /// The host's in-memory record of one outstanding invitation.
@@ -166,41 +109,6 @@ pub struct HostedInvite {
     pub invite: InviteV1,
     /// The verifier, use count and expiry the redemption spends against.
     pub redemption: RedemptionState,
-}
-
-/// Why a join did not produce an admitted session.
-#[derive(Debug, thiserror::Error)]
-pub enum JoinError {
-    /// The channel failed or closed mid-join.
-    #[error("join channel: {0}")]
-    Channel(String),
-    /// The peer sent something other than the message the sequence expects.
-    #[error("malformed join message: {0}")]
-    Malformed(String),
-    /// The peer named an invitation this host is not offering.
-    #[error("the join names an unknown invitation")]
-    UnknownInvite,
-    /// The transcript could not be assembled from this connection's facts.
-    #[error("link challenge: {0}")]
-    Challenge(#[from] webrtc_carrier::ChallengeError),
-    /// A host-side door operation failed.
-    #[error(transparent)]
-    Door(#[from] DoorError),
-    /// The redemption was refused. The refusal was written to the peer.
-    #[error("redemption refused: {0}")]
-    Redemption(#[from] RedemptionRefusal),
-    /// Notochord refused the hello. The reply carrying the refusal was
-    /// written to the peer.
-    #[error("admission denied: {0:?}")]
-    Denied(DenyReason),
-    /// The host's challenge signature did not verify against the key the
-    /// invitation named. Peer side only, and terminal: an unverified channel
-    /// gets no redemption proof.
-    #[error("the host did not prove the invitation's key over this link")]
-    HostUnverified,
-    /// A Notochord frame could not be built or read.
-    #[error("handshake: {0}")]
-    Handshake(#[from] HandshakeError),
 }
 
 /// Everything the host concluded from one completed join.
@@ -357,183 +265,16 @@ pub async fn host_join<P: IdentityProvider, F: JoinFrames>(
     })
 }
 
-/// What the joining end holds after a completed join.
-#[derive(Debug)]
-pub struct PeerJoin {
-    /// The transcript-derived id the host admitted. Matches the host's
-    /// [`JoinConclusion::principal`].
-    pub session_id: [u8; 32],
-    /// The link this end derived. Equal to the host's, or admission could not
-    /// have accepted.
-    pub shared_link: [u8; 16],
-    /// The delegation this session runs under. Retained because a reconnect
-    /// presents it again through [`peer_rejoin`] rather than redeeming anew —
-    /// the invitation stays spent, the delegation keeps working until its own
-    /// expiry or revocation says otherwise.
-    pub delegation: SignedDelegationCertificate,
-}
-
-/// Run the joining side of the sequence over one connected channel.
-///
-/// `invite` is this end's own copy, parsed from the fragment. The ephemeral
-/// provider is the freshly generated subject; its master key is what the
-/// redemption binds and the delegation names.
-#[allow(clippy::too_many_arguments)]
-pub async fn peer_join<P: IdentityProvider, F: JoinFrames>(
-    frames: &mut F,
-    ephemeral: &P,
-    invite: &InviteV1,
-    channel_label: &str,
-    client_fingerprint: DtlsFingerprint,
-    server_fingerprint: DtlsFingerprint,
-    limits: &HandshakeLimits,
-) -> Result<PeerJoin, JoinError> {
-    let challenge = open_and_verify(
+/// Best-effort: a refusal the peer never sees still refuses, so the send
+/// error is not the story here.
+async fn refuse<F: JoinFrames>(frames: &mut F, reason: &str) {
+    let _ = send_json(
         frames,
-        invite,
-        channel_label,
-        client_fingerprint,
-        server_fingerprint,
-    )
-    .await?;
-
-    // The channel is now the invitation's host. Spend one use on it.
-    let subject = ephemeral.master_public_key().to_bytes();
-    let proof = build_redemption_proof(invite.redemption_seed(), &challenge, &subject);
-    send_json(
-        frames,
-        &ToHost::Redeem {
-            subject,
-            proof: proof.to_vec(),
+        &ToPeer::Refused {
+            reason: reason.to_string(),
         },
     )
-    .await?;
-
-    let delegation = match recv_json::<ToPeer, _>(frames).await? {
-        ToPeer::Grant { delegation } => delegation,
-        ToPeer::Refused { reason } => return Err(JoinError::Channel(reason)),
-        other => return Err(unexpected_message("Grant", &other)),
-    };
-
-    hello_and_reply(frames, ephemeral, invite, &challenge, delegation, limits).await
-}
-
-/// Reconnect: the sequence a peer that already holds its delegation runs on a
-/// fresh DTLS link.
-///
-/// The host is verified again — a new link is a new channel someone else could
-/// be terminating — and admission runs again, which is where a delegation
-/// revoked since the first join is refused. What does *not* happen is a
-/// redemption: the invitation's use count belongs to first joins alone.
-#[allow(clippy::too_many_arguments)]
-pub async fn peer_rejoin<P: IdentityProvider, F: JoinFrames>(
-    frames: &mut F,
-    ephemeral: &P,
-    invite: &InviteV1,
-    delegation: SignedDelegationCertificate,
-    channel_label: &str,
-    client_fingerprint: DtlsFingerprint,
-    server_fingerprint: DtlsFingerprint,
-    limits: &HandshakeLimits,
-) -> Result<PeerJoin, JoinError> {
-    let challenge = open_and_verify(
-        frames,
-        invite,
-        channel_label,
-        client_fingerprint,
-        server_fingerprint,
-    )
-    .await?;
-    send_json(frames, &ToHost::Resume {}).await?;
-    hello_and_reply(frames, ephemeral, invite, &challenge, delegation, limits).await
-}
-
-/// The prefix both joins share: name the invitation, contribute the client
-/// nonce, and refuse the channel unless the host proves the invitation's key
-/// over this exact link.
-async fn open_and_verify<F: JoinFrames>(
-    frames: &mut F,
-    invite: &InviteV1,
-    channel_label: &str,
-    client_fingerprint: DtlsFingerprint,
-    server_fingerprint: DtlsFingerprint,
-) -> Result<LinkChallenge, JoinError> {
-    let mut client_nonce = [0u8; 32];
-    OsRng.fill_bytes(&mut client_nonce);
-    send_json(
-        frames,
-        &ToHost::Open {
-            invite: invite.rendezvous().to_bytes(),
-            client_nonce,
-        },
-    )
-    .await?;
-
-    // The host's challenge signature, checked against the key the invitation
-    // named before anything secret crosses this channel.
-    let (server_nonce, signature) = match recv_json::<ToPeer, _>(frames).await? {
-        ToPeer::Challenge {
-            server_nonce,
-            signature,
-        } => (server_nonce, signature),
-        ToPeer::Refused { reason } => return Err(JoinError::Channel(reason)),
-        other => return Err(unexpected_message("Challenge", &other)),
-    };
-    let challenge = LinkChallenge::new(
-        PROJECTION_PROTOCOL,
-        channel_label,
-        invite.rendezvous(),
-        client_nonce,
-        server_nonce,
-        client_fingerprint,
-        server_fingerprint,
-    )?;
-    if !verify_host_challenge(invite.expected_host_key(), &challenge, &signature) {
-        return Err(JoinError::HostUnverified);
-    }
-    Ok(challenge)
-}
-
-/// The suffix both joins share: the ordinary hello bound to this link, and
-/// the host's reply.
-async fn hello_and_reply<P: IdentityProvider, F: JoinFrames>(
-    frames: &mut F,
-    ephemeral: &P,
-    invite: &InviteV1,
-    challenge: &LinkChallenge,
-    delegation: SignedDelegationCertificate,
-    limits: &HandshakeLimits,
-) -> Result<PeerJoin, JoinError> {
-    let shared_link = challenge.shared_link();
-    let profile = ProfileRef {
-        id: invite.profile_id().to_string(),
-        revision: u32::try_from(invite.profile_revision())
-            .map_err(|_| JoinError::Malformed("profile revision exceeds u32".into()))?,
-    };
-    let mut hello_nonce = [0u8; 32];
-    OsRng.fill_bytes(&mut hello_nonce);
-    let hello = crate::webrtc_door::open_webrtc_session(
-        ephemeral,
-        NetworkId(*invite.network()),
-        profile,
-        hello_nonce,
-        shared_link,
-        vec![delegation.clone()],
-    )?;
-    frames
-        .send(&hello.encode(limits)?)
-        .await
-        .map_err(JoinError::Channel)?;
-
-    let reply = recv_binary(frames, "a Notochord reply").await?;
-    match SessionReply::decode(&reply, limits)? {
-        SessionReply::Accept { session_id, .. } => Ok(PeerJoin {
-            session_id,
-            shared_link,
-            delegation,
-        }),
-        SessionReply::Reject { reason } => Err(JoinError::Denied(reason)),
-    }
+    .await;
 }
 
 /// A served join: the admitted session, and the two handles that keep it
@@ -642,47 +383,6 @@ pub async fn serve_webrtc_join<P: IdentityProvider>(
     })
 }
 
-// ── Frame helpers ───────────────────────────────────────────────────────────
-
-async fn recv_json<T: for<'de> Deserialize<'de>, F: JoinFrames>(
-    frames: &mut F,
-) -> Result<T, JoinError> {
-    let payload = recv_binary(frames, "a join message").await?;
-    serde_json::from_slice(&payload)
-        .map_err(|error| JoinError::Malformed(format!("undecodable join message: {error}")))
-}
-
-async fn recv_binary<F: JoinFrames>(frames: &mut F, expected: &str) -> Result<Vec<u8>, JoinError> {
-    match frames.recv().await.map_err(JoinError::Channel)? {
-        Some(payload) => Ok(payload),
-        None => Err(JoinError::Channel(format!(
-            "the channel closed while waiting for {expected}"
-        ))),
-    }
-}
-
-async fn send_json<T: Serialize, F: JoinFrames>(frames: &mut F, message: &T) -> Result<(), JoinError> {
-    let payload = serde_json::to_vec(message)
-        .map_err(|error| JoinError::Malformed(format!("unencodable join message: {error}")))?;
-    frames.send(&payload).await.map_err(JoinError::Channel)
-}
-
-/// Best-effort: a refusal the peer never sees still refuses, so the send
-/// error is not the story here.
-async fn refuse<F: JoinFrames>(frames: &mut F, reason: &str) {
-    let _ = send_json(
-        frames,
-        &ToPeer::Refused {
-            reason: reason.to_string(),
-        },
-    )
-    .await;
-}
-
-fn unexpected_message(expected: &str, actual: &impl std::fmt::Debug) -> JoinError {
-    JoinError::Malformed(format!("expected {expected}, received {actual:?}"))
-}
-
 #[cfg(test)]
 mod tests {
     //! The join sequence with both roles live, over in-memory frames.
@@ -698,6 +398,8 @@ mod tests {
 
     use super::*;
     use crate::carrier::projection_policy;
+    use crate::webrtc_door::RedemptionRefusal;
+    use notochord::{NetworkId, ProfileRef};
     use crate::lifecycle::SessionAuthority;
     use crate::resume::ResumeFixtureEndpoint;
     use crate::session_loop::serve_admitted_session;

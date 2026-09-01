@@ -11,7 +11,7 @@
 
 #[cfg(feature = "web")]
 pub mod access;
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+#[cfg(any(all(feature = "native", not(target_arch = "wasm32")), feature = "webrtc-join"))]
 pub mod admission;
 #[cfg(feature = "web")]
 pub mod app;
@@ -69,8 +69,12 @@ pub mod transfer_endpoint;
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod transfer_offer;
 pub mod view;
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+#[cfg(any(all(feature = "native", not(target_arch = "wasm32")), feature = "webrtc-join"))]
 pub mod webrtc_door;
+#[cfg(any(all(feature = "native", not(target_arch = "wasm32")), feature = "webrtc-join"))]
+pub mod webrtc_join;
+#[cfg(all(feature = "webrtc-browser", target_arch = "wasm32"))]
+pub mod webrtc_browser;
 #[cfg(all(feature = "webrtc-session", not(target_arch = "wasm32")))]
 pub mod webrtc_session;
 

@@ -321,7 +321,9 @@ async fn the_admitted_intent_moves_the_revision_and_the_refused_one_does_not() {
         // builds, so it is read back over the wire rather than from a handle.
         let mut catalog = ResidentEndpointCatalog::new();
         catalog
-            .register_notifying("live", "C4 live board", |_context| Ok(LiveEndpoint::new()))
+            .register_resumable_notifying("live", "C4 live board", |_context| {
+                Ok(LiveEndpoint::new())
+            })
             .expect("the route registers");
         let route = ResidentEndpointRoute::new("live", Duration::from_millis(50))
             .expect("a valid route");
@@ -489,15 +491,32 @@ async fn the_admitted_intent_moves_the_revision_and_the_refused_one_does_not() {
         };
         assert_eq!(*result, IntentResult::Accepted);
 
+        // The acceptance rang the bell. A discovery round trip lets the host
+        // flush it, and the bell then drives the ordinary resume — which the
+        // host must answer by *diff*, not by refusing. The first headed run
+        // found the refusal: the catalog registration had erased resume.
+        let start = driver.core_mut().expect("core").poll();
+        let start = driver.begin(start).expect("poll encodes");
+        drive(&mut driver, &mut write, &mut lines, start)
+            .await
+            .expect("the poll completes");
+        let notice = driver
+            .take_notice()
+            .expect("the admitted intent rang exactly one bell");
+        assert_eq!(notice.revision.0, revision_after_mount.0 + 1);
         let start = driver
             .core_mut()
             .expect("core")
-            .resnapshot(&session)
-            .expect("the session is mounted");
-        let start = driver.begin(start).expect("snapshot encodes");
-        drive(&mut driver, &mut write, &mut lines, start)
+            .resume_from_notice(notice)
+            .expect("the bell names a mounted session");
+        let start = driver.begin(start).expect("resume encodes");
+        let resumed = drive(&mut driver, &mut write, &mut lines, start)
             .await
-            .expect("the resnapshot completes");
+            .expect("the host answers the resume rather than refusing it");
+        assert!(
+            matches!(resumed, Outcome::Changed(true)),
+            "the resume applied a diff: {resumed:?}"
+        );
         let after_admission = driver
             .core()
             .and_then(|core| core.client().acknowledgement(&session))
@@ -506,7 +525,7 @@ async fn the_admitted_intent_moves_the_revision_and_the_refused_one_does_not() {
         assert_eq!(
             after_admission.0,
             revision_after_mount.0 + 1,
-            "the admitted intent moved the native revision exactly once"
+            "the admitted intent moved the native revision exactly once, and the diff carried it"
         );
 
         // End politely, in the order `ServedJoin::finish` documents.

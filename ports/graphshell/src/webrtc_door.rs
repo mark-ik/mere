@@ -7,7 +7,7 @@
 //! The WebRTC door: how a browser holding an invitation becomes an admitted
 //! Personae subject, and every way that does not happen.
 //!
-//! [`browser_carrier`](crate::browser_carrier) is the precedent. It brokers a
+//! `browser_carrier` is the precedent. It brokers a
 //! challenge-bound [`notochord::SessionHello`] for a local extension over a
 //! trusted OS pipe, and the trust it leans on is the pipe: the browser had to
 //! launch this process to speak to it at all. WebRTC has no such pipe. Its
@@ -38,7 +38,7 @@
 //! - the browser's **private subject key**. Every host-side entry point here
 //!   takes a subject as `[u8; 32]` — a public key — so there is no parameter
 //!   through which a private key could arrive, mistakenly or otherwise.
-//! - the invitation's **redemption seed**. [`issue_invite`] generates it,
+//! - the invitation's **redemption seed**. `issue_invite` generates it,
 //!   hands it out inside the descriptor that becomes the URL fragment, and
 //!   retains only [`RedemptionState`] — an Ed25519 *public* verifier plus a
 //!   use count and an expiry. A host store read by an attacker therefore
@@ -61,28 +61,32 @@
 //! Nothing in this module reads or writes. The host functions take bytes and
 //! return bytes; the client functions are pure enough for a `wasm32` browser
 //! build to call the same code the native tests do. The transport that carries
-//! those bytes is [`webrtc_carrier::native`] on this side and
+//! those bytes is `webrtc_carrier::native` on this side and
 //! `webrtc_carrier::browser` on the other, and neither is named here.
 
-use notochord::{
-    AdmittedPrincipal, DenyReason, HandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
-    RequestedAction, RevocationLedger, SessionFacts, SessionHello, TrafficClass,
-};
+use notochord::{HandshakeError, NetworkId, ProfileRef, RequestedAction, SessionHello, TrafficClass};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use notochord::{AdmittedPrincipal, DenyReason, LocalNetworkPolicy, RevocationLedger, SessionFacts};
 use personae::delegation::{
     CapabilityScope, DelegationCertificate, DelegationError, DelegationParent,
     SignedDelegationCertificate,
 };
 use personae::{DerivedKeyAttestation, Ed25519Keypair, Ed25519PublicKey, Ed25519Signature};
 use personae::{IdentityError, IdentityProvider};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
-use transport::{AcceptedSession, Alpn, IngressContext, initiator_link_binding};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use transport::{AcceptedSession, Alpn, IngressContext};
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+use webrtc_carrier::InviteId;
 use webrtc_carrier::{
-    InviteError, InviteId, InviteV1, LinkChallenge, ReleaseRefV1, challenge_signature_bytes,
+    InviteError, InviteV1, LinkChallenge, ReleaseRefV1, challenge_signature_bytes,
     redemption_signing_bytes,
 };
 
 use crate::admission::{PROJECTION_PROTOCOL, connect_action, open_session};
+use notochord::ProofBinding;
 
 /// The one derivation salt behind every host signature this door produces.
 ///
@@ -95,11 +99,11 @@ use crate::admission::{PROJECTION_PROTOCOL, connect_action, open_session};
 /// and give a host two keys to lose.
 pub const WEBRTC_HOST_SIGNING_SALT: &[u8] = b"mere.graphshell/webrtc-host-signing/v1";
 
-/// What the host is offering, minus everything [`issue_invite`] generates.
+/// What the host is offering, minus everything `issue_invite` generates.
 ///
 /// The rendezvous id and the redemption seed are deliberately absent: an
 /// invitation whose secret its caller chose is an invitation whose secret its
-/// caller can reuse, so the door mints both from [`OsRng`] and never accepts
+/// caller can reuse, so the door mints both from `OsRng` and never accepts
 /// them as arguments.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InviteTerms {
@@ -325,6 +329,7 @@ pub enum DoorError {
 // Host side
 // ---------------------------------------------------------------------------
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 /// Mint one invitation: a fresh rendezvous id, a fresh redemption secret, and
 /// the host's signature over the whole descriptor.
 ///
@@ -443,7 +448,7 @@ pub fn redeem(
 /// browser cannot pass the grant on.
 ///
 /// `root_authority` is the host's local trust anchor — the same value its
-/// [`crate::carrier::projection_policy`] names in a
+/// `crate::carrier::projection_policy` names in a
 /// [`notochord::TrustedRoot`]. It is not in the invitation, and deliberately
 /// so: an invitation that carried its own root would be an invitation that
 /// chose which authority admits it.
@@ -496,6 +501,7 @@ pub fn mint_delegation<P: IdentityProvider>(
     )?)
 }
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 /// The facts a WebRTC channel can honestly report, from the audited adapter.
 ///
 /// Built through [`AcceptedSession::session_facts`] rather than by hand, which
@@ -513,6 +519,7 @@ pub fn webrtc_session_facts(shared_link: [u8; 16]) -> SessionFacts {
     .session_facts()
 }
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 /// Run Graphshell admission over one hello that arrived on this channel.
 ///
 /// Sans-I/O, exactly as [`crate::browser_carrier`] is: the hello arrives as
@@ -581,11 +588,21 @@ pub fn build_redemption_proof(
         .to_bytes()
 }
 
+/// The binding a peer signs on this carrier: the protocol and the derived
+/// link, and no peer identity, because the carrier authenticated nobody.
+///
+/// This is `transport::initiator_link_binding` spelled without `transport`,
+/// which a browser build cannot carry. A test below asserts the two produce
+/// the same binding, so the recipe has one owner and this is a receipt of it.
+pub fn link_binding(shared_link: [u8; 16]) -> ProofBinding {
+    ProofBinding::initiator(PROJECTION_PROTOCOL.to_vec(), None, Some(shared_link))
+}
+
 /// Issue the browser's hello, bound to the link both ends derived.
 ///
 /// [`crate::admission::open_session`] with the binding a carrier that
-/// authenticates nobody is entitled to: no peer, one link.
-/// [`transport::initiator_binding`] would be a lie here.
+/// authenticates nobody is entitled to: no peer, one link. A peer-bound
+/// binding would be a lie here.
 pub fn open_webrtc_session<P: IdentityProvider>(
     ephemeral: &P,
     network: NetworkId,
@@ -600,7 +617,7 @@ pub fn open_webrtc_session<P: IdentityProvider>(
         profile,
         TrafficClass::Interactive,
         nonce,
-        &initiator_link_binding(&Alpn::from_bytes(PROJECTION_PROTOCOL), shared_link),
+        &link_binding(shared_link),
         delegations,
     )
 }
@@ -650,6 +667,17 @@ mod tests {
 
     use super::*;
     use crate::admission::{GRAPHSHELL_DOMAIN, PROJECTION_SERVICE};
+
+    /// The binding this door builds without `transport` is the binding
+    /// `transport` builds. One recipe, and this is the receipt.
+    #[test]
+    fn the_local_link_binding_is_transports_link_binding() {
+        let link = [0x42; 16];
+        assert_eq!(
+            link_binding(link),
+            transport::initiator_link_binding(&Alpn::from_bytes(PROJECTION_PROTOCOL), link),
+        );
+    }
     use crate::carrier::projection_policy;
     use notochord::{ChainFault, SessionReply, TrustedRoot};
     use personae::InMemoryProvider;
@@ -1083,7 +1111,7 @@ mod tests {
             },
             TrafficClass::Interactive,
             HELLO_NONCE,
-            &initiator_link_binding(&Alpn::from_bytes(PROJECTION_PROTOCOL), link),
+            &link_binding(link),
             vec![join.grant_for("administer", NOW_MS + TTL_MS)],
         )
         .expect("issue an administer hello")
@@ -1530,7 +1558,7 @@ mod tests {
         assert_eq!(facts.transport, notochord::CarrierKind::Other);
         assert_eq!(
             facts.proof_binding(),
-            initiator_link_binding(&Alpn::from_bytes(PROJECTION_PROTOCOL), link),
+            link_binding(link),
             "the responder's binding must be the one the browser signed against"
         );
     }
