@@ -6,8 +6,9 @@ Personae/settings binding, configure/inspect binary, and read-only Cambium
 surface pass an exact-source focused Cargo gate, and Turnstone admits the
 surface as the contribution seam's second provider; operational host
 composition is ruled, built, and receipted in §10 — the Djinn lane runs a
-real mesh job from stated policy on `SystemClock` and closes clean —
-leaving the full workspace gate and the recorded deferrals open. D2's
+real mesh job from stated policy on `SystemClock` and closes clean — and
+the full workspace gate is closed green, leaving only the deferrals §10
+records. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
@@ -722,6 +723,47 @@ and `accepted_checkpoints` have no settings fields yet, so they remain
 mesh's own empty-means-unrestricted; thermal and bandwidth are stated-only;
 the off-Windows path reports the UTC hour for `local_hour` and is
 stated-only territory.
+
+### The full workspace gate, closed 2026-09-01
+
+The gate every earlier receipt deferred to has been run and is green. It had
+never been reached before: earlier attempts spent their bounded runs in
+dependency resolution without arriving at `rustc`, so every Distillery
+receipt to date was an isolated exact-source harness.
+
+`cargo check --workspace --all-targets` now finishes clean from an empty
+target directory across all 101 members. Two breaks stood in the way, and
+neither is visible to a per-package build:
+
+- Distillery was the only crate restating Genet revisions by hand rather
+  than following the workspace — for `genet-host-api` and for the
+  `genet-scripted-dom` and `layout-dom-api` dev-dependencies. Four
+  alignment commits had dragged those lines along; the move to `eff0cb6d`
+  missed them, so Distillery compiled against one `genet-host-api` while
+  Cambium carried another, and its own `SurfaceDescriptor` would not
+  compare with itself. All three now follow the workspace, which is what
+  `knot-document` already does.
+- The `mesh_lending` field added to pandect's `DeviceSettings` reached
+  three struct literals in Knot that a `-p pandect` run never compiles.
+
+`cargo test --workspace --no-fail-fast` then ran 264 suites: **3664 passed,
+1 failed**. The single failure is
+`graphshell::native::personal_sync_host::tests::a_revocation_on_one_device_reaches_the_others`,
+a multi-device replication test that polls with sleeps; it failed once
+under a saturated machine and passes three times out of three in
+isolation. It is load-flaky rather than a regression, and it sits in a
+crate neither fix touches.
+
+Two environment facts are worth recording, because they cost more time than
+the code did. Running the full test build at cargo's default parallelism
+(16 jobs on this 16-core, 31 GB machine) crashes `rustc` with
+`STATUS_STACK_BUFFER_OVERRUN` while linking large debug binaries, and a
+crashed compile leaves truncated rlibs that Cargo then considers fresh, so
+later runs fail with unresolved externals that look like real link errors.
+Recovering required wiping the target directory rather than cleaning
+individual packages, since dependents keep referencing the old metadata
+hash. The passing run used `-j 4` and `CARGO_PROFILE_DEV_DEBUG=line-tables-only`
+by environment, changing no committed profile.
 
 ### Done conditions
 
