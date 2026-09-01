@@ -30,6 +30,7 @@ keeper = [
   "dep:ssh-key",
   "dep:thiserror",
   "dep:tracing",
+  "dep:tokio",
   "personae/agent",
 ]
 # Freedesktop Secret Service 0.2 adapter. The portable sealed collection model
@@ -59,7 +60,7 @@ ssh-agent-lib = { version = "0.6", optional = true }
 ssh-key = { version = "0.6", features = ["ed25519", "encryption"], optional = true }
 thiserror = { version = "1", optional = true }
 tracing = { workspace = true, optional = true }
-tokio = { version = "1", features = ["macros", "rt", "sync", "time"], optional = true }
+tokio = { version = "1", features = ["macros", "net", "rt", "sync", "time"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "5.19", default-features = false, features = ["tokio"], optional = true }

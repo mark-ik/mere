@@ -14,9 +14,11 @@
 
 #![doc(html_no_source)]
 
+pub mod conditions;
 pub mod pairing;
 pub mod personal_sync;
 pub mod resident;
 pub mod resident_blobs;
+pub mod resident_distillery;
 pub mod resident_knot;
 pub mod settings;

@@ -5,10 +5,9 @@
 Personae/settings binding, configure/inspect binary, and read-only Cambium
 surface pass an exact-source focused Cargo gate, and Turnstone admits the
 surface as the contribution seam's second provider; operational host
-composition is assessed in §10 and its four decisions are ruled (Djinn
-composes; conditions sensed where possible and stated where not;
-a derived personal mesh; single-device first), leaving implementation and
-the full workspace gate open. D2's
+composition is ruled, built, and receipted in §10 — the Djinn lane runs a
+real mesh job from stated policy on `SystemClock` and closes clean —
+leaving the full workspace gate and the recorded deferrals open. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
@@ -674,6 +673,55 @@ all come from the `windows` crate without COM; deferring thermal keeps COM
 out of the resident entirely, and by the composition rule above a device
 that does not sense thermals runs with the thermal ceiling disabled rather
 than with an invented temperature.
+
+### Action, landed 2026-09-01
+
+The composition runs. Three lanes, each gated before the next:
+
+- **Device lending settings** (pandect): `DeviceSettings` gained an optional
+  `mesh_lending` block — the lending rules plus `stated` condition fallbacks,
+  every field an owner statement with no `Default`, validated on load and
+  save, old files still loading. Pandect stays mesh-free: the block is plain
+  data and the consumer converts it.
+- **The sensor** (`djinn::conditions`): `DeviceConditionSensor` implements
+  `ConditionSource` over plain Win32 calls — `GetLastInputInfo`,
+  `GetSystemPowerStatus`, `GetAdaptersAddresses` — with no COM anywhere.
+  Every signal carries a `SignalProvenance` (sensed, stated, absent); absent
+  signals report the fail-closed value whose direction a test verifies
+  against each policy rule, and `validate_policy_coverage` refuses, at
+  composition time, a policy whose enabled rules rest on absent signals. A
+  positive-control assertion keeps the Win32 layer honest: on Windows at
+  least one of idle, battery, or network must come back sensed.
+- **The lane** (`djinn::resident_distillery`): the fourth resident lane,
+  absent by default in `OwnerSettings`. Its open adopts or refuses
+  Distillery's persisted profile against Djinn's resolved one, derives the
+  personal mesh id under `DISTILLERY_MESH_SALT`, refuses an enabled lane on
+  a device with no lending posture, converts the posture, validates
+  coverage, opens the redb mesh store under the owner's retention revision
+  with the derived mesh author as checkpoint authority, reads real memory
+  through `GlobalMemoryStatusEx` (refusing on a build that cannot), and
+  binds through the ordinary `bind_resident` — `SystemClock`, `NoCourier`
+  (truthful for the single-device ruling), builtin registry, no
+  `permissive()` anywhere. Djinn's run loop gained the cancellation signal
+  `run_until` needed and drives the lane as a fourth `select!` arm.
+
+The receipt (`ports/djinn/tests/distillery_lane.rs`) starts the resident
+from explicit settings on `SystemClock`, posts `mesh.blake3/v1` as the
+lane's own derived author, observes `Claimed`, `Started`, `Completed`
+through the run loop's receipts, stops through the shutdown signal, and
+closes clean in the ordered teardown, asserting the installed policy equals
+the converted settings and is not `permissive()`. Companion receipts prove
+the three refusals: no lending posture, an enabled thermal rule with no
+stated temperature, and an absent lane composing no works at all.
+
+Explicit deferrals, recorded rather than defaulted: the trainer resource is
+not wired into Djinn (it would pull the Burn stack into the desktop
+resident; it stays behind Distillery's `trainer` feature until wanted), so
+the persona model library has no code expression yet; `allowed_resources`
+and `accepted_checkpoints` have no settings fields yet, so they remain
+mesh's own empty-means-unrestricted; thermal and bandwidth are stated-only;
+the off-Windows path reports the UTC hour for `local_hour` and is
+stated-only territory.
 
 ### Done conditions
 

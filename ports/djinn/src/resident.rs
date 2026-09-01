@@ -18,10 +18,12 @@ use graphshell::native::endpoint_catalog::{
     ResidentEndpointCatalog, ResidentEndpointCatalogError, ResidentEndpointRoute,
 };
 use mere_resident::{CloseAction, CloseFuture, close_all};
+use personae::bootstrap::Unlock;
 use personae::{IdentityProvider, ProfileId};
 use zeroize::Zeroize;
 
 use crate::resident_blobs::ResidentBlobCustody;
+use crate::resident_distillery::ResidentDistillery;
 use crate::resident_knot::ResidentKnot;
 use crate::settings::OwnerSettings;
 
@@ -33,16 +35,28 @@ pub struct DjinnResident {
     credentials: CastellanResident,
     blobs: ResidentBlobCustody,
     knot: Option<ResidentKnot>,
+    distillery: Option<ResidentDistillery>,
 }
 
 impl DjinnResident {
-    /// Open the credential, content, and optional Knot authorities selected
-    /// for one already-unlocked Personae profile.
+    /// Open the credential, content, and optional Knot and Distillery
+    /// authorities selected for one already-unlocked Personae profile.
+    ///
+    /// `vault_dir` and `unlock` are threaded through for the Distillery lane
+    /// alone. It opens the shared Personae vault a second time, on the same
+    /// directory, because its identity is a *profile-derived* mesh author
+    /// rather than the process's `IdentityProvider` — and Personae's storage
+    /// opens are not exclusive, so the two coexist. Passing an already-opened
+    /// vault instead would mean either handing this constructor a Personae
+    /// internal or moving the derivation out of Distillery, and both cost more
+    /// than one extra open.
     pub async fn open<P: IdentityProvider + ?Sized>(
         identity: &P,
         data_root: &Path,
         profile: &ProfileId,
         owner: OwnerSettings,
+        vault_dir: &Path,
+        unlock: Unlock,
     ) -> Result<Self, String> {
         let credentials = claim_credentials(identity, data_root, profile)?;
         let blobs = ResidentBlobCustody::open(data_root, &owner.content).await?;
@@ -63,10 +77,37 @@ impl DjinnResident {
             },
             None => None,
         };
+        let distillery = match owner.distillery {
+            Some(lane) => {
+                match ResidentDistillery::open(data_root, profile, vault_dir, unlock, lane).await {
+                    Ok(distillery) => Some(distillery),
+                    Err(open_error) => {
+                        // Unwind in reverse construction order: the Knot lane
+                        // was built after blob custody and borrows it, so it
+                        // has to let go first.
+                        let knot_error = match knot {
+                            Some(knot) => knot.close().await.err(),
+                            None => None,
+                        };
+                        let close_error = blobs.shutdown().await.err();
+                        let mut message = format!("open resident Distillery: {open_error}");
+                        if let Some(knot_error) = knot_error {
+                            message.push_str(&format!("; close resident Knot: {knot_error}"));
+                        }
+                        if let Some(close_error) = close_error {
+                            message.push_str(&format!("; close blob custody: {close_error}"));
+                        }
+                        return Err(message);
+                    }
+                }
+            }
+            None => None,
+        };
         Ok(Self {
             credentials,
             blobs,
             knot,
+            distillery,
         })
     }
 
@@ -111,16 +152,59 @@ impl DjinnResident {
         Some((knot.node_id()?, knot.space_id()?))
     }
 
-    /// Stop Knot networking, release credential authority, then flush the
-    /// shared physical store. Call only after every broker and endpoint view
-    /// borrowing this resident has stopped.
+    /// Whether this run composes the resident Distillery works.
+    pub fn distillery_enabled(&self) -> bool {
+        self.distillery.is_some()
+    }
+
+    /// The composed works, for read-only projection and job posting.
+    pub fn distillery(&self) -> Option<&ResidentDistillery> {
+        self.distillery.as_ref()
+    }
+
+    /// Lift the works out so a caller can drive
+    /// [`ResidentDistillery::run_until`] for the length of its run loop.
+    ///
+    /// This exists because that future needs `&mut` on the lane for the whole
+    /// loop while the Knot arm of the same `select!` still needs `&mut` on this
+    /// resident. Lifting the lane out splits the borrow that Rust cannot split
+    /// on its own; [`restore_distillery`](Self::restore_distillery) hands it
+    /// back before shutdown so the ordered close still owns it.
+    pub fn take_distillery(&mut self) -> Option<ResidentDistillery> {
+        self.distillery.take()
+    }
+
+    /// Return a lane taken by [`take_distillery`](Self::take_distillery).
+    pub fn restore_distillery(&mut self, distillery: Option<ResidentDistillery>) {
+        self.distillery = distillery;
+    }
+
+    /// Stop mesh work, then Knot networking, release credential authority, and
+    /// finally flush the shared physical store. Call only after every broker
+    /// and endpoint view borrowing this resident has stopped.
     pub async fn shutdown(self) -> Result<(), String> {
         let Self {
             credentials,
             blobs,
             knot,
+            distillery,
         } = self;
         let report = close_all(vec![
+            (
+                // First: the works borrow nothing from blob custody or
+                // credentials, and stopping work the ring believes is running
+                // is the one close that other devices can observe. Everything
+                // else here is local teardown.
+                "Distillery",
+                Box::new(move || {
+                    Box::pin(async move {
+                        match distillery {
+                            Some(distillery) => distillery.close().await,
+                            None => Ok(()),
+                        }
+                    }) as CloseFuture<'static>
+                }) as CloseAction<'static>,
+            ),
             (
                 "Knot",
                 Box::new(move || {
