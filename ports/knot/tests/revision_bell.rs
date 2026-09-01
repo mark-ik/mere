@@ -128,6 +128,7 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
     let persona = personae::PersonaId::new();
     let settings = pandect::DeviceSettings {
         startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+        ..Default::default()
     };
     pandect::save_device_settings(root.path(), &settings).unwrap();
     pandect::wallet_store::ensure_wallet_state(root.path(), persona, "Knot process receipt")
