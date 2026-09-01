@@ -80,7 +80,12 @@ web-sys = { version = "0.3", features = [
 # while genet-livery resolves from crates.io and a compile error the moment it
 # resolves the working copy: livery uses `AlignmentOptions::last_line_alignment`
 # and `StyleProperty::TabSize`, which published parley 0.10.0 lacks, and buckram
-# names `genet-taffy` outright. Keep the rev in step with the genet pins above.
+# names `genet-taffy` outright. layout-dom-api and genet-scripted-dom are the
+# root's other two crates-io restatements: both are published at 0.1.0 and
+# pinned to the same rev so no crates.io copy can enter the graph beside the
+# git one. Keep the rev in step with the genet pins above.
 [patch.crates-io]
 taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 parley = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
