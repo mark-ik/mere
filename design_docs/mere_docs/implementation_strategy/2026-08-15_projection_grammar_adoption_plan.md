@@ -37,7 +37,7 @@ Platen now names its graph-specific split/tab cache `TileLayout`; `Workbench` is
 alias. Its structural AccessKit projection lives at
 `platen::accessibility::project_tile_layout`, beside the layout it reads. The old Mere
 `workbench` package is retired. Mere and Graphshell consume Genet's reusable `workbench` package
-at immutable revision `d25ef444d216cc71f6897d122c55a92530d5a6ca`. The component boundary and
+at immutable revision `eff0cb6df4834ecce9ac552a055c1c459befa7c3`. The component boundary and
 remaining headed-host receipts are in
 `genet/design_docs/2026-08-31_workbench_component_plan.md`.
 
@@ -951,9 +951,12 @@ not settled without it.
   activation, tearout custody, validation, provenance, serialization, and sink
   refusal. The standalone web manifest now restates its inherited immutable
   Genet patches, and the host `x86_64-pc-windows-msvc` cargo check passes
-  offline with only the cached Workbench path override. The browser/Wasm
-  headed receipt remains blocked by the environment's missing C++/WASI sysroot,
-  so headed verification and A5 remain open. Woodshed is Workbench's second
+  offline with the immutable G1 Genet revision. G1's native-only `fontsan`
+  policy closes the prior C++/WASI sysroot blocker for the wasm dependency
+  cone. The standalone wasm build now passes with an isolated target and the
+  matching `wasm-bindgen 0.2.126` package is generated under the ignored web
+  package directory. Browser-headed authoring evidence remains open, so headed
+  verification and A5 remain open. Woodshed is Workbench's second
   heterogeneous consumer, but it is not itself A5's named portable projection
   proof; A5 still needs a named proof consumer and its per-proof evidence. The
   component follows the component seam in
