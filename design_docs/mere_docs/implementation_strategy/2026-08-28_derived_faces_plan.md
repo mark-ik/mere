@@ -1,8 +1,8 @@
 # Derived Faces Plan
 
 **Date:** 2026-08-28
-**Status:** **D1 landed 2026-08-29 and its derivation-v2 correction landed
-2026-09-01**; D2 (vello bridge) and D3 (canvas arm) open. Was gated on emblem's encoder
+**Status:** **D1 published as `pictograph` 0.1.0 and D2 landed as unpublished
+0.2.0 on 2026-09-01**; D3 (canvas arm) remains open. Was gated on emblem's encoder
 (`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed and
 shipped as emblem 0.2.0 on 2026-08-29.
 **Scope:** procedural node faces for content that has no favicon: derive a
@@ -104,7 +104,7 @@ Done when:
 - decoding under two host LOD values yields the two arms (LOD proof);
 - a fuzz pass over random addresses produces decodable faces with no panics.
 
-### D2. The vello bridge
+### D2. The vello bridge (`pictograph` 0.2.0)
 
 `Sink` implementation building a vello scene fragment; non-zero winding rule
 honored (the one rule emblem's docs call out — vello must not default this
@@ -167,6 +167,17 @@ conservative rollout. Both defensible; not decided here.
   rotate-180. `DERIVATION_VERSION` deliberately moved from 1 to 2. The
   mirror-both test now proves horizontal and vertical symmetry independently,
   and fixture wording now says digest-pinned rather than byte-exact.
+- 2026-09-01: netrender 0.1.2 consumes the published `netrender-vello` 0.10.0
+  package, while Mere's otherwise-unused root `vello` pin names a distinct
+  package. D2 targets `netrender-vello` directly so its `Scene` has the identity
+  netrender's compositor expects. The dependency remains behind a `vello`
+  feature so byte-only derivation keeps its D1 dependency surface.
+- 2026-09-01: emblem hands sinks premultiplied RGBA while peniko accepts
+  straight-alpha colours and performs premultiplied gradient interpolation.
+  The bridge therefore unpremultiplies each resolved colour at that boundary.
+  IconVG linear gradients carry a one-row effective matrix, so D2 constructs an
+  invertible brush basis whose first coordinate is that linear function;
+  radial gradients use the inverse effective matrix directly.
 
 ## 9. Progress
 
@@ -178,6 +189,11 @@ conservative rollout. Both defensible; not decided here.
 - 2026-09-01: the pre-publication review correction moved the mapping to
   derivation v2, replaced the four fixture receipts, added the exact independent
   region counts as a regression test, and brought the focused suite to 14 tests.
+- 2026-09-01: `pictograph` 0.1.0 published on crates.io from corrected Mere
+  commit `1e59c0b7c930b78046fd62896a4b5fa8e6e9f120`.
+- 2026-09-01: D2 added the feature-gated vello bridge as unpublished
+  `pictograph` 0.2.0. The feature suite passes 21 unit tests plus two live
+  headless pixel tests through netrender's wgpu-30 vello package.
 
 ### D1 receipt (2026-08-29)
 
@@ -235,4 +251,42 @@ never quietly updating the table. A companion test asserts the grammar does
 not collapse: all three symmetries, both forms, and at least six distinct
 primary colours must occur across the corpus.
 
-**Not yet published.** 0.1.0 is ready; publishing is a separate step.
+**Published 2026-09-01.** 0.1.0 is the first implementation release.
+
+### D2 receipt (2026-09-01)
+
+Unpublished `pictograph` 0.2.0 adds an optional `vello` feature. `VelloSink`
+maps emblem's move, line, quadratic, cubic, close, and fill calls into a kurbo
+`BezPath` and the exact `netrender-vello` `Scene` type. Every fill explicitly
+uses non-zero winding. `decode` returns a `Graphic` carrying both the clipped
+scene fragment and its IconVG ViewBox; callers append it to their frame scene
+with a placement transform.
+
+The paint boundary is complete for emblem's current vocabulary: flat fills;
+linear and radial gradients; Pad, Reflect, Repeat, and None spread. None uses a
+gradient-domain clip because peniko has no transparent-outside extend mode.
+Resolved premultiplied RGBA is converted to peniko's straight-alpha input while
+gradient interpolation stays premultiplied. A radial transform vello cannot
+represent returns a typed error rather than producing invalid scene data.
+
+Done-conditions met:
+- **real icons reach pixels** — the specification's 36-byte action/info icon
+  and a derived face render through `netrender-vello` on a live headless wgpu
+  adapter;
+- **theme swap reaches pixels** — one derived byte vector is decoded against
+  all-red and all-blue palettes, producing visibly red and blue buffers without
+  re-derivation;
+- **winding is proved at the raster boundary** — two same-direction nested
+  contours fill the centre pixel, the result that distinguishes non-zero from
+  even-odd;
+- **gradient direction reaches pixels** — known linear and radial effective
+  matrices put their start and end colours on the expected sides and radii;
+- **structural coverage** — ViewBox clipping, every path segment, all gradient
+  spreads, radial inversion, palette brush changes, premultiplied colour
+  conversion, and the explicit singular-gradient error are covered;
+- **gates** — 21 unit tests and two headless integration tests pass with the
+  `vello` feature; all-target Clippy and rustdoc pass with warnings denied. The
+  extracted `.crate` repeats all 23 tests using registry dependencies only.
+
+0.2.0 is not published. D3 is still gated on the derived-by-default versus
+opt-in decision recorded above.
