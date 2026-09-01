@@ -2,8 +2,10 @@
 
 **Date**: 2026-08-12
 **Status**: open. W4's lexical n-gram input probe, W5's deterministic fusion
-probe, and the V3 tokenized-URL repair completed 2026-08-31; W4 host wiring and
-W5 live fusion remain open. Spun out of the
+probe, and the V3 tokenized-URL repair completed 2026-08-31. Turnstone's live
+trail-fusion caller is implemented on paired feature branches as of 2026-09-01;
+W4 canvas host wiring and W5's real captured-trail evaluation and weight
+selection remain open. Spun out of the
 [leverage census](../../2026-08-10_leverage_census_brief.md) (step 2), and
 carries the census's audit answer for `mere-embed` inside it.
 
@@ -276,3 +278,32 @@ store, not fixtures only.
   a live fusion weight from this forcing fixture. A broader corpus with true
   paraphrases is still required to judge the semantic value of MiniLM, while
   live W5 still owns caller wiring and weight selection.
+
+- **2026-09-01: live trail-fusion caller implemented; real W5 selection remains
+  open.** Turnstone `7d6e348` on `codex/0901-ngram-recall` consumes Mere
+  `7b6ced78` on `codex/0901-ngram-search`. The trail actor now owns a disposable
+  `TrailIndex` plus an optional ESP lexical-vector index over one latest record
+  per canonical URL. Current graph and recycle-bin titles are projected into
+  cloned traces while minting; browsing traces remain unchanged authority.
+  Corpus, title, or enabled token-order changes re-mint the derived projection.
+  Weight-only changes reuse it.
+
+  Two live application settings expose cumulative token orders `1`, `1+2`, and
+  `1+2+3`, plus phrase influence relative to BM25 from `0` through `4`. The
+  defaults are order `2` and influence `0`. At zero influence Turnstone issues
+  the original BM25 query with the original limit and never mints the vector
+  projection. Positive influence widens both candidate heads, applies the
+  existing deterministic RRF seam, and reduces to the omnibar limit.
+
+  The remote-pinned Turnstone graph passed a library check and all-test
+  type-check. Executed gates passed five trail-actor tests, three settings-owner
+  tests, four retained-settings-pane tests, and warning-denied Clippy over the
+  focused actor module. The actor receipt proves that enabling `1+2` with weight
+  `2` corrects a reversed-word-order BM25 tie and that changing current titles
+  re-mints without a new traversal. Broader Turnstone Clippy still reports its
+  existing warning set; none point into the new recall logic.
+
+  This closes the caller mechanics only. W4's canvas similarity-field and
+  persistence wiring remain separate. W5's done condition still requires a
+  real captured-trail training/evaluation split, weight selection on the
+  training side, held-out ranking metrics, and a stated RAM and latency budget.
