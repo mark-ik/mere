@@ -130,6 +130,7 @@ Done conditions:
   proves the same projections after restart.
 - **2026-08-31:** measured 1/1 integrated receipt, 11/11 Distillery library
   tests, and 122/122 Gemot library tests green. Package-scoped strict Clippy is
-  recorded in the companion receipt. The root workspace's inherited
-  `genet-taffy = =0.13.1` patch still stops normal Cargo entry before
-  compilation and was not changed by this plan.
+  recorded in the companion receipt. Upstream `77b3c3a2` corrected the stale
+  `genet-taffy` requirement to the pinned revision's `0.14.0`; after merging it,
+  the integrated receipt also passed directly from the real integration
+  checkout.

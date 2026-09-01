@@ -1,8 +1,8 @@
 # FLORA, Tulpa, and Standing integration receipt
 
-**Status (2026-08-31):** Passed in a detached verification checkout of
-`codex/0831-integration` through `0738b709`, with the final compile fixes
-mirrored before the run.
+**Status (2026-08-31):** Passed directly on `codex/0831-integration` after
+merging the upstream Genet pin correction `77b3c3a2` and Distillery test repair
+`9a53c77a`.
 
 ## Contract under test
 
@@ -51,21 +51,32 @@ offline resolution, and `-j 1`.
 | `cargo test -p gemot --lib -j 1` | 122 passed |
 | `cargo clippy -p distillery --features flora --lib --test flora_social_receipt --no-deps -j 1 -- -D warnings` | passed |
 | `cargo clippy -p gemot --lib --tests --no-deps -j 1 -- -D warnings` | passed |
+| `cargo check -p mere-canvas -j 1` | passed; 11m51s cold check |
+
+After the Genet pin correction, the integrated receipt command ran again from
+the actual integration checkout: 1 passed after 28m23s of cold path-crate
+compilation; the test itself completed in 4.77s.
 
 The ordinary strict Distillery Clippy command reached unchanged dependency
 warnings in Personae before package linting. The `--no-deps` gate proves the
 changed Distillery package itself under `-D warnings` without relabelling those
 upstream warnings.
 
-## Workspace entry blocker
+## Workspace entry closure
 
-The integration branch's root manifest pins `genet-taffy = =0.13.1` at Genet
-revision `da8762fd`, whose checkout provides `0.0.1` and `0.14.0`. Cargo stops
-at patch resolution before compiling Mere. The verification checkout omitted
-only that inherited patch line; its generated lockfile and scratch manifest
-change did not enter the integration branch. This receipt therefore measures
-the changed packages and their integrated scenario, not a green root-workspace
-gate.
+The first receipt found that the root manifest required
+`genet-taffy = =0.13.1` while Genet revision `da8762fd` provides the real fork
+as `0.14.0`. Upstream commit `77b3c3a2` corrected the exact pin to `=0.14.0`;
+that revision's Buckram and Livery manifests also require `0.14.0`. An inverse
+dependency query now resolves one chain from `genet-taffy 0.14.0` through
+Buckram and `genet-livery` into Mere Canvas, Mere, Graphshell, and Djinn. The
+focused Mere Canvas check compiles `genet-taffy 0.14.0`, Buckram,
+`genet-livery`, and Canvas from that exact chain. The direct integrated receipt
+above also enters Cargo, compiles, and passes without a scratch manifest
+change. The detached-checkout exception is retired.
+
+The adjacent upstream commit `9a53c77a` removed duplicate license/header text
+that had left Distillery's `authority.rs` and `resident.rs` tests malformed.
 
 ## Claim boundary
 

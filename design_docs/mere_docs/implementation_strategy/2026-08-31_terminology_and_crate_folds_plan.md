@@ -97,10 +97,12 @@ Done conditions:
   descriptions contain the old word *engram*. Rewording those bytes would be a
   data migration, so v1 bytes remain stable and current APIs call them
   codicils.
-- **2026-08-31:** the repository root currently cannot enter compilation: its
-  `genet-taffy = =0.13.1` patch does not match either package version at the
-  pinned Genet revision. Focused disposable workspaces are therefore required
-  for honest provider receipts; this plan does not alter the unrelated pin.
+- **2026-08-31:** the first integrated run could not enter compilation because
+  `genet-taffy = =0.13.1` did not match the real `0.14.0` package at the pinned
+  Genet revision. Upstream `77b3c3a2` corrected the exact pin to `=0.14.0` and
+  was merged into the integration branch. The disposable-workspace runs remain
+  useful focused evidence, but are no longer required to bypass this resolver
+  failure.
 - **2026-08-31:** external consumers pin older Mere revisions. Their Journal
   source migrations can land as ordered commits, but their lockfiles cannot be
   made current until a Mere revision containing `muniment::Journal` exists.
@@ -124,6 +126,7 @@ Done conditions:
   bytes, deprecated aliases, historical receipts, or fold notes. Sonance is a
   current Mora module.
 - **2026-08-31:** the integrated FLORA, Tulpa, and Standing receipt is green.
-  Normal root-workspace Cargo entry remains blocked before compilation by the
-  inherited Genet patch mismatch described above; validation used a detached
-  checkout with only that unrelated patch line omitted.
+  After merging `77b3c3a2`, the same receipt entered Cargo and passed directly
+  from the integration checkout. `cargo tree -i genet-taffy@0.14.0` resolves
+  the Buckram/Livery/Mere consumer chain at the exact pinned Genet revision;
+  `cargo check -p mere-canvas -j 1` compiles that chain successfully.
