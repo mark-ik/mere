@@ -7,15 +7,15 @@ assert title GRAPHSHELL H3 READY
 assert snap ready == true
 assert snap session == local
 assert snap detail-open == false
-assert dom #active-session Local Mere
-assert attr #session-local aria-pressed true
+assert dom #gs-active-session Local Mere
+assert attr #gs-session-local aria-pressed true
 capture h3_local
 wait
 act session-remote
 settle 1
 assert snap session == remote
-assert attr #session-remote aria-pressed true
-assert dom #active-session Remote projection
+assert attr #gs-session-remote aria-pressed true
+assert dom #gs-active-session Remote projection
 capture h3_remote
 wait
 act session-local
@@ -23,7 +23,7 @@ settle 1
 key enter
 settle 1
 assert snap detail-open == true
-assert attr #detail-surface aria-hidden false
+assert attr #gs-detail-surface aria-hidden false
 key escape
 settle 1
 assert snap detail-open == false

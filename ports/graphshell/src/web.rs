@@ -1151,14 +1151,30 @@ fn projection_panel(value: &str) -> Option<ProjectionPanel> {
     }
 }
 
-fn element(document: &Document, id: &str) -> Result<Element, String> {
-    document
-        .get_element_by_id(id)
-        .ok_or_else(|| format!("missing #{id}"))
+thread_local! {
+    /// The element `mount` was given: the component's whole world.
+    static ROOT: RefCell<Option<Element>> = const { RefCell::new(None) };
 }
 
-fn set_text(document: &Document, id: &str, value: &str) {
-    if let Some(element) = document.get_element_by_id(id) {
+/// The mount root. Every lookup, token and listener of the component goes
+/// through it, never through the document, so a host page's own ids and
+/// keys are never in play.
+fn root() -> Result<Element, String> {
+    ROOT.with(|slot| slot.borrow().clone())
+        .ok_or_else(|| "the component is not mounted".to_string())
+}
+
+/// One of the component's parts, by its unprefixed name (`detail-surface`
+/// for `#gs-detail-surface`), found under the root.
+fn element(part: &str) -> Result<Element, String> {
+    root()?
+        .query_selector(&format!("#gs-{part}"))
+        .map_err(|_| format!("bad part name {part}"))?
+        .ok_or_else(|| format!("missing part {part}"))
+}
+
+fn set_text(part: &str, value: &str) {
+    if let Ok(element) = element(part) {
         element.set_text_content(Some(value));
     }
 }
@@ -1176,9 +1192,9 @@ fn update_action_draft_semantics(
     document: &Document,
     draft: Option<&ActionDraftSemantics>,
 ) -> Result<(), String> {
-    let surface = element(document, "action-draft-surface")?;
+    let surface = element("action-draft-surface")?;
     surface.set_text_content(None);
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     let Some(draft) = draft else {
         surface
             .set_attribute("hidden", "")
@@ -1231,7 +1247,7 @@ fn update_action_draft_semantics(
         fieldset
             .append_child(&legend)
             .map_err(|_| "could not append action field label")?;
-        let description_id = format!("action-draft-help-{field_index}");
+        let description_id = format!("gs-action-draft-help-{field_index}");
         let description = document
             .create_element("p")
             .map_err(|_| "could not create action field description")?;
@@ -1353,8 +1369,8 @@ fn projection_panel_key(panel: ProjectionPanel) -> &'static str {
     }
 }
 
-fn set_projection_input_value(document: &Document, id: &str, value: &str) -> Result<(), String> {
-    let node = element(document, id)?;
+fn set_projection_input_value(id: &str, value: &str) -> Result<(), String> {
+    let node = element(id)?;
     if let Ok(input) = node.clone().dyn_into::<HtmlInputElement>() {
         input.set_value(value);
         return Ok(());
@@ -1387,11 +1403,8 @@ fn projection_preview(draft: &ProjectionDraft) -> String {
     )
 }
 
-fn update_projection_editor_semantics(
-    host: &BrowserHost,
-    document: &Document,
-) -> Result<(), String> {
-    let surface = element(document, "projection-editor")?;
+fn update_projection_editor_semantics(host: &BrowserHost) -> Result<(), String> {
+    let surface = element("projection-editor")?;
     if host.projection_editor_open {
         surface
             .remove_attribute("hidden")
@@ -1416,79 +1429,53 @@ fn update_projection_editor_semantics(
     let panel = projection_panel_key(host.projection_editor.panel());
     let content_id = host.projection_editor.panel().content_id();
     let preview = projection_preview(draft);
-    set_projection_input_value(
-        document,
-        "projection-source-authority",
+    set_projection_input_value("projection-source-authority",
         &draft.source.authority,
     )?;
-    set_projection_input_value(document, "projection-source-domain", &draft.source.domain)?;
-    set_projection_input_value(
-        document,
-        "projection-source-resource",
+    set_projection_input_value("projection-source-domain", &draft.source.domain)?;
+    set_projection_input_value("projection-source-resource",
         &draft.source.resource,
     )?;
-    set_projection_input_value(document, "projection-reading-key", &draft.reading.key)?;
-    set_projection_input_value(
-        document,
-        "projection-encoding-x",
+    set_projection_input_value("projection-reading-key", &draft.reading.key)?;
+    set_projection_input_value("projection-encoding-x",
         match &draft.encoding.x {
             Channel::Field(value) | Channel::Constant(value) => value,
         },
     )?;
-    set_projection_input_value(
-        document,
-        "projection-encoding-y",
+    set_projection_input_value("projection-encoding-y",
         match &draft.encoding.y {
             Channel::Field(value) | Channel::Constant(value) => value,
         },
     )?;
-    set_projection_input_value(
-        document,
-        "projection-arrangement-kind",
+    set_projection_input_value("projection-arrangement-kind",
         &draft.arrangement.kind,
     )?;
-    set_projection_input_value(
-        document,
-        "projection-arrangement-direction",
+    set_projection_input_value("projection-arrangement-direction",
         &draft.arrangement.direction,
     )?;
-    set_projection_input_value(
-        document,
-        "projection-arrangement-spacing",
+    set_projection_input_value("projection-arrangement-spacing",
         &draft.arrangement.spacing.to_string(),
     )?;
-    set_projection_input_value(
-        document,
-        "projection-appearance-realization",
+    set_projection_input_value("projection-appearance-realization",
         &draft.appearance.realization,
     )?;
-    set_projection_input_value(
-        document,
-        "projection-appearance-title",
+    set_projection_input_value("projection-appearance-title",
         &draft.appearance.title,
     )?;
-    set_projection_input_value(
-        document,
-        "projection-provenance-author",
+    set_projection_input_value("projection-provenance-author",
         &draft.provenance.author,
     )?;
-    set_projection_input_value(
-        document,
-        "projection-provenance-revision",
+    set_projection_input_value("projection-provenance-revision",
         &draft.provenance.source_revision,
     )?;
-    set_projection_input_value(
-        document,
-        "projection-provenance-note",
+    set_projection_input_value("projection-provenance-note",
         &draft.provenance.note,
     )?;
     set_text(
-        document,
         "projection-editor-status",
         &host.projection_editor_status,
     );
     set_text(
-        document,
         "projection-editor-source",
         &format!(
             "{} / {} / {}",
@@ -1496,7 +1483,6 @@ fn update_projection_editor_semantics(
         ),
     );
     set_text(
-        document,
         "projection-editor-provenance",
         &format!(
             "{} · source {} · {}",
@@ -1504,7 +1490,6 @@ fn update_projection_editor_semantics(
         ),
     );
     set_text(
-        document,
         "projection-editor-validation",
         &match &validation {
             Ok(()) => "Valid draft".to_string(),
@@ -1512,19 +1497,18 @@ fn update_projection_editor_semantics(
         },
     );
     set_text(
-        document,
         "projection-editor-lane",
         &format!("ContentSource::Open · graphshell.projection-editor.panel · {content_id}"),
     );
-    set_text(document, "projection-editor-preview", &preview);
+    set_text(
+        "projection-editor-preview", &preview);
     set_attr(
-        &element(document, "projection-editor-preview")?,
+        &element("projection-editor-preview")?,
         "data-preview-value",
         &preview,
     )?;
     for candidate in ProjectionPanel::ALL {
         let button = element(
-            document,
             &format!("projection-panel-{}", projection_panel_key(candidate)),
         )?;
         button
@@ -1536,7 +1520,6 @@ fn update_projection_editor_semantics(
             )
             .map_err(|_| "could not expose selected projection panel")?;
         let group = element(
-            document,
             &format!("projection-fields-{}", projection_panel_key(candidate)),
         )?;
         if candidate == host.projection_editor.panel() {
@@ -1549,7 +1532,7 @@ fn update_projection_editor_semantics(
                 .map_err(|_| "could not hide projection editor panel")?;
         }
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute(
         "data-projection-editor-open",
         &host.projection_editor_open.to_string(),
@@ -1730,7 +1713,7 @@ fn publish_capture_receipt(
     if !summary.active {
         return Ok(());
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute("data-capture-accepted", &summary.accepted.to_string())
         .map_err(|_| "could not expose accepted capture count")?;
     body.set_attribute("data-capture-dropped", &summary.dropped.to_string())
@@ -1751,7 +1734,7 @@ fn publish_history_controls(
     if !summary.active {
         return Ok(());
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute(
         "data-history-result-count",
         &summary.records.len().to_string(),
@@ -1772,7 +1755,7 @@ fn publish_history_controls(
             .map_err(|_| "could not clear history action error")?;
     }
 
-    let results = element(document, "history-results")?;
+    let results = element("history-results")?;
     results.set_text_content(None);
     for record in summary.records.iter().rev().take(100) {
         let item = document
@@ -1798,19 +1781,18 @@ fn publish_history_controls(
 fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     let document = document()?;
     let model = host.chrome_model();
-    set_text(&document, "active-session", &model.active_session);
-    set_text(&document, "selection-status", &model.selection);
-    set_text(&document, "detail-title", &model.selection);
-    set_text(&document, "detail-address", &model.detail_address);
-    set_text(&document, "action-status", &host.action_status);
+    set_text("active-session", &model.active_session);
+    set_text("selection-status", &model.selection);
+    set_text("detail-title", &model.selection);
+    set_text("detail-address", &model.detail_address);
+    set_text("action-status", &host.action_status);
     if !host.action_draft_semantics_ready || model.action_draft != host.rendered_action_draft {
         update_action_draft_semantics(&document, model.action_draft.as_ref())?;
         host.rendered_action_draft = model.action_draft.clone();
         host.action_draft_semantics_ready = true;
     }
-    update_projection_editor_semantics(host, &document)?;
+    update_projection_editor_semantics(host)?;
     set_text(
-        &document,
         "capture-attribution",
         &format!(
             "Reference-host attribution · {} · {}",
@@ -1819,19 +1801,18 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         ),
     );
     set_text(
-        &document,
         "viewport-status",
         &format!("{} by {}", host.width, host.height),
     );
     update_product_semantics(host, &model)?;
     web_remote::update_remote_semantics(host, &document)?;
     set_attr(
-        &element(&document, "detail-surface")?,
+        &element("detail-surface")?,
         "aria-hidden",
         if host.detail_open { "false" } else { "true" },
     )?;
     set_attr(
-        &element(&document, "session-local")?,
+        &element("session-local")?,
         "aria-pressed",
         if host.active == ActiveSession::Local {
             "true"
@@ -1840,7 +1821,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         },
     )?;
     set_attr(
-        &element(&document, "session-remote")?,
+        &element("session-remote")?,
         "aria-pressed",
         if host.active == ActiveSession::Remote {
             "true"
@@ -1868,7 +1849,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
             .remove_attribute("data-focused-node")
             .map_err(|_| "could not clear focused node")?;
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute("data-ready", "true")
         .map_err(|_| "could not expose ready state")?;
     body.set_attribute(
@@ -1892,14 +1873,29 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         .map_err(|_| "could not expose storage persistence")?;
     body.set_attribute("data-capture-count", &host.capture_count.to_string())
         .map_err(|_| "could not expose the capture count")?;
-    document.set_title("GRAPHSHELL H3 READY");
+    if owns_title() {
+        document.set_title("GRAPHSHELL H3 READY");
+    }
     Ok(())
 }
 
-async fn run() -> Result<(), String> {
+/// The component's markup, shipped in the bundle.
+const COMPONENT_MARKUP: &str = include_str!("../web/component.html");
+
+/// Whether this root owns the page title (the full-page surface does; an
+/// embed must not retitle its host).
+fn owns_title() -> bool {
+    root().is_ok_and(|root| root.has_attribute("data-owns-title"))
+}
+
+async fn run(root_element: Element) -> Result<(), String> {
+    root_element.set_inner_html(COMPONENT_MARKUP);
+    ROOT.with(|slot| *slot.borrow_mut() = Some(root_element));
     let document = document()?;
-    document.set_title("Graphshell H3 · booting");
-    let canvas: HtmlCanvasElement = element(&document, "graphshell-canvas")?
+    if owns_title() {
+        document.set_title("Graphshell H3 · booting");
+    }
+    let canvas: HtmlCanvasElement = element("graphshell-canvas")?
         .dyn_into()
         .map_err(|_| "#graphshell-canvas is not a canvas")?;
     let width = canvas.client_width().max(1) as u32;
@@ -2076,12 +2072,22 @@ async fn run() -> Result<(), String> {
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
-    wasm_bindgen_futures::spawn_local(async {
-        if let Err(error) = run().await {
+}
+
+/// Mount the component into `root`: the full page's body-filling element or
+/// a box in someone else's page. One component, whichever surface.
+#[wasm_bindgen]
+pub fn mount(root: Element) -> Result<(), JsValue> {
+    if ROOT.with(|slot| slot.borrow().is_some()) {
+        return Err(JsValue::from_str("Graphshell is already mounted on this page"));
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Err(error) = run(root).await {
             web_sys::console::error_1(&error.clone().into());
             if let Ok(document) = document() {
                 document.set_title(&format!("GRAPHSHELL H3 FAIL: {error}"));
             }
         }
     });
+    Ok(())
 }

@@ -20,7 +20,7 @@ use wasm_bindgen::prelude::Closure;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{Event, File, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement};
 
-use super::{ActiveSession, BrowserHost, document, update_semantics};
+use super::{ActiveSession, BrowserHost, element, root, update_semantics};
 use crate::web_view::ChromeModel;
 
 const SAVED_SCENE_ADDRESS: &str = "mere://scene/graphshell-h3";
@@ -531,7 +531,6 @@ pub(super) fn update_product_semantics(
     host: &mut BrowserHost,
     _model: &ChromeModel,
 ) -> Result<(), String> {
-    let document = document()?;
     let member = host.current_primary_member();
     if member != host.last_detail_member {
         if let Some(id) = member
@@ -547,10 +546,10 @@ pub(super) fn update_product_semantics(
         }
         host.last_detail_member = member;
     }
-    if let Some(element) = document.get_element_by_id("product-status") {
+    if let Ok(element) = element("product-status") {
         element.set_text_content(Some(&host.product_status));
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     for (name, value) in [
         ("data-product-status", host.product_status.clone()),
         (
@@ -595,11 +594,9 @@ async fn read_file_metadata(file: &File) -> Result<LocalFileMetadata, String> {
 }
 
 fn element_as<T: JsCast>(id: &str) -> Result<T, String> {
-    document()?
-        .get_element_by_id(id)
-        .ok_or_else(|| format!("missing #{id}"))?
+    element(id)?
         .dyn_into()
-        .map_err(|_| format!("#{id} has the wrong element type"))
+        .map_err(|_| format!("part {id} has the wrong element type"))
 }
 
 fn input_value(id: &str) -> Result<String, String> {

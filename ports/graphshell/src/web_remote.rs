@@ -53,7 +53,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{Document, Request, RequestInit, RequestMode, Response};
 
-use super::{BrowserHost, element, update_semantics, web_scenario};
+use super::{BrowserHost, element, root, update_semantics, web_scenario};
 
 /// What the browser can present of a remote scene. `NativeGlyph` is what
 /// the live fixture's cards require; the H3 canary offers portable cards.
@@ -441,7 +441,7 @@ impl BrowserHost {
 /// advertised actions as buttons, so the accessibility tree carries what
 /// the endpoint offers and a scenario can press it.
 pub(super) fn update_remote_semantics(host: &BrowserHost, document: &Document) -> Result<(), String> {
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     let set = |name: &str, value: &str| {
         body.set_attribute(name, value)
             .map_err(|_| format!("could not expose {name}"))
@@ -467,7 +467,7 @@ pub(super) fn update_remote_semantics(host: &BrowserHost, document: &Document) -
         set("data-remote-subject", &link.subject)?;
         set("data-remote-session", &link.session_id)?;
     }
-    let group = element(document, "remote-actions")?;
+    let group = element("remote-actions")?;
     let actions = host.remote_actions();
     let rendered = group
         .get_attribute("data-rendered")

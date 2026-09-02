@@ -1,38 +1,54 @@
-:root {
+/* The component is its own box: the canvas fills it and the semantic
+   overlay is positioned within it, whether it fills the page (index.html)
+   or sits in a column of someone else's (embed.html). */
+graphshell-view {
+  display: block;
+  position: relative;
+  overflow: hidden;
   color-scheme: dark;
   background: #071015;
   font-family: system-ui, sans-serif;
 }
 
-* {
+graphshell-view * {
   box-sizing: border-box;
 }
 
-html,
-body,
-#graphshell-canvas {
+html.full-page,
+body.full-page {
   width: 100%;
   height: 100%;
   margin: 0;
   overflow: hidden;
+  background: #071015;
 }
 
-#graphshell-canvas {
+body.full-page graphshell-view {
+  width: 100%;
+  height: 100%;
+}
+
+#gs-graphshell-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+#gs-graphshell-canvas {
   display: block;
   touch-action: none;
   background: #071015;
 }
 
-#semantic-host {
-  position: fixed;
+#gs-semantic-host {
+  position: absolute;
   inset: 0;
   pointer-events: none;
   color: #dce5e8;
 }
 
-#semantic-host header button,
-#semantic-host nav button {
-  position: fixed;
+#gs-semantic-host header button,
+#gs-semantic-host nav button {
+  position: absolute;
   z-index: 4;
   pointer-events: auto;
   color: transparent;
@@ -43,19 +59,19 @@ body,
   cursor: pointer;
 }
 
-#semantic-host button:focus-visible {
+#gs-semantic-host button:focus-visible {
   outline: 2px solid #f0c674;
   outline-offset: 2px;
 }
 
-#session-local {
+#gs-session-local {
   left: 252px;
   top: 10px;
   width: 104px;
   height: 43px;
 }
 
-#session-remote {
+#gs-session-remote {
   left: 364px;
   top: 10px;
   width: 118px;
@@ -89,13 +105,13 @@ nav button:nth-child(6) { left: 162px; }
 nav button:nth-child(7) { left: 208px; }
 nav button:nth-child(8) { left: 254px; }
 
-#detail-surface {
-  position: fixed;
+#gs-detail-surface {
+  position: absolute;
   z-index: 6;
   right: 12px;
   top: 76px;
   width: 352px;
-  max-height: calc(100vh - 92px);
+  max-height: calc(100% - 92px);
   overflow: auto;
   padding: 16px;
   pointer-events: auto;
@@ -105,7 +121,7 @@ nav button:nth-child(8) { left: 254px; }
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
 }
 
-#detail-surface[aria-hidden="true"] {
+#gs-detail-surface[aria-hidden="true"] {
   visibility: hidden;
 }
 
@@ -121,13 +137,13 @@ nav button:nth-child(8) { left: 254px; }
   border: 0;
 }
 
-#product-panel {
-  position: fixed;
+#gs-product-panel {
+  position: absolute;
   z-index: 5;
   left: 12px;
   top: 76px;
   width: 276px;
-  max-height: calc(100vh - 128px);
+  max-height: calc(100% - 128px);
   overflow: auto;
   padding: 12px;
   pointer-events: auto;
@@ -137,88 +153,88 @@ nav button:nth-child(8) { left: 254px; }
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
 }
 
-#product-panel section + section {
+#gs-product-panel section + section {
   border-top: 1px solid #29404a;
   margin-top: 14px;
   padding-top: 12px;
 }
 
-#projection-editor {
+#gs-projection-editor {
   border-color: #41616b;
 }
 
-#projection-editor[hidden] {
+#gs-projection-editor[hidden] {
   display: none;
 }
 
-#projection-editor-panels {
+#gs-projection-editor-panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
-#projection-editor-panels button {
+#gs-projection-editor-panels button {
   margin-top: 0;
   color: #a9c7ba;
   background: #17242c;
   border: 1px solid #35505b;
 }
 
-#projection-editor-panels button[aria-selected="true"] {
+#gs-projection-editor-panels button[aria-selected="true"] {
   color: #172028;
   background: #d39b4a;
 }
 
-#projection-editor-status,
-#projection-editor-validation,
-#projection-editor-source,
-#projection-editor-provenance {
+#gs-projection-editor-status,
+#gs-projection-editor-validation,
+#gs-projection-editor-source,
+#gs-projection-editor-provenance {
   color: #a9c7ba;
   font-size: 11px;
   overflow-wrap: anywhere;
 }
 
-#projection-editor-status,
-#projection-editor-validation {
+#gs-projection-editor-status,
+#gs-projection-editor-validation {
   margin: 5px 0;
 }
 
-#projection-editor-validation {
+#gs-projection-editor-validation {
   color: #8db8a4;
 }
 
-#projection-editor-source,
-#projection-editor-provenance {
+#gs-projection-editor-source,
+#gs-projection-editor-provenance {
   color: #89a6af;
 }
 
-#semantic-host h1,
-#semantic-host h2,
-#semantic-host h3 {
+#gs-semantic-host h1,
+#gs-semantic-host h2,
+#gs-semantic-host h3 {
   margin: 0 0 9px;
   color: #f5e7c4;
   font-size: 14px;
   font-weight: 600;
 }
 
-#semantic-host h3 {
+#gs-semantic-host h3 {
   margin-top: 14px;
   font-size: 12px;
 }
 
-#detail-surface h1 {
+#gs-detail-surface h1 {
   font-size: 18px;
   overflow-wrap: anywhere;
 }
 
-#detail-address {
+#gs-detail-address {
   margin: -4px 0 13px;
   color: #89a6af;
   font-size: 11px;
   overflow-wrap: anywhere;
 }
 
-#action-draft-surface {
+#gs-action-draft-surface {
   margin: 0 0 16px;
   padding: 12px;
   border: 1px solid #35505b;
@@ -226,36 +242,36 @@ nav button:nth-child(8) { left: 254px; }
   background: #101c24;
 }
 
-#action-draft-surface[hidden] {
+#gs-action-draft-surface[hidden] {
   display: none;
 }
 
-#action-draft-surface h2 {
+#gs-action-draft-surface h2 {
   margin-bottom: 5px;
 }
 
-#action-draft-surface p {
+#gs-action-draft-surface p {
   margin: 0 0 8px;
   color: #9fb1b7;
   font-size: 11px;
 }
 
-#action-draft-surface fieldset {
+#gs-action-draft-surface fieldset {
   margin: 10px 0 0;
   padding: 0;
   border: 0;
 }
 
-#action-draft-surface legend {
+#gs-action-draft-surface legend {
   color: #a9c7ba;
   font-size: 11px;
 }
 
-#action-draft-surface [role="alert"] {
+#gs-action-draft-surface [role="alert"] {
   color: #e99387;
 }
 
-#semantic-host label {
+#gs-semantic-host label {
   display: block;
   margin: 8px 0 4px;
   color: #8da2a9;
@@ -263,11 +279,11 @@ nav button:nth-child(8) { left: 254px; }
   letter-spacing: 0.03em;
 }
 
-#semantic-host input,
-#semantic-host select,
-#semantic-host textarea,
-#semantic-host aside button,
-#semantic-host section button,
+#gs-semantic-host input,
+#gs-semantic-host select,
+#gs-semantic-host textarea,
+#gs-semantic-host aside button,
+#gs-semantic-host section button,
 .file-picker {
   width: 100%;
   min-height: 32px;
@@ -279,12 +295,12 @@ nav button:nth-child(8) { left: 254px; }
   font: 12px system-ui, sans-serif;
 }
 
-#semantic-host textarea {
+#gs-semantic-host textarea {
   min-height: 58px;
   resize: vertical;
 }
 
-#history-results {
+#gs-history-results {
   max-height: 132px;
   margin: 6px 0 0;
   padding-left: 20px;
@@ -293,20 +309,20 @@ nav button:nth-child(8) { left: 254px; }
   font-size: 10px;
 }
 
-#history-results li {
+#gs-history-results li {
   margin-bottom: 6px;
   overflow-wrap: anywhere;
 }
 
-#engram-data {
+#gs-engram-data {
   margin-top: 8px;
   min-height: 82px;
   font-family: ui-monospace, monospace;
   font-size: 9px;
 }
 
-#semantic-host aside button,
-#semantic-host section button,
+#gs-semantic-host aside button,
+#gs-semantic-host section button,
 .file-picker {
   position: static;
   height: auto;
@@ -326,7 +342,7 @@ nav button:nth-child(8) { left: 254px; }
   font-size: 12px !important;
 }
 
-#file-input {
+#gs-file-input {
   position: absolute;
   width: 1px !important;
   height: 1px;
@@ -343,25 +359,25 @@ nav button:nth-child(8) { left: 254px; }
   flex: 1;
 }
 
-#semantic-host .check {
+#gs-semantic-host .check {
   display: flex;
   align-items: center;
   gap: 7px;
   letter-spacing: 0;
 }
 
-#semantic-host .check input {
+#gs-semantic-host .check input {
   width: auto;
   min-height: 0;
 }
 
 @media (max-width: 719px) {
-  #session-local {
+  #gs-session-local {
     left: 14px;
     top: 53px;
   }
 
-  #session-remote {
+  #gs-session-remote {
     left: 124px;
     top: 53px;
   }
@@ -384,15 +400,15 @@ nav button:nth-child(8) { left: 254px; }
     bottom: 38px;
   }
 
-  #detail-surface {
+  #gs-detail-surface {
     left: 10px;
     right: auto;
     top: 112px;
     width: calc(100% - 20px);
-    max-height: calc(100vh - 124px);
+    max-height: calc(100% - 124px);
   }
 
-  #product-panel {
+  #gs-product-panel {
     left: 10px;
     top: auto;
     bottom: 8px;
@@ -404,11 +420,11 @@ nav button:nth-child(8) { left: 254px; }
     overflow-x: hidden;
   }
 
-  #product-panel section {
+  #gs-product-panel section {
     min-width: 0;
   }
 
-  #product-panel section + section {
+  #gs-product-panel section + section {
     border-top: 0;
     border-left: 1px solid #29404a;
     margin: 0;
@@ -417,12 +433,12 @@ nav button:nth-child(8) { left: 254px; }
 }
 
 @media (max-width: 479px) {
-  #product-panel {
+  #gs-product-panel {
     grid-template-columns: 1fr;
     max-height: 300px;
   }
 
-  #product-panel section + section {
+  #gs-product-panel section + section {
     border-top: 1px solid #29404a;
     border-left: 0;
     margin-top: 14px;
@@ -433,10 +449,10 @@ nav button:nth-child(8) { left: 254px; }
   display: none !important;
 }
 
-#capture-status[data-state="failed"] {
+#gs-capture-status[data-state="failed"] {
   color: #ff9f92;
 }
 
-#capture-status[data-state="working"] {
+#gs-capture-status[data-state="working"] {
   color: #f4cf7b;
 }

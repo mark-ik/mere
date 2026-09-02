@@ -48,8 +48,12 @@ function semanticNode(element) {
   };
 }
 
-window.graphshellSemanticTree = () =>
-  semanticNode(document.getElementById("semantic-host"));
+// The component's root and its parts. Everything the receipt reads comes
+// from under the root; the page's own ids are not consulted.
+const graphshellRoot = () => document.querySelector("graphshell-view");
+const part = (name) => graphshellRoot()?.querySelector(`#gs-${name}`);
+
+window.graphshellSemanticTree = () => semanticNode(part("semantic-host"));
 
 window.graphshellScenario = () => ({
   state: document.body.dataset.scenario ?? null,
@@ -65,80 +69,80 @@ window.graphshellScenario = () => ({
 
 window.graphshellReceipt = () => ({
   title: document.title,
-  ready: document.body.dataset.ready === "true",
-  session: document.body.dataset.session,
-  detailOpen: document.body.dataset.detailOpen === "true",
-  actionCount: Number(document.body.dataset.actionCount || 0),
-  storage: document.body.dataset.storage,
+  ready: graphshellRoot().dataset.ready === "true",
+  session: graphshellRoot().dataset.session,
+  detailOpen: graphshellRoot().dataset.detailOpen === "true",
+  actionCount: Number(graphshellRoot().dataset.actionCount || 0),
+  storage: graphshellRoot().dataset.storage,
   capture: {
-    accepted: Number(document.body.dataset.captureAccepted || 0),
-    dropped: Number(document.body.dataset.captureDropped || 0),
+    accepted: Number(graphshellRoot().dataset.captureAccepted || 0),
+    dropped: Number(graphshellRoot().dataset.captureDropped || 0),
   },
   remote: {
-    link: document.body.dataset.remoteLink,
-    state: document.body.dataset.remoteState,
-    revision: document.body.dataset.remoteRevision,
-    cards: document.body.dataset.remoteCards,
-    resume: document.body.dataset.remoteResume,
-    subject: document.body.dataset.remoteSubject,
-    session: document.body.dataset.remoteSession,
-    actions: [...document.querySelectorAll("#remote-actions button")].map((b) => ({
+    link: graphshellRoot().dataset.remoteLink,
+    state: graphshellRoot().dataset.remoteState,
+    revision: graphshellRoot().dataset.remoteRevision,
+    cards: graphshellRoot().dataset.remoteCards,
+    resume: graphshellRoot().dataset.remoteResume,
+    subject: graphshellRoot().dataset.remoteSubject,
+    session: graphshellRoot().dataset.remoteSession,
+    actions: [...graphshellRoot().querySelectorAll("#gs-remote-actions button")].map((b) => ({
       intent: b.dataset.intent,
       label: b.textContent,
     })),
   },
-  camera: document.getElementById("graphshell-canvas").dataset.camera,
-  focusedNode: document.getElementById("graphshell-canvas").dataset.focusedNode,
+  camera: part("graphshell-canvas").dataset.camera,
+  focusedNode: part("graphshell-canvas").dataset.focusedNode,
   product: {
-    status: document.body.dataset.productStatus,
-    nodeCount: Number(document.body.dataset.nodeCount || 0),
-    filterCount: Number(document.body.dataset.filterCount || 0),
-    layout: document.body.dataset.layout,
-    physicsPaused: document.body.dataset.physicsPaused === "true",
-    selectedCount: Number(document.body.dataset.selectedCount || 0),
-    exportBytes: Number(document.body.dataset.exportBytes || 0),
-    importedNodes: Number(document.body.dataset.importedNodes || 0),
-    relationFamily: document.body.dataset.relationFamily,
-    face: document.body.dataset.face,
+    status: graphshellRoot().dataset.productStatus,
+    nodeCount: Number(graphshellRoot().dataset.nodeCount || 0),
+    filterCount: Number(graphshellRoot().dataset.filterCount || 0),
+    layout: graphshellRoot().dataset.layout,
+    physicsPaused: graphshellRoot().dataset.physicsPaused === "true",
+    selectedCount: Number(graphshellRoot().dataset.selectedCount || 0),
+    exportBytes: Number(graphshellRoot().dataset.exportBytes || 0),
+    importedNodes: Number(graphshellRoot().dataset.importedNodes || 0),
+    relationFamily: graphshellRoot().dataset.relationFamily,
+    face: graphshellRoot().dataset.face,
   },
   viewport: {
     width: window.innerWidth,
     height: window.innerHeight,
   },
   projectionEditor: {
-    open: document.body.dataset.projectionEditorOpen === "true",
-    panel: document.body.dataset.projectionEditorPanel,
-    content: document.body.dataset.projectionEditorContent,
-    validation: document.body.dataset.projectionEditorValidation,
-    errors: Number(document.body.dataset.projectionEditorErrors || 0),
-    saveCount: Number(document.body.dataset.projectionEditorSaveCount || 0),
-    status: document.getElementById("projection-editor-status")?.textContent,
-    preview: document.getElementById("projection-editor-preview")?.textContent,
+    open: graphshellRoot().dataset.projectionEditorOpen === "true",
+    panel: graphshellRoot().dataset.projectionEditorPanel,
+    content: graphshellRoot().dataset.projectionEditorContent,
+    validation: graphshellRoot().dataset.projectionEditorValidation,
+    errors: Number(graphshellRoot().dataset.projectionEditorErrors || 0),
+    saveCount: Number(graphshellRoot().dataset.projectionEditorSaveCount || 0),
+    status: part("projection-editor-status")?.textContent,
+    preview: part("projection-editor-preview")?.textContent,
     source: {
-      authority: document.getElementById("projection-source-authority")?.value,
-      domain: document.getElementById("projection-source-domain")?.value,
-      resource: document.getElementById("projection-source-resource")?.value,
+      authority: part("projection-source-authority")?.value,
+      domain: part("projection-source-domain")?.value,
+      resource: part("projection-source-resource")?.value,
     },
     reading: {
-      key: document.getElementById("projection-reading-key")?.value,
+      key: part("projection-reading-key")?.value,
     },
     encoding: {
-      x: document.getElementById("projection-encoding-x")?.value,
-      y: document.getElementById("projection-encoding-y")?.value,
+      x: part("projection-encoding-x")?.value,
+      y: part("projection-encoding-y")?.value,
     },
     arrangement: {
-      kind: document.getElementById("projection-arrangement-kind")?.value,
-      direction: document.getElementById("projection-arrangement-direction")?.value,
-      spacing: document.getElementById("projection-arrangement-spacing")?.value,
+      kind: part("projection-arrangement-kind")?.value,
+      direction: part("projection-arrangement-direction")?.value,
+      spacing: part("projection-arrangement-spacing")?.value,
     },
     appearance: {
-      realization: document.getElementById("projection-appearance-realization")?.value,
-      title: document.getElementById("projection-appearance-title")?.value,
+      realization: part("projection-appearance-realization")?.value,
+      title: part("projection-appearance-title")?.value,
     },
     provenance: {
-      author: document.getElementById("projection-provenance-author")?.value,
-      sourceRevision: document.getElementById("projection-provenance-revision")?.value,
-      note: document.getElementById("projection-provenance-note")?.value,
+      author: part("projection-provenance-author")?.value,
+      sourceRevision: part("projection-provenance-revision")?.value,
+      note: part("projection-provenance-note")?.value,
     },
   },
   semantics: window.graphshellSemanticTree(),
@@ -152,6 +156,23 @@ try {
   }
   const module = await import("./pkg/graphshell_web.js");
   await module.default();
+  // Two ways in, one component. `mountGraphshell(element)` is the plain
+  // entry; `<graphshell-view>` is the same entry as a custom element, mounted
+  // when it connects. Elements already in the document upgrade on define.
+  window.mountGraphshell = (element) => module.mount(element);
+  if (!customElements.get("graphshell-view")) {
+    customElements.define(
+      "graphshell-view",
+      class extends HTMLElement {
+        connectedCallback() {
+          if (!this.dataset.mounted) {
+            this.dataset.mounted = "true";
+            module.mount(this);
+          }
+        }
+      },
+    );
+  }
   // The remote link: `?signal=<url>` joins a host over WebRTC through its
   // signaling server (`GET /invite` unless `?invite=` is given, `POST
   // /offer`). Without it the in-process fixture stays mounted.
@@ -159,7 +180,7 @@ try {
   if (signal) {
     await new Promise((resolve) => {
       const poll = () =>
-        document.body.dataset.ready === "true" ? resolve() : setTimeout(poll, 50);
+        graphshellRoot().dataset.ready === "true" ? resolve() : setTimeout(poll, 50);
       poll();
     });
     module.connect_remote(signal, new URLSearchParams(location.search).get("invite"));
@@ -169,14 +190,16 @@ try {
   // src/web_scenario.rs); nothing here interprets them.
   const scenarioPath = new URLSearchParams(location.search).get("scenario");
   if (scenarioPath) {
-    const response = await fetch(scenarioPath);
+    // Never from the HTTP cache: a receipt profile persists across runs, and
+    // a scenario edited between them must be the one that runs.
+    const response = await fetch(scenarioPath, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`scenario ${scenarioPath}: HTTP ${response.status}`);
     }
     const text = await response.text();
     await new Promise((resolve) => {
       const poll = () =>
-        document.body.dataset.ready === "true" ? resolve() : setTimeout(poll, 50);
+        graphshellRoot().dataset.ready === "true" ? resolve() : setTimeout(poll, 50);
       poll();
     });
     // `?sink=<url>` names a receipt sink: when the run completes, the result,

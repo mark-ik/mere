@@ -16,7 +16,7 @@ use web_sys::{
     MouseEvent, PointerEvent, WheelEvent,
 };
 
-use super::{ActiveSession, BrowserHost, document, update_semantics, web_scenario, window};
+use super::{ActiveSession, BrowserHost, document, root, update_semantics, web_scenario, window};
 
 pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), String> {
     let canvas = state.borrow().canvas_element.clone();
@@ -133,7 +133,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.run_command(&command);
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("click", click.as_ref().unchecked_ref())
         .map_err(|_| "could not attach command listener")?;
     click.forget();
@@ -153,7 +153,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.choose_action_draft(&field, &select.value());
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("change", change.as_ref().unchecked_ref())
         .map_err(|_| "could not attach action-draft change listener")?;
     change.forget();
@@ -180,7 +180,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.update_projection_field(&field, &value);
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("input", input.as_ref().unchecked_ref())
         .map_err(|_| "could not attach projection editor input listener")?;
     input.forget();
@@ -214,7 +214,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.run_command(command);
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("keydown", keydown.as_ref().unchecked_ref())
         .map_err(|_| "could not attach keyboard listener")?;
     keydown.forget();

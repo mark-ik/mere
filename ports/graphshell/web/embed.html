@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>An embedding page</title>
+    <link rel="stylesheet" href="./styles.css?h3=1">
+    <style>
+      /* The host page's own look, nothing like the component's. */
+      body { margin: 0; padding: 24px; background: #f4efe6; color: #2b2622; font: 16px/1.5 Georgia, serif; }
+      main { max-width: 1100px; margin: 0 auto; }
+      graphshell-view { width: 960px; height: 600px; margin: 16px 0; border: 2px solid #b39a7a; border-radius: 8px; }
+      #host-controls input, #host-controls button { font: inherit; padding: 4px 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="host-title">An embedding page</h1>
+      <p>This page has its own controls, its own ids and its own keyboard
+        handling. The Graphshell component sits between them and must touch
+        none of it.</p>
+      <!-- Ids chosen to collide with the component's own, unprefixed, names:
+           if the component ever looked these up by document id, it would
+           find the host page's elements instead of its own. -->
+      <p id="host-controls">
+        <label for="search-input">Host search</label>
+        <input id="search-input" data-host-keys="0" value="">
+        <button id="session-local" type="button" data-host-clicks="0">Host button</button>
+      </p>
+      <graphshell-view id="graphshell" data-ready="false"></graphshell-view>
+      <p>Text after the component, still the host page's.</p>
+    </main>
+
+    <section id="scenario-host" aria-hidden="true" hidden>
+      <pre id="scenario-log"></pre>
+      <pre id="scenario-result"></pre>
+      <div id="scenario-captures"></div>
+    </section>
+
+    <script>
+      // The host page counts what reaches it: keys typed into its input and
+      // clicks on its button. A receipt reads these to show the component
+      // took nothing and gave nothing.
+      const input = document.getElementById("search-input");
+      input.addEventListener("keydown", () => {
+        input.dataset.hostKeys = String(Number(input.dataset.hostKeys) + 1);
+      });
+      const button = document.getElementById("session-local");
+      button.addEventListener("click", () => {
+        button.dataset.hostClicks = String(Number(button.dataset.hostClicks) + 1);
+      });
+    </script>
+    <script type="module" src="./loader.js"></script>
+  </body>
+</html>

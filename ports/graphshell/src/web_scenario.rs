@@ -52,7 +52,7 @@ use web_sys::{
     PointerEvent, PointerEventInit,
 };
 
-use super::{BrowserHost, document, element};
+use super::{BrowserHost, document, element, root};
 
 thread_local! {
     static HOST: RefCell<Option<Rc<RefCell<BrowserHost>>>> = const { RefCell::new(None) };
@@ -116,7 +116,7 @@ pub(super) fn tick(host: &mut BrowserHost) {
         if let Some(body) = document.body() {
             let _ = body.set_attribute("data-scenario-frames", &run.frames.to_string());
         }
-        if let Ok(log) = element(&document, "scenario-log") {
+        if let Ok(log) = page_element(&document, "scenario-log") {
             log.set_text_content(Some(&run.scenario.finish().log.join("\n")));
         }
     }
@@ -133,7 +133,7 @@ pub(super) fn tick(host: &mut BrowserHost) {
                 "log": outcome.log,
             });
             if let Ok(document) = document() {
-                if let Ok(log) = element(&document, "scenario-log") {
+                if let Ok(log) = page_element(&document, "scenario-log") {
                     log.set_text_content(Some(&outcome.log.join("\n")));
                 }
                 let _ = mark(&document, result, Some(&report.to_string()));
@@ -151,13 +151,20 @@ fn mark(document: &web_sys::Document, state: &str, result: Option<&str>) -> Resu
     body.set_attribute("data-scenario", state)
         .map_err(|_| "could not mark the scenario state")?;
     if let Some(result) = result {
-        element(document, "scenario-result")?.set_text_content(Some(result));
+        page_element(document, "scenario-result")?.set_text_content(Some(result));
     }
     Ok(())
 }
 
 fn js(error: String) -> JsValue {
     JsValue::from_str(&error)
+}
+
+/// A page-level element (the lane's own output lives outside the component).
+fn page_element(document: &web_sys::Document, id: &str) -> Result<Element, String> {
+    document
+        .get_element_by_id(id)
+        .ok_or_else(|| format!("missing #{id}"))
 }
 
 /// Finish a capture whose readback has landed: encode the pixels as a PNG
@@ -196,7 +203,7 @@ pub(super) fn publish_capture(name: &str, width: u32, height: u32, rgba: &[u8]) 
         .and_then(|_| img.set_attribute("alt", &format!("capture {name}")))
         .and_then(|_| img.set_attribute("src", &url))
         .map_err(|_| "could not describe the capture image")?;
-    element(&document, "scenario-captures")?
+    page_element(&document, "scenario-captures")?
         .append_child(&img)
         .map_err(|_| "could not publish the capture")?;
     Ok(())
@@ -331,7 +338,14 @@ impl Automatable for Probe<'_> {
         let mut snap = ProbeSnapshot::default();
         if let Ok(document) = document() {
             snap = snap.with_field("title", document.title());
-            if let Some(body) = document.body() {
+            // The component's tokens on its root, then the page's (the
+            // scenario's own) on the body.
+            let carriers: Vec<Element> = root()
+                .ok()
+                .into_iter()
+                .chain(document.body().map(Element::from))
+                .collect();
+            for body in carriers {
                 for name in body.get_attribute_names().iter() {
                     let Some(name) = name.as_string() else {
                         continue;
@@ -344,7 +358,14 @@ impl Automatable for Probe<'_> {
             }
         }
         let canvas = &self.host.canvas_element;
-        snap = snap.with_field("camera", canvas.get_attribute("data-camera").unwrap_or_default());
+        let camera = canvas.get_attribute("data-camera").unwrap_or_default();
+        // The camera's parts as numbers too, for `<=` / `>=`: a pan's distance
+        // is velocity-shaped and differs run to run, so a scenario asserts
+        // that it moved past a bound, not that it landed on a pixel.
+        let mut parts = camera.split(',');
+        snap = snap.with_field("camera-x", parts.next().unwrap_or_default());
+        snap = snap.with_field("camera-y", parts.next().unwrap_or_default());
+        snap = snap.with_field("camera", camera);
         snap = snap.with_field(
             "focused-node",
             canvas.get_attribute("data-focused-node").unwrap_or_default(),
@@ -462,8 +483,7 @@ pub(super) fn run_deferred(actions: Vec<DomAction>) -> Vec<String> {
 fn dispatch(action: DomAction) -> Result<(), String> {
     match action {
         DomAction::Pointer { kind, x, y } => {
-            let document = document()?;
-            let canvas = element(&document, "graphshell-canvas")?;
+            let canvas = element("graphshell-canvas")?;
             let rect = canvas.get_bounding_client_rect();
             let init = PointerEventInit::new();
             init.set_bubbles(true);
@@ -499,7 +519,7 @@ fn dispatch(action: DomAction) -> Result<(), String> {
             // canvas when nothing else holds focus.
             let target: Element = match document.active_element() {
                 Some(active) if active.tag_name() != "BODY" => active,
-                _ => element(&document, "graphshell-canvas")?,
+                _ => element("graphshell-canvas")?,
             };
             let event = KeyboardEvent::new_with_keyboard_event_init_dict("keydown", &init)
                 .map_err(|_| "could not build the key event".to_string())?;

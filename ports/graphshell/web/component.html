@@ -1,0 +1,306 @@
+<!--
+  The Graphshell component: what `mount(root)` puts inside its root. Shipped
+  inside the wasm (`include_str!` in web.rs), so a host page needs only the
+  element and the bundle. Every id is prefixed `gs-` and every lookup is
+  scoped to the root, so a host page's own ids are never in play.
+-->
+    <canvas
+      id="gs-graphshell-canvas"
+      tabindex="0"
+      role="application"
+      aria-label="Graphshell graph canvas. Use arrow keys to pan, plus and minus to zoom, and Enter to open object detail."
+    ></canvas>
+
+    <main id="gs-semantic-host" aria-label="Graphshell reference host">
+      <header aria-label="Mounted sessions">
+        <button
+          id="gs-session-local"
+          data-command="session-local"
+          aria-pressed="true"
+        >Local Mere</button>
+        <button
+          id="gs-session-remote"
+          data-command="session-remote"
+          aria-pressed="false"
+        >Remote mount</button>
+      </header>
+
+      <nav aria-label="Graph controls">
+        <button data-command="select-web">Select research object</button>
+        <button data-command="open-detail">Edit selected object</button>
+        <button data-command="pan-left" aria-label="Pan left">Pan left</button>
+        <button data-command="pan-right" aria-label="Pan right">Pan right</button>
+        <button data-command="pan-up" aria-label="Pan up">Pan up</button>
+        <button data-command="pan-down" aria-label="Pan down">Pan down</button>
+        <button data-command="zoom-in" aria-label="Zoom in">Zoom in</button>
+        <button data-command="zoom-out" aria-label="Zoom out">Zoom out</button>
+      </nav>
+
+      <aside id="gs-product-panel" aria-label="Graph tools">
+        <section id="gs-capture-panel" hidden>
+          <h2>Browser history</h2>
+          <p id="gs-capture-status" role="status">Checking capture permission…</p>
+          <p id="gs-capture-attribution">
+            Attribution is supplied by the Graphshell host.
+          </p>
+          <label for="gs-capture-range">First import</label>
+          <select id="gs-capture-range">
+            <option value="0">Live visits only</option>
+            <option value="1">Last day</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <label class="check">
+            <input id="gs-capture-strip-query" type="checkbox">
+            Remove query strings before storage
+          </label>
+          <label for="gs-capture-exclusions">Excluded origins</label>
+          <textarea
+            id="gs-capture-exclusions"
+            placeholder="https://private.example"
+          ></textarea>
+          <div class="button-row">
+            <button id="gs-capture-enable" type="button">Enable capture</button>
+            <button id="gs-capture-save" type="button">Save privacy settings</button>
+            <button id="gs-capture-disable" type="button">Stop capture</button>
+          </div>
+          <h3>Stored visits</h3>
+          <label for="gs-history-filter-range">When</label>
+          <select id="gs-history-filter-range">
+            <option value="0">All time</option>
+            <option value="1">Last day</option>
+            <option value="7" selected>Last 7 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <label for="gs-history-filter-persona">Persona, exact address (optional)</label>
+          <input id="gs-history-filter-persona" placeholder="personae://persona/alice">
+          <label for="gs-history-filter-device">Device, exact address (optional)</label>
+          <input id="gs-history-filter-device" placeholder="personae://device/phone">
+          <button id="gs-history-filter-apply" type="button">Filter stored visits</button>
+          <p id="gs-history-result-status" role="status">Loading stored visits…</p>
+          <ol id="gs-history-results"></ol>
+          <h3>Forget an address</h3>
+          <label for="gs-history-forget-address">Exact stored address</label>
+          <input id="gs-history-forget-address" placeholder="https://example.net/page">
+          <label class="check">
+            <input id="gs-history-forget-object" type="checkbox">
+            Also remove the graph object if capture created it
+          </label>
+          <button id="gs-history-forget" type="button">Forget this address</button>
+          <a href="bridge.html">Open Identity</a>
+        </section>
+
+        <section>
+          <h2>Add an object</h2>
+          <label for="gs-address-input">Address</label>
+          <input id="gs-address-input" value="https://example.net/new-object">
+          <label for="gs-address-title">Title</label>
+          <input id="gs-address-title" value="New research object">
+          <button data-command="add-address">Add address</button>
+          <button data-command="open-projection-editor">Edit projection</button>
+          <label class="file-picker" for="gs-file-input">Choose a file</label>
+          <input id="gs-file-input" type="file">
+        </section>
+
+        <section
+          id="gs-projection-editor"
+          aria-label="Projection editor"
+          aria-hidden="true"
+          hidden
+        >
+          <h2>Projection editor</h2>
+          <p id="gs-projection-editor-status" role="status">Draft ready · unsaved</p>
+          <p id="gs-projection-editor-validation" role="status">Valid draft</p>
+          <p id="gs-projection-editor-lane">ContentSource::Open · graphshell.projection-editor.panel · source</p>
+          <div id="gs-projection-editor-panels" role="tablist" aria-label="Projection editor panels">
+            <button id="gs-projection-panel-source" type="button" role="tab" data-projection-panel="source" aria-selected="true">Source</button>
+            <button id="gs-projection-panel-reading" type="button" role="tab" data-projection-panel="reading" aria-selected="false">Reading</button>
+            <button id="gs-projection-panel-encoding" type="button" role="tab" data-projection-panel="encoding" aria-selected="false">Encoding</button>
+            <button id="gs-projection-panel-arrangement" type="button" role="tab" data-projection-panel="arrangement" aria-selected="false">Arrangement</button>
+            <button id="gs-projection-panel-interaction" type="button" role="tab" data-projection-panel="interaction" aria-selected="false">Interaction</button>
+            <button id="gs-projection-panel-preview" type="button" role="tab" data-projection-panel="preview" aria-selected="false">Preview</button>
+            <button id="gs-projection-panel-provenance" type="button" role="tab" data-projection-panel="provenance" aria-selected="false">Provenance</button>
+          </div>
+          <p><strong>Source</strong> <span id="gs-projection-editor-source"></span></p>
+          <p><strong>Provenance</strong> <span id="gs-projection-editor-provenance"></span></p>
+          <section id="gs-projection-fields-source" data-projection-panel-fields="source">
+            <label for="gs-projection-source-authority">Authority</label>
+            <input id="gs-projection-source-authority" data-projection-field="source.authority">
+            <label for="gs-projection-source-domain">Domain</label>
+            <input id="gs-projection-source-domain" data-projection-field="source.domain">
+            <label for="gs-projection-source-resource">Resource</label>
+            <input id="gs-projection-source-resource" data-projection-field="source.resource">
+          </section>
+          <section id="gs-projection-fields-reading" data-projection-panel-fields="reading" hidden>
+            <label for="gs-projection-reading-key">Reading key</label>
+            <input id="gs-projection-reading-key" data-projection-field="reading.key">
+          </section>
+          <section id="gs-projection-fields-encoding" data-projection-panel-fields="encoding" hidden>
+            <label for="gs-projection-encoding-x">X field</label>
+            <input id="gs-projection-encoding-x" data-projection-field="encoding.x">
+            <label for="gs-projection-encoding-y">Y field</label>
+            <input id="gs-projection-encoding-y" data-projection-field="encoding.y">
+          </section>
+          <section id="gs-projection-fields-arrangement" data-projection-panel-fields="arrangement" hidden>
+            <label for="gs-projection-arrangement-kind">Arrangement id</label>
+            <input id="gs-projection-arrangement-kind" data-projection-field="arrangement.kind">
+            <label for="gs-projection-arrangement-direction">Direction</label>
+            <input id="gs-projection-arrangement-direction" data-projection-field="arrangement.direction">
+            <label for="gs-projection-arrangement-spacing">Spacing</label>
+            <input id="gs-projection-arrangement-spacing" type="number" min="0" data-projection-field="arrangement.spacing">
+          </section>
+          <section id="gs-projection-fields-interaction" data-projection-panel-fields="interaction" hidden>
+            <p>Selection, pan, and zoom remain host interaction policy.</p>
+          </section>
+          <section id="gs-projection-fields-preview" data-projection-panel-fields="preview" hidden>
+            <label for="gs-projection-appearance-realization">Realization id</label>
+            <input id="gs-projection-appearance-realization" data-projection-field="appearance.realization">
+            <label for="gs-projection-appearance-title">Preview title</label>
+            <input id="gs-projection-appearance-title" data-projection-field="appearance.title">
+            <h3>Preview</h3>
+            <p id="gs-projection-editor-preview" data-preview-value=""></p>
+          </section>
+          <section id="gs-projection-fields-provenance" data-projection-panel-fields="provenance" hidden>
+            <label for="gs-projection-provenance-author">Author</label>
+            <input id="gs-projection-provenance-author" data-projection-field="provenance.author">
+            <label for="gs-projection-provenance-revision">Source revision</label>
+            <input id="gs-projection-provenance-revision" data-projection-field="provenance.source_revision">
+            <label for="gs-projection-provenance-note">Note</label>
+            <textarea id="gs-projection-provenance-note" data-projection-field="provenance.note"></textarea>
+          </section>
+          <div class="button-row">
+            <button type="button" data-command="save-projection">Save projection</button>
+            <button type="button" data-command="reload-projection">Reload saved</button>
+            <button type="button" data-command="close-projection-editor">Close</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Find and arrange</h2>
+          <label for="gs-search-input">Search</label>
+          <input id="gs-search-input" placeholder="title, tag, facet, or address">
+          <label for="gs-relation-filter">Relation family</label>
+          <select id="gs-relation-filter">
+            <option value="all">All families</option>
+            <option value="semantic">Semantic</option>
+            <option value="traversal">Traversal</option>
+            <option value="containment">Containment</option>
+            <option value="arrangement">Arrangement</option>
+            <option value="imported">Imported</option>
+            <option value="provenance">Provenance</option>
+          </select>
+          <div class="button-row">
+            <button data-command="apply-filter">Apply</button>
+            <button data-command="clear-filter">Clear</button>
+          </div>
+          <label for="gs-arrangement-select">Arrangement</label>
+          <select id="gs-arrangement-select">
+            <option value="phyllotaxis.default">Spiral</option>
+            <option value="grid.default">Grid</option>
+            <option value="spectral.default">Spectral</option>
+            <option value="kanban.default">Kanban by site</option>
+            <option value="timeline.default">Timeline</option>
+          </select>
+          <div class="button-row">
+            <button data-command="apply-arrangement">Arrange</button>
+            <button data-command="toggle-physics">Pause physics</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Scene and transfer</h2>
+          <div class="button-row">
+            <button data-command="save-scene">Save scene</button>
+            <button data-command="reopen-scene">Reopen</button>
+          </div>
+          <label for="gs-transfer-scope">Transfer scope</label>
+          <select id="gs-transfer-scope">
+            <option value="object-only">Object only</option>
+            <option value="direct-relations">Object and direct relations</option>
+            <option value="selected-subgraph" selected>Selected subgraph</option>
+            <option value="saved-scene">Saved scene and selection</option>
+          </select>
+          <label class="check">
+            <input id="gs-include-local-file" type="checkbox">
+            Include device-local file metadata
+          </label>
+          <div class="button-row">
+            <button data-command="export-engram">Export</button>
+            <button data-command="open-engram">Open export</button>
+          </div>
+          <textarea id="gs-engram-data" aria-label="Graph engram JSON" placeholder="Exported graph engram"></textarea>
+        </section>
+      </aside>
+
+      <section
+        id="gs-detail-surface"
+        aria-label="Object detail"
+        aria-hidden="true"
+      >
+        <h1 id="gs-detail-title">No object selected</h1>
+        <p id="gs-detail-address"></p>
+        <div id="gs-remote-actions" role="group" aria-label="Remote actions"></div>
+        <section
+          id="gs-action-draft-surface"
+          aria-label="Endpoint action input"
+          aria-hidden="true"
+          hidden
+        ></section>
+        <label for="gs-edit-title">Title</label>
+        <input id="gs-edit-title">
+        <label for="gs-edit-tags">Tags</label>
+        <input id="gs-edit-tags" placeholder="comma, separated">
+        <label for="gs-facet-id">Facet id and JSON</label>
+        <input id="gs-facet-id" value="notes.user/v1">
+        <textarea id="gs-facet-json">{"note":"Graphshell H3"}</textarea>
+        <button data-command="save-metadata">Save metadata</button>
+
+        <label for="gs-relation-target">Relate to address</label>
+        <input id="gs-relation-target" value="i2p://reference/service">
+        <select id="gs-relation-kind" aria-label="Relation kind">
+          <option value="user-grouped">Grouped with</option>
+          <option value="cites">Cites</option>
+          <option value="hyperlink">Links to</option>
+          <option value="collection-member">Contains</option>
+          <option value="frame-member">Shares scene</option>
+        </select>
+        <div class="button-row">
+          <button data-command="add-relation">Add relation</button>
+          <button data-command="select-pair">Select pair</button>
+        </div>
+
+        <label for="gs-face-select">Representation</label>
+        <select id="gs-face-select">
+          <option value="favicon">Favicon</option>
+          <option value="bare">Bare</option>
+          <option value="sprite">Sprite</option>
+        </select>
+        <button data-command="apply-face">Use representation</button>
+
+        <label for="gs-handler-select">Open handler</label>
+        <select id="gs-handler-select">
+          <option value="graphshell.inspect">Graphshell Inspect</option>
+          <option value="system.default">Another application</option>
+        </select>
+        <div class="button-row">
+          <button data-command="invoke-action">Open selected</button>
+          <button data-command="close-detail">Close</button>
+        </div>
+      </section>
+
+      <section class="semantic-status" aria-label="Host status">
+        <h2>Current state</h2>
+        <dl>
+          <dt>Session</dt>
+          <dd id="gs-active-session">Booting</dd>
+          <dt>Selection</dt>
+          <dd id="gs-selection-status">None</dd>
+          <dt>Action</dt>
+          <dd id="gs-action-status" role="status">Ready</dd>
+          <dt>Viewport</dt>
+          <dd id="gs-viewport-status">Unknown</dd>
+          <dt>Product</dt>
+          <dd id="gs-product-status" role="status">Booting</dd>
+        </dl>
+      </section>
+    </main>

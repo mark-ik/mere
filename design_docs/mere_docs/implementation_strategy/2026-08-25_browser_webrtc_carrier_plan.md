@@ -704,6 +704,55 @@ and the keyboard listener scope to the root. *Done when* both pages run the
 same bundle and the same `BrowserHost`, and the embed page's own controls are
 untouched by the component's keys and ids.
 
+**C4b.2 landed 2026-09-02.** One component, two surfaces. The markup that
+was `index.html`'s body is `web/component.html`, shipped inside the wasm
+(`include_str!`), and `mount(root)` — a `wasm_bindgen` export — writes it
+into whatever element it is given and runs the host there; `loader.js`
+exposes the same entry two ways, `window.mountGraphshell(element)` and the
+custom element `<graphshell-view>`, which mounts on connect. Every id in
+the component is prefixed `gs-`; every Rust lookup goes through `root()`
+and `element(part)` (a `querySelector` under the root, never
+`getElementById`); every `data-*` token sits on the root rather than the
+body; and the click, change, input and keydown listeners are on the root,
+so keys with focus outside the component never reach it. The stylesheet
+positions the overlay within the component (`position: absolute` in a
+`position: relative` box) instead of the viewport, and `html.full-page` /
+`body.full-page` carry what used to be `:root` rules. `index.html` is the
+full-page surface (`<graphshell-view data-owns-title>` filling the body);
+`embed.html` is someone else's page — its own title, heading, an input and
+a button deliberately carrying the component's *old unprefixed* ids
+(`search-input`, `session-local`), and the component in a 960×600 box
+between them. The extension packaging is untouched: it copies `index.html`,
+`styles.css` and `loader.js`, and the markup now travels in the bundle.
+
+Receipts: `c4b2_full_page.scn` and `c4b2_embed.scn`, both `RESULT ok`, no
+page errors, the browser closed after each. The embed rows: the host title
+and heading intact; a key typed with focus on the host's input counted by
+the host and leaving the camera where it was; a click on the host's
+`#session-local` counted by the host with the component's session
+unchanged; then, with focus on the canvas, the same key moving the camera
+and reaching the component as `command pan-left`, Enter and Escape opening
+and closing the detail. `compare-graphshell-surfaces.py` over the two
+receipts: **53 semantic nodes each, one difference**, the viewport label
+(`1282 by 722` vs `960 by 600`), which is the component measuring its own
+box. `h3_boot` and `c4b1_live_board` rerun green on the new surface.
+
+Findings. A pan's distance is velocity-shaped and differs run to run
+(108 px, then 134 px), so the snapshot exposes `camera-x`/`camera-y` and
+scenarios assert a bound, not a pixel. The receipt profile persists across
+runs, so the page fetches scenarios with `cache: "no-store"` and the sink
+sends the same header; an edited scenario had otherwise run stale. Chrome's
+default `WebRtcHideLocalIpsWithMdns` returns to a fresh profile and hides
+every host candidate behind `.local` names; the driver disables it on the
+command line, which the user profile had done by hand since C1. And the
+web build now resolves genet from a clean worktree at genet's HEAD
+(`Code/worktrees/genet-head`, the web crate's machine-local config) rather
+than the working copy: the other lane's in-flight livery edits had broken
+the build mid-refactor, and a receipt must not depend on someone else's
+unsaved state. Not in scope, stated: one instance per page — the `gs-`
+prefix isolates the component from its host, not two components from each
+other.
+
 *C4b.3 — the checks and the receipt.* Keyboard: with focus on the canvas,
 arrows move `data-camera`, Enter and Escape toggle `data-detail-open`, Tab
 reaches every control in the semantic host, and in the embed the same keys
@@ -1422,3 +1471,15 @@ relay, and reconnect receipts.
   a reader task, advertised actions as DOM buttons; `c4b1_live_board.scn`
   green against `c4_webrtc_host` with the append read back by diff. Next:
   C4b.2, the two surfaces.
+
+- **2026-09-02: C4b.2 landed.** The component's markup ships in the bundle
+  and `mount(root)` puts it anywhere; `<graphshell-view>` and
+  `mountGraphshell(element)` are the two ways in. Ids prefixed, lookups,
+  tokens and listeners root-scoped, the overlay positioned within the box.
+  `index.html` (full page) and `embed.html` (a host page with colliding ids
+  and its own key and click counters) both `RESULT ok`; the semantic trees
+  compare equal but for the viewport label. Driver: its own Chrome profile,
+  closed after every run, mDNS candidate hiding off, no HTTP cache; the web
+  build resolves genet from a clean worktree at HEAD. Next: C4b.3, the
+  keyboard and accessibility rows as a receipt, the profile mark, and the
+  carried resume-on-reconnect row.

@@ -11,7 +11,7 @@ assert snap remote-cards == 1
 act session-remote
 settle 1
 assert snap session == remote
-assert dom #active-session Remote projection
+assert dom #gs-active-session Remote projection
 capture c4b1_mounted
 wait
 # The endpoint advertises both intents; the detail surface offers them as
@@ -19,8 +19,8 @@ wait
 # measured by a resnapshot, since a refusal rings no bell.
 act invoke-action
 settle 1
-assert dom #remote-actions Append a card
-assert dom #remote-actions Forbidden action
+assert dom #gs-remote-actions Append a card
+assert dom #gs-remote-actions Forbidden action
 dom click [data-intent="mere.graphshell/live-fixture/forbidden"]
 wait
 assert snap action-status ~ Rejected
