@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cambium::{AnyView, GenetAppRunner, GenetCtx, GenetElement, View, el, text};
+use genet_render::TextSystem;
 use genet_scripted_dom::ScriptedDom;
 use netrender::Scene;
 
@@ -228,7 +229,7 @@ fn stylesheet(width: u32, height: u32) -> String {
     format!(
         r#"
 .shell {{ width: {width}px; height: {height}px; color: #dce5e8;
-  font-family: sans-serif; font-size: 13px; }}
+  font-family: Roboto, sans-serif; font-size: 13px; }}
 .topbar {{ position: absolute; left: 0px; top: 0px; width: {width}px;
   height: {topbar_height}px; display: flex; background-color: #101820;
   border-bottom: 1px solid #29404a; }}
@@ -280,10 +281,18 @@ fn stylesheet(width: u32, height: u32) -> String {
     )
 }
 
+/// Build the chrome scene through the host's retained text system.
+///
+/// `text` carries the font the page ships (see `run` in `web.rs`): a browser
+/// has no system fonts for fontique to discover, so a one-shot text system
+/// would shape every run against an empty collection and the chrome would
+/// paint boxes without glyphs — which it did from the Livery migration
+/// (2026-08-21) until this was wired back.
 pub(crate) fn build_chrome_scene(
     model: ChromeModel,
     width: u32,
     height: u32,
+    text: &mut TextSystem,
 ) -> Result<Scene, String> {
     let dom = Rc::new(RefCell::new(ScriptedDom::new()));
     let view_model = model.clone();
@@ -292,13 +301,14 @@ pub(crate) fn build_chrome_scene(
     let dom_ref = dom.borrow();
     let sheet = stylesheet(width, height);
     let sheets = [sheet.as_str()];
-    genet_render::scene_from_scripted_dom(
+    genet_render::scene_from_scripted_dom_with_text_system(
         &*dom_ref,
         &sheets,
         width,
         height,
         None,
         &Default::default(),
+        text,
     )
     .map_err(|error| error.to_string())
 }

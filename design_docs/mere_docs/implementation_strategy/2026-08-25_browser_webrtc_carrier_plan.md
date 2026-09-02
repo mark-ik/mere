@@ -740,20 +740,49 @@ Five findings from landing it, three of them about the instrument:
    read the DOM of a browser it cannot reach.
 3. *`rust-lld` crashes on this crate's DWARF* on the pinned 1.97.1
    toolchain (`0xc0000005`, reproducible, at HEAD without any of this
-   work; the last bundle that linked with debug info dates from
-   2026-08-19). `CARGO_PROFILE_DEV_DEBUG=0` links. Recorded in the driver
-   with a retire condition; whether the web manifest should carry
-   `[profile.dev] debug = false` is open.
+   work). Investigated 2026-09-02: it is size, not a linker bug. With
+   `debug = "line-tables-only"` the module links at **1.59 GB**, of which
+   `.debug_str` is 1.37 GB and the `name` section 123 MB against 40 MB of
+   code; full debug info is larger still, and LLD 22.1.6 dies on it. Even
+   the line-tables module is past the browser's 1 GiB limit, so
+   `debug = 0` is the only setting that yields a loadable bundle, not a
+   preference. The last bundle that linked *with* full debug info was
+   2026-08-19 at 106 MB; the Livery/Buckram migration landed 2026-08-21.
+   The module now holds 271,644 functions: 148k in `core` and **44k in
+   `taffy`** (genet-taffy's generic layout, instantiated over Buckram's
+   trees) — a monomorphization explosion that belongs to the genet lane,
+   and the reason bindgen's demangled names (finding 4) run to 2 GB. Names
+   are v0-mangled because 1.97 defaults to v0 and `legacy` is nightly-only
+   now, so no mangling knob exists on stable.
 4. *wasm-bindgen's demangled name section is 2 GB* on this module — 12× the
    167 MB it links to, past the browser's 1 GiB limit
    (`WebAssembly.instantiateStreaming(): size > maximum module size`).
-   `--no-demangle` gives 162 MB; stripping the section gives 40 MB. Some
-   generic type in the graph has a pathological demangled name; not chased.
+   `--no-demangle` gives 162 MB; stripping the section gives 40 MB. Same
+   root as finding 3.
 5. *The canvas chrome renders no glyphs* in this build: pills, rail and
    status are bare boxes in both captures and in the pane's own screenshot,
-   and `GraphshellSans.ttf` is never requested. The DOM mirror carries the
-   text, so the semantic receipt is unaffected, but a pixel receipt of the
-   chrome is currently a receipt of boxes. Pre-existing; owner unknown.
+   and `GraphshellSans.ttf` is never requested. Traced 2026-09-02: `web.rs`
+   used to call `genet_layout::register_host_font(include_bytes!(
+   "../web/GraphshellSans.ttf"))`; commit `04e303ac` (2026-08-21, "Migrate
+   consumers to Livery and Buckram") removed that line with the retired
+   crate and put nothing in its place. On the Livery path a font is
+   per-`TextSystem` (`register_font_bytes`), genet-render's
+   `scene_from_scripted_dom` → `compute_layout` calls the plain
+   `genet_livery::layout`, which makes a fresh, empty `TextSystem`, and on
+   wasm32 fontique has no system fonts to fall back on — so every native
+   host shows text and the browser shows boxes. `layout_with_text_system`
+   already exists; the fix is a genet-render entry that accepts a text
+   system (or a host font registry) plus the one-line registration back in
+   `web.rs`. `cambium-genet-web-host` has no font handling either, so it
+   has the same gap.
+   **Fixed 2026-09-02 (ruled by Mark):** genet-render gained
+   `scene_from_scripted_dom_with_text_system` (and the paint-list twin) and
+   re-exports `TextSystem`; `BrowserHost` keeps one with `GraphshellSans.ttf`
+   (Roboto Regular) registered at boot, the chrome sheet names `Roboto`, and
+   both captures now show brand, pills, rail, product proof and the WebGPU
+   badge. The genet change is committed on genet `main`; mere's web manifest
+   still pins genet at `eff0cb6`, so a clean checkout renders boxes until
+   the pin is aligned past it — locally the config redirect makes it live.
 
 ## 8. C5: public rendezvous
 

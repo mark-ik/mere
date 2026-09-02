@@ -39,6 +39,7 @@ use graphshell::protocol::{
 use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::NodeKey;
+use genet_render::TextSystem;
 use netrender::Scene;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
@@ -288,6 +289,8 @@ struct BrowserHost {
     canvas_element: HtmlCanvasElement,
     gpu: GpuPresenter,
     chrome_scene: Scene,
+    /// Retained shaping state and the shipped font (see `run`).
+    chrome_text: TextSystem,
     chrome_dirty: bool,
     detail_open: bool,
     action_count: u32,
@@ -498,7 +501,12 @@ impl BrowserHost {
         self.resize_if_needed();
         self.advance_arrangement_transition(host_ms);
         if self.chrome_dirty {
-            self.chrome_scene = build_chrome_scene(self.chrome_model(), self.width, self.height)?;
+            self.chrome_scene = build_chrome_scene(
+                self.chrome_model(),
+                self.width,
+                self.height,
+                &mut self.chrome_text,
+            )?;
             self.chrome_dirty = false;
         }
         let content = match self.active {
@@ -1969,7 +1977,14 @@ async fn run() -> Result<(), String> {
         physics_paused: false,
         action_draft: None,
     };
-    let chrome_scene = build_chrome_scene(initial_model, width, height)?;
+    // The chrome's font. A browser has no system fonts for fontique to find,
+    // so the page ships one (Roboto Regular, as `GraphshellSans.ttf`) and
+    // registers it once on a text system the host keeps; the chrome sheet
+    // names the family. `genet_layout::register_host_font` did this until
+    // the Livery migration retired that crate, and the glyphs went with it.
+    let mut chrome_text = TextSystem::new();
+    chrome_text.register_font_bytes(include_bytes!("../web/GraphshellSans.ttf").to_vec());
+    let chrome_scene = build_chrome_scene(initial_model, width, height, &mut chrome_text)?;
     let state = Rc::new(RefCell::new(BrowserHost {
         app,
         remote,
@@ -1979,6 +1994,7 @@ async fn run() -> Result<(), String> {
         canvas_element: canvas,
         gpu,
         chrome_scene,
+        chrome_text,
         chrome_dirty: false,
         detail_open: false,
         action_count: 0,
