@@ -1,8 +1,9 @@
 # FLORA, Tulpa, and Standing integration receipt
 
-**Status (2026-08-31):** Passed directly on `codex/0831-integration` after
-merging the upstream Genet pin correction `77b3c3a2` and Distillery test repair
-`9a53c77a`.
+**Status (2026-09-02):** Passed again on the stack rebased onto `origin/main`
+`4d68c465`, together with the upstream Djinn Distillery lane receipts; landed on
+`main`. First passed 2026-08-31 on `codex/0831-integration` after merging the
+upstream Genet pin correction `77b3c3a2` and Distillery test repair `9a53c77a`.
 
 ## Contract under test
 
@@ -61,6 +62,36 @@ The ordinary strict Distillery Clippy command reached unchanged dependency
 warnings in Personae before package linting. The `--no-deps` gate proves the
 changed Distillery package itself under `-D warnings` without relabelling those
 upstream warnings.
+
+## Rerun after the rebase, 2026-09-02
+
+The stack was replayed onto `origin/main` `4d68c465`, which had gained the
+operational Djinn Distillery resident, honest discrete-GPU selection, and the
+cross-platform lane receipts since the branch base. All commands ran from the
+integration checkout with `-j 2` against the same isolated target directory.
+
+| Command | Result |
+|---|---:|
+| `cargo test -p distillery --features flora --test flora_social_receipt` | 1 passed |
+| `cargo test -p distillery --features flora --lib` | 12 passed |
+| `cargo test -p gemot --lib` | 122 passed |
+| `cargo test -p muniment` / `-p mere-eidetic` / `-p chartulary` | 37 / 95 / 59 passed |
+| `cargo clippy -p distillery --features flora --lib --test flora_social_receipt --no-deps -- -D warnings` | passed |
+| `cargo clippy -p distillery --features flora,trainer-gpu --lib --tests --no-deps -- -D warnings` | passed |
+| `cargo clippy -p gemot --lib --tests --no-deps -- -D warnings` | passed |
+| `cargo test -p djinn --features trainer --test distillery_trainer` | 2 passed |
+| `cargo test -p djinn --features trainer --test distillery_lane` | 4 passed |
+| `cargo test -p djinn --features trainer-gpu --test distillery_trainer_gpu` | 1 passed, 80 s on the discrete GPU |
+| `cargo check -p mere-canvas` | passed |
+
+The Distillery library count rose from 11 to 12 because upstream added a
+trainer test alongside the GPU device probe. The three Djinn commands carried
+`--config profile.dev.package.mere-canvas.incremental=false`: without it the
+test binaries fail to link on windows-msvc with 83 unresolved externals
+against `mere-canvas`, the rust-lang/rust#86049 shape recorded in the
+projection grammar plan, and cleaning the affected packages does not clear
+it. Nothing in the stack touches Canvas; the workaround is the invocation's,
+not the tree's.
 
 ## Workspace entry closure
 

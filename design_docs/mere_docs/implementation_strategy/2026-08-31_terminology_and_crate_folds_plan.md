@@ -1,8 +1,10 @@
 # Terminology and crate folds plan
 
-**Status (2026-08-31):** Complete on `codex/0831-integration`. Provider changes,
-consumer migrations, compatibility readers, active-vocabulary audit, and the
-integrated receipt are implemented.
+**Status (2026-09-02):** Landed on `main`. The stack was rebased from its
+`9a53c77a` base onto `origin/main` `4d68c465` on 2026-09-02, reconciled with
+the Djinn Distillery lane that arrived upstream in between, and every recorded
+gate was rerun green before the push. The seven external consumer commits
+follow it in their own repositories.
 
 ## Scope and rulings
 
@@ -107,6 +109,22 @@ Done conditions:
   source migrations can land as ordered commits, but their lockfiles cannot be
   made current until a Mere revision containing `muniment::Journal` exists.
 
+- **2026-09-02:** the 31 upstream commits between the branch base and
+  `origin/main` overlapped the stack on eight files, with no source-level
+  conflict: two doc-index entries and Distillery's `[features]` block were
+  the only merge conflicts, and the upstream `trainer-gpu` feature now sits
+  beside the branch's `flora` feature. The one real reconciliation was
+  upstream's Djinn trainer receipts, written against `TrainingCorpus` while
+  it still spelled its partitions `*_source_engrams`; they compiled only
+  after the field rename in `ports/djinn/tests/`.
+- **2026-09-02:** the Djinn receipts on windows-msvc link only with
+  `mere-canvas` built non-incrementally, the rust-lang/rust#86049 shape the
+  [projection grammar plan](2026-08-15_projection_grammar_adoption_plan.md)
+  already records; the raw invocation fails with 83 unresolved externals
+  even from a cleaned target. Strict Clippy over Djinn's library also carries
+  four pre-existing lints in `personal_sync.rs` and `resident_knot.rs` that
+  this stack neither introduced nor touched.
+
 ## Progress
 
 - **2026-08-31:** implemented the Eidetic Codicil rename, TrainingCorpus v2
@@ -130,3 +148,12 @@ Done conditions:
   from the integration checkout. `cargo tree -i genet-taffy@0.14.0` resolves
   the Buckram/Livery/Mere consumer chain at the exact pinned Genet revision;
   `cargo check -p mere-canvas -j 1` compiles that chain successfully.
+- **2026-09-02:** rebased the nine commits onto `origin/main` `4d68c465`, added
+  the Djinn field reconciliation, and reran every gate from the integration
+  checkout: integrated receipt 1/1, Distillery library 12/12, Gemot 122/122,
+  Muniment 37, Eidetic 95, Chartulary 59, Djinn CPU trainer 2/2, Djinn lane
+  4/4, Djinn GPU trainer 1/1, strict package Clippy on Distillery (both the
+  recorded `flora` gate and `flora,trainer-gpu` over all tests) and Gemot,
+  and the Mere Canvas dependency-chain check. Details in the
+  [receipt](../testing/2026-08-31_flora_tulpa_standing_receipt.md). Pushed to
+  `main` the same day.
