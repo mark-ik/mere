@@ -286,8 +286,8 @@ async fn the_gpu_lane_trains_on_a_discrete_adapter_or_refuses_to_compose_at_all(
             .expect("load model manifest")
             .expect("model manifest present");
         let corpus = TrainingCorpus {
-            training_source_engrams: save_cases(&mut *store, &TRAIN_PREFIXES).await,
-            evaluation_source_engrams: save_cases(&mut *store, &EVAL_PREFIXES).await,
+            training_source_codicils: save_cases(&mut *store, &TRAIN_PREFIXES).await,
+            evaluation_source_codicils: save_cases(&mut *store, &EVAL_PREFIXES).await,
         };
         let corpus_ref = save_typed(
             &mut *store,

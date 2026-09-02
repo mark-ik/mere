@@ -89,7 +89,7 @@ pub use trainer::{
 ///
 /// These are not conveniences: [`TrainerResource::new`] takes a
 /// [`TrainerDevice`], and [`TrainRequest`] carries a
-/// [`LoraTrainerSettings`] and is fed by [`TrainingCase`] engrams, so a host
+/// [`LoraTrainerSettings`] and is fed by [`TrainingCase`] codicils, so a host
 /// that cannot name them cannot compose the resource or post a job to it.
 /// Re-exporting them here keeps the seam where it already is: distillery
 /// drives esp, and its consumers drive distillery.

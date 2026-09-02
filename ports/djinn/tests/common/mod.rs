@@ -310,7 +310,7 @@ pub fn base_weights() -> Vec<u8> {
     safetensors::serialize(views, &None).unwrap()
 }
 
-/// Save one partition's training cases as opaque engrams, in the sorted order
+/// Save one partition's training cases as opaque codicils, in the sorted order
 /// a corpus partition carries.
 #[cfg(feature = "trainer")]
 pub async fn save_cases(
@@ -338,7 +338,7 @@ pub async fn save_cases(
                 Timestamp(0),
             )
             .await
-            .expect("save case engram"),
+            .expect("save case codicil"),
         );
     }
     ids.sort_by_key(ToString::to_string);
