@@ -837,7 +837,20 @@ mod tests {
             .expect_err("a thermal limit on a device with no thermometer is not a policy");
         assert!(refusal.contains("thermal"), "{refusal}");
 
-        hot.stated.thermal_c = Some(45);
+        // State every fallback the policy's *other* rules rest on as well, so
+        // the only open question is thermal on every platform. On Windows the
+        // sensed idle, battery and network readings beat these anyway; off
+        // Windows nothing is sensed, and without them this half of the test
+        // would fail on idle, battery and network rather than pass on thermal
+        // (it did, the first time it ran on the Fedora ThinkPad, 2026-09-02).
+        hot.stated = StatedConditionSettings {
+            idle_ms: Some(600_000),
+            battery_pct: Some(90),
+            on_mains: Some(true),
+            thermal_c: Some(45),
+            network: Some("wifi".into()),
+            bandwidth_in_use_kbps: None,
+        };
         let sensor = DeviceConditionSensor::new(stated_conditions(&hot).unwrap());
         assert_eq!(
             validate_policy_coverage(&policy, &sensor.coverage()),

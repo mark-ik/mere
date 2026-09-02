@@ -866,7 +866,17 @@ tests and 5 lane receipts passing. `cargo check -p djinn --target
 x86_64-unknown-linux-gnu` cannot run on this machine: the target's std is
 installed but `ring`'s build script needs an `x86_64-linux-gnu-gcc` that is
 not, so the changed non-Windows module was type-checked for that target in
-isolation instead, against the same chrono feature set.
+isolation instead, against the same chrono feature set. The real receipt
+came the same day from the Fedora ThinkPad (`thinkpad-l14-f`, Rust 1.97.1):
+`cargo check -p djinn` green natively, `local_hour` reading 04 EDT where the
+old path would have said 08, and the `conditions` and `resident_distillery`
+unit tests passing — after one Windows-shaped test was corrected. The
+thermal-limit composition test stated only a temperature and expected clean
+coverage, which holds on Windows because idle, battery and network are
+sensed there, and fails anywhere nothing is sensed. It now states every
+fallback the policy's other rules rest on, so the only question it asks is
+thermal on every platform. A green Windows build proved nothing about that
+test until a Linux box ran it.
 
 ### The trainer on the discrete GPU, and the substitution it must not fall for, 2026-09-02
 
