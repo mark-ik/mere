@@ -3,9 +3,10 @@
 **Date**: 2026-08-12
 **Status**: open. W4's lexical n-gram input probe, W5's deterministic fusion
 probe, and the V3 tokenized-URL repair completed 2026-08-31. Turnstone's live
-trail-fusion caller is implemented on paired feature branches as of 2026-09-01;
-W4 canvas host wiring and W5's real captured-trail evaluation and weight
-selection remain open. Spun out of the
+trail-fusion caller and private captured-trail evaluation harness are
+implemented on paired feature branches as of 2026-09-02. W4 canvas host wiring
+remains open. W5 has an executable promotion gate, but the active profile does
+not yet admit a real training/held-out selection. Spun out of the
 [leverage census](../../2026-08-10_leverage_census_brief.md) (step 2), and
 carries the census's audit answer for `mere-embed` inside it.
 
@@ -307,3 +308,43 @@ store, not fixtures only.
   persistence wiring remain separate. W5's done condition still requires a
   real captured-trail training/evaluation split, weight selection on the
   training side, held-out ranking metrics, and a stated RAM and latency budget.
+
+- **2026-09-02: private captured-trail gate implemented; current corpus does
+  not admit selection.** Turnstone `57faef4` on `codex/0901-ngram-recall`
+  adds the local-only harness and records its protocol in
+  `turnstone/design_docs/2026-09-02_trail_recall_evaluation_plan.md`. The
+  ignored receipt takes one explicit session, copies it before opening Fjall,
+  overlays current graph and recycle-bin titles through the live caller's
+  projection, and emits only digests, aggregate ranking metrics, and costs.
+  The judgment manifest remains outside both repositories.
+
+  Admission requires twenty distinct documents and disjoint training and
+  held-out targets: five distinct phrase targets and five controls on each
+  side. Queries must be unique after lexical normalization; phrase queries and
+  projected titles must contain multiple tokens. The manifest explicitly sets
+  maximum token orders, positive fusion weights, `Ranking@K`, an exact dense
+  vector-payload budget, and a p95 query budget. Selection sees training cases
+  only. The held-out verdict requires a unique-top-one phrase gain while
+  preserving overall unique top one, Recall@K, and control unique top one.
+  Resource overruns or metric ties keep BM25.
+
+  The copied active-profile corpus at BLAKE3
+  `db4d9b34d4acbc57ee6a1accf84a7e03e3b3760e87b2c1076c1d56af11db6da6`
+  contains four traces, eleven traversals, seven distinct pages, and one page
+  with a current projected title. The receipt therefore returned
+  `insufficient_corpus` before loading judgments or selecting a weight. This
+  is a negative admission receipt, not a phrase-feature loss. BM25 remains the
+  evidence-backed default.
+
+  The clean remote-pinned Turnstone test graph compiled. The synthetic
+  training-only selection test, all five trail-memory actor tests, and the
+  ignored active-profile admission receipt passed. Package Clippy exited zero;
+  its existing broad warning set contained nothing in the two changed Rust
+  files. Targeted formatting and `git diff --check` passed. The earlier
+  disposable profile copy was verified and deleted after the receipt.
+
+  W5's next done condition is concrete: capture at least twenty distinct pages
+  with enough current multi-token titles, author the private cases from
+  remembered intent before consulting stored titles, and run the admitted
+  receipt. A setting becomes a promotion candidate only if that held-out run
+  says so. W4 remains an independent canvas-field lane.
