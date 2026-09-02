@@ -143,6 +143,55 @@ nav button:nth-child(8) { left: 254px; }
   padding-top: 12px;
 }
 
+#projection-editor {
+  border-color: #41616b;
+}
+
+#projection-editor[hidden] {
+  display: none;
+}
+
+#projection-editor-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+#projection-editor-panels button {
+  margin-top: 0;
+  color: #a9c7ba;
+  background: #17242c;
+  border: 1px solid #35505b;
+}
+
+#projection-editor-panels button[aria-selected="true"] {
+  color: #172028;
+  background: #d39b4a;
+}
+
+#projection-editor-status,
+#projection-editor-validation,
+#projection-editor-source,
+#projection-editor-provenance {
+  color: #a9c7ba;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+#projection-editor-status,
+#projection-editor-validation {
+  margin: 5px 0;
+}
+
+#projection-editor-validation {
+  color: #8db8a4;
+}
+
+#projection-editor-source,
+#projection-editor-provenance {
+  color: #89a6af;
+}
+
 #semantic-host h1,
 #semantic-host h2,
 #semantic-host h3 {

@@ -53,6 +53,9 @@ pub mod policy_projection;
 pub mod product;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod profile;
+
+#[cfg(any(feature = "native", feature = "web"))]
+pub mod projection_editor;
 /// Receipt ingest: a scenario-receipt directory becomes personal-graph facts.
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod receipts;

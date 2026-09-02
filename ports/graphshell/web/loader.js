@@ -73,6 +73,42 @@ window.graphshellReceipt = () => ({
     width: window.innerWidth,
     height: window.innerHeight,
   },
+  projectionEditor: {
+    open: document.body.dataset.projectionEditorOpen === "true",
+    panel: document.body.dataset.projectionEditorPanel,
+    content: document.body.dataset.projectionEditorContent,
+    validation: document.body.dataset.projectionEditorValidation,
+    errors: Number(document.body.dataset.projectionEditorErrors || 0),
+    saveCount: Number(document.body.dataset.projectionEditorSaveCount || 0),
+    status: document.getElementById("projection-editor-status")?.textContent,
+    preview: document.getElementById("projection-editor-preview")?.textContent,
+    source: {
+      authority: document.getElementById("projection-source-authority")?.value,
+      domain: document.getElementById("projection-source-domain")?.value,
+      resource: document.getElementById("projection-source-resource")?.value,
+    },
+    reading: {
+      key: document.getElementById("projection-reading-key")?.value,
+    },
+    encoding: {
+      x: document.getElementById("projection-encoding-x")?.value,
+      y: document.getElementById("projection-encoding-y")?.value,
+    },
+    arrangement: {
+      kind: document.getElementById("projection-arrangement-kind")?.value,
+      direction: document.getElementById("projection-arrangement-direction")?.value,
+      spacing: document.getElementById("projection-arrangement-spacing")?.value,
+    },
+    appearance: {
+      realization: document.getElementById("projection-appearance-realization")?.value,
+      title: document.getElementById("projection-appearance-title")?.value,
+    },
+    provenance: {
+      author: document.getElementById("projection-provenance-author")?.value,
+      sourceRevision: document.getElementById("projection-provenance-revision")?.value,
+      note: document.getElementById("projection-provenance-note")?.value,
+    },
+  },
   semantics: window.graphshellSemanticTree(),
 });
 

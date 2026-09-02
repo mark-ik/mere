@@ -265,6 +265,7 @@ mod tests {
         let persona = PersonaId::new();
         let settings = DeviceSettings {
             startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+            ..Default::default()
         };
         save_device_settings(root.path(), &settings).unwrap();
         wallet_store::ensure_wallet_state(root.path(), persona, "Knot receipt").unwrap();

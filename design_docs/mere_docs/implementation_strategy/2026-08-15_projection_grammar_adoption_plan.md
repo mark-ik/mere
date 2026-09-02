@@ -34,6 +34,17 @@ scene contract note
 
 ## Ruling context
 
+
+### Workbench component adoption (2026-08-31)
+
+Platen now names its graph-specific split/tab cache `TileLayout`; `Workbench` is a compatibility
+alias. Its structural AccessKit projection lives at
+`platen::accessibility::project_tile_layout`, beside the layout it reads. The old Mere
+`workbench` package is retired. Mere and Graphshell consume Genet's reusable `workbench` package
+at immutable revision `eff0cb6df4834ecce9ac552a055c1c459befa7c3`. The component boundary and
+remaining headed-host receipts are in
+`genet/design_docs/2026-08-31_workbench_component_plan.md`.
+
 The report reviewed the catalog against eleven external systems (Vega-Lite,
 Draco, SetCoLa, Gemini, GoTree, ATOM; then Mosaic, Gosling, Penrose, Bluefish,
 GoFish) and returned three results this plan acts on: the catalog's stack
@@ -1024,6 +1035,41 @@ is raised in Progress for Mark.
   requires a second heterogeneous consumer for every portable addition. The
   shelfmark/index ruling is labeled resolved; the embedded-app question
   remains open.
+- 2026-08-31: **Graphshell Projection Editor component and first authoring
+  loop landed through Mere `77369f6f0c03b301c398ad65107114080c4ba630`.** The
+  host-neutral `ports/graphshell/src/projection_editor.rs` now models source
+  and domain binding, reading, encoding, arrangement, interaction,
+  appearance/realization, and provenance as an editable definition with
+  field-level validation, panel taxonomy, reducer actions, deterministic JSON,
+  and a sink-only save boundary. Its seven tools are `workbench::Tile`s in an
+  open Graphshell content lane, so selection and typed tearout use the shared
+  reducer without granting graph or endpoint authority. A focused standalone
+  cross-repo harness passed eight tests, including Platen projection, editor
+  activation, tearout custody, validation, provenance, serialization, and sink
+  refusal. The standalone web manifest now restates its inherited immutable
+  Genet patches, and the host `x86_64-pc-windows-msvc` cargo check passes
+  offline with the immutable G1 Genet revision. G1's native-only `fontsan`
+  policy closes the prior C++/WASI sysroot blocker for the wasm dependency
+  cone. The standalone wasm build now passes with an isolated target and the
+  matching `wasm-bindgen 0.2.126` package is generated under the ignored web
+  package directory. The headed Graphshell browser receipt is now green:
+  localhost reported title `GRAPHSHELL H3 READY` and `ready=true`; the editor
+  opened the source panel, authored `local-workbench-receipt`,
+  `woodshed.practice`, `fixture.projection/workbench`, `practice_title`,
+  `tempo`/`difficulty`, `grid.default`/vertical/24, `canvas.points`, title
+  `Workbench projection receipt`, and provenance
+  `Projection Editor receipt` / `workbench-w4` / `Saved and reloaded in the Graphshell browser receipt`. The deterministic preview was `Workbench projection receipt · read nodes by practice_title · grid.default · x=tempo y=difficulty · canvas.points`. Save reported `saveCount=1`,
+  `validation=valid`, `errors=0`, and `Saved · workbench-w4 · 1 save(s)`;
+  after mutation, reload restored every authored field and reported
+  `Reloaded · graphshell-reference · workbench-w4`. The bound stripped artifact
+  is 34,679,440 bytes with SHA256
+  `A6A43EA0D1FB510E9EEF897B6C9232BB66F5D1F5927DF54DADE3463F55D3DB85`.
+  This closes the browser authoring receipt, while broader headed verification
+  and A5 remain open. Woodshed is Workbench's second
+  heterogeneous consumer, but it is not itself A5's named portable projection
+  proof; A5 still needs a named proof consumer and its per-proof evidence. The
+  component follows the component seam in
+  `genet/design_docs/2026-08-31_workbench_component_plan.md`.
 - 2026-09-01: **C4a landed; A3 stage two tested against it and the gate
   sharpened.** Mere `d10e04da` serves a live Graphshell projection to a
   browser-shaped WebRTC peer (admitted by Notochord, sans-I/O `SessionCore`

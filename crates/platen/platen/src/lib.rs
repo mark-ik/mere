@@ -8,7 +8,7 @@
 //!
 //! The **pane home** for the [`mere`](https://crates.io/crates/mere)
 //! browser: platen compiles a forme [`forme::Arrangement`] into the
-//! presentation plans a host renders panes from — the workbench tiling
+//! presentation plans a host renders panes from — the tiled-layout
 //! model, its tree projection, the pane geometry sidecar, and the
 //! document-canvas scene input for a pane that holds a document tile.
 //!
@@ -34,8 +34,8 @@
 //!   paragraph goes). Platen sees pane content as opaque renderable units.
 //! - **Rendering** — that's the host's job: `platen-view` flex DOM through
 //!   genet's layout, presented by netrender.
-//! - **A11y projection** — that's mere-domain (`frame`, `gloss`,
-//!   `apparatus`) → uxtree; canvas a11y is host-side.
+//! - **Canvas a11y** — host-side. Platen projects its own tiled-layout structure
+//!   through [`accessibility`]; other domain projections remain domain-owned.
 
 #![doc(html_root_url = "https://docs.rs/platen/0.0.1")]
 
@@ -43,6 +43,9 @@
 /// composition-time use. Hosts call this for any pane that holds a document
 /// tile (the output of a nematic engine).
 pub mod document_scene;
+
+/// AccessKit/uxtree projection of Platen-owned structure.
+pub mod accessibility;
 
 /// The tiled-workbench model: slots of tab-stacks over a forme [`forme::Arrangement`],
 /// the active tab per stack, and the projection mode. platen's canonical tiling state
@@ -64,10 +67,11 @@ pub mod tree_projection;
 /// (Cartography geometry lives with the canvas since the decomposition.)
 pub mod projection_geometry;
 
+pub use accessibility::project_tile_layout;
 pub use document_scene::build_document_scene;
 pub use projection_geometry::{Axis, TreeBranch, TreeGeometry};
 pub use tree_projection::{PlanSlot, ProjectionKind, TilePlan, WorkbenchPlan, project_tree};
-pub use workbench::{SlotView, Workbench};
+pub use workbench::{SlotView, TileLayout, Workbench};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

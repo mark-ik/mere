@@ -1,7 +1,8 @@
 # Derived Faces Plan
 
 **Date:** 2026-08-28
-**Status:** **D1 landed 2026-08-29**; D2 (vello bridge) and D3 (canvas arm) open. Was gated on emblem's encoder
+**Status:** **D1 published as `pictograph` 0.1.0 and D2 landed as unpublished
+0.2.0 on 2026-09-01**; D3 (canvas arm) remains open. Was gated on emblem's encoder
 (`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed and
 shipped as emblem 0.2.0 on 2026-08-29.
 **Scope:** procedural node faces for content that has no favicon: derive a
@@ -83,25 +84,27 @@ Same address → same bytes, across machines and peers — this inherits emblem'
 byte-determinism requirement and adds one of its own: the generator carries a
 `DERIVATION_VERSION`; changing the grammar or parameter mapping bumps it, and
 a bump is a deliberate, dated decision (every face in every session changes
-appearance). Golden byte-vector fixtures pin the mapping: a committed table of
-(address → expected `.ivg` bytes) that CI compares byte-for-byte.
+appearance). Digest-pinned fixtures pin the mapping: a committed table of
+(address, byte length, FNV-1a digest, filled-cell count) values that CI compares
+against newly derived faces.
 
 ## 6. Phases
 
-### D1. `pictograph` v1: hash → face bytes
+### D1. `pictograph` 0.1.0: hash → face bytes
 
 Seeded parameter extraction, a first motif grammar (symmetry, density, a small
 family of forms), palette-indexed fills only, two LOD arms, emblem encoding.
 
 Done when:
-- golden fixtures pass: the committed (address → bytes) table reproduces
-  byte-exactly, twice in-process;
+- digest-pinned fixtures pass: committed address, byte-length, digest, and
+  filled-cell values reproduce exactly, with repeat derivation checked
+  separately in-process;
 - decoding a derived face against two different palettes yields different
   resolved paints from identical bytes (theming proof);
 - decoding under two host LOD values yields the two arms (LOD proof);
 - a fuzz pass over random addresses produces decodable faces with no panics.
 
-### D2. The vello bridge
+### D2. The vello bridge (`pictograph` 0.2.0)
 
 `Sink` implementation building a vello scene fragment; non-zero winding rule
 honored (the one rule emblem's docs call out — vello must not default this
@@ -156,6 +159,25 @@ conservative rollout. Both defensible; not decided here.
   in the lattice are Servo's, still in `repos/genet/resources/` from the
   fork. App icons are raster packaging assets and are *not* this plan's
   scope, but the branding gap is recorded here so it is not lost.
+- 2026-09-01: review found that rotate-180 sampled the whole middle row, so two
+  mirrored cells were drawn again and overwrote their first values. The output
+  remained symmetric, but the claim that the stream sampled only an independent
+  region was false. The generator now samples one row-major representative per
+  symmetry orbit: 15 cells for mirror-X, 9 for mirror-both, and 13 for
+  rotate-180. `DERIVATION_VERSION` deliberately moved from 1 to 2. The
+  mirror-both test now proves horizontal and vertical symmetry independently,
+  and fixture wording now says digest-pinned rather than byte-exact.
+- 2026-09-01: netrender 0.1.2 consumes the published `netrender-vello` 0.10.0
+  package, while Mere's otherwise-unused root `vello` pin names a distinct
+  package. D2 targets `netrender-vello` directly so its `Scene` has the identity
+  netrender's compositor expects. The dependency remains behind a `vello`
+  feature so byte-only derivation keeps its D1 dependency surface.
+- 2026-09-01: emblem hands sinks premultiplied RGBA while peniko accepts
+  straight-alpha colours and performs premultiplied gradient interpolation.
+  The bridge therefore unpremultiplies each resolved colour at that boundary.
+  IconVG linear gradients carry a one-row effective matrix, so D2 constructs an
+  invertible brush basis whose first coordinate is that linear function;
+  radial gradients use the inverse effective matrix directly.
 
 ## 9. Progress
 
@@ -164,13 +186,22 @@ conservative rollout. Both defensible; not decided here.
 - 2026-08-28: generator named **pictograph** (Mark's pick) and claimed as a
   0.0.1 stub on crates.io the same day; workspace wiring committed
   (`42731a59`). The plan's `face-derive` working name is retired.
+- 2026-09-01: the pre-publication review correction moved the mapping to
+  derivation v2, replaced the four fixture receipts, added the exact independent
+  region counts as a regression test, and brought the focused suite to 14 tests.
+- 2026-09-01: `pictograph` 0.1.0 published on crates.io from corrected Mere
+  commit `1e59c0b7c930b78046fd62896a4b5fa8e6e9f120`.
+- 2026-09-01: D2 added the feature-gated vello bridge as unpublished
+  `pictograph` 0.2.0. The feature suite passes 21 unit tests plus two live
+  headless pixel tests through netrender's wgpu-30 vello package.
 
 ### D1 receipt (2026-08-29)
 
 `pictograph` 0.1.0 derives a face from a content address, landed in Mere commit
 `d42fd1fbc81ba1ae6a3548c4e5f4e5759e7fa64f`. 13 tests green, clippy clean (the
 only warnings under `-p pictograph` are mere's pre-existing unused-patch
-notices). Faces measure **91 to 179 bytes** across the test corpus.
+notices). Its four pinned fixtures measure **91 to 179 bytes**; that receipt did
+not measure the whole address corpus.
 
 **The grammar, v1:** a 5x5 grid over the default ViewBox, cell side 12 from
 origin -30 — chosen so every coordinate is an integer in `[-30, 30]` and
@@ -180,6 +211,14 @@ palette entries per face. Only the independent region is drawn from the
 stream; symmetry supplies the rest, which is what makes a face read as
 designed rather than noisy. Each cell is a single parallelogram op, and each
 colour group is one path with one fill.
+
+**Pre-publication correction, derivation v2 (2026-09-01):** rotate-180 now
+samples exactly one cell from each of its 13 symmetry orbits rather than 15
+cells with two center-row overwrites. The version bump was intentional because
+the parameter mapping changed. The 68-address deterministic corpus spans **34
+to 211 bytes**; the four pinned fixtures span **51 to 187 bytes**. The suite is
+now 14 tests. Focused test, all-target Clippy with warnings denied, rustdoc with
+warnings denied, and package verification all pass.
 
 **The theming mechanism turned out cleaner than the plan assumed.** The plan
 expected register writes carrying palette indices. In fact IconVG pre-loads
@@ -193,8 +232,9 @@ exactly specified, with integer arithmetic throughout and no hash-map
 iteration. `DERIVATION_VERSION` is folded into the seed.
 
 Done-conditions met:
-- **golden fixtures pass** — committed (address, length, digest, filled-cell)
-  literals for four addresses, byte-exact and stable across repeated runs;
+- **digest-pinned fixtures pass** — committed (address, length, digest,
+  filled-cell) literals for four addresses reproduce exactly, while a separate
+  test proves repeat derivation is stable in-process;
 - **theming proved** — one face's identical bytes decoded against two palettes
   give two colours, and a sweep asserts that *every* fill across the corpus at
   both LOD heights resolves to a palette entry, never a literal;
@@ -202,7 +242,7 @@ Done-conditions met:
   address, the arms differ at the threshold, and most faces genuinely simplify;
 - **fuzz** — 300 random addresses decode without panic at four heights.
 
-**A note on the golden test, which was wrong first.** The initial version
+**A note on the fixture test, which was wrong first.** The initial version
 recomputed both sides of the comparison, so it would have passed no matter how
 the grammar changed — the same non-discriminating shape as the emblem test
 that let the SEL bug through. It now carries committed literals, and its doc
@@ -211,4 +251,42 @@ never quietly updating the table. A companion test asserts the grammar does
 not collapse: all three symmetries, both forms, and at least six distinct
 primary colours must occur across the corpus.
 
-**Not yet published.** 0.1.0 is ready; publishing is a separate step.
+**Published 2026-09-01.** 0.1.0 is the first implementation release.
+
+### D2 receipt (2026-09-01)
+
+Unpublished `pictograph` 0.2.0 adds an optional `vello` feature. `VelloSink`
+maps emblem's move, line, quadratic, cubic, close, and fill calls into a kurbo
+`BezPath` and the exact `netrender-vello` `Scene` type. Every fill explicitly
+uses non-zero winding. `decode` returns a `Graphic` carrying both the clipped
+scene fragment and its IconVG ViewBox; callers append it to their frame scene
+with a placement transform.
+
+The paint boundary is complete for emblem's current vocabulary: flat fills;
+linear and radial gradients; Pad, Reflect, Repeat, and None spread. None uses a
+gradient-domain clip because peniko has no transparent-outside extend mode.
+Resolved premultiplied RGBA is converted to peniko's straight-alpha input while
+gradient interpolation stays premultiplied. A radial transform vello cannot
+represent returns a typed error rather than producing invalid scene data.
+
+Done-conditions met:
+- **real icons reach pixels** — the specification's 36-byte action/info icon
+  and a derived face render through `netrender-vello` on a live headless wgpu
+  adapter;
+- **theme swap reaches pixels** — one derived byte vector is decoded against
+  all-red and all-blue palettes, producing visibly red and blue buffers without
+  re-derivation;
+- **winding is proved at the raster boundary** — two same-direction nested
+  contours fill the centre pixel, the result that distinguishes non-zero from
+  even-odd;
+- **gradient direction reaches pixels** — known linear and radial effective
+  matrices put their start and end colours on the expected sides and radii;
+- **structural coverage** — ViewBox clipping, every path segment, all gradient
+  spreads, radial inversion, palette brush changes, premultiplied colour
+  conversion, and the explicit singular-gradient error are covered;
+- **gates** — 21 unit tests and two headless integration tests pass with the
+  `vello` feature; all-target Clippy and rustdoc pass with warnings denied. The
+  extracted `.crate` repeats all 23 tests using registry dependencies only.
+
+0.2.0 is not published. D3 is still gated on the derived-by-default versus
+opt-in decision recorded above.

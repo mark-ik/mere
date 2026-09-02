@@ -28,6 +28,7 @@
 
 use std::path::{Path, PathBuf};
 
+use mesh::KeepBound;
 use personae::ProfileId;
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +76,7 @@ pub fn settings_path(app_dir: &Path, profile: &ProfileId) -> PathBuf {
 /// A profile id reaches this process from an argument or an environment
 /// variable and is about to become a filename, so it is constrained to
 /// characters that cannot escape the settings directory.
-fn sanitize_profile(profile: &str) -> String {
+pub(crate) fn sanitize_profile(profile: &str) -> String {
     let cleaned: String = profile
         .chars()
         .map(|c| {
@@ -111,9 +112,197 @@ pub struct OwnerSettings {
     pub sync: Option<SyncSettings>,
     /// Absent means this device host does not compose a resident Knot route.
     pub knot: Option<KnotResidentSettings>,
+    /// Absent means this device host does not compose the Distillery works.
+    pub distillery: Option<DistilleryLaneSettings>,
     /// Physical content custody shared by every lane in this resident.
     #[serde(skip_serializing_if = "ResidentContentSettings::is_default")]
     pub content: ResidentContentSettings,
+}
+
+/// The owner's statement of how the resident Distillery works runs on this
+/// device.
+///
+/// **There is deliberately no `Default`**, mirroring
+/// [`distillery::ResidentSettings`] and pandect's `MeshLendingSettings`: every
+/// field here is something the owner said, not a plausible starting point. A
+/// `Default` would let this lane start with cadences and a retention posture
+/// nobody chose, and a retention posture nobody chose is exactly the thing a
+/// governance revision is supposed to make impossible.
+///
+/// What is **not** here is as load-bearing as what is:
+///
+/// - **Device lending policy and stated conditions** live in pandect's
+///   device-scoped `mesh_lending` block, because a lending posture belongs to
+///   the machine rather than to a Personae profile. An enabled lane with no
+///   such block is refused rather than defaulted.
+/// - **The checkpoint authority** is not a setting. It is the derived mesh
+///   author key of this profile — self-authority, because the single-device
+///   ruling makes poster and runner one process. Typing a key here could only
+///   ever hand retention governance to somebody else by accident.
+/// - **The mesh id** is not a setting either; it is derived under
+///   [`distillery::DISTILLERY_MESH_SALT`].
+///
+/// scope=profile; movement=local-only; mutability=restart-required;
+/// security=ordinary (a revision tag and cadences, no key material).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DistilleryLaneSettings {
+    /// How often the non-blocking mesh supervisor gets a turn.
+    pub tick_every_ms: u64,
+    /// How often an advanced frontier is checkpointed. `null` is a statement
+    /// too: it leaves maintenance an explicit owner command.
+    pub maintenance_every_ms: Option<u64>,
+    /// How often the physical store looks for content with no custody tag.
+    pub blob_gc_every_ms: u64,
+    /// Whether an accepted checkpoint may release this mesh's blob tags.
+    pub collect_after_checkpoint: bool,
+    /// The owner-bumped governance tag, exactly 64 hex characters.
+    ///
+    /// A checkpoint names the revision it was authored under, so bumping this
+    /// is how an owner says "the rules changed" in a way peers can see. It is
+    /// typed rather than derived precisely because only the owner knows when
+    /// their intent changed.
+    pub retention_revision: String,
+    /// The hosting promise: `"forever"`, `"until-checkpoint"`, or a whole
+    /// number of milliseconds.
+    pub promised_floor: String,
+    /// The erasure ceiling, in the same vocabulary as
+    /// [`promised_floor`](Self::promised_floor).
+    pub privacy_ceiling: String,
+    /// Whether a checkpoint erases terminal job payloads.
+    pub erase_terminal_at_checkpoint: bool,
+    /// Clock disagreement tolerated when deciding whether a checkpoint would
+    /// strand a lease.
+    pub max_skew_ms: u64,
+    /// Whether this lane composes Distillery's trainer resource, and on what.
+    ///
+    /// `null` is a statement, exactly as
+    /// [`maintenance_every_ms`](Self::maintenance_every_ms) is: *this lane
+    /// composes no trainer*. Omitting the field entirely is refused by the
+    /// same `deny_unknown_fields`/required-field behaviour every other field
+    /// here relies on, because "I forgot to say" and "I said no" must not
+    /// look alike when the answer decides whether a device advertises that it
+    /// can train.
+    #[serde(deserialize_with = "required_option")]
+    pub trainer: Option<TrainerLaneSettings>,
+}
+
+impl DistilleryLaneSettings {
+    /// Refuse a lane that could not be an honest owner statement: a cadence
+    /// that would spin or that Tokio cannot run, a revision tag that is not a
+    /// 32-byte key, or a retention bound outside the stated vocabulary.
+    ///
+    /// This is called at composition rather than at load, because
+    /// [`OwnerSettings`] has no validation hook and inventing one here would
+    /// change how every other section of that file behaves.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.tick_every_ms == 0 {
+            return Err("distillery.tick_every_ms must be greater than zero".into());
+        }
+        if self.maintenance_every_ms == Some(0) {
+            return Err(
+                "distillery.maintenance_every_ms must be greater than zero when stated \
+                 (use null to leave maintenance an explicit command)"
+                    .into(),
+            );
+        }
+        if self.blob_gc_every_ms == 0 {
+            return Err("distillery.blob_gc_every_ms must be greater than zero".into());
+        }
+        self.retention_revision_bytes()?;
+        parse_keep_bound(&self.promised_floor, "distillery.promised_floor")?;
+        parse_keep_bound(&self.privacy_ceiling, "distillery.privacy_ceiling")?;
+        if let Some(trainer) = &self.trainer {
+            trainer.validate()?;
+        }
+        Ok(())
+    }
+
+    /// The governance tag as the 32 bytes a [`mesh::PolicyRevision`] carries.
+    pub fn retention_revision_bytes(&self) -> Result<[u8; 32], String> {
+        parse_hex32(&self.retention_revision).map_err(|_| {
+            format!(
+                "distillery.retention_revision must be exactly 64 hex characters (got {:?})",
+                self.retention_revision
+            )
+        })
+    }
+}
+
+/// Deserialize an `Option` field that is genuinely required to be *written*.
+///
+/// Serde's derive quietly supplies `None` for a missing `Option` field, so a
+/// field typed `Option<T>` normally cannot tell "the owner wrote null" from
+/// "the owner never wrote it". Naming a `deserialize_with` removes that
+/// implicit default — serde will not call a custom function for a field that
+/// is not there — which is exactly the distinction
+/// [`DistilleryLaneSettings::trainer`] needs: whether this device offers the
+/// ring a trainer is not a question a typo may answer.
+fn required_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::deserialize(deserializer)
+}
+
+/// The owner's statement that this lane composes Distillery's trainer, and of
+/// what it trains on and where the artifacts land.
+///
+/// **There is deliberately no `Default`**, for the same reason
+/// [`DistilleryLaneSettings`] has none: a trainer is a thing a device offers
+/// the ring, and nothing should acquire that offer by being left unwritten.
+///
+/// scope=profile; movement=local-only; mutability=restart-required;
+/// security=ordinary (a device word and a path, no key material).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TrainerLaneSettings {
+    /// What the trainer runs on. Today `"cpu"` is the only honest answer.
+    pub device: String,
+    /// Override the model library's location. `null` means the derived
+    /// persona-scoped path under the data root, which is what it should
+    /// normally be.
+    pub library_root: Option<PathBuf>,
+}
+
+impl TrainerLaneSettings {
+    /// Refuse a trainer this composition could not honestly run.
+    ///
+    /// The device vocabulary is closed and, for now, one word wide. A GPU
+    /// trainer is not composable while [`mesh::HostFacts::gpu`] is `false` on
+    /// this lane — the works would advertise a capability nothing behind it
+    /// can answer — so `"gpu"` is refused *by name* rather than quietly
+    /// falling back to the CPU the owner did not ask for.
+    pub fn validate(&self) -> Result<(), String> {
+        match self.device.trim() {
+            "cpu" => Ok(()),
+            other => Err(format!(
+                "distillery.trainer.device must be \"cpu\" (got {other:?}): this lane reports \
+                 HostFacts.gpu as false because nothing in it can run a GPU job, so a \
+                 GPU trainer would advertise work the device would then fail. Say \
+                 \"cpu\", or set distillery.trainer to null."
+            )),
+        }
+    }
+}
+
+/// Read one retention bound out of the owner's closed vocabulary.
+///
+/// Shared by [`DistilleryLaneSettings::validate`] and the lane's conversion
+/// into [`mesh::MeshRetentionPolicy`], so a string that validates is exactly a
+/// string that converts.
+pub fn parse_keep_bound(value: &str, field: &str) -> Result<KeepBound, String> {
+    match value.trim() {
+        "forever" => Ok(KeepBound::Forever),
+        "until-checkpoint" => Ok(KeepBound::UntilCheckpoint),
+        other => other.parse::<u64>().map(KeepBound::ForAgeMs).map_err(|_| {
+            format!(
+                "{field} must be \"forever\", \"until-checkpoint\", or a whole number of \
+                 milliseconds (got {other:?})"
+            )
+        }),
+    }
 }
 
 /// Owner-configurable backing for resident content-addressed bytes.
@@ -712,6 +901,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            distillery: None,
             content: ResidentContentSettings::default(),
         };
         settings.save(&path).unwrap();
@@ -889,6 +1079,215 @@ mod tests {
             )
             .is_some(),
             "a graph named on the command line enables sync with no file"
+        );
+    }
+
+    fn distillery_lane() -> DistilleryLaneSettings {
+        DistilleryLaneSettings {
+            tick_every_ms: 250,
+            maintenance_every_ms: Some(60_000),
+            blob_gc_every_ms: 300_000,
+            collect_after_checkpoint: true,
+            retention_revision: "11".repeat(32),
+            promised_floor: "forever".into(),
+            privacy_ceiling: "until-checkpoint".into(),
+            erase_terminal_at_checkpoint: true,
+            max_skew_ms: 60_000,
+            trainer: None,
+        }
+    }
+
+    #[test]
+    fn the_distillery_lane_round_trips_and_stays_absent_when_unconfigured() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("works.json");
+        let settings = OwnerSettings {
+            distillery: Some(distillery_lane()),
+            ..OwnerSettings::default()
+        };
+        settings.save(&path).unwrap();
+        assert_eq!(OwnerSettings::load(&path).unwrap(), settings);
+
+        let empty = OwnerSettings::default();
+        assert!(
+            empty.distillery.is_none(),
+            "an unconfigured profile must not acquire a works lane by default"
+        );
+        let blank = directory.path().join("blank.json");
+        empty.save(&blank).unwrap();
+        assert_eq!(OwnerSettings::load(&blank).unwrap().distillery, None);
+    }
+
+    #[test]
+    fn a_typo_in_a_distillery_field_is_refused_rather_than_ignored() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("typo.json");
+        let mut json = serde_json::to_value(OwnerSettings {
+            distillery: Some(distillery_lane()),
+            ..OwnerSettings::default()
+        })
+        .unwrap();
+        let lane = json["distillery"].as_object_mut().unwrap();
+        let value = lane.remove("tick_every_ms").unwrap();
+        lane.insert("tick_ever_ms".into(), value);
+        std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
+
+        assert!(
+            OwnerSettings::load(&path).is_err(),
+            "a misspelled cadence must fail loudly; silently ignoring it would \
+             leave the owner believing they had set one"
+        );
+    }
+
+    #[test]
+    fn a_revision_that_is_not_a_key_is_refused() {
+        let mut lane = distillery_lane();
+        lane.retention_revision = "not-hex".into();
+        let refusal = lane.validate().expect_err("a governance tag is 32 bytes");
+        assert!(refusal.contains("retention_revision"), "{refusal}");
+
+        lane.retention_revision = "11".repeat(31);
+        assert!(
+            lane.validate().is_err(),
+            "a short revision must not be zero-padded into a different one"
+        );
+    }
+
+    #[test]
+    fn retention_bounds_come_from_a_closed_vocabulary() {
+        assert_eq!(
+            parse_keep_bound("forever", "field"),
+            Ok(mesh::KeepBound::Forever)
+        );
+        assert_eq!(
+            parse_keep_bound("until-checkpoint", "field"),
+            Ok(mesh::KeepBound::UntilCheckpoint)
+        );
+        assert_eq!(
+            parse_keep_bound("86400000", "field"),
+            Ok(mesh::KeepBound::ForAgeMs(86_400_000))
+        );
+
+        let mut lane = distillery_lane();
+        lane.promised_floor = "eventually".into();
+        let refusal = lane.validate().expect_err("`eventually` is not a bound");
+        assert!(refusal.contains("promised_floor"), "{refusal}");
+        assert!(refusal.contains("eventually"), "{refusal}");
+    }
+
+    #[test]
+    fn a_cadence_that_would_spin_or_never_run_is_refused() {
+        for spoil in [
+            (|lane: &mut DistilleryLaneSettings| lane.tick_every_ms = 0) as fn(&mut _),
+            |lane: &mut DistilleryLaneSettings| lane.blob_gc_every_ms = 0,
+            |lane: &mut DistilleryLaneSettings| lane.maintenance_every_ms = Some(0),
+        ] {
+            let mut lane = distillery_lane();
+            spoil(&mut lane);
+            assert!(lane.validate().is_err(), "{lane:?}");
+        }
+        let mut explicit_only = distillery_lane();
+        explicit_only.maintenance_every_ms = None;
+        assert_eq!(
+            explicit_only.validate(),
+            Ok(()),
+            "`null` is a statement: maintenance stays an explicit command"
+        );
+    }
+
+    #[test]
+    fn a_trainer_lane_round_trips_and_is_absent_only_by_saying_so() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("trainer.json");
+        let mut lane = distillery_lane();
+        lane.trainer = Some(TrainerLaneSettings {
+            device: "cpu".into(),
+            library_root: None,
+        });
+        let settings = OwnerSettings {
+            distillery: Some(lane.clone()),
+            ..OwnerSettings::default()
+        };
+        settings.save(&path).unwrap();
+        assert_eq!(OwnerSettings::load(&path).unwrap(), settings);
+        assert_eq!(lane.validate(), Ok(()));
+
+        // An override path is the owner's word about where artifacts live, so
+        // it round-trips as itself rather than being normalised away.
+        let elsewhere = directory.path().join("elsewhere").join("library.redb");
+        lane.trainer = Some(TrainerLaneSettings {
+            device: "cpu".into(),
+            library_root: Some(elsewhere.clone()),
+        });
+        let overridden = OwnerSettings {
+            distillery: Some(lane),
+            ..OwnerSettings::default()
+        };
+        let with_root = directory.path().join("override.json");
+        overridden.save(&with_root).unwrap();
+        assert_eq!(
+            OwnerSettings::load(&with_root)
+                .unwrap()
+                .distillery
+                .and_then(|lane| lane.trainer)
+                .and_then(|trainer| trainer.library_root),
+            Some(elsewhere)
+        );
+    }
+
+    #[test]
+    fn a_lane_that_never_mentions_a_trainer_is_refused_rather_than_assumed_off() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("silent.json");
+        let mut json = serde_json::to_value(OwnerSettings {
+            distillery: Some(distillery_lane()),
+            ..OwnerSettings::default()
+        })
+        .unwrap();
+        assert!(
+            json["distillery"]
+                .as_object_mut()
+                .unwrap()
+                .remove("trainer")
+                .is_some(),
+            "`trainer` is serialised, so removing it models an owner who never wrote it"
+        );
+        std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
+        assert!(
+            OwnerSettings::load(&path).is_err(),
+            "forgetting to say and saying no must not look alike: an omitted \
+             `trainer` must fail loudly rather than default to off"
+        );
+    }
+
+    #[test]
+    fn a_trainer_device_this_lane_cannot_honour_is_refused_by_name() {
+        for device in ["gpu", "wgpu", "cuda", ""] {
+            let mut lane = distillery_lane();
+            lane.trainer = Some(TrainerLaneSettings {
+                device: device.into(),
+                library_root: None,
+            });
+            let refusal = lane
+                .validate()
+                .expect_err("only \"cpu\" is composable while HostFacts.gpu is false");
+            assert!(refusal.contains("distillery.trainer.device"), "{refusal}");
+            assert!(
+                refusal.contains(&format!("{device:?}")),
+                "the refusal must name the value it refused: {refusal}"
+            );
+            assert!(
+                refusal.contains("HostFacts.gpu"),
+                "the refusal must say why, not just that: {refusal}"
+            );
+        }
+
+        let mut lane = distillery_lane();
+        lane.trainer = None;
+        assert_eq!(
+            lane.validate(),
+            Ok(()),
+            "`null` is a statement: this lane composes no trainer"
         );
     }
 

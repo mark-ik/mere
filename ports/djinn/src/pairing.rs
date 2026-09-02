@@ -221,6 +221,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            distillery: None,
             content: Default::default(),
         }
         .save(&path)
@@ -291,6 +292,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            distillery: None,
             content: Default::default(),
         }
         .save(&path)

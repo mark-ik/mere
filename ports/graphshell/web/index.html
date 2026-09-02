@@ -100,8 +100,82 @@
           <label for="address-title">Title</label>
           <input id="address-title" value="New research object">
           <button data-command="add-address">Add address</button>
+          <button data-command="open-projection-editor">Edit projection</button>
           <label class="file-picker" for="file-input">Choose a file</label>
           <input id="file-input" type="file">
+        </section>
+
+        <section
+          id="projection-editor"
+          aria-label="Projection editor"
+          aria-hidden="true"
+          hidden
+        >
+          <h2>Projection editor</h2>
+          <p id="projection-editor-status" role="status">Draft ready · unsaved</p>
+          <p id="projection-editor-validation" role="status">Valid draft</p>
+          <p id="projection-editor-lane">ContentSource::Open · graphshell.projection-editor.panel · source</p>
+          <div id="projection-editor-panels" role="tablist" aria-label="Projection editor panels">
+            <button id="projection-panel-source" type="button" role="tab" data-projection-panel="source" aria-selected="true">Source</button>
+            <button id="projection-panel-reading" type="button" role="tab" data-projection-panel="reading" aria-selected="false">Reading</button>
+            <button id="projection-panel-encoding" type="button" role="tab" data-projection-panel="encoding" aria-selected="false">Encoding</button>
+            <button id="projection-panel-arrangement" type="button" role="tab" data-projection-panel="arrangement" aria-selected="false">Arrangement</button>
+            <button id="projection-panel-interaction" type="button" role="tab" data-projection-panel="interaction" aria-selected="false">Interaction</button>
+            <button id="projection-panel-preview" type="button" role="tab" data-projection-panel="preview" aria-selected="false">Preview</button>
+            <button id="projection-panel-provenance" type="button" role="tab" data-projection-panel="provenance" aria-selected="false">Provenance</button>
+          </div>
+          <p><strong>Source</strong> <span id="projection-editor-source"></span></p>
+          <p><strong>Provenance</strong> <span id="projection-editor-provenance"></span></p>
+          <section id="projection-fields-source" data-projection-panel-fields="source">
+            <label for="projection-source-authority">Authority</label>
+            <input id="projection-source-authority" data-projection-field="source.authority">
+            <label for="projection-source-domain">Domain</label>
+            <input id="projection-source-domain" data-projection-field="source.domain">
+            <label for="projection-source-resource">Resource</label>
+            <input id="projection-source-resource" data-projection-field="source.resource">
+          </section>
+          <section id="projection-fields-reading" data-projection-panel-fields="reading" hidden>
+            <label for="projection-reading-key">Reading key</label>
+            <input id="projection-reading-key" data-projection-field="reading.key">
+          </section>
+          <section id="projection-fields-encoding" data-projection-panel-fields="encoding" hidden>
+            <label for="projection-encoding-x">X field</label>
+            <input id="projection-encoding-x" data-projection-field="encoding.x">
+            <label for="projection-encoding-y">Y field</label>
+            <input id="projection-encoding-y" data-projection-field="encoding.y">
+          </section>
+          <section id="projection-fields-arrangement" data-projection-panel-fields="arrangement" hidden>
+            <label for="projection-arrangement-kind">Arrangement id</label>
+            <input id="projection-arrangement-kind" data-projection-field="arrangement.kind">
+            <label for="projection-arrangement-direction">Direction</label>
+            <input id="projection-arrangement-direction" data-projection-field="arrangement.direction">
+            <label for="projection-arrangement-spacing">Spacing</label>
+            <input id="projection-arrangement-spacing" type="number" min="0" data-projection-field="arrangement.spacing">
+          </section>
+          <section id="projection-fields-interaction" data-projection-panel-fields="interaction" hidden>
+            <p>Selection, pan, and zoom remain host interaction policy.</p>
+          </section>
+          <section id="projection-fields-preview" data-projection-panel-fields="preview" hidden>
+            <label for="projection-appearance-realization">Realization id</label>
+            <input id="projection-appearance-realization" data-projection-field="appearance.realization">
+            <label for="projection-appearance-title">Preview title</label>
+            <input id="projection-appearance-title" data-projection-field="appearance.title">
+            <h3>Preview</h3>
+            <p id="projection-editor-preview" data-preview-value=""></p>
+          </section>
+          <section id="projection-fields-provenance" data-projection-panel-fields="provenance" hidden>
+            <label for="projection-provenance-author">Author</label>
+            <input id="projection-provenance-author" data-projection-field="provenance.author">
+            <label for="projection-provenance-revision">Source revision</label>
+            <input id="projection-provenance-revision" data-projection-field="provenance.source_revision">
+            <label for="projection-provenance-note">Note</label>
+            <textarea id="projection-provenance-note" data-projection-field="provenance.note"></textarea>
+          </section>
+          <div class="button-row">
+            <button type="button" data-command="save-projection">Save projection</button>
+            <button type="button" data-command="reload-projection">Reload saved</button>
+            <button type="button" data-command="close-projection-editor">Close</button>
+          </div>
         </section>
 
         <section>

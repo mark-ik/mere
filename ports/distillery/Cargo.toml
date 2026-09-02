@@ -20,7 +20,7 @@ cambium.workspace = true
 eidetic = { workspace = true, optional = true }
 esp = { workspace = true, features = ["decoder-lora"], optional = true }
 pollster = { version = "0.4", optional = true }
-genet-host-api = { version = "0.1.0", git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+genet-host-api = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
@@ -41,5 +41,5 @@ burn-flex = { version = "=0.22.0-pre.2", features = ["default"] }
 safetensors = "0.4"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 tempfile = "3"
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
+genet-scripted-dom = { workspace = true }
+layout-dom-api = { workspace = true }

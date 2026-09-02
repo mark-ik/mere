@@ -57,8 +57,8 @@ pub use authority::{
     BlobCustody, Distillery, DistilleryError, MaintenanceReport, RetentionSettings,
 };
 pub use installed::{
-    DistilleryPaths, InstalledAuthority, InstalledError, InstalledSettings, InstalledSettingsError,
-    distillery_settings_path,
+    DISTILLERY_MESH_SALT, DistilleryPaths, InstalledAuthority, InstalledError, InstalledSettings,
+    InstalledSettingsError, distillery_settings_path,
 };
 #[cfg(feature = "remote")]
 pub use remote::{
@@ -77,6 +77,19 @@ pub use surface::{
 pub use trainer::{
     TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt, TrainRequest, TrainerResource,
 };
+
+/// The trainer's own vocabulary, re-exported so a composition layer can wire
+/// and drive the trainer without naming `esp` — the same courtesy esp already
+/// pays `burn`.
+///
+/// These are not conveniences: [`TrainerResource::new`] takes a
+/// [`TrainerDevice`], and [`TrainRequest`] carries a
+/// [`LoraTrainerSettings`] and is fed by [`TrainingCase`] engrams, so a host
+/// that cannot name them cannot compose the resource or post a job to it.
+/// Re-exporting them here keeps the seam where it already is: distillery
+/// drives esp, and its consumers drive distillery.
+#[cfg(feature = "trainer")]
+pub use esp::infer::decoder::{DecoderDevice as TrainerDevice, LoraTrainerSettings, TrainingCase};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
