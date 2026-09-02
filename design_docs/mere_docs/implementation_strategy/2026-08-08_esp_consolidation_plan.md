@@ -72,7 +72,7 @@ holds the ledger, it does not absorb the lanes.
 
 ## 2. The consumer graph (verified, and why this is small)
 
-`vates` ← `mere-infer` only. `sibylla` ← `mere-embed` **and `ports/knot`**
+`vates` ← `mere-infer` only. `sibylla` ← `mere-embed` **and `knot-editor`**
 (`sibylla.workspace = true`, knot:51). `mere-embed` ← `eidetic-search` only.
 **`mere-infer` ← nobody**: it exists to re-export vates under `infer::` paths,
 nothing imports it, and its only original content is one integration test.

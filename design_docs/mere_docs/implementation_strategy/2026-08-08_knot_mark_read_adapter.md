@@ -1,5 +1,10 @@
 # Knot Mark read adapter
 
+> **Repository note (2026-09-01):** this is a historical integration record.
+> Current Knot source and product authority live in the public
+> [`knot-editor`](https://github.com/merely-made/knot-editor) repository; local
+> `ports/knot` paths below name the source layout when each receipt landed.
+
 Status: implemented bounded adapter, pending an external Demarkus-client
 receipt.
 

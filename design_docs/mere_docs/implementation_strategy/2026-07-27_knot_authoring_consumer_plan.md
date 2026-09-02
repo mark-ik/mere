@@ -1,5 +1,10 @@
 # Knot Authoring Consumer Plan
 
+> **Repository note (2026-09-01):** this is a historical integration record.
+> Current Knot source and product authority live in the public
+> [`knot-editor`](https://github.com/merely-made/knot-editor) repository; paths
+> below retain the layout used by the recorded receipts.
+
 **Date:** 2026-07-27
 **Status:** all Knot-owned work in the reconciled sequence is complete locally:
 A1 through A4, typed Inspector clip insertion, production Resolve/Run

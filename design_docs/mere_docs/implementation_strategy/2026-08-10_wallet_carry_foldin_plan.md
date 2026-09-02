@@ -47,7 +47,7 @@ verbatim move wrong:
   doctrine; only the model beneath it moves.
 - `manifest::PersonaId` is already a re-export of `identity::PersonaId`; no
   type split exists.
-- Consumers outside session-runtime: **ports/knot** (`knot_sync_host`,
+- Consumers outside session-runtime: **knot-editor** (`knot_sync_host`,
   `startup.rs`, `tests/revision_bell.rs`). Re-exports must keep these
   compiling unchanged until W4 re-bases them.
 - Sizes: `wallet_store.rs` 1653 lines, `wallet_grant.rs` 2524. Both breach

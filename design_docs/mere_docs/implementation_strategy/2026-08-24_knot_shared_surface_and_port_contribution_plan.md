@@ -9,7 +9,9 @@ accessibility landed; P0 is complete — Turnstone admits
 `distillery.installed.v1` through the existing registry with no
 provider-specific renderer arm, the full shell binary builds from published
 sources, and the contract is reduced and frozen at v1 (Genet `001448d55`,
-Turnstone `3f63671`); F0 is the next gated lane
+Turnstone `3f63671`); the independent `knot-editor` repository extraction and
+Mere/Turnstone consumer cutovers are complete as of 2026-09-01; F0 is the next
+gated lane
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -21,6 +23,7 @@ plugin API.
 - [Knot port plan](2026-07-25_knot_port_plan.md)
 - [Knot authoring consumer plan](2026-07-27_knot_authoring_consumer_plan.md)
 - [Knot in Graphshell plan](2026-08-02_knot_in_graphshell_plan.md)
+- [Knot repository](https://github.com/merely-made/knot-editor)
 - [Device resident consolidation plan](2026-08-20_device_resident_consolidation_plan.md)
 - [Configuration ownership and settings projection plan](2026-08-06_configuration_ownership_settings_projection_plan.md)
 - Turnstone `design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md`
@@ -28,10 +31,11 @@ plugin API.
 
 ## 1. Ruling
 
-Knot is a Mere port and a useful application by itself. Its first product is a
-Djot-native editor over files in place, with a graph substrate, local search,
-portable referenced evidence, and peer replication. Standalone Knot and
-Turnstone consume the same Knot product model and Cambium surface.
+Knot is an independent product and an embeddable Mere port. Its first product
+is a Djot-native editor over files in place, with a graph substrate, local
+search, portable referenced evidence, and peer replication. Standalone Knot,
+Mere residents, and Turnstone consume the same Knot product model and Cambium
+surface.
 
 Turnstone is the compositor. It owns placement, window and pane lifetime,
 focus, layout, hit testing, theme, AccessKit hosting, and shell policy. Knot
@@ -46,6 +50,15 @@ watcher, replication, evidence, and sharing dashboards follow after this seam
 works in two hosts.
 
 ## 2. Findings
+
+### 2026-09-01: Knot is independently versioned and embeds back into Mere
+
+The product packages and desktop wrapper now live in the public
+[`knot-editor`](https://github.com/merely-made/knot-editor) repository. Mere and
+Turnstone consume an immutable Knot revision, while Knot independently pins the
+Mere and Genet contracts it composes. References below to `ports/knot`,
+`ports/knot-document`, and `ports/knot/desktop` describe the historical source
+locations at the time of those receipts.
 
 ### 2026-08-24: the closed seam is larger than `PaneRenderer`
 
@@ -687,6 +700,20 @@ through UI admission.
   test fixtures drop the removed fields when each repo aligns past
   `001448d55`; the pointer-capture routing gap stays noted for the T lane.
   P0 is complete.
+- 2026-09-01: Knot was extracted with preserved history to the public
+  [`knot-editor`](https://github.com/merely-made/knot-editor) repository. A
+  fresh checkout passed 15 `knot-document` tests, 94 editor-library tests, and
+  the desktop host receipt. Turnstone PR #4 consumes immutable Knot revision
+  `c4d15aa6`; its two five-test authoring suites and all five external-endpoint
+  tests pass with one identity for every shared Mere and Genet contract.
+- 2026-09-01: Mere now consumes the same immutable Knot revision, patches
+  Knot's Mere dependencies back to this checkout, and has removed
+  `ports/knot`, `ports/knot-document`, and their workspace entries. Workspace
+  metadata contains one Git identity for each Knot package and one identity
+  for every shared Mere and Genet contract. Djinn's live pairing, joined-sync,
+  route-reopen resident test passes against the external package. The test
+  profile retains line-table debug info for `mere-canvas`, avoiding MSVC's
+  practical 4 GiB archive boundary while keeping useful backtraces.
 
 ## 8. Final done conditions
 

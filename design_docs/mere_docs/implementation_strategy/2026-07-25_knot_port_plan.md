@@ -1,5 +1,10 @@
 # Knot Port Plan
 
+> **Repository note (2026-09-01):** this is the historical in-tree execution
+> record. Current Knot source and product authority live in the public
+> [`knot-editor`](https://github.com/merely-made/knot-editor) repository; local
+> `ports/knot` paths below name the source layout when each receipt landed.
+
 **Date:** 2026-07-25
 **Status:** implementation complete locally 2026-07-27. K0 through K7 are
 executable. Knot has now pulled Stickleback's causal projection seam:

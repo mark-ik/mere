@@ -1,5 +1,10 @@
 # Knot in Graphshell Plan
 
+> **Repository note (2026-09-01):** this is a historical integration record.
+> Current Knot source and product authority live in the public
+> [`knot-editor`](https://github.com/merely-made/knot-editor) repository; local
+> `ports/knot` paths below name the source layout when each receipt landed.
+
 **Date:** 2026-08-02
 **Status:** K0-K3 complete. K1 chose Option A (Mark): shared documents are
 projected, personal documents replicate, and T4's done condition is replaced

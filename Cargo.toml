@@ -97,8 +97,6 @@ members = [
     "crates/graphshell/graphshell-local",
     "crates/graphshell/graphshell-network",
     "ports/graphshell",
-    "ports/knot",
-    "ports/knot-document",
     "ports/djinn",
     "ports/castellan",
     "ports/distillery",
@@ -111,9 +109,6 @@ exclude = [
     # The unpublished browser host carries Git-only Genet presentation deps.
     # Keep it outside release resolution; it remains buildable by manifest path.
     "ports/graphshell/web",
-    # The desktop wrapper carries Git-only Genet presentation deps. Keep it
-    # buildable by manifest path without ordinary Mere resolution pulling winit.
-    "ports/knot/desktop",
     # A private cross-product port: it consumes the neighboring Retinue
     # checkout during the integration phase, so it must not make the Mere
     # workspace's ordinary build acquire a sibling checkout.
@@ -197,8 +192,11 @@ graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { version = "0.0.2", path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { version = "0.0.2", path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { version = "0.0.1", path = "crates/graphshell/graphshell-network" }
-knot-editor = { version = "0.0.3", path = "ports/knot" }
-knot-document = { version = "0.0.1", path = "ports/knot-document" }
+# Knot is an independently releasable product that embeds back into Mere.
+# Pin one reviewed source revision; the patch table below makes Mere's own
+# workspace the implementation source for Knot's Mere-facing contracts here.
+knot-editor = { version = "0.0.3", git = "https://github.com/merely-made/knot-editor.git", rev = "c4d15aa66eee46060081902ba8459f01c9c82f98" }
+knot-document = { version = "0.0.1", git = "https://github.com/merely-made/knot-editor.git", rev = "c4d15aa66eee46060081902ba8459f01c9c82f98" }
 # The credential-keeper port (dramatis plan D4). No longer a reservation:
 # C1/C2 landed the OTP core, sealed OTP items, the release gate, and the
 # `keeper` identity surface graphshell re-exports.
@@ -422,11 +420,44 @@ retinue = { version = "0.1.1", git = "https://github.com/merely-made/retinue.git
 hkdf = "0.13"
 sha2 = "0.11"
 
+# Full MSVC test debuginfo makes mere-canvas's archive exceed the linker's
+# practical 4 GiB boundary. Line tables retain useful test backtraces while
+# keeping every workspace test archive linkable on Windows.
+[profile.test.package.mere-canvas]
+debug = 1
+
 [workspace.lints.rust]
 unsafe_code = "warn"
 
 [workspace.lints.clippy]
 all = "warn"
+
+# Knot pins a released Mere revision when it builds independently. While Knot
+# is embedded in this workspace, use the checked-out Mere packages so shared
+# contracts retain one Cargo source identity.
+[patch."https://github.com/merely-made/mere.git"]
+chartulary = { path = "crates/eidetic/chartulary" }
+chirograph = { path = "crates/chirograph" }
+mere-eidetic = { path = "crates/eidetic/eidetic-core" }
+esp = { path = "crates/intel/esp" }
+mere-fetch = { path = "crates/system/fetch" }
+gemot = { path = "crates/moot/gemot" }
+graphshell = { path = "ports/graphshell" }
+graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
+graphshell-local = { path = "crates/graphshell/graphshell-local" }
+graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
+mora-cmudict = { path = "crates/intel/mora-cmudict" }
+muniment = { path = "crates/eidetic/muniment" }
+notochord = { path = "crates/system/notochord" }
+pandect = { path = "crates/system/pandect" }
+personae = { path = "crates/dramatis/personae" }
+mere-proofs = { path = "crates/system/proofs" }
+sceno = { path = "crates/scenograph/sceno" }
+scenotime = { path = "crates/scenograph/scenotime" }
+script-rhai = { path = "crates/script/rhai" }
+servitor = { path = "crates/servitor" }
+stickleback = { path = "crates/stickleback" }
+mere-transport = { path = "crates/murm/transport" }
 
 # ─── Cross-repo render-stack alignment (Mere → Genet) ───────────────────────
 # Livery/Buckram consume Genet's Taffy fork directly. The retired Stylo layout

@@ -139,7 +139,8 @@ map, which is the observation that produced the scene register.
 
 ## Lane C — Rosette for text (mora's first consumer)
 
-**Repos**: knot (`mere/ports/knot`), mere, mora. **Gate**: open, and this
+**Repos**: [`knot-editor`](https://github.com/merely-made/knot-editor), mere,
+mora. **Gate**: open, and this
 lane carries the session's one piece of unforced surface.
 
 `mora` 0.1.0 is published and consumed by nothing. The founding convention
