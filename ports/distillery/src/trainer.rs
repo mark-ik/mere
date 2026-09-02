@@ -36,6 +36,8 @@ use esp::infer::decoder::{
     DecoderDevice, LoraTrainerSettings, PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader,
     TRAINED_ADAPTER_FORMAT_VERSION, TrainingCase, ranking_tally, train_peft_lora,
 };
+#[cfg(feature = "trainer-gpu")]
+use esp::infer::decoder::{DecoderGpuKind as TrainerGpuKind, GpuAdapterFacts, GpuDeviceType};
 use esp::infer::{AdapterArtifact, AdapterLoader, AdapterSelection, ModelSession};
 use mesh::namespace::BoxFuture;
 use mesh::{
@@ -91,6 +93,40 @@ pub struct TrainReceipt {
     pub baseline: EvalTally,
     /// Adapter-enabled result on the same cases.
     pub adapter: EvalTally,
+}
+
+/// The local discrete GPU as a trainer device, or a refusal naming what was
+/// found instead.
+///
+/// The point of this function is that [`DecoderDevice::wgpu`] cannot fail. It
+/// names a device *kind*; the adapter behind that kind is resolved later,
+/// inside cubecl, at the first kernel launch — and cubecl, asked for a
+/// discrete GPU it cannot find, hands back an unclassified adapter rather than
+/// saying no. A host that composed on that and then advertised
+/// [`mesh::HostFacts::gpu`] would be advertising work it might run on anything
+/// at all.
+///
+/// So the order here is: **ask first, compose second**. The probe reports what
+/// the runtime would bind, this refuses everything that is not a real discrete
+/// GPU by name, and only then is a device constructed. The facts come back
+/// alongside the device so the composer can log them and a receipt can assert
+/// on them — a claim about the GPU that nobody checked is exactly what this
+/// exists to prevent.
+#[cfg(feature = "trainer-gpu")]
+pub fn discrete_gpu_trainer_device() -> Result<(DecoderDevice, GpuAdapterFacts), String> {
+    let facts = esp::infer::decoder::probe_gpu_adapter(TrainerGpuKind::DiscreteGpu(0))
+        .map_err(|error| format!("no discrete GPU this trainer could run on: {error}"))?;
+
+    if facts.device_type != GpuDeviceType::Discrete || !facts.matched_requested_class {
+        return Err(format!(
+            "the wgpu runtime would bind {facts} for a discrete-GPU request, which is not a \
+             discrete GPU of that class. cubecl substitutes an unclassified adapter rather \
+             than refusing, so composing here would put the trainer on unknown hardware \
+             while the device advertised a GPU."
+        ));
+    }
+
+    Ok((DecoderDevice::wgpu(TrainerGpuKind::DiscreteGpu(0)), facts))
 }
 
 /// Mesh resource wrapping the v0 deterministic LoRA trainer over one

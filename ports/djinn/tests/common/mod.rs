@@ -6,12 +6,17 @@
 
 //! Fixtures shared by the Distillery lane receipts.
 //!
-//! Two integration tests open the same resident from the same kind of owner
+//! Three integration tests open the same resident from the same kind of owner
 //! statement — `distillery_lane.rs` proves the lane runs a job at all,
 //! `distillery_trainer.rs` proves the trainer it composes produces real
-//! artifacts — and a second copy of the vault, profile, device-settings and
-//! lending-posture setup would be a place for the two receipts to silently
-//! disagree about what "the same device" means.
+//! artifacts, and `distillery_trainer_gpu.rs` proves the same composition on
+//! this machine's discrete GPU — and a second copy of the vault, profile,
+//! device-settings and lending-posture setup would be a place for the receipts
+//! to silently disagree about what "the same device" means.
+//!
+//! The GPU receipt sharing this fixture is load-bearing rather than tidy: its
+//! tallies are only interpretable against the CPU receipt's because both runs
+//! train on byte-identical weights and the same held-out partition.
 //!
 //! The trainer half (behind the `trainer` feature) additionally carries the
 //! tiny synthetic llama fixture. That is one more copy of the fixture that

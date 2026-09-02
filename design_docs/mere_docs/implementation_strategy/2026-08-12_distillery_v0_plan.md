@@ -724,9 +724,9 @@ written `[]` is the owner stating no restriction, while omission is refused
 host policy. And the trainer now runs in the resident behind djinn's
 `trainer` feature: `DistilleryLaneSettings.trainer` is a required
 `Option<TrainerLaneSettings>` whose `null` composes no trainer, whose
-`device` accepts only `cpu` while `HostFacts.gpu` is false, and whose
-presence on a build without the feature refuses `open` rather than
-composing a works that cannot do what its settings claim. Making it
+`device` accepted only `cpu` (widened to `cpu` or `gpu` on 2026-09-02, see
+below), and whose presence on a build without the feature refuses `open`
+rather than composing a works that cannot do what its settings claim. Making it
 required exposed that `maintenance_every_ms`, documented as "`null` is a
 statement too", had never actually been required: serde supplies `None`
 for a missing `Option` unless a `deserialize_with` removes that default.
@@ -746,10 +746,20 @@ resource, observes completion on `SystemClock`, reads the committed
 0/6 versus adapter 4/6, the forcing fixture's numbers,
 now through the desktop resident.
 
-Remaining deferrals, recorded rather than defaulted: thermal and bandwidth
-are stated-only; the off-Windows path reports the UTC hour for `local_hour`
-and is stated-only territory; the trainer device is CPU until a GPU lane
-earns `HostFacts.gpu`.
+Remaining deferrals, recorded rather than defaulted: thermal is stated-only,
+now on evidence rather than on convenience (see below). Bandwidth, the
+off-Windows `local_hour` and the CPU-only trainer were all closed on
+2026-09-02. The trainer now runs on this machine's discrete GPU behind
+djinn's `trainer-gpu` feature, and `HostFacts.gpu` follows the resource that
+was composed rather than the hardware present — which matters because of what
+sits underneath: cubecl's `select_from_adapter_list`, asked for
+`DiscreteGpu(0)` where no discrete adapter exists, **falls through to the
+unclassified `DeviceType::Other` list at the same index** and returns whatever
+is there, panicking only when that list is short too. `Device::wgpu` cannot
+fail, so nothing on the burn side ever reports the substitution. The answer is
+an esp probe that mirrors cubecl's selection and reports the adapter *before*
+a device is constructed, so the lane refuses rather than trains on hardware
+nobody named (see below).
 
 ### The full workspace gate, closed 2026-09-01
 
@@ -791,6 +801,184 @@ Recovering required wiping the target directory rather than cleaning
 individual packages, since dependents keep referencing the old metadata
 hash. The passing run used `-j 4` and `CARGO_PROFILE_DEV_DEBUG=line-tables-only`
 by environment, changing no committed profile.
+
+### Two condition deferrals closed, and thermal recorded as evidence, 2026-09-02
+
+**Bandwidth is sensed.** `bandwidth_in_use_kbps` now comes from the adapter
+byte counters — `GetAdaptersAddresses` for the adapter walk, `GetIfEntry2`
+per adapter for `InOctets + OutOctets` — summed over exactly the adapters
+`network()` already counts as uplinks (operationally up, not loopback, not a
+tunnel, holding a gateway), because a rate summed over a different set than
+the class describes would be two answers about two machines. Still no COM.
+
+A rate needs two readings, so the sensor keeps the previous counter total and
+its timestamp under one lock, and computes `delta_octets * 8 / elapsed_ms`
+once at least 100 ms separate them; a total that went *down* (counter wrap,
+adapter reset) is a baseline that no longer applies rather than a negative
+rate, so that pass reports no new rate and re-baselines. A sensed rate beats
+the owner's stated number outright.
+
+The provenance rule is the part worth recording. `bandwidth` is `Sensed`
+whenever the counters were *readable* on that pass, including the very first
+reading in `DeviceConditionSensor::new`, where no interval exists yet and the
+value falls back to the stated number or to `ABSENT_BANDWIDTH_IN_USE_KBPS`.
+That is honest because of what the provenance is for:
+`validate_policy_coverage` runs at composition and asks whether this device
+can read its link counters at all, which readability answers, and the first
+reading never reaches a policy — the host takes conditions on its first
+supervisor tick, one `tick_every_ms` later, by which time a real interval
+exists. Unreadable counters still fall through to stated, then to `Absent`,
+and a bandwidth rule on such a device is still refused by name. Off Windows
+the counters are not read at all, so bandwidth stays stated-only there.
+
+Measured on this laptop while writing the tests: 8,347,331,657 cumulative
+octets across the up-and-gatewayed adapters, a 19,073-octet delta over 200 ms,
+which the sensor reported as 585 kbps, `Sensed`. The counters move.
+
+**The off-Windows local hour is real.** `sensed::local_hour` on
+`cfg(not(windows))` returned the *UTC* hour and the module docs carried it as
+a known approximation, which made `DevicePolicy::quiet_hours` untrustworthy
+anywhere but Windows. It is now `chrono::Local::now().hour()`, behind a
+`[target.'cfg(not(windows))'.dependencies]` entry on chrono 0.4.45 — already
+in the graph — with default features off and `clock` on. chrono rather than
+`time`: `time`'s local-offset lookup refuses in a multi-threaded process on
+Unix, and the resident is one. Windows keeps `GetLocalTime`.
+
+**Thermal stays an owner statement, and now says why.** The only COM-free
+route to a package temperature is the `Thermal Zone Information`
+performance-counter set through PDH, which does read without elevation. On
+the development laptop (2026-09-02) `\_TZ.TZ01` reported a constant 368.2 K
+(`High Precision` 3682) through idle, an 89% CPU load burst, and the
+cool-down after it, with `Throttle Reasons` 0 throughout: the ACPI zone on
+this hardware is a static value, not a sensor.
+`MSAcpi_ThermalZoneTemperature` over WMI is access-denied without elevation
+and needs a COM apartment besides. A live temperature exists only through
+vendor tools — `nvidia-smi` read the GPU at 75 °C — which are outside this
+stack. A reading the policy would believe as sensed has to move, so thermal
+remains a stated signal until hardware with a live ACPI zone is in hand. This
+is a finding, not a deferral: the module docs carry the same paragraph so the
+next reader does not re-run the experiment.
+
+Gates: `cargo fmt -p djinn` clean, `cargo clippy -p djinn --all-targets`
+adding no finding in `conditions.rs` (djinn's four pre-existing findings are
+in `personal_sync.rs` and `resident_knot.rs`), `cargo test -p djinn` 65 lib
+tests and 5 lane receipts passing. `cargo check -p djinn --target
+x86_64-unknown-linux-gnu` cannot run on this machine: the target's std is
+installed but `ring`'s build script needs an `x86_64-linux-gnu-gcc` that is
+not, so the changed non-Windows module was type-checked for that target in
+isolation instead, against the same chrono feature set.
+
+### The trainer on the discrete GPU, and the substitution it must not fall for, 2026-09-02
+
+Ruled by the owner the same day: a `trainer-gpu` feature and a `"gpu"` device
+word, composing `Device::wgpu(DiscreteGpu(0))`, with `HostFacts.gpu` true only
+when that resource registered and a receipt that runs the forcing fixture on
+the RTX 4060 and asserts the adapter was *acquired*, not fallen back from.
+The last clause is the whole design, and this is why.
+
+**The trap.** `Device::wgpu(kind)` is infallible: it names a device *kind*, and
+the adapter behind that kind is not resolved until the first kernel launches,
+inside cubecl. cubecl's `select_from_adapter_list` (cubecl-wgpu 0.11.0-pre.2,
+`runtime.rs`) partitions the enumerated adapters into two lists — those whose
+`wgpu::DeviceType` matches the requested class, and those reporting
+`DeviceType::Other` — and when the requested list is shorter than the index it
+**takes from the `Other` list at that index instead**, panicking only when
+that list is short too. Nothing reports the substitution. A resident that
+asked for a discrete GPU, got something else, and then advertised
+`HostFacts.gpu` to the ring would be lying in the one direction the mesh
+cannot check, and a receipt that only asserted "the job completed with
+`device: gpu`" would pass on exactly that machine. This laptop has two
+adapters — an NVIDIA GeForce RTX 4060 Laptop GPU (discrete) and an AMD Radeon
+780M (integrated) — so "a GPU ran it" is not the same claim as "the discrete
+GPU ran it".
+
+**The answer: ask before composing.** `esp::infer::decoder::gpu_probe`
+(behind `decoder-wgpu`) reports the adapter the wgpu runtime *would* bind, as
+plain data — `GpuAdapterFacts { name, backend, device_type,
+matched_requested_class }` over a `GpuDeviceType` of its own rather than
+`wgpu`'s. It mirrors cubecl exactly: the same `AutoGraphicsApi` backend
+(Vulkan off macOS), the same `enumerate_adapters` over that backend alone, the
+same device-type filter, the same index, and the same
+`CUBECL_WGPU_DEFAULT_DEVICE` rule — which is asymmetric and worth recording:
+cubecl consults that variable **only** for `DefaultDevice`/`BestAvailable`, and
+an explicit `DiscreteGpu(0)` ignores it. The probe copies that rather than
+improving on it, with one deliberate divergence: a value the variable carries
+that cubecl cannot parse is refused by name instead of logged and dropped.
+It creates an instance and enumerates; it never requests a device or a queue,
+so the probe binds nothing. The substitution case is *reported*, not refused —
+`matched_requested_class: false` — because whether an unclassified adapter is
+acceptable is the caller's policy. esp is where this lives because esp already
+owns the burn boundary; it uses the workspace's single `wgpu` 30.0.1, the same
+one cubecl-wgpu resolves to, which is what makes the answer an answer about
+the adapter cubecl would really bind rather than a parallel enumeration.
+
+Because it is a mirror, it can drift. That is why the receipt runs real work
+on the reported adapter rather than trusting the report.
+
+**The three layers, each refusing in its own vocabulary.**
+
+- `distillery::discrete_gpu_trainer_device()` (feature `trainer-gpu =
+  ["trainer", "esp/decoder-wgpu"]`) probes, refuses anything that is not
+  `Discrete` *and* matched out of the discrete class, and only then constructs
+  the device — returning the facts alongside it so nothing downstream has to
+  take the composition on faith.
+- `djinn`'s `TrainerLaneSettings::device` now accepts `"cpu"` and `"gpu"`
+  syntactically and nothing else. The check is deliberately syntactic: a
+  settings file is validated on whatever machine reads it, so refusing `"gpu"`
+  there would make the same file valid or invalid depending on what was
+  plugged in.
+- `resident_distillery::open` answers the two real questions. A `"gpu"` lane on
+  a build without `trainer-gpu` is refused by name, at the same point in the
+  flow as the existing trainer-without-feature refusal, naming the feature as
+  the way out. With the feature, it calls the helper, refuses composition on
+  its error naming what was found instead, logs the adapter and backend at
+  `info`, registers `TrainerResource` on the returned device, and exposes the
+  facts as `ResidentDistillery::trainer_adapter()`.
+
+**`host_facts` now takes the composed `gpu: bool`.** Its doc says the rule
+outright: the fact follows the composed resource, never hardware presence. A
+machine with an RTX in it and a CPU trainer on top still advertises `false`,
+because `HostFacts` is an offer of work this device will *run*. `mesh-host`'s
+`Host` gained a `facts()` accessor beside `policy()`, for the same reason
+`policy()` exists — a composition that claims it reached the supervisor has to
+be checkable there.
+
+**Measured on this machine.** The probe reports `NVIDIA GeForce RTX 4060
+Laptop GPU (vulkan, discrete adapter)`; `DiscreteGpu(99)` is a clean refusal
+naming the index, not a panic. The new receipt
+`ports/djinn/tests/distillery_trainer_gpu.rs` composes the lane with `device:
+"gpu"`, asserts the adapter facts are `Discrete` and matched, asserts
+`HostFacts.gpu == true` on the *installed* host, and drives the same synthetic
+llama fixture through the resident on `SystemClock` to
+Claimed → Started → Completed. **Baseline 0/6, adapter 4/6 at `RankingAt{3}`,
+124.0 s.** The CPU receipt on the identical fixture the same day: baseline
+0/6, adapter 4/6, 16.6 s. Two things worth keeping. The tallies match here but
+the receipt asserts only *strict improvement* and prints what it measured —
+f32 reductions on a GPU need not reproduce ndarray's numbers bit for bit, and
+pinning the figures would make the receipt a test about floating-point luck.
+And the GPU run is **seven and a half times slower**, which is not a defect:
+the fixture is a two-layer, eight-hidden, 32-token model trained by 40
+finite-difference steps, so per-step launch and shader-compilation overhead
+dominates entirely. This receipt proves the lane is honest about its hardware.
+It says nothing about the GPU being the faster place to train, and a model
+large enough to answer that question is its own slice.
+
+Gates: `cargo fmt` clean on the four touched crates (the workspace-wide
+`--check` carries pre-existing diffs in `luggage`, `conatus` and
+`graphshell-client` that this work does not touch); `cargo clippy -p esp
+--features decoder-wgpu,decoder-lora --all-targets` adding no finding in esp's
+own source; `cargo clippy -p djinn --all-targets --features trainer-gpu`
+adding none beyond djinn's four pre-existing ones in `personal_sync.rs` and
+`resident_knot.rs`. Tests: esp `infer::decoder` 46 passed; `distillery
+--features trainer-gpu` 6 + 1 + 1 + 2 + 1 passed; `djinn` default 65 lib + 5
+lane; `--features trainer` 65 lib + 4 lane + 2 CPU-trainer (the second being
+the `cfg(not(feature = "trainer-gpu"))` refusal); `--features trainer-gpu` 65
+lib + 4 lane + 1 CPU-trainer + 1 GPU-trainer. The refusal receipt moved:
+`a_gpu_trainer_is_refused_by_name_before_anything_is_opened` was a settings
+assertion and is now
+`a_build_with_no_gpu_trainer_refuses_a_lane_that_states_one`, which opens a
+resident and reads the composition's refusal, because that is where the
+question moved.
 
 ### Done conditions
 

@@ -35,6 +35,11 @@ iroh = { version = "1.0.3", optional = true }
 default = []
 remote = ["dep:burn-backend", "dep:burn-ir", "dep:burn-remote", "dep:iroh"]
 trainer = ["dep:esp", "dep:eidetic", "dep:pollster", "tokio/rt"]
+# The trainer on the local discrete GPU. Additive over `trainer`: it turns on
+# esp's wgpu decoder backend and the adapter probe that comes with it, so a
+# host can ask which adapter the runtime would bind *before* composing a
+# device on it. Nothing here changes what the CPU trainer does.
+trainer-gpu = ["trainer", "esp/decoder-wgpu"]
 
 [dev-dependencies]
 burn-flex = { version = "=0.22.0-pre.2", features = ["default"] }

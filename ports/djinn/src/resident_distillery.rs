@@ -27,6 +27,13 @@
 //! - **No invented capacity.** [`mesh::HostFacts::memory_mib`] is read from the
 //!   operating system, and a build that cannot read it refuses rather than
 //!   advertising a number.
+//! - **No unearned GPU.** [`mesh::HostFacts::gpu`] follows the resource this
+//!   composition actually registered, never the hardware present. A `"gpu"`
+//!   trainer is composed only after Distillery's adapter probe says the wgpu
+//!   runtime would bind a real discrete adapter — because cubecl, asked for a
+//!   discrete GPU it cannot find, substitutes an unclassified adapter instead
+//!   of refusing. A machine with a GPU and a CPU trainer on it still
+//!   advertises `false`.
 //! - **No borrowed identity.** The mesh id is derived under Distillery's own
 //!   salt from the same Personae profile Djinn resolved, and the retention
 //!   checkpoint authority is that profile's derived mesh author.
@@ -80,6 +87,16 @@ pub struct ResidentDistillery {
     /// build refuses a lane that asks for one rather than opening a store
     /// nothing would ever write to.
     model_library: Option<Arc<Mutex<RedbBackend>>>,
+    /// The adapter the composed trainer actually runs on, when this lane
+    /// composed a GPU trainer.
+    ///
+    /// Kept because the claim `HostFacts::gpu == true` is only as good as the
+    /// evidence behind it, and the evidence is this: the name, backend and
+    /// class of the adapter the wgpu runtime reported *before* the device was
+    /// constructed. A receipt reads it to prove the run went to the discrete
+    /// GPU rather than to whatever cubecl would have substituted.
+    #[cfg(feature = "trainer-gpu")]
+    trainer_adapter: Option<distillery::GpuAdapterFacts>,
 }
 
 impl ResidentDistillery {
@@ -105,6 +122,28 @@ impl ResidentDistillery {
                  carries no trainer; rebuild with the `trainer` feature or set \
                  distillery.trainer to null. A works must not compose settings it cannot \
                  honour."
+                    .into(),
+            );
+        }
+
+        // The same gate, one word narrower: a build may carry the trainer and
+        // still not carry the GPU half of it, and the two are separate
+        // features because the GPU half pulls wgpu and cubecl's whole runtime
+        // in behind burn. Refused at the same point and for the same reason —
+        // training on the CPU because the owner's word was unanswerable would
+        // be exactly the quiet substitution this lane exists to refuse.
+        #[cfg(all(feature = "trainer", not(feature = "trainer-gpu")))]
+        if lane
+            .trainer
+            .as_ref()
+            .is_some_and(|trainer| trainer.device.trim() == "gpu")
+        {
+            return Err(
+                "distillery.trainer.device is \"gpu\", but this build carries no GPU \
+                 trainer; rebuild with the `trainer-gpu` feature or say \"cpu\". A works \
+                 must not compose settings it cannot honour, and training on the CPU \
+                 instead would leave the owner's own settings file reading as proof the \
+                 device trains on its GPU."
                     .into(),
             );
         }
@@ -165,9 +204,10 @@ impl ResidentDistillery {
             )
         })?;
 
-        // Facts and paths are read before `bind_resident` consumes the
-        // authority, so nothing below has to reopen a vault to say where it is.
-        let facts = host_facts()?;
+        // Paths are read before `bind_resident` consumes the authority, so
+        // nothing below has to reopen a vault to say where it is. The host
+        // facts are *not* read here: `gpu` is a fact about what got composed,
+        // so it cannot be known until the registry below is assembled.
         let profile_name = authority.profile().0;
         let mesh_root = paths.root().to_path_buf();
 
@@ -186,22 +226,65 @@ impl ResidentDistillery {
         #[cfg(not(feature = "trainer"))]
         let model_library: Option<Arc<Mutex<RedbBackend>>> = None;
 
+        // The adapter a GPU trainer was actually composed on, filled in below
+        // if one was. It stays `None` for a CPU trainer and for no trainer at
+        // all, and it is what [`Self::trainer_adapter`] hands out.
+        #[cfg(feature = "trainer-gpu")]
+        let mut trainer_adapter: Option<distillery::GpuAdapterFacts> = None;
+
         // Registering is fallible, and the closure below cannot be, so the
         // registry is assembled here and only *installed* there.
         #[cfg(feature = "trainer")]
         let registry = match model_library.as_ref() {
             Some(store) => {
+                // The owner's device word, turned into a device. `"cpu"` is
+                // `ndarray`, as it has always been. `"gpu"` goes through
+                // Distillery's probe-then-compose helper, which refuses unless
+                // the wgpu runtime would really bind a discrete adapter —
+                // cubecl would otherwise substitute an unclassified one and
+                // say nothing, and this lane would then advertise a GPU it
+                // could not name.
+                let device = match lane.trainer.as_ref().map(|trainer| trainer.device.trim()) {
+                    #[cfg(feature = "trainer-gpu")]
+                    Some("gpu") => {
+                        let (device, adapter) =
+                            distillery::discrete_gpu_trainer_device().map_err(|refusal| {
+                                format!(
+                                    "distillery.trainer.device is \"gpu\", and this build \
+                                     carries the GPU trainer, but this machine cannot \
+                                     honour it: {refusal}"
+                                )
+                            })?;
+                        tracing::info!(
+                            adapter = %adapter.name,
+                            backend = %adapter.backend,
+                            device_type = %adapter.device_type,
+                            "composing the Distillery trainer on the discrete GPU"
+                        );
+                        trainer_adapter = Some(adapter);
+                        device
+                    }
+                    _ => distillery::TrainerDevice::ndarray(),
+                };
                 let mut registry = mesh::ResourceRegistry::builtin();
                 registry
                     .register(Arc::new(distillery::TrainerResource::new(
                         Arc::clone(store),
-                        distillery::TrainerDevice::ndarray(),
+                        device,
                     )))
                     .map_err(|error| format!("register the trainer resource: {error}"))?;
                 Some(registry)
             }
             None => None,
         };
+
+        // The one place `HostFacts::gpu` is decided, and it is decided by what
+        // was registered a few lines up rather than by what is plugged in.
+        #[cfg(feature = "trainer-gpu")]
+        let composed_gpu = trainer_adapter.is_some();
+        #[cfg(not(feature = "trainer-gpu"))]
+        let composed_gpu = false;
+        let facts = host_facts(composed_gpu)?;
 
         let resident = authority
             .bind_resident(mesh_id, store, resident_settings(&lane), move |space| {
@@ -243,6 +326,8 @@ impl ResidentDistillery {
             profile: profile_name,
             mesh_root,
             model_library,
+            #[cfg(feature = "trainer-gpu")]
+            trainer_adapter,
         })
     }
 
@@ -276,6 +361,19 @@ impl ResidentDistillery {
     /// one open store the trainer is writing.
     pub fn model_library(&self) -> Option<Arc<Mutex<RedbBackend>>> {
         self.model_library.as_ref().map(Arc::clone)
+    }
+
+    /// The GPU adapter this lane's trainer was composed on, or `None` when it
+    /// composed a CPU trainer or none at all.
+    ///
+    /// This is the evidence behind [`mesh::HostFacts::gpu`] on this lane, and
+    /// it is exposed rather than merely logged because a log line is not
+    /// something a receipt can assert on. `Some(_)` here and
+    /// `HostFacts::gpu == true` are the same fact seen from two sides; they
+    /// are set from one value at composition and cannot drift apart.
+    #[cfg(feature = "trainer-gpu")]
+    pub fn trainer_adapter(&self) -> Option<&distillery::GpuAdapterFacts> {
+        self.trainer_adapter.as_ref()
     }
 
     /// The product authority, for read-only board and progress projections.
@@ -565,19 +663,23 @@ fn retention_policy(
 /// machine but not this moment is a scheduling concern, and scheduling by live
 /// pressure is a later slice.
 ///
-/// `gpu` is `false`, and that is the honest answer rather than a placeholder:
-/// nothing in this composition can run a GPU job. The builtin resources are
-/// CPU work, and the one resource this lane may add on top — Distillery's
-/// trainer — is composed on `TrainerDevice::ndarray()`, which is why
-/// `distillery.trainer.device` refuses anything but `"cpu"`. Claiming a GPU
-/// would advertise work this device would then fail.
-fn host_facts() -> Result<mesh::HostFacts, String> {
+/// `gpu` is an argument rather than a constant, and the rule behind it is the
+/// whole point: **the fact follows the composed resource, never the hardware.**
+/// It is `true` only when this composition actually registered a resource
+/// running on a GPU device — which today means a `"gpu"` trainer, on a build
+/// carrying `trainer-gpu`, whose adapter probe found a real discrete adapter.
+/// A machine with a discrete GPU in it and a CPU trainer composed on top still
+/// advertises `false`, because [`mesh::HostFacts`] is an offer to the ring:
+/// what it promises is work this device will *run*, not silicon it happens to
+/// contain. The builtin resources are all CPU work, so nothing else can move
+/// this bit.
+fn host_facts(gpu: bool) -> Result<mesh::HostFacts, String> {
     Ok(mesh::HostFacts {
         memory_mib: total_memory_mib().ok_or(
             "this build cannot read total physical memory, and a device must not advertise a \
              capacity it never measured",
         )?,
-        gpu: false,
+        gpu,
     })
 }
 
@@ -824,8 +926,8 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn this_machine_reports_a_real_memory_size_and_no_gpu() {
-        let facts = host_facts().expect("Windows can read physical memory");
+    fn this_machine_reports_a_real_memory_size_and_a_gpu_fact_that_follows_composition() {
+        let facts = host_facts(false).expect("Windows can read physical memory");
         assert!(
             facts.memory_mib >= 512,
             "a machine running this test has more than half a gigabyte: {}",
@@ -833,13 +935,22 @@ mod tests {
         );
         assert!(
             !facts.gpu,
-            "nothing in this composition can run a GPU job, so nothing may claim one"
+            "a composition that registered no GPU resource may not claim one, and the \
+             machine running this test has a discrete GPU in it — which is exactly the \
+             case that would go wrong if the fact were read off the hardware"
+        );
+        assert!(
+            host_facts(true)
+                .expect("Windows can read physical memory")
+                .gpu,
+            "and the composed answer is carried through rather than overridden"
         );
     }
 
     #[cfg(not(windows))]
     #[test]
     fn a_build_that_cannot_measure_memory_refuses_to_advertise_one() {
-        assert!(host_facts().is_err());
+        assert!(host_facts(false).is_err());
+        assert!(host_facts(true).is_err());
     }
 }

@@ -4,46 +4,48 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The receipt for the Djinn-composed trainer: a resident opened from nothing
-//! but owner-stated policy trains a real LoRA adapter and leaves it in the
-//! persona's own model library.
+//! The receipt for the GPU-composed trainer: the same lane, the same synthetic
+//! fixture, the same forcing question — run on this machine's discrete GPU,
+//! with the adapter named rather than assumed.
 //!
-//! `distillery/tests/trainer.rs` already proves the *resource* works, over a
-//! hand-built one-host mesh and a `MemoryBackend`. This file proves the
-//! *composition*: the same resource reached by the path a desktop actually
-//! takes — [`DjinnResident::open`], the profile's derived mesh author, the
-//! device's stated lending posture, a `SystemClock`, and a concrete
-//! `RedbBackend` on disk under the persona's data root.
+//! `distillery_trainer.rs` already proves the composition on the CPU. This file
+//! changes exactly one field, `distillery.trainer.device` from `"cpu"` to
+//! `"gpu"`, and asserts the three things that word is supposed to mean:
 //!
-//! Three things are load-bearing here that the resource's own receipt cannot
-//! say:
+//! 1. **The adapter is the discrete GPU, and it was checked.**
+//!    [`ResidentDistillery::trainer_adapter`] reports the adapter the wgpu
+//!    runtime named *before* the device was constructed, and it is asserted to
+//!    be `Discrete`, matched out of the discrete class rather than substituted.
+//!    This is the load-bearing assertion of the whole file. cubecl's
+//!    `select_from_adapter_list`, asked for `DiscreteGpu(0)` on a machine with
+//!    no discrete adapter, falls through to the unclassified `Other` list and
+//!    returns whatever is there; it panics only when that list is short too.
+//!    A receipt that merely observed "the job completed on device gpu" would
+//!    pass identically on a machine that had quietly run on an integrated
+//!    adapter, which is the exact failure this lane was built to refuse.
+//! 2. **The advertised fact followed the composition.** `HostFacts::gpu` is
+//!    read back off the *installed* host, the same way the CPU receipt reads
+//!    the installed policy, and asserted `true`. Composing a GPU trainer and
+//!    advertising no GPU, or advertising a GPU with no GPU resource behind it,
+//!    are both lies to the ring; this checks the one that can happen here.
+//! 3. **Real training happened on it.** The same synthetic llama fixture, the
+//!    same held-out partition, the same trainer job — driven through the
+//!    resident on `SystemClock` to `Step::Completed`, and the committed
+//!    `TrainReceipt` read back out of the blob space.
 //!
-//! 1. **The posture permits the trainer by name.** `allowed_resources` is
-//!    exactly `["esp.train.peft-lora/v1"]`, asserted against the *installed*
-//!    policy after open, so this run is admitted because the owner said so and
-//!    not because the set was empty.
-//! 2. **The artifacts land somewhere durable and persona-scoped.** The library
-//!    file is asserted to exist at the derived
-//!    `<data_root>/models/<profile>/library.redb` — not in the personal-graph
-//!    store, and not under a mesh root whose retention policy could collect it.
-//! 3. **The gate is honest in both directions.** This file only compiles with
-//!    the `trainer` feature; `distillery_lane.rs` carries the matching
-//!    `cfg(not(feature = "trainer"))` refusal, so neither feature set is
-//!    without a live assertion about the gate. The same pattern one word in:
-//!    the refusal below runs under `cfg(not(feature = "trainer-gpu"))`, and
-//!    `distillery_trainer_gpu.rs` is its composing half.
+//! The tally assertion is deliberately *strict improvement* and nothing
+//! sharper. The CPU receipt's 6/6-against-4/6 numbers are ndarray's; f32
+//! reductions on a GPU need not reproduce them bit for bit, and pinning the
+//! exact figures would make this a test about floating-point luck rather than
+//! about the trainer. What the receipt owes is the measurement it actually
+//! took, printed, plus the claim that the adapter beat the untuned base on
+//! held-out cases.
 //!
-//! The run itself stays on the CPU under both feature sets. `device: "cpu"` is
-//! not incidental here — it is what makes this receipt a statement about the
-//! composed *path* rather than about whatever hardware the machine has, and it
-//! is what lets the GPU receipt's tallies be compared against something.
-//!
-//! Windows-only for the same reason the lane receipt is: the lane reads
-//! `HostFacts::memory_mib` from the operating system and refuses to advertise
-//! a capacity it never measured, and only the Windows half of this crate can
-//! measure one today.
+//! Windows-only for the same reason every lane receipt is: the lane refuses to
+//! advertise a memory capacity it never measured, and only the Windows half of
+//! this crate can measure one today.
 
-#![cfg(all(feature = "trainer", windows))]
+#![cfg(all(feature = "trainer-gpu", windows))]
 
 mod common;
 
@@ -56,8 +58,8 @@ use common::{
     open_vault, owner, profile, save_cases, tokenizer_json, unlock, write_device_settings,
 };
 use distillery::{
-    LoraTrainerSettings, ResidentReceipt, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt,
-    TrainRequest,
+    GpuDeviceType, LoraTrainerSettings, ResidentReceipt, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE,
+    TrainReceipt, TrainRequest,
 };
 use djinn::resident::DjinnResident;
 use djinn::settings::TrainerLaneSettings;
@@ -72,14 +74,14 @@ use mesh::{BlobSource as _, ResourceId};
 use mesh_host::Step;
 use tokio::sync::Notify;
 
-/// Training on the CPU under a `line-tables-only` debug profile takes tens of
-/// seconds. This bound is a *failure* bound — the run is stopped by the
-/// observer seeing `Step::Completed`, and the assertions below distinguish the
-/// two endings — so it is set well past any honest run rather than tuned close.
-const FAILURE_BOUND: Duration = Duration::from_secs(300);
+/// A failure bound, not an expectation. The run is stopped by the observer
+/// seeing `Step::Completed`; this only decides how long a *stuck* run is given
+/// before the assertions below call it. Generous, because a first GPU run pays
+/// shader compilation on top of the training itself.
+const FAILURE_BOUND: Duration = Duration::from_secs(600);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_library() {
+async fn the_composed_trainer_trains_on_this_machines_discrete_gpu() {
     let directory = tempfile::tempdir().expect("temporary resident root");
     let data_root = directory.path().join("data");
     let (vault_dir, identity) = open_vault(directory.path());
@@ -90,23 +92,12 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
     let mut posture = lending();
     posture.allowed_resources = vec![TRAINER_RESOURCE.into()];
     posture.accepted_checkpoints = vec!["restart".into()];
-    assert_eq!(
-        posture.max_thermal_c, 0,
-        "the thermal rule stays disabled: this build has no thermometer"
-    );
-    assert_eq!(posture.min_idle_ms, 1);
-    assert_eq!(
-        posture.stated.idle_ms,
-        Some(600_000),
-        "a machine driving a test run is rarely idle, so the owner's stated \
-         fallback is what the idle rule actually rests on here"
-    );
     write_device_settings(&data_root, Some(posture));
 
+    // The one field that differs from the CPU receipt.
     let mut trains = lane();
     trains.trainer = Some(TrainerLaneSettings {
-        device: "cpu".into(),
-        // The derived persona-scoped path is the thing under test.
+        device: "gpu".into(),
         library_root: None,
     });
 
@@ -119,13 +110,38 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         unlock(),
     )
     .await
-    .expect("compose the Djinn resident with a trainer-carrying Distillery lane");
+    .expect("compose the Djinn resident with a GPU trainer on this machine's discrete GPU");
     assert!(resident.distillery_enabled());
     let mut works = resident
         .take_distillery()
         .expect("the lane was composed and can be driven");
 
-    // 1. The owner's posture reached the supervisor, and it names the trainer.
+    // 1. The adapter, named. Not "a GPU" — this one.
+    let adapter = works
+        .trainer_adapter()
+        .expect("a lane that composed a GPU trainer knows which adapter it composed on")
+        .clone();
+    println!("djinn GPU trainer adapter: {adapter}");
+    assert_eq!(
+        adapter.device_type,
+        GpuDeviceType::Discrete,
+        "the lane composed on an adapter that is not a discrete GPU: {adapter:?}"
+    );
+    assert!(
+        adapter.matched_requested_class,
+        "the adapter came out of cubecl's unclassified fallback list rather than the \
+         discrete class, which is the silent substitution this lane refuses: {adapter:?}"
+    );
+    assert!(
+        !adapter.name.trim().is_empty(),
+        "an adapter with no name is not an adapter anyone could check: {adapter:?}"
+    );
+    assert!(!adapter.backend.trim().is_empty(), "{adapter:?}");
+
+    // 2. The owner's posture and the composed GPU fact both reached the
+    //    supervisor. The facts are read off the installed host rather than
+    //    recomputed, for the same reason the policy is: a composition that
+    //    claims it reached the supervisor has to be checkable there.
     let installed = works.authority().host().policy().clone();
     assert_eq!(
         installed.allowed_resources,
@@ -133,19 +149,22 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         "the trainer runs because the device's stated posture permits it by \
          name, not because the allowed set was empty"
     );
-    assert_ne!(
-        installed,
-        mesh::DevicePolicy::permissive(),
-        "a lane that fell back to permissive() would lend on nobody's authority"
+    let facts = *works.authority().host().facts();
+    assert!(
+        facts.gpu,
+        "a lane that composed a GPU trainer must advertise the GPU it composed: {facts:?}"
     );
+    assert!(facts.memory_mib >= 512, "{facts:?}");
 
     let library = works
         .model_library()
         .expect("a lane that stated a trainer composed a model library");
 
-    // 2. Author the base model triple and the corpus into that library —
+    // 3. Author the base model triple and the corpus into that library —
     //    through the resident's own handle, because redb is single-writer and
-    //    the trainer is about to write into the same file.
+    //    the trainer is about to write into the same file. Byte-identical to
+    //    the CPU receipt's fixture, so the two runs' tallies are about the
+    //    device and not about the data.
     let (base_model_ref, tokenizer_ref, corpus_ref) = {
         let mut store = library.lock().await;
         let base_model_ref = ModelLibrary::save_model_with_components(
@@ -159,7 +178,7 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
             Vec::new(),
             Vec::new(),
             PrivacyClass::LocalOnly,
-            ProvenanceRecord::self_imported("djinn-trainer-receipt"),
+            ProvenanceRecord::self_imported("djinn-gpu-trainer-receipt"),
             TrustEnvelope::self_asserted(),
             Timestamp(0),
         )
@@ -178,7 +197,7 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
             &corpus,
             vec![],
             PrivacyClass::LocalOnly,
-            ProvenanceRecord::self_imported("djinn-trainer-receipt"),
+            ProvenanceRecord::self_imported("djinn-gpu-trainer-receipt"),
             TrustEnvelope::self_asserted(),
             Timestamp(1),
         )
@@ -187,13 +206,13 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         (base_model_ref, manifest.tokenizer_blob, corpus_ref)
     };
 
-    // 3. Stage the request and post the job as this device. Every ref and
-    //    hyperparameter is explicit; nothing is inferred from job facts.
+    // 4. Stage the request and post the job as this device. The same
+    //    hyperparameters the CPU receipt uses, for the same reason.
     let request = TrainRequest {
         base_model_ref,
         tokenizer_ref,
         corpus_ref,
-        adapter_name: "djinn-trainer-receipt".into(),
+        adapter_name: "djinn-gpu-trainer-receipt".into(),
         prompt_template: "{{ prompt }}".into(),
         metric: EvalMetric::RankingAt { limit: 3 },
         settings: LoraTrainerSettings {
@@ -220,9 +239,6 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
                 request_blob,
                 "receipt",
                 64 * 1024,
-                // The trainer declares `VerificationClass::ProducerOnly`, so
-                // asking for anything stricter than `Observed` would be asking
-                // for a claim nobody can make.
                 DeterminismClass::Observed,
             ),
             1,
@@ -231,7 +247,7 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         .await
         .expect("post the trainer job as this device");
 
-    // 4. Drive the resident until the job commits.
+    // 5. Drive the resident until the job commits.
     let stop = Arc::new(Notify::new());
     let signal = Arc::clone(&stop);
     let mut observed: Vec<Step> = Vec::new();
@@ -269,8 +285,7 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
     println!("observed step sequence: {observed:?}");
     assert!(
         completed,
-        "the composed trainer never completed the job in {FAILURE_BOUND:?}; \
-         steps were {observed:?}"
+        "the GPU trainer never completed the job in {FAILURE_BOUND:?}; steps were {observed:?}"
     );
     assert!(
         observed
@@ -278,8 +293,15 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
             .any(|step| matches!(step, Step::Claimed { .. })),
         "a completion with no claim would mean the board was not really driven: {observed:?}"
     );
+    assert!(
+        observed
+            .iter()
+            .any(|step| matches!(step, Step::Started { .. })),
+        "the job must have been started on this device, not merely reported done: {observed:?}"
+    );
 
-    // 5. The committed output is the compact receipt.
+    // 6. The committed output is the compact receipt, and it reports what it
+    //    measured.
     let board = works
         .authority()
         .host()
@@ -301,17 +323,18 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         .expect("fetch the committed receipt")
         .expect("committed receipt bytes present");
     let receipt: TrainReceipt = serde_json::from_slice(&receipt_bytes).expect("receipt JSON");
-    assert!(
-        receipt.adapter.passed > receipt.baseline.passed,
-        "the receipt must show a strict held-out improvement: {receipt:?}"
-    );
     assert_eq!(
         receipt.baseline.total,
         EVAL_PREFIXES.len() as u64,
         "the tally must be over the held-out partition, whole"
     );
+    assert_eq!(receipt.adapter.total, receipt.baseline.total);
+    assert!(
+        receipt.adapter.passed > receipt.baseline.passed,
+        "the receipt must show a strict held-out improvement on the GPU: {receipt:?}"
+    );
 
-    // 6. The artifacts are in the persona's library, under the receipt's refs.
+    // 7. The artifacts are in the persona's library, under the receipt's refs.
     {
         let mut store = library.lock().await;
         let manifest = load_typed::<ModelAdapterManifest>(
@@ -344,39 +367,30 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
             .expect("evaluation report present");
         assert_eq!(report.baseline, receipt.baseline);
         assert_eq!(report.adapter, receipt.adapter);
-        assert!(
-            report.adapter_beats_baseline().expect("comparable report"),
-            "the stored report must show the strict improvement"
-        );
         report
             .validate_for_adapter(receipt.adapter_manifest_ref, &manifest)
             .expect("report provenance links match the adapter manifest");
     }
 
-    // 7. And the library is a real file, at the derived persona-scoped path.
-    //    Written out longhand rather than by calling the derivation, so this
-    //    asserts the location rather than agreeing with it.
+    // 8. And the library is a real file, at the derived persona-scoped path.
     let derived = data_root.join("models").join("works").join("library.redb");
     assert!(
         derived.is_file(),
         "the model library must exist at {}",
         derived.display()
     );
-    assert!(
-        !derived.starts_with(works.mesh_root()),
-        "a trained adapter must outlive any one mesh: {} is under {}",
-        derived.display(),
-        works.mesh_root().display()
-    );
 
     println!(
-        "djinn trainer receipt: baseline {}/{} vs adapter {}/{} at RankingAt{{3}}, \
-         trained in {:.1}s into {}",
+        "djinn GPU trainer receipt: baseline {}/{} vs adapter {}/{} at RankingAt{{3}}, \
+         trained in {:.1}s on {} ({}, {} adapter) into {}",
         receipt.baseline.passed,
         receipt.baseline.total,
         receipt.adapter.passed,
         receipt.adapter.total,
         elapsed.as_secs_f64(),
+        adapter.name,
+        adapter.backend,
+        adapter.device_type,
         derived.display(),
     );
 
@@ -385,67 +399,4 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         .shutdown()
         .await
         .expect("clean ordered resident shutdown");
-}
-
-/// The GPU gate's refusing half: this build carries the trainer but not the
-/// GPU trainer, so a lane that says `device: "gpu"` is refused by name rather
-/// than trained on the CPU.
-///
-/// The failure this exists against is the one that would look like success. A
-/// composition that fell back to `ndarray` would produce this file's other
-/// receipt exactly — real adapter, real tallies, real artifacts — while the
-/// owner read their own settings file as proof the device trains on its GPU.
-/// The refusal is checked to name the feature, because "not supported" without
-/// the way out is a wall.
-///
-/// It is raised before any host fact is read, so it needs no GPU, and it
-/// disappears under `trainer-gpu`, where `distillery_trainer_gpu.rs` asserts
-/// the composing half. Neither feature set is left without a live assertion
-/// about this gate.
-#[cfg(not(feature = "trainer-gpu"))]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_build_with_no_gpu_trainer_refuses_a_lane_that_states_one() {
-    let directory = tempfile::tempdir().expect("temporary resident root");
-    let data_root = directory.path().join("data");
-    let (vault_dir, identity) = open_vault(directory.path());
-    // A perfectly good lending posture: the refusal under test must be about
-    // the missing GPU trainer, not about anything else being wrong.
-    write_device_settings(&data_root, Some(lending()));
-
-    let mut asks_for_a_gpu = lane();
-    asks_for_a_gpu.trainer = Some(TrainerLaneSettings {
-        device: "gpu".into(),
-        library_root: None,
-    });
-    // The settings themselves are valid — `"gpu"` is inside the closed
-    // vocabulary — and only this *build* cannot honour them. That split is
-    // deliberate: the same settings file is valid on the machine that can run
-    // it, and a validator that refused here would make the file's meaning
-    // depend on what happened to be plugged in.
-    assert_eq!(asks_for_a_gpu.validate(), Ok(()));
-
-    let refusal = common::refusal_from(
-        DjinnResident::open(
-            &identity,
-            &data_root,
-            &profile(),
-            owner(Some(asks_for_a_gpu)),
-            &vault_dir,
-            unlock(),
-        )
-        .await,
-        "a build with no GPU trainer must refuse a lane that states one rather than \
-         composing a CPU trainer the owner did not ask for",
-    )
-    .await;
-
-    assert!(refusal.contains("distillery.trainer.device"), "{refusal}");
-    assert!(
-        refusal.contains("\"gpu\""),
-        "the refusal must name the value it refused: {refusal}"
-    );
-    assert!(
-        refusal.contains("`trainer-gpu` feature"),
-        "the refusal must name the way out: {refusal}"
-    );
 }
