@@ -782,8 +782,21 @@ Five findings from landing it, three of them about the instrument:
    invasive, only if (1) is not enough; (3) `[profile.dev] opt-level = 1`
    (or per-package on `genet-render`/`genet-livery`/`buckram`) in the *web*
    manifest, which lets inlining collapse the 148k `core` adapters — a
-   complement, not a fix, and the only knob mere owns. Decisions open: (1)
-   alone or (1)+(2); which way to align the font stack.
+   complement, not a fix, and the only knob mere owns. Ruled 2026-09-02:
+   (1), then (2) only if (1) is not enough.
+   **Shape (1) landed 2026-09-02 (genet, buckram).** `AlgorithmRun` holds
+   `&mut dyn FnMut` (`MeasureFn`); the three public entries keep their
+   `impl FnMut` signatures and coerce at the boundary, so no genet-livery
+   call site changed. Measured on graphshell-web: taffy **44,095 → 9,036**
+   functions, the whole module **271,644 → 158,317**; debug-info-off
+   **167 MB → 70 MB**; line-tables-only **1.59 GB → 265 MB**, well under
+   the 1 GiB limit. buckram 257, genet-livery's full suite, and
+   genet-render's tests green. (1) is enough; (2) is not taken. The
+   **full-debug-info link now succeeds** — 974 MB, so the crash is gone,
+   though that bundle sits 10% under the browser limit and `debug = 0`
+   (70 MB) or line tables (265 MB) remain the sensible browser builds; the
+   driver keeps `debug = 0` for size, no longer for survival. The
+   duplicated `read-fonts`/`skrifa` stack is still open, genet-owned.
 4. *wasm-bindgen's demangled name section is 2 GB* on this module — 12× the
    167 MB it links to, past the browser's 1 GiB limit
    (`WebAssembly.instantiateStreaming(): size > maximum module size`).
