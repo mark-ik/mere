@@ -662,6 +662,40 @@ the refused and admitted intents through the existing action surface, and
 reads the admitted change back by diff off the bell — the C4a receipt's rows,
 now rendered.
 
+**C4b.1 landed 2026-09-02.** `ports/graphshell/src/web_remote.rs` is the
+link: `RemoteLink::{Fixture, WebRtc}`, one accessor
+(`BrowserHost::remote_client`) answering which `ClientState` holds the
+remote scene, and the eleven synchronous sites rewritten over it. The
+WebRTC realization holds the `SessionDriver`, an outbound queue a writer
+task drains onto the channel (`BrowserSession::writer`, the glue's new
+outbound half, so one task writes while another sits in `next_line`), and
+the [`RemoteOp`] in flight; a reader task folds every line the host writes
+through `on_remote_line`, and the answer finishes the operation and begins
+what it implies — a mount after discovery, a poll after an acceptance, a
+resume for every bell, a resnapshot after a refusal so "unchanged" is
+measured rather than assumed. `?signal=<url>` (and `?invite=`) makes
+`loader.js` call `connect_remote` once the host is ready; without it the
+fixture stays, as ruled. The endpoint's advertised actions render as
+buttons under `#remote-actions` (one per intent, `data-intent` on each),
+so the accessibility tree carries what the endpoint offers and a scenario
+can press it; a plain action submits at once, a bounded form opens as the
+draft it always did. The live fixture's cards require `NativeGlyph`, which
+the remote profile now declares.
+
+Receipt: `web/scenarios/c4b1_live_board.scn` against `c4_webrtc_host`,
+`RESULT ok` in 61 frames — join, mount at revision 1 with one card, the
+forbidden intent `Rejected` with the revision standing after a resnapshot,
+the append `Accepted`, the bell resumed by **`diff · 1 → 2`**, two cards on
+the canvas, no page errors; `h3_boot` still green on the fixture path.
+Captures show the board, the detail surface and the status text. Two
+findings: a poll answers `Changed`, not a descriptor (the probe never looked
+at that outcome, so it never mattered); and on loopback an intent round trip
+plus a resnapshot complete inside one animation frame, so `wait` may hold
+zero frames and is still correct. The wasm32 identity stack needs
+`--cfg getrandom_backend="wasm_js"` in the web crate's rustflags; the
+machine-local config carries it and a committed
+`.cargo/config.toml.example` says so.
+
 *C4b.2 — one component, two surfaces.* The wasm entry becomes a mount on a
 root element; `index.html` is the full-page surface calling it on the body,
 and a second page places the same mount beside unrelated content of its own
@@ -1376,3 +1410,15 @@ relay, and reconnect receipts.
   frames, `rust-lld` DWARF crash worked around with `debug = 0`, bindgen's
   2 GB name section worked around with `--no-demangle`, and the canvas
   chrome renders no glyphs in this build. Next: C4b.1, the real mount.
+
+- **2026-09-02: both investigations closed; C4b.1 landed.** The glyphs:
+  the Livery migration had dropped the host font registration; genet-render
+  gained `scene_from_scripted_dom_with_text_system` and the web host keeps
+  a text system with the shipped font (genet `893ccb9b3d9`). The size:
+  buckram's measure closure was the multiplier; erased behind `dyn FnMut`
+  (genet `577e2471e97`), taffy 44k → 9k functions, the module 167 → 70 MB,
+  full debug info links again. C4b.1: `web_remote.rs` — `RemoteLink` with
+  the fixture and WebRTC realizations, the driver's answers arriving through
+  a reader task, advertised actions as DOM buttons; `c4b1_live_board.scn`
+  green against `c4_webrtc_host` with the append read back by diff. Next:
+  C4b.2, the two surfaces.

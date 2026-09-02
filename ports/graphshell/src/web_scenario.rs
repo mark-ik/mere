@@ -70,6 +70,11 @@ pub(super) fn install(state: &Rc<RefCell<BrowserHost>>) {
     HOST.with(|slot| *slot.borrow_mut() = Some(state.clone()));
 }
 
+/// The booted host, for the other JavaScript entries.
+pub(super) fn host() -> Option<Rc<RefCell<BrowserHost>>> {
+    HOST.with(|slot| slot.borrow().clone())
+}
+
 /// Parse and arm a scenario. The frame pump runs it from the next frame.
 #[wasm_bindgen]
 pub fn run_scenario(text: &str) -> Result<(), JsValue> {
@@ -345,6 +350,16 @@ impl Automatable for Probe<'_> {
             canvas.get_attribute("data-focused-node").unwrap_or_default(),
         );
         snap = snap.with_field("action-status", self.host.action_status.clone());
+        snap = snap.with_field("remote-link", self.host.remote_link_name());
+        snap = snap.with_field("remote-state", self.host.remote_status.clone());
+        snap = snap.with_field("remote-resume", self.host.remote_last_resume.clone());
+        snap = snap.with_field(
+            "remote-revision",
+            self.host
+                .remote_revision()
+                .map(|revision| revision.to_string())
+                .unwrap_or_default(),
+        );
         snap = snap.with_field("product-status", self.host.product_status.clone());
         snap.with_field("scenario-frames", self.host.scenario_frames.to_string())
     }
@@ -369,10 +384,9 @@ impl Automatable for Probe<'_> {
         self.pointer("pointerup", x, y);
     }
 
-    /// A capture in flight is the only asynchronous work the host has today; a
-    /// WebRTC session in flight joins it in C4b.1.
+    /// A capture in flight, or a remote answer still to come.
     fn busy(&mut self) -> Option<bool> {
-        Some(self.host.capture_pending.is_some())
+        Some(self.host.capture_pending.is_some() || self.host.remote_in_flight())
     }
 }
 

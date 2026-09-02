@@ -74,6 +74,19 @@ window.graphshellReceipt = () => ({
     accepted: Number(document.body.dataset.captureAccepted || 0),
     dropped: Number(document.body.dataset.captureDropped || 0),
   },
+  remote: {
+    link: document.body.dataset.remoteLink,
+    state: document.body.dataset.remoteState,
+    revision: document.body.dataset.remoteRevision,
+    cards: document.body.dataset.remoteCards,
+    resume: document.body.dataset.remoteResume,
+    subject: document.body.dataset.remoteSubject,
+    session: document.body.dataset.remoteSession,
+    actions: [...document.querySelectorAll("#remote-actions button")].map((b) => ({
+      intent: b.dataset.intent,
+      label: b.textContent,
+    })),
+  },
   camera: document.getElementById("graphshell-canvas").dataset.camera,
   focusedNode: document.getElementById("graphshell-canvas").dataset.focusedNode,
   product: {
@@ -139,6 +152,18 @@ try {
   }
   const module = await import("./pkg/graphshell_web.js");
   await module.default();
+  // The remote link: `?signal=<url>` joins a host over WebRTC through its
+  // signaling server (`GET /invite` unless `?invite=` is given, `POST
+  // /offer`). Without it the in-process fixture stays mounted.
+  const signal = new URLSearchParams(location.search).get("signal");
+  if (signal) {
+    await new Promise((resolve) => {
+      const poll = () =>
+        document.body.dataset.ready === "true" ? resolve() : setTimeout(poll, 50);
+      poll();
+    });
+    module.connect_remote(signal, new URLSearchParams(location.search).get("invite"));
+  }
   // The scenario lane: `?scenario=<path>` names a script the page runs on
   // itself once the host reports ready. Results land in the DOM (see
   // src/web_scenario.rs); nothing here interprets them.

@@ -36,12 +36,15 @@ use std::future::poll_fn;
 use std::rc::Rc;
 use std::task::{Poll, Waker};
 
-use notochord::HandshakeLimits;
 use personae::InMemoryProvider;
 use webrtc_carrier::{
-    BrowserInitiator, BrowserInitiatorConfig, DtlsFingerprint, FingerprintRole, InviteV1,
-    MAX_FRAME_PAYLOAD_BYTES,
+    BrowserInitiator, DtlsFingerprint, FingerprintRole, MAX_FRAME_PAYLOAD_BYTES,
 };
+
+// What a page needs to name to drive a join, re-exported so the page
+// depends on this module alone.
+pub use notochord::HandshakeLimits;
+pub use webrtc_carrier::{BrowserInitiatorConfig, InviteV1};
 
 use crate::admission::PROJECTION_PROTOCOL;
 use crate::webrtc_join::{
@@ -323,12 +326,27 @@ impl BrowserSession {
 
     /// Send one NDJSON line to the host, cut at the carrier's frame ceiling.
     pub async fn send_line(&mut self, line: &str) -> Result<(), String> {
-        let mut bytes = line.as_bytes().to_vec();
-        bytes.push(b'\n');
-        for chunk in bytes.chunks(MAX_FRAME_PAYLOAD_BYTES) {
-            self.frames.send(chunk).await?;
+        self.writer().send_line(line).await
+    }
+
+    /// The subject this session runs as, hex-encoded, for a receipt.
+    pub fn subject_hex(&self) -> String {
+        use personae::IdentityProvider;
+        self.ephemeral
+            .master_public_key()
+            .to_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    /// The outbound half on its own, so one task can write while another
+    /// sits in [`next_line`](Self::next_line). Sending needs only the
+    /// initiator, which is shared; receiving owns the inbox.
+    pub fn writer(&self) -> BrowserWriter {
+        BrowserWriter {
+            initiator: self.frames.initiator.clone(),
         }
-        Ok(())
     }
 
     /// The next complete line from the host, or `None` when the channel is
@@ -347,6 +365,26 @@ impl BrowserSession {
                 None => return Ok(self.assembler.take_partial()),
             }
         }
+    }
+}
+
+/// The outbound half of a session; see [`BrowserSession::writer`].
+pub struct BrowserWriter {
+    initiator: Rc<BrowserInitiator>,
+}
+
+impl BrowserWriter {
+    /// Send one NDJSON line to the host, cut at the carrier's frame ceiling.
+    pub async fn send_line(&self, line: &str) -> Result<(), String> {
+        let mut bytes = line.as_bytes().to_vec();
+        bytes.push(b'\n');
+        for chunk in bytes.chunks(MAX_FRAME_PAYLOAD_BYTES) {
+            self.initiator
+                .send_frame(chunk)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(())
     }
 }
 

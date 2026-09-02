@@ -23,6 +23,7 @@
 mod web_events;
 mod web_gpu;
 mod web_product;
+mod web_remote;
 mod web_scenario;
 mod web_view;
 
@@ -33,9 +34,7 @@ use std::rc::Rc;
 use graphshell::browser_storage::{StoragePersistence, decide, status_line};
 use graphshell::client::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
 use graphshell::endpoint::{IntentSink, ProjectionSource};
-use graphshell::protocol::{
-    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession,
-};
+use graphshell::protocol::{IntentResult, ProjectionSession};
 use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::NodeKey;
@@ -71,6 +70,7 @@ use muniment::IndexedDbBackend;
 use uuid::Uuid;
 use web_events::{install_events, schedule_frames};
 use web_gpu::{GpuPresenter, PendingCapture};
+use web_remote::RemoteLink;
 use web_scenario::{DomAction, ScenarioRun};
 use web_product::update_product_semantics;
 use web_view::{ChromeModel, build_chrome_scene};
@@ -282,8 +282,12 @@ impl CanvasTransition {
 
 struct BrowserHost {
     app: GraphshellApp<IndexedDbBackend>,
-    remote: FixtureEndpoint,
-    remote_session: ProjectionSession,
+    /// Where the remote projection lives (`web_remote`).
+    remote: RemoteLink,
+    remote_session: Option<ProjectionSession>,
+    remote_status: String,
+    remote_joining: bool,
+    remote_last_resume: String,
     active: ActiveSession,
     canvas: Canvas,
     canvas_element: HtmlCanvasElement,
@@ -439,18 +443,13 @@ impl BrowserHost {
                         "Select an object".to_string(),
                     )
                 }),
-            ActiveSession::Remote => (
-                "Projection boundary card".to_string(),
-                "fixture.graphshell/note:recent".to_string(),
-            ),
+            ActiveSession::Remote => self.remote_selection(),
         };
         let (product_status, arrangement, physics_paused) = self.product_chrome();
         // Satisfaction belongs to the remote scene, so it is only spoken when
         // one is mounted. A local canvas has no holds to report on.
         let satisfaction = self
-            .app
-            .client
-            .mounted(&self.remote_session)
+            .remote_mounted()
             .and_then(|mounted| Satisfaction::of(&mounted.scene.tables).line())
             .unwrap_or_default();
         ChromeModel {
@@ -459,7 +458,7 @@ impl BrowserHost {
                     "Local Mere · {} objects",
                     self.app.host.graph().node_count()
                 ),
-                ActiveSession::Remote => REMOTE_LABEL.to_string(),
+                ActiveSession::Remote => self.remote_label(),
             },
             local_active: self.active == ActiveSession::Local,
             detail_open: self.detail_open,
@@ -579,7 +578,7 @@ impl BrowserHost {
             self.height as f32,
             [0.025, 0.045, 0.057, 1.0],
         );
-        let Some(mounted) = self.app.client.mounted(&self.remote_session) else {
+        let Some(mounted) = self.remote_mounted() else {
             return scene;
         };
         let bounds = mounted.scene.tables.bounds;
@@ -695,6 +694,15 @@ impl BrowserHost {
             "pan-right" => self.pan(42.0, 0.0),
             "pan-up" => self.pan(0.0, -42.0),
             "pan-down" => self.pan(0.0, 42.0),
+            other if other.starts_with("remote-action-") => {
+                match other["remote-action-".len()..].parse::<usize>() {
+                    Ok(index) => self.invoke_remote_action(index),
+                    Err(_) => {
+                        self.probe_events.push(format!("command-unknown {command}"));
+                        return false;
+                    }
+                }
+            }
             _ => {
                 if !self.run_product_command(command) {
                     self.probe_events.push(format!("command-unknown {command}"));
@@ -933,28 +941,33 @@ impl BrowserHost {
     }
 
     fn open_remote_action_draft(&mut self) {
+        let Some(session) = self.remote_session.clone() else {
+            self.action_status = "Failed · remote projection is not mounted".to_string();
+            return;
+        };
         let Some((observed_epoch, observed_revision)) = self
-            .app
-            .client
-            .mounted(&self.remote_session)
+            .remote_mounted()
             .map(|mounted| (mounted.scene.epoch, mounted.scene.revision))
         else {
             self.action_status = "Failed · remote projection is not mounted".to_string();
             return;
         };
-        let tree = match self.app.client.accessibility_tree(
-            &self.remote_session,
-            &CapabilityProfile::new([
-                PresentationCapability::PortableCard,
-                PresentationCapability::Image,
-            ]),
-        ) {
+        let tree = match self
+            .remote_client()
+            .ok_or("remote link is not discovered".to_string())
+            .and_then(|client| {
+                client
+                    .accessibility_tree(&session, &web_remote::remote_profile())
+                    .map_err(|error| format!("{error:?}"))
+            }) {
             Ok(tree) => tree,
             Err(error) => {
-                self.action_status = format!("Failed · remote accessibility tree: {error:?}");
+                self.action_status = format!("Failed · remote accessibility tree: {error}");
                 return;
             }
         };
+        // A bounded form opens as a draft. Plain actions are offered as
+        // buttons by `update_remote_semantics`; opening the detail is enough.
         let Some((target, action)) = tree.children.iter().find_map(|item| {
             item.actions
                 .iter()
@@ -962,14 +975,18 @@ impl BrowserHost {
                 .cloned()
                 .map(|action| (item.instance, action))
         }) else {
-            self.action_status =
-                "Failed · remote projection advertises no bounded action form".to_string();
+            let count = tree
+                .children
+                .iter()
+                .map(|item| item.actions.len())
+                .sum::<usize>();
+            self.action_status = format!("{count} remote action(s) advertised");
             return;
         };
         self.action_status = format!("Choose values · {}", action.label);
         self.action_draft = Some(ActionDraft::new(action));
         self.action_draft_target = Some(ActionDraftTarget {
-            session: self.remote_session.clone(),
+            session,
             target,
             observed_epoch,
             observed_revision,
@@ -989,6 +1006,10 @@ impl BrowserHost {
     }
 
     fn submit_action_draft(&mut self) {
+        if matches!(self.remote, RemoteLink::WebRtc(_)) {
+            self.submit_remote_draft();
+            return;
+        }
         let Some(target) = self.action_draft_target.clone() else {
             self.action_status = "Failed · no remote action draft target is open".to_string();
             return;
@@ -1006,16 +1027,20 @@ impl BrowserHost {
             }
         };
         self.action_count = self.action_count.saturating_add(1);
-        match self.remote.invoke(invocation) {
-            Ok(IntentResult::Accepted) => match self.remote.snapshot(self.remote.request()) {
+        let RemoteLink::Fixture(fixture) = &mut self.remote else {
+            return;
+        };
+        match fixture.invoke(invocation) {
+            Ok(IntentResult::Accepted) => match fixture.snapshot(fixture.request()) {
                 Ok(snapshot) => match self.app.mount_remote(snapshot) {
-                    Ok(_) => {
+                    Ok(session) => {
                         let revision = self
                             .app
                             .client
-                            .mounted(&self.remote_session)
+                            .mounted(&session)
                             .map(|mounted| mounted.scene.revision.0)
                             .unwrap_or_default();
+                        self.remote_session = Some(session);
                         self.action_status = format!(
                             "Accepted · resnapshotted revision {revision} · {} invocation(s)",
                             self.action_count
@@ -1799,6 +1824,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         &format!("{} by {}", host.width, host.height),
     );
     update_product_semantics(host, &model)?;
+    web_remote::update_remote_semantics(host, &document)?;
     set_attr(
         &element(&document, "detail-surface")?,
         "aria-hidden",
@@ -1987,8 +2013,11 @@ async fn run() -> Result<(), String> {
     let chrome_scene = build_chrome_scene(initial_model, width, height, &mut chrome_text)?;
     let state = Rc::new(RefCell::new(BrowserHost {
         app,
-        remote,
-        remote_session,
+        remote: RemoteLink::Fixture(remote),
+        remote_session: Some(remote_session),
+        remote_status: "fixture".to_string(),
+        remote_joining: false,
+        remote_last_resume: String::new(),
         active: ActiveSession::Local,
         canvas: graph_canvas,
         canvas_element: canvas,
