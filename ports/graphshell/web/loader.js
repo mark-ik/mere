@@ -208,6 +208,31 @@ try {
     // than reading a DOM it may not be able to reach.
     const sink = new URLSearchParams(location.search).get("sink");
     if (sink) {
+      // Progress while the run is alive, so a run that never completes
+      // still says how far it got: the same state the DOM shows, posted
+      // every two seconds to the sink's `/scenario-progress`.
+      const progress = sink.replace(/\/scenario-receipt$/, "/scenario-progress");
+      const beat = setInterval(async () => {
+        if (document.body.dataset.scenario !== "running") {
+          clearInterval(beat);
+          return;
+        }
+        try {
+          await fetch(progress, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              scenario: window.graphshellScenario(),
+              frames: document.body.dataset.scenarioFrames,
+              log: document.getElementById("scenario-log")?.textContent,
+              remote: window.graphshellReceipt().remote,
+              actionStatus: part("action-status")?.textContent,
+            }),
+          });
+        } catch (_) {
+          // The sink may be gone; the receipt is what matters.
+        }
+      }, 2000);
       document.addEventListener(
         "graphshell-scenario-complete",
         async () => {

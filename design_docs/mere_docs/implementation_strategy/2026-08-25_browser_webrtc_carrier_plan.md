@@ -3,8 +3,10 @@
 **Date:** 2026-08-25
 **Status:** in progress. C0-C2 landed 2026-08-26. C3 landed 2026-08-28: the
 forced relay is physically proven over a TURN relay on a second machine, so the
-stop line is CLEARED. The `reconnect` defect is fixed and headed-verified
-2026-08-28; the snapshot resume branch stays carried. C4 is the next phase.
+stop line is CLEARED. C4 landed 2026-09-02 (C4a 09-01, C4b 09-02): the real
+Graphshell web client mounts a native-owned projection over WebRTC in both
+surfaces, with the browser carrier profile marked physically proven in the
+remote projection plan. C5, public rendezvous, is the next phase.
 **Scope:** Let an ordinary browser join a bounded live Graphshell session whose
 native application retains state and authority. Build the carrier and admission
 proof before adding public rendezvous infrastructure.
@@ -753,6 +755,27 @@ unsaved state. Not in scope, stated: one instance per page — the `gs-`
 prefix isolates the component from its host, not two components from each
 other.
 
+**C4b.3 landed 2026-09-02; C4b is closed, and with it C4.** The receipt is
+`Code/testing/mere/webrtc_c4b_receipt.md`: five page-driven receipts, all
+green, the keyboard and accessibility rows in both surfaces with equal
+semantic trees, and the carried resume-on-reconnect row. That row needed
+three things. The fixture opened a `LiveEndpoint` per session, so a change
+during an outage could not reach the peer that came back;
+`SharedLiveEndpoint` is one board behind a lock, handed to every session,
+and `POST /nudge` moves it natively (`LiveEndpoint::append`, the same path
+an admitted intent takes). The page gained `remote-disconnect` (close from
+this end; the driver, core and mount kept), `remote-reconnect`
+(`BrowserJoin::complete_rejoin` with the retired session's subject and
+delegation, then a rediscovery that keeps the mount and a poll that rings
+the missed bell) and `remote-nudge` (the receipt hook). Observed: the host
+served the first session five requests and saw it end `Disconnected`,
+appended natively to revision 3, admitted the same subject on a new
+transcript, and the page resumed by `diff · 2 → 3` with three cards on the
+canvas — never a re-snapshot. The remote projection plan's browser profile
+is marked physically proven, with its condition (a headed browser-to-native
+session reconnects) quoted against the row that met it. The driver runs the
+fixture itself on request, so a live-board receipt starts from revision 1.
+
 *C4b.3 — the checks and the receipt.* Keyboard: with focus on the canvas,
 arrows move `data-camera`, Enter and Escape toggle `data-detail-open`, Tab
 reaches every control in the semantic host, and in the embed the same keys
@@ -1483,3 +1506,17 @@ relay, and reconnect receipts.
   build resolves genet from a clean worktree at HEAD. Next: C4b.3, the
   keyboard and accessibility rows as a receipt, the profile mark, and the
   carried resume-on-reconnect row.
+
+- **2026-09-02: C4b.3 landed; C4 is closed.** `SharedLiveEndpoint` (one
+  board for every session) and `POST /nudge` on the fixture;
+  `remote-disconnect` / `remote-reconnect` / `remote-nudge` on the page;
+  `c4b3_reconnect.scn` green: a native append while the link was down,
+  rejoined as the same subject, resumed by `diff · 2 → 3`. The remote
+  projection plan's browser profile is marked physically proven. Receipt:
+  `Code/testing/mere/webrtc_c4b_receipt.md`. The driver runs the fixture
+  itself (`-Fixture`) and the page posts progress while a run is alive, so
+  a stall leaves its last state. Open, deliberately: one instance per
+  page; the duplicated `read-fonts`/`skrifa` stack (genet); the web
+  manifest's `[profile.dev]` setting; the DOC_README index line for this
+  plan still reads "C4 open" and belongs to the lane holding that file.
+  Next: C5, public rendezvous.

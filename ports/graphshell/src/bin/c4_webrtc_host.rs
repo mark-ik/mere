@@ -54,7 +54,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use graphshell::carrier::projection_policy;
-use graphshell::live_endpoint::{ADMITTED_INTENT, LiveEndpoint, REFUSED_INTENT};
+use graphshell::live_endpoint::{ADMITTED_INTENT, LiveEndpoint, REFUSED_INTENT, SharedLiveEndpoint};
 use graphshell::native::endpoint_catalog::{ResidentEndpointCatalog, ResidentEndpointRoute};
 use graphshell::native::projection_host::ResidentProjectionHost;
 use graphshell::webrtc_door::{InviteTerms, issue_invite};
@@ -191,8 +191,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // first headed run found exactly that — the bell rang, the browser asked
     // to resume, and the host said the endpoint could not. An endpoint with a
     // diff history has to be registered as one.
-    catalog.register_resumable_notifying("live", "C4 live board", |_context| {
-        Ok(LiveEndpoint::new())
+    // One board for every session, not one per session: a peer that drops
+    // and rejoins must find the board where the host left it, and `POST
+    // /nudge` moves it while a peer is away (the resume-on-reconnect row).
+    let board = SharedLiveEndpoint::new(LiveEndpoint::new());
+    let route_board = board.clone();
+    catalog.register_resumable_notifying("live", "C4 live board", move |_context| {
+        Ok(route_board.clone())
     })?;
     let route = ResidentEndpointRoute::new("live", Duration::from_millis(250))?;
     let host = Arc::new(Mutex::new(ResidentProjectionHost::new(
@@ -207,6 +212,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  offer         POST http://{signal_addr}/offer   (text/plain: offer SDP in, answer SDP out)");
     println!("  invite        GET  http://{signal_addr}/invite  (the fragment below, as text)");
     println!("  health        GET  http://{signal_addr}/health");
+    println!("  nudge         POST http://{signal_addr}/nudge   (append a card natively; answers the new revision)");
     println!("  carrier bind  {}:{}", args.bind, args.udp_port);
     if args.advertise.is_empty() {
         println!(
@@ -244,11 +250,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let fragment = fragment.clone();
         let bind = SocketAddr::new(args.bind, args.udp_port);
         let advertise = args.advertise.clone();
+        let board = board.clone();
         session += 1;
         let id = session;
         tokio::spawn(async move {
             if let Err(error) = serve_request(
-                stream, id, hosted, host, ledger, provider, policy, fragment, bind, advertise,
+                stream, id, hosted, host, ledger, provider, policy, fragment, bind, advertise, board,
             )
             .await
             {
@@ -272,6 +279,7 @@ async fn serve_request(
     fragment: String,
     bind: SocketAddr,
     advertise: Vec<IpAddr>,
+    board: SharedLiveEndpoint,
 ) -> Result<(), String> {
     let (read, mut write) = stream.split();
     let mut reader = BufReader::new(read);
@@ -310,6 +318,11 @@ async fn serve_request(
         ("OPTIONS", _) => respond(&mut write, "204 No Content", "").await,
         ("GET", "/health") => respond(&mut write, "200 OK", "ok").await,
         ("GET", "/invite") => respond(&mut write, "200 OK", &fragment).await,
+        ("POST", "/nudge") => {
+            let revision = board.with(|endpoint| endpoint.append());
+            println!("[nudge] the host appended a card natively; board at revision {}", revision.0);
+            respond(&mut write, "200 OK", &revision.0.to_string()).await
+        }
         ("POST", "/offer") => {
             let mut body = vec![0u8; content_length];
             if content_length > 0 {

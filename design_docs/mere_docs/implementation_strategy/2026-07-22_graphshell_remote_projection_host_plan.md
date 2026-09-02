@@ -285,9 +285,10 @@ The protocol is carrier-neutral, but each profile has an honest ceiling:
 - **Full peer:** the promoted Murm peer transport over Iroh for native peers.
   The Graphshell protocol is an application protocol over its stream, not a
   Murm conversation.
-- **Browser:** WebTransport, WebRTC, or a user-owned bridge remains a carrier
-  decision. WebGPU rendering evidence does not prove browser peer transport.
-  Claim this profile only after a headed browser-to-native session reconnects.
+- **Browser:** **physically proven 2026-09-02** over direct WebRTC below
+  Notochord — see the finding of that date below. WebTransport or a
+  user-owned bridge remain possible second lanes; the profile no longer
+  waits on them.
 - **Constrained radio:** management facts, compact cards, status, and bounded
   diffs. Full NetRender scenes and live panes are outside this profile. Retinue
   can carry it only after byte budgets and fragmentation are measured on real
@@ -604,6 +605,27 @@ license trigger is real; Graphshell does not wait for a workspace-wide
 reorganization.
 
 ## Findings
+
+### 2026-09-02: the browser carrier profile is physically proven
+
+The condition this plan set — *claim this profile only after a headed
+browser-to-native session reconnects* — is met, and the rendered session
+is behind it. In real Chrome, the Graphshell web client (`<graphshell-view>`,
+full-page and embedded) joins `c4_webrtc_host` through the C4 door over a
+direct WebRTC data channel below Notochord, mounts the resident host's live
+board onto its canvas, invokes the endpoint's advertised intents (the
+forbidden one `Rejected` with the revision standing, the append `Accepted`
+and read back by diff off the bell), drops its link, and rejoins as the
+same subject with the retained delegation — the invitation not spent twice
+— to find a change the host made natively while it was away, resumed by
+diff (`2 → 3`), not by re-snapshot. Keyboard and accessibility-tree checks
+pass in both surfaces with equal semantic trees. Receipts, page-driven and
+reproducible by one command:
+`Code/testing/mere/scenarios/graphshell-web/{c4b1_live_board,c4b2_full_page,c4b2_embed,c4b3_reconnect}/`,
+summarized in `Code/testing/mere/webrtc_c4b_receipt.md`. Forced relay,
+host-signed DTLS-fingerprint binding and replay refusal were proven at C3
+(`webrtc_forced_relay_receipt.md`). The lane's full record is the
+[browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md).
 
 ### 2026-08-25: browser carrier feasibility is green; the profile remains open
 

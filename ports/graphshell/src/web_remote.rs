@@ -42,7 +42,10 @@ use graphshell::client::{ActionDraft, ActionDraftTarget, ClientState, MountedSce
 use graphshell::protocol::{
     AdvertisedAction, CapabilityProfile, IntentResult, PresentationCapability,
 };
-use graphshell::webrtc_browser::{BrowserInitiatorConfig, BrowserJoin, HandshakeLimits, InviteV1};
+use graphshell::webrtc_browser::{
+    BrowserInitiatorConfig, BrowserJoin, BrowserSession, BrowserWriter, HandshakeLimits,
+    InMemoryProvider, InviteV1, RetiredSession, SignedDelegationCertificate,
+};
 use graphshell_client::Progress;
 use graphshell_client::core::Outcome;
 use graphshell_client::driver::{Advance, SessionDriver};
@@ -80,12 +83,25 @@ pub(crate) enum RemoteLink {
 pub(crate) struct WebRtcLink {
     pub(crate) driver: SessionDriver,
     outbox: UnboundedSender<String>,
+    /// The channel's outbound half, kept so the page can close it.
+    writer: BrowserWriter,
     pub(crate) pending: Option<RemoteOp>,
     /// The acknowledged revision before the resume in flight, for the
     /// `diff · a → b` line the receipt reads.
     resume_before: Option<u64>,
     pub(crate) subject: String,
     pub(crate) session_id: String,
+    /// What a reconnect presents again: the same signaling server and the
+    /// same invitation (the delegation and subject come back from the
+    /// retired session).
+    signal_url: String,
+    /// The invitation as its fragment; `InviteV1` is deliberately not
+    /// `Clone`, and a rejoin parses it again.
+    invite_fragment: String,
+    /// Set by `remote_disconnect`, so the reader reports "disconnected"
+    /// rather than a host that went away.
+    closing: bool,
+    pub(crate) rejoins: u32,
 }
 
 /// The operation whose answer is awaited.
@@ -329,12 +345,25 @@ impl BrowserHost {
         match (op, outcome) {
             (Some(RemoteOp::Discover), Outcome::Descriptor(descriptor)) => {
                 self.remote_status = format!("discovered · {}", descriptor.label);
-                let progress = self
-                    .link_mut()
-                    .and_then(|link| link.driver.core_mut())
-                    .ok_or_else(|| "not discovered".to_string())
-                    .and_then(|core| core.mount(0));
-                self.begin_remote(RemoteOp::Mount, progress);
+                if self.remote_session.is_some() {
+                    // A rediscovery on a link that already mounted — the
+                    // reconnect. The mount is kept; whatever moved while the
+                    // link was down comes back as bells, which a poll rings.
+                    self.remote_status = "open".to_string();
+                    let progress = self
+                        .link_mut()
+                        .and_then(|link| link.driver.core_mut())
+                        .map(|core| core.poll())
+                        .ok_or_else(|| "not discovered".to_string());
+                    self.begin_remote(RemoteOp::Poll, progress);
+                } else {
+                    let progress = self
+                        .link_mut()
+                        .and_then(|link| link.driver.core_mut())
+                        .ok_or_else(|| "not discovered".to_string())
+                        .and_then(|core| core.mount(0));
+                    self.begin_remote(RemoteOp::Mount, progress);
+                }
             }
             (Some(RemoteOp::Mount), Outcome::Mounted(session)) => {
                 self.remote_session = Some(session);
@@ -466,6 +495,7 @@ pub(super) fn update_remote_semantics(host: &BrowserHost, document: &Document) -
     if let RemoteLink::WebRtc(link) = &host.remote {
         set("data-remote-subject", &link.subject)?;
         set("data-remote-session", &link.session_id)?;
+        set("data-remote-rejoins", &link.rejoins.to_string())?;
     }
     let group = element("remote-actions")?;
     let actions = host.remote_actions();
@@ -554,21 +584,22 @@ async fn join(
                 .map_err(|error| format!("GET /invite: {error}"))?
         }
     };
-    let invite = InviteV1::parse_fragment(fragment.trim())
+    let invite_fragment = fragment.trim().to_string();
+    let invite = InviteV1::parse_fragment(&invite_fragment)
         .map_err(|error| format!("invite fragment: {error}"))?;
     status("building the peer connection");
     let mut browser_join =
         BrowserJoin::new(BrowserInitiatorConfig::default()).map_err(|error| error.to_string())?;
     let answer = offer_and_signal(&mut browser_join, &signal_url, &status).await?;
     status("joining: challenge, redemption, admission");
-    let mut session = browser_join
+    let session = browser_join
         .complete(&answer, &invite, &HandshakeLimits::default().clamped())
         .await
         .map_err(|error| format!("join refused: {error}"))?;
     let subject = session.subject_hex();
     let session_id = hex(&session.joined.session_id);
     let writer = session.writer();
-    let (outbox, mut inbox) = unbounded::<String>();
+    let (outbox, inbox) = unbounded::<String>();
 
     {
         let mut host = state.borrow_mut();
@@ -581,25 +612,34 @@ async fn join(
         host.remote = RemoteLink::WebRtc(Box::new(WebRtcLink {
             driver: SessionDriver::new(remote_profile()),
             outbox,
+            writer: writer.clone(),
             pending: None,
             resume_before: None,
             subject,
             session_id,
+            signal_url,
+            invite_fragment,
+            closing: false,
+            rejoins: 0,
         }));
         host.remote_joining = false;
         host.remote_status = "discovering".to_string();
         host.probe_events.push("remote-joined".to_string());
-        let advance = match &mut host.remote {
-            RemoteLink::WebRtc(link) => {
-                link.pending = Some(RemoteOp::Discover);
-                link.driver.discover()
-            }
-            RemoteLink::Fixture(_) => unreachable!("just set"),
-        };
-        host.carry_remote(advance);
+        host.begin_discovery();
         let _ = update_semantics(&mut host);
     }
+    spawn_pumps(state, session, writer, inbox);
+    Ok(())
+}
 
+/// The two tasks a live session needs: outbound lines onto the channel, and
+/// every inbound line into the driver.
+fn spawn_pumps(
+    state: Rc<RefCell<BrowserHost>>,
+    mut session: BrowserSession,
+    writer: BrowserWriter,
+    mut inbox: futures_channel::mpsc::UnboundedReceiver<String>,
+) {
     // Outbound: lines the host asked to send, in order.
     spawn_local(async move {
         while let Some(line) = inbox.next().await {
@@ -612,24 +652,31 @@ async fn join(
 
     // Inbound: every line the host writes, folded into the driver; the
     // frame after each one mirrors whatever changed.
-    let reader_state = state.clone();
     spawn_local(async move {
         loop {
             match session.next_line().await {
                 Ok(Some(line)) => {
-                    let mut host = reader_state.borrow_mut();
+                    let mut host = state.borrow_mut();
                     host.on_remote_line(&line);
                     let _ = update_semantics(&mut host);
                 }
                 Ok(None) => {
-                    let mut host = reader_state.borrow_mut();
-                    host.remote_status = "closed: the host closed the channel".to_string();
+                    let mut host = state.borrow_mut();
+                    let closing = host.link_mut().is_some_and(|link| link.closing);
+                    host.remote_status = if closing {
+                        "disconnected".to_string()
+                    } else {
+                        "closed: the host closed the channel".to_string()
+                    };
+                    host.remote_joining = false;
+                    host.probe_events.push("remote-channel-closed".to_string());
                     host.chrome_dirty = true;
                     let _ = update_semantics(&mut host);
                     break;
                 }
                 Err(error) => {
-                    let mut host = reader_state.borrow_mut();
+                    let mut host = state.borrow_mut();
+                    host.remote_joining = false;
                     host.remote_fail(format!("recv: {error}"));
                     let _ = update_semantics(&mut host);
                     break;
@@ -641,11 +688,170 @@ async fn join(
         let retired = session.retire();
         RETIRED.with(|parked| parked.borrow_mut().push(retired));
     });
+}
+
+impl BrowserHost {
+    /// Discover on the live link: the first thing said on any link, and on
+    /// a reconnect the thing that keeps the mount (`SessionCore::rediscover`).
+    fn begin_discovery(&mut self) {
+        let advance = match self.link_mut() {
+            Some(link) => {
+                link.pending = Some(RemoteOp::Discover);
+                link.driver.discover()
+            }
+            None => return,
+        };
+        self.carry_remote(advance);
+    }
+
+    /// Close the channel from this end. The session retires when the close
+    /// lands; the driver, its core and the mount are kept for a reconnect.
+    pub(crate) fn remote_disconnect(&mut self) {
+        let Some(link) = self.link_mut() else {
+            self.action_status = "Failed · no WebRTC link to disconnect".to_string();
+            return;
+        };
+        link.closing = true;
+        link.pending = None;
+        link.driver.disconnect();
+        link.writer.close();
+        self.remote_joining = true;
+        self.remote_status = "disconnecting".to_string();
+        self.probe_events.push("remote-disconnect".to_string());
+        self.chrome_dirty = true;
+    }
+
+    /// A new link to the same host as the same subject: the retired
+    /// session's delegation is presented again, the invitation is not spent
+    /// twice, and whatever moved while the link was down comes back by diff.
+    pub(crate) fn remote_reconnect(&mut self) {
+        let Some(state) = web_scenario::host() else {
+            return;
+        };
+        let Some((signal_url, invite)) = self
+            .link_mut()
+            .map(|link| (link.signal_url.clone(), link.invite_fragment.clone()))
+        else {
+            self.action_status = "Failed · no WebRTC link to reconnect".to_string();
+            return;
+        };
+        let Some(retired) = RETIRED.with(|parked| parked.borrow_mut().pop()) else {
+            self.action_status = "Failed · no retired session to rejoin as".to_string();
+            return;
+        };
+        // The retired channel stays parked; only the subject and the
+        // delegation travel to the new link.
+        PARKED.with(|parked| parked.borrow_mut().push(retired.frames));
+        self.remote_joining = true;
+        self.remote_status = "reconnecting".to_string();
+        self.probe_events.push("remote-reconnect".to_string());
+        self.chrome_dirty = true;
+        spawn_local(async move {
+            let result = rejoin(
+                state.clone(),
+                signal_url,
+                invite,
+                retired.ephemeral,
+                retired.joined.delegation,
+            )
+            .await;
+            if let Err(error) = result {
+                let mut host = state.borrow_mut();
+                host.remote_joining = false;
+                host.remote_fail(error);
+                let _ = update_semantics(&mut host);
+            }
+        });
+    }
+
+    /// Ask the signaling server to move the board natively (`POST /nudge`),
+    /// as a host would while a peer is away. A receipt hook: the fixture is
+    /// the only server that answers it.
+    pub(crate) fn remote_nudge(&mut self) {
+        let Some(state) = web_scenario::host() else {
+            return;
+        };
+        let Some(signal_url) = self.link_mut().map(|link| link.signal_url.clone()) else {
+            self.action_status = "Failed · no WebRTC link to nudge".to_string();
+            return;
+        };
+        self.remote_joining = true;
+        self.probe_events.push("remote-nudge".to_string());
+        spawn_local(async move {
+            let result = http("POST", &format!("{signal_url}/nudge"), Some("")).await;
+            let mut host = state.borrow_mut();
+            host.remote_joining = false;
+            match result {
+                Ok(revision) => {
+                    host.action_status = format!("Nudged · host at revision {}", revision.trim());
+                    host.probe_events
+                        .push(format!("remote-nudged revision {}", revision.trim()));
+                }
+                Err(error) => host.remote_fail(format!("nudge: {error}")),
+            }
+            host.chrome_dirty = true;
+            let _ = update_semantics(&mut host);
+        });
+    }
+}
+
+async fn rejoin(
+    state: Rc<RefCell<BrowserHost>>,
+    signal_url: String,
+    invite_fragment: String,
+    ephemeral: InMemoryProvider,
+    delegation: SignedDelegationCertificate,
+) -> Result<(), String> {
+    let status = |text: &str| {
+        let mut host = state.borrow_mut();
+        host.remote_status = text.to_string();
+        let _ = update_semantics(&mut host);
+    };
+    let invite = InviteV1::parse_fragment(&invite_fragment)
+        .map_err(|error| format!("invite fragment: {error}"))?;
+    status("building the peer connection");
+    let mut browser_join =
+        BrowserJoin::new(BrowserInitiatorConfig::default()).map_err(|error| error.to_string())?;
+    let answer = offer_and_signal(&mut browser_join, &signal_url, &status).await?;
+    status("rejoining: challenge, admission");
+    let session = browser_join
+        .complete_rejoin(
+            &answer,
+            &invite,
+            ephemeral,
+            delegation,
+            &HandshakeLimits::default().clamped(),
+        )
+        .await
+        .map_err(|error| format!("rejoin refused: {error}"))?;
+    let session_id = hex(&session.joined.session_id);
+    let writer = session.writer();
+    let (outbox, inbox) = unbounded::<String>();
+    {
+        let mut host = state.borrow_mut();
+        let Some(link) = host.link_mut() else {
+            return Err("the link went away during the rejoin".to_string());
+        };
+        link.outbox = outbox;
+        link.writer = writer.clone();
+        link.session_id = session_id;
+        link.closing = false;
+        link.pending = None;
+        link.rejoins += 1;
+        host.remote_joining = false;
+        host.remote_status = "rediscovering".to_string();
+        host.probe_events.push("remote-rejoined".to_string());
+        host.begin_discovery();
+        let _ = update_semantics(&mut host);
+    }
+    spawn_pumps(state, session, writer, inbox);
     Ok(())
 }
 
 thread_local! {
-    static RETIRED: RefCell<Vec<graphshell::webrtc_browser::RetiredSession>> =
+    static RETIRED: RefCell<Vec<RetiredSession>> = const { RefCell::new(Vec::new()) };
+    /// Channels of sessions that were rejoined as: their frames, kept alive.
+    static PARKED: RefCell<Vec<graphshell::webrtc_browser::BrowserFrames>> =
         const { RefCell::new(Vec::new()) };
 }
 

@@ -36,7 +36,6 @@ use std::future::poll_fn;
 use std::rc::Rc;
 use std::task::{Poll, Waker};
 
-use personae::InMemoryProvider;
 use webrtc_carrier::{
     BrowserInitiator, DtlsFingerprint, FingerprintRole, MAX_FRAME_PAYLOAD_BYTES,
 };
@@ -44,6 +43,8 @@ use webrtc_carrier::{
 // What a page needs to name to drive a join, re-exported so the page
 // depends on this module alone.
 pub use notochord::HandshakeLimits;
+pub use personae::InMemoryProvider;
+pub use personae::delegation::SignedDelegationCertificate;
 pub use webrtc_carrier::{BrowserInitiatorConfig, InviteV1};
 
 use crate::admission::PROJECTION_PROTOCOL;
@@ -369,11 +370,19 @@ impl BrowserSession {
 }
 
 /// The outbound half of a session; see [`BrowserSession::writer`].
+#[derive(Clone)]
 pub struct BrowserWriter {
     initiator: Rc<BrowserInitiator>,
 }
 
 impl BrowserWriter {
+    /// Close the channel politely from this end. The reader's `next_line`
+    /// then returns `None`, and it retires the session (see
+    /// [`BrowserSession::retire`] for why the frames must be parked).
+    pub fn close(&self) {
+        self.initiator.close();
+    }
+
     /// Send one NDJSON line to the host, cut at the carrier's frame ceiling.
     pub async fn send_line(&self, line: &str) -> Result<(), String> {
         let mut bytes = line.as_bytes().to_vec();

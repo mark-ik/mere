@@ -346,8 +346,17 @@ impl IntentSink for LiveEndpoint {
                 reason: format!("unknown intent {}", intent.intent),
             });
         }
+        self.append();
+        Ok(IntentResult::Accepted)
+    }
+}
 
-        // The one path that moves the scene.
+impl LiveEndpoint {
+    /// Append a card natively — the host's own hand on the board — and ring
+    /// the bell. The one path that moves the scene, whether an admitted intent
+    /// reached it or the host changed the board while a peer was away (the
+    /// resume-on-reconnect receipt needs exactly that).
+    pub fn append(&mut self) -> Revision {
         let index = self.card_count();
         let source = self
             .scene
@@ -391,7 +400,76 @@ impl IntentSink for LiveEndpoint {
             epoch: EPOCH,
             revision: self.revision,
         });
-        Ok(IntentResult::Accepted)
+        self.revision
+    }
+}
+
+/// One [`LiveEndpoint`] shared by every session a host serves.
+///
+/// A catalog route opens an endpoint per admitted session, which is right
+/// for a product and wrong for a board that must outlive any one visitor: a
+/// peer that drops and rejoins has to find the board where the host left it,
+/// with whatever changed while it was away. This wrapper is that board — one
+/// endpoint behind a lock, handed to each session as its own — so a native
+/// change during an outage is what the next session's poll rings for.
+#[derive(Clone)]
+pub struct SharedLiveEndpoint(std::sync::Arc<std::sync::Mutex<LiveEndpoint>>);
+
+impl SharedLiveEndpoint {
+    pub fn new(endpoint: LiveEndpoint) -> Self {
+        Self(std::sync::Arc::new(std::sync::Mutex::new(endpoint)))
+    }
+
+    /// Run `f` on the board.
+    pub fn with<R>(&self, f: impl FnOnce(&mut LiveEndpoint) -> R) -> R {
+        let mut guard = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        f(&mut guard)
+    }
+}
+
+impl ProjectionCatalog for SharedLiveEndpoint {
+    fn describe(&self) -> EndpointDescriptor {
+        self.with(|endpoint| endpoint.describe())
+    }
+}
+
+impl ProjectionSource for SharedLiveEndpoint {
+    type Error = LiveEndpointError;
+
+    fn snapshot(&mut self, request: ProjectionRequest) -> Result<ProjectionSnapshot, Self::Error> {
+        self.with(|endpoint| endpoint.snapshot(request))
+    }
+}
+
+impl PresentationSource for SharedLiveEndpoint {
+    type Error = LiveEndpointError;
+
+    fn resource(&mut self, request: ResourceRequest) -> Result<ResourceResponse, Self::Error> {
+        self.with(|endpoint| endpoint.resource(request))
+    }
+}
+
+impl ResumableProjectionSource for SharedLiveEndpoint {
+    type Error = LiveEndpointError;
+
+    fn resume(&mut self, request: ResumeRequest) -> Result<ResumeReply, Self::Error> {
+        self.with(|endpoint| endpoint.resume(request))
+    }
+}
+
+impl ProjectionNoticeSource for SharedLiveEndpoint {
+    type Error = LiveEndpointError;
+
+    fn poll_notice(&mut self) -> Result<Option<CarrierNotice>, Self::Error> {
+        self.with(|endpoint| endpoint.poll_notice())
+    }
+}
+
+impl IntentSink for SharedLiveEndpoint {
+    type Error = LiveEndpointError;
+
+    fn invoke(&mut self, intent: IntentInvocation) -> Result<IntentResult, Self::Error> {
+        self.with(|endpoint| endpoint.invoke(intent))
     }
 }
 

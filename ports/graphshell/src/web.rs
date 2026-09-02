@@ -694,6 +694,9 @@ impl BrowserHost {
             "pan-right" => self.pan(42.0, 0.0),
             "pan-up" => self.pan(0.0, -42.0),
             "pan-down" => self.pan(0.0, 42.0),
+            "remote-disconnect" => self.remote_disconnect(),
+            "remote-reconnect" => self.remote_reconnect(),
+            "remote-nudge" => self.remote_nudge(),
             other if other.starts_with("remote-action-") => {
                 match other["remote-action-".len()..].parse::<usize>() {
                     Ok(index) => self.invoke_remote_action(index),
