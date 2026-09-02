@@ -493,10 +493,20 @@ the deep link, C4b of the browser WebRTC carrier plan is the embed component,
 and C5 public rendezvous is what lets a visitor reach a device. For
 **mer3ly.net**: full versions of the applications embedded in the site as
 their own browser builds, the site hosting the family. Forced to one answer
-for both, the second wins. The mer3ly.net direction is a new objective, not
-a target in this plan: it needs its own assessment, one per application,
-since each has its own browser story. Nothing in the ruled scope of this plan
-starts it.
+for both, the second wins. Refined the same day: the first of those
+applications is Graphshell, and its job on mer3ly.net is to **supersede the
+site's own canvas** (the seiche sandbox the consumer survey found consuming
+the stack along its second, non-portable path) and to **serve as the site
+index** beside everything else it does. That reading joins the two rulings
+above: shelfmark is already the index layer, and Graphshell as the site's
+canvas is the thing that reads it. It also answers the prover-or-demand
+question raised in Progress for mer3ly's own case: once Graphshell is the
+site's index, the graph view stops being a stress-test toy and becomes the
+site's navigation, which is a product pull. The mer3ly.net direction is a
+new objective, not a target in this plan: it needs its own assessment,
+Graphshell-supersedes-the-canvas first and one per further application,
+since each has its own browser story. Nothing in the ruled scope of this
+plan starts it.
 
 **Stage-two fact transport - ruled 2026-09-01.** Found 2026-09-01 while testing C4b
 against A3's gate. `RepresentationLadder::select` evaluates five facts;
@@ -523,7 +533,7 @@ The ladder types move out of cartography (they depend only on
 the natural carrier for the disclosed pair if the stretch is taken; its doc
 already reserves it for host-side signals a remote viewer cannot read.
 
-**Served endpoint selects at a declared zoom - ruled 2026-09-01.** Found the
+**Served endpoint selects at a declared zoom - ruled and landed 2026-09-01.** Found the
 same day: `MereHost::local_request` builds the offer's score through the
 strategy at 1280 x 720, zoom 1.0, no extents, so the ladder's Card rung fails
 `ScreenWidth > 0` and every item scores Glyph, while `build_snapshot`
@@ -1041,7 +1051,55 @@ is raised in Progress for Mark.
   rather than earning a deploy. Both carry Mark's framing, recorded in the
   rulings section: mer3ly's graph view is a stress-test toy for an embedded
   canvas, not a product pull.
-  Open for Mark, raised not ruled: the 2026-08-16 consumer ruling says
-  mer3ly's asks open gates. Read with today's framing, a mer3ly ask opens a
-  gate as a prover, not as demand; if that distinction should be written
-  into the consumer ruling itself, say so.
+  Raised the same day and answered by Mark's refinement of the embedded-app
+  ruling: mer3ly's asks are a prover's until Graphshell supersedes the site
+  canvas and becomes the site index, at which point the graph view is the
+  site's navigation and its asks are product demand. The 2026-08-16
+  consumer ruling stands unchanged; this records what would change its
+  character and when.
+- 2026-09-01: **served endpoint selects from the ladder: code written,
+  receipt written, receipt not yet run.** `MereHost` now builds the offer's
+  score and the snapshot from one `served_layout` (phyllotaxis at 1280 x 720,
+  every node measured at the served 240 x 112 footprint, ladder evaluated at
+  `SERVED_ZOOM = 1.0`), and each served item carries the rung the registry
+  selected, Glyph when the score does not name it. The receipt
+  `served_snapshot_selects_rungs_from_the_ladder_at_declared_zoom` asserts
+  the fixture's visit spread as its control, then web (10 ms) as Glyph,
+  receipt (110 ms) as Card, and offer/snapshot agreement on every item.
+  Verification so far: the change compiles for its real target
+  (`cargo check -p graphshell --target wasm32-unknown-unknown
+  --no-default-features --features web`, clean). It could not be *run*:
+  `mere_host` is `web`-gated, the default `native` suite never compiles it
+  (149 tests pass and prove nothing about this file), and the native
+  `--no-default-features --features web` test build fails at link with
+  unresolved `canvas` symbols even after `cargo clean -p mere-canvas
+  -p mere-cartography -p graphshell`. That failure predates this work: it is
+  the invocation the 2026-07-27 H1 receipt ran, and every MereHost-testing
+  module (`app`, `capture`, `product`, `mere_host`) is `web`-gated, so the
+  whole MereHost test surface has been unrunnable natively on this machine
+  for some time without anything noticing. Swept in on the way: the
+  `sessions.rs` test module used `native`-only imports under a bare
+  `cfg(test)`, which was the first compile error the web build hit; it is
+  now gated like its imports. Visible effect of the change, for the record:
+  none on the rich viewer, which picks offers by capability and never
+  branches on the rung; the frozen realization now calls stale served items
+  Symbol and recent ones Object, and the offer's score stops contradicting
+  the snapshot.
+- 2026-09-01: **the link break chased to its cause; the receipt ran.** After
+  a real clean the 103 unresolved externals fell to one symbol,
+  `drop_glue<canvas::geometry::CartographyGeometry>`, advertised in
+  mere-canvas's metadata and absent from its incremental object cache: the
+  shape of rust-lang/rust#86049 (open; windows-msvc; incremental;
+  LNK2019/2001 on allocator and drop glue; no cause identified upstream;
+  "disable incremental" the standing workaround). Turning incremental off
+  for `mere-canvas` alone links: the receipt passes and the full web-feature
+  suite passes, 39 of 39, with graphshell still incremental. The fix is
+  scoped to the invocation rather than the workspace because a canvas
+  edit-loop rebuild measures ~9 s incremental against ~2.5 min without, a
+  penalty the Mac and Linux boxes have no reason to pay: `cargo test-web`,
+  an alias in `.cargo/config.toml.example`, carries
+  `--config profile.dev.package.mere-canvas.incremental=false`, and the H1
+  receipt doc points at it. Retire condition: run the bare invocation on
+  each toolchain bump; if it links, drop the override. The served-endpoint
+  ruling is closed by this receipt; A3 stage one now holds for the product
+  endpoint.
