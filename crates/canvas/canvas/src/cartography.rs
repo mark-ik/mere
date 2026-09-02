@@ -115,15 +115,23 @@ impl Canvas {
 
     /// A node's **face** (the texture on its body): a per-node override if the user set one
     /// (via [`set_node_face`](Self::set_node_face) or [`set_node_sprite`](Self::set_node_sprite)),
-    /// otherwise the default [`Favicon`](Face::Favicon). Independent of the body (the collider
-    /// hull). A future scene pane (Decision 6) can diversify the default by content type.
+    /// otherwise [`Derived`](Face::Derived) while the node has no favicon source and
+    /// [`Favicon`](Face::Favicon) once it does. Independent of the body (the collider hull).
     /// (Node body & face — the Face axis.)
     pub fn node_face(&self, key: NodeKey) -> Face {
-        self.node_faces.get(&key).copied().unwrap_or_default()
+        self.node_faces.get(&key).copied().unwrap_or_else(|| {
+            self.graph.get_node(key).map_or(Face::default(), |node| {
+                if node.favicon().is_some() {
+                    Face::Favicon
+                } else {
+                    Face::Derived
+                }
+            })
+        })
     }
 
     /// Render the on-screen gnodes as host chrome-DOM elements instead of in-scene Scene
-    /// layers: the next [`frame`](Canvas::frame) drops the gnode + favicon layers, keeping
+    /// layers: the next [`frame`](Canvas::frame) drops the gnode + face layers, keeping
     /// edges + demoted dots as the underlay. The host sets this on the focused canvas
     /// (whose gnodes it snapshots into the shell document) and leaves it off on secondary
     /// panes. Either way a gnode is the node's rendered body, never the node's referenced
@@ -258,6 +266,17 @@ impl Canvas {
         self.style.edge_color = ColorF::new(edge[0], edge[1], edge[2], edge[3]);
     }
 
+    /// Replace the live palette used to decode every derived face. Face bytes stay cached and
+    /// unchanged; the next frame resolves their palette slots through these colors.
+    pub fn set_derived_face_palette(&mut self, palette: DerivedFacePalette) {
+        self.derived_face_palette = palette;
+    }
+
+    /// The palette currently used to decode derived faces.
+    pub fn derived_face_palette(&self) -> DerivedFacePalette {
+        self.derived_face_palette
+    }
+
     /// Set the per-node content silhouettes the canvas shapes its on-screen nodes
     /// by, keyed by node UUID; the canvas resolves each to its `NodeKey`. The host
     /// recomputes + pushes this from each node's content type as content is
@@ -273,7 +292,7 @@ impl Canvas {
     }
 
     /// Override a single node's **face** (the texture on its body), keyed by node UUID. Wins
-    /// over the default [`Favicon`](Face::Favicon) until [`clear_node_face`](Self::clear_node_face).
+    /// over the content-sensitive default until [`clear_node_face`](Self::clear_node_face).
     /// Sets only the face: the body (the collider hull) and any stored sprite image are left
     /// intact, so a face switch never reshapes the node or discards an imported sprite. The
     /// override is held on the canvas; persisting it is a follow-up (it joins the cartography
@@ -284,8 +303,9 @@ impl Canvas {
         }
     }
 
-    /// Clear a node's per-node face override, reverting it to the default
-    /// [`Favicon`](Face::Favicon). Leaves the body and any sprite image intact. Keyed by node
+    /// Clear a node's per-node face override, reverting it to the content-sensitive default:
+    /// [`Derived`](Face::Derived) without a favicon source, otherwise [`Favicon`](Face::Favicon).
+    /// Leaves the body and any sprite image intact. Keyed by node
     /// UUID; a no-op for an unknown id. (Node body & face — the Face axis.)
     pub fn clear_node_face(&mut self, id: uuid::Uuid) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
@@ -317,15 +337,15 @@ impl Canvas {
         }
     }
 
-    /// Remove a node's stored sprite image; if its face was [`Sprite`](Face::Sprite), revert the
-    /// face to [`Favicon`](Face::Favicon). Leaves the body (the collider hull) intact, since the
+    /// Remove a node's stored sprite image; if its face was [`Sprite`](Face::Sprite), clear that
+    /// override and return to the content-sensitive default. Leaves the body (the collider hull) intact, since the
     /// hull is the node's own shape once traced. Keyed by node UUID; a no-op for an unknown id.
     /// (Node body & face — sprite face.)
     pub fn clear_node_sprite(&mut self, id: uuid::Uuid) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_sprites.remove(&key);
             if self.node_faces.get(&key) == Some(&Face::Sprite) {
-                self.node_faces.insert(key, Face::Favicon);
+                self.node_faces.remove(&key);
             }
         }
     }

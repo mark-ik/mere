@@ -46,6 +46,12 @@ seiche.workspace = true
 # The graph-structural signal producer (intel/signals): degree-based importance now (the
 # size-by-importance encoding reads it), richer signals later. (Graph signals.)
 signals.workspace = true
+# Deterministic palette-backed node faces. Canvas consumes the byte-only
+# generator and lowers emblem's decoded paths into its portable paint list;
+# the optional pictograph vello bridge stays out of this device-free crate.
+pictograph.workspace = true
+emblem.workspace = true
+tincture.workspace = true
 
 # The actor harness behind the always-offload physics backend (P6): the seiche
 # Simulation runs on an armillary actor thread, emitting position snapshots the
