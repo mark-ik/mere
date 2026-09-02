@@ -39,6 +39,10 @@ genet-render = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb
 # content-over-chrome composition below are ours.
 genet-render-host = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
 genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3", version = "=0.1.0" }
+# The shared scenario driver every genet app runs its receipts through; the
+# page implements its `Automatable`/`Driveable` over the browser DOM
+# (`src/web_scenario.rs`). Pure: its three deps are already in this graph.
+genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
 js-sys = "0.3"
 netrender = { git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 netrender_device = { git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
@@ -52,10 +56,12 @@ console_error_panic_hook = "0.1"
 web-sys = { version = "0.3", features = [
     "console",
     "Blob",
+    "CanvasRenderingContext2d",
     "Document",
     "DomRect",
     "Element",
     "Event",
+    "EventInit",
     "EventTarget",
     "File",
     "FileList",
@@ -64,11 +70,14 @@ web-sys = { version = "0.3", features = [
     "HtmlInputElement",
     "HtmlSelectElement",
     "HtmlTextAreaElement",
+    "ImageData",
     "KeyboardEvent",
+    "KeyboardEventInit",
     "MouseEvent",
     "Navigator",
     "Node",
     "PointerEvent",
+    "PointerEventInit",
     "StorageManager",
     "Storage",
     "WheelEvent",

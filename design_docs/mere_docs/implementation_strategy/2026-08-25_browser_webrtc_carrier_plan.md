@@ -592,6 +592,169 @@ the canvas. A row exercising resume-on-reconnect with a native change during
 the outage is also carried; the machinery it would use is the one the
 admitted-intent row proved.
 
+### C4b: assessment (2026-09-01)
+
+C4b owns the two remaining done-conditions of §7 — keyboard and
+accessibility-tree checks in the embedded and full-page surfaces — plus the
+real mount deferred from C4a and the profile mark for the remote projection
+plan. What follows is what the code says today, then the phases and the
+decisions they hang on.
+
+**The web client as it stands.** `ports/graphshell/src/web.rs` (1,985 lines)
+is the H3 reference host page. `BrowserHost` holds a
+`GraphshellApp<IndexedDbBackend>` for the local graph and a
+`canary::FixtureEndpoint` for the remote session, mounted in-process by
+`app.mount_remote(remote.snapshot(..))` and driven *synchronously*: an intent
+is `self.remote.invoke(..)` followed by a re-snapshot (`web.rs:954`), and the
+scene is read back from `app.client.mounted(&remote_session)`. Eleven sites
+touch the remote session this way. The chrome is a Cambium view
+(`web_view.rs`) presented over WebGPU (`web_gpu.rs`); every fact the chrome
+shows is mirrored into the DOM under `#semantic-host` by `update_semantics`
+(`aria-pressed`, `aria-hidden`, `role="status"`, and `data-*` tokens on
+`<body>` — `data-session`, `data-detail-open`, `data-action-count` — plus the
+title `GRAPHSHELL H3 READY`). `loader.js` derives an accessibility tree from
+that DOM (`semanticNode`: role, label, `aria-hidden` filtering), which is what
+the H3 receipts checked. The canvas is `role="application"` with an
+`aria-label` naming the keys, and `web_events.rs:189` maps them: arrows pan,
+`+`/`-` zoom, Enter opens detail, Escape closes it, form fields excepted.
+
+**Four findings that shape the phase.**
+
+1. *Two `ClientState`s.* `GraphshellApp.client` holds the local mount;
+   `SessionCore` owns its own (`core.client()`). A WebRTC-mounted session
+   lives in the driver's core, which the presenter never reads. The mount
+   is therefore not a swap of endpoint but a change of *where the remote
+   scene lives* and *when answers arrive*: every synchronous remote call
+   becomes ask → send line → later `on_line` → outcome → `update_semantics`.
+2. *The keyboard handler is document-wide.* An embed with that listener
+   steals its host page's arrow keys. It has to become root-scoped, keyed to
+   focus inside the component — which is also the keyboard check worth
+   making: keys outside the component do nothing to it.
+3. *DOM addressing is by global id* — 13 `element(&document, id)` /
+   `set_text` sites across `web.rs` and `web_product.rs`, and `index.html`
+   owns the ids. An embed in a page that has its own `#search-input` breaks.
+   The mirror has to address a root element, not the document.
+4. *There is no browser harness.* `docs/2026-08-06_browser_storage_persistence_receipt.md`
+   closes with a stop rule: the next browser-facing claim decides whether
+   receipts stay hand-taken or become wired. C4a's receipt was hand-driven
+   through a real Chrome (DOM-addressed clicks, not synthetic OS input).
+   C4b is that next claim.
+
+Also found: the remote projection plan's condition for the browser carrier
+profile — *"claim this profile only after a headed browser-to-native session
+reconnects"* — was met by C4a's rejoin row. The mark is a doc edit and a
+timing decision, below. And the a11y work under way in genet (`genet-render`,
+`inker`) does not touch this lane: the web client's accessibility surface is
+the DOM mirror, and it imports nothing from `genet_render::a11y`.
+
+**Phases.**
+
+*C4b.1 — the real mount.* `BrowserHost.remote` becomes a link with two
+realizations: the in-process fixture (kept, for a page with no invite) and a
+WebRTC session (`BrowserJoin` → `BrowserSession` → `SessionDriver`), with one
+accessor answering which `ClientState` holds the remote scene. The eleven
+synchronous sites are rewritten against the core's operations; answers land
+through the `BrowserSession::next_line` loop and re-run `update_semantics`.
+Cards from `LiveEndpoint` present through the existing portable-card path
+(`CapabilityProfile` already declares `PortableCard`). *Done when* the page,
+given an invite, mounts the fixture host's live board on the canvas, shows
+the refused and admitted intents through the existing action surface, and
+reads the admitted change back by diff off the bell — the C4a receipt's rows,
+now rendered.
+
+*C4b.2 — one component, two surfaces.* The wasm entry becomes a mount on a
+root element; `index.html` is the full-page surface calling it on the body,
+and a second page places the same mount beside unrelated content of its own
+(its own inputs, its own headings) as the embedded surface. Every DOM lookup
+and the keyboard listener scope to the root. *Done when* both pages run the
+same bundle and the same `BrowserHost`, and the embed page's own controls are
+untouched by the component's keys and ids.
+
+*C4b.3 — the checks and the receipt.* Keyboard: with focus on the canvas,
+arrows move `data-camera`, Enter and Escape toggle `data-detail-open`, Tab
+reaches every control in the semantic host, and in the embed the same keys
+with focus outside the component change nothing in it. Accessibility: the
+`semanticNode` tree of the component root is equal in both surfaces, and the
+remote action form renders with its labels and descriptions (the G11 bounded
+form path) from the WebRTC-mounted session. Both surfaces, one JSON receipt
+each, plus the carried row: a native change *during* a disconnect, resumed by
+diff on reconnect. *Done when* the receipt is in `Code/testing/mere/` and the
+profile mark is in the remote projection plan.
+
+**Ruled 2026-09-01.** The embed is *both*: a root-scoped mount entry and a
+custom element over it, in this phase. Receipts are taken by a *page-side
+scenario lane* — the page drives itself from a URL parameter with the
+genet-probe verb vocabulary and reports into the DOM — which ends the
+hand-taken era the 2026-08-06 stop rule named; it lands first, as C4b.0,
+because every later done-condition is checked through it. The in-process
+fixture *stays* as the no-invite realization beside the WebRTC one. The
+profile mark lands *at C4b close*, with the rendered session behind it.
+
+*C4b.0 — the scenario lane.* `?scenario=` names a script (a URL the page
+fetches, or an inline body); verbs follow genet-probe's grammar as far as the
+DOM allows — click by selector or text, key chords through the real keydown
+path, act by command id, settle by frames, assert on text and attributes,
+capture, log — and the run ends with a `RESULT ok|fail` line, the step log,
+and any captures reachable from the DOM. *Done when* a scenario reproduces
+the H3 boot receipt (title, storage tokens, semantic tree) without a hand on
+the page, in both surfaces once C4b.2 exists.
+
+**C4b.0 landed 2026-09-01** (full-page surface; the embed follows C4b.2).
+`ports/graphshell/src/web_scenario.rs` consumes `genet-probe` — the same
+parser and loop woodshed and turnstone run — and implements `Automatable`
+and `Driveable` over the browser DOM: `act` is `run_command` (which now
+answers whether the command exists), `assert snap` reads every `data-*`
+token on `<body>` plus the title and the canvas camera, and the DOM verbs
+the shared grammar lacks (`dom click`, `focus`, `key`, `type`, `click-at`,
+`assert dom | attr | title | focused`) are the page's `app_step`. `capture`
+composes the frame exactly as `present` does but into an owned `COPY_SRC`
+target, reads it back asynchronously (`web_gpu::PendingCapture`; `wait`
+holds on it through `busy`), and encodes through a 2D canvas so no image
+crate joins the bundle. The page reports into the DOM as it runs
+(`data-scenario`, `data-scenario-frames`, the live log) and, given
+`?sink=`, POSTs the finished receipt and captures to a local sink. The
+driver is `Code/testing/mere/scripts/run-graphshell-web-scenario.ps1` with
+`graphshell-web-sink.py` beside it; receipts land in
+`Code/testing/mere/scenarios/graphshell-web/<name>/` as `scenario.done`,
+`result.json` and PNGs — woodshed's shape. Seed scenario
+`web/scenarios/h3_boot.scn`: 27 steps, `RESULT ok` in 36 frames, two
+1282×722 captures, no page errors, title, storage tokens and the whole
+semantic tree in the receipt. The 2026-08-06 stop rule is answered.
+
+Five findings from landing it, three of them about the instrument:
+
+1. *DOM events must be dispatched after the tick.* The host's own listeners
+   `borrow_mut` the host; a synthetic `keydown` dispatched from inside the
+   tick, where the host is already borrowed, re-enters that borrow and
+   traps — and the browser swallows a listener's exception, so
+   `dispatchEvent` returns normally and the step looks run. The first
+   scenario failed exactly there (Enter never opened the detail). Verbs now
+   queue `DomAction`s; the frame pump dispatches them once the borrow ends.
+   Page errors are also kept (`window.graphshellErrors`) and carried in the
+   receipt, because `update_semantics` rewrites the title every frame and
+   would hide a loader's `FAIL` title.
+2. *A hidden tab gets no animation frames.* The app's Browser pane fired no
+   `requestAnimationFrame` even while `document.hidden` was false, so a
+   frame-pumped lane cannot run there; a real headed Chrome ran the same
+   scenario in three seconds. The sink exists so the driver never needs to
+   read the DOM of a browser it cannot reach.
+3. *`rust-lld` crashes on this crate's DWARF* on the pinned 1.97.1
+   toolchain (`0xc0000005`, reproducible, at HEAD without any of this
+   work; the last bundle that linked with debug info dates from
+   2026-08-19). `CARGO_PROFILE_DEV_DEBUG=0` links. Recorded in the driver
+   with a retire condition; whether the web manifest should carry
+   `[profile.dev] debug = false` is open.
+4. *wasm-bindgen's demangled name section is 2 GB* on this module — 12× the
+   167 MB it links to, past the browser's 1 GiB limit
+   (`WebAssembly.instantiateStreaming(): size > maximum module size`).
+   `--no-demangle` gives 162 MB; stripping the section gives 40 MB. Some
+   generic type in the graph has a pathological demangled name; not chased.
+5. *The canvas chrome renders no glyphs* in this build: pills, rail and
+   status are bare boxes in both captures and in the pane's own screenshot,
+   and `GraphshellSans.ttf` is never requested. The DOM mirror carries the
+   text, so the semantic receipt is unaffected, but a pixel receipt of the
+   chrome is currently a receipt of boxes. Pre-existing; owner unknown.
+
 ## 8. C5: public rendezvous
 
 Deploy `https://mer3ly.net/join/<rendezvous>#<private-capability>` only after C4.
@@ -1127,3 +1290,17 @@ relay, and reconnect receipts.
   plus 2 composition and 2 signaling receipts; graphshell-client 46; carrier
   68. CARRIED to C4b: the real mount in `web.rs` and the surfaces;
   resume-on-reconnect with a change during the outage.
+
+- **2026-09-01: C4b assessed and ruled; C4b.0 landed.** Assessment in §7:
+  the web client's remote session is in-process and synchronous, two
+  `ClientState`s, a document-wide keyboard handler, global-id DOM
+  addressing, and no browser harness. Ruled: embed as both a root-scoped
+  mount entry and a custom element; receipts by a page-side scenario lane;
+  the in-process fixture stays beside the WebRTC realization; the profile
+  mark at C4b close. C4b.0 is that lane: `web_scenario.rs` over
+  `genet-probe`, GPU-readback captures, a receipt sink and driver under
+  `Code/testing/mere/`, `h3_boot.scn` green in real Chrome. Findings: DOM
+  dispatch deferred past the tick (re-entrant borrow), hidden tabs get no
+  frames, `rust-lld` DWARF crash worked around with `debug = 0`, bindgen's
+  2 GB name section worked around with `--no-demangle`, and the canvas
+  chrome renders no glyphs in this build. Next: C4b.1, the real mount.

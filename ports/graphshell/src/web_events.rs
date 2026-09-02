@@ -16,7 +16,7 @@ use web_sys::{
     MouseEvent, PointerEvent, WheelEvent,
 };
 
-use super::{ActiveSession, BrowserHost, document, update_semantics, window};
+use super::{ActiveSession, BrowserHost, document, update_semantics, web_scenario, window};
 
 pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), String> {
     let canvas = state.borrow().canvas_element.clone();
@@ -227,16 +227,30 @@ pub(super) fn schedule_frames(state: Rc<RefCell<BrowserHost>>) -> Result<(), Str
     let next = frame.clone();
     let callback_state = state.clone();
     *next.borrow_mut() = Some(Closure::new(move |host_ms: f64| {
-        {
+        let deferred = {
             let mut host = callback_state.borrow_mut();
             if let Err(error) = host.render(host_ms) {
                 web_sys::console::error_1(&error.clone().into());
                 if let Ok(document) = document() {
                     document.set_title(&format!("GRAPHSHELL H3 FAIL: {error}"));
                 }
+                Vec::new()
             } else {
                 let _ = update_semantics(&mut host);
+                // After the frame and its mirror: a scenario step sees the
+                // DOM as this frame left it.
+                web_scenario::tick(&mut host);
+                let _ = update_semantics(&mut host);
+                std::mem::take(&mut host.deferred_dom)
             }
+        };
+        // The borrow above has ended, so the host's own listeners can take
+        // the host: only now may a step's DOM events be dispatched.
+        if !deferred.is_empty() {
+            let events = web_scenario::run_deferred(deferred);
+            let mut host = callback_state.borrow_mut();
+            host.probe_events.extend(events);
+            let _ = update_semantics(&mut host);
         }
         if let Ok(window) = window()
             && let Some(callback) = frame.borrow().as_ref()

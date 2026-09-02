@@ -23,6 +23,7 @@
 mod web_events;
 mod web_gpu;
 mod web_product;
+mod web_scenario;
 mod web_view;
 
 use std::cell::RefCell;
@@ -68,7 +69,8 @@ use graphshell_client::frozen::Satisfaction;
 use muniment::IndexedDbBackend;
 use uuid::Uuid;
 use web_events::{install_events, schedule_frames};
-use web_gpu::GpuPresenter;
+use web_gpu::{GpuPresenter, PendingCapture};
+use web_scenario::{DomAction, ScenarioRun};
 use web_product::update_product_semantics;
 use web_view::{ChromeModel, build_chrome_scene};
 
@@ -317,6 +319,17 @@ struct BrowserHost {
     projection_editor_open: bool,
     projection_editor_status: String,
     projection_editor_save_count: u32,
+    /// The scenario lane (`web_scenario`): a script in flight, the semantic
+    /// events it asserts against, and a capture armed or landing.
+    scenario: Option<ScenarioRun>,
+    scenario_frames: u32,
+    probe_events: Vec<String>,
+    /// DOM events a scenario step asked for, dispatched by the frame pump
+    /// once it has let go of the host (`web_scenario::DomAction`).
+    deferred_dom: Vec<DomAction>,
+    capture_request: Option<String>,
+    capture_pending: Option<(String, PendingCapture)>,
+    capture_count: u32,
 }
 
 struct BrowserProjectionSink;
@@ -480,6 +493,8 @@ impl BrowserHost {
     }
 
     fn render(&mut self, host_ms: f64) -> Result<(), String> {
+        self.scenario_frames = self.scenario_frames.wrapping_add(1);
+        self.finish_capture()?;
         self.resize_if_needed();
         self.advance_arrangement_transition(host_ms);
         if self.chrome_dirty {
@@ -490,8 +505,35 @@ impl BrowserHost {
             ActiveSession::Local => self.canvas.frame(self.width, self.height).0,
             ActiveSession::Remote => self.remote_scene(),
         };
+        if let Some(name) = self.capture_request.take() {
+            // The same two scenes this frame presents, composed into an owned
+            // target: a capture is the frame, not a re-rendering of it.
+            let pending = self
+                .gpu
+                .capture(&content, &self.chrome_scene, self.width, self.height);
+            self.capture_pending = Some((name, pending));
+        }
         self.gpu
             .present(&content, &self.chrome_scene, self.width, self.height)
+    }
+
+    /// Publish a capture whose readback has landed, if any.
+    fn finish_capture(&mut self) -> Result<(), String> {
+        let landed = self
+            .capture_pending
+            .as_ref()
+            .is_some_and(|(_, pending)| pending.ready());
+        if !landed {
+            return Ok(());
+        }
+        let Some((name, pending)) = self.capture_pending.take() else {
+            return Ok(());
+        };
+        let (width, height, rgba) = pending.take()?;
+        web_scenario::publish_capture(&name, width, height, &rgba)?;
+        self.capture_count += 1;
+        self.probe_events.push(format!("capture-done {name} {width}x{height}"));
+        Ok(())
     }
 
     fn begin_arrangement_transition(
@@ -601,7 +643,10 @@ impl BrowserHost {
         scene
     }
 
-    fn run_command(&mut self, command: &str) {
+    /// Run one named command. `false` when no such command exists, so a
+    /// scenario's `act` fails loudly rather than silently doing nothing.
+    fn run_command(&mut self, command: &str) -> bool {
+        self.probe_events.push(format!("command {command}"));
         match command {
             "open-projection-editor" => {
                 self.projection_editor_open = true;
@@ -644,7 +689,8 @@ impl BrowserHost {
             "pan-down" => self.pan(0.0, 42.0),
             _ => {
                 if !self.run_product_command(command) {
-                    return;
+                    self.probe_events.push(format!("command-unknown {command}"));
+                    return false;
                 }
             }
         }
@@ -652,6 +698,7 @@ impl BrowserHost {
             self.refresh_representation_score();
         }
         self.chrome_dirty = true;
+        true
     }
 
     fn select_projection_panel(&mut self, panel: &str) {
@@ -1809,6 +1856,8 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     // than parsing prose that is allowed to change.
     body.set_attribute("data-storage-persistence", host.storage_persistence.token())
         .map_err(|_| "could not expose storage persistence")?;
+    body.set_attribute("data-capture-count", &host.capture_count.to_string())
+        .map_err(|_| "could not expose the capture count")?;
     document.set_title("GRAPHSHELL H3 READY");
     Ok(())
 }
@@ -1961,7 +2010,15 @@ async fn run() -> Result<(), String> {
         projection_editor_open: false,
         projection_editor_status: "Draft ready · unsaved".to_string(),
         projection_editor_save_count: 0,
+        scenario: None,
+        scenario_frames: 0,
+        probe_events: Vec::new(),
+        deferred_dom: Vec::new(),
+        capture_request: None,
+        capture_pending: None,
+        capture_count: 0,
     }));
+    web_scenario::install(&state);
     install_events(&state)?;
     web_product::install_product_events(&state)?;
     update_semantics(&mut state.borrow_mut())?;

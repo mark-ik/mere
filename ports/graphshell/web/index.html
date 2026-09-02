@@ -307,6 +307,14 @@
       </section>
     </main>
 
+    <!-- The scenario lane's output. Hidden from the accessibility tree on
+         purpose: a receipt must not change the surface it measures. -->
+    <section id="scenario-host" aria-hidden="true" hidden>
+      <pre id="scenario-log"></pre>
+      <pre id="scenario-result"></pre>
+      <div id="scenario-captures"></div>
+    </section>
+
     <script type="module" src="./loader.js"></script>
   </body>
 </html>
