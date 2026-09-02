@@ -15,7 +15,7 @@ the reconciled
 [Djot editor and clipping plan](../../archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md),
 the [Graphshell remote projection host plan](2026-07-22_graphshell_remote_projection_host_plan.md),
 Genet's `docs/2026-07-25_text_editing_primitive_plan.md`, and the reconciled
-evaluation/export plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md`).
+evaluation/export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`).
 
 ## Ruling
 
@@ -350,7 +350,7 @@ Appending to the open document uses the existing target and base token.
 
 Transclusion Resolve and block Run reuse the same intent advertisement,
 capability, consent, stale-revision, receipt, and revision-bell path from the
-evaluation/export plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md`).
+evaluation/export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`).
 The result is attached to the editable presentation as derived text tied to the
 current base token. It is not written to disk or into a signed vault journal.
 

@@ -39,7 +39,7 @@ intentional:
 | Semantic web clipping and `ClippedFrom` provenance | Mere `crates/import::web_clip`; Turnstone Inspector/content lane | The host-neutral producer survived. The Meerkat command did not. A current Inspector selection-to-Knot write path is open. |
 | Outline and folds in the product | Genet readout plus a consumer-pulled Cambium tree/outline; Turnstone Gloss/Inspector | Outline data exists; a Knot authoring consumer and interactive tree are open. This is shared component work, not a Knot parser fork. |
 | Query, agent, diagram, and Wasm blocks | polyglot block resolver plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`) | Separate resolver work. It is not unfinished Phase 3 editor work. |
-| Transclusion, evaluation, sanitized HTML, consent, and derived-result caching | Knot evaluation and export plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md`) | Reconciled there. Pure transforms live in Genet; effect policy and cache live in Knot; the product host presents intents and consent. |
+| Transclusion, evaluation, sanitized HTML, consent, and derived-result caching | Knot evaluation and export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`) | Reconciled there. Pure transforms live in Genet; effect policy and cache live in Knot; the product host presents intents and consent. |
 | Shared documents | Knot sync plus Commons | Personal and communal convergence landed. Public addressing, discovery, and publishing UX remain separate product work, not restoration of `knot://` node storage. |
 
 ### Surviving product slices
@@ -799,7 +799,7 @@ This plan extends, and does not re-scope, the following owners:
 - 2026-05-08 polyglot knot design (`genet/design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`)
   and 2026-06-13 polyglot block resolver plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`):
   the block vocabulary and the descriptor-as-`CodeBlock` decision.
-- 2026-06-12 knot evaluation and export plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-12_knot_evaluation_export_plan.md`):
+- 2026-06-12 knot evaluation and export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`):
   the eval and include passes, the HTML fragment fidelity tier (K4), and richer
   span fidelity. Phase 6 fidelity work belongs there.
 - [2026-06-23 gloss outline lens plan](../../mere_docs/implementation_strategy/2026-06-23_gloss_outline_lens_plan.md):
