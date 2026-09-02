@@ -38,12 +38,16 @@
 //! composed *path* rather than about whatever hardware the machine has, and it
 //! is what lets the GPU receipt's tallies be compared against something.
 //!
-//! Windows-only for the same reason the lane receipt is: the lane reads
-//! `HostFacts::memory_mib` from the operating system and refuses to advertise
-//! a capacity it never measured, and only the Windows half of this crate can
-//! measure one today.
+//! It runs wherever the lane composes, for the same reason the lane receipt
+//! does: the one fact `HostFacts` will not invent is physical memory, and this
+//! crate reads that on Windows, Linux and macOS. The device conditions it
+//! leans on off Windows are the fixture's stated fallbacks — see
+//! `common::lending`, whose docs carry the pairing that keeps them honest.
+//! Nothing else here is platform-shaped: the model library path is derived
+//! with `Path::join` under a `tempfile` root, and the training is `ndarray` on
+//! the CPU.
 
-#![cfg(all(feature = "trainer", windows))]
+#![cfg(feature = "trainer")]
 
 mod common;
 

@@ -6,7 +6,9 @@ Personae/settings binding, configure/inspect binary, and read-only Cambium
 surface pass an exact-source focused Cargo gate, and Turnstone admits the
 surface as the contribution seam's second provider; operational host
 composition is ruled, built, and receipted in §10 — the Djinn lane runs a
-real mesh job from stated policy on `SystemClock` and closes clean — and
+real mesh job from stated policy on `SystemClock` and closes clean, and as of
+2026-09-02 reads physical memory on Windows, Linux and macOS alike, so its
+receipts are no longer Windows-gated — and
 the full workspace gate is closed green, leaving only the deferrals §10
 records. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
@@ -700,7 +702,8 @@ The composition runs. Three lanes, each gated before the next:
   a device with no lending posture, converts the posture, validates
   coverage, opens the redb mesh store under the owner's retention revision
   with the derived mesh author as checkpoint authority, reads real memory
-  through `GlobalMemoryStatusEx` (refusing on a build that cannot), and
+  through `GlobalMemoryStatusEx` (refusing on a build that cannot; two more
+  readings were added on 2026-09-02, see below), and
   binds through the ordinary `bind_resident` — `SystemClock`, `NoCourier`
   (truthful for the single-device ruling), builtin registry, no
   `permissive()` anywhere. Djinn's run loop gained the cancellation signal
@@ -960,8 +963,10 @@ naming the index, not a panic. The new receipt
 "gpu"`, asserts the adapter facts are `Discrete` and matched, asserts
 `HostFacts.gpu == true` on the *installed* host, and drives the same synthetic
 llama fixture through the resident on `SystemClock` to
-Claimed → Started → Completed. **Baseline 0/6, adapter 4/6 at `RankingAt{3}`,
-124.0 s.** The CPU receipt on the identical fixture the same day: baseline
+Claimed → Started → Completed. (That receipt gained a second branch on
+2026-09-02, for machines with no discrete adapter — see below; what is
+described here is now its discrete branch.) **Baseline 0/6, adapter 4/6 at
+`RankingAt{3}`, 124.0 s.** The CPU receipt on the identical fixture the same day: baseline
 0/6, adapter 4/6, 16.6 s. Two things worth keeping. The tallies match here but
 the receipt asserts only *strict improvement* and prints what it measured —
 f32 reductions on a GPU need not reproduce ndarray's numbers bit for bit, and
@@ -989,6 +994,110 @@ assertion and is now
 `a_build_with_no_gpu_trainer_refuses_a_lane_that_states_one`, which opens a
 resident and reads the composition's refusal, because that is where the
 question moved.
+
+### The lane composes on three operating systems, 2026-09-02
+
+Ruled by the owner the same day. Every Distillery lane receipt carried
+`cfg(windows)` — not because anything in the lane was Windows-shaped, but
+because `total_memory_mib` returned `None` off Windows and `host_facts`
+rightly refuses to advertise a capacity it never measured. One unread number
+was gating three receipts, so the whole lane went unproven on the two
+platforms it was about to be run on. Read the number instead.
+
+**Three readings, one per platform.** `GlobalMemoryStatusEx` on Windows, as
+before. On Linux, the `MemTotal:` line of `/proc/meminfo`, in `std` alone: the
+value is kibibytes despite the kernel writing `kB`, integer-divided by 1024,
+and anything unexpected — no `/proc`, no such line, an unparseable value — is
+`None` rather than a guess. On macOS, `sysctlbyname("hw.memsize")` through
+`libc` 0.2 under a `[target.'cfg(target_os = "macos")'.dependencies]` entry,
+already in the workspace graph; bytes to MiB, saturating into `u32`, a
+non-zero return or a short reply is `None`. `libc` rather than spawning
+`sysctl(8)`, because a resident should not fork a process to learn its own
+memory size. Every other target still reports nothing and still refuses, in
+the same voice as before: a port that wants this lane supplies a real reading
+first.
+
+**The receipts follow the readings.** `distillery_lane.rs`'s whole-run receipt
+lost its `cfg(windows)`; `distillery_trainer.rs` went from `cfg(all(feature =
+"trainer", windows))` to `cfg(feature = "trainer")`, and
+`distillery_trainer_gpu.rs` likewise. Nothing else in those files was
+platform-shaped — the model library path is `Path::join` under a `tempfile`
+root, and the CPU training is `ndarray`.
+
+What makes them runnable off Windows, where *nothing* is sensed, is the
+fixture's stated posture, and the pairing is worth stating as an invariant
+because it is easy to break silently: `common::lending` enables exactly one
+rule, `min_idle_ms`, and states a fallback for it; battery, thermal, network
+and bandwidth are each switched off by the owner. `validate_policy_coverage`
+refuses an enabled rule resting on an absent signal, so a rule enabled in that
+fixture *without* a stated fallback would compose on Windows and refuse
+everywhere else. That is the same shape of bug the thermal-limit test hit on
+the ThinkPad on 2026-09-02, one paragraph up. The fixture needed no change —
+it was already correct — and its docs now carry the invariant so the next
+edit to it has to notice.
+
+**The GPU receipt now proves whichever answer the hardware supports.** It was
+written for a machine with a discrete adapter and would simply have failed to
+compose on one without. It now probes first —
+`distillery::probe_gpu_adapter(DiscreteGpu(0))`, the same question
+`discrete_gpu_trainer_device` asks inside the composition — prints what it
+found, and branches:
+
+- **A matched discrete adapter**: the previous body unchanged. Compose with
+  `device: "gpu"`, assert the adapter facts are `Discrete` and matched, assert
+  `HostFacts.gpu == true` on the installed host, train, assert strict held-out
+  improvement, print the tallies and the adapter.
+- **Anything else**: assert that opening the lane with `device: "gpu"` is
+  *refused*, that the refusal names the setting, the value, and either the
+  adapter found instead (by name) or the runtime's own account of finding
+  none, and that the refusal unwinds without a second failure. `refusal_from`
+  is the "nothing was composed" assertion — an `Ok` there is a live resident,
+  which it shuts down and then fails on.
+
+Both branches print which one ran, so a log reader knows what the machine
+proved. Neither is a skip, and the refusing branch is the more valuable of the
+two: it is the branch where cubecl would otherwise have handed the lane an
+adapter it did not ask for. This matters concretely for the two machines this
+is headed to — the Fedora ThinkPad has AMD Renoir integrated graphics on RADV
+and no discrete adapter, and wgpu classes Apple Silicon GPUs as
+`IntegratedGpu`, so `probe_gpu_adapter(DiscreteGpu(0))` refuses on both. On
+those machines the receipt's job is to prove the refusal, and a passing run
+there trains nothing on purpose.
+
+Gates, run on the Windows laptop: `cargo fmt -p djinn` clean; `cargo clippy -p
+djinn --all-targets --features trainer-gpu` adding nothing beyond djinn's four
+pre-existing findings in `personal_sync.rs` and `resident_knot.rs`. Tests:
+default **65 lib + 5 lane**; `--features trainer` **65 lib + 4 lane + 2
+CPU-trainer**; `--features trainer-gpu` **65 lib + 4 lane + 1 CPU-trainer + 1
+GPU-trainer**, the GPU receipt taking the discrete branch on the RTX 4060
+(`NVIDIA GeForce RTX 4060 Laptop GPU (vulkan, discrete adapter)`, baseline 0/6
+vs adapter 4/6, 68.8 s).
+
+The refusing branch was proved by positive control rather than left to the
+remote runs: with `discrete_gpu_trainer_device` and the receipt's probe
+temporarily pointed at `DiscreteGpu(99)`, the lane refused with
+
+> `distillery.trainer.device is "gpu", and this build carries the GPU trainer,
+> but this machine cannot honour it: no discrete GPU this trainer could run
+> on: backend: no DiscreteGpu adapter at index 99 on the vulkan backend: 1 of
+> that class and 0 unclassified adapter(s) are present`
+
+and every assertion in that branch held. Both edits were reverted. This is the
+lesson from the thermal test restated: an untaken branch is not a proven one,
+and a machine that cannot reach it naturally can still be made to.
+
+Cross-target checking was again unavailable end-to-end: `cargo check -p djinn
+--target x86_64-unknown-linux-gnu` still dies in `ring`'s build script for want
+of an `x86_64-linux-gnu-gcc`. The two new arms were therefore type-checked in
+isolation, in a scratch crate carrying only them, against their real targets —
+`x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`, both installed here, the
+latter resolving `libc` 0.2.189 without a C toolchain. `cargo check` and `cargo
+clippy` are clean for both. That proves the arms parse and type-check; it
+proves nothing about the numbers they return.
+
+**Native results — `<pending native run>`** (Fedora ThinkPad `thinkpad-l14-f`:
+memory reading, the three receipts, and which branch the GPU receipt took;
+Apple Silicon iMac: the same).
 
 ### Done conditions
 

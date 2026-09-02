@@ -95,6 +95,14 @@ pub fn open_vault(root: &Path) -> (PathBuf, IdentityVault<Box<dyn personae::Iden
 /// idle, so `stated.idle_ms` is what a run actually leans on — the owner's
 /// word standing in for a reading that would otherwise withhold forever.
 ///
+/// Taken together that is what lets these receipts run off Windows, where
+/// nothing is sensed at all: `validate_policy_coverage` refuses an enabled
+/// rule resting on an absent signal, one rule is enabled, and that one rule
+/// has a stated value. The invariant to keep is that pairing — enabling a rule
+/// here without stating a fallback for it would compose on Windows and refuse
+/// everywhere else, which is precisely the shape of bug a Windows-only receipt
+/// used to hide.
+///
 /// `allowed_resources` and `accepted_checkpoints` are stated narrowly rather
 /// than left `[]`: `["mesh.blake3/v1"]` is the one job the lane receipt
 /// actually posts, so the posture explicitly permits the job under test rather

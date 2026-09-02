@@ -82,6 +82,14 @@ windows = { version = "0.62", features = [
 [target.'cfg(not(windows))'.dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
+# `sysctlbyname("hw.memsize")` for `HostFacts::memory_mib`
+# (`src/resident_distillery.rs`). macOS has no `/proc/meminfo`, and the sysctl
+# is the kernel's own answer; libc rather than spawning `sysctl(8)`, because a
+# resident should not fork a process to learn its own memory size. 0.2 is
+# already in this workspace's graph.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
 [[bin]]
 name = "djinn"
 path = "src/bin/djinn.rs"

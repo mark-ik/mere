@@ -52,13 +52,19 @@ use tokio::sync::Notify;
 
 /// The whole receipt: stated policy in, completed job out, clean close.
 ///
-/// Windows-only, and the reason is itself part of the discipline: the lane
-/// reads `HostFacts::memory_mib` from the operating system and refuses to
-/// advertise a capacity it never measured. Only the Windows half of this crate
-/// can measure one today, so only Windows can produce this receipt. The
-/// refusal tests below run everywhere, because they refuse before any fact is
-/// read.
-#[cfg(windows)]
+/// It runs wherever the lane can compose, which is wherever this crate can
+/// measure physical memory: Windows, Linux and macOS. That is the one fact
+/// `HostFacts` refuses to invent, so it is the one thing that decides where
+/// this receipt is a receipt.
+///
+/// Off Windows nothing about the device is *sensed*, and the run leans on the
+/// fixture's stated fallbacks instead. That is not a weakening of the claim:
+/// `common::lending` enables exactly one rule, `min_idle_ms`, and states an
+/// idle time for it; battery, thermal, network and bandwidth are each switched
+/// off by the owner, for reasons the fixture's own docs give. A rule left
+/// enabled with nothing sensed and nothing stated behind it would refuse
+/// composition on such a machine rather than pass quietly — which is exactly
+/// what the thermal test below proves, on purpose.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_works_run_a_real_mesh_job_to_completion_and_close_clean() {
     let directory = tempfile::tempdir().expect("temporary resident root");

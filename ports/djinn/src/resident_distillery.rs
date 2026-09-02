@@ -25,8 +25,9 @@
 //!   this platform, so a `max_thermal_c` above zero with no stated temperature
 //!   refuses composition — loudly, at start, rather than by never lending.
 //! - **No invented capacity.** [`mesh::HostFacts::memory_mib`] is read from the
-//!   operating system, and a build that cannot read it refuses rather than
-//!   advertising a number.
+//!   operating system — `GlobalMemoryStatusEx` on Windows, `MemTotal:` from
+//!   `/proc/meminfo` on Linux, the `hw.memsize` sysctl on macOS — and a build
+//!   on a target with none of those refuses rather than advertising a number.
 //! - **No unearned GPU.** [`mesh::HostFacts::gpu`] follows the resource this
 //!   composition actually registered, never the hardware present. A `"gpu"`
 //!   trainer is composed only after Distillery's adapter probe says the wgpu
@@ -655,13 +656,15 @@ fn retention_policy(
 
 /// What this machine can honestly say it has.
 ///
-/// `memory_mib` is total physical memory, read once at composition. It is a
-/// ceiling rather than a live reading, and it is deliberately not "free right
-/// now": [`mesh::HostFacts`] is a static offer other devices match job
-/// requirements against, so a number that moved every time a browser opened
-/// would make this device's offers meaningless. A job that would fit the
-/// machine but not this moment is a scheduling concern, and scheduling by live
-/// pressure is a later slice.
+/// `memory_mib` is total physical memory, read once at composition from
+/// [`total_memory_mib`] — `GlobalMemoryStatusEx` on Windows, `MemTotal:` from
+/// `/proc/meminfo` on Linux, the `hw.memsize` sysctl on macOS, and nothing at
+/// all anywhere else, where this refuses. It is a ceiling rather than a live
+/// reading, and it is deliberately not "free right now": [`mesh::HostFacts`]
+/// is a static offer other devices match job requirements against, so a number
+/// that moved every time a browser opened would make this device's offers
+/// meaningless. A job that would fit the machine but not this moment is a
+/// scheduling concern, and scheduling by live pressure is a later slice.
 ///
 /// `gpu` is an argument rather than a constant, and the rule behind it is the
 /// whole point: **the fact follows the composed resource, never the hardware.**
@@ -683,6 +686,20 @@ fn host_facts(gpu: bool) -> Result<mesh::HostFacts, String> {
     })
 }
 
+// ─── Total physical memory, one reading per platform ────────────────────────
+//
+// Three sources, and naming them is the whole doc: `GlobalMemoryStatusEx` on
+// Windows, the `MemTotal:` line of `/proc/meminfo` on Linux, the `hw.memsize`
+// sysctl on macOS. Each is the operating system's own answer, and none of them
+// is guessed from anything else — a device that could not reach its platform's
+// answer reports `None` and `host_facts` refuses.
+//
+// The arms are cheap enough to be per-platform rather than per-crate: Windows
+// and macOS each go through a dependency this port already carries for its
+// own reasons, and the Linux arm is `std` alone.
+
+/// Windows: `GlobalMemoryStatusEx`, through the `windows` crate
+/// [`crate::conditions`] already carries.
 #[cfg(windows)]
 fn total_memory_mib() -> Option<u32> {
     use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
@@ -697,11 +714,60 @@ fn total_memory_mib() -> Option<u32> {
     u32::try_from(status.ullTotalPhys / (1024 * 1024)).ok()
 }
 
-/// Off Windows this lane has no dependency-free reading of physical memory, so
-/// it reports nothing and [`host_facts`] refuses. The same posture
+/// Linux: the `MemTotal:` line of `/proc/meminfo`, which the kernel reports in
+/// kibibytes despite writing `kB`.
+///
+/// `std` alone, deliberately: `/proc/meminfo`'s first line has been
+/// `MemTotal:` for the life of the interface, and taking a dependency to read
+/// one integer out of a text file would cost the resident more than it buys.
+/// Anything unexpected — no `/proc`, no such line, a value that will not parse
+/// — is `None` rather than a guess.
+#[cfg(target_os = "linux")]
+fn total_memory_mib() -> Option<u32> {
+    let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+    let kib: u64 = meminfo
+        .lines()
+        .find_map(|line| line.strip_prefix("MemTotal:"))?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()?;
+    Some(u32::try_from(kib / 1024).unwrap_or(u32::MAX))
+}
+
+/// macOS: the `hw.memsize` sysctl, which reports bytes.
+///
+/// `sysctlbyname` through `libc` rather than spawning `sysctl(8)`: a resident
+/// that forked a process to learn its own memory size would be paying for an
+/// answer the kernel hands over directly. A non-zero return, or a reply that
+/// is not the `u64` this asked for, is `None`.
+#[cfg(target_os = "macos")]
+fn total_memory_mib() -> Option<u32> {
+    let mut bytes: u64 = 0;
+    let mut written = size_of::<u64>();
+    // SAFETY: the name is a NUL-terminated C string, `bytes` and `written` are
+    // live locals, and `written` is exactly the size of the buffer the second
+    // pointer addresses; the call writes only through the pointers it is given.
+    let answered = unsafe {
+        libc::sysctlbyname(
+            c"hw.memsize".as_ptr(),
+            (&raw mut bytes).cast(),
+            &raw mut written,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if answered != 0 || written != size_of::<u64>() {
+        return None;
+    }
+    Some(u32::try_from(bytes / (1024 * 1024)).unwrap_or(u32::MAX))
+}
+
+/// Everywhere else: nothing, and [`host_facts`] refuses rather than advertise
+/// a capacity this build never measured. The same posture
 /// [`crate::conditions`] takes with its sensed signals: a port that wants this
 /// lane supplies a real reading first.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 fn total_memory_mib() -> Option<u32> {
     None
 }
@@ -937,30 +1003,35 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
+    /// Windows, Linux and macOS each have a real reading, so on all three this
+    /// asks the same two questions: the number is the machine's, and the GPU
+    /// bit is the composition's.
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     #[test]
     fn this_machine_reports_a_real_memory_size_and_a_gpu_fact_that_follows_composition() {
-        let facts = host_facts(false).expect("Windows can read physical memory");
+        let facts = host_facts(false).expect("this platform reads physical memory");
         assert!(
-            facts.memory_mib >= 512,
-            "a machine running this test has more than half a gigabyte: {}",
+            facts.memory_mib > 512,
+            "a machine running this test has more than half a gibibyte, so a smaller \
+             answer means the reading is wrong rather than the machine small: {}",
             facts.memory_mib
         );
         assert!(
             !facts.gpu,
-            "a composition that registered no GPU resource may not claim one, and the \
-             machine running this test has a discrete GPU in it — which is exactly the \
-             case that would go wrong if the fact were read off the hardware"
+            "a composition that registered no GPU resource may not claim one — and this \
+             runs on machines that do have a GPU in them, which is exactly the case that \
+             would go wrong if the fact were read off the hardware"
         );
         assert!(
             host_facts(true)
-                .expect("Windows can read physical memory")
+                .expect("this platform reads physical memory")
                 .gpu,
             "and the composed answer is carried through rather than overridden"
         );
     }
 
-    #[cfg(not(windows))]
+    /// Anywhere else there is no reading, and the refusal is the receipt.
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     #[test]
     fn a_build_that_cannot_measure_memory_refuses_to_advertise_one() {
         assert!(host_facts(false).is_err());

@@ -5,12 +5,22 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! The receipt for the GPU-composed trainer: the same lane, the same synthetic
-//! fixture, the same forcing question — run on this machine's discrete GPU,
-//! with the adapter named rather than assumed.
+//! fixture, the same forcing question — what does `device: "gpu"` do on *this*
+//! machine, with the adapter named rather than assumed.
 //!
 //! `distillery_trainer.rs` already proves the composition on the CPU. This file
 //! changes exactly one field, `distillery.trainer.device` from `"cpu"` to
-//! `"gpu"`, and asserts the three things that word is supposed to mean:
+//! `"gpu"`, and there are two honest answers to that, decided by hardware and
+//! not by the test: a machine with a discrete adapter must train on it, and a
+//! machine without one must be *refused*. The receipt asks
+//! [`distillery::probe_gpu_adapter`] which machine it is on, prints the
+//! answer, and then proves the corresponding claim. Neither branch is a skip;
+//! a log reader can tell from the printed branch line which of the two this
+//! run proved.
+//!
+//! ## The discrete branch
+//!
+//! Three things that word is supposed to mean:
 //!
 //! 1. **The adapter is the discrete GPU, and it was checked.**
 //!    [`ResidentDistillery::trainer_adapter`] reports the adapter the wgpu
@@ -41,11 +51,24 @@
 //! took, printed, plus the claim that the adapter beat the untuned base on
 //! held-out cases.
 //!
-//! Windows-only for the same reason every lane receipt is: the lane refuses to
-//! advertise a memory capacity it never measured, and only the Windows half of
-//! this crate can measure one today.
+//! ## The refusing branch
+//!
+//! On a machine with no discrete adapter — an integrated-only laptop, an Apple
+//! GPU, which wgpu classes as `IntegratedGpu`, a headless box — the claim under
+//! test is the *refusal*, and it is the more valuable of the two: it is the
+//! branch where cubecl would have handed the lane something it did not ask for.
+//! The receipt asserts that opening the resident with `device: "gpu"` fails,
+//! that the refusal names both the setting it refused and the adapter facts
+//! that were found instead (or the absence, when nothing was found), and that
+//! no resident was composed. Passing here without training anything is the
+//! whole point: the lane declining to advertise a GPU it cannot name is the
+//! behaviour, not a shortfall of it.
+//!
+//! It runs wherever the lane composes at all — Windows, Linux and macOS, the
+//! three platforms this crate can read physical memory on, which is the one
+//! fact `HostFacts` refuses to invent.
 
-#![cfg(all(feature = "trainer-gpu", windows))]
+#![cfg(feature = "trainer-gpu")]
 
 mod common;
 
@@ -55,11 +78,12 @@ use std::time::Duration;
 
 use common::{
     CONFIG_JSON, EVAL_PREFIXES, MODEL_ID, TRAIN_PREFIXES, base_weights, lane, lending, now_ms,
-    open_vault, owner, profile, save_cases, tokenizer_json, unlock, write_device_settings,
+    open_vault, owner, profile, refusal_from, save_cases, tokenizer_json, unlock,
+    write_device_settings,
 };
 use distillery::{
     GpuDeviceType, LoraTrainerSettings, ResidentReceipt, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE,
-    TrainReceipt, TrainRequest,
+    TrainReceipt, TrainRequest, TrainerGpuKind, probe_gpu_adapter,
 };
 use djinn::resident::DjinnResident;
 use djinn::settings::TrainerLaneSettings;
@@ -80,8 +104,9 @@ use tokio::sync::Notify;
 /// shader compilation on top of the training itself.
 const FAILURE_BOUND: Duration = Duration::from_secs(600);
 
+/// Whichever of the two claims this machine's hardware supports, proved.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_composed_trainer_trains_on_this_machines_discrete_gpu() {
+async fn the_gpu_lane_trains_on_a_discrete_adapter_or_refuses_to_compose_at_all() {
     let directory = tempfile::tempdir().expect("temporary resident root");
     let data_root = directory.path().join("data");
     let (vault_dir, identity) = open_vault(directory.path());
@@ -100,6 +125,78 @@ async fn the_composed_trainer_trains_on_this_machines_discrete_gpu() {
         device: "gpu".into(),
         library_root: None,
     });
+
+    // Which machine is this? The same question `discrete_gpu_trainer_device`
+    // is about to ask inside the composition, asked here first so the receipt
+    // knows which of the two claims it owes — and printed either way, because
+    // a reader of the log is entitled to know what the machine proved rather
+    // than only that something passed.
+    let probe = probe_gpu_adapter(TrainerGpuKind::DiscreteGpu(0));
+    match &probe {
+        Ok(facts) => println!("djinn GPU probe: {facts}"),
+        Err(error) => println!("djinn GPU probe: no adapter — {error}"),
+    }
+    let is_discrete = matches!(
+        &probe,
+        Ok(facts) if facts.device_type == GpuDeviceType::Discrete && facts.matched_requested_class
+    );
+
+    if !is_discrete {
+        println!(
+            "branch: no discrete adapter on this machine — proving the lane REFUSES \
+             `device: \"gpu\"` rather than composing on what is here"
+        );
+        // What the refusal has to carry: the adapter it found instead, by name,
+        // or the runtime's own account of finding nothing. Either way the owner
+        // reading this message can tell what their machine actually has, which
+        // is the difference between a refusal and a wall.
+        let found = match &probe {
+            Ok(facts) => facts.name.clone(),
+            Err(error) => error.to_string(),
+        };
+
+        let refusal = refusal_from(
+            DjinnResident::open(
+                &identity,
+                &data_root,
+                &profile(),
+                owner(Some(trains)),
+                &vault_dir,
+                unlock(),
+            )
+            .await,
+            "a lane that says `device: \"gpu\"` on a machine with no discrete adapter must \
+             refuse rather than compose on whatever cubecl would have substituted",
+        )
+        .await;
+        println!("djinn GPU lane refusal: {refusal}");
+
+        assert!(
+            refusal.contains("distillery.trainer.device"),
+            "the refusal must name the setting it refused: {refusal}"
+        );
+        assert!(
+            refusal.contains("\"gpu\""),
+            "the refusal must name the value it refused: {refusal}"
+        );
+        assert!(
+            refusal.contains(&found),
+            "the refusal must name what this machine has instead of a discrete GPU \
+             ({found}): {refusal}"
+        );
+        assert!(
+            !refusal.contains("close blob custody"),
+            "the refusal must unwind cleanly, not report a second failure: {refusal}"
+        );
+        // `refusal_from` is the "nothing was composed" assertion: an `Ok` here
+        // would be a live resident, which it shuts down and then fails on.
+        return;
+    }
+
+    println!(
+        "branch: a discrete adapter is present — proving the lane composes on it and \
+         trains real work there"
+    );
 
     let mut resident = DjinnResident::open(
         &identity,
