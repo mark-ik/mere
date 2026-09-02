@@ -1,7 +1,7 @@
 # FLORA, Tulpa, and Standing integration receipt
 
 **Status (2026-09-02):** Passed again on the stack rebased onto `origin/main`
-`4d68c465`, together with the upstream Djinn Distillery lane receipts; landed on
+`f2924f08`, together with the upstream Djinn Distillery lane receipts; landed on
 `main`. First passed 2026-08-31 on `codex/0831-integration` after merging the
 upstream Genet pin correction `77b3c3a2` and Distillery test repair `9a53c77a`.
 
@@ -92,6 +92,12 @@ against `mere-canvas`, the rust-lang/rust#86049 shape recorded in the
 projection grammar plan, and cleaning the affected packages does not clear
 it. Nothing in the stack touches Canvas; the workaround is the invocation's,
 not the tree's.
+
+`main` moved again to `f2924f08` (Canvas derived faces D3) before the push.
+Distillery, Gemot, Muniment, Eidetic and Chartulary carry no edge to Canvas
+or Graphshell (`cargo tree`), so their results stand; the Canvas check and
+the three Djinn receipts were rerun on the tree replayed onto `f2924f08` and
+passed again.
 
 ## Workspace entry closure
 

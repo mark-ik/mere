@@ -1,7 +1,7 @@
 # Terminology and crate folds plan
 
 **Status (2026-09-02):** Landed on `main`. The stack was rebased from its
-`9a53c77a` base onto `origin/main` `4d68c465` on 2026-09-02, reconciled with
+`9a53c77a` base onto `origin/main` `f2924f08` on 2026-09-02, reconciled with
 the Djinn Distillery lane that arrived upstream in between, and every recorded
 gate was rerun green before the push. The seven external consumer commits
 follow it in their own repositories.
@@ -148,12 +148,15 @@ Done conditions:
   from the integration checkout. `cargo tree -i genet-taffy@0.14.0` resolves
   the Buckram/Livery/Mere consumer chain at the exact pinned Genet revision;
   `cargo check -p mere-canvas -j 1` compiles that chain successfully.
-- **2026-09-02:** rebased the nine commits onto `origin/main` `4d68c465`, added
+- **2026-09-02:** rebased the nine commits onto `origin/main` `f2924f08`, added
   the Djinn field reconciliation, and reran every gate from the integration
   checkout: integrated receipt 1/1, Distillery library 12/12, Gemot 122/122,
   Muniment 37, Eidetic 95, Chartulary 59, Djinn CPU trainer 2/2, Djinn lane
   4/4, Djinn GPU trainer 1/1, strict package Clippy on Distillery (both the
   recorded `flora` gate and `flora,trainer-gpu` over all tests) and Gemot,
   and the Mere Canvas dependency-chain check. Details in the
-  [receipt](../testing/2026-08-31_flora_tulpa_standing_receipt.md). Pushed to
-  `main` the same day.
+  [receipt](../testing/2026-08-31_flora_tulpa_standing_receipt.md). `main`
+  then moved to `f2924f08` (Canvas derived faces D3) before the push, so the
+  stack was replayed once more; the only overlap was Canvas's `quint`→`numen`
+  rename against D3's new modules, and the Canvas check and the three Djinn
+  receipts were rerun on that tree before landing.

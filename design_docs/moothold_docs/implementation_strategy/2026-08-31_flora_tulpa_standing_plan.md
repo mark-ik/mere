@@ -134,7 +134,7 @@ Done conditions:
   `genet-taffy` requirement to the pinned revision's `0.14.0`; after merging it,
   the integrated receipt also passed directly from the real integration
   checkout.
-- **2026-09-02:** the stack was rebased onto `origin/main` `4d68c465` and
+- **2026-09-02:** the stack was rebased onto `origin/main` `f2924f08` and
   landed on `main`. The integrated receipt passed again (1/1), with Distillery
   12/12 and Gemot 122/122; the rerun table lives in the
   [receipt](../../mere_docs/testing/2026-08-31_flora_tulpa_standing_receipt.md).
