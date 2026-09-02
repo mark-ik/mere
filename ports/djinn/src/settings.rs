@@ -150,7 +150,11 @@ pub struct DistilleryLaneSettings {
     /// How often the non-blocking mesh supervisor gets a turn.
     pub tick_every_ms: u64,
     /// How often an advanced frontier is checkpointed. `null` is a statement
-    /// too: it leaves maintenance an explicit owner command.
+    /// too: it leaves maintenance an explicit owner command. Omitting the
+    /// field is refused, for the same reason [`trainer`](Self::trainer)
+    /// refuses it: an owner who never said when their frontier is
+    /// checkpointed has not said "never".
+    #[serde(deserialize_with = "required_option")]
     pub maintenance_every_ms: Option<u64>,
     /// How often the physical store looks for content with no custody tag.
     pub blob_gc_every_ms: u64,
@@ -178,11 +182,9 @@ pub struct DistilleryLaneSettings {
     ///
     /// `null` is a statement, exactly as
     /// [`maintenance_every_ms`](Self::maintenance_every_ms) is: *this lane
-    /// composes no trainer*. Omitting the field entirely is refused by the
-    /// same `deny_unknown_fields`/required-field behaviour every other field
-    /// here relies on, because "I forgot to say" and "I said no" must not
-    /// look alike when the answer decides whether a device advertises that it
-    /// can train.
+    /// composes no trainer*. Omitting the field entirely is refused, because
+    /// "I forgot to say" and "I said no" must not look alike when the answer
+    /// decides whether a device advertises that it can train.
     #[serde(deserialize_with = "required_option")]
     pub trainer: Option<TrainerLaneSettings>,
 }
@@ -235,9 +237,11 @@ impl DistilleryLaneSettings {
 /// field typed `Option<T>` normally cannot tell "the owner wrote null" from
 /// "the owner never wrote it". Naming a `deserialize_with` removes that
 /// implicit default — serde will not call a custom function for a field that
-/// is not there — which is exactly the distinction
-/// [`DistilleryLaneSettings::trainer`] needs: whether this device offers the
-/// ring a trainer is not a question a typo may answer.
+/// is not there — which is exactly the distinction every nullable field of
+/// [`DistilleryLaneSettings`] needs: whether this device offers the ring a
+/// trainer, or when it checkpoints its frontier, is not a question a typo may
+/// answer. Both nullable fields there name this function, so the two cannot
+/// drift apart again.
 fn required_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -1236,28 +1240,30 @@ mod tests {
     }
 
     #[test]
-    fn a_lane_that_never_mentions_a_trainer_is_refused_rather_than_assumed_off() {
+    fn a_lane_that_never_mentions_a_nullable_field_is_refused_rather_than_assumed_off() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("silent.json");
-        let mut json = serde_json::to_value(OwnerSettings {
-            distillery: Some(distillery_lane()),
-            ..OwnerSettings::default()
-        })
-        .unwrap();
-        assert!(
-            json["distillery"]
-                .as_object_mut()
-                .unwrap()
-                .remove("trainer")
-                .is_some(),
-            "`trainer` is serialised, so removing it models an owner who never wrote it"
-        );
-        std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
-        assert!(
-            OwnerSettings::load(&path).is_err(),
-            "forgetting to say and saying no must not look alike: an omitted \
-             `trainer` must fail loudly rather than default to off"
-        );
+        for field in ["trainer", "maintenance_every_ms"] {
+            let path = directory.path().join(format!("silent-{field}.json"));
+            let mut json = serde_json::to_value(OwnerSettings {
+                distillery: Some(distillery_lane()),
+                ..OwnerSettings::default()
+            })
+            .unwrap();
+            assert!(
+                json["distillery"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(field)
+                    .is_some(),
+                "`{field}` is serialised, so removing it models an owner who never wrote it"
+            );
+            std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
+            assert!(
+                OwnerSettings::load(&path).is_err(),
+                "forgetting to say and saying no must not look alike: an omitted \
+                 `{field}` must fail loudly rather than default to off"
+            );
+        }
     }
 
     #[test]

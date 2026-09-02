@@ -726,7 +726,14 @@ host policy. And the trainer now runs in the resident behind djinn's
 `Option<TrainerLaneSettings>` whose `null` composes no trainer, whose
 `device` accepts only `cpu` while `HostFacts.gpu` is false, and whose
 presence on a build without the feature refuses `open` rather than
-composing a works that cannot do what its settings claim. The persona model
+composing a works that cannot do what its settings claim. Making it
+required exposed that `maintenance_every_ms`, documented as "`null` is a
+statement too", had never actually been required: serde supplies `None`
+for a missing `Option` unless a `deserialize_with` removes that default.
+Both nullable fields of the lane now name the same `required_option`
+deserializer, ruled consistent on 2026-09-01 while no on-disk `distillery`
+block exists outside test fixtures, so an omitted field fails the load
+rather than passing as "never". The persona model
 library is a `RedbBackend` at `<data-root>/models/<profile>/library.redb`
 (overridable), deliberately neither the personal-graph store nor under the
 mesh root, so adapters outlive any one mesh. The trainer receipt
