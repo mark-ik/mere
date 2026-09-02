@@ -754,6 +754,36 @@ Five findings from landing it, three of them about the instrument:
    and the reason bindgen's demangled names (finding 4) run to 2 GB. Names
    are v0-mangled because 1.97 defaults to v0 and `legacy` is nightly-only
    now, so no mangling knob exists on stable.
+   **Scoped 2026-09-02 (read-only, subagent).** The multiplier is not the
+   DOM type (one `LayoutDom` in this build, `ScriptedDom`) but the *measure
+   closure*: buckram implements all of taffy's tree traits on
+   `AlgorithmRun<'a, S, Context, Source, Measure>`
+   (`buckram/src/taffy_adapter/run.rs:9`) with the caller's measure closure
+   taken by value, so every `compute_layout_with_measure` call site is its
+   own `Measure` type and its own full copy of taffy's algorithm.
+   genet-livery's `layout.rs` has twelve such call sites, most inside
+   `<D>`-generic functions, plus a nesting wrapper
+   (`positioned_intrinsic_sizes`, layout.rs:1360) that spawns a second-level
+   closure per caller: **~14 distinct tree types**, confirmed two ways in the
+   module (24 `round_layout` symbols ÷ 2). ~3,150 taffy functions per copy
+   (taffy has 1,200 `fn`s and ~610 closures, all separate in debug). Every
+   one of those symbols is codegen'd into **genet-render** (19,396 tagged
+   `genet_render`, none `graphshell_web`), so a per-package profile knob on
+   `taffy` cannot bite. The migration explains the growth: `04e303ac`
+   replaced `genet-layout` with `genet-render` in the web manifest on
+   2026-08-21, pulling the whole Livery/Buckram/taffy cone in two days after
+   the 106 MB build. Secondary: the web lock carries *two* copies each of
+   `read-fonts`, `skrifa` and `font-types` (parley/harfrust on 0.39/0.42,
+   netrender/vello on 0.41/0.44) — ~3,000 functions, a version-alignment
+   job. Fix shapes, all genet-owned: (1) erase `Measure` behind
+   `&mut dyn FnMut` in the adapter — public `impl FnMut` entries unchanged,
+   no genet-livery call site moves, ~38,000 functions and ~85% of taffy's
+   `.debug_str` gone; (2) erase `Context` too, 2 → 1 tree types, more
+   invasive, only if (1) is not enough; (3) `[profile.dev] opt-level = 1`
+   (or per-package on `genet-render`/`genet-livery`/`buckram`) in the *web*
+   manifest, which lets inlining collapse the 148k `core` adapters — a
+   complement, not a fix, and the only knob mere owns. Decisions open: (1)
+   alone or (1)+(2); which way to align the font stack.
 4. *wasm-bindgen's demangled name section is 2 GB* on this module — 12× the
    167 MB it links to, past the browser's 1 GiB limit
    (`WebAssembly.instantiateStreaming(): size > maximum module size`).
