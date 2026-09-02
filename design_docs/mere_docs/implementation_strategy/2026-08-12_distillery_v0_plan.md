@@ -1095,9 +1095,21 @@ latter resolving `libc` 0.2.189 without a C toolchain. `cargo check` and `cargo
 clippy` are clean for both. That proves the arms parse and type-check; it
 proves nothing about the numbers they return.
 
-**Native results — `<pending native run>`** (Fedora ThinkPad `thinkpad-l14-f`:
-memory reading, the three receipts, and which branch the GPU receipt took;
-Apple Silicon iMac: the same).
+**Native results, 2026-09-02.** Fedora ThinkPad `thinkpad-l14-f` (x86_64,
+AMD Renoir, RADV, Rust 1.97.1): `MemTotal` 15,707,136 kB read from
+`/proc/meminfo`; 62 library tests, the 5 lane receipts, and the 2 CPU-trainer
+receipts green, the trainer receipt at baseline 0/6 vs adapter 4/6 in 16.4 s;
+the GPU receipt took the refusing branch on the vulkan backend ("no
+DiscreteGpu adapter at index 0 ... 0 of that class and 0 unclassified
+adapter(s) are present"), the lane refused `device: "gpu"` by name, and nothing
+composed. Apple Silicon iMac `Mayolas-iMac` (M4, macOS 26.5.1, Rust 1.97.1):
+`hw.memsize` 17,179,869,184 read through `sysctlbyname`; the same 62 + 5 + 2
+green, the trainer receipt at 0/6 vs 4/6 in 5.9 s; the GPU receipt took the
+refusing branch on the metal backend with the same account, since wgpu classes
+Apple GPUs as integrated. The forcing fixture therefore reaches the same
+tallies on three operating systems and two CPU architectures; that is an
+observation, not a cross-device bit claim, which the trainer still does not
+make.
 
 ### Done conditions
 
