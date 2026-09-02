@@ -1,11 +1,14 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status (reconciled 2026-08-29)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
+**Status (reconciled 2026-09-01)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
 one, A4+C2, and A2 are closed. Turnstone `648bf19` is B1's definitive close,
 including routed screen-reader interaction. The Projection Receipts Plan's
 coordinated spatial/Matrix views close A2's resolution half. A3 stage two and
-A5 retain their entrance gates. A5 waits for a named product consumer to open
+A5 retain their entrance gates. A3 stage two's gate was sharpened 2026-09-01
+against C4a: it waits for a remote viewer with a local camera over a served
+scene, which C4b is not; its fact-transport shape is ruled (evaluation must
+work without the host facts; carrying them is the stretch). A5 waits for a named product consumer to open
 its first proof; the promotion suite begins with that proof and is an evidence
 harness rather than a consumer. FT7 is closed through the local, admitted
 remote, and frozen Matrix parity receipt. FT8 is closed through Retinue
@@ -189,7 +192,7 @@ trip is deterministic; clause removal restores the unfiltered reading.
 Done when: brush, filter, and focus are named, serialized citizens rather
 than host-only state.
 
-**A3. LOD rungs as declarative conditions - STAGE ONE LANDED 2026-08-19 (via P3b); stage two stays gated.**
+**A3. LOD rungs as declarative conditions - STAGE ONE LANDED 2026-08-19 (via P3b); stage two stays gated, gate sharpened 2026-09-01.**
 Context: `ScoreItem.representation` is a pre-selected rung; the conditions
 that select it live in host code, so a remote client cannot re-select on its
 own zoom and a static realization cannot state why a rung was chosen.
@@ -200,9 +203,16 @@ conditions are realization-dependent, data-space conditions are
 reading-dependent.
 Tasks: stage one, conditions as data in cartography's representation
 profiles (host-side registry; the P3b card-to-glyph traversal is the named
-consumer). Stage two, portable only when a remote consumer needs client-side
-re-selection: rung conditions travel beside the score, and a static
-realization evaluates them at its declared zoom deterministically.
+consumer). Stage two, portable only when a remote viewer re-selects on a
+camera of its own: rung conditions travel beside the score, and a static
+realization evaluates them at its declared zoom deterministically. Stage two
+is larger than the ladder alone: `ScreenWidth`, `ScreenHeight` and `ZoomLevel`
+are viewer facts, but `Recency` and `Focused` are host facts the wire does not
+carry (recency derives from `graph.node_last_visited` in
+`cartography/src/spiral_score.rs`), so either they travel per item or the
+ladder is split-evaluated. Ruled 2026-09-01: both, in that order of
+obligation; see
+[Stage-two fact transport](#resolved-ruling-and-open-question).
 Forcing consumer: P3b (the recorded remaining half of P3: representation
 degrades card to glyph with recency and zoom, focus stays live). Mer3ly does
 not force this one: it exports `representation_registry()` to JavaScript for
@@ -214,6 +224,20 @@ selected rungs, deterministic; a hysteresis test shows a rung boundary does
 not flicker under small zoom oscillation.
 Stage-one done when: the representation ladder is registry data and one live
 host selects from it using declared view facts rather than a hardcoded branch.
+Entrance gate (sharpened 2026-09-01): a remote viewer with a local camera
+over a served scene. The earlier wording, "a remote re-selection consumer",
+made C4a's browser peer look like a candidate; it is not. The browser's
+remote view has no camera (`ports/graphshell/src/web.rs` `zoom` and `pan`
+return unless the session is local; `remote_scene` fits the served bounds at
+scale <= 1.0), the served rung is fixed by the endpoint
+(`MereHost::build_snapshot` hardcodes `Representation::Card` at
+`ports/graphshell/src/mere_host.rs`), and the client's own resolution is
+capability-based offer choice within that rung, the presentation plane the
+remote projection host plan ruled in §4.3 and landed at G1. C4b's
+done-conditions are keyboard and accessibility-tree checks on the embedded
+and full-page surfaces; they add no camera. The gate opens the moment a
+served scene is composed on the local canvas's camera, which the remote
+projection host plan §1 permits as curation truth.
 Stage-two done when: the ladder travels beside the score because a second host
 needs to re-select locally, and that host honors it without porting Mere's
 selection code.
@@ -454,13 +478,75 @@ with chirograph the fallback; checkability (`expects.generation`) is required in
 v1. The [scene citation index brief](../research/2026-08-16_scene_citation_index_brief.md)
 holds the reasoning.
 
-**Apps embedded in the site - open.** Mark, 2026-08-16: if he could embed full
+**Apps embedded in the site - ruled 2026-09-01, two sites, two answers.** Mark, 2026-08-16: if he could embed full
 versions of all his apps in the site, he would. That is a larger scope question
 than this plan carries, but it bears on the index ruling directly. An index is
 exactly the addressing an embedded app needs for a deep link, and under that
 reading authority-grade consumption stops being one site consuming one stack
 and becomes the site hosting the family. Recorded here so the index question is
 not settled without it.
+Ruled 2026-09-01. There are two sites and the answer differs. For
+**merelyllc.com**, the company site: it hosts Graphshell embeds, and every
+other application reaches it as a served projection through Graphshell, which
+is the remote projection host plan's product ruling (§1) applied; shelfmark is
+the deep link, C4b of the browser WebRTC carrier plan is the embed component,
+and C5 public rendezvous is what lets a visitor reach a device. For
+**mer3ly.net**: full versions of the applications embedded in the site as
+their own browser builds, the site hosting the family. Forced to one answer
+for both, the second wins. The mer3ly.net direction is a new objective, not
+a target in this plan: it needs its own assessment, one per application,
+since each has its own browser story. Nothing in the ruled scope of this plan
+starts it.
+
+**Stage-two fact transport - ruled 2026-09-01.** Found 2026-09-01 while testing C4b
+against A3's gate. `RepresentationLadder::select` evaluates five facts;
+three are the viewer's (`ScreenWidth`, `ScreenHeight`, `ZoomLevel`) and two
+are the host's (`Recency`, `Focused`), and neither the score nor the scene
+carries the host pair. When stage two opens, one of two shapes has to be
+chosen: the host pair travels per item beside the ladder, or the ladder is
+split-evaluated, host clauses resolved before serving and viewer clauses at
+the viewer. The choice fixes what a static realization can claim about why a
+rung was chosen, so it is ruled before the consumer exists, not under it.
+Ruled: not a choice between the two. **Evaluation without the host facts is
+the baseline obligation**: a viewer given a ladder and no `Recency` or
+`Focused` must still select a rung, so the host's clauses resolve to a
+per-item ceiling before serving and the viewer evaluates the rest. **Carrying
+the facts is the stretch**: a host may disclose them per item, and a viewer
+that receives them evaluates the full ladder. Disclosure is therefore never
+required for the ladder to work, which is what makes it a host's choice
+rather than a wire obligation. Design consequence for stage two: a condition
+whose fact is absent must have a defined result (the ceiling stands in for
+the host clauses; an absent viewer fact is the existing non-finite path,
+which never selects), and a static realization states whichever half it had.
+The ladder types move out of cartography (they depend only on
+`sceno::Representation`) when stage two opens. `ProjectedItem.channels` is
+the natural carrier for the disclosed pair if the stretch is taken; its doc
+already reserves it for host-side signals a remote viewer cannot read.
+
+**Served endpoint selects at a declared zoom - ruled 2026-09-01.** Found the
+same day: `MereHost::local_request` builds the offer's score through the
+strategy at 1280 x 720, zoom 1.0, no extents, so the ladder's Card rung fails
+`ScreenWidth > 0` and every item scores Glyph, while `build_snapshot`
+hardcodes every item as Card at 240 x 112. The offer and the snapshot
+disagree on every item; nothing breaks because endpoints ignore the request
+score for shape, but the wire carries two answers. Ruled: the served snapshot
+selects from the ladder at declared zoom 1.0 with the served footprint as the
+measured extent, and the hardcode goes. That makes stage one's "one live host
+selects from it" true of the product endpoint, and the offer and snapshot
+agree. A3 stage-one task; the landing is recorded in Progress.
+
+**What mer3ly is, clear-eyed - recorded 2026-09-01.** Mark's framing when
+ruling the two 2026-08-16 leftovers below: the graph view of an index of his
+own site is a toy, and a fine one, whose purpose is stress-testing an embedded
+canvas. There are zero consumers for sharing how people arrange it, and no
+need for any. The feature would have real utility over a real dataset, which
+needs other embeds and other data than descriptions of his GitHub repositories.
+Recorded beside the 2026-08-16 consumer ruling above because the two must be
+read together: mer3ly is live, public, pinned, and the shipping prover of the
+receipts plan, and that is what makes it authority-grade; what it is not is
+evidence of product demand for the features its receipts prove. Whether that
+qualifies the consumer ruling's "its asks open gates" is not settled here; it
+is raised in Progress for Mark.
 
 ## Progress
 
@@ -928,3 +1014,34 @@ not settled without it.
   requires a second heterogeneous consumer for every portable addition. The
   shelfmark/index ruling is labeled resolved; the embedded-app question
   remains open.
+- 2026-09-01: **C4a landed; A3 stage two tested against it and the gate
+  sharpened.** Mere `d10e04da` serves a live Graphshell projection to a
+  browser-shaped WebRTC peer (admitted by Notochord, sans-I/O `SessionCore`
+  with blocking and event-driven adapters, `LiveEndpoint` moving only for
+  admitted intent), tracked in the browser WebRTC carrier plan; C4b, the
+  embedded and full-page surfaces, was split out 2026-08-31. Checked whether
+  C4b is A3 stage two's remote re-selection consumer: it is not. The served
+  rung is endpoint-fixed, the browser's remote view has no camera, and the
+  client's only resolution is capability-based offer choice within the rung.
+  The gate now reads "a remote viewer with a local camera over a served
+  scene". Opened the stage-two fact transport ruling, since `Recency` and
+  `Focused` are host facts the wire does not carry. No code changed.
+- 2026-09-01: **the open rulings and two deferred questions scoped and
+  ruled by Mark.** Stage-two fact transport: evaluation without host facts
+  is the baseline, carrying them the stretch; disclosure is a host's choice.
+  Apps embedded: two sites, two answers; merelyllc.com hosts Graphshell
+  embeds with other applications as served projections, mer3ly.net embeds
+  the full applications, and the latter is a new objective needing its own
+  assessment. Served endpoint: select from the ladder at declared zoom 1.0
+  rather than hardcode Card; code to follow. Two 2026-08-16 leftovers: A1's
+  `honored_holds` half is closed, since `Scene.honored_holds` was promoted
+  the same day, while displacement by a consumer's own physics or viewport
+  fit stays gated on a consumer asking; C1's mer3ly unmet-count beside
+  "1 pin honored" is approved and folds into the next mer3ly wasm rebuild
+  rather than earning a deploy. Both carry Mark's framing, recorded in the
+  rulings section: mer3ly's graph view is a stress-test toy for an embedded
+  canvas, not a product pull.
+  Open for Mark, raised not ruled: the 2026-08-16 consumer ruling says
+  mer3ly's asks open gates. Read with today's framing, a mer3ly ask opens a
+  gate as a prover, not as demand; if that distinction should be written
+  into the consumer ruling itself, say so.
