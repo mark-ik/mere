@@ -1,8 +1,7 @@
 # Platform Boundary and Repository Topology Plan
 
 **Date:** 2026-09-02  
-**Status:** reviewed against the code 2026-09-02; P0 and P1 authorized by Mark
-the same day and in progress, with the inventory landing as §9 of this plan.
+**Status:** P0 landed 2026-09-02 as §9; P1 in progress the same day.
 The authority boundary is ruled with Mark, while code moves,
 repository changes, and GitHub operations have not started.  
 **Authority:** this is the canonical plan for the Genet/Mere boundary and the
@@ -310,7 +309,7 @@ stated point before the phase that touches their seam:
 
 | Before | Plan | Must reach | Why |
 | --- | --- | --- | --- |
-| P1 | [Workbench component plan](../../../../genet/design_docs/2026-08-31_workbench_component_plan.md) | W4 landed on genet `main` | W1-W3 and the Pelt receipts live on five unmerged `codex/workbench-*` and `codex/pelt-*` branches; splitting `genet-host-api` from Workbench on `main` would fork them |
+| P2 | [Workbench component plan](../../../../genet/design_docs/2026-08-31_workbench_component_plan.md) | W4 landed on genet `main` | `codex/workbench-core-20260831` is already on `main`; the four remaining `codex/workbench-followups-*` and `codex/pelt-*` branches (nine commits) touch none of the four mixed crates, so P1 may split them, but Workbench itself must not move under an open lane |
 | P1 | [Knot shared surface and port contribution plan](2026-08-24_knot_shared_surface_and_port_contribution_plan.md) | F0, or an explicit hold on the v1-frozen surface contract | the surface contract in `genet-host-api` is what P1 moves to Mere; it was frozen at v1 under this plan (Genet `001448d55`) |
 | P2 | [License sweep plan](2026-08-22_license_sweep_plan.md) | genet's P2-P7 headers and ledger, or a deliberate move-then-sweep ruling | invariant 5; each moved crate otherwise re-enters the sweep |
 | P2 | [Browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md) | a quiet window, not completion | the lane commits to mere hourly and `git subtree` refuses a dirty tree (July finding) |
@@ -325,9 +324,9 @@ events and do not touch the seams; the settings projection plan is complete
 through C6, though its code pointer to `genet-host-api/tile.rs` is stale
 since the Workbench plan removed that module, which P0 records.
 
-P0 has no prerequisite. P1 may begin on the two mixed crates' seams that the
-Workbench branches do not touch, but its split of the surface and Workbench
-vocabulary waits on the first two rows.
+P0 has no prerequisite. P1 may begin on all four mixed seams: the open
+Workbench and Pelt branches touch none of them (checked 2026-09-02). Its
+surface half still honours the v1 freeze in the second row.
 
 ### P0. Produce the authority inventory
 
@@ -350,6 +349,10 @@ would point from Genet to Mere.
 - Add dependency-direction checks that reject a Mere source in Genet's graph,
   as a new witness in the existing `support/ci/check_dependency_cones.py`
   rather than a new mechanism.
+- Extract inker's contract half (session traits, accessibility projection,
+  capabilities, page capture, the engine-id namespace) into an engine-owned
+  crate in this phase, not P3, so Genet never carries a Mere source while
+  the controller moves; give the cone witness an inker cone.
 
 **Done when:** Genet builds and exercises web-visible behavior without Mere;
 Mere can inject application policy through the new contracts; WPT still reaches
@@ -452,6 +455,352 @@ genuinely open work before archival.
 8. Repository and GitHub mutations are separate from crate relocation and need
    their own receipts.
 
+## 9. P0 authority inventory (2026-09-02)
+
+Mechanical census from `cargo metadata --no-deps` over genet (99 members) and the
+17 mere members that are scene crates or consume Cambium or a scene crate,
+joined with every manifest under `Code/repos` outside the two repositories that
+names a family crate (source kind in parentheses), and with the docs that name
+the crate in their title or head. Classes are the plan's defaults, corrected
+where the code disagrees; the split analyses in §9.3 name every mixed seam.
+
+### 9.1 Members by class
+
+**Engine, stays in Genet (70).** The Servo-derived platform crates, the DOM,
+style, layout, script, render and host crates, WPT, and the vendored `parley`
+patch. None has a consumer the plan moves except through the mixed crates, and
+their external consumers pin genet directly:
+
+- `engine-observables-api`: turnstone
+- `genet-clipboard`: hocket
+- `genet-livery`: mesocosm, turnstone
+- `genet-paint-types`: turnstone
+- `genet-probe`: cleromancy, hocket, knot-editor, mesocosm, retinue, retinue-wn1-v4-physical, turnstone, woodshed
+- `genet-render`: turnstone
+- `genet-scripted-dom`: cleromancy, hocket, isometry, knot-editor, mer3ly, mesocosm, retinue, retinue-wn1-v4-physical, turnstone, woodshed
+- `genet-static-dom`: turnstone
+- `genet-winit-host`: isometry, turnstone
+- `layout-dom-api`: cleromancy, hocket, isometry, knot-editor, mer3ly, retinue, retinue-wn1-v4-physical, turnstone, woodshed
+- `parley`: hocket, knot-editor, mesocosm, netrender, turnstone, woodshed
+- `script-engine-api`: turnstone
+- `script-engine-piccolo`: turnstone
+
+**Move to Mere as written (25), with their engine-side consumers inside genet
+and their external consumer repositories:**
+
+| member | version | engine-side consumers in genet | external consumer repos |
+|---|---|---|---|
+| `cambium` | 0.3.3 | - | cleromancy, hocket, isometry, knot-editor, mer3ly, mesocosm, retinue, retinue-wn1-v4-physical, turnstone, woodshed |
+| `cambium-genet-web-host` | 0.1.0 (unpublished) | - | woodshed |
+| `cambium-genet-winit-host` | 0.1.0 (unpublished) | - | cleromancy, hocket, knot-editor, retinue, retinue-wn1-v4-physical, woodshed |
+| `cambium-nematic` | 0.3.1 | - | - |
+| `cambium-rootstock` | 0.1.0 (unpublished) | - | woodshed |
+| `cambium-winit` | 0.3.0 | - | isometry, turnstone |
+| `cambium-winit-a11y` | 0.3.0 (unpublished) | - | - |
+| `document-canvas` | 0.1.0 | genet-documents (optional) | - |
+| `errand` | 0.3.4 | genet-documents (optional) | turnstone |
+| `fleece` | 0.4.0 | genet-scripted, genet-documents | knot-editor, turnstone |
+| `graft-engine` | 0.2.0 (unpublished) | - | - |
+| `illume` | 0.0.2 | - | knot-editor |
+| `knot-editor-host` | 0.1.1 | - | knot-editor, turnstone |
+| `meristem` | 0.2.0 | - | - |
+| `nematic` | 0.1.1 | genet-documents (optional) | knot-editor |
+| `pelt` | 0.2.0 (unpublished) | - | - |
+| `pelt-core` | 0.2.0 (unpublished) | - | - |
+| `pelt-desktop` | 0.2.0 (unpublished) | - | - |
+| `scrying-engine` | 0.2.0 (unpublished) | - | - |
+| `sprigging` | 0.2.1 | - | hocket, isometry, mesocosm, retinue, retinue-wn1-v4-physical, turnstone, woodshed |
+| `tabard` | 0.0.1 | - | - |
+| `tinct` | 0.1.2 | - | hocket, woodshed |
+| `verso-tile` | 0.1.0 | - | - |
+| `weld-engine` | 0.2.0 (unpublished) | - | turnstone |
+| `workbench` | 0.1.0 | genet-host-api | hocket, mesocosm, woodshed |
+
+**Mixed, split by authority (4):** `genet-documents`, `genet-host-api`, `inker`, `netfetcher`. Their seams are §9.3.
+
+**Class corrections from the census.** `fleece` (0.4.0) is consumed inside
+genet by `genet-scripted` and `genet-documents`, both engine or mixed, and
+externally by knot-editor and turnstone; with its CI-witnessed cone of
+`layout_dom_api` and `unicode-segmentation` it is classed **independent** rather
+than move: it may stay in genet as a lower library or leave for its own
+repository, but it does not go to Mere. `tinct` (0.1.2) and `illume` (0.0.2)
+have no engine-side consumer and move as written. `verso-tile` (0.1.0) and
+`cambium-nematic` (0.3.1) have no consumer anywhere in the census and move
+with their families.
+
+**Mere scene and UI members (17):** `chirograph`, `distillery`, `djinn`, `gazette`, `graphshell`, `graphshell-client`, `graphshell-local`, `graphshell-stdio`, `knot-document`, `knot-editor`, `mere-canvas`, `mere-cartography`, `mere-persona-picker`, `sceno`, `scenograph`, `scenomise`, `scenotime`. Every one is `framework`; `scenograph`
+(0.0.4) has no consumer in the census, consistent with §1 dissolving the
+facade; `sceno` is consumed by thirteen manifests across nine repositories.
+
+### 9.2 Edges that would point from Genet to Mere
+
+Computed over the same graph. After the moves as originally written, and
+before any split:
+
+- `genet-documents` (mixed) -> `document-canvas (optional)`, `errand (optional)`, `fleece`, `nematic (optional)`
+- `genet-host-api` (mixed) -> `workbench`
+- `genet-scripted` (engine) -> `fleece`
+
+`genet-render` and `genet-scripted` are engine crates the plan keeps; their
+edges are why `inker` is mixed and `fleece` is reclassed. No other kept member
+reaches a moving one. Genet reaches no Mere source today, in manifests, in the
+resolved graph, or through the machine-local patch file; the new witness in
+`support/ci/check_dependency_cones.py` holds that line from here on.
+
+### 9.3 Mixed seams
+
+Each mixed crate was analysed read-only against the plan's §2 sentence for
+it: item inventory, every use of a moving dependency, every consumer across
+genet, mere and the twelve product repositories, the proposed split, and the
+seam that lets the Genet half name no Mere type. The positive controls run
+afterwards are stated where they were run.
+
+#### `genet-host-api` (676 lines, four files at the crate root)
+
+The cut is clean and needs no seam trait. `lib.rs` and `navigation.rs` are
+the raw half: `ResourceFetcher` and `ResourceResponse` (the injected fetch
+seam, 110 keep-side uses across genet-scripted, genet-documents and
+genet-document-resources), `resolve_href`, and the `EngineProfile` /
+`ShellEngine` / `ShellEngineCapabilities` / `DeferredShellEngine` cluster.
+`settings.rs` (238) and `surface.rs` (143) are the application half in their
+entirety: settings scope, movement, mutability and security are Mere and
+product vocabulary, and the surface descriptor is frozen at v1 under a Mere
+plan that `surface.rs:12-17` names as its authority. Nothing in either half
+names a type from the other; the only coupling is two `pub mod` lines and a
+seven-name re-export. Delete those and the crate falls into a ~290-line Genet
+remainder with zero in-workspace dependencies and a ~380-line Mere crate that
+depends on `workbench` and on nothing from Genet. The crate's single
+`workbench` edge is `settings.rs:12`, so the split severs it without waiting
+for Workbench to move.
+
+Every in-genet caller of the application half is itself scheduled to move
+(cambium's setting row, surface and catalog; Pelt's appearance and workspace
+viewer), so after P2 and P3 the application half has no keep-side consumer.
+External consumers of it are turnstone (seven files), woodshed, hocket,
+knot-editor and mere's `knot-document` and `distillery` ports: eighteen import
+sites, no logic changes. None of the open `codex/*` branches touches this
+crate.
+
+Two rulings and two hazards. **Ruling 1:** §2's mixed-crate bullet keeps
+"profile contracts" in Genet while the authority map moves "engine selection"
+to Mere; `EngineProfile` is both. Recommendation: keep it, since it names two
+Genet engine identities and its only consumer is Pelt; the routing policy
+lives in Pelt's `selected_engine`, not in the enum. **Ruling 2:**
+`ShellEngineCapabilities` has no caller in the fourteen-repository census;
+decide whether it is a reservation or dead before either half inherits it.
+**Hazard 1:** turnstone and woodshed pin a revision where `tile.rs` still
+existed, and turnstone has four call sites on `genet_host_api::tile::*`
+(`settings_provider.rs:13`, `settings_pane.rs:13`, `app/pane_arms.rs:511-534`)
+that break on any repoint past `abcea38b962`, independent of this plan.
+**Hazard 2:** the existing cone witness asserts Pelt's manifests are at
+`ports/pelt`; when Pelt moves in P3 that assertion breaks and Genet's "one
+small raw host" role is unfilled, `pelt-core` being disqualified by its
+`workbench` and `inker` dependencies.
+
+#### `genet-documents` (6,802 lines, 12 files)
+
+Its feature table already draws the boundary. `livery`, `scripted`,
+`livery-scripted` and `scripted-nova` pull only Genet crates; `netfetch`,
+`reader` and `smolweb` pull netfetcher, document-canvas, errand and nematic,
+all optional and already gated. The stays half is the Livery and Scripted
+session engines (`engines/livery.rs`, 1,746; `engines/scripted.rs`, 251), the
+clip and content-report walk (`engines/clip.rs`), the `data:`/`file://`
+branches of `LocalFetcher`, and the `href` re-export, about 4,000 lines with
+tests. The moves half is `reader.rs` (836), `smolweb.rs` (1,038),
+`engines/smolweb.rs`, `net_fetch.rs` (the shared tokio runtime, the
+netfetcher host, errand fetch and the TOFU trust store), `ResourceFetchPolicy`
+and `ConfiguredLocalFetcher`, about 2,500 lines with tests; a Mere crate on
+the order of `mere-document-lanes`. `net_fetch.rs:10-12` already states the
+rule the crate violates: engine components stay byte-consuming and never link
+transport.
+
+After that move the stays half names two moving dependencies. `inker`, only
+through `session_engine`, `a11y`, `capabilities` and one routing id constant:
+the contract half, which `genet-render` already depends on for the same
+types. And `fleece`, at `engines/clip.rs:108` (`extract_main_text`), which
+stands or falls with `genet-scripted`'s public `extract()`; it is the second
+witness for classing Fleece independent. One leak remains in the stays half,
+`fetch.rs:101` sniffing schemes through `errand`.
+
+Three seams, all types Genet already owns. Session dispatch is
+`inker::SessionEngine` and `DocumentSession`: both halves implement them and
+Mere's host registers both in one `SessionRegistry`, so Genet names only the
+trait. Routing: the engine id constants are the first fifty lines of
+`routing.rs` (`ENGINE_GENET_LIVERY` and its siblings); keep those names with
+the contract half and move the route policy, rules and decisions that fill
+the rest of that file, which is the "routing moves, semantics stay" cut.
+(`routing/ids.rs` holds the host-graph context identities, `NodeKey` and
+`RouteViewId`, deliberately kernel-free; they stay with the contract.)
+Fetch: `genet_host_api::
+ResourceFetcher` is already the seam; restructure `LocalFetcher` so the
+remote schemes are injected as a fallback fetcher rather than `#[cfg]`
+branches, which deletes the errand leak and the `netfetch`/`smolweb` features
+from Genet's manifest without waiting for the netfetcher split.
+
+Consumers: exactly two. Pelt's desktop port takes both halves (its default
+features are `livery`, `reader`, `netfetch`), and turnstone by git revision
+takes one Genet item and four Mere-side ones, which is the right shape for a
+product. Mere does not consume the crate; genet-wpt does not either, so the
+split cannot regress WPT. Decisions for Mark: whether Pelt, as the host that
+proves Genet without Mere, sheds `reader` and `smolweb` or accepts a Mere
+dependency; whether `ResourceFetchPolicy` (redirect, concurrency, body and
+timeout caps, used at four Pelt sites) is reclassed as a `genet-host-api`
+contract. Caveat for receipts: turnstone's `.cargo/config.toml` redirects the
+whole genet family to a Codex worktree, so a turnstone build today proves
+that worktree, not its pinned revision. Unverified positive control: `cargo
+check --no-default-features --features scripted` on the stays half.
+
+#### `netfetcher` (5,221 lines, 26 files)
+
+The authority split is already the crate's design; the graph does not yet
+prove it. About 2,430 non-test lines are web-observable Fetch semantics and
+stay: `request`, `response`, `cors` (the most WPT-load-bearing file),
+`referrer`, `sri`, `data_url`, `decode`, the HSTS and Alt-Svc parsers, the
+RFC 9111 freshness rules in `cache`, and all of `fetch/` but the send. About
+1,300 lines are transport, trust, credentials and persistence: `client`
+(the process-global hyper/rustls client and the public one-way
+`accept_invalid_certs` downgrade), `h3_client`, `websocket` (not Fetch at
+all, dead public API), the in-memory cookie, cache, HSTS, Alt-Svc and
+preflight stores, and the send in `fetch/transport.rs`. `FetchContext`
+already carries six host seams as `dyn` objects (cookies, cache, CSP, HSTS,
+preflight, Alt-Svc) and Mere already injects through them from
+`crates/system/fetch`; the direction of every existing edge is Mere to
+netfetcher.
+
+Two defects block a mechanical proof: `fetch/preflight.rs:57` calls the
+shared client directly instead of the send, and there is no transport seam,
+so the transport is reached through a process-global that cannot be excluded
+from a build. Proposed seam, in place: a `Transport` trait taking the
+existing `WireRequest` shape and returning the existing `RawResponse`
+(`fetch/transport.rs:22`, already the transport-agnostic normal form), held on
+`FetchContext` beside the six stores and defaulted in `permissive()` so WPT,
+genet-documents and a raw host run unchanged; route the preflight through it;
+hoist the 8 MiB cache cap off the crate onto the context; feature-gate the
+hyper, h3 and websocket lanes so a `default-features = false` build is the
+proof that the semantics half links no transport. No file moves.
+
+Consumers: genet-documents (narrow: `permissive`, `Request::get`, `fetch`,
+body drain, behind its `netfetch` feature), genet-wpt (the whole enum surface
+plus `accept_invalid_certs` at `main.rs:871`, which needs a replacement in the
+same change), and Mere's `mere-fetch` by git revision (storage-wide: it is the
+only consumer of the cookie jar's `all_records`/`load_records`). Risks:
+`decode` pins tokio into the semantics half through `async-compression`'s
+tokio readers, acceptable but not a "no runtime" half; the first async seam on
+a context whose seams are all synchronous is a design decision with more than
+one answer; `data_url` may duplicate the `data-url` crate genet-documents
+already pulls.
+
+#### `inker` (8,410 lines, 20 files; published, MIT/Apache by its own line)
+
+The contract half severs with no edge to cut. `session_engine` (1,267 lines:
+the `SessionEngine` and `DocumentSession` traits, `ContentReport`,
+`OutlineEntry`, `DocumentClip`, the input vocabulary), `a11y` (458, the
+projection `genet-render` produces), `capabilities` (95) and `page_capture`
+(131) depend on nothing else in the crate; `session_engine` never names
+`document`, `engine` or `routing`, and the registry keys on a string engine
+id. That is 1,951 lines, or 2,945 with the whole routing module. Everything
+else is controller: the portable document model and its exporters,
+evaluators and transclusion (2,800 lines whose own docs say "policy is the
+caller's"), the request/response `Engine` and its registry, `surface_engine`
+(1,305 lines, the WebSurface and user-agent-policy contract the three GPU
+adapters implement), `statements` (its counterpart is Mere's linked-data),
+and `sniff` (335 lines, no caller anywhere).
+
+Consumers decide it. After the plan's moves, the only Genet-resident
+consumers are `genet-render` and the Livery and Scripted lanes of
+`genet-documents`, and between them they use exactly `a11y`, `capabilities`,
+`session_engine` (with `SessionRegistry` in tests) and one routing constant,
+`ENGINE_GENET_LIVERY`. Every one of Mere's nine consuming crates sits
+entirely in the controller half; none names the contracts. Turnstone
+straddles both (twenty files; `shell/weld.rs` alone imports thirty-four
+`surface_engine` types). `routing.rs` is two authorities in one file: the
+engine-id namespace and rung ladder in its first 180 lines are Genet facts a
+kept crate returns from `engine_id()`, the route policy, rules and decisions
+below them are Mere's; no kept crate uses the policy half.
+
+Proposed shape: extract the contract half into a new Genet crate beside
+`engine-observables-api` and `layout-dom-api` under `components/shared`
+(name to be claimed: `document-session-api`, `genet-document-api` or
+`inker-contracts`); `inker` keeps its name, version line and license, moves
+to Mere with the controller, and re-exports the contract crate wholesale so
+its flat facade survives. Then turnstone, Pelt, nematic, document-canvas,
+the adapters, knot-editor and all nine Mere crates change only a manifest
+source line, and only `genet-render` (two files) and `genet-documents`
+(seven) repoint their imports, which they must, being the edges severed.
+Mere's pin on inker becomes a workspace path and gains a genet pin on the
+contract crate; turnstone takes both.
+
+Sequencing correction: the plan puts the Inker move in P3 and contract
+establishment in P1. If inker leaves before the contract crate exists,
+Genet's graph carries a Mere source for the duration. The extraction is a
+P1 item, and the cone witness, which has no inker cone today, should gain
+one. Two hazards: `genet-render` reaches inker by a relative path, not the
+workspace table, so the move fails loudly there; and four inker revisions
+are already live across the family (mere and knot-editor at `eff0cb6d`,
+turnstone and woodshed at `da8762fd`, hocket and isometry on `branch = main`
+at different heads, isometry still resolving 0.1.0, cleromancy through a
+machine-local path patch recorded in its committed lock), so P4's
+source-identity audit wants a baseline before the split, not only after.
+Docs: `genet/design_docs/inker_docs` holds one file, the engine-picker plan,
+which is controller material already citing four Mere documents; it travels,
+leaving a page-capture-contract note behind, and genet's `DOC_POLICY.md`
+claim that its three area roots mirror `components/{inker,nematic,verso-tile}`
+goes false when they move.
+
+#### Rulings the inventory needs from Mark before P1 touches these seams
+
+1. **Fleece's class.** Independent lower library, witnessed by two engine
+   consumers and its CI cone; it does not go to Mere. Where it lives (genet
+   or its own repository) is a §4 question, not a P1 one.
+2. **`EngineProfile`.** Keep in Genet with `ShellEngine` and the deferred
+   engine; it names two Genet engine identities, and the routing policy
+   lives in Pelt. This resolves §2's contradiction between "profile
+   contracts stay" and "engine selection moves": the enum stays, the
+   selection moves.
+3. **`ShellEngineCapabilities`.** No caller anywhere in the census; delete,
+   or state what it reserves.
+4. **Pelt's side of the line.** Its desktop port enables `reader` and
+   `netfetch` by default and carries the smolweb glue, so today it cannot be
+   the host that proves Genet without Mere. Either Pelt sheds those lanes
+   before P3 and keeps the raw-host role, or a smaller host takes the role
+   and the cone witness's Pelt assertion moves with Pelt.
+5. **`ResourceFetchPolicy`.** Redirect, concurrency, body and timeout caps
+   are host contracts even though their implementation is transport;
+   reclass it as `genet-host-api` vocabulary so Pelt's four uses stay
+   Genet-side, or move it and accept a Pelt-to-Mere edge.
+6. **Netfetcher's transport seam.** Its six existing seams are synchronous;
+   the transport one cannot be. Trait with a boxed future, or `async fn` in
+   trait: a design decision with more than one defensible answer, to be
+   taken in the netfetcher change itself.
+7. **Inker's contract crate.** Recommended: the contracts leave for a new
+   engine-owned crate under `components/shared` and `inker` keeps its name
+   on the controller, re-exporting them; the reverse fixes nine files and
+   churns sixty. The new crate's name is a naming-ledger claim.
+8. **Inker's routing file.** Split it at line 180 (engine ids and rung
+   ladder stay, route policy moves) or keep the whole 994-line module in
+   Genet as a legal downward read for Mere. Splitting is honest to
+   authority; keeping avoids forking a file.
+9. **`SessionRegistry`.** A registry by the plan's letter, but
+   genet-documents' kept tests spawn through it; recommended to stay beside
+   the traits it dispatches. `sniff_content_type` has no caller and is a
+   retirement candidate rather than a move.
+
+### 9.4 Source identities at review time
+
+Mere consumes eight genet crates (inker, document-canvas, nematic, fleece,
+knot-editor-host, illume, cambium, scrying-engine) from one immutable revision,
+`eff0cb6df4834ecce9ac552a055c1c459befa7c3`. External consumers reach the moving
+crates by three source kinds; a repoint in P4 must replace each:
+
+- **git branch**: hocket, isometry, mesocosm
+- **git rev**: cleromancy, knot-editor, retinue, retinue-wn1-v4-physical, turnstone, woodshed
+- **registry**: hocket, isometry, mer3ly, mesocosm, woodshed
+
+Registry pins on `cambium`, `sprigging`, `workbench`, `tinct` and the
+`genet-*` crates survive a repository move unchanged until the next publish,
+when `repository` fields update; git-revision pins repoint; git-branch pins
+(hocket, isometry, mesocosm) are mutable and become revisions under §5.
+
 ## Findings
 
 ### 2026-09-02
@@ -490,10 +839,10 @@ genuinely open work before archival.
   Every other moving crate has no keep-side consumer inside genet.
 - Fleece's dependency cone is already witnessed in genet CI as
   `layout_dom_api` plus `unicode-segmentation` and nothing else.
-- The Workbench component plan's W1-W3 and the Pelt receipts are on five
-  `codex/*` branches (`workbench-core-20260831`,
-  `workbench-followups-integration-20260902`, `pelt-scrying-tearout`,
-  `pelt-secondary-accesskit`, `pelt-surface-producer`), not on `main`.
+- The Workbench component plan's core branch is on genet `main`; four
+  follow-up branches (`workbench-followups-integration-20260902`,
+  `pelt-scrying-tearout`, `pelt-secondary-accesskit`, `pelt-surface-producer`,
+  nine commits) remain open and touch none of the four mixed crates.
 - V0 of the Vello gates was already met by the Netrender note.
 
 ## Progress
@@ -511,3 +860,8 @@ genuinely open work before archival.
   P7 and V0; the prerequisites table and the edge findings were added. Mark
   authorized P0 and P1 the same day, with the inventory as a section of this
   plan.
+- P0 landed 2026-09-02 as §9: 99 genet members and 17 mere members classed,
+  the four Genet-to-Mere edges named, every mixed seam given a proposed API
+  by a per-crate analysis, and consumer source identities captured. The
+  Mere-source witness landed in genet `cbe7d383584`, with its positive
+  control, as P1's first deliverable.
