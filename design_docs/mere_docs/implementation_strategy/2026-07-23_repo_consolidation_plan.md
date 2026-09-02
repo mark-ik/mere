@@ -26,6 +26,13 @@ the [projection proofs plan](2026-07-21_projection_proofs_plan.md), the
 (promotion rows withdrawn by this plan), and the
 [mere/turnstone boundary pass plan](2026-07-09_mere_turnstone_boundary_pass_plan.md).
 
+> **Boundary correction, 2026-09-02:** the
+> [platform boundary and repository topology plan](2026-09-02_platform_boundary_and_repository_topology_plan.md)
+> supersedes this plan's placement of Cambium and upper application components
+> in Genet and reopens the later repository-topology review. The C0-C6
+> execution, publication, and source-history receipts below remain historical
+> facts.
+
 ## 1. Ruling
 
 Mere is the platform; the family repos that were extracted from it remain its
