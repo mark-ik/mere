@@ -1,9 +1,11 @@
 # Platform Boundary and Repository Topology Plan
 
 **Date:** 2026-09-02  
-**Status:** P0 and P1 landed 2026-09-02 (§9 and the Progress entries); P2 not started.
-The authority boundary is ruled with Mark, while code moves,
-repository changes, and GitHub operations have not started.  
+**Status:** P0 and P1 landed 2026-09-02; **P2 landed 2026-09-03** in the
+consumers-first order the second-pass assessment recommended, with P3's Pelt,
+Tabard, knot-editor-host and mere-document-lanes moving ahead of it (§9 and the
+Progress entries). The authority boundary is ruled with Mark. Nothing has been
+pushed and no GitHub operation has run.  
 **Authority:** this is the canonical plan for the Genet/Mere boundary and the
 follow-on repository-topology review. Mer3ly continues to own the public
 repository manifest and transfer receipts.  
@@ -375,6 +377,14 @@ the exact Fetch and document semantics it is meant to test.
 `sceno` scene both render through Genet on supported desktop and web targets,
 accessibility and input receipts remain green, and at least two unlike products
 consume the Mere source.
+
+**Status (2026-09-03): met, all four clauses.** Genet's removal landed at
+`a93189b1d7c` and mere's landing at `725bbf1a`; the receipts for each clause are
+in the Progress entries below. The content ran in the order the second-pass
+assessment recommended — Pelt and its companions first, Cambium after — so P3's
+consumer half is landed and P3's remaining items (Inker's upper controller,
+document-canvas, Nematic, Errand, Fleece, Illume, Tinct, Verso, and Knot's
+reconciliation) are what is left of that phase.
 
 ### P3. Move upper components and ports
 
@@ -1602,3 +1612,226 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   Not done here: nothing landed in mere, and nothing was pushed. The commit
   sits on genet's `main` as the single unpushed commit.
+
+- 2026-09-03: **the Cambium family, Workbench and `mere-surface-api` landed in
+  mere** (merge commits `523a5979`, `5cc203bf`, `69ad7907`; scenes `3e4d5098`,
+  wiring `91bf62c9`, headers `725bbf1a`). The receiving half of P2, against
+  genet `a93189b1d7c`.
+
+  History came in the way Pelt's did: `git fetch <bare> main:import-<name>`
+  then `git merge --allow-unrelated-histories`, from the three bare
+  repositories the removal exported path-limited with their prefixes already
+  rewritten. Each landed tree hashes identically to its bare tip and to
+  genet's, so these are the same objects, not a copy that looks alike:
+
+  | path | packages | commits | tree |
+  |---|---|---|---|
+  | `crates/cambium` | `cambium`, `cambium-rootstock`, `cambium-winit`, `cambium-winit-a11y`, `cambium-genet-winit-host`, `cambium-genet-web-host`, `cambium-nematic`, `meristem`, `sprigging` | 91 | `593ffeb82f1` |
+  | `crates/cambium/workbench` | `workbench` | 1 | `ae9ab404f5f` |
+  | `crates/system/surface-api` | `mere-surface-api` | 1 | `e5aef208675` |
+
+  `git diff --name-only <before> HEAD` after each merge listed **nothing**
+  outside that merge's prefix: 168, 2 and 4 paths. The three landed trees hold
+  **174** tracked files, exactly genet's count across the three directories at
+  the parent of its removal commit. The import branches were deleted.
+
+  **The scene family moved under the umbrella and the facade dissolved**
+  (`3e4d5098`). `sceno`, `scenomise` and `scenotime` went from
+  `crates/scenograph/` to `crates/cambium/scenes/`, keeping their names and
+  versions; `crates/scenograph/README.md` came with them, corrected — its
+  four-crate table is three, and its dual Apache/MIT license section, inherited
+  from the standalone repository and already stale (mere has no
+  `LICENSE-APACHE` or `LICENSE-MIT`, and every source in the three crates
+  carries an MPL-2.0 header), is now MPL-2.0. The `scenograph` facade crate is
+  deleted. `git grep` found no consumer of it anywhere in mere, in code or in a
+  manifest — only prose in historical docs — and its 528-line solver registry
+  moved into `scenomise` as `scenomise::registry`. The published
+  `scenograph 0.0.4` name is untouched and stays held for the editor.
+
+  **One thing had to be decided in the registry move, and it is a naming
+  collision, not a design change.** The facade exported eight items at its
+  root. Seven are re-exported at `scenomise`'s root exactly as the facade
+  exported them. The eighth is `solve`, and `scenomise::solve` already exists
+  and is consumed: it is the closed-form solve over the eleven named families,
+  while the registry's `solve` dispatches an `Arrangement::Custom` id. The
+  registry's therefore stays addressed as `scenomise::registry::solve`, said in
+  the crate docs and in the README. **Open for Mark:** whether that is right,
+  or whether the registry's should take a distinct root name. Nothing consumes
+  either path today, so this is cheap to change now and expensive to guess at
+  later. Two `scenomise::` self-references inside the registry became
+  `crate::`, which the compiler caught immediately; that is the only code
+  change in the whole file.
+
+  **Wiring** (`91bf62c9`). Eleven new members, so 116 workspace packages where
+  there were 106 — eleven in, the facade out. Every git pin of one of the
+  eleven became a workspace path, in the root manifest and in the two
+  standalone ports that name them directly (`ports/graphshell/web` for
+  `cambium`, `ports/knot/desktop` for `cambium-genet-winit-host`). Seven patch
+  entries left `.cargo/config.toml.example` and both live gitignored twins
+  identically — `cambium`, `sprigging`, `workbench`, `mere-surface-api` and
+  `cambium-genet-winit-host` from the genet table, `cambium` and `sprigging`
+  from the crates-io one — because patching a git or crates.io source at a
+  path that is also a workspace member is a hard lockfile collision. The files
+  now say so, and name the four P3 crates under the same prohibition.
+
+  The landed manifests reached genet's other components by relative path
+  inside genet's tree (`../../genet-livery`, `../../shared/layout-dom` and
+  eight more). Those became git pins declared once in the root
+  `[workspace.dependencies]`, as mere already does for the rest of the family.
+  `genet-render-host` had no root declaration at all — it existed only in the
+  patch table, for `ports/graphshell/web` — and gains one; `windows-sys 0.61`
+  joins for the winit host's Win32 frame geometry. Every genet.git pin in the
+  repository moved from `b78e2b92251` to `a93189b1d7c` in the same motion:
+  **56 lines across four manifests at one revision**, zero occurrences of the
+  old one, witnessed by grep and by the unpatched resolve below.
+
+  Two fields needed inlining. `workbench` and `mere-surface-api` inherited
+  `rust-version` from genet's workspace and mere's does not declare it; it is
+  inline at genet's `1.86.0`, unchanged, because the move is not an MSRV
+  decision. Genet's workspace `authors` is the Servo Project Developers, which
+  those two inherited and now inherit from mere instead; that is a correction,
+  not a side effect. Every landed crate's `repository` inherits mere's rather
+  than naming genet.
+
+  **`examples/genet_web_smoke` came with the family.** It is not a workspace
+  member here, as it was not in genet, so `cargo check --workspace` does not
+  cover it; its `cambium` dependency is a plain relative path inside this
+  repository again rather than the dangling `../../../mere/...` the removal
+  left, and its four genet path deps and two patch entries became git pins at
+  `a93189b1d7c` (cargo resolves `genet-taffy` and `sonic-rs` by package name
+  anywhere in that repository, so `support/patches/` needs no special
+  handling). That closes the first of the removal's two open items.
+
+  **The four receipt harnesses came too**, closing the second:
+  `wayland-frame-receipt.ps1`, `windows-maximized-receipt.ps1`,
+  `windows-snap-receipt.ps1` and `x11-shadow-receipt.ps1` are in mere's
+  `scripts/`, with their scenario paths corrected from `components/cambium/...`
+  to `crates/cambium/...` (each `.scn` verified present) and their default
+  output directory from `testing\genet\` to `testing\mere\`. Their
+  `$repoRoot` / `$codeRoot` derivation needed nothing: `scripts/` sits at the
+  repository root in both trees. The same two stale paths inside the host's own
+  `examples/smoke.rs` and `smoke.scn` were corrected.
+
+  **Docs.** `2026-08-31_workbench_component_plan.md` and
+  `2026-09-03_host_ui_zoom_plan.md` are in
+  `design_docs/mere_docs/implementation_strategy/` and indexed in
+  `DOC_README.md`. Both are dated implementation plans about application
+  composition, which is what `mere_docs/` holds; **open for Mark:** whether the
+  Cambium family should instead have an area root of its own, which the policy
+  would allow and two documents do not obviously earn. The zoom plan's link to
+  `docs/2026-08-09_cambium_desktop_host_g1_receipt.md`, which stays in genet
+  because `genet-livery` still cites it, became the cross-repo path citation
+  `genet/docs/...`; its `mere/design_docs/...` citation of the configuration
+  ownership plan became a relative link, now that the plan is a neighbour.
+  Each got a **Home** note saying where it came from and that `components/...`
+  paths in its body are genet's. Cambium's own `crates/cambium/docs/`
+  travelled inside the exported tree and its links were checked: only
+  `local-genet-development.md` was wrong, and badly — it described resolving
+  genet from crates.io through a per-crate patch file, a posture two moves out
+  of date. It is rewritten around mere's root workspace pin and the two
+  standing rules of the patch table. `design_docs/scenograph_docs/` stays where
+  it is, describing code that still lives here, with its landing note extended
+  to record the second move.
+
+  **Receipts.**
+
+  `cargo check --workspace` **patched** green, 0 errors, **192 warnings across
+  twelve crates** — byte for byte the same per-crate set as the Pelt landing's.
+  The eleven landed crates and the three scene crates generate **zero**
+  warnings on the host target, so the warning delta from this landing is 0.
+  What did move is the unused-patch list, 9 lines to 6: `genet-render-host`,
+  `boa_engine` and `boa_gc` became live, because `cambium-rootstock` pulls the
+  present core and the host chain reaches the script engine. Nothing was fixed
+  and nothing was silenced.
+
+  `cargo check --workspace` **unpatched** — run from a directory outside the
+  tree so the machine-local patch table does not load — green, 0 errors, **190
+  warnings across eleven crates**, the twelve minus `nematic`, exactly as the
+  Pelt landing recorded. The witness that the patch table was off is
+  `genet-livery v0.0.2 (https://github.com/merely-made/genet.git?rev=a93189b1d7c...)`;
+  **zero** lines in the whole log name `C:\Users\mark_\Code\repos\genet`.
+  **30 genet-derived packages resolve from `genet.git?rev=a93189b1d7c` and
+  nowhere else** — 39 before, minus the nine Cambium packages that are now this
+  repository's own. `cambium 0.3.3`, `sprigging`, `meristem`, `workbench` and
+  `mere-surface-api` all check from `C:\Users\mark_\Code\repos\mere\...` in
+  that same unpatched run, which is the landing's sharpest single fact.
+
+  `cargo test -p cambium-genet-winit-host`: **75 passed, 0 failed** across
+  seven binaries — including the two the P2 done-condition names, `decorations`
+  (11) and `input_routing` (18), plus `accessibility` (5), `spatial_focus` (5),
+  `ui_zoom` (17), `lifecycle` (3) and 16 unit tests. The accessibility and
+  input receipts are green from mere.
+  `cargo test -p cambium -p cambium-rootstock -p sceno -p scenomise -p scenotime`:
+  **339 passed, 0 failed** (182 / 23 / 26 / 78 / 30). Scenomise's 78 include
+  the registry's own tests, which travelled with the file.
+
+  `cargo check -p cambium-genet-web-host --target wasm32-unknown-unknown`
+  green, 1 warning (an unused import that arrived with the crate).
+  `cargo check --target wasm32-unknown-unknown` from `ports/graphshell/web`
+  green. `cargo check --manifest-path ports/knot/desktop/Cargo.toml` green,
+  resolving `cambium-winit`, `cambium-rootstock`, `cambium-winit-a11y` and
+  `cambium-genet-winit-host` from mere and `genet-livery`, `genet-render`,
+  `genet-probe` and `buckram` from genet — the boundary in one build.
+  `scripts/check_port_boundaries.py` passes.
+
+  **The desktop half of the done-condition**, unchanged output across the
+  repository move for the second time: `cargo run -p pelt --no-default-features
+  --features livery -j 1 -- --product-receipt article` reports
+  `assertion=jump-link press/release moved the retained viewport` and
+  `digest=b1d6a62acf85b553`, and its 50,836-byte PNG is **byte-identical** to
+  the one genet rendered at `8c1e324ed4d`, its last commit that still had Pelt.
+  A retained widget rendering through Genet, from mere, pixel for pixel as
+  before.
+
+  **The web half is a real browser, not a type-check.**
+  `testing/mere/scripts/run-graphshell-web-scenario.ps1 h3_boot -Build` builds
+  the wasm bundle, serves it, and opens headed Chrome; the page drives itself
+  through `genet-probe`'s verb loop and POSTs its receipt back. `RESULT ok`,
+  two captures (`h3_local.png` 62,515 bytes, `h3_remote.png` 61,021 bytes), no
+  page errors, under
+  `testing/mere/scenarios/graphshell-web/p2_cambium_h3_boot`. Its receipt
+  carries **both** lanes at once: `"layout": "phyllotaxis.default"` over 11
+  nodes with a projection editor reading `x=x y=y` into a canvas realization —
+  a `sceno` scene — and the chrome around it is a retained Cambium view tree,
+  `ports/graphshell/src/web_view.rs` building `cambium::View` / `el` / `text`
+  into a `ScriptedDom` that `genet-render` paints. A widget and a scene,
+  through Genet, on the web target, live.
+
+  **At least two unlike products consume the Mere source**, and the resolve
+  graph says six: `pelt` (the reference browser), `graphshell` (the graph
+  portal, native and wasm), `knot-editor` with `knot-document` and
+  `knot-desktop` (the document editor), `distillery` (the model works), `djinn`
+  and `mere-persona-picker`. `cargo tree -i cambium --workspace --target all`
+  names every one of them at a `crates/cambium/...` path.
+
+  `relicense_headers.py --audit` went **1155 -> 1286** owned sources: the 132
+  the removal took out of genet, less the facade's `lib.rs`. "Without Exhibit
+  A" arrived at **6**, and genet's removal entry expected those six to be
+  meristem's. They were not. Meristem's thirty sources were already correct;
+  the six were five in `cambium-genet-winit-host` (`src/decorations.rs`,
+  `src/harness.rs`, and the `decorations`, `input_routing` and `ui_zoom` test
+  files) and one in `cambium-rootstock` (`src/input.rs`). They are Mark's own,
+  so they took the plain Exhibit A header rather than the retained-notice form
+  the xilem-derived files use (`725bbf1a`). The audit is at **0** without
+  Exhibit A and **0** Exhibit B hits, on 1291 owned sources once
+  `genet_web_smoke` is counted.
+
+  **P2's "Done when" is met, in all four clauses.** Genet has no Cambium
+  workspace member (`a93189b1d7c`, with its own receipts on that commit); a
+  retained widget and a `sceno` scene both render through Genet on desktop (the
+  Pelt article receipt, byte-identical across the move) and on web (the headed
+  Chrome `h3_boot` receipt, which carries both in one page); accessibility and
+  input receipts are green from mere (`accessibility` 5, `decorations` 11,
+  `input_routing` 18); and six unlike products consume the Mere source, where
+  two were asked for.
+
+  Not done here, and not P2's: nothing was pushed. The nine repositories that
+  pin the Cambium family from genet.git repoint to mere.git in P4, after the
+  receiving head is public and green. The Circuit recipe's
+  `workspace_graph.json` fixture is now two generations behind the member list;
+  its test reads the committed snapshot rather than live `cargo metadata`, so
+  nothing fails, and regenerating it still belongs to the lane that owns it.
+  The `C:/Users/mark_/Code/worktrees/genet-head` clean worktree that
+  `ports/graphshell/web`'s local patch table points at was moved to
+  `a93189b1d7c` for the web receipt; that is a detached checkout of an existing
+  worktree and changed nothing in genet.
