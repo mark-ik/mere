@@ -158,7 +158,7 @@ sweep.
 | mesocosm, paredros | MPL-2.0, shape A headers | MPL-2.0, shape C | P7 + the promoted-library clause — headers landed 2026-09-03; the clause and the single-`LICENSE` layout pending, with `paredros-identity`'s grant needing a ruling |
 | isometry | MIT OR Apache-2.0, edition 2021 | MPL-2.0 (edition separate) | P3 — waits on its lane's dirty tree |
 | turnstone, woodshed, hocket | MIT OR Apache-2.0 | MPL-2.0 | P4, each when its tree is clean — turnstone and hocket landed 2026-09-03; woodshed waits on its lane's dirty tree |
-| wavicle, mora, gaz, reservation stubs | MIT OR Apache-2.0 | MPL-2.0 | P5 — wavicle and mora landed 2026-09-03; the stubs went with mere and genet; gaz has no repository on GitHub any more (checked 2026-09-03), so there is nothing to sweep and the name stays Mark's by the naming ledger |
+| wavicle, mora, gaz, reservation stubs | MIT OR Apache-2.0 | MPL-2.0 | P5 — wavicle and mora landed 2026-09-03; the stubs went with mere and genet; gaz has no repository on GitHub any more (checked 2026-09-03); its code is mere's `crates/dramatis/gaz`, swept with mere in P1, and the name stays Mark's by the naming ledger |
 | wgpu-graft / -scry / -weld | MPL-2.0 manifests over a largely Apache-2.0 wgpu fork | MPL-2.0 on Mark's files only | P7, after a provenance ledger — 2026-09-03: wgpu-scry and wgpu-weld landed; wgpu-graft's 57 owned sources headered the same day on Mark's ruling, the vendored 86% (GPUI, not wgpu) retained under its own licenses |
 
 ## 6. What the sweep touches
@@ -184,8 +184,10 @@ and the root README exception line. Third-party-derived manifests stay.
 files in flight on 2026-08-22, so it waits. **hocket** 31, none, pair, README.
 **wavicle** 13, 4 headed, pair, README. **mora** (`repos/mora`, published
 0.1.0 MIT OR Apache-2.0). **gaz** lived only on GitHub (`merely-made/gaz`);
-its code is the subtree in mere. On 2026-09-03 the repository was found gone
-from GitHub under both accounts; the name remains claimed in the naming ledger.
+its code is `crates/dramatis/gaz` in mere (Mark, 2026-09-03), which took
+MPL-2.0 and the house header with the rest of mere in P1. On 2026-09-03 the
+repository was found gone from GitHub under both accounts; the name remains
+claimed in the naming ledger.
 
 **Rules carried over, with 2026-08-22's confirmations.** Exhibit A in source
 files, never Exhibit B ("Incompatible With Secondary Licenses"), so §3.3 keeps
