@@ -92,7 +92,11 @@ implementations. Their product ownership labels are superseded by this split.
 **Sharpened 2026-09-02 (Mark).** Graphshell is a *viewer and redirector*, not
 a surface that hosts content for interaction — with one exception, which is
 the point: the projection itself, of which Graphshell is the preeminent
-manipulator. That is not nothing. Authenticated access to all the data of all
+manipulator. Viewing is fully in scope: with Genet in the mix, Graphshell
+reads simple structured content through Workbench and Genet for free, and it
+would make no sense to exclude that. What it does not host is the browser
+proper — the engines and the taxonomy of a browser expressed through Mere,
+which are Turnstone's. It is fine to read your content in Graphshell. That is not nothing. Authenticated access to all the data of all
 the applications, used to customize projections to your own taste, is a
 **home-page graph of app graphs**; and that capability is meant to appear in
 every application that has its own app graph, not only in Graphshell. This is
@@ -100,9 +104,11 @@ the family composition thesis's anti-shell test in its positive form: the
 manipulator is a platform capability whose receipt is a second host. Two
 consequences it leaves unruled: the Projection Editor, today a self-contained
 module in `ports/graphshell`, is by this reading a Mere component with
-Graphshell as one host, and its crate home wants deciding; and Graphshell does
-*not* compose Workbench panes the way Turnstone does — Turnstone is the
-meerkat successor shell, Graphshell is the lens.
+Graphshell as one host, and its crate home wants deciding; and Graphshell may
+compose Workbench for reading without becoming Turnstone, which remains the
+meerkat successor shell with the browser engines proper. Knot can use
+Workbench too (Mark, same day); Workbench is a component any of them takes,
+not a mark of which one is the shell.
 
 ### Djinn is currently a stale reservation
 
