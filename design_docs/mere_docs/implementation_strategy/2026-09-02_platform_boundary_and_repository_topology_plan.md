@@ -1,7 +1,7 @@
 # Platform Boundary and Repository Topology Plan
 
 **Date:** 2026-09-02  
-**Status:** P0 landed 2026-09-02 as §9; P1 in progress the same day.
+**Status:** P0 and P1 landed 2026-09-02 (§9 and the Progress entries); P2 not started.
 The authority boundary is ruled with Mark, while code moves,
 repository changes, and GitHub operations have not started.  
 **Authority:** this is the canonical plan for the Genet/Mere boundary and the
@@ -918,3 +918,24 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   it while its reader and smolweb lanes keep inker. The cone witness now
   holds the contract crate a leaf and forbids genet-render an inker edge.
   Next and last in P1: `genet-documents`.
+- **genet-documents split landed** in genet `76a47850946`, and with it **P1 is
+  complete**. The reader and smolweb lanes, their session engine and the
+  remote fetch bridge moved with history into `components/mere-document-lanes`
+  (Mark's name, checked free on the sparse index; reader unconditional,
+  `smolweb` and `netfetch` its features). genet-documents keeps the Livery
+  and Scripted lanes and links no controller, content lane or transport,
+  which the cone witness enforces. The fetch seam was restructured rather
+  than moved: `LocalFetcher` serves `data:`, `file://` and bare paths and
+  takes a remote fetcher by injection; `RemoteFetcher` in the new crate
+  covers http(s) and the smolweb schemes; `ResourceFetchPolicy` is
+  genet-host-api vocabulary (ruling 5). Pelt composes the two and takes the
+  new crate under its lane features, which answers ruling 4 for P1: Pelt
+  depends on the Mere-bound crate for those lanes, and whether it sheds
+  them or a smaller host takes the raw-host role is settled in P3.
+  P1's done-conditions: Genet reaches no Mere source (witnessed), Mere
+  injects policy through the seams (`FetchContext::transport`,
+  `ResourceFetcher`, the session traits in `document-session-api`), and WPT
+  reaches the same Fetch semantics (fetch/api/basic and abort identical by
+  name) and never consumed genet-documents. Four consumer repoints wait on
+  P4: turnstone (`genet_documents` reader and smolweb items, `genet_host_api`
+  settings and surface, `::tile`), woodshed, hocket and knot-editor.
