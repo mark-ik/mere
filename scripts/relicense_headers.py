@@ -196,7 +196,29 @@ def already_covered(body):
     return any("Mozilla Public" in l for l in body[:HEAD_SPAN])
 
 
-def process(path, tok, bare, retain=False):
+def strip_block_header(body):
+    """Remove a leading `/* ... */` comment that carries Exhibit A (Servo's
+    form), returning (removed_lines, rest). Used by --renormalize only."""
+    i = 0
+    while i < len(body) and not body[i].strip():
+        i += 1
+    if i >= len(body) or not body[i].lstrip().startswith("/*"):
+        return [], body
+    j = i
+    while j < len(body) and "*/" not in body[j]:
+        j += 1
+    if j >= len(body):
+        return [], body
+    block = body[i:j + 1]
+    if not any("Mozilla Public" in l for l in block):
+        return [], body
+    rest = body[j + 1:]
+    if rest and not rest[0].strip():
+        rest = rest[1:]
+    return block, rest
+
+
+def process(path, tok, bare, retain=False, renormalize=False):
     raw = path.read_bytes()
     eol = detect_eol(raw)
     enc = "utf-8-sig" if raw[:3] == b"\xef\xbb\xbf" else "utf-8"
@@ -205,7 +227,17 @@ def process(path, tok, bare, retain=False):
     body = [l[:-1] if l.endswith("\r") else l for l in body]
 
     if already_covered(body):
-        return False, "already Exhibit A", text
+        if not renormalize:
+            return False, "already Exhibit A", text
+        # Shape normalisation (sweep plan P7): a block-form Exhibit A becomes
+        # shape C; a line-form one falls through to the ordinary replace path.
+        block, rest = strip_block_header(body)
+        if block:
+            foreign = [l for l in block if "Copyright" in l and not OWN_NOTICE.search(l)]
+            header = build_header(tok, bare)
+            new = foreign + header + [""] + rest
+            out = eol.join(new)
+            return out.encode("utf-8") != raw, "renormalize block header", out
 
     had = any(HEADER_PAT.match(l) for l in body[:8])
     lead, stripped, rest = restrip(body)
@@ -288,6 +320,9 @@ def main():
                          "cambium, meristem)")
     ap.add_argument("--only", default=None,
                     help="limit to paths under this prefix")
+    ap.add_argument("--renormalize", action="store_true",
+                    help="rewrite an existing Exhibit A header to shape C "
+                         "(sweep plan P7); with --bare, keeps it copyright-free")
     args = ap.parse_args()
 
     repo = args.repo.resolve()
@@ -320,7 +355,7 @@ def main():
         tok = COMMENT[rel.suffix]
         path = repo / rel
         try:
-            did, why, out = process(path, tok, args.bare, args.retain_notice)
+            did, why, out = process(path, tok, args.bare, args.retain_notice, args.renormalize)
         except (UnicodeDecodeError, OSError) as e:
             print("  SKIP (unreadable) %s: %s" % (rel, e))
             continue
