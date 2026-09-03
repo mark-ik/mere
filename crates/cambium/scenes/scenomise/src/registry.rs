@@ -235,14 +235,17 @@ impl SolverRegistry {
     }
 }
 
-/// Realize a score, resolving [`sceno::Arrangement::Custom`] through `registry`.
+/// Realize a score via `registry`, resolving [`sceno::Arrangement::Custom`] there.
+///
+/// The name is the sibling of [`crate::solve_with`]: `solve` realizes the named
+/// families, `solve_with` takes a planner closure, `solve_via` takes the catalog.
 ///
 /// The eleven named families never touch the registry; they are solved by
 /// `scenomise` exactly as [`crate::solve`] would. Only a custom arrangement
 /// consults it, and a failure there is returned rather than absorbed: a score
 /// naming a solver nobody registered has not been laid out, and saying so is the
 /// difference between a diagnosable error and a canvas of items at the origin.
-pub fn solve(score: &sceno::Score, registry: &SolverRegistry) -> Result<sceno::Scene, SolveError> {
+pub fn solve_via(score: &sceno::Score, registry: &SolverRegistry) -> Result<sceno::Scene, SolveError> {
     let sceno::Arrangement::Custom { id, config } = &score.arrangement else {
         return Ok(crate::solve(score));
     };
@@ -380,7 +383,7 @@ mod tests {
         let mut registry = SolverRegistry::new();
         registry.register(Line::new(Vec::new())).unwrap();
 
-        let scene = solve(
+        let scene = solve_via(
             &custom_score(serde_json::json!({ "pitch": 25.0 })),
             &registry,
         )
@@ -393,7 +396,7 @@ mod tests {
     fn the_config_reaches_the_solver() {
         let mut registry = SolverRegistry::new();
         registry.register(Line::new(Vec::new())).unwrap();
-        let scene = solve(
+        let scene = solve_via(
             &custom_score(serde_json::json!({ "pitch": 1.0 })),
             &registry,
         )
@@ -405,7 +408,7 @@ mod tests {
     fn an_unregistered_id_is_an_error_not_an_empty_canvas() {
         let registry = SolverRegistry::new();
         assert_eq!(
-            solve(&custom_score(serde_json::json!({})), &registry),
+            solve_via(&custom_score(serde_json::json!({})), &registry),
             Err(SolveError::Unregistered("mod:test:line".to_string()))
         );
     }
@@ -420,7 +423,7 @@ mod tests {
             .register(Line::new(vec![Disclosure::Axis]))
             .unwrap();
         assert_eq!(
-            solve(&custom_score(serde_json::json!({})), &registry),
+            solve_via(&custom_score(serde_json::json!({})), &registry),
             Err(SolveError::MissingDisclosure {
                 id: "mod:test:line".to_string(),
                 required: Disclosure::Axis,
@@ -436,7 +439,7 @@ mod tests {
             .unwrap();
         let mut score = custom_score(serde_json::json!({}));
         score.items[1].axis = Some(AxisValue::Numeric(1.0));
-        assert!(solve(&score, &registry).is_ok());
+        assert!(solve_via(&score, &registry).is_ok());
     }
 
     #[test]
@@ -449,7 +452,7 @@ mod tests {
             config: serde_json::json!({}),
         };
         assert_eq!(
-            solve(&score, &registry),
+            solve_via(&score, &registry),
             Err(SolveError::CountMismatch {
                 id: "mod:test:miscounts".to_string(),
                 items: 3,
@@ -463,7 +466,7 @@ mod tests {
         // An empty registry must not stop a Grid score from solving.
         let mut score = Score::new(Arrangement::Grid(sceno::Grid::default()));
         score.items.push(card(0));
-        let scene = solve(&score, &SolverRegistry::new()).expect("built-ins need no registry");
+        let scene = solve_via(&score, &SolverRegistry::new()).expect("built-ins need no registry");
         assert_eq!(scene.items.len(), 1);
     }
 

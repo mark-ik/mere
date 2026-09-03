@@ -70,7 +70,7 @@ file, the solver registry behind `sceno::Arrangement::Custom`, moved into
 `scenomise` as `scenomise::registry` — a registry needs the score contract and
 the solver contract at once, and `scenomise` owns both. Its types are
 re-exported at `scenomise`'s root as the facade exported them; its `solve` is
-addressed as `scenomise::registry::solve`, because the plain name is already
+named `scenomise::solve_via`, because the plain name is already
 `scenomise`'s closed-form solve over the named families. The published
 `scenograph 0.0.4` name is held for the scene editor product.
 

@@ -1654,7 +1654,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   exported them. The eighth is `solve`, and `scenomise::solve` already exists
   and is consumed: it is the closed-form solve over the eleven named families,
   while the registry's `solve` dispatches an `Arrangement::Custom` id. The
-  registry's therefore stays addressed as `scenomise::registry::solve`, said in
+  registry's was first left as `scenomise::registry::solve` (renamed `solve_via` on Mark's ruling the same day), said in
   the crate docs and in the README. **Open for Mark:** whether that is right,
   or whether the registry's should take a distinct root name. Nothing consumes
   either path today, so this is cheap to change now and expensive to guess at

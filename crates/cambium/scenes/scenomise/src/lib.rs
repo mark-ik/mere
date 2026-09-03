@@ -22,9 +22,10 @@
 //! which arrived here when the `scenograph` facade dissolved: a registry needs
 //! the score contract and the solver contract at once, and this crate already
 //! owns both. Its types are re-exported at the root exactly as the facade
-//! exported them. Its `solve` is not: that name is already this crate's
-//! closed-form solve over the named families, so the registry's stays
-//! addressed as [`registry::solve`].
+//! exported them, and its realizer is [`solve_via`]: `solve` realizes the
+//! named families, `solve_with` takes a planner closure, `solve_via` takes
+//! the catalog (renamed from the facade's `solve` on 2026-09-03, since that
+//! name was already this crate's closed-form solve).
 //!
 //! Product adapters choose sources, translate native facts to a score, and
 //! realize the resulting scene. Where an arrangement needs something only the
@@ -39,6 +40,7 @@ mod solve;
 
 pub use registry::{
     ArrangementId, Disclosure, RegisterError, SolveError, Solver, SolverCapability, SolverRegistry,
+    solve_via,
 };
 pub use relax::{Relaxation, relax, relax_holding};
 pub use solve::{pinned_instances, solve, solve_with};
