@@ -892,3 +892,17 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   receipts closed on genet `main` (`66bf5c0b551`), which satisfies the P2
   prerequisite row. Next in P1: `genet-host-api`, then the inker contract
   extraction, then `genet-documents`.
+- Names ruled by Mark 2026-09-02, both checked free on the crates.io sparse
+  index and both plain hyphenated infrastructure per the naming ledger's
+  tier rule: **`mere-surface-api`** for the application half of
+  genet-host-api, **`document-session-api`** for inker's contract crate.
+  Claims follow with a real publish when each crate is ready.
+- **genet-host-api split landed** in genet `57bcc38fdae`: settings and surface
+  moved with history into `components/mere-surface-api` (depends on
+  workbench alone); the raw half keeps the name at 0.2.0 with no
+  in-workspace dependency; six in-genet import sites repointed and cambium
+  no longer depends on genet-host-api; the cone witness holds both cones.
+  External consumers are untouched until P4, when eighteen import sites
+  across turnstone, woodshed, hocket, knot-editor and Mere's knot-document
+  and distillery ports move to `mere_surface_api`. Next: the inker
+  contract extraction, then `genet-documents`.
