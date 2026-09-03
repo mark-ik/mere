@@ -1315,3 +1315,107 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   that owns it. P3's other half — Cambium and Workbench, with no genet consumer
   left — is next, and Pelt's genet pins become workspace paths in that same
   motion.
+
+- 2026-09-03: **the four open items from the Pelt landing are closed**
+  (`020c0449`, `f75db463`, `76a4c58c`, `ac3d1024`, this entry). Each was
+  recorded above as open or deferred; none needed the P3 work ahead of it.
+
+  **1. The fixture images moved under Pelt, and the strings were rewritten**
+  (`76a4c58c`, plus the three file moves in `020c0449`; **Mark's ruling** on
+  the question the landing left open). `resources/servo_64.png` and
+  `resources/servo_1024.png` are now `ports/pelt/examples/resources/`, beside
+  the fixtures that use them, and the top-level `resources/` is gone. The
+  landing kept them at the root because the authored URLs are themselves under
+  test, and that was right about the constraint and wrong about the
+  conclusion: **the depth is what the tests exercise, not the destination.**
+  `static_viewer.rs` asserts the p5 fixture's authored URL exactly and its
+  *unnormalized* resolved URL, `..` segments and all. So every URL keeps the
+  climb it had — four segments from `livery-route/index.html`, five from
+  `livery-route/assets/route.css`, six from `p5-resources/final/styles/root.css`
+  and from the four assertion strings — and then descends into
+  `ports/pelt/examples/resources/`. A one-segment `../resources/` would have
+  resolved correctly and silently stopped testing relative resolution at those
+  depths. `LICENSES.md`'s retained row is now `ports/pelt/examples/resources`,
+  same license, upstream and notice text, paragraph corrected.
+
+  Receipts: `cargo test -p pelt-desktop --features livery` **64 passed; 0
+  failed**, genet's number and the landing's. The article product receipt
+  reports `assertion=jump-link press/release moved the retained viewport
+  digest=b1d6a62acf85b553` with a 50,836-byte PNG — **the same digest and the
+  same byte count the landing recorded on both sides of the repository move**,
+  so the relocation changed nothing that renders.
+  `relicense_headers.py --repo . --audit`: 1155 owned sources, **0 without
+  Exhibit A**, 0 Exhibit B hits, and the ledger path resolves to the new
+  directory.
+
+  **2. `ports/knot/desktop` builds standalone** (`020c0449`). Both pre-existing
+  faults are fixed as the 2026-09-03 repoint described them. It has an empty
+  `[workspace]` table, which is what actually keeps it out of the workspace —
+  the root `exclude` entry never could, because the path sits inside the member
+  `ports/knot`. Given the table it restates the two `[patch.crates-io]` entries
+  its graph needs, `taffy` (as `genet-taffy`) and `parley`, at the same genet
+  revision the root names and with the root's own reasons; without them
+  `genet-livery` resolved published parley 0.10.0 and failed on
+  `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`, exactly
+  as predicted. The root manifest's exclude comment claimed the port "remains
+  buildable by manifest path"; that was false and is corrected for both nested
+  entries, `ports/graphshell/web` included.
+
+  Compiling it for the first time found a third fault, in code no build had
+  ever reached: `focused_text`'s `get` slot closure is an `E0282`, type
+  annotations needed. One parameter type. Receipt: `cargo check
+  --manifest-path ports/knot/desktop/Cargo.toml` green, `Finished dev profile
+  in 25.75s`.
+
+  **3. `ports/graphshell/web` is proven** (`f75db463`). The shared worktree
+  `worktrees/genet-head` was clean, and went from `577e2471e97` to
+  `b78e2b92251` by detached checkout — the revision every genet.git pin here
+  names. That alone was not enough. The port's gitignored `.cargo/config.toml`
+  states its own invariant, that its patch table is the **union** of itself and
+  the root config's, all pointed at the worktree; sixteen names the root gained
+  since had never been added, so the root table supplied them from the genet
+  *working copy* and the first build died on `package collision in the
+  lockfile: workbench ... are different`. The missing-entry trap in its
+  loudest form yet: a hard error rather than a duplicate crate or a silent
+  mismatch. Sixteen entries added, and `knot-editor-host` removed — it left
+  genet with Pelt and no longer exists under the worktree at all.
+
+  Receipts, both from `ports/graphshell/web`: `cargo check` green in 1m 34s,
+  `cargo check --target wasm32-unknown-unknown` green in 1m 15s. Only the
+  reasons are machine-independent, so they, and not the absolute paths, went
+  into the committed `.cargo/config.toml.example`, which had said nothing about
+  the patch table at all.
+
+  **4. The Circuit workspace-graph fixture is current** (`ac3d1024`).
+  Regenerated with `scripts/workspace_graph_fixture.py`; **31 lines added, 1
+  removed** — two packages (`knot-editor-host`, `tabard`), six edges, and the
+  `generated_from` sha. One edge corrects a claim from the removal: **`pelt`
+  `-desktop` does name `tabard`**, optionally, behind `tabard-preview`, and
+  `cargo metadata --no-deps` reports optional dependencies like any other.
+  Genet's "no dependent anywhere" was true of genet's manifests, not of Pelt's.
+  Receipt: `cargo test -p distillery` **13 passed, 0 failed**, the landing's
+  number.
+
+  **Two things to know about how these receipts were taken.** The genet
+  working copy went mid-edit under P3 while this work ran — `components/`
+  `cambium` is being removed from it right now — and mere's machine-local
+  patch table points there, so the ordinary patched loop failed with `failed
+  to load source for dependency cambium` and, once, with a Windows `os error
+  267` as a directory vanished under a running `rustc`. The article receipt and
+  the distillery test were therefore taken **unpatched, run from a directory
+  outside the tree** so the machine-local table does not load and genet
+  resolves from git at `b78e2b92251` — the same technique, and the same
+  reasoning, as the unpatched witnesses above. That is a stronger receipt, not
+  a weaker one: it is the pinned revision rather than a neighbour's working
+  copy. Items 2 and 3 were checked before that removal reached them.
+
+  And one mis-bundling, recorded rather than repaired: `git mv` stages
+  immediately, so the three file moves of item 1 were already in the index when
+  item 2 was committed and rode into `020c0449`. `76a4c58c` carries every
+  content change of item 1 and none of the moves. Nothing is lost and nothing
+  is pushed; forward commits are safe and history surgery to un-bundle is not
+  the trade.
+
+  **Still open after this.** Nothing from the landing's list. P3's other half —
+  Cambium and Workbench, with no genet consumer left — is in flight in genet as
+  this is written, and Pelt's genet pins become workspace paths in that motion.
