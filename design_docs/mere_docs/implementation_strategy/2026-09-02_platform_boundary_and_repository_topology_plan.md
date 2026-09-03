@@ -857,6 +857,92 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   nine commits) remain open and touch none of the four mixed crates.
 - V0 of the Vello gates was already met by the Netrender note.
 
+### 2026-09-03 — P2 assessment: the Cambium move cannot go first
+
+Written before any file moves, from the P0 census and the tree as it stands
+after P1 and the license sweep.
+
+**The cluster.** Cambium is not a leaf in genet. Two members the plan moves
+in P3 depend on it today: `knot-editor-host` on `cambium`, and `pelt-desktop`
+on `cambium` and `cambium-genet-winit-host` behind its `livery` feature. And
+`workbench`, which the plan lists among the P3 moves, is depended on by
+`cambium`, `mere-surface-api`, `pelt-core` and `pelt-desktop`. So the set
+{Cambium family, Workbench, mere-surface-api, mere-document-lanes, Pelt,
+knot-editor-host} is one connected cluster inside genet, and every edge in it
+points toward Cambium and Workbench.
+
+**Why P2 as written breaks invariant 1.** If the Cambium family and Workbench
+leave genet while Pelt and knot-editor-host stay, those two must reach Cambium
+from mere's repository, and the resolved graph then carries a Mere source.
+The witness landed in P1 fails on the first `cargo metadata`. There is no
+feature flag that removes Pelt's dependence: `livery` is its shell.
+
+**Three orders, one that holds.**
+
+1. *P2 then P3 as written* — fails the witness between the two phases, as
+   above.
+2. *The whole cluster in one motion* — Cambium, Workbench, the two
+   Mere-bound contract crates, Pelt and knot-editor-host move together. Every
+   step holds invariant 1, but it is one change across nine Cambium crates,
+   two ports, a host, and 167 tracked Cambium files plus Pelt's, with the
+   P2 and P3 done-conditions to prove at once.
+3. *Consumers first, then Cambium* — Pelt and knot-editor-host move to mere
+   first (P3's items), consuming Cambium from genet by revision as mere's
+   five Cambium consumers already do; that edge points downward and the
+   witness is silent. Then the Cambium family and Workbench move with no
+   genet consumer left, and Pelt's pins become workspace paths in the same
+   commit. Each step is a bounded change with its own receipts, and invariant
+   1 holds at every commit.
+
+Recommendation: 3. It reorders the phases' *content* without changing what
+each proves: the P2 done-conditions (no Cambium members in genet, a widget and
+a scene rendering through genet on desktop and web, receipts green, two unlike
+products on the Mere source) are proven when Cambium lands, after Pelt has
+already been running from mere against genet's Cambium.
+
+**What the raw-host ruling becomes under 3.** Once Pelt leaves, genet's only
+host is genet-wpt, which is headless. The plan's "one small host that proves
+Genet works without Mere" then has to be founded: a minimal headed port over
+`genet-winit-host`, `genet-render-host` and a Livery session, with no
+Workbench and no Cambium. The cone witness's assertion that Pelt's manifests
+live at `ports/pelt` retires with Pelt. That founding is P3 work and its own
+small plan; ruling 4's question is answered by it, not by trimming Pelt.
+
+**Landing shape in mere, to be ruled.** mere's convention is one family per
+`crates/<family>/` directory. Proposed: `crates/cambium/` for the nine Cambium
+crates; the scene family moves from `crates/scenograph/` to
+`crates/cambium/scenes/` under the umbrella, keeping crate names; Workbench to
+`crates/cambium/workbench`; `mere-surface-api` and `mere-document-lanes` to
+`crates/system/` beside `fetch`, since they are host contracts and content
+lanes rather than widgets; Pelt to `ports/pelt`, knot-editor-host to
+`crates/cambium/knot-editor-host` or beside Knot's port. The `scenograph`
+facade (36 lines of re-exports plus a 528-line solver registry) has one
+in-mere consumer, the `webrtc-join` probe, and that consumer already takes
+`sceno` directly; the registry moves into `scenomise` or a `cambium-scenes`
+umbrella crate, the facade crate is deleted, and the published name is held
+for the editor product per the naming ledger.
+
+**History.** `git subtree split -P components/cambium` over genet's history
+was tried with a ten-minute budget and finished in 275 seconds, walking 738
+commits and producing a 328-commit branch (`cambium-history-probe`, local to
+genet) whose root is the 2026-06-16 xilem_core vendoring from the Serval
+era and whose tip is today's relicense. So the July finding, that a split
+out of a large repository is not viable, does not hold for this path, and
+the move can preserve history as the plan asks: `git subtree add` of that
+branch into mere at the chosen prefix, with the tree's own `docs/history`
+and receipts travelling in it. Copy plus pointer remains the fallback if the
+add itself misbehaves.
+
+**Consumers.** Nine repositories pin the Cambium family from genet.git today
+(cleromancy, hocket, isometry, knot-editor, mer3ly, mesocosm, retinue,
+turnstone, woodshed; 35 manifest lines). They repoint to mere.git in P4 after
+the receiving head is public and green, and mere's own five consumers of
+`cambium` and `workbench` become workspace paths when the crates land.
+
+**Prerequisites now met or not.** The license sweep's genet phase landed
+(`957926e4e8a`); mere was clean at assessment time, the quiet window is a
+matter of picking the hour; the Workbench W4 receipts are on genet main.
+
 ## Progress
 
 ### 2026-09-02
