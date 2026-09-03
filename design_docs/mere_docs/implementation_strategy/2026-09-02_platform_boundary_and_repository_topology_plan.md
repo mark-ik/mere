@@ -596,6 +596,11 @@ that break on any repoint past `abcea38b962`, independent of this plan.
 `ports/pelt`; when Pelt moves in P3 that assertion breaks and Genet's "one
 small raw host" role is unfilled, `pelt-core` being disqualified by its
 `workbench` and `inker` dependencies.
+Two late additions: knot-editor carries a repository-local cargo checkout of
+genet at its pinned revision, which still has the old `tile` alias, and P4's
+repoint must invalidate it; and the `frisket` name-claim's published
+description still names the removed `genet-host-api` tile contract, to be
+corrected when Workbench moves.
 
 #### `genet-documents` (6,802 lines, 12 files)
 
@@ -747,7 +752,10 @@ leaving a page-capture-contract note behind, and genet's `DOC_POLICY.md`
 claim that its three area roots mirror `components/{inker,nematic,verso-tile}`
 goes false when they move.
 
-#### Rulings the inventory needs from Mark before P1 touches these seams
+#### Rulings the inventory needed from Mark, taken 2026-09-02
+
+All nine were ruled as recommended. Each item below states the recommendation
+that is now the ruling.
 
 1. **Fleece's class.** Independent lower library, witnessed by two engine
    consumers and its CI cone; it does not go to Mere. Where it lives (genet
@@ -865,3 +873,19 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   by a per-crate analysis, and consumer source identities captured. The
   Mere-source witness landed in genet `cbe7d383584`, with its positive
   control, as P1's first deliverable.
+- Mark ruled all nine §9.3 items as recommended, 2026-09-02, and named
+  netfetcher first. **netfetcher seam landed** in genet `1fae097752c`: a
+  `Transport` seam on `FetchContext` (boxed future, object-safe like the
+  other seams), the preflight routed through it, the cache body cap hoisted
+  onto the context, and the hyper, h3 and websocket lanes behind default-on
+  features. The `default-features = false` build is the proof and CI runs
+  it, with a cone witness that the semantics-only tree reaches none of
+  eleven transport crates and the default tree does. Three seam tests, the
+  sixty-eight existing tests unchanged, WPT and genet-documents building
+  with `netfetch`. WPT `fetch/api/basic` and `fetch/api/abort` in
+  spawn-server mode are identical by name before and after (81/119 and
+  19/35 subtests), the baseline built from a detached worktree at the
+  pre-change head. While this landed the Workbench component plan's W4
+  receipts closed on genet `main` (`66bf5c0b551`), which satisfies the P2
+  prerequisite row. Next in P1: `genet-host-api`, then the inker contract
+  extraction, then `genet-documents`.
