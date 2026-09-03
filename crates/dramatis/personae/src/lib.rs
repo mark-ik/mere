@@ -100,7 +100,8 @@ pub use crate::seal::{seal_bytes, unseal_bytes};
 pub use crate::sealed_profile_storage::SealedProfileStorage;
 pub use crate::sealed_record_storage::{SealedRecordChange, SealedRecordStorage};
 pub use crate::startup_unlock::{
-    StartupUnlockMode, auto_unlock_backend_available, load_or_create_auto_unlock_root,
+    StartupUnlockMode, auto_unlock_backend_available, load_existing_auto_unlock_root,
+    load_or_create_auto_unlock_root,
 };
 pub use crate::vault::{
     CredentialLineage, IdentitySlot, IdentityStorage, IdentityVault, InMemoryStorage, Profile,

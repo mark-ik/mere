@@ -127,8 +127,9 @@ pub use paths::{
     remote_auth_wrapping_keys_path,
 };
 pub use secrets::{
-    identity_seed_locked_at_startup, load_identity_seed, relock_wallet_after_manual_unlock,
-    save_identity_seed, unlock_wallet_with_auto_os, wallet_local_secrets_locked,
+    identity_seed_locked_at_startup, load_identity_seed, load_identity_seed_read_only,
+    relock_wallet_after_manual_unlock, save_identity_seed, unlock_wallet_with_auto_os,
+    wallet_local_secrets_locked,
 };
 
 #[cfg(test)]

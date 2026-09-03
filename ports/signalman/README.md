@@ -35,6 +35,58 @@ grant before the radio opens, verifies the station-signed acknowledgement, and
 refuses to replace an existing record. It prints only public receipt fields.
 The physical radio receipt remains deployment work.
 
+For a physically witnessed V4 first-owner claim, initialize the separate
+controller scope explicitly, after the command has read the existing wallet
+without migrating its sealed or legacy seed record:
+
+```text
+mere-signalman-first-owner init \
+  --authority-root PATH
+```
+
+`init` refuses a missing or locked wallet, creates
+`first-owner-controller-id.json` exactly once with create-new semantics, and
+prints only the resulting public controller fingerprint. It never opens USB.
+Its current create-new final-file write is not atomic: if interruption leaves
+malformed public scope JSON, `claim` fails closed. Before any board claim, the
+operator may remove only that public scope file and rerun `init`.
+The later `claim` action requires that existing scope and also reads the
+wallet without creating an unlock root, wallet, or identity:
+
+```text
+mere-signalman-first-owner claim \
+  --authority-root PATH \
+  --port COM6 \
+  --region us915 \
+  --frequency-hz 906875000 \
+  --bandwidth-hz 250000 \
+  --tx-power-dbm 17
+```
+
+The `claim` invocation itself is a durable board mutation after a fresh
+physical presence window. It is not run automatically by this port or its
+tests. Initializing a controller scope is not a board claim, and no physical
+Claim or Resume receipt exists yet.
+
+After a claim, `status` asks the running board for its control status under
+the same controller identity, over the ordinary USB modem stream, with no
+button gesture:
+
+```text
+mere-signalman-first-owner status \
+  --authority-root PATH \
+  --port COM6 \
+  --node NODE_HEX
+```
+
+The board verifies the signed command against its durable grant and journals
+the outer replay counter before it answers, so `status` keeps that counter in
+`first-owner-controller-counter.json` beside the scope record and advances it,
+with a synced temporary file and rename, before every send. A counter the
+board has already accepted is refused with silence; the command then reports a
+carrier timeout. The record starts at one for a freshly claimed board and is
+never rewound by this port.
+
 This integration package is intentionally a separate workspace and pins the
 Retinue source revision consumed by downstream Signalman builds. It is not a
 publishable dependency story.
