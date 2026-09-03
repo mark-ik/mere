@@ -5,3 +5,20 @@
 # of graphshell does not compile for wasm32-unknown-unknown.
 [target.wasm32-unknown-unknown]
 rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
+
+# The live file also carries a genet path-patch table, which is NOT reproduced
+# here because its paths are absolute and machine-local. Two things about it
+# are not machine-local, and following this example without them is how the
+# 2026-09-03 proof of this port began:
+#
+#  1. Point it at a CLEAN WORKTREE checked out at the exact revision every
+#     genet.git pin in this repository names, not at the genet working copy
+#     another lane edits in place:
+#       git -C <worktree> checkout --detach <rev>
+#
+#  2. It must name EVERY genet package the root mere .cargo/config.toml names,
+#     not just the ones this crate's graph mentions. Cargo config files merge
+#     up the directory tree, so any name this table omits is supplied by the
+#     root table from the working copy — and one package reached by two
+#     different paths is a hard "package collision in the lockfile", not a
+#     silent mismatch. Diff the two tables by name whenever either changes.
