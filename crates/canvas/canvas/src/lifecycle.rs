@@ -199,6 +199,9 @@ impl Canvas {
             projection_score: None,
             projection_representations: HashMap::new(),
             arrangement_pull: seiche::DEFAULT_ANCHOR_STIFFNESS,
+            physics_law: crate::PhysicsLaw::Springs,
+            physics_overlays: Vec::new(),
+            physics_kind_source: crate::PhysicsKindSource::Site,
             restored_score_hold: None,
             scope: None,
             fold: None,
@@ -339,6 +342,13 @@ impl Canvas {
         // nodes added after it was placed (its targets snapshot at build time).
         // (Field regions — rebuild-on-mutation / new-node capture.)
         self.rebuild_coupling_forces();
+        // A law or overlay that snapshots graph structure (Stress's hop distances,
+        // Orbit's masses, Kinds' kinds, the group / depth overlays) is rebuilt
+        // against the new topology the same way; the others keep their state.
+        // (Physics catalog — P1.)
+        if self.physics_forces_are_graph_bound() {
+            self.rebuild_law_forces();
+        }
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&self.graph);
         self.node_document = genet_livery::LiveryDocument::new(
             node_dom,

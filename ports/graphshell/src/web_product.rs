@@ -219,6 +219,24 @@ impl BrowserHost {
         self.canvas
             .apply_cartography_faces(scene.cartography.face_iter());
         self.canvas.set_arrangement_pull(scene.arrangement_pull);
+        // The law, its overlays and the kind source ride the scene; an unknown id
+        // (a scene from a newer catalog) falls back to the default rather than
+        // failing the restore. (Physics catalog — P1.)
+        self.canvas.set_physics_kind_source(
+            mere::canvas::PhysicsKindSource::parse(&scene.physics_kind_source)
+                .unwrap_or(mere::canvas::PhysicsKindSource::Site),
+        );
+        self.canvas.set_physics_overlays(
+            scene
+                .physics_overlays
+                .iter()
+                .filter_map(|id| mere::canvas::PhysicsOverlay::parse(id))
+                .collect(),
+        );
+        self.canvas.set_physics_law(
+            mere::canvas::PhysicsLaw::parse(&scene.physics_law)
+                .unwrap_or(mere::canvas::PhysicsLaw::Springs),
+        );
         self.canvas.set_physics_damping(scene.physics_damping);
         self.canvas.set_physics_paused(scene.physics_paused);
         self.canvas.set_selected_members(&scene.selected);
@@ -433,6 +451,14 @@ impl BrowserHost {
             layout_strategy: Some(self.layout_id.clone()),
             physics_paused: self.physics_paused,
             physics_damping: self.physics_damping,
+            physics_law: self.canvas.physics_law().id().to_string(),
+            physics_overlays: self
+                .canvas
+                .physics_overlays()
+                .iter()
+                .map(|overlay| overlay.id().to_string())
+                .collect(),
+            physics_kind_source: self.canvas.physics_kind_source().id().to_string(),
             arrangement_pull: self.canvas.arrangement_pull(),
             camera_offset: camera.offset,
             camera_zoom: camera.zoom,

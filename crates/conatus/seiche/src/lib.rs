@@ -66,6 +66,20 @@ pub type NodeKey = petgraph::stable_graph::NodeIndex;
 pub mod forces;
 pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 
+/// The physics catalog's **laws**: distinct dynamics over the node bodies,
+/// each a [`Force`] a host installs through [`Simulation::set_forces`].
+/// Springs (the trio above), Charge ([`BarnesHutRepulsion`] + springs) and
+/// Still (no forces) need nothing here; the rest are their own files.
+pub mod laws;
+pub mod overlays;
+pub use laws::{
+    Anneal, Boids, Gravity, Kuramoto, LinLogForce, MagneticSpring, ParticleLife, StressSpring,
+    graph_distances,
+};
+pub use overlays::{
+    DegreeRepulsion, DepthGravity, DomainCluster, GravityLocus, GridSnap, HubGravity,
+};
+
 /// Tensorized N-body force laws. Burn stays opt-in behind `tensor-burn` so
 /// ordinary layout consumers do not acquire the GPU/runtime stack.
 pub mod tensor_forces;
@@ -520,8 +534,46 @@ impl Simulation {
         self.forces.push(Box::new(force));
     }
 
+    /// Replace the built-in force list wholesale — the law switch of the
+    /// physics catalog. Couplings, the affinity force and the anchor force
+    /// keep their own slots and are untouched; bodies keep their positions and
+    /// velocities, so the new law takes over from where the old one left the
+    /// graph rather than from a reseed. Forces run in the order given.
+    pub fn set_forces(&mut self, forces: Vec<Box<dyn Force>>) {
+        self.forces = forces;
+    }
+
+    /// Remove every built-in force (the catalog's `Still`): bodies coast to
+    /// rest under damping alone, and the arrangement's anchors — if installed
+    /// — are all that pulls.
+    pub fn clear_forces(&mut self) {
+        self.forces.clear();
+    }
+
     pub fn force_count(&self) -> usize {
         self.forces.len()
+    }
+
+    /// A node body's current linear velocity, if it has a body.
+    pub fn velocity_of(&self, node: NodeKey) -> Option<Vector> {
+        self.bodies_by_node
+            .get(&node)
+            .and_then(|&handle| self.bodies.get(handle))
+            .map(|body| body.linvel())
+    }
+
+    /// Total kinetic energy of the node bodies, `Σ ½ m v²` — the number a
+    /// receipt reads to say a restless law is restless and a settling one
+    /// settled.
+    pub fn kinetic_energy(&self) -> f32 {
+        self.bodies_by_node
+            .values()
+            .filter_map(|&handle| self.bodies.get(handle))
+            .map(|body| {
+                let v = body.linvel();
+                0.5 * body.mass() * (v.x * v.x + v.y * v.y)
+            })
+            .sum()
     }
 
     /// Replace the field-coupling forces wholesale (the built-in layout forces in

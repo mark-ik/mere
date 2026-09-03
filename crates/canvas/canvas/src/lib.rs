@@ -171,6 +171,14 @@ pub use ambient::{AmbientSim, GameOfLife, NBody, ParticleLife, SandFall, Tinctur
 mod physics;
 use physics::Physics;
 
+/// The physics catalog: the laws a graph can move under, the overlays composed
+/// onto them, and the named profiles. (Physics catalog — P1.)
+pub mod physics_catalog;
+pub use physics_catalog::{
+    CANVAS_PHYSICS_KIND_SOURCES, CANVAS_PHYSICS_LAWS, CANVAS_PHYSICS_OVERLAYS,
+    CANVAS_PHYSICS_PROFILES, PhysicsKindSource, PhysicsLaw, PhysicsOverlay, PhysicsProfile,
+};
+
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
 const SETTLE_TICKS: u32 = 360;
 /// A gentle re-separation burst (~1.5s at 60fps) after node colliders resize, so
@@ -593,6 +601,16 @@ pub struct Canvas {
     /// forces. The dial between "layout as authority" and "layout as
     /// participant". (Arrangement as attractor.)
     arrangement_pull: f32,
+    /// The physics **law** the graph moves under — which dynamics, not how
+    /// tuned (see [`physics_catalog`]). Springs is the force-directed default
+    /// the canvas has always run. (Physics catalog — P1.)
+    physics_law: PhysicsLaw,
+    /// The **overlays** composed onto the law, in the order they run after it.
+    /// (Physics catalog — P1.)
+    physics_overlays: Vec<PhysicsOverlay>,
+    /// Where the Kinds law reads a node's kind from (site, cluster, degree) —
+    /// the host's choice per scene. (Physics catalog — P1.)
+    physics_kind_source: PhysicsKindSource,
     /// A restored score's `(strategy id, graph revision)` claim on the layout.
     /// [`restore_projection_score`](Self::restore_projection_score) buffers the
     /// score's own positions; without this the host's very next

@@ -170,7 +170,7 @@ pub struct CanvasStrategyProjection {
 
 /// The URL's host/authority — the substring between `://` and the next `/` (or end), else the
 /// whole string. The kanban categorical axis groups nodes by this. (Arrangements — kanban.)
-fn url_host(url: &str) -> String {
+pub(crate) fn url_host(url: &str) -> String {
     let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
     after_scheme
         .split(['/', '?', '#'])

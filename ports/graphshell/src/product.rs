@@ -219,11 +219,29 @@ pub struct SavedSceneV1 {
     pub layout_strategy: Option<String>,
     pub physics_paused: bool,
     pub physics_damping: f32,
+    /// The physics law id (`mere::canvas::PhysicsLaw::id`); Springs when absent,
+    /// so a scene saved before the catalog reads as it always did.
+    #[serde(default = "default_physics_law")]
+    pub physics_law: String,
+    /// The overlay ids composed onto the law, in run order.
+    #[serde(default)]
+    pub physics_overlays: Vec<String>,
+    /// Where the Kinds law reads a node's kind from (`site`, `cluster`, `degree`).
+    #[serde(default = "default_physics_kind_source")]
+    pub physics_kind_source: String,
     pub arrangement_pull: f32,
     pub camera_offset: (f32, f32),
     pub camera_zoom: f32,
     pub default_handler: String,
     pub cartography: CartographyGeometry,
+}
+
+fn default_physics_law() -> String {
+    mere::canvas::PhysicsLaw::Springs.id().to_string()
+}
+
+fn default_physics_kind_source() -> String {
+    mere::canvas::PhysicsKindSource::Site.id().to_string()
 }
 
 /// User-selected public card copied from a mounted endpoint into local graph
@@ -783,6 +801,49 @@ mod tests {
         }
     }
 
+    /// A scene saved before the physics catalog carries no law, overlays or kind
+    /// source; it must still open, as Springs with nothing composed on. And the
+    /// three fields round-trip by id once present. (Physics catalog — P1.)
+    #[test]
+    fn saved_scene_physics_fields_default_and_round_trip() {
+        let legacy = serde_json::json!({
+            "name": "Before the catalog",
+            "selected": [],
+            "layout_strategy": "grid.default",
+            "physics_paused": true,
+            "physics_damping": 0.7,
+            "arrangement_pull": 0.4,
+            "camera_offset": [0.0, 0.0],
+            "camera_zoom": 1.0,
+            "default_handler": "system.default",
+            "cartography": CartographyGeometry::default(),
+        });
+        let scene: SavedSceneV1 = serde_json::from_value(legacy).expect("a legacy scene opens");
+        assert_eq!(scene.physics_law, mere::canvas::PhysicsLaw::Springs.id());
+        assert!(scene.physics_overlays.is_empty());
+        assert_eq!(
+            scene.physics_kind_source,
+            mere::canvas::PhysicsKindSource::Site.id()
+        );
+
+        let chosen = SavedSceneV1 {
+            physics_law: mere::canvas::PhysicsLaw::Kinds.id().to_string(),
+            physics_overlays: vec![
+                mere::canvas::PhysicsOverlay::Tide.id().to_string(),
+                mere::canvas::PhysicsOverlay::GridSnap.id().to_string(),
+            ],
+            physics_kind_source: mere::canvas::PhysicsKindSource::Cluster.id().to_string(),
+            ..scene
+        };
+        let json = serde_json::to_string(&chosen).expect("encodes");
+        let back: SavedSceneV1 = serde_json::from_str(&json).expect("decodes");
+        assert_eq!(back, chosen);
+        assert_eq!(
+            mere::canvas::PhysicsLaw::parse(&back.physics_law),
+            Some(mere::canvas::PhysicsLaw::Kinds)
+        );
+    }
+
     #[test]
     fn projection_clock_excludes_paused_host_time_and_replays_deterministically() {
         fn run() -> Vec<f32> {
@@ -862,6 +923,9 @@ mod tests {
             layout_strategy: Some("grid.default".to_string()),
             physics_paused: true,
             physics_damping: 0.7,
+            physics_law: "stress.kamada-kawai".to_string(),
+            physics_overlays: vec!["grid-snap".to_string()],
+            physics_kind_source: "site".to_string(),
             arrangement_pull: 0.4,
             camera_offset: (123.0, 234.0),
             camera_zoom: 1.2,

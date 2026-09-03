@@ -30,8 +30,8 @@ use armillary::{ActorHandle, Emitter, Wake, spawn};
 use euclid::default::Point2D;
 use kernel::graph::NodeKey;
 use seiche::{
-    AffinitySpring, Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider,
-    NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
+    AffinitySpring, Basin, CouplingForce, FluidParams, Force, LayoutSnapshot, LayoutView,
+    NodeCollider, NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
 };
 
 use super::TICK_DT;
@@ -65,6 +65,11 @@ pub(crate) enum PhysicsCommand {
     /// triggers ("cluster by affinity"). Position-preserving. (Graph signals — P4.)
     SetAffinityForce(Option<AffinitySpring>),
     SetAnchorForce(Option<seiche::AnchorSpring>),
+    /// Replace the law's force set wholesale — the physics law and its overlays
+    /// (the catalog's `laws × overlays`), leaving the coupling / affinity / anchor
+    /// slots alone. Position-preserving: no body moves until the next tick.
+    /// (Physics catalog — P1.)
+    SetForces(Vec<Box<dyn Force>>),
     /// Set the linear damping (the "inertia" physics setting) on new + live bodies.
     SetLinearDamping(f32),
     /// Reshape node colliders to per-node face shapes (see [`Simulation::set_node_colliders`]).
@@ -231,6 +236,27 @@ impl Physics {
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetAnchorForce(force));
             }
+        }
+    }
+
+    /// Replace the law's force set wholesale (see [`PhysicsCommand::SetForces`]):
+    /// the physics law plus its overlays. The coupling / affinity / anchor slots
+    /// are separate and untouched. Position-preserving. (Physics catalog — P1.)
+    pub fn set_forces(&mut self, forces: Vec<Box<dyn Force>>) {
+        match self {
+            Physics::Inline(p) => p.sim.set_forces(forces),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetForces(forces));
+            }
+        }
+    }
+
+    /// The number of forces in the law slot (inline backend only). Test introspection.
+    #[cfg(test)]
+    pub(crate) fn force_count(&self) -> usize {
+        match self {
+            Physics::Inline(p) => p.sim.force_count(),
+            Physics::Actor(_) => 0,
         }
     }
 
@@ -587,6 +613,7 @@ fn apply(
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
         PhysicsCommand::SetAffinityForce(force) => sim.set_affinity_force(force),
         PhysicsCommand::SetAnchorForce(force) => sim.set_anchor_force(force),
+        PhysicsCommand::SetForces(forces) => sim.set_forces(forces),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
         PhysicsCommand::SetNodeColliders(colliders) => sim.set_node_colliders(colliders),
         PhysicsCommand::SetNodeMaterials(materials) => sim.set_node_materials(materials),

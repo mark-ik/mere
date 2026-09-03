@@ -1,7 +1,7 @@
 # Physics Catalog Plan
 
 **Date:** 2026-09-02
-**Status:** plan (assessed and ruled 2026-09-02; P1 ready to start).
+**Status:** in progress (P1 landed 2026-09-02; P2 next).
 **Scope:** A catalog of *distinct physics layout laws* — dynamical systems
 over the graph's bodies that produce different layouts because they are
 different physics — as a lever beside the arrangement catalog, plus the
@@ -187,6 +187,31 @@ moving a body until the next tick, every combination round-trips through
 the saved scene, the law and overlay tests are green, and a catalog test
 proves every id builds and every label is plain.
 
+*Landed 2026-09-02.* seiche: `set_forces` / `clear_forces` /
+`velocity_of` / `kinetic_energy`; `laws/` (`StressSpring` +
+`graph_distances`, `LinLogForce`, `Gravity`, `ParticleLife`, `Boids`,
+`Kuramoto`, `MagneticSpring`, `Anneal`) and `overlays/`
+(`DegreeRepulsion`, `DomainCluster`, `HubGravity`, `DepthGravity`,
+`GridSnap`, `GravityLocus` with `tidal`), one test each stating what it
+reveals; 73 seiche tests green. Canvas: `physics_catalog.rs` with
+`PhysicsLaw` / `PhysicsOverlay` / `PhysicsKindSource` / `PhysicsProfile`,
+the three catalogs plus `CANVAS_PHYSICS_KIND_SOURCES`, the setters
+(`set_physics_law`, `set_physics_overlays`, `toggle_physics_overlay`,
+`set_physics_kind_source`, `apply_physics_profile`, `physics_profile_id`),
+`LawInputs` (the attribute builders: degree, site groups, cluster groups,
+BFS depth, the distance table), `PhysicsCommand::SetForces` for the
+actor, and the graph-bound rebuild on `reconcile_derived`; four catalog
+tests green (every id round-trips, every law and overlay builds on the
+sample graph without moving a body, every profile applies and names
+itself back, a living law keeps ticking and Stress survives a topology
+change). Graphshell: `SavedSceneV1` gains `physics_law`,
+`physics_overlays`, `physics_kind_source` with serde defaults (a legacy
+scene opens as Springs); the web host saves them from the canvas and
+re-applies them on restore. The web-side restore/save edit
+(`web_product.rs`) is wasm-only and could not be compiled this session:
+the clean genet worktree the web build reads from
+(`worktrees/genet-head`) is gone from disk (see Findings).
+
 **P2 — the levers in both hosts, with a receipt per law.** The product
 panel gains a law picker, overlay toggles and a profile picker beside the
 arrangement picker (web: `physics-select`, `overlay-<id>` checkboxes,
@@ -248,7 +273,42 @@ and the native host shows the same by hand.
   settle budgets (`input.rs:590` is the continuous run the play control
   enters); Orbit, Kinds, Flock, Sync and the oscillating locus never rest,
   so a law declares `wants_continuous_tick`, the rider the physics scenes
-  plan added for perpetual scenes.
+  plan added for perpetual scenes. Landed as `PhysicsLaw::never_rests` /
+  `PhysicsOverlay::never_rests` on the canvas side: a switch to a living
+  law settles for `u32::MAX` (the play control's continuous run) instead
+  of the ordinary budget, so no seiche-side rider was needed.
+- 2026-09-02 (P1): the node snapshot every law starts from iterated
+  `bodies_by_node`, a `HashMap`, so a seeded law (Anneal's walk) drew its
+  random numbers in a different node order per process and a seeded run
+  did not reproduce. `laws::node_positions` now sorts by node index; every
+  law and overlay reads through it.
+- 2026-09-02 (P1): rapier weighs every node body the same (density-scaled
+  to mass ≈ 1), so Orbit's degree masses must be gravitational only: the
+  law applies `m_inertial · G · m_other / d²`, and the one-time kick is
+  the circular speed for the mass *inside* each body's radius (sorted,
+  prefix-summed), or the outer leaves start unbound.
+- 2026-09-02 (P1): `EdgeSpring` holds spokes at 170 with stiffness 10;
+  an inverse-square hub push sized safely for close range is under a
+  pixel of displacement at that reach, so `DegreeRepulsion` falls off as
+  `1/d`. The overlay tests are with/without comparisons on the same graph
+  for this reason: an overlay that does nothing measurable is a defect.
+- 2026-09-02 (P1): the profile catalog test found Gas ≡ bare Charge,
+  Magnet ≡ bare Flow, Void ≡ bare Still; a picker cannot name the live
+  choice when two profiles coincide, so the bare-law profiles exist only
+  for the eight laws the donor's ten do not already offer bare.
+- 2026-09-02 (P1): the web build's genet worktree
+  (`C:/Users/mark_/Code/worktrees/genet-head`, the machine-local
+  `.cargo/config.toml` redirect) no longer exists — genet's worktree list
+  shows only `repos/genet` (main at `76a47850946`, 34 commits past the
+  `577e2471e97` buckram pin, mid crate-split and dirty in cambium) and a
+  Codex worktree. Recreating it at `577e2471e97` (or wherever the config
+  was last proven) is the way back to a wasm build; that is a git action
+  in a repo this plan does not own, so it waits for Mark.
+- 2026-09-02 (P1): `tests::fold_and_source_time::source_time_canvas_scrubs_every_canvas_arrangement_without_rewriting_live_truth`
+  failed once in the full canvas run and passed three times alone; the
+  compared bytes are a graph snapshot that carries `timestamp_secs`, so a
+  second boundary between the two serializations breaks it. Pre-existing,
+  not touched here.
 
 ## 5. Decisions
 
@@ -260,8 +320,23 @@ donor's ten preset names return as the first ten profiles. Open: where the
 native picker sits (the product panel, or the scene settings page the
 physics-scenes plan founded).
 
+Taken in P1, for Mark to confirm or overturn: the kind sources v1 offers
+are **by site** (URL host), **by cluster** (the Louvain partition) and
+**by degree** (isolated / leaf / connected / hub), default *site* — not
+the `relation-family` default P1's text named, because a node's relation
+family is a graphshell-tier taxonomy (`RelationFamilyFilter`) the canvas
+does not see; adding it means threading the family per node down as an
+attribute, which is a small P2 item if wanted. A long tail of sites folds
+into eight kinds (particle life reads best with a handful).
+
 ## Progress
 
 - 2026-09-02: assessed against the crates and the donor's archived docs;
   plan written; the first draft's collapse into tunings rejected by Mark
   and rewritten as laws × overlays × tunables.
+- 2026-09-02: P1 landed — eight laws and six overlays in seiche, the
+  catalogs, setters and attribute builders in the canvas, the three saved-
+  scene fields in graphshell; seiche 73/73, canvas 188/188 (one
+  pre-existing clock flake, see Findings), graphshell scene tests 6/6
+  under `web,personal-sync,native`. The wasm check of the web host's
+  restore/save edit is blocked on the missing genet worktree.
