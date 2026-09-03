@@ -345,6 +345,10 @@
       "mere-kernel"
     ],
     [
+      "knot-document",
+      "knot-editor-host"
+    ],
+    [
       "knot-editor",
       "chartulary"
     ],
@@ -801,6 +805,26 @@
       "personae"
     ],
     [
+      "pelt",
+      "pelt-core"
+    ],
+    [
+      "pelt",
+      "pelt-desktop"
+    ],
+    [
+      "pelt-desktop",
+      "mere-document-lanes"
+    ],
+    [
+      "pelt-desktop",
+      "pelt-core"
+    ],
+    [
+      "pelt-desktop",
+      "tabard"
+    ],
+    [
       "platen",
       "mere-forme"
     ],
@@ -921,7 +945,7 @@
       "esp"
     ]
   ],
-  "generated_from": "3ce750f5",
+  "generated_from": "f75db463",
   "packages": [
     "app-host",
     "armillary",
@@ -953,6 +977,7 @@
     "insigne",
     "knot-document",
     "knot-editor",
+    "knot-editor-host",
     "luggage",
     "mere",
     "mere-alembic",
@@ -964,6 +989,7 @@
     "mere-chrome",
     "mere-comms",
     "mere-crawl",
+    "mere-document-lanes",
     "mere-eidetic",
     "mere-eidetic-fjall",
     "mere-eidetic-https-fetcher",
@@ -997,6 +1023,9 @@
     "notochord",
     "numen",
     "pandect",
+    "pelt",
+    "pelt-core",
+    "pelt-desktop",
     "personae",
     "pictograph",
     "platen",
@@ -1019,6 +1048,7 @@
     "shell-state",
     "sibylla",
     "stickleback",
+    "tabard",
     "titulus",
     "ux-events",
     "uxtree",
