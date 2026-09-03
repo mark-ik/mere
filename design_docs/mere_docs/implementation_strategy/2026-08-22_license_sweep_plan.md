@@ -1,7 +1,7 @@
 # License Sweep Plan
 
 **Date:** 2026-08-22
-**Status:** **P0 and P1 landed 2026-08-27**; P2-P7 remain. mere is MPL-2.0 by
+**Status:** **P0 and P1 landed 2026-08-27; P2 (genet) landed 2026-09-03**; P3-P7 remain. mere is MPL-2.0 by
 default with correct provenance — receipt in §6's Progress. Both P0
 confirmations were settled 2026-08-22 (header shape C, the notice
 `Mark Alan Boykin`, no exceptions); P0's tooling and ledger were built
@@ -388,3 +388,41 @@ never before that repository's ledger is written.
   applications, P5 standalones, P6 documents, P7 the already-MPL repositories.
   Baseline counts for P3-P5 were taken 2026-08-27 and are in the P0 entry.
   **No crate was republished for the license change**, per invariant 8.
+- **2026-09-03, P2 LANDED** (genet `957926e4e8a`). genet is MPL-2.0 by default with
+  correct provenance. What changed: 23 owned manifests to `MPL-2.0` (the ~18
+  permissive ones the plan lists plus sprigging, meristem, document-session-api
+  and the cambium, frisket, genet-livery, livery and meristem name claims);
+  23 owned per-crate license texts removed, leaving the single root `LICENSE`
+  beside `LICENSE_WHATWG_SPECS` (Servo's retained notice file, ledgered);
+  meristem keeps its Apache-2.0 text as the Xilem notice file; hyper_serde and
+  malloc_size_of keep their pairs as retained Servo-lineage crates; a root
+  `LICENSES.md` with 18 ledger paths (the five vendored patches, the two
+  Servo-lineage crates, the WPT, Blink, Dromaeo and jQuery corpora, Servo's
+  test pages and resources, mozdebug, the WHATWG text) and a Servo-heritage
+  section; ten READMEs. Headers: 384 files, 269 added and 115 replaced (the
+  76 July headers and 39 meristem files keeping the Xilem Authors' line above
+  the new header, via `--retain-notice`); second run changes 0.
+  **Receipt (`--audit`, after):** 881 owned sources of 66,421 tracked, **7
+  without Exhibit A** (held out, below), **0 Exhibit B hits**; manifests
+  `{MPL-2.0: 50, workspace: 66}` plus 8 permissive lines all in retained
+  trees. `cargo deny check licenses` green; `cargo check -p genet-probe -p
+  inker` green; line endings preserved per file (a CRLF file gained exactly
+  the six CR lines of its header).
+  **Tool change for this repository:** `relicense_headers.py` gained a guard
+  that leaves any file whose leading lines already carry Exhibit A untouched,
+  whatever comment shape carries it. Its header detector saw only line
+  comments and would otherwise have stacked a second header on the 497
+  Servo-derived files that carry Exhibit A as a `/* ... */` block. No
+  `--bare` run was needed: every bare owned file was Mark's.
+  **Invariant 7 was breached and recovered.** genet's status was not checked
+  before `--apply`, and two other lanes had ten files in flight (a Cambium
+  pointer-button lane, a Livery paint lane with scratch tests). Seven of those
+  had received a header; it was removed again so their working copies carry
+  only their lanes' edits, and none of the ten is in the commit. They take
+  their headers when those lanes land, by rerunning the idempotent tool; the
+  7 in the receipt are exactly them. Check `git status` before every
+  `--apply`; the tool should refuse a dirty tree itself, which is a P3 item.
+  **Two greps report matches that are correct:** `MIT OR Apache-2.0` in
+  `components/inker/Cargo.toml` is a comment naming the published 0.1.1's
+  grant, and the Exhibit B string appears in `LICENSE` and in Servo's
+  about:license resource page, both quoting the license text.

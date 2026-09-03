@@ -939,3 +939,6 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   name) and never consumed genet-documents. Four consumer repoints wait on
   P4: turnstone (`genet_documents` reader and smolweb items, `genet_host_api`
   settings and surface, `::tile`), woodshed, hocket and knot-editor.
+- 2026-09-03: the license sweep's P2 landed on genet (`957926e4e8a`), which
+  satisfies this plan's P2 prerequisite row for the license sweep; the
+  quiet-window row is a matter of timing, not completion.

@@ -179,6 +179,23 @@ def restrip(body):
     return lead, stripped, body[i:]
 
 
+#: how many leading lines an existing licence header may occupy
+HEAD_SPAN = 12
+
+
+def already_covered(body):
+    """A file whose leading lines already carry Exhibit A is Covered Software
+    and is left alone, whatever comment shape carries it.
+
+    genet's Servo-derived files carry Exhibit A as a `/* ... */` block, which
+    HEADER_PAT (line comments only) does not see; without this check the tool
+    would stack a second header on nearly five hundred of them. The July form
+    (`Mark AB (markik)` + a permissive SPDX) carries no Exhibit A and is still
+    replaced.
+    """
+    return any("Mozilla Public" in l for l in body[:HEAD_SPAN])
+
+
 def process(path, tok, bare, retain=False):
     raw = path.read_bytes()
     eol = detect_eol(raw)
@@ -186,6 +203,9 @@ def process(path, tok, bare, retain=False):
     text = raw.decode(enc)
     body = text.split("\n")
     body = [l[:-1] if l.endswith("\r") else l for l in body]
+
+    if already_covered(body):
+        return False, "already Exhibit A", text
 
     had = any(HEADER_PAT.match(l) for l in body[:8])
     lead, stripped, rest = restrip(body)
@@ -274,6 +294,19 @@ def main():
     if args.audit:
         cmd_audit(repo)
         return 0
+
+    if args.apply:
+        # Invariant 7: never sweep a dirty tree. Another lane's in-flight files
+        # would receive headers that then ride into that lane's commit, or be
+        # swept into this one. Learned on genet, 2026-09-03.
+        dirty = subprocess.run(
+            ["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        if dirty:
+            print("refusing --apply: the tree has uncommitted changes (invariant 7):")
+            print(dirty)
+            return 2
 
     skips = load_ledger(repo)
     files = git_tracked(repo, list(COMMENT))
