@@ -116,7 +116,10 @@ adopting as a named gate when Graphshell embedding is ever scheduled: the
 receipt is a *second host*, not a second view.
 
 **The capability, named (Mark, 2026-09-02).** The thing that passes the
-anti-shell test is the *projection manipulator*: authenticated access to all
+anti-shell test is the *projection manipulator*, and its name is
+**Scenograph** — the boundary plan frees the name by dissolving the generic
+facade into Cambium and reserves it for exactly this: the scene/projection
+editor product, built with Cambium. The manipulator is authenticated access to all
 the data of all the applications, used to customize projections to your own
 taste — a home-page graph of app graphs. Graphshell is its preeminent host and
 otherwise a viewer and redirector — reading simple structured content through

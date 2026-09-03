@@ -101,11 +101,17 @@ the applications, used to customize projections to your own taste, is a
 **home-page graph of app graphs**; and that capability is meant to appear in
 every application that has its own app graph, not only in Graphshell. This is
 the family composition thesis's anti-shell test in its positive form: the
-manipulator is a platform capability whose receipt is a second host. Two
-consequences it leaves unruled: the Projection Editor, today a self-contained
-module in `ports/graphshell`, is by this reading a Mere component with
-Graphshell as one host, and its crate home wants deciding; and Graphshell may
-compose Workbench for reading without becoming Turnstone, which remains the
+manipulator is a platform capability whose receipt is a second host. One
+consequence it settles the same day: the Projection Editor, today a
+self-contained module in `ports/graphshell`, is **Scenograph** — the name the
+[boundary plan](mere_docs/implementation_strategy/2026-09-02_platform_boundary_and_repository_topology_plan.md)
+§1 and P2 free by dissolving the generic `scenograph` facade into Cambium and
+reserve "for the scene/projection editor product, built with Cambium rather
+than naming the scene runtime itself." Scenograph is a Mere product crate,
+Graphshell is its preeminent host, and it appears in every application with
+its own graph. The published `scenograph 0.0.3` is the facade; the name is
+re-pointed by a real publish of the editor, never by reservation alone. And
+Graphshell may compose Workbench for reading without becoming Turnstone, which remains the
 meerkat successor shell with the browser engines proper. Knot can use
 Workbench too (Mark, same day); Workbench is a component any of them takes,
 not a mark of which one is the shell.
