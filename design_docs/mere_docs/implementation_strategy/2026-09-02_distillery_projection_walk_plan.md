@@ -189,8 +189,9 @@ alternate reachable in both. Turnstone is the third host, not the second.
 **W5. Alembic's work-runs.** Once the Alembic move is ruled and executed, its
 bounded-actor runs join the board Chronicle as a second job kind: same
 recipe, one more entity kind, no new scene.
-*Gate:* the census §7.4 open items (the authority half, the move's shape)
-ruled. Not opened before.
+*Gate:* the move is executed (2026-09-02, `ports/distillery/{alembic,athanor}`
+founded); what remains is Alembic's workshop implemented far enough to emit
+runs onto the board. Not opened before that.
 
 ## 5. Boundaries
 

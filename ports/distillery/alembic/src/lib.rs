@@ -4,7 +4,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! **Alembic**, the Mere platform's recall and workshop port.
+//! **Alembic**, the recall and workshop component of Distillery, the Mere
+//! platform's works.
 //!
 //! An alembic is the still that sits on the athanor's constant low heat: what
 //! distils is what the furnace has been holding. This port is that pair for
@@ -21,8 +22,9 @@
 //!   granted reads, writes, actions and watches, model and tool selection,
 //!   run history, pending petitions, refusals and costs, pause, revoke,
 //!   retry, and dissolve — with exact attribution into the target
-//!   application's history. It lives with the resident, whose scheduler runs
-//!   the jobs.
+//!   application's history. It lives in Athanor (`mere-athanor`), the
+//!   sibling crate, in the domain that owns it; Djinn schedules it as one
+//!   resident service and invents nothing.
 //!
 //! **Athanor was always an agent.** The distillation furnace — the steady
 //! background actor that consolidates memory and mints distillates while you
@@ -32,9 +34,10 @@
 //!
 //! The boundaries are the point:
 //!
-//! - **Not distillery.** Distillery is the model works: jobs, leases,
-//!   manifests, device policy, retention. Distillery runs models; alembic
-//!   runs work, and an agent here may use a model there.
+//! - **Inside Distillery, not the model works.** Distillery is the works:
+//!   jobs, leases, manifests, device policy, retention. Distillery runs
+//!   models; its Alembic component runs work over them, and an agent here may
+//!   use a model there. Re-ruled from a port of its own 2026-09-02.
 //! - **Not the store.** Codicils, retention, and the browsing corpus are
 //!   `eidetic`'s; the graph-codicil spine and memory levels currently sit in
 //!   `pandect`.
