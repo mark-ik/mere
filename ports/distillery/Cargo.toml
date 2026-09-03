@@ -51,3 +51,7 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", 
 tempfile = "3"
 genet-scripted-dom = { workspace = true }
 layout-dom-api = { workspace = true }
+# The walk fixtures author a p2panda log directly, so the test names
+# `Operation<MeshExt>`. `mesh` re-exports `MeshExt` and `to_operation` but not
+# p2panda's own `Operation`, and a helper that returns one has to say so.
+p2panda-core = "0.7.0"

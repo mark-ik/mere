@@ -1,8 +1,10 @@
 # Distillery Projection Walk Plan
 
 **Date:** 2026-09-02
-**Status:** plan; assessed 2026-09-02 on Mark's "walk distillery", implementation
-unstarted. Every fact in §2 is read from the tree at mere `77a3701f052`.
+**Status:** W0 landed 2026-09-02 (fixtures under test; the headless surface
+drive written but unverified behind a local-checkout blocker, see Progress);
+W1 not opened. §2 was read at mere `77a3701f052` and corrected at `3ce750f5`
+by the W0 implementation, which read the code rather than this plan.
 **Scope:** the first end-to-end scene binding for a port — dataset → scene →
 Scenograph → host — walked on Distillery. This plan owns the walk; the
 [Distillery v0 plan](2026-08-12_distillery_v0_plan.md) owns the works
@@ -60,19 +62,32 @@ This is the clock the board's events hang from.
 
 **Installed facts.** `DistilleryInstalledSnapshotV1 { profile, protection,
 mesh_id, mesh_root, mesh_store_path, blob_store_root, resident:
-Option<ResidentSettings> }` plus the latest receipt — what the surface renders
-today. These are status facts, not a scene (§3).
+Option<DistilleryResidentSnapshotV1> }` — the last a newtype over
+`ResidentSettings`, which W4's prop shape will feel — plus the latest receipt:
+what the surface renders today. These are status facts, not a scene (§3).
 
 **Artifacts and provenance.** `TrainRequest { base_model_ref, tokenizer_ref,
-corpus_ref, adapter_name }` → `TrainReceipt { adapter_manifest_ref,
-eval_report_ref, adapter_blob, adapter_config_blob, baseline: EvalTally }`;
-`FloraContribution { contribution_id, manifest_ref, manifest, adapter_config
-}` → `FloraAggregate { manifest, adapter bytes, receipt }`. Every reference is
-a `ManifestId`: content-addressed, so provenance is a DAG whose edges are
-references. This is wired-shaped data.
+corpus_ref, adapter_name, prompt_template, metric: EvalMetric, settings:
+LoraTrainerSettings, created_at }` → `TrainReceipt { adapter_manifest_ref,
+eval_report_ref, adapter_blob, adapter_config_blob, baseline: EvalTally,
+adapter: EvalTally }` — both tallies, which is what makes §3.2's
+compare-two-evals intent supportable from the data. `FloraContribution {
+contribution_id, manifest_ref, manifest, adapter_config_json: Vec<u8>,
+adapter_safetensors: Vec<u8>, weight }` → `FloraAggregate { manifest,
+adapter_config_json, adapter_safetensors, receipt }`. Training provenance is
+edge-by-reference: every reference is a content-addressed `ManifestId`, so it
+is a DAG whose edges are references. The Flora records are not: they carry
+the adapter bytes inline beside a manifest reference. So the Circuit's blocks
+are of two kinds — reference-only and payload-bearing — and W3's entrance
+check decides how a payload-bearing block is represented before any of it is
+drawn.
 
-**Retention and custody.** `RetentionSettings`, `ResidentStorage`,
-`MaintenanceReport`: what the works keeps and what it erased, per tick.
+**Retention and custody.** `RetentionSettings`, `ResidentStorage`, and
+`MaintenanceReport { checkpoint, candidates, collected, effects }`, per tick:
+`candidates` is the count of blob refs safe to release, `collected` the
+custody claims actually removed, and the gap between them is what a custodian
+refused. Nothing counts what was kept; a Chronicle span for a maintenance
+window can show released-versus-refused, not retained.
 
 ## 3. The scene binding, by the nine questions
 
@@ -140,12 +155,15 @@ Chronicle sits in (W4).
 Each phase names its forcing consumer and its receipt. Nothing here closes a
 gate in the adoption plan; evidence it produces is filed there.
 
-**W0. Assemble.** Fixtures for both second datasets — Djinn's resident job
-log for Chronicle; the workspace dependency graph for Circuit — readable
-without Distillery, plus a genet-probe scenario skeleton for the headed
-receipts.
+**W0. Assemble — landed 2026-09-02, one leg unverified.** Fixtures for both
+second datasets, readable without Distillery, plus a headless drive of the
+installed surface through its own runner (the headed `.scn` belongs to W4,
+because Turnstone admits the surface through a *pinned* mere revision in
+another repository).
 *Done when:* both fixtures exist under test, and a bare scenario drives the
 installed surface end to end. Nothing rendered yet.
+*State:* the fixtures exist and their tests are proven; the surface drive is
+written and could not be run in this checkout (Progress, 2026-09-02).
 
 **W1. The endpoint.** `ports/distillery` implements `ProjectionCatalog`,
 `ProjectionSource`, and `ResumableProjectionSource` over the board and the
@@ -225,9 +243,53 @@ runs onto the board. Not opened before that.
   change to disclose tick and epoch.
 - Turnstone admits the Distillery surface as the contribution seam's second
   provider (v0 plan status), which makes the anti-shell second host a
-  composition receipt rather than new machinery.
+  composition receipt rather than new machinery. Concretely: turnstone's
+  `src/shell/mod.rs` registers a built-in `DistilleryInstalledProvider`, and
+  its `Cargo.toml` pins `distillery` to a mere git revision — so a headed
+  scenario there sees the pinned Distillery, not this checkout.
+- W0 (2026-09-02): `ResidentReceipt` does not derive `Serialize`, so the
+  fixture's tick stream is a six-variant `TickRecord` mirror in the test file
+  (the two failure variants included, to keep the mapping total).
+  `mesh` re-exports `MeshExt` and `to_operation` but not p2panda's
+  `Operation`, so a test that authors a log names `p2panda-core` as a
+  dev-dependency. Tracked `.json` under the fixtures comes back CRLF unless
+  `.gitattributes` says otherwise; it now does for
+  `ports/distillery/tests/fixtures/**`.
+- W0 (2026-09-02): in this checkout `cargo check -p distillery` fails inside
+  `src/surface.rs` before any test is reached — the local genet working copy
+  split `genet-host-api`'s application half out as `mere-surface-api`
+  (genet `57bcc38fdae`), `.cargo/config.toml` patches cambium to that local
+  genet, and mere's `surface.rs` still imports the surface contracts from
+  `genet_host_api` at the pinned `eff0cb6`, so two `SurfaceDescriptor` types
+  meet at `distillery_installed_surface`. Local-dev only: a clean checkout
+  resolving genet from `eff0cb6` is unaffected. The migration of mere's
+  side is the boundary plan's P1/P3 work, in flight in another session, and
+  not this plan's to make.
 
 ## Progress
 
 - 2026-09-02: plan founded from the assessment in the port GUI composition
   brief, on Mark's "walk distillery". No code opened.
+- 2026-09-02: **W0 landed, one leg unverified.** Implemented by a subagent
+  under a paths-only brief (new files under `ports/distillery/tests/`, one
+  script, one dev-dependency line) while another session worked the tree.
+  Landed: `tests/walk_fixtures.rs` (569 lines) with three tests;
+  `tests/fixtures/chronicle/{distillery_board,djinn_board}.json`, two boards
+  of the same grammar and different owners built by `JobBoard::fold` over
+  seeded p2panda operations (3 and 4 jobs; Posted, Claimed with a lease,
+  Committed V2; a second claimant so `next_claimants` is non-empty), each
+  with a `TickRecord` stream; `tests/fixtures/circuit/workspace_graph.json`
+  (100 packages, 230 edges, acyclic, `generated_from` the HEAD it was cut
+  at) produced by `scripts/workspace_graph_fixture.py`, byte-identical on
+  regeneration except for that label when HEAD moves. Verification: the two
+  data tests were type-checked and run against the committed files in an
+  isolated probe crate that path-depends on the same `mesh`, `personae`, and
+  patched `p2panda-core`, three processes, byte-equality asserted across
+  them — because `cargo test -p distillery` cannot link in this checkout
+  (Findings). The headless surface drive
+  `installed_surface_drives_headless_through_its_runner` is written against
+  the surface's own unit-test pattern and every call checked against the
+  pinned `RetainedSurfaceSession`, and it has not run. Re-run
+  `cargo test -p distillery --test walk_fixtures` twice once mere's surface
+  imports follow the `mere-surface-api` split. §2 corrected in five places
+  by the same pass.

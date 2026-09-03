@@ -52,3 +52,4 @@ assets/** binary
 # Graphshell receipts are deterministic proof artifacts. Keep their serialized
 # bytes stable across Windows and Unix checkouts.
 ports/graphshell/docs/receipts/*.html text eol=lf
+ports/distillery/tests/fixtures/** text eol=lf
