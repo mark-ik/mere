@@ -1,9 +1,10 @@
 # Preference adapter experiment plan
 
 **Status (2026-09-03):** in progress. Mark ruled D1–D3 on 2026-09-03: the
-local SmolLM2-135M; his own writing corpus as the primary target, his prompts
-as a second, and the workspace voice as the contrast; sixty blind pairs. The
-corpus location is the one open input. Follow-on to the
+local SmolLM2-135M; his prompts as the primary corpus, the workspace voice
+as the contrast, his wider writing (poetry, OneDrive or iCloud documents)
+held back as a later pointer only if the prompts prove too thin; sixty blind
+pairs. Follow-on to the
 [autodiff LoRA trainer plan](2026-09-02_autodiff_lora_trainer_plan.md),
 whose trainer this experiment puts to a real question.
 
@@ -91,13 +92,18 @@ A negative answer is a valid outcome and is written up the same way.
   preference rather than a corpus, and the only one with an automatic metric.
 - **D2 as ruled.** Mark has a large corpus of his own writing (he is an
   English major) and offered it, together with his prompts and the workspace
-  voice for contrast. So the experiment runs three corpora against one base:
-  **E1, Mark's prose**, the real desire path; **E2, Mark's prompts**, his
-  user turns from the local Claude Code transcripts (about 3,100 turns across
-  561 transcripts as of 2026-09-03, pasted material filtered out); **E3, the
-  workspace voice**, the design docs. The house-style rule checks stay as an
-  evaluation axis on every arm rather than as a training corpus. Every corpus
-  stays local beside the model directory and never enters the repository.
+  voice for contrast, then narrowed it: no document combing now, the prompts
+  are enough to start, and poetry or his OneDrive/iCloud documents are a
+  pointer he can give later if the prompts prove too thin. So the experiment
+  runs two corpora against one base: **E1, Mark's prompts**, his user turns
+  from the local Claude Code transcripts (about 3,100 turns across 561
+  transcripts as of 2026-09-03 before filtering; pasted handoffs, tool
+  output, and anything secret-shaped filtered out), each paired with the tail
+  of the assistant turn it answered so the adapter learns how Mark replies;
+  **E2, the workspace voice**, design-doc paragraphs paired with the
+  paragraph before them. The house-style rule checks stay as an evaluation
+  axis on every arm rather than as a training corpus. Every corpus stays
+  local beside the model directory and never enters the repository.
 - **D3, the human budget.** How many blind pairs Mark will score: twenty,
   forty, or sixty. Each pair is one unseen prompt with the base and adapted
   continuations in random order, asked "which reads more like your rules,
@@ -154,6 +160,6 @@ has been run.
 ## Progress
 
 - **2026-09-03:** assessment complete; findings verified; D1–D3 put to Mark
-  and ruled: SmolLM2-135M first; E1 Mark's prose, E2 his prompts, E3 the
-  workspace voice; sixty blind pairs. Waiting on the corpus location before
-  Phase 2; Phase 1 (the sequence objective) does not depend on it.
+  and ruled: SmolLM2-135M first; E1 his prompts, E2 the workspace voice, his
+  wider writing deferred; sixty blind pairs. Phase 1 started the same day;
+  the prompt corpus is being extracted locally alongside it.
