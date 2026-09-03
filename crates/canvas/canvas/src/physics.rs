@@ -251,6 +251,16 @@ impl Physics {
         }
     }
 
+    /// The node bodies' kinetic energy — inline backend only; the actor's
+    /// snapshots do not carry it yet, so it reads zero offloaded. (Physics
+    /// catalog — the receipts' energy floor.)
+    pub fn kinetic_energy(&self) -> f32 {
+        match self {
+            Physics::Inline(p) => p.sim.kinetic_energy(),
+            Physics::Actor(_) => 0.0,
+        }
+    }
+
     /// The number of forces in the law slot (inline backend only). Test introspection.
     #[cfg(test)]
     pub(crate) fn force_count(&self) -> usize {

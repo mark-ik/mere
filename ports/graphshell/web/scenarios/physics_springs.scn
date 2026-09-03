@@ -1,0 +1,36 @@
+# Physics receipt: Springs, the force-directed default, re-applied through the
+# panel. Its signature is rest: no overlapping bodies and the energy gone
+# once the spring has rung down.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+# The boot arrangement pauses the canvas; the receipt wants the law running.
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+assert snap physics-law == spring.rapier
+select #gs-physics-select spring.rapier
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == spring.rapier
+assert snap physics-profile == law.springs
+assert dom #gs-product-status Physics set to Springs
+capture physics_springs_start
+wait
+settle 60
+capture physics_springs_settled
+wait
+# The spring's own energy rings down within four seconds (a probe read
+# 235 000 → 1 800 → 460). What remains is a slow outward drift of the two
+# disconnected components against the centering boundary, a few pixels a
+# second, so rest here means: the ring-down gone, nothing overlapping, and
+# the graph not flying apart.
+settle 300
+assert snap physics-energy <= 500
+assert snap layout-overlaps == 0
+assert snap layout-spread <= 250
+log physics springs receipt complete

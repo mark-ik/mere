@@ -1,7 +1,7 @@
 # Physics Catalog Plan
 
 **Date:** 2026-09-02
-**Status:** in progress (P1 landed 2026-09-02, P1b the petgraph sources 2026-09-03; P2 next).
+**Status:** in progress (P1 landed 2026-09-02, P1b the petgraph sources and P2's web half 2026-09-03; P2's native half waits on the picker decision, then P3).
 **Scope:** A catalog of *distinct physics layout laws* — dynamical systems
 over the graph's bodies that produce different layouts because they are
 different physics — as a lever beside the arrangement catalog, plus the
@@ -257,6 +257,26 @@ ten donor profiles and asserting its overlays are the ones installed.
 *Done when* eleven law receipts and the profile receipt are green and the
 captures show what the labels say.
 
+*Landed 2026-09-03 (web half).* The panel gains `physics-select`, an
+`overlay-<id>` checkbox per overlay, `kind-source-select` /
+`mass-source-select` / `depth-source-select`, `profile-select`, and the
+`apply-physics` / `apply-profile` commands; the selects are filled from
+the canvas catalogs the first time the panel is seen empty, and follow the
+canvas after a profile or a reopened scene. The arrangement picker gains
+**Free (physics alone)**, the canvas's `None`. The chrome hint reads
+`<arrangement> · <law> · physics <state>`. The snapshot exposes
+`physics-law`, `physics-overlays`, `physics-profile` (`custom` when no
+profile names the pair), the three sources, `physics-paused` (now the
+canvas's own state), and the layout's signature numbers from
+`Canvas::layout_stats` — `physics-energy`, `layout-spread`,
+`layout-overlaps`, `layout-stretch`. The scenario lane gains `select
+<css> <value>` and `check <css> on|off`. Twelve receipts green
+(`Code/testing/mere/physics_p2_receipt.md`), and five defects found by
+them fixed: the pause toggle, the anchors under every law, Orbit under
+damping, Charge's calibration, Still's explosion (see Findings). The
+native half is unbuilt: no native surface carries an arrangement picker
+today, so the open decision below is where the first one goes.
+
 **P3 — physics on the remote board.** The web host seeds seiche bodies
 from the remote scene's items — the projection's score is the seed and,
 through the anchor pull, an attractor — and runs the chosen law over them,
@@ -354,6 +374,43 @@ and the native host shows the same by hand.
 - 2026-09-03 (P1b): asserting the same relation kind twice between a pair
   is idempotent in the kernel, so a multiplicity fixture must lay distinct
   kinds; the catalog tests' `wired` helper cycles through four.
+- 2026-09-03 (P2): the web host's pause toggle flipped a remembered flag
+  that the canvas's own pause (an arrangement pick pauses it) had left
+  behind, so the first click paused a paused sim; every first-run law
+  switch happened frozen in the spiral seed. The canvas is the authority
+  now, for the toggle and the snapshot field both.
+- 2026-09-03 (P2): the arrangement's anchor springs act under every law
+  (by design — the anchor pull is a tunable), so a law receipt under the
+  boot Spiral measures the anchors: Stress stretched 1.45 instead of ~3.5,
+  Flow was squeezed into seven overlaps. The web picker had no way to say
+  "no arrangement"; it has **Free** now, and the receipts pick it first.
+- 2026-09-03 (P2): Orbit died under the host's damping within six
+  seconds — gravity conserves energy only in a frictionless world, and the
+  seiche test ran too short under too little damping to see it. `Gravity`
+  cancels each body's damping with `m·d·v` along its velocity
+  (`counter_damping`), and the receipt reads energy at one and six seconds.
+- 2026-09-03 (P2): `BarnesHutRepulsion`'s default strength (2 400, `1/d`)
+  is a third of `NodeExclusion` at a node diameter, exactly the
+  recalibration its own docs deferred; Charge is built at 6 000 in the
+  canvas, matched at contact. Two touching pairs became none.
+- 2026-09-03 (P2): Still as an *empty* force set exploded (energy 10⁶,
+  bodies off the canvas): rapier's contact solver alone met the tight free
+  seed and accumulated separating velocity every tick, with no repulsion to
+  spread the bodies first as every other law has. Still is the seiche
+  `Hold` force now — velocity zeroed each tick — so contacts nudge.
+- 2026-09-03 (P2): under Springs with no arrangement the fixture never
+  reaches "energy ≤ 5": a probe read the spring ring down in four seconds
+  and then a steady outward drift, the two disconnected components pushing
+  apart against the weak `Boundary` at a few pixels a second. The trio's
+  free equilibrium on a disconnected graph is slow; nobody saw it because
+  the canvas has always run under an arrangement. The receipt asserts the
+  honest signature (ring-down gone, no overlaps, not flying apart); the
+  drift itself is a `Boundary` / exclusion-cutoff tuning left open.
+- 2026-09-03 (P2): the driver's exit code reports the driver, not the
+  scenario; `result.json`'s `scenario.state` is the receipt.
+- 2026-09-03 (P2): `Canvas::layout_stats` runs a BFS from every node per
+  frame for `stretch`; trivial on the fixture, `O(n·m)` on a large graph.
+  Worth gating on node count if the web host ever carries thousands.
 
 ## 5. Decisions
 
@@ -397,3 +454,11 @@ inference carried.
   source, two depth sources, the Skeleton overlay, weighted Stress) and
   their saved-scene fields; seiche 74/74, canvas 192/192, graphshell
   scene tests 6/6, wasm check green.
+- 2026-09-03: P2's web half landed — the panel's law / overlay / source /
+  profile controls, the Free arrangement, the chrome hint, the signature
+  snapshot fields, the `select` / `check` verbs, twelve receipts green
+  after four driver runs that found and fixed five defects (the pause
+  toggle, the anchors, Orbit under damping, Charge's calibration, Still's
+  explosion); `Hold` joins the laws. seiche 76/76, canvas 193/193. Receipt:
+  `Code/testing/mere/physics_p2_receipt.md`. Native half open on the
+  picker decision.

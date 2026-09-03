@@ -12,7 +12,12 @@ use graphshell::product::{
     EditableRelation, ExportRequest, LocalFileMetadata, RelationFamilyFilter, SavedSceneV1,
     TransferScope,
 };
-use mere::canvas::{CameraView, Face, project_canvas_strategy_with_score_for_view};
+use mere::canvas::{
+    CANVAS_PHYSICS_DEPTH_SOURCES, CANVAS_PHYSICS_KIND_SOURCES, CANVAS_PHYSICS_LAWS,
+    CANVAS_PHYSICS_MASS_SOURCES, CANVAS_PHYSICS_OVERLAYS, CANVAS_PHYSICS_PROFILES, CameraView,
+    Face, PhysicsDepthSource, PhysicsKindSource, PhysicsLaw, PhysicsMassSource, PhysicsOverlay,
+    project_canvas_strategy_with_score_for_view,
+};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use wasm_bindgen::JsCast;
@@ -20,10 +25,12 @@ use wasm_bindgen::prelude::Closure;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{Event, File, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement};
 
-use super::{ActiveSession, BrowserHost, element, root, update_semantics};
+use super::{ActiveSession, BrowserHost, document, element, root, update_semantics};
 use crate::web_view::ChromeModel;
 
 const SAVED_SCENE_ADDRESS: &str = "mere://scene/graphshell-h3";
+/// The arrangement picker's "no arrangement" choice: physics alone.
+const FREE_LAYOUT_ID: &str = "free";
 const DEFAULT_SPRITE: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 pub(super) fn install_product_events(
@@ -76,6 +83,8 @@ impl BrowserHost {
             "clear-filter" => self.clear_filter(),
             "apply-arrangement" => self.apply_arrangement_from_form(),
             "toggle-physics" => self.toggle_physics(),
+            "apply-physics" => self.apply_physics_from_form(),
+            "apply-profile" => self.apply_profile_from_form(),
             "apply-face" => self.apply_face(),
             "save-scene" => self.save_scene(),
             "reopen-scene" => self.reopen_scene(),
@@ -91,10 +100,13 @@ impl BrowserHost {
         true
     }
 
-    pub(super) fn product_chrome(&self) -> (String, String, bool) {
+    /// The chrome's product line: status, the arrangement id, the physics
+    /// law's label, and whether physics is paused.
+    pub(super) fn product_chrome(&self) -> (String, String, String, bool) {
         (
             self.product_status.clone(),
             self.layout_id.clone(),
+            self.canvas.physics_law().label().to_string(),
             self.canvas.physics_paused(),
         )
     }
@@ -146,8 +158,7 @@ impl BrowserHost {
                 (key, restored)
             })
             .collect();
-        self.canvas
-            .set_layout_strategy(Some(self.layout_id.clone()));
+        self.canvas.set_layout_strategy(self.strategy_choice());
         self.canvas.set_projection_score(projection.score);
         self.canvas.apply_strategy_positions(&positions);
         self.canvas.note_strategy_computed(
@@ -184,8 +195,7 @@ impl BrowserHost {
         self.physics_paused = scene.physics_paused;
         self.handler_id = scene.default_handler.clone();
         self.canvas.set_graph(self.app.host.graph().clone());
-        self.canvas
-            .set_layout_strategy(Some(self.layout_id.clone()));
+        self.canvas.set_layout_strategy(self.strategy_choice());
         let positions: Vec<_> = scene
             .cartography
             .iter()
@@ -247,6 +257,9 @@ impl BrowserHost {
         );
         self.canvas.set_physics_damping(scene.physics_damping);
         self.canvas.set_physics_paused(scene.physics_paused);
+        // The panel's controls follow the reopened scene; before the first
+        // frame fills them there is nothing to set yet.
+        let _ = sync_physics_controls(self);
         self.canvas.set_selected_members(&scene.selected);
         self.primary_member = scene.selected.first().copied();
         self.canvas.set_camera(CameraView {
@@ -355,9 +368,27 @@ impl BrowserHost {
         Ok("Showing the whole graph".to_string())
     }
 
+    /// The canvas's strategy for the host's layout id: `None` for the free
+    /// arrangement (physics alone, the canvas's force-directed default),
+    /// `Some(id)` for an analytic one.
+    fn strategy_choice(&self) -> Option<String> {
+        (self.layout_id != FREE_LAYOUT_ID).then(|| self.layout_id.clone())
+    }
+
     fn apply_arrangement_from_form(&mut self) -> Result<String, String> {
         let next_layout_id = select_value("arrangement-select")?;
         let selected = self.canvas.selected_members();
+        if next_layout_id == FREE_LAYOUT_ID {
+            // No analytic layout: drop the buffered positions and the score,
+            // and let the physics law alone place the graph. Reverting
+            // resumes a paused sim (the canvas's own rule). (Physics catalog — P2.)
+            self.arrangement_transition = None;
+            self.layout_id = next_layout_id;
+            self.canvas.set_projection_score(None);
+            self.canvas.set_layout_strategy(None);
+            self.canvas.set_selected_members(&selected);
+            return Ok("Arrangement set to free: physics alone".to_string());
+        }
         let previous_score = self.canvas.projection_score().cloned();
         let extents = self.canvas.strategy_extents();
         let projection = project_canvas_strategy_with_score_for_view(
@@ -374,8 +405,7 @@ impl BrowserHost {
         );
         let transitioning = self.begin_arrangement_transition(&projection.positions)?;
         self.layout_id = next_layout_id;
-        self.canvas
-            .set_layout_strategy(Some(self.layout_id.clone()));
+        self.canvas.set_layout_strategy(self.strategy_choice());
         self.canvas.set_projection_score(projection.score);
         if !transitioning {
             self.canvas.apply_strategy_positions(&projection.positions);
@@ -421,8 +451,78 @@ impl BrowserHost {
         self.canvas.set_projection_score(projection.score);
     }
 
+    /// The physics panel's Apply: the law, the checked overlays and the three
+    /// sources, in that order of dependence (sources first, so the law's build
+    /// reads them). (Physics catalog — P2.)
+    fn apply_physics_from_form(&mut self) -> Result<String, String> {
+        let law_id = select_value("physics-select")?;
+        let law = PhysicsLaw::parse(&law_id)
+            .ok_or_else(|| format!("unknown physics law {law_id}"))?;
+        let mut overlays = Vec::new();
+        for overlay in PhysicsOverlay::ALL {
+            if element_as::<HtmlInputElement>(&format!("overlay-{}", overlay.id()))?.checked() {
+                overlays.push(overlay);
+            }
+        }
+        let kind = PhysicsKindSource::parse(&select_value("kind-source-select")?)
+            .unwrap_or(PhysicsKindSource::Site);
+        let mass = PhysicsMassSource::parse(&select_value("mass-source-select")?)
+            .unwrap_or(PhysicsMassSource::Degree);
+        let depth = PhysicsDepthSource::parse(&select_value("depth-source-select")?)
+            .unwrap_or(PhysicsDepthSource::Roots);
+        self.canvas.set_physics_kind_source(kind);
+        self.canvas.set_physics_mass_source(mass);
+        self.canvas.set_physics_depth_source(depth);
+        self.canvas.set_physics_overlays(overlays.clone());
+        self.canvas.set_physics_law(law);
+        sync_physics_controls(self)?;
+        Ok(if overlays.is_empty() {
+            format!("Physics set to {}", law.label())
+        } else {
+            format!(
+                "Physics set to {} with {}",
+                law.label(),
+                overlays
+                    .iter()
+                    .map(|overlay| overlay.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+    }
+
+    /// The profile picker's Apply: a named (law, overlays) pair, then the
+    /// panel's controls follow it. (Physics catalog — P2.)
+    fn apply_profile_from_form(&mut self) -> Result<String, String> {
+        let id = select_value("profile-select")?;
+        if id.is_empty() {
+            return Err("choose a profile first".to_string());
+        }
+        if !self.canvas.apply_physics_profile(&id) {
+            return Err(format!("unknown physics profile {id}"));
+        }
+        sync_physics_controls(self)?;
+        let overlays = self.canvas.physics_overlays();
+        Ok(if overlays.is_empty() {
+            format!("Profile {id}: {}", self.canvas.physics_law().label())
+        } else {
+            format!(
+                "Profile {id}: {} with {}",
+                self.canvas.physics_law().label(),
+                overlays
+                    .iter()
+                    .map(|overlay| overlay.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })
+    }
+
     fn toggle_physics(&mut self) -> Result<String, String> {
-        self.physics_paused = !self.physics_paused;
+        // The canvas is the authority: picking an arrangement pauses it on
+        // its own (`set_layout_strategy`), so the host's remembered flag can
+        // lag it, and a toggle read from the flag would "pause" a paused sim.
+        self.physics_paused = !self.canvas.physics_paused();
         self.canvas.set_physics_paused(self.physics_paused);
         Ok(if self.physics_paused {
             "Physics paused".to_string()
@@ -585,8 +685,46 @@ pub(super) fn update_product_semantics(
     if let Ok(element) = element("product-status") {
         element.set_text_content(Some(&host.product_status));
     }
+    ensure_physics_controls(host)?;
+    let stats = host.canvas.layout_stats();
     let body = root()?;
     for (name, value) in [
+        (
+            "data-physics-law",
+            host.canvas.physics_law().id().to_string(),
+        ),
+        (
+            "data-physics-overlays",
+            host.canvas
+                .physics_overlays()
+                .iter()
+                .map(|overlay| overlay.id())
+                .collect::<Vec<_>>()
+                .join(","),
+        ),
+        (
+            "data-physics-profile",
+            host.canvas
+                .physics_profile_id()
+                .unwrap_or("custom")
+                .to_string(),
+        ),
+        (
+            "data-physics-kind-source",
+            host.canvas.physics_kind_source().id().to_string(),
+        ),
+        (
+            "data-physics-mass-source",
+            host.canvas.physics_mass_source().id().to_string(),
+        ),
+        (
+            "data-physics-depth-source",
+            host.canvas.physics_depth_source().id().to_string(),
+        ),
+        ("data-physics-energy", format!("{:.1}", stats.energy)),
+        ("data-layout-spread", format!("{:.0}", stats.spread)),
+        ("data-layout-overlaps", stats.overlaps.to_string()),
+        ("data-layout-stretch", format!("{:.2}", stats.stretch)),
         ("data-product-status", host.product_status.clone()),
         (
             "data-node-count",
@@ -594,7 +732,10 @@ pub(super) fn update_product_semantics(
         ),
         ("data-filter-count", host.filter_count.to_string()),
         ("data-layout", host.layout_id.clone()),
-        ("data-physics-paused", host.physics_paused.to_string()),
+        (
+            "data-physics-paused",
+            host.canvas.physics_paused().to_string(),
+        ),
         (
             "data-selected-count",
             host.canvas.selected_members().len().to_string(),
@@ -646,6 +787,111 @@ fn set_input_value(id: &str, value: &str) -> Result<(), String> {
 
 fn select_value(id: &str) -> Result<String, String> {
     Ok(element_as::<HtmlSelectElement>(id)?.value())
+}
+
+/// Fill an empty `<select>` from a `(value, label)` catalog, with an optional
+/// disabled placeholder first. A select that already has options is left
+/// alone, so this is safe to call every frame.
+fn fill_select(id: &str, options: &[(&str, &str)], placeholder: Option<&str>) -> Result<(), String> {
+    let select = element_as::<HtmlSelectElement>(id)?;
+    if select.length() > 0 {
+        return Ok(());
+    }
+    let document = document()?;
+    let add = |value: &str, label: &str, placeholder: bool| -> Result<(), String> {
+        let option = document
+            .create_element("option")
+            .map_err(|_| format!("could not create an option for {id}"))?;
+        option
+            .set_attribute("value", value)
+            .map_err(|_| format!("could not set an option value for {id}"))?;
+        if placeholder {
+            option
+                .set_attribute("disabled", "")
+                .map_err(|_| format!("could not disable the placeholder for {id}"))?;
+            option
+                .set_attribute("selected", "")
+                .map_err(|_| format!("could not select the placeholder for {id}"))?;
+        }
+        option.set_text_content(Some(label));
+        select
+            .append_child(&option)
+            .map_err(|_| format!("could not append an option to {id}"))?;
+        Ok(())
+    };
+    if let Some(text) = placeholder {
+        add("", text, true)?;
+    }
+    for (value, label) in options {
+        add(value, label, false)?;
+    }
+    Ok(())
+}
+
+/// Populate the physics panel from the canvas catalogs the first time it is
+/// seen empty (the component ships the controls bare so the catalogs stay in
+/// one place), then set every control to the canvas's live choice.
+/// (Physics catalog — P2.)
+fn ensure_physics_controls(host: &BrowserHost) -> Result<(), String> {
+    if element_as::<HtmlSelectElement>("physics-select")?.length() > 0 {
+        return Ok(());
+    }
+    fill_select("physics-select", CANVAS_PHYSICS_LAWS, None)?;
+    fill_select("kind-source-select", CANVAS_PHYSICS_KIND_SOURCES, None)?;
+    fill_select("mass-source-select", CANVAS_PHYSICS_MASS_SOURCES, None)?;
+    fill_select("depth-source-select", CANVAS_PHYSICS_DEPTH_SOURCES, None)?;
+    let profiles: Vec<(&str, &str)> = CANVAS_PHYSICS_PROFILES
+        .iter()
+        .map(|profile| (profile.id, profile.label))
+        .collect();
+    fill_select("profile-select", &profiles, Some("Choose a profile"))?;
+    let fieldset = element("physics-overlays")?;
+    let document = document()?;
+    for (id, label) in CANVAS_PHYSICS_OVERLAYS {
+        let wrap = document
+            .create_element("label")
+            .map_err(|_| "could not create an overlay label".to_string())?;
+        let input = document
+            .create_element("input")
+            .map_err(|_| "could not create an overlay checkbox".to_string())?;
+        for (name, value) in [
+            ("type", "checkbox"),
+            ("id", &format!("gs-overlay-{id}")),
+            ("data-overlay", id),
+        ] {
+            input
+                .set_attribute(name, value)
+                .map_err(|_| format!("could not set {name} on the {id} checkbox"))?;
+        }
+        let text = document
+            .create_element("span")
+            .map_err(|_| "could not create an overlay caption".to_string())?;
+        text.set_text_content(Some(label));
+        wrap.append_child(&input)
+            .and_then(|_| wrap.append_child(&text))
+            .and_then(|_| fieldset.append_child(&wrap))
+            .map_err(|_| format!("could not append the {id} overlay control"))?;
+    }
+    sync_physics_controls(host)
+}
+
+/// Set every physics control to the canvas's live choice: the law, the
+/// checked overlays, the three sources, and the profile that names the pair
+/// (the placeholder when none does).
+fn sync_physics_controls(host: &BrowserHost) -> Result<(), String> {
+    set_select_value("physics-select", host.canvas.physics_law().id())?;
+    for overlay in PhysicsOverlay::ALL {
+        element_as::<HtmlInputElement>(&format!("overlay-{}", overlay.id()))?
+            .set_checked(host.canvas.physics_overlays().contains(&overlay));
+    }
+    set_select_value("kind-source-select", host.canvas.physics_kind_source().id())?;
+    set_select_value("mass-source-select", host.canvas.physics_mass_source().id())?;
+    set_select_value("depth-source-select", host.canvas.physics_depth_source().id())?;
+    set_select_value(
+        "profile-select",
+        host.canvas.physics_profile_id().unwrap_or(""),
+    )?;
+    Ok(())
 }
 
 pub(super) fn selected_handler() -> Result<String, String> {

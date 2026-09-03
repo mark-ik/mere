@@ -41,6 +41,7 @@
 mod anneal;
 mod boids;
 mod gravity;
+mod hold;
 mod kuramoto;
 mod linlog;
 mod magnetic;
@@ -50,6 +51,7 @@ mod stress;
 pub use anneal::Anneal;
 pub use boids::Boids;
 pub use gravity::Gravity;
+pub use hold::Hold;
 pub use kuramoto::Kuramoto;
 pub use linlog::LinLogForce;
 pub use magnetic::MagneticSpring;

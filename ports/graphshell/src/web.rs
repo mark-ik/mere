@@ -445,7 +445,7 @@ impl BrowserHost {
                 }),
             ActiveSession::Remote => self.remote_selection(),
         };
-        let (product_status, arrangement, physics_paused) = self.product_chrome();
+        let (product_status, arrangement, physics_law, physics_paused) = self.product_chrome();
         // Satisfaction belongs to the remote scene, so it is only spoken when
         // one is mounted. A local canvas has no holds to report on.
         let satisfaction = self
@@ -474,6 +474,7 @@ impl BrowserHost {
             product_status,
             satisfaction,
             arrangement,
+            physics_law,
             physics_paused,
             action_draft: self.action_draft.as_ref().map(ActionDraft::semantics),
         }
@@ -2004,6 +2005,7 @@ async fn run(root_element: Element) -> Result<(), String> {
         // Nothing is mounted at construction, so there is nothing to report.
         satisfaction: String::new(),
         arrangement: "phyllotaxis.default".to_string(),
+        physics_law: mere::canvas::PhysicsLaw::Springs.label().to_string(),
         physics_paused: false,
         action_draft: None,
     };

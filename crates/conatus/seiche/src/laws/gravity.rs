@@ -33,6 +33,11 @@ pub struct Gravity {
     /// Tangential speed given on the first tick, per unit distance from the
     /// mass centre; `0.0` lets the graph simply fall together.
     pub orbital_kick: f32,
+    /// Cancel each body's linear damping with an equal drive along its
+    /// velocity. Gravity conserves energy only in a frictionless world; a
+    /// host's damping (the "inertia" setting) would otherwise spiral every
+    /// leaf into its hub within seconds. On by default: an orbit is the point.
+    pub counter_damping: bool,
     kicked: Mutex<bool>,
 }
 
@@ -45,6 +50,7 @@ impl Gravity {
             strength: 9_000.0,
             softening: 24.0,
             orbital_kick: 1.0,
+            counter_damping: true,
             kicked: Mutex::new(false),
         }
     }
@@ -121,7 +127,13 @@ impl Force for Gravity {
         for (i, (_, handle, _)) in nodes.iter().enumerate() {
             if let Some(body) = ctx.bodies.get_mut(*handle) {
                 let inertial = body.mass().max(1e-3);
-                body.add_force(accelerations[i] * inertial, true);
+                let mut force = accelerations[i] * inertial;
+                if self.counter_damping {
+                    // rapier applies `v /= 1 + dt·d` each step; a force of
+                    // `m·d·v` puts back what that takes, to first order.
+                    force += body.linvel() * (body.linear_damping() * inertial);
+                }
+                body.add_force(force, true);
             }
         }
     }

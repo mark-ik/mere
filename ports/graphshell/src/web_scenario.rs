@@ -48,8 +48,8 @@ use wasm_bindgen::Clamped;
 use wasm_bindgen::prelude::*;
 use web_sys::{
     CanvasRenderingContext2d, Element, Event, EventInit, HtmlCanvasElement, HtmlElement,
-    HtmlInputElement, HtmlTextAreaElement, ImageData, KeyboardEvent, KeyboardEventInit,
-    PointerEvent, PointerEventInit,
+    HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement, ImageData, KeyboardEvent,
+    KeyboardEventInit, PointerEvent, PointerEventInit,
 };
 
 use super::{BrowserHost, document, element, root};
@@ -257,6 +257,33 @@ impl Probe<'_> {
                 });
                 Ok(())
             }
+            "select" => {
+                let (css, value) = split_first(rest);
+                if find(css)?.dyn_ref::<HtmlSelectElement>().is_none() {
+                    return Err(format!("select '{css}': not a select"));
+                }
+                self.host.deferred_dom.push(DomAction::Select {
+                    css: css.to_string(),
+                    value: value.to_string(),
+                });
+                Ok(())
+            }
+            "check" => {
+                let (css, state) = split_first(rest);
+                let on = match state.trim() {
+                    "on" => true,
+                    "off" => false,
+                    other => return Err(format!("check wants on|off, got '{other}'")),
+                };
+                if find(css)?.dyn_ref::<HtmlInputElement>().is_none() {
+                    return Err(format!("check '{css}': not an input"));
+                }
+                self.host.deferred_dom.push(DomAction::Check {
+                    css: css.to_string(),
+                    on,
+                });
+                Ok(())
+            }
             "click-at" => {
                 let mut parts = rest.split_whitespace();
                 let x: f32 = parts
@@ -456,6 +483,10 @@ pub(crate) enum DomAction {
     Click(String),
     Key(KeySpec),
     Type { css: String, text: String },
+    /// Set a `<select>`'s value, then fire `change`.
+    Select { css: String, value: String },
+    /// Set a checkbox on or off, then fire `change`.
+    Check { css: String, on: bool },
 }
 
 /// A parsed key chord: modifiers and the `KeyboardEvent.key` value.
@@ -526,6 +557,39 @@ fn dispatch(action: DomAction) -> Result<(), String> {
             target
                 .dispatch_event(&event)
                 .map_err(|_| "could not dispatch the key event".to_string())?;
+            Ok(())
+        }
+        DomAction::Select { css, value } => {
+            let target = find(&css)?;
+            let select = target
+                .dyn_ref::<HtmlSelectElement>()
+                .ok_or_else(|| format!("'{css}' is not a select"))?;
+            select.set_value(&value);
+            if select.value() != value {
+                return Err(format!("select '{css}': no option '{value}'"));
+            }
+            let init = EventInit::new();
+            init.set_bubbles(true);
+            let event = Event::new_with_event_init_dict("change", &init)
+                .map_err(|_| "could not build the change event".to_string())?;
+            target
+                .dispatch_event(&event)
+                .map_err(|_| "could not dispatch the change event".to_string())?;
+            Ok(())
+        }
+        DomAction::Check { css, on } => {
+            let target = find(&css)?;
+            let input = target
+                .dyn_ref::<HtmlInputElement>()
+                .ok_or_else(|| format!("'{css}' is not an input"))?;
+            input.set_checked(on);
+            let init = EventInit::new();
+            init.set_bubbles(true);
+            let event = Event::new_with_event_init_dict("change", &init)
+                .map_err(|_| "could not build the change event".to_string())?;
+            target
+                .dispatch_event(&event)
+                .map_err(|_| "could not dispatch the change event".to_string())?;
             Ok(())
         }
         DomAction::Type { css, text } => {

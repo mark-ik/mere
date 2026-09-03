@@ -44,7 +44,7 @@ use petgraph::graph::{DiGraph, EdgeIndex, NodeIndex, UnGraph};
 use petgraph::visit::EdgeRef;
 use seiche::{
     Anneal, BarnesHutRepulsion, Boids, Boundary, DegreeRepulsion, DepthGravity, DomainCluster,
-    EdgeSpring, Force, Gravity, GravityLocus, GridSnap, HubGravity, Kuramoto, LinLogForce,
+    EdgeSpring, Force, Gravity, GravityLocus, GridSnap, Hold, HubGravity, Kuramoto, LinLogForce,
     MagneticSpring, NodeExclusion, ParticleLife, StressSpring,
 };
 
@@ -60,6 +60,11 @@ const PAGE_RANK_DAMPING: f32 = 0.85;
 const PAGE_RANK_ITERATIONS: usize = 50;
 /// The Skeleton overlay's tree-edge stiffness, against `EdgeSpring`'s 10.
 const SKELETON_STIFFNESS: f32 = 60.0;
+/// Charge's repulsion, calibrated so that at contact (a node diameter, 36)
+/// the `1/d` push matches `NodeExclusion`'s inverse-square one
+/// (`220_000 / 36² ≈ 170`): the seiche default of 2 400 left bodies
+/// touching under the edge springs. (Physics catalog — the Charge receipt.)
+const CHARGE_STRENGTH: f32 = 6_000.0;
 
 /// The physics law: which dynamics the graph moves under. Ids are technical
 /// (`family.method`), labels plain, as the arrangement catalog does it.
@@ -95,7 +100,8 @@ pub enum PhysicsLaw {
     /// Davidson–Harel simulated annealing: a random walk over a layout energy,
     /// cooling to a minimum.
     Anneal,
-    /// No law: bodies hold where the arrangement (or a hand) put them.
+    /// No law: bodies hold where the arrangement (or a hand) put them
+    /// (velocity zeroed each tick, so contacts can only nudge).
     Still,
 }
 
@@ -378,6 +384,23 @@ impl PhysicsDepthSource {
     pub fn parse(id: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|source| source.id() == id)
     }
+}
+
+/// What the layout looks like right now, in numbers a receipt can assert
+/// on: the laws' signatures. (Physics catalog — P2.)
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LayoutStats {
+    /// The node bodies' kinetic energy (inline backend; zero offloaded).
+    pub energy: f32,
+    /// Root-mean-square distance of the nodes from their centroid.
+    pub spread: f32,
+    /// Node pairs closer than a node body's diameter.
+    pub overlaps: usize,
+    /// Canvas distance between the two graph-farthest connected nodes,
+    /// divided by the mean visible edge length — a metric layout (Stress)
+    /// reads near the diameter in hops, a local one well under it. Zero
+    /// without edges.
+    pub stretch: f32,
 }
 
 /// A named (law, overlays) pair: what a picker offers as one choice.
@@ -977,7 +1000,10 @@ impl<'a> LawInputs<'a> {
                 Box::new(Boundary::default()),
             ],
             PhysicsLaw::Charge => vec![
-                Box::new(BarnesHutRepulsion::default()),
+                Box::new(BarnesHutRepulsion {
+                    strength: CHARGE_STRENGTH,
+                    ..BarnesHutRepulsion::default()
+                }),
                 Box::new(EdgeSpring::default()),
                 Box::new(Boundary::default()),
             ],
@@ -1022,7 +1048,9 @@ impl<'a> LawInputs<'a> {
                 Box::new(Boundary::default()),
             ],
             PhysicsLaw::Anneal => vec![Box::new(Anneal::seeded(LAW_SEED))],
-            PhysicsLaw::Still => Vec::new(),
+            // Held, not empty: with no force at all rapier's contact solver
+            // blasts an overlapping seed apart (the Still receipt found it).
+            PhysicsLaw::Still => vec![Box::new(Hold)],
         }
     }
 
@@ -1248,6 +1276,74 @@ impl Canvas {
             self.settle_physics(u32::MAX);
         } else {
             self.settle_physics(SETTLE_TICKS);
+        }
+    }
+
+    /// The node bodies' kinetic energy right now (inline backend; zero offloaded).
+    pub fn physics_energy(&self) -> f32 {
+        self.physics.kinetic_energy()
+    }
+
+    /// The layout's signature numbers: energy, spread, overlaps, stretch.
+    pub fn layout_stats(&self) -> LayoutStats {
+        let positions: Vec<(NodeKey, euclid::default::Point2D<f32>)> =
+            self.view.positions().collect();
+        let n = positions.len();
+        if n == 0 {
+            return LayoutStats {
+                energy: self.physics_energy(),
+                ..LayoutStats::default()
+            };
+        }
+        let centroid = positions
+            .iter()
+            .fold(euclid::default::Vector2D::<f32>::zero(), |acc, (_, p)| {
+                acc + p.to_vector()
+            })
+            / n as f32;
+        let spread = (positions
+            .iter()
+            .map(|(_, p)| (p.to_vector() - centroid).square_length())
+            .sum::<f32>()
+            / n as f32)
+            .sqrt();
+        let diameter = 2.0 * crate::NODE_HALF;
+        let mut overlaps = 0;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                if (positions[i].1 - positions[j].1).length() < diameter {
+                    overlaps += 1;
+                }
+            }
+        }
+        let at: HashMap<NodeKey, euclid::default::Point2D<f32>> = positions.into_iter().collect();
+        let edges = visible_relation_edges(&self.graph, &self.hidden_edges);
+        let lengths: Vec<f32> = edges
+            .iter()
+            .filter_map(|(a, b)| Some((*at.get(a)? - *at.get(b)?).length()))
+            .collect();
+        let stretch = if lengths.is_empty() {
+            0.0
+        } else {
+            let mean_edge = lengths.iter().sum::<f32>() / lengths.len() as f32;
+            let keys: Vec<NodeKey> = at.keys().copied().collect();
+            // The graph-farthest connected pair, by BFS from every node.
+            let mut farthest: Option<(NodeKey, NodeKey, u32)> = None;
+            for (a, b, hops) in seiche::graph_distances(keys.iter().copied(), &edges) {
+                if farthest.is_none_or(|(_, _, best)| hops > best) {
+                    farthest = Some((a, b, hops));
+                }
+            }
+            match farthest {
+                Some((a, b, _)) if mean_edge > 0.0 => (at[&a] - at[&b]).length() / mean_edge,
+                _ => 0.0,
+            }
+        };
+        LayoutStats {
+            energy: self.physics_energy(),
+            spread,
+            overlaps,
+            stretch,
         }
     }
 

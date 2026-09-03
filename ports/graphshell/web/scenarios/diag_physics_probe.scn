@@ -1,0 +1,39 @@
+# Diagnostic, not a receipt: read the energy and spread every two seconds
+# under Springs with no arrangement. Every assert below is meant to fail;
+# the failure text carries the reading.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select spring.rapier
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+settle 120
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+settle 120
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+settle 120
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+settle 120
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+settle 120
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+settle 120
+assert snap physics-energy <= -1
+assert snap layout-spread <= -1
+assert snap layout-overlaps <= -1
+capture physics_probe_end
+wait
+log probe complete

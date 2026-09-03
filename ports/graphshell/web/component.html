@@ -200,10 +200,30 @@
             <option value="spectral.default">Spectral</option>
             <option value="kanban.default">Kanban by site</option>
             <option value="timeline.default">Timeline</option>
+            <option value="free">Free (physics alone)</option>
           </select>
           <div class="button-row">
             <button data-command="apply-arrangement">Arrange</button>
             <button data-command="toggle-physics">Pause physics</button>
+          </div>
+          <label for="gs-physics-select">Physics</label>
+          <select id="gs-physics-select"></select>
+          <fieldset id="gs-physics-overlays" class="checks">
+            <legend>Overlays</legend>
+          </fieldset>
+          <label for="gs-kind-source-select">Kinds</label>
+          <select id="gs-kind-source-select"></select>
+          <label for="gs-mass-source-select">Mass</label>
+          <select id="gs-mass-source-select"></select>
+          <label for="gs-depth-source-select">Depth</label>
+          <select id="gs-depth-source-select"></select>
+          <div class="button-row">
+            <button data-command="apply-physics">Apply physics</button>
+          </div>
+          <label for="gs-profile-select">Profile</label>
+          <select id="gs-profile-select"></select>
+          <div class="button-row">
+            <button data-command="apply-profile">Apply profile</button>
           </div>
         </section>
 

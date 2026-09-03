@@ -1,0 +1,84 @@
+# Physics receipt: the donor's ten profiles, each applied through the profile
+# picker, each naming itself back with its law and the overlays it installs.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-profile-select liquid
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == liquid
+assert snap physics-law == spring.rapier
+assert snap physics-overlays == gravity-locus
+assert attr #gs-overlay-gravity-locus data-overlay gravity-locus
+select #gs-profile-select gas
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == gas
+assert snap physics-law == charge.barnes-hut
+select #gs-profile-select solid
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == solid
+assert snap physics-overlays == domain-cluster,degree-repulsion
+select #gs-profile-select archipelago
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == archipelago
+assert snap physics-law == energy.linlog
+assert snap physics-overlays == domain-cluster,degree-repulsion
+select #gs-profile-select constellation
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == constellation
+assert snap physics-overlays == degree-repulsion,hub-gravity
+select #gs-profile-select crystal
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == crystal
+assert snap physics-law == stress.kamada-kawai
+assert snap physics-overlays == grid-snap
+capture physics_profiles_crystal
+wait
+select #gs-profile-select tide
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == tide
+assert snap physics-overlays == tide
+settle 60
+assert snap physics-energy >= 0.1
+select #gs-profile-select sediment
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == sediment
+assert snap physics-overlays == depth-gravity
+capture physics_profiles_sediment
+wait
+select #gs-profile-select magnet
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == magnet
+assert snap physics-law == flow.magnetic
+select #gs-profile-select void
+dom click [data-command="apply-profile"]
+settle 1
+assert snap physics-profile == void
+assert snap physics-law == still.default
+# And a custom pair names no profile: Still plus the skeleton, then the
+# checkbox off again.
+check #gs-overlay-skeleton on
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-overlays == skeleton
+assert snap physics-profile == custom
+check #gs-overlay-skeleton off
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-profile == void
+log physics profiles receipt complete

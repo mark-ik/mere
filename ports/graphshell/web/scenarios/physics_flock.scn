@@ -1,0 +1,27 @@
+# Physics receipt: Flock, boids over the graph — separation, alignment,
+# cohesion, a cruising speed. Its signature is a moving flock: energy above a
+# floor a second in and five seconds later.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select flock.boids
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == flock.boids
+assert snap physics-profile == law.flock
+capture physics_flock_start
+wait
+settle 60
+capture physics_flock_moving
+wait
+assert snap physics-energy >= 1
+settle 300
+assert snap physics-energy >= 1
+log physics flock receipt complete

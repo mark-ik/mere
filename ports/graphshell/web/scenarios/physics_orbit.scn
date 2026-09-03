@@ -1,0 +1,27 @@
+# Physics receipt: Orbit, gravity with an orbital kick — hubs are suns. Its
+# signature is motion that never rests: kinetic energy above a floor a
+# second in, and still there five seconds later.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select orbit.gravity
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == orbit.gravity
+assert snap physics-profile == law.orbit
+capture physics_orbit_start
+wait
+settle 60
+capture physics_orbit_moving
+wait
+assert snap physics-energy >= 1
+settle 300
+assert snap physics-energy >= 1
+log physics orbit receipt complete

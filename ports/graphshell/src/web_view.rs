@@ -33,6 +33,8 @@ pub(crate) struct ChromeModel {
     /// which is the point of carrying both halves on the wire.
     pub satisfaction: String,
     pub arrangement: String,
+    /// The physics law's plain label (the catalog's `PhysicsLaw::label`).
+    pub physics_law: String,
     pub physics_paused: bool,
     pub action_draft: Option<ActionDraftSemantics>,
 }
@@ -155,8 +157,9 @@ fn chrome_view(model: ChromeModel) -> impl View<(), (), GenetCtx, Element = Gene
                     el(
                         "div",
                         text(format!(
-                            "{} · physics {}",
+                            "{} · {} · physics {}",
                             model.arrangement,
+                            model.physics_law,
                             if model.physics_paused {
                                 "paused"
                             } else {

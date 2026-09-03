@@ -1,0 +1,28 @@
+# Physics receipt: Stress, a spring between every connected pair at its graph
+# distance. Its signature is a metric picture: the fixture's farthest pair is
+# four hops apart, and ends at least two and a half mean edge lengths apart
+# on the canvas (a local law leaves it near one and a half).
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select stress.kamada-kawai
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == stress.kamada-kawai
+assert snap physics-profile == law.stress
+capture physics_stress_start
+wait
+settle 60
+capture physics_stress_settled
+wait
+settle 300
+assert snap layout-stretch >= 2.5
+assert snap layout-overlaps == 0
+log physics stress receipt complete

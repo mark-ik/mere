@@ -1,0 +1,26 @@
+# Physics receipt: Flow, magnetic springs — directed edges align to a field
+# direction. Its signature is a settled, unoverlapped picture read along the
+# field.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select flow.magnetic
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == flow.magnetic
+assert snap physics-profile == magnet
+capture physics_flow_start
+wait
+settle 60
+capture physics_flow_settled
+wait
+settle 300
+assert snap layout-overlaps == 0
+log physics flow receipt complete

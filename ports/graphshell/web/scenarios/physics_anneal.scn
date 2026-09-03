@@ -1,0 +1,26 @@
+# Physics receipt: Anneal, Davidson–Harel simulated annealing — a seeded
+# random walk over a layout energy, cooling. Its signature is a cooled
+# picture: the walk writes positions and leaves no velocity behind.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select anneal.davidson-harel
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == anneal.davidson-harel
+assert snap physics-profile == law.anneal
+capture physics_anneal_start
+wait
+settle 60
+capture physics_anneal_cooling
+wait
+settle 300
+assert snap physics-energy <= 5
+log physics anneal receipt complete

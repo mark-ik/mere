@@ -1,0 +1,28 @@
+# Physics receipt: Still, no law — bodies hold where they are. Its signature
+# is rest: no energy at all, and no explosion off an overlapping seed.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select still.default
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == still.default
+assert snap physics-profile == void
+capture physics_still_start
+wait
+settle 60
+capture physics_still_held
+wait
+settle 300
+assert snap physics-energy <= 0.5
+# Held from the tight free seed, the graph did not fly apart: the contact
+# solver may nudge overlapping bodies, never blast them.
+assert snap layout-spread <= 200
+log physics still receipt complete

@@ -1,0 +1,25 @@
+# Physics receipt: Charge, Barnes–Hut repulsion between every body plus edge
+# springs. Its signature is spread: no two bodies overlap once it has run.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+# No arrangement: the boot Spiral's anchor springs would pull under every law.
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+select #gs-physics-select charge.barnes-hut
+dom click [data-command="apply-physics"]
+settle 1
+assert snap physics-law == charge.barnes-hut
+assert snap physics-profile == gas
+capture physics_charge_start
+wait
+settle 60
+capture physics_charge_settled
+wait
+settle 300
+assert snap layout-overlaps == 0
+log physics charge receipt complete

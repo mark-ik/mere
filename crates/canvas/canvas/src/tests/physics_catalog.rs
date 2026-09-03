@@ -120,6 +120,45 @@ fn every_law_id_round_trips_and_its_label_is_plain() {
     assert!(PhysicsOverlay::parse("").is_none());
 }
 
+/// The signature numbers a receipt asserts on: a laid-out path has no
+/// overlaps and stretches to about its hop count under Stress; a paused,
+/// halted canvas has no energy.
+#[test]
+fn layout_stats_carry_the_laws_signatures() {
+    let (mut canvas, keys) = wired(
+        &[
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+            "https://d.test",
+        ],
+        &[(0, 1), (1, 2), (2, 3)],
+    );
+    canvas.set_physics_paused(true);
+    for (i, &key) in keys.iter().enumerate() {
+        canvas
+            .view
+            .set_position(key, Point2D::new(i as f32 * 170.0, 0.0));
+    }
+    let stats = canvas.layout_stats();
+    assert_eq!(stats.overlaps, 0);
+    assert!(
+        (stats.stretch - 3.0).abs() < 1e-3,
+        "a straight path stretches to its hops: {}",
+        stats.stretch
+    );
+    assert!(stats.spread > 100.0);
+    assert_eq!(stats.energy, 0.0, "halted bodies carry no energy");
+    // Fold the path onto one point: every pair overlaps, nothing stretches.
+    for &key in &keys {
+        canvas.view.set_position(key, Point2D::new(0.0, 0.0));
+    }
+    let folded = canvas.layout_stats();
+    assert_eq!(folded.overlaps, 6);
+    assert_eq!(folded.stretch, 0.0);
+    assert_eq!(folded.spread, 0.0);
+}
+
 /// A proper colouring never puts a kind beside itself; islands each get one.
 #[test]
 fn coloring_and_island_kinds_read_the_topology() {
@@ -274,7 +313,7 @@ fn skeleton_and_weighted_stress_read_multiplicity() {
     drop(inputs);
     canvas.set_physics_law(PhysicsLaw::Still);
     canvas.set_physics_overlays(vec![PhysicsOverlay::Skeleton]);
-    assert_eq!(canvas.law_force_count(), 1);
+    assert_eq!(canvas.law_force_count(), 2, "the hold and the tree");
     assert!(
         canvas.physics_forces_are_graph_bound(),
         "the tree follows the topology"
@@ -318,9 +357,9 @@ fn every_law_and_overlay_builds_on_the_sample_graph_without_moving_a_body() {
         );
     }
     assert_eq!(canvas.physics_overlays().len(), PhysicsOverlay::ALL.len());
-    // Still + every overlay: exactly one force per overlay.
+    // Still + every overlay: the hold, then exactly one force per overlay.
     canvas.set_physics_law(PhysicsLaw::Still);
-    assert_eq!(canvas.law_force_count(), PhysicsOverlay::ALL.len());
+    assert_eq!(canvas.law_force_count(), PhysicsOverlay::ALL.len() + 1);
     for overlay in PhysicsOverlay::ALL {
         assert!(
             !canvas.toggle_physics_overlay(overlay),
@@ -328,7 +367,7 @@ fn every_law_and_overlay_builds_on_the_sample_graph_without_moving_a_body() {
             overlay.id()
         );
     }
-    assert_eq!(canvas.law_force_count(), 0);
+    assert_eq!(canvas.law_force_count(), 1, "still is the hold alone");
     for source in PhysicsKindSource::ALL {
         canvas.set_physics_law(PhysicsLaw::Kinds);
         canvas.set_physics_kind_source(source);
