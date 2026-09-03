@@ -1,13 +1,15 @@
 [package]
 name = "pelt-desktop"
-version.workspace = true
+# Landed in mere 2026-09-03; see ports/pelt/Cargo.toml for why the keys genet's
+# workspace supplied are stated inline here.
+version = "0.2.0"
 authors.workspace = true
 license.workspace = true
 edition.workspace = true
-publish.workspace = true
-rust-version.workspace = true
+publish = false
+rust-version = "1.86.0"
 repository.workspace = true
-description.workspace = true
+description = "Pelt's desktop shell: the winit/wgpu present stack and the engine lanes behind it."
 
 [lib]
 name = "pelt_desktop"
@@ -116,22 +118,29 @@ linux-present = [
 ]
 
 [dependencies]
-cambium = { path = "../../../components/cambium/cambium", optional = true }
-cambium-genet-winit-host = { path = "../../../components/cambium/cambium-genet-winit-host", optional = true }
+# Landed in mere 2026-09-03. Every dependency that reached genet by relative
+# path (`../../../components/...`) is now a workspace-declared git pin on
+# genet.git at the one revision the root manifest states.
+cambium = { workspace = true, optional = true }
+cambium-genet-winit-host = { workspace = true, optional = true }
 netrender = { workspace = true, optional = true }
-image = { workspace = true, optional = true }
+# Only `save_buffer_with_format(.., ImageFormat::Png)` is used, so this takes
+# the png-only feature set mere's other image consumer already uses.
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 paint = { workspace = true, optional = true }
 genet-host-api = { workspace = true }
 mere-surface-api = { workspace = true }
 mere-document-lanes = { workspace = true, optional = true }
 workbench = { workspace = true }
 genet-documents = { workspace = true, optional = true, default-features = false }
-genet-livery = { path = "../../../components/genet-livery", optional = true }
-genet-render = { path = "../../../components/genet-render", optional = true }
+genet-livery = { workspace = true, optional = true }
+genet-render = { workspace = true, optional = true }
 inker = { workspace = true, optional = true }
 accesskit = { workspace = true, optional = true }
 pelt-core = { workspace = true }
-tabard = { path = "../../tabard", optional = true }
+# Tabard landed beside Pelt under `ports/`; it is a workspace member here, so
+# the former `../../tabard` relative path becomes a workspace path dep.
+tabard = { workspace = true, optional = true }
 tinct = { workspace = true, optional = true }
 pollster = { version = "0.4", optional = true }
 raw-window-handle = { workspace = true, optional = true }
@@ -142,14 +151,14 @@ paint_list_render = { workspace = true, optional = true }
 
 # The render-free extraction lane: extract a PageExtract from the live post-JS DOM
 # (the headless-scripted-DOM scrape path for SPAs). Depends only on layout-dom-api.
-fleece = { path = "../../../components/fleece", optional = true }
-genet-winit-host = { path = "../../../components/genet-winit-host", optional = true }
+fleece = { workspace = true, optional = true }
+genet-winit-host = { workspace = true, optional = true }
 # Spec `data:` URL decoding for the LocalFetcher (percent-encoded + base64 bodies).
 
 # Remote document loading (behind the `netfetch` feature): the netfetcher engine
 # (sibling repo) for http(s), bridged onto the sync `ResourceFetcher` through a tokio
 # runtime. The same dep set genet-wpt's `fetch()` uses.
-url = { workspace = true, optional = true }
+url = { version = "2.5", optional = true }
 
 # Smolweb document loading (behind the `smolweb` feature): the errand transport
 # (sibling repo) for gemini/gopher/nex/finger/spartan/guppy, bridged onto the sync
@@ -161,23 +170,24 @@ url = { workspace = true, optional = true }
 # live mutable DOM, and the JS engines. `script-engine-api` supplies the
 # `ScriptEngine` trait bound the engine-generic `ScriptedDocument<E>` is written
 # against; Boa is the default backend, Nova the gated one (`scripted-nova`).
-script-runtime-api = { path = "../../../components/script-runtime-api", optional = true }
-script-engine-api = { path = "../../../components/script-engine-api", optional = true }
-genet-scripted-dom = { path = "../../../components/genet-scripted-dom", optional = true }
-genet-scripted = { path = "../../../components/genet-scripted", optional = true, default-features = false }
-script-engine-boa = { path = "../../../components/script-engine-boa", optional = true }
-script-engine-nova = { path = "../../../components/script-engine-nova", optional = true }
+script-runtime-api = { workspace = true, optional = true }
+script-engine-api = { workspace = true, optional = true }
+genet-scripted-dom = { workspace = true, optional = true }
+genet-scripted = { workspace = true, optional = true, default-features = false }
+script-engine-boa = { workspace = true, optional = true }
+script-engine-nova = { workspace = true, optional = true }
 # The `LayoutDom` trait (for the inline-`<script>` DOM walk) + QualName parts.
-layout-dom-api = { path = "../../../components/shared/layout-dom", optional = true }
+layout-dom-api = { workspace = true, optional = true }
 # External-script post-fetch processing (scripted feature): `encoding_rs` decodes the
 # fetched bytes per the `<script charset>` (default UTF-8); `sha2` + `base64` verify a
 # `<script integrity>` Subresource-Integrity hash before the script is allowed to run.
-encoding_rs = { workspace = true, optional = true }
-sha2 = { workspace = true, optional = true }
+encoding_rs = { version = "0.8", features = ["serde"], optional = true }
+# Not mere's workspace sha2 (0.11): this carries genet's 0.10 line.
+sha2 = { version = "0.10", optional = true }
 base64 = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true, features = [
+windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
     "Win32_System_Threading",
@@ -186,7 +196,17 @@ windows-sys = { workspace = true, features = [
 ] }
 # Windows presentation bridges HWND into paint; the Livery workspace also
 # imports D3D12 textures and constructs its registered Scrying producer.
-windows = { workspace = true, features = ["Win32_System_Threading"], optional = true }
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Security",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_WindowsAndMessaging",
+], optional = true }
 dpi = { workspace = true, optional = true }
 scrying-engine = { workspace = true, optional = true }
 

@@ -30,7 +30,13 @@ knot-document = { workspace = true, features = ["engine"] }
 muniment = { workspace = true, features = ["redb"] }
 mora.workspace = true
 mora-cmudict.workspace = true
-nematic.workspace = true
+# `endpoint.rs` names `nematic::HtmlFragmentEngine`, which is behind nematic's
+# `html-fragment` feature. The workspace pin is `default-features = false`, so
+# until 2026-09-03 this compiled only because knot-editor-host resolved from
+# genet.git and pulled nematic's defaults in through genet's own workspace
+# table. knot-editor-host is a member here now, so the feature is named where
+# it is used.
+nematic = { workspace = true, features = ["html-fragment"] }
 notify = "8"
 notochord = { workspace = true, features = ["tokio"] }
 personae.workspace = true

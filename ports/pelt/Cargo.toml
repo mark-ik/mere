@@ -1,13 +1,17 @@
 [package]
 name = "pelt"
-version.workspace = true
+# Landed in mere 2026-09-03. genet's workspace supplied `publish`,
+# `rust-version` and `description`; mere's does not, so the three that were
+# inherited are stated here. The version keeps genet's 0.2.0 rather than
+# taking mere's workspace 0.0.1, which would silently renumber the crate.
+version = "0.2.0"
 authors.workspace = true
 license.workspace = true
 edition.workspace = true
-publish.workspace = true
-rust-version.workspace = true
+publish = false
+rust-version = "1.86.0"
 repository.workspace = true
-description.workspace = true
+description = "Pelt: the reference browser port over Genet's engine and Cambium's retained shell."
 build = "build.rs"
 
 [lib]
@@ -72,9 +76,11 @@ macos-present = ["viewer-engine", "pelt-desktop/macos-present"]
 # on non-Linux hosts.
 linux-present = ["viewer-engine", "pelt-desktop/linux-present"]
 [dependencies]
-cfg-if = { workspace = true }
+cfg-if = "1.0.4"
 genet-host-api = { workspace = true }
 inker = { workspace = true }
 pelt-core = { workspace = true }
-pelt-desktop = { workspace = true, optional = true, default-features = false }
-windows-sys = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_System_Console"] }
+pelt-desktop = { workspace = true, optional = true }
+# Not a workspace pin: mere's only other windows-sys consumer (personae) is on
+# 0.59, and this port carries genet's 0.61 rather than dragging that one along.
+windows-sys = { version = "0.61", features = ["Win32_Graphics_Gdi", "Win32_System_Console"] }

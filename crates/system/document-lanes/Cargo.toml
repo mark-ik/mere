@@ -3,8 +3,8 @@ name = "mere-document-lanes"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-repository = "https://github.com/merely-made/genet"
-description = "Mere's document content lanes above Genet: the reader and smolweb sessions over the portable document canvas, and the remote resource fetcher over netfetcher and errand. Mere's half of the former genet-documents, homed here until the platform boundary plan moves it."
+repository = "https://github.com/merely-made/mere"
+description = "Mere's document content lanes above Genet: the reader and smolweb sessions over the portable document canvas, and the remote resource fetcher over netfetcher and errand. Mere's half of the former genet-documents; landed in mere 2026-09-03 by the platform boundary plan."
 publish = true
 
 [lib]
@@ -22,17 +22,20 @@ smolweb = ["dep:errand", "dep:nematic", "dep:tokio"]
 document-session-api = { workspace = true }
 inker = { workspace = true }
 genet-host-api = { workspace = true }
-genet-static-dom = { path = "../genet-static-dom" }
-fleece = { path = "../fleece" }
+# Formerly relative paths into genet's components; now the workspace git pins.
+genet-static-dom = { workspace = true }
+fleece = { workspace = true }
 netrender = { workspace = true }
 document-canvas = { workspace = true, features = ["netrender"] }
-image = { workspace = true }
-url = { workspace = true }
+# The smolweb lane decodes whatever a capsule serves, so this keeps genet's
+# full codec set rather than mere's png-only ingest pin.
+image = { version = "0.25", default-features = false, features = ["avif", "rayon", "bmp", "gif", "ico", "jpeg", "png", "webp"] }
+url = "2.5"
 nematic = { workspace = true, optional = true }
 errand = { workspace = true, optional = true }
-netfetcher = { path = "../netfetcher", optional = true }
-tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time"], optional = true }
-bytes = { workspace = true, optional = true }
+netfetcher = { workspace = true, optional = true }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"], optional = true }
+bytes = { version = "1", optional = true }
 
 [dev-dependencies]
 # Offline mock HTTP server for the netfetch integration tests; runs without a

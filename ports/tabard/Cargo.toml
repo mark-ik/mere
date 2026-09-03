@@ -3,7 +3,8 @@ name = "tabard"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+# Landed in mere 2026-09-03 (platform boundary plan, P3).
+repository = "https://github.com/merely-made/mere"
 description = "Theme-authoring port for Genet: Tinct seeds in, typed DTCG design tokens and Livery CSS custom-property stylesheets out."
 readme = "README.md"
 keywords = ["theme", "design-tokens", "oklch", "palette", "icons"]
@@ -12,10 +13,11 @@ categories = ["gui", "graphics"]
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-tinct = { version = "=0.1.2", path = "../../components/tinct" }
+tinct = { workspace = true }
 
 [dev-dependencies]
-genet-livery = { version = "0.0.2", path = "../../components/genet-livery" }
-genet-static-dom = { version = "0.1.0", path = "../../components/genet-static-dom" }
-layout-dom-api = { version = "0.1.0", path = "../../components/shared/layout-dom" }
-livery = { version = "0.0.3", path = "../../components/livery" }
+# Formerly relative paths into genet's components; now the workspace git pins.
+genet-livery = { workspace = true }
+genet-static-dom = { workspace = true }
+layout-dom-api = { workspace = true }
+livery = { workspace = true }

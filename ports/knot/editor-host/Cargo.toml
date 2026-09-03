@@ -8,7 +8,7 @@ authors = ["Mark AB (markik)"]
 # workspace repository that still points at upstream servo. Matches illume, the
 # portable half of the same pair.
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+repository = "https://github.com/merely-made/mere"
 description = "Host-side reuse-lexers for the knot editor: precise inner-language injection over parsers the workspace already ships, layered as overrides on the portable illume pack. Markdown via pulldown-cmark today; CSS/HTML/JS/Turtle to follow."
 readme = "README.md"
 documentation = "https://docs.rs/knot-editor-host"
@@ -24,7 +24,9 @@ default = ["preview"]
 preview = ["dep:inker", "dep:nematic"]
 
 [dependencies]
-cambium = { version = "0.3.2", path = "../../cambium/cambium" }
+# Landed in mere 2026-09-03: the former relative path into genet's components
+# is now the workspace git pin.
+cambium = { workspace = true }
 illume = { workspace = true }
 # A parser the workspace already ships (nematic uses it for CommonMark knots).
 # Its offset-iter event stream maps to highlight spans the same way jotdown

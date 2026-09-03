@@ -62,7 +62,38 @@ fleece = { path = "../genet/components/fleece" }
 # published 0.1.1, while its siblings tracked the working copy.
 inker = { path = "../genet/components/inker" }
 nematic = { path = "../genet/components/nematic" }
-knot-editor-host = { path = "../genet/components/inker/knot-editor-host" }
+# knot-editor-host is NOT here any more: it landed in mere 2026-09-03 as the
+# workspace member ports/knot/editor-host. Patching a git source at a path that
+# is also a workspace member is a hard lockfile collision, so the four crates
+# the platform boundary plan landed that day — pelt, tabard, knot-editor-host
+# and mere-document-lanes — must never appear in this table.
+#
+# Everything below was added 2026-09-03 with those crates: Pelt reaches these
+# genet components by name from mere's own manifests now, and a patch table
+# that redirects a git source must carry EVERY package a manifest names from
+# it, or the local loop resolves half the family from the git checkout and the
+# other half from the working copy. workbench and scrying-engine were already
+# named by mere's root manifest and were missing for the same reason.
+"genet-documents" = { path = "../genet/components/genet-documents" }
+"genet-document-resources" = { path = "../genet/components/genet-document-resources" }
+"genet-render" = { path = "../genet/components/genet-render" }
+"genet-winit-host" = { path = "../genet/components/genet-winit-host" }
+"genet-scripted" = { path = "../genet/components/genet-scripted" }
+"document-session-api" = { path = "../genet/components/shared/document-session-api" }
+"cambium-genet-winit-host" = { path = "../genet/components/cambium/cambium-genet-winit-host" }
+"script-runtime-api" = { path = "../genet/components/script-runtime-api" }
+"script-engine-api" = { path = "../genet/components/script-engine-api" }
+"script-engine-boa" = { path = "../genet/components/script-engine-boa" }
+"script-engine-nova" = { path = "../genet/components/script-engine-nova" }
+# Package names differ from the directory and from mere's dependency key.
+"servo-paint" = { path = "../genet/components/paint" }
+"servo-webgl-wgpu" = { path = "../genet/components/webgl-wgpu" }
+livery = { path = "../genet/components/livery" }
+workbench = { path = "../genet/components/workbench" }
+"scrying-engine" = { path = "../genet/components/inker/engines/scrying-engine" }
+# Also missing before: patched workbench/cambium reach genet-probe by path
+# while mere's root pins it from git, which is two copies of one crate.
+"genet-probe" = { path = "../genet/components/genet-probe" }
 # Moved here from [patch.crates-io] 2026-08-24: mere git-deps illume from
 # genet.git, so the crates-io entry never bound and cargo reported it as an
 # unused patch while the build silently used the git checkout.
