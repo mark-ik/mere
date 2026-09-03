@@ -80,6 +80,21 @@ A negative answer is a valid outcome and is written up the same way.
   tables, and code excluded), 2,500 kept, about 187k words, each paired with
   the paragraph before it. The contrast arm is subsampled to the prompt
   corpus's token budget so the comparison is about voice, not volume.
+- **Held-out loss on the tiny fixture is a noisy target.** (Phase 1,
+  2026-09-03.) The fixture's near-uniform untrained weights make raw
+  cross-entropy a far noisier objective than the ranking tally the earlier
+  receipts use; a `v_proj`-only adapter at the receipts' learning rate
+  plateaued within noise of the baseline, and a reproducible held-out
+  decrease needed `q_proj` added and the learning rate an order of magnitude
+  lower (0.02), where every combination of 200–400 steps and 0.015–0.025
+  passed. The fixture proves the objective's mechanics; it says nothing about
+  a real model, which is Phase 2's job.
+- **Full-sequence logits set the batch size on a real model.** The objective
+  materializes `[batch, seq, vocab]` logits in f32; at SmolLM2's 49,152-token
+  vocabulary and sequence 256 that is 50 MB per case, so the harness trains
+  in mini-batches and measures held-out loss in chunks rather than one
+  full-batch step. Phase 1 left the Adam loop full-batch with the resampling
+  point named; Phase 2 adds the loop.
 - **The receipt schema has one metric.** `EvalMetric::RankingAt` is the only
   variant; held-out loss and rule adherence do not fit it. The experiment
   records its results as a dated testing doc with a JSON sidecar, the way the
@@ -176,3 +191,16 @@ has been run.
   and ruled: SmolLM2-135M first; E1 his prompts, E2 the workspace voice, his
   wider writing deferred; sixty blind pairs. Phase 1 started the same day;
   the prompt corpus is being extracted locally alongside it.
+- **2026-09-03:** Phase 1 landed in esp: `SequenceCase` (prompt, response;
+  tokenized prompt, response, EOS from `config.json`); right-padding with a
+  loss mask under the causal decoder; `train_peft_lora_autodiff_sequences`
+  sharing init, the Adam loop, and the serializer with the single-token
+  trainer through one `run_adam_loop`; `sequence_loss` for held-out
+  measurement on any loaded `DecoderModel` (`DecoderProvider::model()` added
+  as the smallest accessor). Tests: padded batch equals the token-weighted
+  mean of unpadded cases; a one-token response reproduces the single-token
+  objective once the EOS target is accounted for; gradient check on the
+  sequence objective; held-out strict decrease on a synthetic rule on CPU
+  and on the discrete GPU; the adapter loads through the unchanged loader.
+  esp 129 lib tests plus receipts green with `decoder-autodiff,decoder-wgpu`,
+  the `decoder-lora` suite unchanged, strict Clippy and fmt clean.

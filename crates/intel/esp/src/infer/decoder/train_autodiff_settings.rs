@@ -35,6 +35,32 @@ pub const TRAINED_PEFT_VERSION_AUTODIFF: &str = "esp-trainer-v1";
 /// [`TRAINED_PEFT_VERSION_AUTODIFF`], in the form the adapter loader checks.
 pub const TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF: &str = "peft-esp-trainer-v1";
 
+/// One supervised whole-response case: a rendered prompt and the response it
+/// should be followed by.
+///
+/// Tokenization contract (see [`super::train_autodiff::train_peft_lora_autodiff_sequences`]
+/// for the code): the case tokenizes to prompt tokens, then response tokens,
+/// then the model's EOS token id, in that order — so the model is taught to
+/// stop after the response, not merely to continue it. Cases may differ in
+/// length; the trainer right-pads the batch to the longest.
+///
+/// This is [`super::train::TrainingCase`]'s whole-span generalization:
+/// `TrainingCase`'s one supervised position is the degenerate instance here,
+/// at `response` of one token — except that even then the two are not the
+/// same number, because this trainer's EOS rule adds a second supervised
+/// target `TrainingCase` never had. See the sequence trainer's tests for the
+/// exact accounting.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SequenceCase {
+    /// The rendered prompt. Never supervised: the loss excludes every
+    /// prompt position, the same way `TrainingCase` never supervises
+    /// anything before its last token.
+    pub prompt: String,
+    /// The response the prompt should produce. May be empty; the case is
+    /// still supervised on the EOS token that follows it.
+    pub response: String,
+}
+
 /// Explicit hyperparameters for the v1 autodiff LoRA trainer.
 ///
 /// There is deliberately no `Default`, v0's rule: every value is part of the

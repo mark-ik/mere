@@ -70,10 +70,13 @@ pub use train::{
 // must be able to name a v1 adapter's version and settings on a build that
 // will never train one. Only the function is behind `decoder-autodiff`.
 #[cfg(feature = "decoder-autodiff")]
-pub use train_autodiff::train_peft_lora_autodiff;
+pub use train_autodiff::{
+    sequence_loss, train_peft_lora_autodiff, train_peft_lora_autodiff_sequences,
+};
 #[cfg(feature = "decoder-lora")]
 pub use train_autodiff_settings::{
-    AutodiffLoraSettings, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TRAINED_PEFT_VERSION_AUTODIFF,
+    AutodiffLoraSettings, SequenceCase, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
+    TRAINED_PEFT_VERSION_AUTODIFF,
 };
 
 /// The device vocabulary hosts select from, re-exported so a composition

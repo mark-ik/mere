@@ -180,6 +180,23 @@ impl DecoderProvider {
         Ok(Self::from_parts(model, tokenizer, model_id, loader))
     }
 
+    /// The decoder body itself, for callers that need to reach past the
+    /// portable [`InferenceProvider`] seam.
+    ///
+    /// The sequence trainer's held-out evaluation (`sequence_loss`, behind
+    /// `decoder-autodiff`) is the reason this exists: it has to run the
+    /// exact training objective — the real forward, the real padded-batch
+    /// loss mask — against a session a `PeftLoraAdapterLoader` produced,
+    /// base or adapted, and `InferenceProvider` has no notion of that
+    /// objective to widen. A borrowed reference is the smallest surface
+    /// that unblocks it: nothing about ownership of the model needs to
+    /// move, and every existing `DecoderProvider` construction path is
+    /// unaffected. Not linked by name because it lives behind a feature
+    /// this module does not require.
+    pub fn model(&self) -> &DecoderModel {
+        &self.model
+    }
+
     /// Full vocabulary logits for the token immediately following a rendered
     /// prompt. This decoder-specific diagnostic supports numerical adapter and
     /// backend receipts without widening the portable provider trait.
