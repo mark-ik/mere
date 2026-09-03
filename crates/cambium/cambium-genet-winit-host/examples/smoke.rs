@@ -16,7 +16,7 @@
 //! headed-verify pass want:
 //!
 //! ```text
-//! HOST_SMOKE_SCENARIO=components/cambium/cambium-genet-winit-host/examples/smoke.scn \
+//! HOST_SMOKE_SCENARIO=crates/cambium/cambium-genet-winit-host/examples/smoke.scn \
 //! HOST_SMOKE_RECEIPT=smoke.receipt \
 //!   cargo run -p cambium-genet-winit-host --example smoke
 //! ```

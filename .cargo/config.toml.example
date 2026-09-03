@@ -35,17 +35,20 @@
 # outside the workspace. genet-render-host is the sharpest case — used only by
 # ports/graphshell/web, which is why the note above it exists.
 
+# 2026-09-03 (platform boundary plan, P2): the Cambium family, Workbench and
+# mere-surface-api landed in mere as workspace members, so every entry that
+# redirected one of them is GONE from both tables below. Patching a git or
+# crates.io source at a path that is also a workspace member is a hard lockfile
+# collision, not a warning. The names removed here, and which may never return:
+# cambium, cambium-genet-winit-host, sprigging, workbench, mere-surface-api
+# (genet table) and cambium, sprigging (crates-io table). The four crates the
+# same plan landed on 2026-09-03 under P3 — pelt, tabard, knot-editor-host and
+# mere-document-lanes — are under the same prohibition.
+
 [patch."https://github.com/merely-made/genet.git"]
 "engine-observables-api" = { path = "../genet/components/shared/engine-observables-api" }
 "layout-dom-api" = { path = "../genet/components/shared/layout-dom" }
 "genet-host-api" = { path = "../genet/components/genet-host-api" }
-# The application half genet's P1 split out of genet-host-api (genet
-# 57bcc38fdae). It must be listed for the same reason genet-render-host is:
-# patched `cambium` reaches it by workspace path, mere's knot-document and
-# distillery reach it by git, and two copies of one crate is an E0308 on
-# `SurfaceDescriptor`, not a resolution failure — the missing-entry trap in its
-# duplicate-crate form.
-"mere-surface-api" = { path = "../genet/components/mere-surface-api" }
 fleece = { path = "../genet/components/fleece" }
 "genet-livery" = { path = "../genet/components/genet-livery" }
 "genet-scripted-dom" = { path = "../genet/components/genet-scripted-dom" }
@@ -80,7 +83,6 @@ nematic = { path = "../genet/components/nematic" }
 "genet-winit-host" = { path = "../genet/components/genet-winit-host" }
 "genet-scripted" = { path = "../genet/components/genet-scripted" }
 "document-session-api" = { path = "../genet/components/shared/document-session-api" }
-"cambium-genet-winit-host" = { path = "../genet/components/cambium/cambium-genet-winit-host" }
 "script-runtime-api" = { path = "../genet/components/script-runtime-api" }
 "script-engine-api" = { path = "../genet/components/script-engine-api" }
 "script-engine-boa" = { path = "../genet/components/script-engine-boa" }
@@ -89,10 +91,8 @@ nematic = { path = "../genet/components/nematic" }
 "servo-paint" = { path = "../genet/components/paint" }
 "servo-webgl-wgpu" = { path = "../genet/components/webgl-wgpu" }
 livery = { path = "../genet/components/livery" }
-workbench = { path = "../genet/components/workbench" }
 "scrying-engine" = { path = "../genet/components/inker/engines/scrying-engine" }
-# Also missing before: patched workbench/cambium reach genet-probe by path
-# while mere's root pins it from git, which is two copies of one crate.
+# Named for the same missing-entry reason as genet-render-host.
 "genet-probe" = { path = "../genet/components/genet-probe" }
 # Moved here from [patch.crates-io] 2026-08-24: mere git-deps illume from
 # genet.git, so the crates-io entry never bound and cargo reported it as an
@@ -102,8 +102,6 @@ illume = { path = "../genet/components/illume" }
 errand = { path = "../genet/components/errand" }
 # Adopted into genet 2026-07-23 (repo consolidation).
 netfetcher = { path = "../genet/components/netfetcher" }
-cambium = { path = "../genet/components/cambium/cambium" }
-sprigging = { path = "../genet/components/cambium/sprigging" }
 
 [patch."https://github.com/merely-made/netrender.git"]
 netrender = { path = "../netrender/netrender" }
@@ -127,12 +125,6 @@ p2panda-stream = { path = "../../crates/p2panda/p2panda-stream" }
 p2panda-sync = { path = "../../crates/p2panda/p2panda-sync" }
 layout-dom-api = { path = "../genet/components/shared/layout-dom" }
 tinct = { path = "../genet/components/tinct" }
-# pelt-desktop consumes the PUBLISHED cambium stack, which the git-source patch
-# above cannot catch; the published chain drags a second Stylo lineage that
-# collides with genet-stylo on `links = "servo_style_crate"`. Redirect the
-# crates.io source at genet's own copies so exactly one Stylo is in the graph.
-cambium = { path = "../genet/components/cambium/cambium" }
-sprigging = { path = "../genet/components/cambium/sprigging" }
 
 # Every entry below is live: signalman consumes this whole family from the
 # neighbouring Retinue checkout. They read as unused in any ordinary workspace

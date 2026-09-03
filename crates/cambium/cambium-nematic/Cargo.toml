@@ -5,7 +5,7 @@ description = "Cambium-native views and themes for Nematic smolweb content"
 edition.workspace = true
 rust-version = "1.92"
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+repository.workspace = true
 readme = "README.md"
 publish = true
 
@@ -18,5 +18,5 @@ cambium = { version = "0.3.0", path = "../cambium" }
 errand = { workspace = true }
 
 [dev-dependencies]
-layout_dom_api = { package = "layout-dom-api", path = "../../shared/layout-dom" }
-genet-scripted-dom = { path = "../../genet-scripted-dom" }
+layout_dom_api = { workspace = true }
+genet-scripted-dom = { workspace = true }

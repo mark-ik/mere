@@ -1,12 +1,14 @@
 [package]
 name = "mere-surface-api"
 version = "0.1.0"
-repository = "https://github.com/merely-made/genet"
+repository.workspace = true
 publish = true
 authors.workspace = true
 license.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# Inline: genet's workspace supplied this and mere's does not. The value is
+# genet's 1.86.0, unchanged — the move is not an MSRV decision.
+rust-version = "1.86.0"
 description = "Application host contracts above Genet: the settings projection and product surface admission vocabulary. Mere's half of the former genet-host-api, homed here until the platform boundary plan moves it."
 keywords = ["mere", "host", "settings", "surface", "contract"]
 categories = ["gui", "api-bindings"]

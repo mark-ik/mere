@@ -5,7 +5,7 @@ description = "The browser event source for a Cambium application host: DOM even
 edition.workspace = true
 rust-version = "1.92"
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+repository.workspace = true
 # Same posture as the winit event source: it rides Genet's retained
 # Livery/Buckram host integration, which remains unpublished. Consumers take it
 # from genet.git by branch.
@@ -15,8 +15,8 @@ publish = false
 # The stock this is grafted onto. Everything below is what a browser adds.
 cambium-rootstock = { version = "0.1.0", path = "../cambium-rootstock" }
 cambium = { version = "0.3.3", path = "../cambium" }
-genet-render-host = { path = "../../genet-render-host" }
-genet-scripted-dom = { path = "../../genet-scripted-dom" }
+genet-render-host = { workspace = true }
+genet-scripted-dom = { workspace = true }
 netrender = { workspace = true }
 wgpu = { workspace = true }
 

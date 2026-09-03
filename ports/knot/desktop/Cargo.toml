@@ -19,12 +19,14 @@ name = "knot"
 path = "src/main.rs"
 
 [dependencies]
-cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
+# A mere workspace member since 2026-09-03 (platform boundary plan, P2), so a
+# relative path rather than a git pin.
+cambium-genet-winit-host = { path = "../../../crates/cambium/cambium-genet-winit-host" }
 knot-document = { path = "../../knot-document" }
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a", version = "=0.1.0" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "a93189b1d7c7d468e110b5638cccd4b60251a480", version = "=0.1.0" }
 
 [dev-dependencies]
-genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
+genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "a93189b1d7c7d468e110b5638cccd4b60251a480" }
 tempfile = "3"
 
 # ─── Restated root patches (nothing is inherited by a standalone workspace) ──
@@ -35,10 +37,10 @@ tempfile = "3"
 # Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
 # inherited by consumers, so this manifest restates the same immutable Genet
 # revision.
-taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
+taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "a93189b1d7c7d468e110b5638cccd4b60251a480" }
 # Same restatement, same reason: genet-livery is built against Genet's Parley
 # fork (its `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`
 # do not exist in published parley 0.10.0, which carries the same version
 # number). Missing this is invisible while a consumer resolves a *published*
 # genet-livery, and a compile error the moment it resolves the working copy.
-parley = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
+parley = { git = "https://github.com/merely-made/genet.git", rev = "a93189b1d7c7d468e110b5638cccd4b60251a480" }

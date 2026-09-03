@@ -5,7 +5,7 @@ description = "The stock a Cambium application host is grafted onto: input vocab
 edition.workspace = true
 rust-version = "1.92"
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+repository.workspace = true
 # Same posture as cambium-genet-winit-host, which this was carved out of: it
 # rides genet-livery and genet-render, which inherit genet's publish = false.
 # Consumers take it from genet.git by branch.
@@ -18,17 +18,17 @@ publish = false
 cambium = { version = "0.3.3", path = "../cambium" }
 # Retained Livery/Buckram layout and its visual caret vocabulary are core host
 # machinery, not an event-source concern.
-genet-livery = { path = "../../genet-livery" }
-genet-render = { path = "../../genet-render" }
+genet-livery = { workspace = true }
+genet-render = { workspace = true }
 # The DOM the host lays out and routes against, and the leaf registry a
 # custom-paint leaf describes itself through. Both are host machinery, not
 # event-source concerns.
-genet-scripted-dom = { path = "../../genet-scripted-dom" }
+genet-scripted-dom = { workspace = true }
 sprigging = { version = "0.2.1", path = "../sprigging" }
 # The present core, which is already windowing-neutral: `SurfaceHost` is a
 # `RenderCore` plus a window surface, and the browser presenter assembles
 # the same pair by hand against a canvas.
-genet-render-host = { path = "../../genet-render-host" }
+genet-render-host = { workspace = true }
 netrender = { workspace = true }
 wgpu = { workspace = true }
 # The view layer the host runs, its overlay-scrollbar fade clock, and the paint
@@ -37,7 +37,7 @@ meristem = { version = "0.2.0", path = "../meristem" }
 cambium-winit = { version = "0.3.0", path = "../cambium-winit" }
 paint_list_api = { workspace = true }
 paint_list_render = { workspace = true }
-layout_dom_api = { package = "layout-dom-api", path = "../../shared/layout-dom" }
+layout_dom_api = { workspace = true }
 # The host clock. `std::time::Instant::now()` compiles for
 # wasm32-unknown-unknown and panics when called, so a browser host built on
 # std time would pass every type check and die on its first frame. web_time
