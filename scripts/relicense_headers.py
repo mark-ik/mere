@@ -333,14 +333,18 @@ def main():
     if args.apply:
         # Invariant 7: never sweep a dirty tree. Another lane's in-flight files
         # would receive headers that then ride into that lane's commit, or be
-        # swept into this one. Learned on genet, 2026-09-03.
-        dirty = subprocess.run(
+        # swept into this one. Learned on genet, 2026-09-03. The check covers
+        # the files this tool writes, tracked sources with a comment token:
+        # the sweep's own ledger, manifest, LICENSE and README edits precede
+        # --apply by design and must not trip it (learned on mora, same day).
+        status = subprocess.run(
             ["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=no"],
             capture_output=True, text=True, check=True,
-        ).stdout.strip()
+        ).stdout.splitlines()
+        dirty = [l for l in status if Path(l[3:].strip().strip('"')).suffix in COMMENT]
         if dirty:
-            print("refusing --apply: the tree has uncommitted changes (invariant 7):")
-            print(dirty)
+            print("refusing --apply: source files have uncommitted changes (invariant 7):")
+            print("\n".join(dirty))
             return 2
 
     skips = load_ledger(repo)
