@@ -1,9 +1,10 @@
 # Distillery Projection Walk Plan
 
 **Date:** 2026-09-02
-**Status:** W0 landed 2026-09-02 (fixtures under test; the headless surface
-drive written but unverified behind a local-checkout blocker, see Progress);
-W1 not opened. §2 was read at mere `77a3701f052` and corrected at `3ce750f5`
+**Status:** W0 complete — landed 2026-09-02, all three tests verified in the
+real crate 2026-09-03 once mere's surface imports followed the
+`mere-surface-api` split; W1 held until the boundary migration's P2/P3 moves
+settle (Progress, 2026-09-03). §2 was read at mere `77a3701f052` and corrected at `3ce750f5`
 by the W0 implementation, which read the code rather than this plan.
 **Scope:** the first end-to-end scene binding for a port — dataset → scene →
 Scenograph → host — walked on Distillery. This plan owns the walk; the
@@ -162,8 +163,8 @@ because Turnstone admits the surface through a *pinned* mere revision in
 another repository).
 *Done when:* both fixtures exist under test, and a bare scenario drives the
 installed surface end to end. Nothing rendered yet.
-*State:* the fixtures exist and their tests are proven; the surface drive is
-written and could not be run in this checkout (Progress, 2026-09-02).
+*State:* complete. All three tests pass in the real crate as of 2026-09-03
+(Progress).
 
 **W1. The endpoint.** `ports/distillery` implements `ProjectionCatalog`,
 `ProjectionSource`, and `ResumableProjectionSource` over the board and the
@@ -293,3 +294,21 @@ runs onto the board. Not opened before that.
   `cargo test -p distillery --test walk_fixtures` twice once mere's surface
   imports follow the `mere-surface-api` split. §2 corrected in five places
   by the same pass.
+- 2026-09-03: **W0 verified in the real crate; W1 held.** Mere was repointed
+  to genet head after P1 (`487e18a4`), `surface.rs` now imports from
+  `mere_surface_api`, `cargo check -p distillery` is clean, and
+  `cargo test -p distillery --test walk_fixtures` passes 3 of 3 — the
+  headless surface drive included. A second run minutes later could not
+  resolve at all: the local genet checkout was mid-edit and `cambium`'s
+  manifest inherited a `mere-surface-api` entry its workspace no longer
+  declared. That is the boundary plan's P2/P3 (Cambium and the surface
+  contracts moving toward Mere) in flight, not a regression; the determinism
+  receipt for the fixtures already stands from the probe (three processes,
+  byte-equality). W1's endpoint would build against exactly the crates that
+  are moving, so it is held until those moves settle rather than written
+  twice; its brief is ready: `ProjectionCatalog::describe`,
+  `ProjectionSource::snapshot` with `SceneSnapshot::from_dense`,
+  `PresentationSource::resource`, `ResumableProjectionSource::resume`, the
+  `LiveEndpoint` pattern in `ports/graphshell/src/live_endpoint.rs`,
+  `Arrangement::Timeline` with `ScoreItem.axis: Option<AxisValue>`, and
+  registration through `ResidentEndpointCatalog::register_resumable_notifying`.
