@@ -226,6 +226,14 @@ impl BrowserHost {
             mere::canvas::PhysicsKindSource::parse(&scene.physics_kind_source)
                 .unwrap_or(mere::canvas::PhysicsKindSource::Site),
         );
+        self.canvas.set_physics_mass_source(
+            mere::canvas::PhysicsMassSource::parse(&scene.physics_mass_source)
+                .unwrap_or(mere::canvas::PhysicsMassSource::Degree),
+        );
+        self.canvas.set_physics_depth_source(
+            mere::canvas::PhysicsDepthSource::parse(&scene.physics_depth_source)
+                .unwrap_or(mere::canvas::PhysicsDepthSource::Roots),
+        );
         self.canvas.set_physics_overlays(
             scene
                 .physics_overlays
@@ -459,6 +467,8 @@ impl BrowserHost {
                 .map(|overlay| overlay.id().to_string())
                 .collect(),
             physics_kind_source: self.canvas.physics_kind_source().id().to_string(),
+            physics_mass_source: self.canvas.physics_mass_source().id().to_string(),
+            physics_depth_source: self.canvas.physics_depth_source().id().to_string(),
             arrangement_pull: self.canvas.arrangement_pull(),
             camera_offset: camera.offset,
             camera_zoom: camera.zoom,

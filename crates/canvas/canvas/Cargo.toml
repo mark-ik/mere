@@ -43,6 +43,11 @@ serde_json = "1"
 # `build::{sync_sim_with_graph, coupling_force_from_graph}` — the adapters that
 # replaced seiche's removed `kernel-bridge` wrappers when seiche was extracted.
 seiche.workspace = true
+# The algorithm shelf behind the physics catalog's attribute builders (a
+# colouring, PageRank, feedback-arc + toposort layering, dominators, the
+# spanning tree, weighted shortest paths), run over a view built from the
+# visible edges. The same petgraph the kernel's graph is backed by.
+petgraph = "0.8.3"
 # The graph-structural signal producer (intel/signals): degree-based importance now (the
 # size-by-importance encoding reads it), richer signals later. (Graph signals.)
 signals.workspace = true

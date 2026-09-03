@@ -1,7 +1,7 @@
 # Physics Catalog Plan
 
 **Date:** 2026-09-02
-**Status:** in progress (P1 landed 2026-09-02; P2 next).
+**Status:** in progress (P1 landed 2026-09-02, P1b the petgraph sources 2026-09-03; P2 next).
 **Scope:** A catalog of *distinct physics layout laws* — dynamical systems
 over the graph's bodies that produce different layouts because they are
 different physics — as a lever beside the arrangement catalog, plus the
@@ -210,7 +210,37 @@ scene opens as Springs); the web host saves them from the canvas and
 re-applies them on restore. The web-side restore/save edit
 (`web_product.rs`) is wasm-only and could not be compiled this session:
 the clean genet worktree the web build reads from
-(`worktrees/genet-head`) is gone from disk (see Findings).
+(`worktrees/genet-head`) is gone from disk (see Findings). *2026-09-03:*
+the worktree was recreated at the `577e2471e97` pin and the wasm check
+passed; P1 is fully verified.
+
+**P1b — the petgraph sources (ruled 2026-09-03, landed the same day).**
+The kernel's graph is a petgraph 0.8.3 `StableGraph` behind chartulary,
+and petgraph's algorithm shelf maps onto the attributes the laws and
+overlays already snapshot, so it joins the catalog as *sources* (where an
+attribute is read from — tunables, not laws). The canvas builds a
+[`TopologyView`] over the **visible** edges (a directed multigraph, one
+edge per relation cell; an undirected simple graph with cost
+`1 / multiplicity`), so hidden relations relax the physics as they relax
+the springs, and runs: `dsatur_coloring` and `tarjan_scc` for two more
+kind sources (**By colouring**: a kind never touches its own kind; **By
+island**: each component a kind); `page_rank` as a **mass source** for
+Orbit and the hub overlays (`PhysicsMassSource::{Degree, PageRank}`;
+seiche's `HubGravity` / `DegreeRepulsion` gain `with_weights`);
+`greedy_feedback_arc_set` + `toposort` longest-path layering and
+`dominators::simple_fast` as two more **depth sources**
+(`PhysicsDepthSource::{Roots, Layers, Focus}`); `min_spanning_tree` as
+the **Skeleton** overlay (tree edges stiff, via `StressSpring` at one
+hop) with a `skeleton` profile over Charge; and per-node `dijkstra` for
+the Stress law's distance table, so a pair joined by three relations sits
+at a third of a hop (seiche's `StressSpring::from_weighted_distances`).
+`SavedSceneV1` gains `physics_mass_source` and `physics_depth_source`
+with defaults. Four more catalog tests (a path two-colours and islands
+separate; the hub outranks its linkers and weights average one; layers
+survive a cycle and dominators count from the focus, the unreachable node
+one below the deepest; the tree takes the thrice-joined pair and Stress
+reads it as a third of a hop). seiche 74/74, canvas 192/192, graphshell
+scene tests 6/6, wasm check green.
 
 **P2 — the levers in both hosts, with a receipt per law.** The product
 panel gains a law picker, overlay toggles and a profile picker beside the
@@ -309,6 +339,21 @@ and the native host shows the same by hand.
   compared bytes are a graph snapshot that carries `timestamp_secs`, so a
   second boundary between the two serializations breaks it. Pre-existing,
   not touched here.
+- 2026-09-03 (P1b): the kernel's petgraph is `pub(crate)` inside
+  `chartulary::Graph`, and the signals crate reaches it only through a
+  two-method `TopologyView` trait (keys + undirected neighbours), so the
+  canvas builds its own petgraph view from the visible edge list rather
+  than borrowing the kernel's. Linear in the graph, rebuilt per force
+  rebuild, and it respects hidden relations, which the kernel's inner
+  graph could not.
+- 2026-09-03 (P1b): the Focus depth source snapshots the focused node at
+  build; a selection change alone does not rebuild the forces (only a
+  topology change or a source switch does). Open: whether a focus change
+  under the Depth overlay should rebuild — a small P2 item if the receipt
+  shows it matters.
+- 2026-09-03 (P1b): asserting the same relation kind twice between a pair
+  is idempotent in the kernel, so a multiplicity fixture must lay distinct
+  kinds; the catalog tests' `wired` helper cycles through four.
 
 ## 5. Decisions
 
@@ -329,6 +374,13 @@ does not see; adding it means threading the family per node down as an
 attribute, which is a small P2 item if wanted. A long tail of sites folds
 into eight kinds (particle life reads best with a handful).
 
+Ruled 2026-09-03: the petgraph shelf joins as sources, all four packs
+(kinds by colouring + island, mass by PageRank, depth by layers +
+dominators, the Skeleton overlay + weighted Stress), landed before the
+pickers as P1b so P2 exposes every source in one pass. Not taken:
+matching, a Steiner tree over the selection, cliques as groups — no
+inference carried.
+
 ## Progress
 
 - 2026-09-02: assessed against the crates and the donor's archived docs;
@@ -340,3 +392,8 @@ into eight kinds (particle life reads best with a handful).
   pre-existing clock flake, see Findings), graphshell scene tests 6/6
   under `web,personal-sync,native`. The wasm check of the web host's
   restore/save edit is blocked on the missing genet worktree.
+- 2026-09-03: the genet worktree recreated at the pin, the P1 wasm check
+  green; P1b landed — the petgraph sources (two kind sources, a mass
+  source, two depth sources, the Skeleton overlay, weighted Stress) and
+  their saved-scene fields; seiche 74/74, canvas 192/192, graphshell
+  scene tests 6/6, wasm check green.

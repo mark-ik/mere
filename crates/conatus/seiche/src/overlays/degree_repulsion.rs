@@ -6,25 +6,31 @@
 
 //! Degree repulsion: hubs push their surroundings apart.
 //!
-//! Extra separation from every node scaled by `ln(degree + 1)`, within a
-//! radius, so a well-connected node clears room for the spokes it will draw
-//! in. The donor's `DegreeRepulsion` extra, over any law. The falloff is
-//! `1/d`, not `1/d²`: it has to still be felt at spring length (the springs
-//! hold spokes at ~170 under [`EdgeSpring`](crate::EdgeSpring)'s default),
-//! where an inverse-square push sized safely for close range is nothing.
+//! Extra separation from every node scaled by its weight — `ln(degree + 1)`
+//! from the edges unless the host supplies its own — within a radius, so a
+//! well-connected node clears room for the spokes it will draw in. The
+//! donor's `DegreeRepulsion` extra, over any law. The falloff is `1/d`, not
+//! `1/d²`: it has to still be felt at spring length (the springs hold spokes
+//! at ~170 under [`EdgeSpring`](crate::EdgeSpring)'s default), where an
+//! inverse-square push sized safely for close range is nothing.
+
+use std::collections::HashMap;
 
 use rapier2d::prelude::*;
 
 use crate::laws::{degrees, node_positions};
-use crate::{Force, ForceContext};
+use crate::{Force, ForceContext, NodeKey};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct DegreeRepulsion {
-    /// Push at unit distance per unit of log degree.
+    /// Push at unit distance per unit of weight.
     pub strength: f32,
     /// Beyond this a hub pushes nothing.
     pub radius: f32,
     pub min_distance: f32,
+    /// The host's per-node weights; `None` reads `ln(degree + 1)` from the
+    /// edges each tick.
+    weights: Option<HashMap<NodeKey, f32>>,
 }
 
 impl Default for DegreeRepulsion {
@@ -33,18 +39,40 @@ impl Default for DegreeRepulsion {
             strength: 40_000.0,
             radius: 400.0,
             min_distance: 8.0,
+            weights: None,
         }
+    }
+}
+
+impl DegreeRepulsion {
+    /// Use these weights instead of log degree — a node absent here pushes
+    /// nothing.
+    pub fn with_weights(mut self, weights: impl IntoIterator<Item = (NodeKey, f32)>) -> Self {
+        self.weights = Some(weights.into_iter().collect());
+        self
     }
 }
 
 impl Force for DegreeRepulsion {
     fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
         let nodes = node_positions(ctx);
-        let degree = degrees(ctx.edges);
+        let weights: Vec<f32> = match &self.weights {
+            Some(map) => nodes
+                .iter()
+                .map(|(key, _, _)| map.get(key).copied().unwrap_or(0.0).max(0.0))
+                .collect(),
+            None => {
+                let degree = degrees(ctx.edges);
+                nodes
+                    .iter()
+                    .map(|(key, _, _)| ((degree.get(key).copied().unwrap_or(0) + 1) as f32).ln())
+                    .collect()
+            }
+        };
         let radius2 = self.radius * self.radius;
         let mut forces = vec![Vector::ZERO; nodes.len()];
         for i in 0..nodes.len() {
-            let weight = ((degree.get(&nodes[i].0).copied().unwrap_or(0) + 1) as f32).ln();
+            let weight = weights[i];
             if weight <= 0.0 {
                 continue;
             }
@@ -71,7 +99,7 @@ impl Force for DegreeRepulsion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Boundary, EdgeSpring, NodeExclusion, NodeKey, Simulation};
+    use crate::{Boundary, EdgeSpring, NodeExclusion, Simulation};
     use euclid::default::Point2D;
 
     /// A hub's spokes end further from it with the overlay than without.
@@ -82,13 +110,8 @@ mod tests {
             let mut sim = Simulation::new();
             sim.sync_nodes(keys.iter().enumerate().map(|(i, &k)| {
                 let a = i as f32 * 1.2;
-                (
-                    k,
-                    Point2D::new(
-                        60.0 * a.cos() * (i > 0) as u8 as f32,
-                        60.0 * a.sin() * (i > 0) as u8 as f32,
-                    ),
-                )
+                let r = if i > 0 { 60.0 } else { 0.0 };
+                (k, Point2D::new(r * a.cos(), r * a.sin()))
             }));
             sim.sync_edges(
                 keys[1..]

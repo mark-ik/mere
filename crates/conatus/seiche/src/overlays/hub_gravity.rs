@@ -7,20 +7,26 @@
 //! Hub gravity: everything is drawn toward the hubs.
 //!
 //! Each node is pulled toward every other node in proportion to that node's
-//! `ln(degree + 1)` and inversely to distance, so high-degree nodes become
-//! attractors and the picture reads hub-and-spoke. The donor's `HubGravity`
-//! extra (its constellation preset), over any law.
+//! weight and inversely to distance, so heavy nodes become attractors and the
+//! picture reads hub-and-spoke. The weight is `ln(degree + 1)` from the
+//! edges unless the host supplies its own (PageRank, say). The donor's
+//! `HubGravity` extra (its constellation preset), over any law.
+
+use std::collections::HashMap;
 
 use rapier2d::prelude::*;
 
 use crate::laws::{degrees, node_positions};
-use crate::{Force, ForceContext};
+use crate::{Force, ForceContext, NodeKey};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct HubGravity {
-    /// Pull at unit distance per unit of a hub's log degree.
+    /// Pull at unit distance per unit of a hub's weight.
     pub strength: f32,
     pub min_distance: f32,
+    /// The host's per-node weights; `None` reads `ln(degree + 1)` from the
+    /// edges each tick.
+    weights: Option<HashMap<NodeKey, f32>>,
 }
 
 impl Default for HubGravity {
@@ -28,18 +34,37 @@ impl Default for HubGravity {
         Self {
             strength: 2_000.0,
             min_distance: 30.0,
+            weights: None,
         }
+    }
+}
+
+impl HubGravity {
+    /// Use these weights instead of log degree — a node absent here weighs
+    /// nothing. Sized so the mean is about one, like log degree on a sparse
+    /// graph, they pull as the default does.
+    pub fn with_weights(mut self, weights: impl IntoIterator<Item = (NodeKey, f32)>) -> Self {
+        self.weights = Some(weights.into_iter().collect());
+        self
     }
 }
 
 impl Force for HubGravity {
     fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
         let nodes = node_positions(ctx);
-        let degree = degrees(ctx.edges);
-        let weights: Vec<f32> = nodes
-            .iter()
-            .map(|(key, _, _)| ((degree.get(key).copied().unwrap_or(0) + 1) as f32).ln())
-            .collect();
+        let weights: Vec<f32> = match &self.weights {
+            Some(map) => nodes
+                .iter()
+                .map(|(key, _, _)| map.get(key).copied().unwrap_or(0.0).max(0.0))
+                .collect(),
+            None => {
+                let degree = degrees(ctx.edges);
+                nodes
+                    .iter()
+                    .map(|(key, _, _)| ((degree.get(key).copied().unwrap_or(0) + 1) as f32).ln())
+                    .collect()
+            }
+        };
         let mut forces = vec![Vector::ZERO; nodes.len()];
         for i in 0..nodes.len() {
             for j in 0..nodes.len() {
@@ -62,7 +87,7 @@ impl Force for HubGravity {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Boundary, EdgeSpring, NodeExclusion, NodeKey, Simulation};
+    use crate::{Boundary, EdgeSpring, NodeExclusion, Simulation};
     use euclid::default::Point2D;
 
     /// Unconnected nodes end nearer a hub with the overlay than without.
@@ -109,6 +134,37 @@ mod tests {
         assert!(
             with < without * 0.85,
             "strays with {with:.0} should be nearer than without {without:.0}"
+        );
+    }
+
+    /// With host weights, the weighted node is the attractor even when it has
+    /// no edges at all.
+    #[test]
+    fn host_weights_name_the_hub() {
+        let keys: Vec<NodeKey> = (0..3).map(NodeKey::new).collect();
+        let mut sim = Simulation::new();
+        sim.set_linear_damping(2.0);
+        sim.sync_nodes([
+            (keys[0], Point2D::new(-200.0, 0.0)),
+            (keys[1], Point2D::new(0.0, 0.0)),
+            (keys[2], Point2D::new(200.0, 0.0)),
+        ]);
+        sim.sync_edges(Vec::<(NodeKey, NodeKey)>::new());
+        sim.set_forces(vec![Box::new(
+            HubGravity::default().with_weights([(keys[2], 3.0)]),
+        )]);
+        for _ in 0..300 {
+            sim.tick(1.0 / 60.0);
+        }
+        let far = sim.position_of(keys[0]).unwrap().x;
+        assert!(
+            far > -190.0,
+            "the stray moved toward the weighted node: {far:.0}"
+        );
+        let hub = sim.position_of(keys[2]).unwrap().x;
+        assert!(
+            (hub - 200.0).abs() < 1.0,
+            "the weighted node itself feels nothing: {hub:.0}"
         );
     }
 }

@@ -43,11 +43,26 @@ impl StressSpring {
         distances: impl IntoIterator<Item = (NodeKey, NodeKey, u32)>,
         unit_length: f32,
     ) -> Self {
+        Self::from_weighted_distances(
+            distances
+                .into_iter()
+                .map(|(a, b, hops)| (a, b, hops as f32)),
+            unit_length,
+        )
+    }
+
+    /// Springs from a weighted distance table of `(a, b, distance)` in units
+    /// of hops — a host that weights its edges (a pair joined by three
+    /// relations at a third of a hop, say) hands the shortest-path lengths in
+    /// here. Non-positive distances and self-pairs are ignored.
+    pub fn from_weighted_distances(
+        distances: impl IntoIterator<Item = (NodeKey, NodeKey, f32)>,
+        unit_length: f32,
+    ) -> Self {
         Self {
             pairs: distances
                 .into_iter()
-                .filter(|&(a, b, hops)| a != b && hops > 0)
-                .map(|(a, b, hops)| (a, b, hops as f32))
+                .filter(|&(a, b, d)| a != b && d > 0.0 && d.is_finite())
                 .collect(),
             unit_length,
             stiffness: 40.0,

@@ -229,6 +229,12 @@ pub struct SavedSceneV1 {
     /// Where the Kinds law reads a node's kind from (`site`, `cluster`, `degree`).
     #[serde(default = "default_physics_kind_source")]
     pub physics_kind_source: String,
+    /// Where Orbit's masses and the hub overlays' weights come from (`degree`, `pagerank`).
+    #[serde(default = "default_physics_mass_source")]
+    pub physics_mass_source: String,
+    /// Where the Depth overlay reads depth from (`roots`, `layers`, `focus`).
+    #[serde(default = "default_physics_depth_source")]
+    pub physics_depth_source: String,
     pub arrangement_pull: f32,
     pub camera_offset: (f32, f32),
     pub camera_zoom: f32,
@@ -242,6 +248,14 @@ fn default_physics_law() -> String {
 
 fn default_physics_kind_source() -> String {
     mere::canvas::PhysicsKindSource::Site.id().to_string()
+}
+
+fn default_physics_mass_source() -> String {
+    mere::canvas::PhysicsMassSource::Degree.id().to_string()
+}
+
+fn default_physics_depth_source() -> String {
+    mere::canvas::PhysicsDepthSource::Roots.id().to_string()
 }
 
 /// User-selected public card copied from a mounted endpoint into local graph
@@ -825,6 +839,14 @@ mod tests {
             scene.physics_kind_source,
             mere::canvas::PhysicsKindSource::Site.id()
         );
+        assert_eq!(
+            scene.physics_mass_source,
+            mere::canvas::PhysicsMassSource::Degree.id()
+        );
+        assert_eq!(
+            scene.physics_depth_source,
+            mere::canvas::PhysicsDepthSource::Roots.id()
+        );
 
         let chosen = SavedSceneV1 {
             physics_law: mere::canvas::PhysicsLaw::Kinds.id().to_string(),
@@ -833,6 +855,8 @@ mod tests {
                 mere::canvas::PhysicsOverlay::GridSnap.id().to_string(),
             ],
             physics_kind_source: mere::canvas::PhysicsKindSource::Cluster.id().to_string(),
+            physics_mass_source: mere::canvas::PhysicsMassSource::PageRank.id().to_string(),
+            physics_depth_source: mere::canvas::PhysicsDepthSource::Focus.id().to_string(),
             ..scene
         };
         let json = serde_json::to_string(&chosen).expect("encodes");
@@ -926,6 +950,8 @@ mod tests {
             physics_law: "stress.kamada-kawai".to_string(),
             physics_overlays: vec!["grid-snap".to_string()],
             physics_kind_source: "site".to_string(),
+            physics_mass_source: "pagerank".to_string(),
+            physics_depth_source: "layers".to_string(),
             arrangement_pull: 0.4,
             camera_offset: (123.0, 234.0),
             camera_zoom: 1.2,

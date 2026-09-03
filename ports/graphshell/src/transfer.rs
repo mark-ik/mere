@@ -982,6 +982,8 @@ fn remap_scene(scene: &SavedSceneV1, ids: &HashMap<Uuid, Uuid>) -> SavedSceneV1 
         physics_law: scene.physics_law.clone(),
         physics_overlays: scene.physics_overlays.clone(),
         physics_kind_source: scene.physics_kind_source.clone(),
+        physics_mass_source: scene.physics_mass_source.clone(),
+        physics_depth_source: scene.physics_depth_source.clone(),
         arrangement_pull: scene.arrangement_pull,
         camera_offset: scene.camera_offset,
         camera_zoom: scene.camera_zoom,

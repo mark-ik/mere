@@ -202,6 +202,8 @@ impl Canvas {
             physics_law: crate::PhysicsLaw::Springs,
             physics_overlays: Vec::new(),
             physics_kind_source: crate::PhysicsKindSource::Site,
+            physics_mass_source: crate::PhysicsMassSource::Degree,
+            physics_depth_source: crate::PhysicsDepthSource::Roots,
             restored_score_hold: None,
             scope: None,
             fold: None,

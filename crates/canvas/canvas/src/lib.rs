@@ -175,8 +175,10 @@ use physics::Physics;
 /// onto them, and the named profiles. (Physics catalog — P1.)
 pub mod physics_catalog;
 pub use physics_catalog::{
-    CANVAS_PHYSICS_KIND_SOURCES, CANVAS_PHYSICS_LAWS, CANVAS_PHYSICS_OVERLAYS,
-    CANVAS_PHYSICS_PROFILES, PhysicsKindSource, PhysicsLaw, PhysicsOverlay, PhysicsProfile,
+    CANVAS_PHYSICS_DEPTH_SOURCES, CANVAS_PHYSICS_KIND_SOURCES, CANVAS_PHYSICS_LAWS,
+    CANVAS_PHYSICS_MASS_SOURCES, CANVAS_PHYSICS_OVERLAYS, CANVAS_PHYSICS_PROFILES,
+    PhysicsDepthSource, PhysicsKindSource, PhysicsLaw, PhysicsMassSource, PhysicsOverlay,
+    PhysicsProfile,
 };
 
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
@@ -611,6 +613,12 @@ pub struct Canvas {
     /// Where the Kinds law reads a node's kind from (site, cluster, degree) —
     /// the host's choice per scene. (Physics catalog — P1.)
     physics_kind_source: PhysicsKindSource,
+    /// Where Orbit's masses and the hub overlays' weights come from (degree,
+    /// PageRank). (Physics catalog — P1b.)
+    physics_mass_source: PhysicsMassSource,
+    /// Where the Depth overlay reads a node's depth from (roots, layers, the
+    /// focus). (Physics catalog — P1b.)
+    physics_depth_source: PhysicsDepthSource,
     /// A restored score's `(strategy id, graph revision)` claim on the layout.
     /// [`restore_projection_score`](Self::restore_projection_score) buffers the
     /// score's own positions; without this the host's very next

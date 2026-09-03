@@ -1785,6 +1785,8 @@ mod tests {
                     physics_law: "spring.rapier".into(),
                     physics_overlays: Vec::new(),
                     physics_kind_source: "site".into(),
+                    physics_mass_source: "degree".into(),
+                    physics_depth_source: "roots".into(),
                     arrangement_pull: 0.4,
                     camera_offset: (12.0, 24.0),
                     camera_zoom: 1.2,
