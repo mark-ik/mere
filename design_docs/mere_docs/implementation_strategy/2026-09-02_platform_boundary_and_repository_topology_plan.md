@@ -1028,3 +1028,63 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 - 2026-09-03: the license sweep's P2 landed on genet (`957926e4e8a`), which
   satisfies this plan's P2 prerequisite row for the license sweep; the
   quiet-window row is a matter of timing, not completion.
+
+### 2026-09-03
+
+- **mere repointed to genet head after P1** (mere `487e18a478c`). Every
+  genet.git pin moved from `eff0cb6df48`, the revision §9.4 recorded as mere's
+  single source identity, to `388d89c3a64`; `ports/knot/desktop` was two
+  revisions further behind at `da8762fd910` and joins the rest. Thirty-nine pin
+  lines across three manifests at one revision, witnessed by grep and by
+  `cargo metadata` resolving 31 genet-derived packages there and nowhere else.
+- Three of the four split crates reach mere; only one changed code.
+  **`genet-host-api`** is 0.2.0 with the raw engine half alone, and mere names
+  nothing in it, so the workspace pin becomes `mere-surface-api` 0.1.0 and
+  `distillery` and `knot-document` swap crate and import for the six surface
+  types across three files, with no logic change. **`inker`**'s re-export is
+  module for module, so no import path moved and `document-session-api` needs
+  no pin of its own: it arrives transitively at the same revision. **`netfetcher`**
+  needs no source change, because `crates/system/fetch` builds its context only
+  through `FetchContext::permissive()`, so `transport` and `cache_max_body_bytes`
+  default in and the default-on transport features keep the wire.
+  **`genet-documents`** turns out not to be a mere consumer at all, so
+  `mere-document-lanes` is not pinned; mere's own smolweb and gemini lanes are
+  `mere-fetch`'s, over errand. This corrects §9.4's count in one direction and
+  §9.3's expectations in another: mere's exposure to P1 was two crates, not four.
+- The new crate exposed the machine-local patch table's missing-entry trap in
+  its duplicate-crate form. Patched `cambium` reaches `mere-surface-api` by
+  workspace path while `knot-document` reaches it by git, and two copies of one
+  crate is an `E0308` on `SurfaceDescriptor`, not a resolution failure. The
+  entry is added to the committed `.cargo/config.toml.example` with that reason,
+  beside the `genet-render-host` note that records the trap's first form.
+- Genet's head did not compile when this repoint began. The relicense sweep
+  `957926e4e8a` added `PointerButton` to cambium's `lib.rs` re-export without
+  the `pointer.rs` half that defines it, which existed only in a working tree
+  and on no branch: a sweep commit that captured half of an active lane. Genet
+  closed it as `388d89c3a64` and this repoint targets that, so invariant 7 is
+  satisfied by a receiving revision that is green rather than merely public.
+- Receipts. `cargo check --workspace` **unpatched at head** — run from outside
+  the tree so the machine-local patch table does not load, witnessed by
+  `cambium v0.3.3` resolving from `genet.git?rev=388d89c3` rather than a path —
+  is green in 7m 58s with 0 errors and 182 warnings across nine crates, all
+  pre-existing. The ordinary patched run is green in 37s with the same set.
+  `cargo test -p knot-document` passes 9, `cargo test -p distillery` passes 13,
+  `walk_fixtures` among them being a file this change edited. No warning was
+  fixed and none is new.
+- Two consumers stay unproven and open. **`ports/graphshell/web`** was not
+  built: its own `.cargo/config.toml` patches genet to the shared worktree
+  `worktrees/genet-head`, which sits at `577e2471e97`, thirty-seven commits
+  behind head and older than all four P1 commits, so a build there would mix a
+  pre-P1 cambium with head-pinned workbench, taffy and parley. Refreshing that
+  worktree belongs to the lane that owns it, not to this change; its ten pins
+  are repointed and its proof is deferred. **`ports/knot/desktop`** cannot be
+  built standalone at all, for two pre-existing faults this repoint found and
+  deliberately did not fix: it is nested inside the member `ports/knot` yet
+  carries no empty `[workspace]` table, so the root's `exclude` entry cannot
+  reach it and even `--manifest-path` refuses, contradicting the exclude
+  comment's claim that it stays buildable that way; and given such a table it
+  then inherits none of the root's `[patch.crates-io]` restatements, so
+  `genet-livery` resolves published parley 0.10.0 and fails on
+  `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize` —
+  exactly the trap the root manifest's own comment predicts. Its three pins are
+  repointed; making it buildable wants both fixes and is P4 work.
