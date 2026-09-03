@@ -31,7 +31,7 @@ p { margin: 0 0 16px; }
   height: 64px;
   margin: 0 0 16px;
   background-color: #d9b46c;
-  background-image: url("../../../../../../resources/servo_64.png");
+  background-image: url("../../../../../../ports/pelt/examples/resources/servo_64.png");
   background-repeat: no-repeat;
   background-position: center;
 }

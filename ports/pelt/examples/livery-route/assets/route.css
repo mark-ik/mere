@@ -10,7 +10,7 @@
   height: 64px;
   margin: 12px 0;
   background-color: #d9b46c;
-  background-image: url("../../../../../resources/servo_64.png");
+  background-image: url("../../../../../ports/pelt/examples/resources/servo_64.png");
   background-repeat: no-repeat;
 }
 

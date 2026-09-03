@@ -22,13 +22,15 @@ relicensed, and nothing here receives a Merely copyright line.
 | `support/patches/cubek-reduce` | MIT OR Apache-2.0 | [tracel-ai/cubecl](https://github.com/tracel-ai/cubecl) | `LICENSE-MIT`, `LICENSE-APACHE` in-tree |
 | `support/patches/burn-cubecl` | MIT OR Apache-2.0 | [tracel-ai/burn](https://github.com/tracel-ai/burn) | upstream's |
 | `support/patches/burn-remote` | MIT OR Apache-2.0 | [tracel-ai/burn](https://github.com/tracel-ai/burn) | upstream's |
-| `resources` | MPL-2.0 | [servo/servo](https://github.com/servo/servo) (`resources/`), by way of genet | Servo's |
+| `ports/pelt/examples/resources` | MPL-2.0 | [servo/servo](https://github.com/servo/servo) (`resources/`), by way of genet | Servo's |
 
-`resources` holds two Servo logo images that Pelt's example documents
-reference by repository-root relative path. They came with Pelt from genet on
-2026-09-03 and are Servo's work under the same MPL-2.0, so they keep Servo's
-copyright and take no Merely line; genet's own ledger carries the identical
-row. The directory's `README.md` is Mark's and carries the house header.
+`ports/pelt/examples/resources` holds two Servo logo images that Pelt's
+example documents reference by URLs that climb to the repository root and
+descend again. They came with Pelt from genet on 2026-09-03, sat at the
+repository root until later the same day, and are Servo's work under the same
+MPL-2.0, so they keep Servo's copyright and take no Merely line; genet's own
+ledger carries the identical row. The directory's `README.md` is Mark's and
+carries the house header.
 
 384 tracked files. These are vendored patch trees consumed through
 `[patch]`; they are upstream's work carrying upstream's terms.

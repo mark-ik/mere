@@ -867,9 +867,10 @@ mod livery_route_tests {
         assert!(
             resources.resources.iter().any(|resource| {
                 resource.kind == genet_document_resources::ResourceKind::Image
-                    && resource.authored_url == "../../../../../../resources/servo_64.png"
+                    && resource.authored_url
+                        == "../../../../../../ports/pelt/examples/resources/servo_64.png"
                     && resource.resolved_url.replace('\\', "/").ends_with(
-                        "/p5-resources/final/styles/../../../../../../resources/servo_64.png",
+                        "/p5-resources/final/styles/../../../../../../ports/pelt/examples/resources/servo_64.png",
                     )
             }),
             "resolved resource ledger: {resource_ledger:#?}"
@@ -899,7 +900,7 @@ mod livery_route_tests {
             "/p5-resources/final/styles/root.css",
             "/p5-resources/final/styles/palette.css",
             "/p5-resources/final/styles/../../../Ahem.ttf",
-            "/p5-resources/final/styles/../../../../../../resources/servo_64.png",
+            "/p5-resources/final/styles/../../../../../../ports/pelt/examples/resources/servo_64.png",
         ];
         let actual = requests
             .lock()
@@ -1719,7 +1720,7 @@ impl windowed::ViewerContent for ControllerViewerContent {
                     "/p5-resources/final/styles/root.css",
                     "/p5-resources/final/styles/palette.css",
                     "/p5-resources/final/styles/../../../Ahem.ttf",
-                    "/p5-resources/final/styles/../../../../../../resources/servo_64.png",
+                    "/p5-resources/final/styles/../../../../../../ports/pelt/examples/resources/servo_64.png",
                 ];
                 let trace = self
                     .resource_requests

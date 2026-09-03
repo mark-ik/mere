@@ -12,11 +12,14 @@ Test fixture assets that Pelt's example documents reference **by repository-root
 relative path**, carried here with Pelt when it landed from genet 2026-09-03
 (`design_docs/mere_docs/implementation_strategy/2026-09-02_platform_boundary_and_repository_topology_plan.md`).
 
-They are here rather than under `ports/pelt/` because the authored URLs in the
-fixtures resolve to the repository root, and those exact strings are what
-`ports/pelt/desktop/static_viewer.rs` asserts on: the tests exercise relative
-URL resolution across four, five and six `..` segments, so moving the files
-would mean rewriting the very strings under test.
+They sat at the repository root until 2026-09-03, when Mark ruled that two
+Servo-derived fixture PNGs are not a top-level directory's worth of repository.
+They now live under Pelt, next to the fixtures that use them. The authored URLs
+still climb to the repository root — four, five and six `..` segments, exactly
+as before — and then descend into `ports/pelt/examples/resources/`, because
+`ports/pelt/desktop/static_viewer.rs` asserts on those strings: the tests
+exercise relative URL resolution at each of those depths, so the climb is the
+thing under test and it is preserved.
 
 | file | referenced by |
 |---|---|
