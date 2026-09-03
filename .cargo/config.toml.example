@@ -39,6 +39,13 @@
 "engine-observables-api" = { path = "../genet/components/shared/engine-observables-api" }
 "layout-dom-api" = { path = "../genet/components/shared/layout-dom" }
 "genet-host-api" = { path = "../genet/components/genet-host-api" }
+# The application half genet's P1 split out of genet-host-api (genet
+# 57bcc38fdae). It must be listed for the same reason genet-render-host is:
+# patched `cambium` reaches it by workspace path, mere's knot-document and
+# distillery reach it by git, and two copies of one crate is an E0308 on
+# `SurfaceDescriptor`, not a resolution failure — the missing-entry trap in its
+# duplicate-crate form.
+"mere-surface-api" = { path = "../genet/components/mere-surface-api" }
 fleece = { path = "../genet/components/fleece" }
 "genet-livery" = { path = "../genet/components/genet-livery" }
 "genet-scripted-dom" = { path = "../genet/components/genet-scripted-dom" }

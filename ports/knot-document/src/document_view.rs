@@ -12,7 +12,7 @@ use cambium::{
     AnyView, DomHandle, GenetAppRunner, GenetCtx, GenetElement, RunnerSurfaceSession, TextInput,
     button, div, el, lens, span, textarea_typed,
 };
-use genet_host_api::{
+use mere_surface_api::{
     ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId, SurfaceSourceShape,
 };
 

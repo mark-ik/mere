@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use cambium::{
     AnyView, DomHandle, GenetAppRunner, GenetCtx, GenetElement, RunnerSurfaceSession, div, el, span,
 };
-use genet_host_api::{
+use mere_surface_api::{
     ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId, SurfaceSourceShape,
 };
 use muniment::Backend;

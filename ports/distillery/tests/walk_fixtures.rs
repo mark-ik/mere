@@ -41,7 +41,7 @@ use distillery::{
     MaintenanceReport, ResidentReceipt, ResidentSettings, RetentionSettings,
     distillery_installed_descriptor, distillery_installed_surface,
 };
-use genet_host_api::SurfaceAvailability;
+use mere_surface_api::SurfaceAvailability;
 use genet_scripted_dom::ScriptedDom;
 use layout_dom_api::LayoutDom;
 use mesh::spec::{DeterminismClass, JobOutput, JobSpec, VerificationClass};

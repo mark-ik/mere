@@ -20,7 +20,7 @@ engine = [
 
 [dependencies]
 cambium.workspace = true
-genet-host-api = { workspace = true }
+mere-surface-api = { workspace = true }
 illume = { workspace = true, optional = true }
 knot-editor-host = { workspace = true }
 inker = { workspace = true, optional = true }
