@@ -808,7 +808,7 @@ This plan extends, and does not re-scope, the following owners:
 - [2026-06-23 node body face model plan](../../mere_docs/implementation_strategy/2026-06-23_node_body_face_model_plan.md):
   owns the node's Body and Face presentation. The clip swatch kind composes with
   it.
-- [2026-06-21 command registry configurable menus plan](../../mere_docs/implementation_strategy/2026-06-21_command_registry_configurable_menus_plan.md):
+- [2026-06-21 command registry configurable menus plan](../2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md):
   every editor action and the clip gesture register as command ids here.
 - [2026-06-10 scrying tile plan](../../mere_docs/implementation_strategy/2026-06-10_scrying_tile_plan.md) and
   [2026-06-23 render ladder and extraction plan](../../mere_docs/implementation_strategy/2026-06-23_render_ladder_and_extraction_plan.md):

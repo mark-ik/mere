@@ -6,10 +6,11 @@
 
 //! The trail index — tantivy over `BrowsingTrace` events, native produce path.
 //!
-//! One document per traversal event. Text fields (title, url, domain) carry
-//! BM25 recall; the **reserved fast-field columns** (domain, owner, at_ms,
-//! transition) carry the reports — columnar from day one so aggregations
-//! never force a re-index (the derivation plan's E3 rule).
+//! One document per traversal event. Tokenized title, page-text, and URL
+//! component fields carry BM25 recall; the canonical URL and domain remain
+//! exact string fields. The **reserved fast-field columns** (domain, owner,
+//! at_ms, transition) carry the reports — columnar from day one so
+//! aggregations never force a re-index (the derivation plan's E3 rule).
 //!
 //! The index is derived state. [`TrailIndex::rebuild`] re-mints it from the
 //! trace corpus, and [`TrailIndex::open`] refuses an index whose spec
@@ -21,9 +22,11 @@ use std::path::{Path, PathBuf};
 
 use eidetic::browsing::BrowsingTrace;
 use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
-use tantivy::schema::{FAST, Field, INDEXED, STORED, STRING, Schema, TEXT, Value};
-use tantivy::{Index, TantivyDocument, doc};
+use tantivy::query::{Query, QueryParser, TermQuery};
+use tantivy::schema::{
+    FAST, Field, INDEXED, IndexRecordOption, STORED, STRING, Schema, TEXT, Value,
+};
+use tantivy::{Index, TantivyDocument, Term, doc};
 
 use crate::spec::SearchIndexSpec;
 use crate::{Result, SearchError};
@@ -35,6 +38,7 @@ const WRITER_BUDGET_BYTES: usize = 15_000_000;
 #[derive(Clone, Copy)]
 struct Fields {
     url: Field,
+    url_text: Field,
     title: Field,
     text: Field,
     domain: Field,
@@ -46,6 +50,9 @@ struct Fields {
 fn trail_schema() -> (Schema, Fields) {
     let mut builder = Schema::builder();
     let url = builder.add_text_field("url", STRING | STORED);
+    // Preserve `url` as the exact stored identity while indexing the same
+    // canonical bytes through the default tokenizer for host/path recall.
+    let url_text = builder.add_text_field("url_text", TEXT);
     let title = builder.add_text_field("title", TEXT | STORED);
     // Page main text (reader-mode), tokenized for BM25 body recall; not stored —
     // hits return url/title, not the body. (C5.)
@@ -58,6 +65,7 @@ fn trail_schema() -> (Schema, Fields) {
         builder.build(),
         Fields {
             url,
+            url_text,
             title,
             text,
             domain,
@@ -77,6 +85,20 @@ fn domain_of(url: &str) -> String {
         .next()
         .unwrap_or("")
         .to_ascii_lowercase()
+}
+
+/// A single absolute URL bypasses Tantivy's field-query grammar (`https:`
+/// would otherwise be read as a field name) and takes the exact URL path.
+fn is_absolute_url_query(query: &str) -> bool {
+    let Some((scheme, rest)) = query.split_once("://") else {
+        return false;
+    };
+    !scheme.is_empty()
+        && !rest.is_empty()
+        && !query.chars().any(char::is_whitespace)
+        && scheme
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
 }
 
 /// One recall hit.
@@ -154,6 +176,7 @@ impl TrailIndex {
             for event in &trace.events {
                 let mut document = doc!(
                     fields.url => event.to.url.clone(),
+                    fields.url_text => event.to.url.clone(),
                     fields.domain => domain_of(&event.to.url),
                     fields.owner => trace.owner.clone(),
                     fields.at_ms => event.at_ms,
@@ -188,9 +211,12 @@ impl TrailIndex {
         Ok(reader.searcher().num_docs())
     }
 
-    /// BM25 recall over titles, URLs, and domains: "where did I read about
-    /// X?". Hits come back ranked, newest-irrelevant — relevance is the
-    /// ranking; time is a column the caller can re-sort by.
+    /// BM25 recall over tokenized titles, page text, and URL components. A
+    /// single absolute-URL query takes an exact term path on the canonical URL
+    /// field so query syntax cannot mistake its scheme for a field name. Other
+    /// input uses the existing parser over the tokenized fields plus exact URL
+    /// and domain terms. Hits come back ranked, newest-irrelevant — relevance
+    /// is the ranking; time is a column the caller can re-sort by.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<Hit>> {
         let reader = self.index.reader()?;
         let searcher = reader.searcher();
@@ -199,14 +225,26 @@ impl TrailIndex {
             vec![
                 self.fields.title,
                 self.fields.url,
+                self.fields.url_text,
                 self.fields.domain,
                 self.fields.text,
             ],
         );
-        let parsed = parser
-            .parse_query(query)
-            .map_err(|e| SearchError::Tantivy(format!("query: {e}")))?;
-        let top = searcher.search(&parsed, &TopDocs::with_limit(limit.max(1)).order_by_score())?;
+        let query = query.trim();
+        let parsed: Box<dyn Query> = if is_absolute_url_query(query) {
+            Box::new(TermQuery::new(
+                Term::from_field_text(self.fields.url, query),
+                IndexRecordOption::Basic,
+            ))
+        } else {
+            parser
+                .parse_query(query)
+                .map_err(|e| SearchError::Tantivy(format!("query: {e}")))?
+        };
+        let top = searcher.search(
+            parsed.as_ref(),
+            &TopDocs::with_limit(limit.max(1)).order_by_score(),
+        )?;
         let mut hits = Vec::with_capacity(top.len());
         for (score, address) in top {
             let document: TantivyDocument = searcher.doc(address)?;
@@ -375,6 +413,39 @@ mod tests {
     }
 
     #[test]
+    fn titleless_url_components_are_recallable() {
+        let dir = tempfile::tempdir().unwrap();
+        let trace = BrowsingTrace::from_events(
+            "m",
+            vec![TraceEvent {
+                from: None,
+                to: PageRef {
+                    url: "https://docs.example/rust/async/book/getting-started".to_string(),
+                    title: None,
+                },
+                transition: TraceTransition::Imported,
+                at_ms: 1_000,
+                dwell_ms: None,
+                candidates: Vec::new(),
+            }],
+        );
+        let index = TrailIndex::rebuild(dir.path().join("idx"), [&trace]).unwrap();
+
+        let hits = index.search("rust async book", 5).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(
+            hits[0].url,
+            "https://docs.example/rust/async/book/getting-started"
+        );
+        assert_eq!(hits[0].title, None);
+
+        let exact = index
+            .search("https://docs.example/rust/async/book/getting-started", 5)
+            .unwrap();
+        assert_eq!(exact[0].url, hits[0].url);
+    }
+
+    #[test]
     fn open_refuses_a_drifted_spec_and_rebuild_recovers() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("idx");
@@ -403,6 +474,35 @@ mod tests {
         // And a normal reopen now succeeds.
         let reopened = TrailIndex::open(&path).unwrap();
         assert_eq!(reopened.doc_count().unwrap(), 3);
+    }
+
+    #[test]
+    fn open_refuses_v2_fields_and_rebuild_recovers_url_recall() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("idx");
+        let traces = corpus();
+        TrailIndex::rebuild(&path, &traces).unwrap();
+
+        SearchIndexSpec {
+            fields_version: crate::spec::FIELDS_V2,
+            ..SearchIndexSpec::current()
+        }
+        .write_sidecar(&path)
+        .unwrap();
+
+        match TrailIndex::open(&path) {
+            Err(SearchError::FormatMismatch { found, current }) => {
+                assert!(found.contains("fields v2"));
+                assert!(current.contains("fields v3"));
+            }
+            other => panic!("expected field-version mismatch, got {:?}", other.err()),
+        }
+
+        let rebuilt = TrailIndex::rebuild(&path, &traces).unwrap();
+        assert_eq!(
+            rebuilt.search("docs example tantivy", 5).unwrap()[0].url,
+            "https://docs.example/tantivy"
+        );
     }
 
     #[test]
@@ -438,5 +538,9 @@ mod tests {
         assert_eq!(domain_of("https://Docs.Example/path?q=1"), "docs.example");
         assert_eq!(domain_of("gemini://smol.host"), "smol.host");
         assert_eq!(domain_of("no-scheme/path"), "no-scheme");
+        assert!(is_absolute_url_query("https://docs.example/path?q=1"));
+        assert!(is_absolute_url_query("gemini://smol.host"));
+        assert!(!is_absolute_url_query("https://docs.example one more term"));
+        assert!(!is_absolute_url_query("where did I read this"));
     }
 }

@@ -3,7 +3,7 @@
 **Date**: 2026-07-01
 **Status**: cross-cutting state snapshot (research). Doc-derived: full
 `DOC_README.md` index read plus deep reads of the most recent plans
-([roster detail cards](../implementation_strategy/2026-06-29_graph_object_roster_detail_cards_plan.md),
+([roster detail cards](../../archive_docs/2026-09-02_retired_plans/2026-06-29_graph_object_roster_detail_cards_plan.md),
 [smolweb host integration](../implementation_strategy/2026-06-28_smolweb_host_integration_plan.md)),
 then a second pass over the 2026-07-01-touched crop (§7). Statuses are as
 their owning docs report them; code-verified only where noted. Successor
@@ -23,7 +23,7 @@ document, themed from seed palettes ([theme system](../../archive_docs/2026-07-0
 complete), user zoom shipped, auto-DPI planned.
 
 - **Graph core.** Statement-shaped kernel on petgraph, six edge families,
-  SPARQL read slice, JSON-LD in/out. The [Roster](../implementation_strategy/2026-06-29_graph_object_roster_detail_cards_plan.md)
+  SPARQL read slice, JSON-LD in/out. The [Roster](../../archive_docs/2026-09-02_retired_plans/2026-06-29_graph_object_roster_detail_cards_plan.md)
   is now the durable graph-object control surface (nodes / links / graphlets /
   fields / facets, with in-roster cards). Relation cells
   `(source, target, kind)` are addressable across roster rows, Link Card,
@@ -74,15 +74,15 @@ complete), user zoom shipped, auto-DPI planned.
 
 ## 3. Sidequests
 
-- [lane0_sidequests](../implementation_strategy/2026-06-16_lane0_sidequests_plan.md):
+- [lane0_sidequests](../../archive_docs/2026-09-02_retired_plans/2026-06-16_lane0_sidequests_plan.md):
   glue-only wins where the dep edge already exists (JSON-LD export,
   recover-node, relation-kind picker, tessera chip, Barnes-Hut, Trail button).
 - Find-in-page host UI (backend committed, UI unbuilt); notification
   subsystem P1+ (foundation tested, no toast view yet); context-menu parity
   for relation-cell actions; gloss Scene-to-DOM migration; the
-  [render-perf plan](../implementation_strategy/2026-06-24_meerkat_render_perf_plan.md)
+  [render-perf plan](../../archive_docs/2026-09-02_retired_plans/2026-06-24_meerkat_render_perf_plan.md)
   (split the ~1700-line `render()`, dirty-gate the redraw loop);
-  [tracing reach](../implementation_strategy/2026-06-26_tracing_reach_and_quality_plan.md)
+  [tracing reach](../../archive_docs/2026-09-02_retired_plans/2026-06-26_tracing_reach_and_quality_plan.md)
   (nine first-party crates at zero tracing calls); physics scenes and the
   isometric camera as the playful pair.
 

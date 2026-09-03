@@ -257,5 +257,5 @@ intent type instead of three near-identical single-variant enums.
     total DOM size rather than the changed delta. That's a `genet-layout`
     question, out of scope for this session; worth its own investigation/
     plan given the shell document (roster + gloss + orrery gnodes) is
-    only going to grow. See the [UI polish plan](2026-07-01_ui_polish_plan.md)
+    only going to grow. See the [UI polish plan](../2026-09-02_retired_plans/2026-07-01_ui_polish_plan.md)
     §5 for where this finding now lives as design_docs record.

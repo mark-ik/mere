@@ -14,7 +14,7 @@ the loop that puts a model behind the actions. This doc is that loop.
 - [system diagnostics plan, D7](../implementation_strategy/2026-06-08_system_diagnostics_and_accessibility_plan.md) —
   the landed typed harness: `AgentObservation` (surfaces, enabled actions, diagnostics, a11y) +
   `AgentAction` incl. the by-id `Invoke(String)` registry seam. The hands seam. This doc consumes it.
-- [command registry plan](../implementation_strategy/2026-06-21_command_registry_configurable_menus_plan.md) —
+- [command registry plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md) —
   the one action id-space (palette, omnibar, a11y, harness). The tool vocabulary.
 - [mcp_native_graph plan](../implementation_strategy/2026-06-26_mcp_native_graph_plan.md) — the
   external boundary, both directions. Expose rides the registry; consume is a tool ring here.

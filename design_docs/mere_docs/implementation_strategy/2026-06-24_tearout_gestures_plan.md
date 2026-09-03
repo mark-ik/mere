@@ -288,7 +288,7 @@ The remaining gesture work, with seams and rough size. Independent of the graphl
   (2026-06-27).** Mark's reframe: notifications are a **Steward-accounted subsystem**, and toasts
   are their *transient view* — the ambiguous-drag prompt is one **actionable** notification, not a
   one-off chrome widget. The subsystem has its own plan now —
-  [notification subsystem plan](2026-06-27_notification_subsystem_plan.md) (this item is its P2
+  [notification subsystem plan](../../archive_docs/2026-09-02_retired_plans/2026-06-27_notification_subsystem_plan.md) (this item is its P2
   actionable consumer); the tear-out side here is just the no-modifier drag-out-vs-pin gesture.
   **Foundation built + tested:** a `NotificationRecord` log in
   `HostObservability` (beside `diagnostics`), `record_notification(severity, title, body,

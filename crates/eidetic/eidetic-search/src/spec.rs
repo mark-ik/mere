@@ -38,6 +38,11 @@ pub const FIELDS_V1: u32 = 1;
 /// index written at v1 mismatches and re-mints from the corpus.
 pub const FIELDS_V2: u32 = 2;
 
+/// v3 added a tokenized, non-stored `url_text` field while retaining the
+/// canonical `url` field as an exact stored string. Indexes written at v2
+/// re-mint so URL path and host components become recallable.
+pub const FIELDS_V3: u32 = 3;
+
 /// The spec sidecar's file name inside an index directory.
 pub const SPEC_SIDECAR: &str = "mere-search-spec.json";
 
@@ -89,7 +94,7 @@ pub async fn bootstrap_search_schema(store: &mut dyn Store) -> eidetic::Result<(
 pub struct SearchIndexSpec {
     /// The tantivy version string the segments were written with.
     pub tantivy_version: String,
-    /// The logical field set's version ([`FIELDS_V1`]).
+    /// The logical field set's version ([`FIELDS_V3`]).
     pub fields_version: u32,
     /// Tokenizer name for the text fields.
     pub tokenizer: String,
@@ -100,7 +105,7 @@ impl SearchIndexSpec {
     pub fn current() -> Self {
         Self {
             tantivy_version: tantivy::version_string().to_string(),
-            fields_version: FIELDS_V2,
+            fields_version: FIELDS_V3,
             tokenizer: "default".to_string(),
         }
     }
@@ -171,12 +176,19 @@ mod tests {
         let current = SearchIndexSpec::current();
         assert!(current.matches_current());
         assert!(!current.tantivy_version.is_empty());
+        assert_eq!(current.fields_version, FIELDS_V3);
 
         let drifted = SearchIndexSpec {
             tantivy_version: "tantivy 0.1.0".to_string(),
-            ..current
+            ..current.clone()
         };
         assert!(!drifted.matches_current());
+
+        let v2_fields = SearchIndexSpec {
+            fields_version: FIELDS_V2,
+            ..current
+        };
+        assert!(!v2_fields.matches_current());
     }
 
     #[test]

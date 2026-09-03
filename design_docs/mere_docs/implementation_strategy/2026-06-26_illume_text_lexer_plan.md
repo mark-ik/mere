@@ -167,7 +167,7 @@ illume's first non-editor consumer.
   illume's seed.
 - [borrowed-ideas brief](../research/2026-06-25_borrowed_ideas_brief.md): the `=query`
   block and the broader graph-as-text directions the omnibar grammar feeds into.
-- [command registry / configurable menus plan](2026-06-21_command_registry_configurable_menus_plan.md):
+- [command registry / configurable menus plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md):
   the `>` shell + `ActionRegistry` that the omnibar legibility goal sits on top of.
 - tincture (publishing as tinct): the `syntax` module, the colour contract.
 - genet `xilem-serval`: `styled_textarea`, the renderer.

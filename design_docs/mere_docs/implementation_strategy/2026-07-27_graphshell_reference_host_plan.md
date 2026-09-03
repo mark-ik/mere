@@ -1423,6 +1423,13 @@ authorization and attributed results.
 Mark's ask, 2026-07-27: "I'd like to be able to easily find printers and
 surface them as local network devices in my mere."
 
+**Home moved 2026-09-01.** The landed half of this item (peer discovery in
+production, Murm's `P2pandaOverlayHost`, the two branch-pinned forks and the
+macOS signing finding) is recorded as R0 of the
+[reachability rungs plan](2026-08-03_reachability_rungs_and_privacy_lanes_plan.md).
+The measured sections below stay as the investigation record. The DNS-SD half
+remains scoped here and is owned by Murm per the Djinn plan's F3.
+
 **Two capabilities that share a protocol and nothing else.** Conflating them is
 the main risk in this item:
 

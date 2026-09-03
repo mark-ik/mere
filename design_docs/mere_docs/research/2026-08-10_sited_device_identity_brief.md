@@ -60,6 +60,14 @@ the running station rather than waiting for the former deadline. Choosing a
 board-backed storage root, dispatching received controls over a live radio,
 and proving a physical stop remain separate carrier/deployment receipts.
 
+**Execution note, 2026-09-02, first owner:** board first-owner control is not a
+sited-station credential. Signalman derives its private controller signer from
+Castellan's separate controller domain and a separate persisted controller
+scope, read-only from the existing authority root. It cannot reuse a station
+device id or identity; the explicit claim command refuses a missing wallet or
+scope and creates neither. This is host integration only, not a board claim or
+commissioning receipt.
+
 The origin (Mark, 2026-08-10): castellan should manage derived, ephemeral
 device identities, so a sited radio holds nothing worth stealing. Radios "will
 probably be sited not under the ambit of a host and stolen at some point."

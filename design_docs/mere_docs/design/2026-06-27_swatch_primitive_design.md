@@ -12,7 +12,7 @@ as the Navigator; this realizes it),
 [graphlet derivation from selection](2026-06-13_graphlet_derivation_from_selection.md),
 [node body & face model plan](../implementation_strategy/2026-06-23_node_body_face_model_plan.md)
 (owns the node-body-editor swatch, B3),
-[object card plan](../implementation_strategy/2026-06-21_object_card_plan.md)
+[object card plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md)
 (owns the focus-card-slot card),
 [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md)
 (owns the per-window instance machinery + graphlets),
@@ -234,7 +234,7 @@ Locked swatches expose none of the three. That is what locked means.
 **Templates persist per persona** (Mark, 2026-06-27). A persona's saved swatch
 templates ride the persona settings store (`personas/<id>/settings/`, beside the
 curated context menu in `PersonaSettings`), the same per-persona UI-curation pattern
-the [command registry / configurable menus plan](../implementation_strategy/2026-06-21_command_registry_configurable_menus_plan.md)
+the [command registry / configurable menus plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md)
 uses, so a persona carries its own swatch library across graphs.
 
 The consequence worth stating: the swatch primitive plus the template mechanism is
@@ -268,7 +268,7 @@ Fragments exist, each owned by a sibling plan; the unifying primitive does not.
   (`d4375d0`) and its remaining vestiges (the snapshot↔live toggle, the
   promote-to-live paths, the stale "live card" comments) were stripped 2026-06-27;
   going live is opening a workbench tile now. Owned by
-  [object card plan](../implementation_strategy/2026-06-21_object_card_plan.md).
+  [object card plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md).
 - **The connections swatch** is unbuilt, marked `TODO(swatch agent)` at
   `render/cards.rs:129`: a multi-node selection (`selected_members().len() > 1`)
   should summon the selected nodes plus their edges as a DOM swatch. That is where
