@@ -159,7 +159,7 @@ sweep.
 | isometry | MIT OR Apache-2.0, edition 2021 | MPL-2.0 (edition separate) | P3 — waits on its lane's dirty tree |
 | turnstone, woodshed, hocket | MIT OR Apache-2.0 | MPL-2.0 | P4, each when its tree is clean — turnstone and hocket landed 2026-09-03; woodshed waits on its lane's dirty tree |
 | wavicle, mora, gaz, reservation stubs | MIT OR Apache-2.0 | MPL-2.0 | P5 — wavicle and mora landed 2026-09-03; the stubs went with mere and genet; gaz is Mark's call |
-| wgpu-graft / -scry / -weld | MPL-2.0 manifests over a largely Apache-2.0 wgpu fork | MPL-2.0 on Mark's files only | P7, after a provenance ledger — provenance pass in progress 2026-09-03 |
+| wgpu-graft / -scry / -weld | MPL-2.0 manifests over a largely Apache-2.0 wgpu fork | MPL-2.0 on Mark's files only | P7, after a provenance ledger — 2026-09-03: wgpu-scry and wgpu-weld landed; wgpu-graft ledgered only, since 86% of its sources are vendored GPUI (not wgpu) and its 57 owned sources await Mark's call |
 
 ## 6. What the sweep touches
 
