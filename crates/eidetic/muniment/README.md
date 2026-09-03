@@ -1,9 +1,10 @@
 # muniment
 
 A portable persistence store. One host-supplied byte `Backend` seam (filesystem,
-OPFS, redb, fjall), typed mutable `SlotStore` slots over a pluggable codec, and
-content-addressed immutable `BlobStore` blobs. Format-agnostic and
-wasm-friendly. The storage floor a small app keeps its durable state in.
+OPFS, redb, fjall), typed mutable `SlotStore` slots over a pluggable codec,
+content-addressed immutable `BlobStore` blobs, and append-only `Journal<T>`
+histories. Format-agnostic and wasm-friendly. The storage floor a small app
+keeps its durable state in.
 
 ```rust
 use muniment::{BlobStore, JsonSlots, MemoryBackend};
@@ -30,6 +31,7 @@ assert_eq!(blobs.get(&hash).await?.unwrap(), b"media bytes");
 | `blob` | `BlobStore<B>`: `put`, `get`, `has`; `Hash` (blake3, `of` / `as_bytes` / `to_hex` / `from_hex`) |
 | `codec` | `Codec`, `JsonCodec`, `PostcardCodec` |
 | `error` | `StoreError` |
+| `journal` | `Journal<T>`, `Seq`, causal links, fork provenance, and slot-backed persistence |
 | `redb_backend` | `RedbBackend` (feature `redb`) |
 | `zip_backend` | `ZipBackend` (feature `zip`) |
 | `indexeddb_backend` | `IndexedDbBackend` (feature `indexeddb`, wasm32 only) |
@@ -50,12 +52,12 @@ matching codec.
 The `Backend` is `async` and `?Send` so a browser main thread can await OPFS
 promises, while desktop backends return ready futures. `scan` is an ordered
 half-open range read; `apply` commits a batch of `WriteOp`s, atomically where the
-backend has transactions. muniment moves bytes and does not model what they mean.
+backend has transactions. `Journal<T>` supplies replayable order without taking
+ownership of the events' domain meaning.
 
 Built from a survey of four consumers (woodshed, hocket, isometry, mere), each
-of which was hand-rolling this seam. Sibling to
-[codicil](https://github.com/merely-made/mere), the append-only log that versions
-what muniment stores. See [`design_docs/`](design_docs/).
+of which was hand-rolling this seam. The former standalone `codicil` log now
+lives here as the plainly named `Journal<T>`. See [`design_docs/`](design_docs/).
 
 The name: a muniment room is where a household keeps its deeds and records, the
 documents preserved as evidence.

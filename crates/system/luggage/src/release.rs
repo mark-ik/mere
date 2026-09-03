@@ -25,6 +25,56 @@ use crate::error::{Error, Result};
 /// The manifest file name a directory or GitHub feed serves.
 pub const MANIFEST_NAME: &str = "luggage.json";
 
+/// A claim about *which* signed release something belongs to.
+///
+/// Two opaque 32-byte identities and nothing else: `manifest_blake3` names the
+/// exact signed manifest bytes, and `publisher_key_id` names the key a
+/// verifier looks trust up for. It deliberately carries no manifest, no public
+/// key, and no feed — a bearer can display or resolve the reference, and can
+/// do nothing else with it.
+///
+/// This is the *reference*, not the release. [`RemoteRelease`] is the parsed
+/// manifest with versions, URLs and signatures in it; this names one without
+/// containing any of it, which is what makes it safe to put somewhere a
+/// manifest could never go — a URL fragment, a QR code, an invitation carried
+/// over untrusted signaling.
+///
+/// # It is not an authorization
+///
+/// Holding a matching reference proves nothing. The publisher trust store is
+/// where `publisher_key_id`'s signature is actually checked, and that check is
+/// a separate decision made by whoever loads the release. A reference must
+/// never become an admission input: consumers that carry one alongside an
+/// authentication handshake admit on the handshake, and treat this as display
+/// and lookup only.
+///
+/// # Stability
+///
+/// The `V1` suffix is a wire contract, not a draft marker. This type is
+/// carried across trust boundaries by consumers with their own canonical
+/// encodings (see the browser WebRTC carrier's `InviteV1`), so the field set
+/// is fixed. A different field set is a `ReleaseRefV2`, never an edit here.
+///
+/// Available in the release-identity core: it needs no dependency at all, so
+/// it is reachable with `default-features = false` on any target the crate
+/// builds for.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ReleaseRefV1 {
+    /// The BLAKE3 digest of the exact signed manifest bytes.
+    pub manifest_blake3: [u8; 32],
+    /// Identifies the publisher key a verifier looks up trust for — not the
+    /// key itself.
+    pub publisher_key_id: [u8; 32],
+}
+
+impl ReleaseRefV1 {
+    /// The encoded width of a reference: two 32-byte identities.
+    ///
+    /// Consumers length-prefix and frame these themselves; this is here so a
+    /// bound can be computed without hard-coding 64 somewhere else.
+    pub const ENCODED_BYTES: usize = 64;
+}
+
 /// Supported update format.
 #[derive(Debug, Serialize, Copy, Clone, PartialEq, Eq)]
 pub enum UpdateFormat {

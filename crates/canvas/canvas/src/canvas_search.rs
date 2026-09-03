@@ -16,15 +16,14 @@
 //! couplings.
 //!
 //! This module does **not** know about graphshell or any UI toolkit —
-//! it composes existing embed + quint
+//! it composes existing embed + numen
 //! primitives. Graphshell-side palette wiring (action registration,
 //! input event routing) is its own slice.
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use quint::projection::FieldProjection;
-use quint::registry::FieldId;
+use numen::{FieldId, FieldProjection};
 
 use crate::field_bridge::register_query_similarity_field;
 use esp::embed::VectorIndex;
@@ -184,8 +183,7 @@ impl<K: Hash + Eq + Clone, P: EmbeddingProvider> CanvasSearchSurface<K, P> {
 mod tests {
     use super::*;
     use esp::embed::StubEmbeddingProvider;
-    use quint::eval::eval_scalar;
-    use quint::registry::{FieldDef, FieldRegistry};
+    use numen::{FieldDef, FieldRegistry, eval_scalar};
 
     fn provider() -> StubEmbeddingProvider {
         StubEmbeddingProvider::new(64).unwrap()

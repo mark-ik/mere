@@ -129,8 +129,17 @@ pub use crate::frame::{
 pub use crate::invite::{
     HOST_CHALLENGE_SIGNATURE_DOMAIN, INVITE_DESCRIPTOR_DOMAIN, INVITE_FRAGMENT_PREFIX,
     INVITE_ID_BYTES, INVITE_V1_VERSION, InviteId, InviteV1, MAX_INVITE_BYTES,
-    REDEMPTION_PROOF_DOMAIN, ReleaseRefV1, challenge_signature_bytes, redemption_signing_bytes,
+    REDEMPTION_PROOF_DOMAIN, challenge_signature_bytes, redemption_signing_bytes,
 };
+
+/// Release identity, re-exported from Luggage, which owns it.
+///
+/// Re-exported rather than merely used so a consumer holding an
+/// [`InviteV1`] can name the type its
+/// [`release`](InviteV1::release) accessor returns without adding a
+/// dependency on Luggage. The definition lives in `luggage::release`; this is
+/// the same type, not a copy.
+pub use luggage::ReleaseRefV1;
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

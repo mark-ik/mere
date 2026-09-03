@@ -243,7 +243,7 @@ pub enum GraphDelta {
     },
     SetNodeNested {
         key: NodeKey,
-        nested: Option<codicil::LogId>,
+        nested: Option<muniment::LogId>,
     },
     SetNodePinned {
         key: NodeKey,
@@ -790,7 +790,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             GraphDeltaResult::NodeMetadataUpdated(updated)
         }
         GraphDelta::ReplaySetNodeNestedById { node_id, nested } => {
-            let log = nested.clone().map(codicil::LogId::new);
+            let log = nested.clone().map(muniment::LogId::new);
             let updated = graph
                 .get_node_key_by_id(node_id)
                 .is_some_and(|key| graph.set_node_nested(key, log.clone()));

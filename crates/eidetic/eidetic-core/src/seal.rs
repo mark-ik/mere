@@ -6,7 +6,7 @@
 
 //! Encrypt-at-rest seam for the private lane (persona-wallet gap #2).
 //!
-//! Today an engram's payload is stored cleartext and [`PrivacyClass`] is a
+//! Today a codicil's payload is stored cleartext and [`PrivacyClass`] is a
 //! metadata tag. This module is the boundary that turns the tag into a real
 //! at-rest encryption boundary: `LocalOnly` / `TrustedPeersOnly` payloads seal
 //! under a persona epoch key before they hit the [`Store`], and unseal on read;
@@ -372,7 +372,7 @@ mod tests {
     fn seals_private_lane_and_round_trips_to_cleartext() {
         pollster::block_on(async {
             let sealer = TestSealer::new([1u8; 16], [9u8; 32]);
-            let cleartext = b"a private engram payload";
+            let cleartext = b"a private codicil payload";
             let mut manifest = manifest_for(cleartext, PrivacyClass::LocalOnly);
 
             let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();
@@ -393,7 +393,7 @@ mod tests {
     fn public_lane_stays_cleartext() {
         pollster::block_on(async {
             let sealer = TestSealer::new([2u8; 16], [8u8; 32]);
-            let cleartext = b"a public moot engram";
+            let cleartext = b"a public moot codicil";
             let mut manifest = manifest_for(cleartext, PrivacyClass::MootScoped);
 
             let stored = seal_payload_for_store(Some(&sealer), &mut manifest, cleartext).unwrap();

@@ -82,7 +82,7 @@ impl Graph {
                 node.media_type = pnode.mime_hint.clone();
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
                 node.body = pnode.body.clone();
-                node.nested = pnode.nested.clone().map(codicil::LogId::new);
+                node.nested = pnode.nested.clone().map(muniment::LogId::new);
                 node.content = pnode
                     .content_hash
                     .as_deref()

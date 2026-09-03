@@ -13,18 +13,18 @@
 //! will schedule it, so it tests without a runtime. It honours eidetic **R0**: the
 //! `propose_*` half is pure (reads a snapshot, mutates nothing), and the `apply_*`
 //! half drops only short-term **cached content** (`content_store` blobs), never graph
-//! truth (nodes / edges stay) and never engrams (immutable). Forgetting is the one
+//! truth (nodes / edges stay) and never codicils (immutable). Forgetting is the one
 //! place blobs are dropped, and it drops only auto-captured short-term memory.
 //!
-//! Consolidation and facet extraction are Athanor's other passes (graph engrams are
+//! Consolidation and facet extraction are Athanor's other passes (graph codicils are
 //! already deduplicated by content-addressing, so consolidation is light); they land
 //! as later passes alongside this one.
 //!
-//! Consolidation (this module's second pass) relates graph engrams that are
+//! Consolidation (this module's second pass) relates graph codicils that are
 //! successive versions of the same material — significant URL overlap — but carry
 //! no lineage link yet. Composing is the *only* way eidetic offers to link two
 //! already-saved manifests (they are immutable; there is no post-hoc amendment), so
-//! `apply_consolidation` reuses [`graph_engram::compose_graph_engrams`]. That is
+//! `apply_consolidation` reuses [`graph_codicil::compose_graph_codicils`]. That is
 //! content-addressed, so re-linking an already-consolidated pair on a later pass is
 //! a safe no-op (same bytes, same id) rather than a duplicate.
 
@@ -36,16 +36,16 @@ use kernel::persistence::GraphSnapshot;
 use kernel::types::ImageRole;
 
 use crate::content_store;
-use crate::graph_engram::{self, RedactionPolicy};
+use crate::graph_codicil::{self, RedactionPolicy};
 use crate::image_store;
 use crate::memory_levels::{EvictionPolicy, evictable_short_term};
 
-/// How many of the most-recently-created engrams a consolidation pass considers.
+/// How many of the most-recently-created codicils a consolidation pass considers.
 /// Bounds the pairwise scan (thaw is per-candidate, comparison is per-pair) as the
-/// store grows; revisit if engrams get numerous enough for this to matter (like B6).
+/// store grows; revisit if codicils get numerous enough for this to matter (like B6).
 const CONSOLIDATION_CANDIDATE_CAP: usize = 50;
 
-/// The minimum URL-overlap fraction (of the smaller engram's url set) for a pair to
+/// The minimum URL-overlap fraction (of the smaller codicil's url set) for a pair to
 /// count as "the same material" rather than coincidental overlap (e.g. two unrelated
 /// sessions that both visited one common site). A first-cut heuristic; tune once
 /// real consolidation proposals can be eyeballed.
@@ -106,7 +106,7 @@ pub fn propose_forgetting(
 /// urls had content actually removed (genuine feedback, never a placebo).
 ///
 /// Drops only short-term cached blobs via [`content_store::evict_content`] (R0: not
-/// graph truth, not engrams). An accepted proposal the host hands back here.
+/// graph truth, not codicils). An accepted proposal the host hands back here.
 pub async fn apply_forgetting(store: &mut dyn Store, proposal: &ForgetProposal) -> Result<usize> {
     let mut dropped = 0;
     for url in &proposal.urls {
@@ -254,7 +254,7 @@ pub fn apply_image_reference_forgetting(
     dropped
 }
 
-/// A proposal to consolidate: pairs of graph engrams that look like successive
+/// A proposal to consolidate: pairs of graph codicils that look like successive
 /// versions of the same material but carry no lineage link yet.
 ///
 /// Athanor emits this; the host decides whether to apply it (the R0 propose/apply
@@ -262,7 +262,7 @@ pub fn apply_image_reference_forgetting(
 /// so `apply_consolidation` names it explicitly rather than leaving it implicit.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ConsolidationProposal {
-    /// Each pair to relate. Composing a pair links them: the new engram's
+    /// Each pair to relate. Composing a pair links them: the new codicil's
     /// `upstream` names both.
     pub pairs: Vec<(ManifestId, ManifestId)>,
 }
@@ -277,18 +277,18 @@ impl ConsolidationProposal {
     }
 }
 
-/// Propose consolidation: pairs of graph engrams whose node-url sets overlap enough
+/// Propose consolidation: pairs of graph codicils whose node-url sets overlap enough
 /// to be "the same material" at different points in time, and that no existing
-/// engram already relates (no manifest's `upstream` already names both).
+/// codicil already relates (no manifest's `upstream` already names both).
 ///
 /// Reads the store — lists manifests (cheap; `provenance.upstream` rides on the
 /// manifest, no thaw needed to check existing links) and thaws each of the newest
-/// [`CONSOLIDATION_CANDIDATE_CAP`] *originally-generated* engrams once to compare url
-/// sets — but writes nothing (R0). Only `Generated`-origin engrams are candidates:
-/// composing a `Derived` (already-consolidated) engram into another would keep
+/// [`CONSOLIDATION_CANDIDATE_CAP`] *originally-generated* codicils once to compare url
+/// sets — but writes nothing (R0). Only `Generated`-origin codicils are candidates:
+/// composing a `Derived` (already-consolidated) codicil into another would keep
 /// re-merging composites rather than relating fresh version chains.
 pub async fn propose_consolidation(store: &mut dyn Store) -> Result<ConsolidationProposal> {
-    let mut manifests = graph_engram::list_graph_engrams(store).await?;
+    let mut manifests = graph_codicil::list_graph_codicils(store).await?;
     manifests.sort_by_key(|m| std::cmp::Reverse(m.created_at.0));
 
     let already_linked = |a: ManifestId, b: ManifestId| {
@@ -303,10 +303,10 @@ pub async fn propose_consolidation(store: &mut dyn Store) -> Result<Consolidatio
         .filter(|m| m.provenance.origin == ProvenanceOrigin::Generated)
         .take(CONSOLIDATION_CANDIDATE_CAP)
     {
-        let Some(engram) = graph_engram::load_graph_engram(store, manifest.id).await? else {
+        let Some(codicil) = graph_codicil::load_graph_codicil(store, manifest.id).await? else {
             continue;
         };
-        let urls: HashSet<String> = engram
+        let urls: HashSet<String> = codicil
             .snapshot
             .nodes
             .iter()
@@ -346,7 +346,7 @@ pub async fn apply_consolidation(
 ) -> Result<usize> {
     let mut linked = 0;
     for &(a, b) in &proposal.pairs {
-        if graph_engram::compose_graph_engrams(store, &[a, b], redaction, created_at)
+        if graph_codicil::compose_graph_codicils(store, &[a, b], redaction, created_at)
             .await?
             .is_some()
         {
@@ -716,24 +716,29 @@ mod tests {
         });
     }
 
-    /// Save a graph engram over exactly `urls`, oldest-first by node insertion.
-    async fn save_engram(store: &mut MemStore, urls: &[&str], at_ms: u64) -> ManifestId {
+    /// Save a graph codicil over exactly `urls`, oldest-first by node insertion.
+    async fn save_codicil(store: &mut MemStore, urls: &[&str], at_ms: u64) -> ManifestId {
         let mut graph = Graph::new();
         for (i, url) in urls.iter().enumerate() {
             graph.add_node(url.to_string(), Point2D::new(i as f32, 0.0));
         }
-        graph_engram::save_graph_engram(store, &graph, RedactionPolicy::default(), Timestamp(at_ms))
-            .await
-            .expect("save")
+        graph_codicil::save_graph_codicil(
+            store,
+            &graph,
+            RedactionPolicy::default(),
+            Timestamp(at_ms),
+        )
+        .await
+        .expect("save")
     }
 
     #[test]
-    fn propose_consolidation_finds_overlapping_unlinked_engrams() {
+    fn propose_consolidation_finds_overlapping_unlinked_codicils() {
         pollster::block_on(async {
             let mut store = MemStore::default();
-            let a = save_engram(&mut store, &["https://x.example", "https://y.example"], 1).await;
-            let b = save_engram(&mut store, &["https://y.example", "https://z.example"], 2).await;
-            save_engram(&mut store, &["https://q.example"], 3).await; // unrelated
+            let a = save_codicil(&mut store, &["https://x.example", "https://y.example"], 1).await;
+            let b = save_codicil(&mut store, &["https://y.example", "https://z.example"], 2).await;
+            save_codicil(&mut store, &["https://q.example"], 3).await; // unrelated
 
             let proposal = propose_consolidation(&mut store).await.expect("propose");
             assert_eq!(proposal.len(), 1, "only the overlapping pair is proposed");
@@ -751,7 +756,7 @@ mod tests {
             let mut store = MemStore::default();
             // a and b both have 4 urls, sharing only 1 -> 1/4 = 0.25 of the smaller
             // (here, either) set, below the 0.5 threshold.
-            save_engram(
+            save_codicil(
                 &mut store,
                 &[
                     "https://1.example",
@@ -762,7 +767,7 @@ mod tests {
                 1,
             )
             .await;
-            save_engram(
+            save_codicil(
                 &mut store,
                 &[
                     "https://4.example",
@@ -786,8 +791,8 @@ mod tests {
     fn apply_consolidation_composes_and_records_the_upstream_link() {
         pollster::block_on(async {
             let mut store = MemStore::default();
-            let a = save_engram(&mut store, &["https://x.example", "https://y.example"], 1).await;
-            let b = save_engram(&mut store, &["https://y.example", "https://z.example"], 2).await;
+            let a = save_codicil(&mut store, &["https://x.example", "https://y.example"], 1).await;
+            let b = save_codicil(&mut store, &["https://y.example", "https://z.example"], 2).await;
 
             let proposal = propose_consolidation(&mut store).await.expect("propose");
             assert_eq!(proposal.len(), 1);
@@ -802,7 +807,7 @@ mod tests {
             .expect("apply");
             assert_eq!(linked, 1, "one pair composed");
 
-            let manifests = graph_engram::list_graph_engrams(&mut store)
+            let manifests = graph_codicil::list_graph_codicils(&mut store)
                 .await
                 .expect("list");
             assert!(
@@ -810,7 +815,7 @@ mod tests {
                     .iter()
                     .any(|m| m.provenance.upstream.contains(&a)
                         && m.provenance.upstream.contains(&b)),
-                "a new engram links a and b via upstream",
+                "a new codicil links a and b via upstream",
             );
         });
     }
@@ -819,16 +824,16 @@ mod tests {
     fn propose_consolidation_skips_a_pair_already_linked_by_a_prior_pass() {
         pollster::block_on(async {
             let mut store = MemStore::default();
-            save_engram(&mut store, &["https://x.example", "https://y.example"], 1).await;
-            save_engram(&mut store, &["https://y.example", "https://z.example"], 2).await;
+            save_codicil(&mut store, &["https://x.example", "https://y.example"], 1).await;
+            save_codicil(&mut store, &["https://y.example", "https://z.example"], 2).await;
 
             let first = propose_consolidation(&mut store).await.expect("propose");
             apply_consolidation(&mut store, &first, RedactionPolicy::default(), Timestamp(3))
                 .await
                 .expect("apply");
 
-            // The two source engrams are still Generated (compose never mutates its
-            // sources) and still overlap exactly as before, but a linking engram
+            // The two source codicils are still Generated (compose never mutates its
+            // sources) and still overlap exactly as before, but a linking codicil
             // now names both -- a second pass must not re-propose them.
             let second = propose_consolidation(&mut store)
                 .await

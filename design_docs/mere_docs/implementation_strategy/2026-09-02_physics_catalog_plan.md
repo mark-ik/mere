@@ -1,0 +1,267 @@
+# Physics Catalog Plan
+
+**Date:** 2026-09-02
+**Status:** plan (assessed and ruled 2026-09-02; P1 ready to start).
+**Scope:** A catalog of *distinct physics layout laws* — dynamical systems
+over the graph's bodies that produce different layouts because they are
+different physics — as a lever beside the arrangement catalog, plus the
+composable extra forces the donor's presets were made of, in the canvas
+and both Graphshell hosts, extended to the remote board, with receipts.
+Not in scope: new integrators (seiche stays rapier), GPU tiers (the spatial
+compute plan), the ambient backdrop sims (already a catalog), the donor's
+WASM layout mods.
+
+**Related:** [cartography layer brief](../research/2026-05-10_cartography_layer_brief.md)
+(§5, the strategy catalogue and the helper-era preset portfolio),
+[the cartography–gyre layout seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
+(arrangements compute, physics simulates; the seed/read-back bridge),
+[physics scenes and tangibility plan](2026-06-22_physics_scenes_and_tangibility_plan.md)
+(the scene and ambient catalogs this one sits beside),
+[browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md)
+(the web host and the scenario lane the receipts run on).
+Donor sources, read 2026-09-02 from the archive (`mark-ik/graphshell`,
+branch `webrender-wgpu-branch`, `design_docs/graphshell_docs/implementation_strategy/`):
+`canvas/2026-02-24_physics_engine_extensibility_plan.md` (the Layout
+Algorithm Reference Table and the Ten Thematic/Topological Physics
+Presets), `canvas/layout_algorithm_portfolio_spec.md`,
+`canvas/force_layout_and_barnes_hut_spec.md`,
+`canvas/layout_behaviors_and_physics_spec.md`,
+`system/register/physics_profile_registry_spec.md`.
+
+## 1. The question, and what the code answers today
+
+Mark's framing (2026-09-02): there are catalogs of arrangements, of
+node/edge/field/canvas presentations, of scenes — so there should be a
+catalog of physics layouts too, an additional lever a scene author reaches
+for; and it must not collapse into tuned versions of one force-directed
+graph. Verified against the crates:
+
+- **cartography** owns two contracts: `LayoutStrategy` (analytic, one
+  shot) and `StreamingLayoutStrategy` (iterative, host-owned serializable
+  state). The canvas picker lists eight graph-only analytic arrangements
+  (`CANVAS_LAYOUT_STRATEGIES`, `cartography_scene.rs:146`); the seiche
+  force-directed default is the host's `None`, unlisted; the pure streaming
+  strategies the donor had (`ForceDirected`, `BarnesHut`,
+  `SemanticEdgeWeight`) no longer exist in mere's crates — they left with
+  `arrangements`.
+- **seiche** owns the physics: a rapier world with `forces: Vec<Box<dyn
+  Force>>` (`lib.rs:375`) and `add_force` only — no replace, no clear
+  (`lib.rs:507`). Seven `Force`s: `NodeExclusion`, `EdgeSpring`, `Boundary`
+  (installed at build, `seiche_bridge.rs:58`), `AnchorSpring` (the
+  arrangement-as-attractor pull), `AffinitySpring` (semantic affinity),
+  `CouplingForce` (fields — the donor's magnetic zones, landed), and
+  `BarnesHutRepulsion` (built, exported, never added). A `Force` sees
+  `ForceContext { bodies, colliders, joints, bodies_by_node, edges,
+  repulsion_solver }` (`lib.rs:343`): positions and topology, no node
+  attributes. Tunables: linear damping, pause/play, settle budgets. Two
+  catalogs already live in this tier: thirteen declarative scenes
+  (`scenes.rs`) and four ambient sims.
+- **persistence** (`SavedSceneV1`, `product.rs:213`) carries
+  `physics_paused` and `physics_damping`, nothing that names a law.
+- **the web host** runs seiche inline through settle budgets (~6 s), same
+  fixed force set; the remote board is drawn from the endpoint's score with
+  no physics.
+
+## 2. Terms, and the donor's catalog read in them
+
+Three words are in play and they are not the same thing; the donor's docs
+use all three, and the plan's first draft conflated the second and third.
+
+- **Layout algorithm** (the graph-drawing literature's word): a procedure
+  that computes positions from structure. Two kinds — *analytic*
+  (grid, tree/Sugiyama, radial, phyllotaxis, Penrose, L-system, timeline,
+  kanban, spectral, embedding) and *energy minimization* (spring-electrical
+  à la Fruchterman–Reingold, Kamada–Kawai stress, LinLog/ForceAtlas2,
+  annealing). Mere calls the analytic kind **arrangements**; the picker is
+  their catalog. The energy kind, run to convergence, is what the donor's
+  `arrangements` crate did (`ForceDirected`, `BarnesHut`); run live under
+  rapier, it is the next thing.
+- **Physics law** (this plan's word; the donor's "Dynamic physics"
+  category): a dynamical system over bodies — what force each feels, from
+  whom, as a function of what — integrated over time. Live FR is one;
+  so are n-body gravitation, particle life, flocking, phase
+  synchronization, fluids, rigid bodies with collision. This is seiche's
+  tier, and the catalog this plan founds.
+- **Physics profile / preset** (the donor's word, `physics_profile_registry_spec`):
+  a *named parameter set and extra-force composition over one law* —
+  `Liquid`, `Gas`, `Solid` were "semantic parameter sets over the
+  Fruchterman–Reingold force model". That is the tuning tier; it is real
+  and it stays, but it is not the catalog.
+
+So the lever has three parts, and the donor had all three in some form:
+
+1. **Laws** — distinct dynamics. The catalog.
+2. **Overlays** — the donor's Level-2 "post-physics extra forces", each a
+   seiche `Force` composable onto any law: `DegreeRepulsion` (hubs spread),
+   `DomainCluster` (pull toward the centroid of same-site nodes),
+   `HubGravity` (gravity scaling with log degree), `DepthGravity` (BFS depth
+   drives one axis: roots up, leaves down), `GridSnap` (spring to the
+   nearest grid point), `GravityLocus` (pull toward a point, optionally
+   oscillating), and the ones mere already has: `CouplingForce` (fields,
+   the donor's zones), `AffinitySpring` (semantic clustering),
+   `AnchorSpring` (the arrangement's pull).
+3. **Tunables** — damping, settle policy, pause/play, anchor strength,
+   overlay strengths. A **profile** is a saved (law, overlays, tunables)
+   triple with a name — the donor's ten presets are profiles, and they map
+   cleanly:
+
+| donor preset | law | overlays |
+|---|---|---|
+| liquid | Springs | weak locus |
+| gas | Springs | none, no anchor |
+| solid | Springs | domain cluster + degree repulsion |
+| archipelago | Springs | strong domain cluster + degree repulsion |
+| constellation | Springs | degree repulsion + hub gravity |
+| crystal | Springs | grid snap |
+| tide | Springs | oscillating locus (never settles) |
+| sediment | Springs | depth gravity |
+| magnet | Springs | fields (landed as `CouplingForce`) |
+| void | Still | none |
+
+Every one is the same law. That is the collapse Mark refused, and the
+donor's own reference table already pointed past it: its "Constraint-Based
+/ Elastic (rapier)" and "Semantic Embedding" rows are different physics,
+not presets.
+
+### The laws (v1 — all of them, ruled 2026-09-02; plain labels)
+
+| id | label | dynamics | what it reveals | needs |
+|---|---|---|---|---|
+| `spring.rapier` | Springs | today's law: rigid-body exclusion, Hooke springs on edges, boundary | local structure, no overlap; the interactive default | edges |
+| `charge.barnes-hut` | Charge | Coulomb repulsion between all bodies (1/d, Barnes-Hut O(n log n)) + edge springs: the Fruchterman–Reingold shape | evenly spread neighbourhoods, the classic force picture | edges |
+| `stress.kamada-kawai` | Stress | every pair a spring whose rest length is graph distance × L | global distance fidelity: paths unroll to true length, far is far | all-pairs shortest paths, cached per topology |
+| `energy.linlog` | Energy | attraction ∝ d on edges, repulsion ∝ 1/d overall, degree-weighted (LinLog / ForceAtlas2) | communities as islands, hubs central | edges, degree |
+| `orbit.gravity` | Orbit | n-body gravitation, mass by degree, tangential initial velocity, no rest | the graph as a solar system: leaves orbit hubs | degree |
+| `kinds.particle-life` | Kinds | particle life: each node has a kind; an asymmetric kind×kind attract/repel matrix (the ambient sim's law over the graph) | sorting, chasing and fleeing by kind; never at rest | a kind per node — the host's choice per scene (relation family, domain, facet), recorded in the saved scene |
+| `flock.boids` | Flock | separation / alignment / cohesion; edge-neighbours are flockmates | constellations that move as groups | edges |
+| `sync.kuramoto` | Sync | phase oscillators coupled along edges; angle = phase, radius = distance from focus | communities as phase clusters on a ring | edges, a focus |
+| `flow.magnetic` | Flow | directed edges align to a field direction (magnetic springs); with depth gravity, the donor's sediment made a law | hierarchy and direction by physics, Sugiyama's reading without its layers | directed edges |
+| `anneal.davidson-harel` | Anneal | stochastic descent on a general energy under a temperature schedule | a balanced settled picture; stochastic | edges |
+| `still.default` | Still | no forces; positions are the arrangement's (the donor's void) | the arrangement alone | — |
+
+### The overlays (v1, from the donor's Level 2)
+
+`DegreeRepulsion`, `DomainCluster`, `HubGravity`, `DepthGravity`,
+`GridSnap`, `GravityLocus` (with an optional oscillation, the donor's
+tide) — six new seiche `Force`s, each composable onto any law; plus the
+three already landed. Overlays are what a profile toggles; the donor's ten
+presets become the first ten profiles, expressed as (law, overlays,
+tunables) and named as they were — the evocative names are the product
+tier and belong to profiles, not laws.
+
+In code: seiche gains `set_forces` / `clear_forces`; laws and overlays are
+seiche `Force`s (seiche is the published home, so mer3ly's live seiche
+path can pick them up); the canvas owns the catalogs
+(`CANVAS_PHYSICS_LAWS`, `CANVAS_PHYSICS_OVERLAYS`, `CANVAS_PHYSICS_PROFILES`,
+mirroring `CANVAS_LAYOUT_STRATEGIES`), builds forces from graph attributes
+(degree, kind, depth, domain, the distance table), and switches the live
+simulation — inline or actor — with `Canvas::set_physics_law(id)`,
+`set_physics_overlays(ids)`, `apply_physics_profile(id)`.
+
+## 3. Phases
+
+**P1 — laws and overlays in seiche, the catalogs in the canvas.** seiche
+gains `set_forces` / `clear_forces` (additive) and the `Force`s: laws
+`StressSpring`, `LinLogForce`, `Gravity` (n-body), `ParticleLife`,
+`Boids`, `Kuramoto`, `MagneticSpring`, `Anneal`; overlays
+`DegreeRepulsion`, `DomainCluster`, `HubGravity`, `DepthGravity`,
+`GridSnap`, `GravityLocus`. Each law carries a unit test stating what it
+reveals — Stress: a 4-node path settles with end-to-end distance ≈ 3L;
+Energy: two cliques joined by one edge sit further apart than under
+Springs; Orbit and Kinds and Flock: kinetic energy above a floor after
+600 ticks; Kinds: intra-kind distance below inter-kind; Sync: two
+communities end in two phase clusters; Flow: a directed chain ends
+monotone along the field; Anneal: energy after the schedule below energy
+before. Each overlay carries one (degree repulsion spreads hubs; depth
+gravity orders a tree top-down; grid snap lands on grid points). The
+canvas gains `PhysicsLaw` / `PhysicsOverlay` / `PhysicsProfile` values,
+the three catalogs, the setters, the `PhysicsCommand::SetForces` mirror
+for the actor, attribute builders (degree, kind by the host's choice,
+depth from a focus, domain from URL, the distance table, rebuilt on
+topology change as couplings are), and the persisted `physics_law`,
+`physics_overlays`, `physics_kind_source` fields on `SavedSceneV1`
+(optional, defaults `spring.rapier`, none, `relation-family`). Field
+couplings stay under every law; the anchor pull is a tunable. *Done when*
+a law or overlay switch on a live canvas replaces the force set without
+moving a body until the next tick, every combination round-trips through
+the saved scene, the law and overlay tests are green, and a catalog test
+proves every id builds and every label is plain.
+
+**P2 — the levers in both hosts, with a receipt per law.** The product
+panel gains a law picker, overlay toggles and a profile picker beside the
+arrangement picker (web: `physics-select`, `overlay-<id>` checkboxes,
+`profile-select`; native: the same commands); the chrome hint reads
+`<arrangement> · <law>`; the saved scene carries all three. The web
+snapshot exposes `physics-law`, `physics-overlays`, `physics-energy`
+(kinetic energy). Receipts: `physics_<law>.scn` per law with capture pairs
+across `settle 60`, asserting the law's own signature (Stress: two nodes
+three edges apart end further than adjacent; Orbit/Kinds/Flock: energy
+above a floor at the end; Charge/Energy: no overlapping bodies; Springs
+and Still: at rest), and one `physics_profiles.scn` applying each of the
+ten donor profiles and asserting its overlays are the ones installed.
+*Done when* eleven law receipts and the profile receipt are green and the
+captures show what the labels say.
+
+**P3 — physics on the remote board.** The web host seeds seiche bodies
+from the remote scene's items — the projection's score is the seed and,
+through the anchor pull, an attractor — and runs the chosen law over them,
+reading positions back for drawing (the seam doc's seed/read pair, on the
+remote side). A card appended by the host enters with a settle burst.
+Host interaction policy; the endpoint's score is never written back.
+*Done when* `c4b1_live_board` under Charge shows the second card settle
+away from the first (positions and a capture pair) and under Orbit the
+cards keep moving.
+
+**P4 — drag and add.** The web pointer path reaches `pointer_down/up`;
+verify drag pins and re-settles under each law, and adding a node fans it
+out and settles (or joins the motion under the restless laws); one receipt
+row per law; the donor's reheat-on-structural-change and
+place-near-parent contracts (`layout_behaviors_and_physics_spec.md` §2)
+adopted as the add behaviour. *Done when* the rows are green on the web
+and the native host shows the same by hand.
+
+## 4. Findings
+
+- 2026-09-02: `BarnesHutRepulsion` has been one `add_force` from live since
+  2026-06 (`2026-07-03_archived_plan_tails_plan.md:170`); Charge is its
+  honest home, because it replaces `NodeExclusion`'s pairwise exclusion
+  rather than adding to it — a different physics, not a tuning.
+- 2026-09-02: the donor's ten presets are one law with different
+  overlays (table above); its reference table's genuinely different physics
+  were rapier constraints and semantic embedding, and its
+  `force_layout_and_barnes_hut_spec` §5 said in as many words that
+  Barnes-Hut "is a scaling implementation choice, not a new user-facing
+  semantics model". The donor never had a law catalog; it had a profile
+  registry over FR. This plan is the first to separate the two.
+- 2026-09-02: a `Force` sees positions and topology but no node
+  attributes (`lib.rs:343`); laws and overlays that need degree, kind,
+  depth, domain or graph distance take them at construction from the
+  canvas, the way `CouplingForce` snapshots its targets, and are rebuilt on
+  topology change as couplings are.
+- 2026-09-02: `Force` is `&self` and forces run in registration order;
+  laws with interior state (Sync's phases, Anneal's temperature, the
+  oscillating locus's clock) keep it behind a `Mutex`; a law plus its
+  overlays is one ordered `Vec<Box<dyn Force>>` that `set_forces`
+  installs in the declared order (law first, overlays after, couplings
+  last).
+- 2026-09-02: on the web the simulation is inline and ticks only through
+  settle budgets (`input.rs:590` is the continuous run the play control
+  enters); Orbit, Kinds, Flock, Sync and the oscillating locus never rest,
+  so a law declares `wants_continuous_tick`, the rider the physics scenes
+  plan added for perpetual scenes.
+
+## 5. Decisions
+
+Ruled 2026-09-02: laws are distinct dynamics, never tunings of one; all
+eleven laws in v1 ("plenty"); labels plain, ids technical; the kind for
+Kinds is the host's choice per scene; the catalogs live in the canvas and
+the forces in seiche; the DOC_README index line added this session; the
+donor's ten preset names return as the first ten profiles. Open: where the
+native picker sits (the product panel, or the scene settings page the
+physics-scenes plan founded).
+
+## Progress
+
+- 2026-09-02: assessed against the crates and the donor's archived docs;
+  plan written; the first draft's collapse into tunings rejected by Mark
+  and rewritten as laws × overlays × tunables.

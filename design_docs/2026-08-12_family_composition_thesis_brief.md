@@ -115,6 +115,21 @@ only when a pipeline end has more than one occupant" — proof 4). Worth
 adopting as a named gate when Graphshell embedding is ever scheduled: the
 receipt is a *second host*, not a second view.
 
+**The capability, named (Mark, 2026-09-02).** The thing that passes the
+anti-shell test is the *projection manipulator*, and its name is
+**Scenograph** — the boundary plan frees the name by dissolving the generic
+facade into Cambium and reserves it for exactly this: the scene/projection
+editor product, built with Cambium. The manipulator is authenticated access to all
+the data of all the applications, used to customize projections to your own
+taste — a home-page graph of app graphs. Graphshell is its preeminent host and
+otherwise a viewer and redirector — reading simple structured content through
+Genet and Workbench is in scope, the browser proper is Turnstone's — but the
+manipulator is meant to appear in every application that
+has its own app graph. That fixes what the second host must embed: not a
+Graphshell pane, but the manipulator over the host's own graph, holding a
+lens, never truth. The suite census §3 carries the charter sharpening and the
+two placement consequences it leaves open.
+
 **The narrowing gradient.** Possession ⊇ disclosure ⊇ synchronization ⊇
 projection: what an application holds, what a grant admits, what a replicated
 space carries, what a score selects — each strictly narrower, each owned by an

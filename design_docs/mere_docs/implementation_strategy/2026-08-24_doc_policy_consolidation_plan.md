@@ -1,9 +1,14 @@
 # Doc Policy Consolidation Plan — one canonical core, facade-collapsed areas, spec docs repatriated
 
 **Date**: 2026-08-24
-**Status**: **complete 2026-08-24 — A, B and C all landed.** Decisions taken by
-Mark 2026-08-24 (four questions, recorded in §Decisions). Phases A and B are
-mere-local; phase C touched smolweb and genet.
+**Status**: **reopened 2026-09-02 for phase D, the active-tree audit.** A, B
+and C landed 2026-08-24 and stay closed. D1 (mechanical pass) and D2
+(judgment pass over all 281 active docs) complete 2026-09-02, with a depth
+re-pass of batches 03–06 in progress under decision 12; D4 (judgment report)
+delivered the same day, four class rulings taken (decisions 9–12), item-level
+escalations open; D3 (mechanical fixes) waits for the live tree to quiet. Decisions taken by Mark 2026-08-24 (four questions) and
+2026-09-02 (four more), both recorded in §Decisions. Phases A and B were
+mere-local; phase C touched smolweb and genet; phase D is mere-local.
 
 **Committed 2026-08-24** in twelve repos: mere (swept by a concurrent session
 in `db9c613c`), smolweb, mesocosm, woodshed, and the eight policy-only repos.
@@ -39,6 +44,37 @@ genet's `docs/` migration, and the pre-existing broken links (§Findings).
    that knowingly. It has one real advantage the migration option lacks:
    founding a new directory does not touch the thirteen files another session
    currently has dirty inside `docs/`.
+
+## Decisions (Mark, 2026-09-02)
+
+Taken after the D1 numbers were on the table, with named options.
+
+5. **Scope**: everything active — claim verification across all 281 docs, not
+   only the current set. Older material is expected to yield less per doc.
+6. **Fix versus report**: fix the mechanical class as one batch once the
+   other session's `DOC_README.md` edit commits; bring judgment calls (dead
+   plans, superseded receipts) with evidence before changing anything.
+7. **Record**: reopen this plan rather than found a new brief — it already
+   holds the standing 2026-08-24 finding, and core §1 prefers the existing
+   home.
+8. **Code review**: "review mere" also meant the code; that is a separate
+   lane with its own scope, not part of D. Non-Fable subagents may be used
+   for the audit's fan-out.
+
+Rulings on the D4 report, taken 2026-09-02 with the report in hand:
+
+9. **Dead plans (§2 of the report, sixteen)**: hold. Mark reads the list
+   himself before any archiving; nothing in that class moves in D3.
+10. **Historical banners (§4, twenty-five)**: yes as a class, but the list
+    with proposed banner text is shown first; nothing is bannered until he
+    has seen it. Produced after ruling 12's re-pass so the list reflects the
+    deeper evidence, since most candidates sit in those four batches.
+11. **Status lines contradicted by the document's own Progress log (§6a,
+    thirty-four plans)**: mechanical. The header is rewritten to what the
+    log already records; lands with the D3 batch.
+12. **Depth re-pass**: yes — batches 03–06 (the May–July plans, 88 docs)
+    are re-run on Opus, independently of the Sonnet outputs, which are kept
+    beside them; the aggregate prefers the deeper pass where both exist.
 
 ## Findings
 
@@ -186,6 +222,42 @@ to a missing file.
 and genet's two-doc-home split is stated explicitly in its policy rather than
 left to be discovered. **All met 2026-08-24.**
 
+### D. Active-tree audit (reopened 2026-09-02)
+
+The 2026-08-24 broken-link finding was recorded and not scheduled. Mark asked
+for the audit on 2026-09-02; this phase is it, scoped to the active tree (281
+docs at `bcb222ce`; `archive_docs/` excluded by design).
+
+- **D1**. Mechanical pass over every active doc, read from HEAD so another
+  session's in-flight edits are neither audited nor disturbed: index coverage
+  in both directions, relative-link resolution, plan Status extraction and
+  classification, commit-hash resolution against every local repo, code-font
+  path existence. Method and blind spots in §Finding (2026-09-02).
+- **D2**. Judgment pass over all 281 docs: each gets a disposition (current,
+  historical-marked, historical-unmarked, superseded, dead), a status-line
+  verdict, and a per-claim list checked against the pinned tree — paths,
+  symbols, versions, hashes, cross-doc claims, internal contradictions. Run
+  as fourteen batched verifications against a detached worktree pinned at
+  `bcb222ce`, with protocol and manifests kept outside the tree; results
+  aggregated here.
+- **D3**. Mechanical fixes as one batch once `DOC_README.md` is no longer
+  dirty under another session: index the orphans; convert links into the
+  Claude memory directory to prose or remove them; add Status lines where
+  absent; archive plans D2 confirms complete, extracting open points per
+  core §8; add the rename-key banner to, or retire paths in, docs D2 classes
+  historical-unmarked; convert active-tree cross-repo relative links to path
+  citations per core §5.
+- **D4**. Judgment report: dead and stale-open plans, contradicted receipts,
+  docs to mark historical or superseded — each with evidence, none changed
+  until ruled.
+
+**Done when**: D1 numbers are recorded with method and blind spots; every
+active doc has a D2 block in the aggregated record; the D1 checker re-run
+after D3 reports zero orphans, zero memory-directory links, zero Status-less
+plans, and every remaining broken link or missing path sits in a doc that
+marks itself historical or in `archive_docs/`; D4 delivered to Mark with each
+item's evidence.
+
 ## Progress
 
 - **2026-08-24**: Plan written. Assessment verified against the trees; three
@@ -253,6 +325,107 @@ left to be discovered. **All met 2026-08-24.**
   **mere's policy now states the rule this leaves behind**: when code leaves
   the repository, its docs go with it in the same session. An area root
   describing code that lives elsewhere is the failure this pass cleaned up.
+
+- **2026-09-02 (D1 landed, D2 opened)**: Mark asked for a review of mere and
+  an audit of its docs. Mechanical pass run against `bcb222ce` (numbers and
+  blind spots in §Finding 2026-09-02); four scope decisions taken with the
+  numbers on the table (§Decisions). A detached worktree pinned at `bcb222ce`
+  was created outside the tree so the judgment pass audits a stable snapshot
+  and cannot touch the live tree, where another session held eight docs
+  dirty. Fourteen batch manifests generated, each carrying its docs'
+  mechanical pre-findings; verification protocol written; batches dispatched
+  in waves of four, current-state docs first (root briefs, technical
+  architecture, July–August plans). The `DOC_README.md` index line for this
+  plan still says complete; it is corrected in D3 with the rest of the index
+  work, because that file is dirty under the other session.
+
+- **2026-09-02 (D2 landed, D4 delivered)**: fourteen batches, 281 of 281
+  docs with a record, every batch at full coverage. 2,556 claims checked:
+  1,986 hold, 481 stale (19%), 90 unverifiable; 79 contradictions.
+  Dispositions: 134 current, 69 historical-marked, 60 historical-unmarked,
+  16 dead, 2 superseded. Recommended actions: fix-refs 67 docs,
+  update-status 56, mark-historical 23, archive 16 outright plus those
+  recommended after a status update, escalate 7. **One event explains most
+  stale paths**: the meerkat deletion, `c5f01064` on 2026-07-18 (198 files,
+  63,680 deletions), which roughly thirty plans still describe as landed,
+  several with Progress entries dated after it; then the renames
+  `session-runtime`→`pandect`, `persona`→`dramatis`,
+  `orrery`→`conatus`/`canvas`, `moothold`→`gemot`, `node-lineage`→`stemma`,
+  `mere-orrery`→`glossary`, and the device host into `ports/djinn`. **The
+  dominant defect class** is a status line contradicted by the same
+  document's Progress log — about two dozen plans whose header froze while
+  the log moved on; the document is its own authority there, so that class
+  is proposed as D3-mechanical. Method: the four Opus batches verified 14–23
+  claims per doc, the ten Sonnet batches 3–7, so the May–July plans (batches
+  03–06, 88 docs) had the shallower pass; a deeper re-pass there is an
+  option, not scheduled. The D4 report lives beside the aggregate in the
+  scratchpad and was handed to Mark the same day. D3 still waits on
+  `DOC_README.md`, dirty under the other session, whose in-flight edits also
+  touch six flagged docs (standards survey, event-DAG brief, reachability
+  rungs, graphshell reference host, search surface wiring, djinn resident
+  services), so those findings may already be addressed in the working tree.
+
+- **2026-09-02 (D2 depth re-pass landed, decision 12)**: batches 03–06
+  re-run on Opus, independently of the Sonnet files, which are kept beside
+  them. The aggregate now carries the deeper pass: 4,346 claims checked (was
+  2,556), 3,091 hold, 1,144 stale (26%, was 19%), 113 unverifiable; 141
+  contradictions (was 79). Dispositions: 127 current, 76
+  historical-unmarked, 61 historical-marked, 17 dead. On the same 88 docs,
+  Sonnet had checked 330 claims and found 118 stale; Opus checked 2,140 and
+  found 786, and changed 29 of 88 dispositions — among them three
+  `dead`→`historical-unmarked`, six new `dead`, and several
+  `historical-marked`→`historical-unmarked` where the existing 2026-06-09
+  audit note was itself found stale (it maps `mere-identity`→
+  `persona/identity`, since renamed again to `dramatis/personae`). **Method
+  finding to carry forward: on identical inputs and the same protocol,
+  Sonnet under-checked by roughly six and a half times and reached a
+  different disposition on one doc in three; use Opus for verification
+  batches, Sonnet for triage.** House banner form confirmed from the tree
+  (a dated audit note as a blockquote under the title, layered rather than
+  replaced). The D4 report and the banner list (ruling 10, 31 docs)
+  regenerated from the deeper aggregate and re-delivered; the dead list
+  (ruling 9) changed membership and is re-delivered with it.
+
+- **2026-09-02 (scoping for rulings 9–10 and the escalations)**: Mark asked
+  for the dead list, the banner list and the escalations to be scoped rather
+  than read raw. **Dead**: seventeen cases written with evidence, open points
+  and a recommendation; extraction target confirmed as the archived-plan-tails
+  plan, whose own header names it the single backlog for every pass; fifteen
+  archive, one retire, one reclassified live — the kith plan, whose gate
+  cleared 2026-08-09 and which `crates/mesh/mesh/src/lease.rs:22-26` still
+  names as owing. **Banners**: thirty-one sorted — twenty banner with per-doc
+  text in the tree's own dated-audit-note form (second layer where a
+  2026-06-09 note exists, never replacing it), eight archive instead as
+  completed records, one two-line repair, two held. **Escalations**: an Opus
+  evidence pass over twelve questions across mere, turnstone and genet found
+  nothing built under another name — five never built, four partial, one
+  superseded, one built-then-deleted. Nine of the twelve resolve through two
+  demolitions no plan records: `c5f01064` and genet `55c05d11759` (Stylo and
+  `genet-layout` retired 2026-08-21, which also took the parallel-cascade
+  thesis's mechanism with it). Both left producers without consumers:
+  `GraphTableStats`, `PersonaSettings.menu_actions`/`command_usage`,
+  `ToastSpec`, `BarnesHutRepulsion`. Seven secondary escalations settled by
+  lookup, including one code breach — `ports/distillery/probe/session-fixture/
+  Cargo.toml:21` pins `sha2 = "0.10"` against the ruled 0.11 row — and one
+  product gap: turnstone has no `register-theme` dependency, so the T1–T5
+  theme-mode machinery has no consumer. The standards-survey index
+  discrepancy is the other session's uncommitted working copy, not a lost
+  commit. Three scoping documents and the evidence file delivered.
+
+- **2026-09-02 (ruling 9 executed: all seventeen archived)**: Mark ruled
+  archive all, overriding the scoping's one NOT-DEAD (kith) and one RETIRE
+  (the layout probe) — both archived with their re-scope notes carried.
+  `git mv` of the seventeen into `archive_docs/2026-09-02_retired_plans/`, a
+  new checkpoint suffix because these are retired, not completed. Per core §5,
+  73 inbound links repointed across 35 files in the same pass, six of them in
+  older archive folders that also pointed at these plans. Per core §6, the
+  seventeen `DOC_README.md` entries repointed and annotated "Archived
+  2026-09-02" — that file was still dirty under the other session, so the
+  edits were read-modify-write on disk and compose with theirs; noted as a
+  risk, not a collision. Open points extracted to the archived-plan-tails
+  plan's new 2026-09-02 section, the tree's own precedent for tails. Not
+  committed. The proposed Sonnet/Opus method memory was declined ("won't age
+  well") and not written.
 
 ### Finding: genet now has two doc homes
 
@@ -332,3 +505,59 @@ destroy them, recoverable only from `db9c613c^`. smolweb was in the same state
 and is now committed; genet is not, because a session is actively working in
 that tree and its `design_docs/` also holds that session's in-flight fleece
 work. Committing it is theirs to do, not ours. Flagged rather than fixed.
+
+### Finding (2026-09-02): the active tree, measured
+
+D1, verified against `bcb222ce` with the eight docs then dirty under another
+session read from HEAD and one untracked brief skipped. 281 active docs, 135
+of them plans.
+
+- **Index (§6)**: 17 orphans, 0 ghosts. The orphans include a root brief the
+  projection grammar catalog names as owning its scene judgments
+  (`2026-08-23_projection_scenes_and_graph_native_platform.md`), the
+  graphshell reference host plan, six `mere_docs/testing/` receipts, and a
+  plan filed under `technical_architecture/`
+  (`2026-08-14_tactile_tier_plan.md`).
+- **Plans (§8)**: 39 self-describe as complete or landed yet sit in the
+  active tree — roughly twenty are fully done, the rest partial. 13 have no
+  Status line at all. Of 37 that read as open, about fifteen were last dated
+  May–June 2026, including one for the deleted meerkat crate.
+- **Links (§5)**: 293 broken relative links in the active tree. The
+  2026-08-24 figure of 806 occurrences said the bulk sat in `archive_docs/`;
+  a third does not. 19 links across six docs point into the Claude memory
+  directory (`lexicon_brief` 4, `protocol_architecture_plan` 8,
+  `auto-update_brief` 2, `identity-vault-ssh-agent_plan` 2,
+  `memory_tiers_brief` 1, `MURM_AS_BILATERAL` 2). 99 cross-repo relative
+  links, 44 of them in the graphshell harvest brief.
+- **Code-font paths**: 495 cited, roughly 260 absent at HEAD after
+  correcting 13 `components/` paths the checker had tested against the wrong
+  root (they resolve in genet). The absent set is dominated by the deleted
+  meerkat (20 citations), pre-rename `crates/persona` (12) and
+  `crates/orrery` (9), and the old `session-runtime`. Only 8 of the 138
+  citing docs carry the rename-key banner that makes such references
+  deliberate; 130 do not. Live breaks worth naming: `ports/retinue-agent/*`
+  (six citations from the reference host plan),
+  `ports/graphshell/src/bin/graphshell_device_host.rs` (replaced by djinn,
+  per the resident consolidation plan), `ports/pelt`,
+  `ports/knot/src/editor.rs`, and five genet paths under the removed
+  `genet-layout`.
+- **Commit receipts**: 361 hashes cited; 348 resolve in some local repo. Of
+  the 13 that do not, three are model revisions rather than commits; the ten
+  real ones cluster in the illume text-lexer plan, plus `03661ce` cited by
+  `DOC_README.md` itself.
+
+**Method and blind spots**, per the rule recorded above that a zero is only
+evidence if the checker would have reported non-zero. Every axis reported
+non-zero except ghosts; the ghost check shares the resolver that found the
+293, so its zero is credible. Known blind spots: only inline markdown links —
+bracketed text followed by a parenthesised target — are seen (no
+reference-style links, no bare URLs; and a literal example of that syntax in
+prose reads as a link, which this very sentence tripped on 2026-09-02); the code-font path check
+requires a known leading segment (`crates/`, `ports/`, `apps/`,
+`components/`, `src/`, `design_docs/`, `repos/`, `tests/`, `examples/`), so
+paths under other roots are unchecked, and bare `src/`, `tests/`,
+`examples/` paths are ambiguous without crate context and over-count; the
+hash check accepts a hash resolving in *any* local repo, so a hash
+attributed to the wrong repo passes; plan Status classification is by regex,
+and its 45-doc "unclear" bucket was not hand-sorted in D1. The checker lives
+outside the tree (`mere_doc_audit.py`, scratchpad) and is rerun to close D3.

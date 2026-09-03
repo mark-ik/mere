@@ -29,7 +29,10 @@ pub const LOCAL_FILE_FACET: &str = "graphshell.local-file/v1";
 pub const CONTENT_FACET: &str = "graphshell.content/v1";
 pub const SAVED_SCENE_FACET: &str = "graphshell.saved-scene/v2";
 pub const PINNED_PROJECTION_FACET: &str = "graphshell.pinned-projection/v1";
-pub const PRODUCT_ENGRAM_SCHEMA: &str = "graphshell.graph-engram/v1";
+pub const PRODUCT_CODICIL_SCHEMA: &str = "graphshell.graph-codicil/v2";
+/// Read-only compatibility tag for graph selections exported before the
+/// Engram-to-Codicil vocabulary migration.
+pub const LEGACY_PRODUCT_ENGRAM_SCHEMA: &str = "graphshell.graph-engram/v1";
 
 /// The host-owned elapsed clock for one projection transition.
 ///
@@ -245,7 +248,7 @@ pub struct PinnedProjectionCardV1 {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ProductEngramV1 {
+pub struct ProductCodicilV2 {
     pub schema: String,
     pub scope: TransferScope,
     pub exported_at_ms: u64,
@@ -279,7 +282,7 @@ pub enum ProductError {
     UnknownAddress(String),
     InvalidFacetJson(String),
     EmptySelection,
-    InvalidEngram(String),
+    InvalidCodicil(String),
     InvalidContentReference(String),
 }
 
@@ -291,7 +294,7 @@ impl std::fmt::Display for ProductError {
             Self::UnknownAddress(address) => write!(formatter, "unknown address {address}"),
             Self::InvalidFacetJson(error) => write!(formatter, "invalid facet JSON: {error}"),
             Self::EmptySelection => write!(formatter, "the transfer scope contains no objects"),
-            Self::InvalidEngram(error) => write!(formatter, "invalid graph engram: {error}"),
+            Self::InvalidCodicil(error) => write!(formatter, "invalid graph codicil: {error}"),
             Self::InvalidContentReference(error) => {
                 write!(formatter, "invalid portable content reference: {error}")
             }
@@ -520,10 +523,10 @@ impl<B: Backend> MereHost<B> {
             .facet_value(address, SAVED_SCENE_FACET)
             .ok_or_else(|| ProductError::UnknownAddress(address.to_string()))?;
         serde_json::from_value(value.clone())
-            .map_err(|error| ProductError::InvalidEngram(error.to_string()))
+            .map_err(|error| ProductError::InvalidCodicil(error.to_string()))
     }
 
-    pub fn export_product_engram(&self, request: ExportRequest) -> Result<Vec<u8>, ProductError> {
+    pub fn export_product_codicil(&self, request: ExportRequest) -> Result<Vec<u8>, ProductError> {
         let members = transfer_members(self.graph(), &request)?;
         if members.is_empty() {
             return Err(ProductError::EmptySelection);
@@ -535,19 +538,19 @@ impl<B: Backend> MereHost<B> {
             request.include_local_file_locations,
         );
         let scene = request.scene.map(|scene| filter_scene(scene, &members));
-        serde_json::to_vec_pretty(&ProductEngramV1 {
-            schema: PRODUCT_ENGRAM_SCHEMA.to_string(),
+        serde_json::to_vec_pretty(&ProductCodicilV2 {
+            schema: PRODUCT_CODICIL_SCHEMA.to_string(),
             scope: request.scope,
             exported_at_ms: request.exported_at_ms,
             graph,
             facets,
             scene,
         })
-        .map_err(|error| ProductError::InvalidEngram(error.to_string()))
+        .map_err(|error| ProductError::InvalidCodicil(error.to_string()))
     }
 
-    pub fn import_product_engram(&mut self, bytes: &[u8]) -> Result<ImportReceipt, ProductError> {
-        let engram = decode_engram(bytes)?;
+    pub fn import_product_codicil(&mut self, bytes: &[u8]) -> Result<ImportReceipt, ProductError> {
+        let codicil = decode_codicil(bytes)?;
         let current_facets = self.graph().facets().clone();
         let mut merged = self.graph().to_snapshot();
         let mut known: HashSet<_> = merged
@@ -556,19 +559,19 @@ impl<B: Backend> MereHost<B> {
             .map(|node| node.node_id.clone())
             .collect();
         let mut imported_nodes = 0;
-        for node in engram.graph.nodes {
+        for node in codicil.graph.nodes {
             if known.insert(node.node_id.clone()) {
                 merged.nodes.push(node);
                 imported_nodes += 1;
             }
         }
-        let imported_relations = engram.graph.edges.len();
-        merged.edges.extend(engram.graph.edges);
-        merged.timestamp_secs = engram.exported_at_ms / 1_000;
+        let imported_relations = codicil.graph.edges.len();
+        merged.edges.extend(codicil.graph.edges);
+        merged.timestamp_secs = codicil.exported_at_ms / 1_000;
         let mut graph = Graph::from_snapshot(&merged);
         graph.overlay_facets(current_facets);
-        let imported_facets = engram.facets.iter().map(|(_, facets)| facets.len()).sum();
-        graph.overlay_facets(engram.facets);
+        let imported_facets = codicil.facets.iter().map(|(_, facets)| facets.len()).sum();
+        graph.overlay_facets(codicil.facets);
         self.replace_product_graph(graph);
         Ok(ImportReceipt {
             nodes: imported_nodes,
@@ -577,20 +580,20 @@ impl<B: Backend> MereHost<B> {
         })
     }
 
-    pub fn replace_with_product_engram(
+    pub fn replace_with_product_codicil(
         &mut self,
         bytes: &[u8],
     ) -> Result<(ImportReceipt, Option<SavedSceneV1>), ProductError> {
-        let engram = decode_engram(bytes)?;
+        let codicil = decode_codicil(bytes)?;
         let receipt = ImportReceipt {
-            nodes: engram.graph.nodes.len(),
-            relations: engram.graph.edges.len(),
-            facets: engram.facets.iter().map(|(_, facets)| facets.len()).sum(),
+            nodes: codicil.graph.nodes.len(),
+            relations: codicil.graph.edges.len(),
+            facets: codicil.facets.iter().map(|(_, facets)| facets.len()).sum(),
         };
-        let mut graph = Graph::from_snapshot(&engram.graph);
-        graph.overlay_facets(engram.facets);
+        let mut graph = Graph::from_snapshot(&codicil.graph);
+        graph.overlay_facets(codicil.facets);
         self.replace_product_graph(graph);
-        Ok((receipt, engram.scene))
+        Ok((receipt, codicil.scene))
     }
 }
 
@@ -736,29 +739,29 @@ fn filter_scene(mut scene: SavedSceneV1, members: &HashSet<Uuid>) -> SavedSceneV
     scene
 }
 
-pub(crate) fn decode_engram(bytes: &[u8]) -> Result<ProductEngramV1, ProductError> {
-    let engram: ProductEngramV1 = serde_json::from_slice(bytes)
-        .map_err(|error| ProductError::InvalidEngram(error.to_string()))?;
-    if engram.schema != PRODUCT_ENGRAM_SCHEMA {
-        return Err(ProductError::InvalidEngram(format!(
-            "expected {PRODUCT_ENGRAM_SCHEMA}, found {}",
-            engram.schema
+pub(crate) fn decode_codicil(bytes: &[u8]) -> Result<ProductCodicilV2, ProductError> {
+    let codicil: ProductCodicilV2 = serde_json::from_slice(bytes)
+        .map_err(|error| ProductError::InvalidCodicil(error.to_string()))?;
+    if codicil.schema != PRODUCT_CODICIL_SCHEMA && codicil.schema != LEGACY_PRODUCT_ENGRAM_SCHEMA {
+        return Err(ProductError::InvalidCodicil(format!(
+            "expected {PRODUCT_CODICIL_SCHEMA} or legacy {LEGACY_PRODUCT_ENGRAM_SCHEMA}, found {}",
+            codicil.schema
         )));
     }
-    let ids: HashSet<_> = engram
+    let ids: HashSet<_> = codicil
         .graph
         .nodes
         .iter()
         .map(|node| node.node_id.as_str())
         .collect();
-    if engram.graph.edges.iter().any(|edge| {
+    if codicil.graph.edges.iter().any(|edge| {
         !ids.contains(edge.from_node_id.as_str()) || !ids.contains(edge.to_node_id.as_str())
     }) {
-        return Err(ProductError::InvalidEngram(
-            "a relation names an object outside the engram".to_string(),
+        return Err(ProductError::InvalidCodicil(
+            "a relation names an object outside the codicil".to_string(),
         ));
     }
-    Ok(engram)
+    Ok(codicil)
 }
 
 #[cfg(test)]
@@ -798,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    fn h3_mixed_graph_scene_and_selected_engram_round_trip() {
+    fn h3_mixed_graph_scene_and_selected_codicil_round_trip() {
         let mut host =
             MereHost::fixture(MemoryBackend::new(), selected_persona(), fixture_handlers())
                 .expect("fixture");
@@ -878,7 +881,7 @@ mod tests {
         );
 
         let bytes = host
-            .export_product_engram(ExportRequest {
+            .export_product_codicil(ExportRequest {
                 focused: file,
                 selected: selected.clone(),
                 scope: TransferScope::SelectedSubgraph,
@@ -891,6 +894,15 @@ mod tests {
         assert!(!json.contains(LOCAL_FILE_FACET));
         assert!(json.contains(CONTENT_FACET));
 
+        let mut legacy: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        legacy["schema"] = serde_json::Value::String(LEGACY_PRODUCT_ENGRAM_SCHEMA.to_string());
+        let legacy_bytes = serde_json::to_vec(&legacy).unwrap();
+        assert_eq!(
+            decode_codicil(&legacy_bytes).unwrap().schema,
+            LEGACY_PRODUCT_ENGRAM_SCHEMA,
+            "the v1 graph-engram tag remains readable"
+        );
+
         let mut reopened = MereHost::empty(
             MemoryBackend::new(),
             selected_persona(),
@@ -901,7 +913,7 @@ mod tests {
                 at_ms: 100,
             },
         );
-        let imported = reopened.import_product_engram(&bytes).expect("import");
+        let imported = reopened.import_product_codicil(&bytes).expect("import");
         assert_eq!(imported.nodes, 4);
         assert_eq!(reopened.graph().node_count(), 4);
         for id in selected {
@@ -934,7 +946,7 @@ mod tests {
         }));
 
         let (_, imported_scene) = reopened
-            .replace_with_product_engram(&bytes)
+            .replace_with_product_codicil(&bytes)
             .expect("open as graph");
         let imported_scene = imported_scene.expect("scene");
         assert_eq!(imported_scene.selected.len(), 4);

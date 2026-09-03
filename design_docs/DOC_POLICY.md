@@ -140,8 +140,8 @@ mere/design_docs/
 ├── mere_docs/                     ← product-level concerns
 ├── armillary_docs/                ← the armillary crate
 ├── dramatis_docs/                 ← identity and contacts (personae, gaz)
-├── eidetic_docs/                  ← the memory stack (chartulary, codicil,
-│                                     muniment, scholia)
+├── eidetic_docs/                  ← the memory stack (Eidetic codicils,
+│                                     muniment journals, chartulary + RDF)
 ├── intel_docs/                    ← embedding and inference (esp)
 ├── moothold_docs/                 ← community / federation
 ├── murm_docs/                     ← bilateral comms

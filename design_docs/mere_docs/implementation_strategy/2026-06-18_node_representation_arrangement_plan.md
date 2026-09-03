@@ -724,7 +724,7 @@ it is the default of a setting, not a baked constant.
   **P0 now has one item left: the interactive resize handle (1).**
 - 2026-06-22: **P0 + P1 effectively complete (via the object card); the frontier + next steps scoped.**
   Status reconciliation after the object-card work (see
-  [object_card_plan](2026-06-21_object_card_plan.md)):
+  [object_card_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md)):
   - **P0 done.** The last open item, the interactive resize handle, was **superseded** by Mark's
     iOS-style call: a per-node size is set by stepping discrete tiers in the object card's size widget
     (`SIZE_TIERS`, `−  ●●●○○  +`), not a drag handle. That widget plus the landed collider / edge-trim /

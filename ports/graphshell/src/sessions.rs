@@ -251,7 +251,7 @@ fn escape(input: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "native", not(target_arch = "wasm32")))]
 mod tests {
     use chirograph::{
         CachePolicy, CarrierNotice, PresentationManifest, ProjectionSnapshot, ProtocolVersion,

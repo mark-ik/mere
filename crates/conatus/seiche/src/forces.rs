@@ -73,7 +73,7 @@ impl Force for NodeExclusion {
 
         // Above the threshold, a host may stage this exact layout law through a
         // different evaluator. This remains a CPU-integrator seam: positions and
-        // forces cross it as slices, unlike quint's resident-buffer lane.
+        // forces cross it as slices, unlike Conatus's resident-buffer lane.
         if let Some(solver) = ctx.repulsion_solver {
             if nodes.len() >= ctx.gpu_repulsion_threshold {
                 let xs: Vec<f32> = nodes.iter().map(|(_, p)| p.x).collect();

@@ -154,10 +154,10 @@ fn settle_timing_naive_vs_gpu_solver() {
 
     const TICKS: usize = 20;
     let solver: RepulsionSolver = Arc::new(|xs: &[f32], ys: &[f32], request: RepulsionRequest| {
-        quint::forces::node_exclusion_wgpu_roundtrip(
+        node_exclusion_wgpu_roundtrip(
             xs,
             ys,
-            quint::forces::NodeExclusionParams {
+            NodeExclusionParams {
                 strength: request.strength,
                 cutoff: request.cutoff,
                 min_distance: request.min_distance,

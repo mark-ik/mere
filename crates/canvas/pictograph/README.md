@@ -5,7 +5,9 @@ face out.
 
 A pictograph writes a picture. From a node's content address this derives a
 small symmetric mark, encoded as IconVG bytes by
-[emblem](https://crates.io/crates/emblem). Faces are 90 to 200 bytes.
+[emblem](https://crates.io/crates/emblem). Faces are compact: the current
+68-address test corpus spans 34 to 211 bytes, and the suite caps them below
+512 bytes.
 
 The word is the mechanism twice over: a pictograph is a pictorial sign that
 carries meaning by convention, and in the statistical sense it is data encoded
@@ -40,13 +42,38 @@ let face = pictograph::derive(b"some content address").unwrap();
 the two palette entries, the filled cells — for callers that want to explain a
 face rather than only draw one.
 
+## Vello bridge
+
+Enable the `vello` feature to decode any emblem-supported IconVG file into the
+exact `Scene` type consumed by netrender:
+
+```rust
+let bytes = pictograph::derive(b"some content address").unwrap();
+let graphic = pictograph::vello::decode(
+    &bytes,
+    &emblem::Palette::default(),
+    emblem::Host { height: 64.0, ..Default::default() },
+)
+.unwrap();
+let mut frame_scene = pictograph::vello::Scene::new();
+let face_transform = pictograph::vello::kurbo::Affine::translate((32.0, 32.0));
+graphic.append_to(&mut frame_scene, Some(face_transform));
+```
+
+The bridge carries the ViewBox clip, uses non-zero winding, converts emblem's
+premultiplied colours into peniko's straight-alpha inputs, and lowers flat,
+linear-gradient, and radial-gradient paints. All four IconVG spread modes are
+covered. The dependency is feature-gated so byte-only users do not acquire the
+vello scene stack.
+
 ## Versioning
 
 `DERIVATION_VERSION` is mixed into the seed, so bumping it changes every face
 everywhere. That is a deliberate, visible act, never a side effect of tidying
 the code: two peers on different versions would derive different bytes for the
-same content and silently disagree. Golden fixtures in the test suite pin the
-mapping so a change cannot happen by accident.
+same content and silently disagree. Digest-pinned fixtures in the test suite
+record committed byte length, digest, and filled-cell count, so a change cannot
+happen by accident.
 
 Lives in the [mere](https://github.com/merely-made/mere) workspace under
 `crates/canvas/`. The plan is
@@ -54,4 +81,4 @@ Lives in the [mere](https://github.com/merely-made/mere) workspace under
 
 ## License
 
-MPL-2.0 (see LICENSE at the workspace root).
+[MPL-2.0](https://github.com/merely-made/mere/blob/main/LICENSE).

@@ -113,7 +113,7 @@ impl Backend for FjallStore {
     }
 
     /// Ordered range read, `[start, end)`. Fjall's LSM is key-ordered, so this
-    /// is a native range scan — the ordered read a codicil log needs to replay
+    /// is a native range scan — the ordered read a journal needs to replay
     /// a per-author range in `seq` order.
     async fn scan(&self, start: &str, end: &str) -> Result<Vec<String>, StoreError> {
         let mut keys = Vec::new();

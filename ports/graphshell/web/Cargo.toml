@@ -21,7 +21,11 @@ crate-type = ["cdylib"]
 path = "../src/web.rs"
 
 [dependencies]
-graphshell = { path = "..", default-features = false, features = ["web"] }
+# `webrtc-browser` is the C4 door's peer half (`webrtc_browser`, `webrtc_join`)
+# and needs `--cfg getrandom_backend="wasm_js"` in this target's rustflags:
+# personae's wasm32 identity stack sits on getrandom 0.3, whose `wasm_js`
+# feature is inert without the cfg. See .cargo/config.toml.example.
+graphshell = { path = "..", default-features = false, features = ["web", "webrtc-browser"] }
 mere = { path = "../../../crates/mere", default-features = false, features = ["graph", "canvas"] }
 # `indexeddb` supplies the browser realization of muniment's byte-store seam,
 # which this crate hands to `GraphshellApp` as its backend. It lived here until
@@ -31,18 +35,26 @@ graphshell-client = { path = "../../../crates/graphshell/graphshell-client" }
 sceno = { path = "../../../crates/scenograph/sceno" }
 scenotime = { path = "../../../crates/scenograph/scenotime" }
 serde = { version = "1", features = ["derive"] }
-cambium = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
-genet-render = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
+cambium = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
+genet-render = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
 # The present core, shared with every winit host. Booting wgpu, picking a
 # non-sRGB surface format, and rasterizing a Scene are not browser-specific, so
 # this crate no longer hand-rolls them; only the canvas target and the
 # content-over-chrome composition below are ours.
-genet-render-host = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
-genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
+genet-render-host = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3", version = "=0.1.0" }
+# The shared scenario driver every genet app runs its receipts through; the
+# page implements its `Automatable`/`Driveable` over the browser DOM
+# (`src/web_scenario.rs`). Pure: its three deps are already in this graph.
+genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
 js-sys = "0.3"
 netrender = { git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 netrender_device = { git = "https://github.com/merely-made/netrender.git", rev = "6f1a4fe70a58a57ba6b248acfa662f0ec4e44a25" }
 serde_json = "1"
+# The remote link's outbound queue: the host enqueues lines synchronously,
+# a task drains them onto the channel.
+futures-channel = "0.3"
+futures-util = { version = "0.3", default-features = false }
 sha2 = "0.11"
 uuid = { version = "1", features = ["serde", "v4"] }
 wasm-bindgen = "=0.2.126"
@@ -52,10 +64,12 @@ console_error_panic_hook = "0.1"
 web-sys = { version = "0.3", features = [
     "console",
     "Blob",
+    "CanvasRenderingContext2d",
     "Document",
     "DomRect",
     "Element",
     "Event",
+    "EventInit",
     "EventTarget",
     "File",
     "FileList",
@@ -63,13 +77,42 @@ web-sys = { version = "0.3", features = [
     "HtmlElement",
     "HtmlInputElement",
     "HtmlSelectElement",
+    "Headers",
     "HtmlTextAreaElement",
+    "ImageData",
     "KeyboardEvent",
+    "KeyboardEventInit",
     "MouseEvent",
     "Navigator",
     "Node",
     "PointerEvent",
+    "PointerEventInit",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
     "StorageManager",
+    "Storage",
     "WheelEvent",
     "Window",
 ] }
+
+# Standalone manifests do not inherit Mere's root patch table, so the ones
+# that matter are restated here (see the note at the top). Keep every rev in
+# step with the genet pins above. Parley and Taffy are Genet forks published
+# under the same version number as the crate they replace, so missing either
+# is invisible while genet-livery resolves from crates.io and a compile error
+# the moment it resolves the working copy: livery uses
+# `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`, which
+# published parley 0.10.0 lacks, and buckram names `genet-taffy` outright.
+# layout-dom-api and genet-scripted-dom are both published at 0.1.0 and pinned
+# to the same rev so no crates.io copy can enter the graph beside the git one.
+# ipc-channel is Genet's in-process backend; vello is the maintained wgpu-30
+# renderer fork. These are remote revision/tag patches, never local paths.
+[patch.crates-io]
+parley = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
+taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3", version = "=0.1.0" }
+genet-scripted-dom = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3", version = "=0.1.0" }
+ipc-channel = { git = "https://github.com/merely-made/genet.git", rev = "eff0cb6df4834ecce9ac552a055c1c459befa7c3" }
+vello = { git = "https://github.com/mark-ik/vello.git", tag = "vello-0.10.0" }

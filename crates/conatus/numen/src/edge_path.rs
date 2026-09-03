@@ -8,14 +8,13 @@
 //! endpoints, optionally traced through a vector field.
 //!
 //! Edge-geometry siblings to [`Coupling`](super::coupling::Coupling): both are
-//! field-layer truth the kernel owns and `quint` reads, and neither is a
+//! field-layer truth the kernel owns and numen evaluates, and neither is a
 //! node→node `EdgePayload` sidecar. Where a coupling says *how nodes respond to a
 //! field*, an edge-path rule says *how an edge's curve is drawn* (and a
 //! `FieldLine` path is field-driven, hence the [`FieldId`] reference).
 //!
-//! Ported from `quint::coupling` (field-system extraction Phase 4) so the kernel
-//! owns every field-layer definition type; `quint` re-exports these. Derives are
-//! serde only (parity with [`coupling`](super::coupling) / [`field_ast`](super::field_ast));
+//! The kernel owns every field-layer definition type. Derives are serde only
+//! (parity with [`coupling`](super::coupling) / [`field_ast`](super::field_ast));
 //! rkyv lands at the `Persisted*` DTO layer if these become persisted. WASM-clean.
 
 use serde::{Deserialize, Serialize};

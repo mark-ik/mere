@@ -82,6 +82,7 @@ changes the engine path itself.
 | `quint` | Field evaluation, CubeCL kernels, resident tensor/chunk allocations |
 | `seiche` | Graph-oriented 2D dynamics specialist; shares contracts with the runtime where real, never an adapter over the 3D body API |
 | `conatus` | Shared 3D body world and host-neutral runtime |
+| `conatus-brick` | Product-neutral sparse brick ABI and ray-in WGSL DDA; never camera, material, or composition policy |
 | Netrender | One-device tenancy and final frame composition |
 | Renderling | 3D scene/render implementation, consumed as a tenant |
 | Mesocosm voxel types | First source material for generic voxel storage, revision, dirty-region, collision, and meshing features; since 2026-08-26 Mesocosm is also a runtime consumer, holding `BodyWorld` tactile advice through its own `mesocosm-runtime` adapter |
@@ -434,6 +435,7 @@ contract declared in advance.
   frame, source, lease, tenant, and conductor vocabulary still waits for a
   second product.
 
+
 ## Consolidation map (ruled 2026-08-28, Mark; amended the same day from a three-engines sketch)
 
 The consolidation goal, stated plainly: functional, modular, nonredundant
@@ -483,3 +485,18 @@ quadrant this fills is GPU *dynamics*: the family already has GPU fields
 and GPU residency, and its rigid bodies are CPU-only until then. License
 diligence on the upstream source happens at decomposition time, before any
 kernel is taken.
+## Progress (2026-08-26 brick-traversal ownership pass)
+
+- `conatus-brick` now owns the deterministic sparse pointer/atlas layout, its
+  explicit projection revision, the exact GPU trace-space layout, and the
+  camera-neutral WGSL DDA. It accepts selected brick bytes and caller-supplied
+  rays; it owns no Ground, camera, material, lighting, body, frame, or lease
+  vocabulary.
+- Mesocosm's former implementation is reduced to a Ground source adapter and
+  product presentation shader. Paredros has its own source adapter and is the
+  second tracked product consumer. The two compile the same shared WGSL under
+  orthographic and perspective cameras.
+- Quint remains the owner of resident allocations. The next join is therefore
+  incremental `ResidentChunk` publication into this ABI, not moving the DDA
+  into Quint or inventing a universal voxel renderer. Raymarch depth and
+  Renderling occlusion remain the next presentation boundary.

@@ -120,7 +120,7 @@ pub use types::{CameraView, EdgeCell, Face, NodeShape, NodeState, PointerButton,
 // presentation library):
 /// Cartography projection-request derivation + the layout-strategy catalog.
 pub mod cartography_scene;
-/// Visual couplings → paint overlays (the quint field paint pass).
+/// Visual couplings → paint overlays (the numen field paint pass).
 pub mod coupling_paint;
 /// Cartography geometry: the settled-layout sidecar the host persists.
 pub mod geometry;
@@ -144,10 +144,11 @@ pub use geometry::CartographyGeometry;
 
 /// The node accent palette every representation of a node tints from.
 pub mod palette;
+pub use palette::DerivedFacePalette;
 
-/// Query similarity over the canvas: the embedding→quint field bridge and the
+/// Query similarity over the canvas: the embedding→numen field bridge and the
 /// search surface built on it. Homed here in the 2026-08-12 eidetic reorg —
-/// they are canvas glue (quint fields over placed nodes) that had been parked
+/// they are canvas glue (numen fields over placed nodes) that had been parked
 /// in the intel tier, where nothing consumed them.
 pub mod canvas_search;
 mod edge_cells;
@@ -216,13 +217,12 @@ const EDGE_PICK_TOL: f32 = 6.0;
 /// Node box half-extent (px) — matches the underlay's default node rect, so each
 /// DOM child sits centered on the same world position.
 const NODE_HALF: f32 = 18.0;
-/// The favicon face inset: the icon quad occupies this fraction of the face so
-/// the node's accent (activation state, selection-wins amber) reads as a frame
-/// around the icon instead of surviving only at the icon's corner cutouts. A
+/// The face-content inset: an icon or derived mark occupies this fraction of the body so the
+/// node's accent (activation state, selection-wins amber) reads as a frame around it. A
 /// cover-fit face remains available as `Face::Sprite`; this knob is a design
 /// setting candidate (status-communication design space, 2026-07-09: inset
 /// frame now; caption chip / hover ring / status card tracked as alternatives).
-const FAVICON_INSET: f32 = 0.72;
+const FACE_INSET: f32 = 0.72;
 
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
@@ -322,10 +322,16 @@ pub struct Canvas {
     /// Per-node content silhouette the host pushes for node shaping. Resolved to
     /// `NodeKey` on set; a node absent here draws as `Square` (the default).
     node_shapes: HashMap<NodeKey, NodeShape>,
-    /// Per-node **face** overrides (the user's per-node texture choice on the Face axis). A
-    /// node absent here defaults to [`Face::Favicon`], so this holds only explicit overrides,
-    /// never the whole graph. Independent of the body (the collider hull). (Node body & face.)
+    /// Per-node **face** overrides (the user's per-node texture choice on the Face axis). A node
+    /// absent here derives a face until it has a favicon source, so this holds only explicit
+    /// overrides, never the whole graph. Independent of the body (the collider hull).
     node_faces: HashMap<NodeKey, Face>,
+    /// Theme-derived colors resolved while decoding pictograph bytes. This can change without
+    /// invalidating the deterministic byte cache.
+    derived_face_palette: DerivedFacePalette,
+    /// Derived IconVG bytes keyed by canonical node address. The derivation version is compiled
+    /// into pictograph's seed, so an implementation update naturally starts a fresh process cache.
+    derived_face_cache: HashMap<(u32, String), Vec<u8>>,
     /// Per-node face footprint overrides (px). A node absent here takes size-by-degree
     /// (when on) or the uniform default, so this holds only explicit resizes. (P0 resize.)
     node_sizes: HashMap<NodeKey, f32>,
@@ -612,7 +618,7 @@ pub struct Canvas {
     /// discarded on a graph switch, just like selection and other view state.
     fold_undo: Vec<FoldViewState>,
     fold_redo: Vec<FoldViewState>,
-    /// When set, the scene omits the on-screen gnode + favicon layers: the host renders
+    /// When set, the scene omits the on-screen gnode + face layers: the host renders
     /// those gnodes as DOM elements in the shell document instead (the focused canvas only;
     /// secondary panes keep their in-scene gnodes). Edges + demoted dots stay as the underlay.
     /// A gnode is the node's rendered body either way — a Scene layer here, a chrome DOM
@@ -627,6 +633,7 @@ impl Default for Canvas {
 }
 
 mod cartography;
+mod derived_face;
 mod gloss;
 mod lifecycle;
 mod nodes;

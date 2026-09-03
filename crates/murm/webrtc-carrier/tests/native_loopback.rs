@@ -41,12 +41,11 @@ use std::time::{Duration, Instant};
 
 use tokio::net::UdpSocket;
 
-use webrtc_carrier::native::str0m::change::{SdpAnswer, SdpPendingOffer};
-use webrtc_carrier::native::str0m::channel::{ChannelConfig, Reliability};
-use webrtc_carrier::native::str0m::{Candidate, Rtc, RtcConfig};
+use webrtc_carrier::native::str0m::RtcConfig;
 use webrtc_carrier::native::{
     Answerer, AnswererConfig, Carrier, CarrierConfig, CarrierStats, DEDICATED_DRIVER_STACK_BYTES,
-    DEDICATED_SCTP_WINDOW_BYTES, DEFAULT_SCTP_WINDOW_BYTES, DriverPlacement, NativeError, serve,
+    DEDICATED_SCTP_WINDOW_BYTES, DEFAULT_SCTP_WINDOW_BYTES, DriverPlacement,
+    LoopbackOfferer as Offerer, NativeError, loopback_pair, serve,
 };
 use webrtc_carrier::{
     Backpressure, FingerprintRole, FrameError, MAX_FRAME_BYTES, MAX_FRAME_PAYLOAD_BYTES,
@@ -86,118 +85,12 @@ fn carrier_config(backpressure: Backpressure) -> CarrierConfig {
     carrier_config_on(backpressure, DriverPlacement::SharedRuntime)
 }
 
-/// A str0m offerer: bound socket, declared candidate, one data channel.
-///
-/// This is the browser's role played by str0m. It uses the crate's own re-export
-/// so the engine is the exact version the adapter compiled against.
-struct Offerer {
-    rtc: Rtc,
-    socket: UdpSocket,
-    pending: Option<SdpPendingOffer>,
-    offer: String,
-}
-
-impl Offerer {
-    async fn create(label: &str) -> Self {
-        let socket = UdpSocket::bind("127.0.0.1:0")
-            .await
-            .expect("a loopback UDP port");
-        let addr: SocketAddr = socket.local_addr().expect("a local address");
-
-        let mut rtc = RtcConfig::new().clear_codecs().build(Instant::now());
-        let candidate = Candidate::host(addr, "udp").expect("a host candidate");
-        assert!(
-            rtc.add_local_candidate(candidate).is_some(),
-            "the loopback host candidate must be accepted, or nothing below tests anything"
-        );
-
-        let mut change = rtc.sdp_api();
-        let _channel = change.add_channel_with_config(ChannelConfig {
-            label: label.to_owned(),
-            ordered: true,
-            reliability: Reliability::Reliable,
-            ..ChannelConfig::default()
-        });
-        let (offer, pending) = change.apply().expect("a data channel requires negotiation");
-        let offer = offer.to_sdp_string();
-
-        Self {
-            rtc,
-            socket,
-            pending: Some(pending),
-            offer,
-        }
-    }
-
-    fn accept_answer(&mut self, answer: &str) {
-        let answer = SdpAnswer::from_sdp_string(answer).expect("the answer parses");
-        let pending = self.pending.take().expect("one answer per offer");
-        self.rtc
-            .sdp_api()
-            .accept_answer(pending, answer)
-            .expect("the answer applies");
-    }
-}
-
 /// Runs one full handshake and returns both live carriers.
 ///
-/// `(answerer, offerer)`.
+/// `(answerer, offerer)` — the exported harness, whose own asserts carry the
+/// fingerprint receipts this file used to hold privately.
 async fn connect(config: CarrierConfig) -> (Carrier, Carrier) {
-    let mut offerer = Offerer::create(&config.channel_label).await;
-
-    let mut answerer = Answerer::bind(AnswererConfig {
-        bind: "127.0.0.1:0".parse().expect("a literal address"),
-        advertise: Vec::new(),
-        carrier: config.clone(),
-    })
-    .await
-    .expect("the answerer binds");
-
-    // The host can publish its own fingerprint before any offer arrives — the
-    // certificate exists from construction, which is what lets an invitation
-    // carry it.
-    let declared = answerer
-        .local_fingerprint()
-        .expect("the host's own fingerprint is sha-256");
-    assert_eq!(declared.role().name(), "server");
-
-    let answer = answerer.answer(&offerer.offer).expect("an SDP answer");
-    offerer.accept_answer(&answer);
-
-    let peer_config = CarrierConfig {
-        local_dtls_role: FingerprintRole::Client,
-        ..config.clone()
-    };
-    let (answered, offered) = tokio::join!(
-        answerer.accept(),
-        serve(offerer.rtc, offerer.socket, peer_config)
-    );
-
-    let answered = answered.expect("the answerer's channel opens");
-    let offered = offered.expect("the offerer's channel opens");
-
-    // The two role-tagged halves the C2 link challenge binds, taken from the
-    // handshake that actually ran rather than from the SDP's claims. Both ends
-    // must agree on both, or no shared link could ever be derived.
-    let host = answered
-        .fingerprints()
-        .expect("the host observed the handshake");
-    let peer = offered
-        .fingerprints()
-        .expect("the peer observed the handshake");
-    assert_eq!(host, peer, "the two ends disagree about the DTLS handshake");
-    assert_eq!(
-        host.server().digest(),
-        declared.digest(),
-        "the host's negotiated certificate is the one it published"
-    );
-    assert_ne!(
-        host.client().canonical_bytes(),
-        host.server().canonical_bytes(),
-        "two distinct certificates must produce two distinct canonical forms"
-    );
-
-    (answered, offered)
+    loopback_pair(config).await
 }
 
 async fn expect_frame(carrier: &mut Carrier, expected: &[u8]) {
@@ -1265,5 +1158,90 @@ async fn a_raised_window_on_a_dedicated_thread_stops_holding_every_frame() {
         "the raised window still held {} times in {ECHO_FRAMES} frames, against {} at the default",
         raised.source.window_holds,
         baseline.source.window_holds
+    );
+}
+
+// ── Property 8: the frame pump presents a byte stream ────────────────────────
+
+/// The carrier's frames carry a *byte stream*, not a message queue.
+///
+/// This is what Graphshell's session loop rests on: it writes NDJSON with
+/// `write_all` and reads it back with `BufReader::lines`, and neither end knows
+/// a frame exists. The property that has to hold is that frame boundaries are
+/// invisible — a line longer than one frame is split across several and arrives
+/// as one line, and several short lines may share a frame and still arrive as
+/// several lines.
+///
+/// Run over the same real DTLS loopback as everything else in this file, so the
+/// chunking under test is the carrier's own, not a mock's.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_frame_pump_hides_frame_boundaries_from_a_line_reader() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use webrtc_carrier::native::stream_over_frames;
+
+    let (answerer, offerer) = connect(CarrierConfig::default()).await;
+    let (a_read, a_write, _a_control) = answerer.into_parts();
+    let (b_read, b_write, _b_control) = offerer.into_parts();
+    let (mut host, _host_pump) = stream_over_frames(a_read, a_write);
+    let (peer, _peer_pump) = stream_over_frames(b_read, b_write);
+
+    // One line far longer than a single frame, then two short ones. If frames
+    // leaked through as message boundaries, the long line would arrive in
+    // pieces and the short ones might be merged.
+    let long = "x".repeat(MAX_FRAME_PAYLOAD_BYTES * 3 + 17);
+    let written = format!("{long}\n{{\"id\":1}}\n{{\"id\":2}}\n");
+    host.write_all(written.as_bytes())
+        .await
+        .expect("the host writes its lines");
+    host.flush().await.expect("the host flushes");
+
+    let mut lines = BufReader::new(peer).lines();
+    let first = lines
+        .next_line()
+        .await
+        .expect("the peer reads")
+        .expect("a first line");
+    assert_eq!(
+        first.len(),
+        long.len(),
+        "a line spanning several frames must arrive as one line"
+    );
+    assert_eq!(first, long, "and byte-for-byte the same line");
+
+    assert_eq!(
+        lines.next_line().await.expect("the peer reads").as_deref(),
+        Some("{\"id\":1}"),
+        "two short lines sharing a frame stay two lines"
+    );
+    assert_eq!(
+        lines.next_line().await.expect("the peer reads").as_deref(),
+        Some("{\"id\":2}"),
+    );
+}
+
+/// Dropping the stream ends the pump, and it says why.
+///
+/// A session that ends has to stop the task carrying it; a pump left spinning
+/// on a carrier nobody reads is the "without a hot loop" failure this crate
+/// already tests for elsewhere, arriving by a new route.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn dropping_the_stream_ends_its_pump() {
+    use webrtc_carrier::native::stream_over_frames;
+
+    let (answerer, offerer) = connect(CarrierConfig::default()).await;
+    let (a_read, a_write, _a_control) = answerer.into_parts();
+    let (b_read, b_write, _b_control) = offerer.into_parts();
+    let (host, host_pump) = stream_over_frames(a_read, a_write);
+    let (_peer, _peer_pump) = stream_over_frames(b_read, b_write);
+
+    drop(host);
+
+    let end = tokio::time::timeout(Duration::from_secs(5), host_pump)
+        .await
+        .expect("the pump ends promptly rather than spinning")
+        .expect("the pump task does not panic");
+    assert!(
+        end.is_clean(),
+        "dropping the stream is an ordinary end, got {end}"
     );
 }

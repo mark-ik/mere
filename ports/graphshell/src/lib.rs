@@ -11,7 +11,7 @@
 
 #[cfg(feature = "web")]
 pub mod access;
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+#[cfg(any(all(feature = "native", not(target_arch = "wasm32")), feature = "webrtc-join"))]
 pub mod admission;
 #[cfg(feature = "web")]
 pub mod app;
@@ -36,6 +36,7 @@ pub mod identity_endpoint;
 pub mod identity_projection;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod lifecycle;
+pub mod live_endpoint;
 #[cfg(feature = "web")]
 pub mod mere_host;
 #[cfg(feature = "web")]
@@ -52,6 +53,9 @@ pub mod policy_projection;
 pub mod product;
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 pub mod profile;
+
+#[cfg(any(feature = "native", feature = "web"))]
+pub mod projection_editor;
 /// Receipt ingest: a scenario-receipt directory becomes personal-graph facts.
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod receipts;
@@ -68,8 +72,14 @@ pub mod transfer_endpoint;
 #[cfg(all(feature = "personal-sync", not(target_arch = "wasm32")))]
 pub mod transfer_offer;
 pub mod view;
-#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+#[cfg(any(all(feature = "native", not(target_arch = "wasm32")), feature = "webrtc-join"))]
 pub mod webrtc_door;
+#[cfg(any(all(feature = "native", not(target_arch = "wasm32")), feature = "webrtc-join"))]
+pub mod webrtc_join;
+#[cfg(all(feature = "webrtc-browser", target_arch = "wasm32"))]
+pub mod webrtc_browser;
+#[cfg(all(feature = "webrtc-session", not(target_arch = "wasm32")))]
+pub mod webrtc_session;
 
 pub use chirograph as protocol;
 pub use graphshell_client as client;

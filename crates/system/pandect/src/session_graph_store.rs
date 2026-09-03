@@ -11,7 +11,7 @@
 //! its serde [`GraphSnapshot`] — the URL-stable form, since petgraph NodeIndex
 //! keys are not stable across sessions. This is the "serde `graph.json` as the
 //! live store" cut; a content-addressed eidetic layer (blobs / manifests /
-//! engrams) sits behind it later for media + history.
+//! codicils) sits behind it later for media + history.
 //!
 //! Native-only: this is filesystem persistence. wasm hosts persist through a
 //! different backend (IndexedDB / OPFS), so the module is excluded from

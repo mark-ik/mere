@@ -83,7 +83,7 @@ board distinguishes `LeaseRevokedByOwner` from `LeaseLapsed`.
 ## 3. Capability Sharing
 
 **Authority**:
-[`../implementation_strategy/2026-06-30_kith_capability_sharing_plan.md`](../implementation_strategy/2026-06-30_kith_capability_sharing_plan.md)
+[`../implementation_strategy/2026-06-30_kith_capability_sharing_plan.md`](../../archive_docs/2026-09-02_retired_plans/2026-06-30_kith_capability_sharing_plan.md)
 
 **Related**:
 [`../implementation_strategy/2026-06-26_federation_interop_plan.md`](../implementation_strategy/2026-06-26_federation_interop_plan.md),

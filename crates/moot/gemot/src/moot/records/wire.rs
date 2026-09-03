@@ -6,7 +6,7 @@
 
 //! Moot operation-wire bridge — object events as signed p2panda operations.
 //!
-//! Mirrors the tessera and mesh wires: a [`MootEvent`] rides the synced
+//! Mirrors the standing and mesh wires: a [`MootEvent`] rides the synced
 //! event-DAG as a signed `Operation<MootExt>`; the moot id is the signed
 //! addressing extension, so an event for one moot cannot replay into
 //! another; the author signs at its per-author log position, forming a
@@ -55,7 +55,7 @@ pub enum MootEvent {
     /// A member announcing themselves; the author key is the identity,
     /// `name` is a display label. First join per author wins.
     Joined { name: String, at_ms: u64 },
-    /// An engram reference shared into the moot's fauna: the manifest id
+    /// An codicil reference shared into the moot's fauna: the manifest id
     /// (CID) plus what it claims to be. Blob transfer is a later milestone;
     /// the reference is the hand-off.
     Shared {

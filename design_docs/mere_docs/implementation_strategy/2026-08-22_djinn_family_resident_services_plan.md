@@ -383,6 +383,11 @@ of enabled resident services and their disclosure-safe records. LAN discovery
 is configurable and preferred for local reachability; it does not create
 authorization and does not replace owner-selected relays outside the LAN.
 
+The peer-discovery substrate this advertises beside is recorded as R0 of the
+[reachability rungs plan](2026-08-03_reachability_rungs_and_privacy_lanes_plan.md)
+(2026-09-01); `P2pandaHostPolicy` in `crates/murm/transport/src/p2panda_host.rs`
+is where an advertisement toggle plugs in.
+
 Done conditions for Phase F:
 
 - an update notification appears once, survives a host restart, and can be

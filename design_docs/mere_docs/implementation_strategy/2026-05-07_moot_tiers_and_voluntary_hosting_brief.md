@@ -13,7 +13,7 @@ see §1). Updates the
 
 - [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md) — earlier brief from today; this one supersedes its §7 framing of moot hosting and refines §8.7 (personas) and §8.9 (spam resistance).
 - [`2026-05-05_protocol_architecture_plan.md`](2026-05-05_protocol_architecture_plan.md) — original protocol architecture plan; §5 protocol-mod framing is now interpreted through the tier and hosting-model lens captured here.
-- [`../../moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md`](../../moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md) — the Pattern A / Pattern B distinction; reframed as routing-only-clients (Pattern A becomes "the moot links to the resource and members open it via a thin client") and outbound bridges (Pattern B; one-way publishing).
+- [`../../moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md`](../../archive_docs/2026-09-02_retired_plans/2026-05-05_irc_mod_plan.md) — the Pattern A / Pattern B distinction; reframed as routing-only-clients (Pattern A becomes "the moot links to the resource and members open it via a thin client") and outbound bridges (Pattern B; one-way publishing).
 - [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — current lexicon; needs the coalition / moothold rename pass after this brief lands.
 
 ---

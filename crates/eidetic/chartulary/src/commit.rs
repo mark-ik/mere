@@ -29,7 +29,7 @@
 
 use std::collections::HashSet;
 
-use codicil::{Codicil, LogId};
+use muniment::{Journal, LogId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -258,16 +258,16 @@ where
 /// Wrap a pre-gate edit log (entries are bare [`GraphEdit`]s) as an attributed
 /// batch log: one single-edit batch per entry, authored
 /// [`Author::pre_gate`]. The log's identity carries over; fork provenance
-/// cannot (codicil exposes no parts-constructor), which open question 7 of the
+/// cannot (the journal exposes no parts-constructor), which open question 7 of the
 /// plan records.
-pub fn migrate_pre_gate<N, E>(legacy: Codicil<GraphEdit<N, E>>) -> Codicil<Batch<N, E>>
+pub fn migrate_pre_gate<N, E>(legacy: Journal<GraphEdit<N, E>>) -> Journal<Batch<N, E>>
 where
     N: Identified + Clone,
     E: Clone,
 {
     let mut log = match legacy.id() {
-        Some(id) => Codicil::with_id(id.clone()),
-        None => Codicil::new(),
+        Some(id) => Journal::with_id(id.clone()),
+        None => Journal::new(),
     };
     for edit in legacy.entries() {
         log.append(Batch {
@@ -366,7 +366,7 @@ mod tests {
         // Merge: one journal carrying both writers' batches, in the deterministic
         // order the replication layer would impose. Ids are carried in the
         // `Connect` edits, so replay reuses them rather than re-minting.
-        let mut merged = codicil::Codicil::new();
+        let mut merged = Journal::new();
         for batch in a.log().entries().iter().chain(b.log().entries()) {
             merged.append(batch.clone());
         }
@@ -400,7 +400,7 @@ mod tests {
         }
 
         // Alice replays bob's whole journal, then mints her own edge.
-        let mut merged = codicil::Codicil::new();
+        let mut merged = Journal::new();
         for batch in b.log().entries() {
             merged.append(batch.clone());
         }
@@ -424,7 +424,7 @@ mod tests {
         first: &GraphLog<Container, Relation>,
         second: &GraphLog<Container, Relation>,
     ) -> GraphLog<Container, Relation> {
-        let mut merged = codicil::Codicil::new();
+        let mut merged = Journal::new();
         for batch in first.log().entries().iter().chain(second.log().entries()) {
             merged.append(batch.clone());
         }
@@ -444,7 +444,7 @@ mod tests {
         second: &GraphLog<Container, Relation>,
     ) -> GraphLog<Container, Relation> {
         let shared = base.log().entries().len();
-        let mut merged = codicil::Codicil::new();
+        let mut merged = Journal::new();
         for batch in base
             .log()
             .entries()
@@ -762,8 +762,8 @@ mod tests {
             let slots = JsonSlots::new(MemoryBackend::new());
 
             // A legacy log: bare GraphEdit entries, as B0-era code wrote them.
-            let mut legacy: Codicil<GraphEdit<Container, Relation>> =
-                Codicil::with_id(codicil::LogId::new("old"));
+            let mut legacy: Journal<GraphEdit<Container, Relation>> =
+                Journal::with_id(LogId::new("old"));
             legacy.append(GraphEdit::InsertNode(Container::new("a")));
             legacy.append(GraphEdit::InsertNode(Container::new("b")));
             legacy.append(GraphEdit::Connect {
@@ -779,11 +779,7 @@ mod tests {
                 .unwrap();
             assert_eq!(loaded.graph().node_count(), 2);
             assert_eq!(loaded.graph().edge_count(), 1);
-            assert_eq!(
-                loaded.id(),
-                Some(&codicil::LogId::new("old")),
-                "identity carried"
-            );
+            assert_eq!(loaded.id(), Some(&LogId::new("old")), "identity carried");
             assert_eq!(loaded.revision(), 3, "one batch per legacy edit");
             assert!(
                 loaded

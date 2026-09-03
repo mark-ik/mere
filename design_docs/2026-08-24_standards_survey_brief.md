@@ -421,9 +421,17 @@ implementation written to the older enum list targets deprecated values.
 
 ## 4. The largest hole is in none of them: local-link discovery
 
-**There is no local-link discovery story anywhere in the stack.** The survey
-covers global directory (WebFinger, JSContact, DID, NIP-05) and long-haul radio
-(Reticulum, LoRa) and has nothing in between.
+**Corrected 2026-09-01.** As first written, this section claimed no local-link
+discovery story existed anywhere in the stack. Half right. Peer discovery over
+mDNS is in production: p2panda's mDNS runs `Active` in Turnstone, Graphshell,
+Knot and Djinn behind Murm's `P2pandaOverlayHost`, with two branch-pinned forks
+and a macOS signing finding. The home for that record is R0 of the
+[reachability rungs plan](mere_docs/implementation_strategy/2026-08-03_reachability_rungs_and_privacy_lanes_plan.md).
+What is absent is DNS-SD service browsing and advertisement (RFC 6763), planned
+work owned by Murm with Djinn's registry (F3) and the reference host plan's H10
+as consumer. The rest of this section stands for that half. The survey covers
+global directory (WebFinger, JSContact, DID, NIP-05) and long-haul radio
+(Reticulum, LoRa), and between them sits only the peer-discovery rung.
 
 **RFC 6762 (mDNS) + RFC 6763 (DNS-SD)**, both Proposed Standard, are the layer
 that distillery's device ring, moot's places, and turnstone's shared addressable
@@ -434,7 +442,8 @@ collides with the platform resolver; "Bonjour" is Apple's trademark for the same
 protocol.
 
 **Verdict: ADOPT**, and it deserves its own plan rather than being absorbed into
-a port.
+a port. (2026-09-01: for peer discovery that plan is the reachability rungs
+plan's R0; DNS-SD service browsing is still to be planned, in Murm.)
 
 Three more cross-cutting items:
 
@@ -740,6 +749,7 @@ recorded in §1, §3.3, §5, §6 and §8.
 | PULL | Signal protocol: Double Ratchet, X3DH, PQXDH, SPQR | Signal specifications (Double Ratchet; X3DH; PQXDH; Sparse Post-Quantum Ratchet) | crates/murm — the bilateral lane (design_docs/murm_docs/technical_architecture/MURM_AS_BILATERAL.md) |
 | PULL | WebRTC (and SIP) | W3C WebRTC: Real-Time Communication in Browsers (REC 13 March 2025); IETF RTCWEB suite (RFC 8825 overview, 8826/8827 security, 8829 JSEP, 8831 data channels, 8834 media transport); SIP is RFC 3261 | ports/moot (murmur) — 'calls when the transport and media receipts support them'; genet/pelt as the engine that would host a browser-side peer … |
 | PULL | Reticulum Network Stack and LXMF | RNS (Reticulum Network Stack, manual v1.5.0) and LXMF (Lightweight Extensible Message Format) | ports/signalman (already built on it via retinue/postilion), crates/prns (Rust Reticulum checkout, MIT OR Apache-2.0 — verified in its Cargo.toml) |
+| WATCH | Nym mixnet (Loopix-derived; Sphinx packets; zk-nym bandwidth credentials) | No standard designator. Nym network docs (nym.com/docs); `nym-sdk` 1.21.5 on crates.io, Apache-2.0, 2026-08-19, byte-stream module git-only per its docs; Loopix (Piotrowska et al., USENIX Security 2017); Sphinx (Danezis and Goldberg, IEEE S&P 2009) | None today; row hand-added 2026-09-01. Could only be a fourth control-plane privacy lane beside emissary (reachability rungs plan R3): five hops (entry gateway, three mix layers, exit gateway), roughly half a second of exponential delay per mix hop, constant loop cover traffic. Not a rendezvous rung: a Nym address is `identity.encryption@gateway`, location-bearing and distributed out of band, with no netDB equivalent, so it carries only to a peer whose address you already hold. Bandwidth is metered at the gateway by zk-nym credentials paid in NYM, crypto or fiat; the docs' "SDK integrations currently connect to the Mixnet without requiring credentials" is a present exemption, not a promise. The entry gateway sees the client IP. Over I2P it adds only global-passive-adversary timing resistance, at the price of token-gated bandwidth and a dependence on Nym's economy. Revisit when a consumer's threat model names timing correlation. |
 | SKIP | FCC Part 97 — prohibited transmissions (amateur service) | 47 CFR §97.113(a)(4), with §97.113(a)(3) | repos/retinue (all of it), ports/signalman — this constrains what band a station may ever legally use |
 | ADOPT | Unlicensed ISM regulatory floor: FCC Part 15.247, ETSI EN 300 220-2, ARIB STD-T108 | 47 CFR §15.247 (US, 902–928 MHz); ETSI EN 300 220-2 V3.3.1 (2025-03) (EU SRD 25–1000 MHz, harmonised under RED 2014/53/EU art. 3.2); ARIB STD-T108 (Japan, 920 MHz); ITU-R Radio Regulations Edition of 2024 for the underlying region allocations | repos/retinue/crates/radio-hand (region.rs, executive.rs) — already implemented |
 | SKIP | LoRaWAN | LoRa Alliance TS001 (L2 specification) and RP002 Regional Parameters | None. retinue uses raw LoRa PHY via SX1262 with its own mesh layer. |
@@ -887,6 +897,11 @@ was committed, and they corrected this brief rather than the world:
   table elsewhere correctly names `livery`, and OpenType/COLRv1 cited `swash`
   where netrender uses `skrifa`.
 
+- **Hand-edited after the generator, 2026-09-01:** one WATCH row added (Nym
+  mixnet, beside the Reticulum row) and §4's opening claim corrected against
+  the code. Both are edits to the output, exactly what the bullet above warns
+  about: anyone re-generating §7 must re-apply the Nym row.
+
 The generalisation worth keeping: the survey's *standards* research held up well
 under adversarial checking, but its claims about **this codebase** — which crate
 owns what, how expensive a change is — were the weakest part and needed a
@@ -945,8 +960,10 @@ answer and the choice is Mark's.
    implementation of a now-stable W3C-CG format that tabard needs anyway. That
    is either a small well-scoped piece of leverage or a distraction from tabard
    itself. Naming-ledger territory if the answer is yes.
-7. **Where mDNS/DNS-SD lands (§4).** It is the largest hole in the stack and it
-   has no obvious owner: distillery's ring, moot's places and turnstone's shared
+7. **Where DNS-SD lands (§4).** Narrowed 2026-09-01: peer discovery landed in
+   Murm (reachability plan R0), so the hole is service browsing alone, and the
+   Djinn plan's F3 has since assigned it to Murm. As first written it had no
+   obvious owner: distillery's ring, moot's places and turnstone's shared
    places all need it, which is an argument for a shared crate rather than three
    implementations, and an argument that it belongs to none of them.
 8. **Insigne versus Verifiable Credentials 2.0 (§5).** VC 2.0 is close to what

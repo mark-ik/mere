@@ -16,7 +16,7 @@
 //! ([`FieldDefinition`](crate::graph::FieldDefinition), `Box`-nested) — rides as a
 //! **serde-JSON string** ([`PersistedField::definition_json`]) rather than via
 //! rkyv `omit_bounds`: the kernel AST is deliberately serde-only, the definition
-//! is loaded once and evaluated in memory by `quint` (no zero-copy benefit), and
+//! is loaded once and evaluated in memory by numen (no zero-copy benefit), and
 //! a blob keeps the archive flat and the round-trip robust. `serde_json` is
 //! already a base kernel dependency.
 

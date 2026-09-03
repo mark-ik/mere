@@ -4,14 +4,14 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The workbench's recursive split tree: the internal model behind [`Workbench`].
+//! The TileLayout's recursive split tree: the internal model behind [`TileLayout`].
 //!
 //! A [`Pane`] is either a [`Stack`] (a tab group of one or more members, one visible)
 //! or a [`Split`](Pane::Split) of children laid along an axis (a `Row` is side-by-side,
 //! a `Column` is stacked top-to-bottom), each child carrying its fractional share of
 //! the split. Splits nest freely, so the tree expresses every variation: horizontal,
 //! vertical, and combinations. It mirrors Genet's
-//! [`TileTree`](genet_host_api::tile::TileTree)
+//! [`TileTree`](workbench::TileTree)
 //! shape (the surface that renders it), so [`Pane::to_tile_tree`] is a direct map.
 //!
 //! The tree holds [`GraphMemberId`]s; the host resolves each to renderable content. The
@@ -19,7 +19,7 @@
 //! the geometry-free tiling logic; layout is the host's genet/taffy job.
 
 use forme::GraphMemberId;
-use genet_host_api::tile::SplitAxis;
+use workbench::SplitAxis;
 
 /// A tab group: members sharing one cell, `active` the visible one.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,7 +56,7 @@ pub(super) struct Branch {
     pub pane: Pane,
 }
 
-/// A node in the workbench tree.
+/// A node in the TileLayout tree.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Pane {
     Stack(Stack),
@@ -323,9 +323,9 @@ impl Pane {
     /// Map this pane onto Genet's [`TileTree`], resolving each member through `tile_for`.
     pub(super) fn to_tile_tree(
         &self,
-        tile_for: &mut impl FnMut(GraphMemberId) -> genet_host_api::tile::Tile,
-    ) -> genet_host_api::tile::TileTree {
-        use genet_host_api::tile::{TileBranch, TileTree};
+        tile_for: &mut impl FnMut(GraphMemberId) -> workbench::Tile,
+    ) -> workbench::TileTree {
+        use workbench::{TileBranch, TileTree};
         match self {
             Pane::Stack(s) if s.members.len() == 1 => TileTree::single(tile_for(s.members[0])),
             Pane::Stack(s) => {

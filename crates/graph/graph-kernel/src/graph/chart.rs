@@ -66,7 +66,7 @@ impl ContentBearing for Node {
 }
 
 impl GraphBearing for Node {
-    fn nested(&self) -> Option<&codicil::LogId> {
+    fn nested(&self) -> Option<&muniment::LogId> {
         // Structural containment (the one-node ruling): the node BEARS the
         // graph named by this log identity. A denizen's inner world hangs
         // here; agency (subject + kind) stays a facet.
@@ -166,9 +166,9 @@ mod tests {
             None,
             "an ordinary node bears no graph"
         );
-        node.nested = Some(codicil::LogId::new("denizens/trail-keeper"));
+        node.nested = Some(muniment::LogId::new("denizens/trail-keeper"));
         assert_eq!(
-            GraphBearing::nested(&node).map(codicil::LogId::as_str),
+            GraphBearing::nested(&node).map(muniment::LogId::as_str),
             Some("denizens/trail-keeper"),
             "containment is structural: the borne world reads off the node itself"
         );

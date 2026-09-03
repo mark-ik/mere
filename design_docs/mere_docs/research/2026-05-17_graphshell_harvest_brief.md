@@ -105,7 +105,7 @@ Keep ingestion signals stratified by lane (Discovery / Freshness / Clustering / 
 Bounded hot in-memory traversal log + fjall cold tier per edge, with O(1) count for visual edge-weight overlay. Storage proof for the `Traversal` relation family.
 
 - Source: [`graphshell edge_traversal_model_research.md:377`](../../../../graphshell/design_docs/graphshell_docs/research/2026-02-20_edge_traversal_model_research.md#L377).
-- Applies to: relation taxonomy plan's `Traversal` family currently has no storage substrate. `EdgePayload` carries hot-tier `Vec<Traversal>` plus `archived_traversal_count: u64` metadata; cold tier under fjall keyspace per the [short-term memory substrate plan](../implementation_strategy/2026-05-14_short_term_memory_substrate_plan.md) precedent.
+- Applies to: relation taxonomy plan's `Traversal` family currently has no storage substrate. `EdgePayload` carries hot-tier `Vec<Traversal>` plus `archived_traversal_count: u64` metadata; cold tier under fjall keyspace per the [short-term memory substrate plan](../../archive_docs/2026-09-02_retired_plans/2026-05-14_short_term_memory_substrate_plan.md) precedent.
 
 ### T2-6. UxTree as canonical semantic tree with path-stable IDs
 
@@ -184,7 +184,7 @@ The renderer/multiplexer/session work has already absorbed the bulk of graphshel
 - Session manifest + tear-out — [browser multiplexer framing](2026-05-11_browser_multiplexer_framing.md), [tearout operations brief](2026-05-11_tearout_operations_brief.md).
 - View intent sidecar — [view intent sidecar plan](../implementation_strategy/2026-05-14_view_intent_sidecar_plan.md).
 - Switcher thumbnails — [switcher thumbnails plan](../implementation_strategy/2026-05-14_switcher_thumbnails_plan.md).
-- Short-term memory substrate — [short-term memory substrate plan](../implementation_strategy/2026-05-14_short_term_memory_substrate_plan.md).
+- Short-term memory substrate — [short-term memory substrate plan](../../archive_docs/2026-09-02_retired_plans/2026-05-14_short_term_memory_substrate_plan.md).
 - Persona model — [persona model brief](2026-05-14_persona_model_brief.md).
 - Cartography projection layer — [cartography layer brief](2026-05-10_cartography_layer_brief.md).
 - Relation taxonomy + edge mutation — [relation taxonomy and edge mutation plan](../implementation_strategy/2026-05-11_relation_taxonomy_and_edge_mutation_plan.md).

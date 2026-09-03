@@ -8,7 +8,7 @@ Linked/Astroid crystallize, chip-click crystallize) are deferred slices, still o
 P4/P5 now have further downstream slices through the roster/orrery relation-cell
 work: 2026-07-01 closed the "gyre topology and springs remain endpoint-pair
 scoped" gap (springs are now per-visible-relation-cell — see the [roster detail
-cards plan](2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01
+cards plan](../../archive_docs/2026-09-02_retired_plans/2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01
 entry), but P4/P5's full done conditions (per-cell edge *thickness*, one shared
 element-model edge renderer between the orrery and the connections swatch, and
 the P5 `GraphDefault < GraphViewOverride < SelectionOverride` layered stack)
@@ -33,7 +33,7 @@ each existing fragment; it extends them, it does not duplicate them.
 - [node body & face model plan](2026-06-23_node_body_face_model_plan.md) **owns
   `swatch.rs`** (the B3 body designer). P1 is the generalization B3 already names
   ("generalizing over the host state is the reuse step", `swatch.rs:18`).
-- [object card plan](2026-06-21_object_card_plan.md) **owns the focus-card slot**.
+- [object card plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md) **owns the focus-card slot**.
   P2 adds the slot's multi-selection branch (`render/cards.rs:129` TODO).
 - [graphlet wiring plan](../../archive_docs/2026-07-04_completed_plans/2026-06-25_graphlet_wiring_plan.md) **owns the per-window
   instance machinery + graphlet derivation/reconcile**. P3 crystallize reuses it.
@@ -213,7 +213,7 @@ membership is unaffected by any hide.
 only" behavior is built — `orrery::build::visible_relation_edges` feeds the
 instance's `hidden_edges` into the gyre spring sync, and every hide/show
 mutator re-syncs immediately (see the [roster detail cards
-plan](2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01 entry).
+plan](../../archive_docs/2026-09-02_retired_plans/2026-06-29_graph_object_roster_detail_cards_plan.md)'s 2026-07-01 entry).
 Graphlet membership is confirmed unaffected (hide/show never touches
 `derive_members`/graphlet truth). **Not built**: the `GraphDefault <
 GraphViewOverride < SelectionOverride` layered stack itself — hide/show is
@@ -402,7 +402,7 @@ template renders a purpose-built UI over its own subgraph.
   read-only ranked display; the live projection toggle that re-derives it is still P4 (needs the swatch
   hit-test). Bin compiles, 14 graphlet tests green.
 - **2026-06-30 - P4/P5 partial via roster/orrery relation-cell work.** The
-  [graph object roster detail-cards plan](2026-06-29_graph_object_roster_detail_cards_plan.md)
+  [graph object roster detail-cards plan](../../archive_docs/2026-09-02_retired_plans/2026-06-29_graph_object_roster_detail_cards_plan.md)
   landed fanned canvas relation-cell overlay/picking, selected-cell redraw, Link
   Card relation-row hide/show, per-cell session visibility keyed by `(source,
   target, RelationKind)`, and connections-swatch filtering/routing for visible

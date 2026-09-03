@@ -17,7 +17,7 @@ external-ALPN seam landed first in its `main` as `9f2c2a01`.
 [`2026-06-30_personal_mesh_substrate_m2_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_personal_mesh_substrate_m2_plan.md),
 [`2026-06-30_mesh_lease_scheduler_plan.md`](../../archive_docs/2026-08-09_completed_plans/2026-06-30_mesh_lease_scheduler_plan.md),
 [`2026-08-09_burn_0_22_migration_plan.md`](2026-08-09_burn_0_22_migration_plan.md),
-[`2026-06-30_kith_capability_sharing_plan.md`](2026-06-30_kith_capability_sharing_plan.md),
+[`2026-06-30_kith_capability_sharing_plan.md`](../../archive_docs/2026-09-02_retired_plans/2026-06-30_kith_capability_sharing_plan.md),
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md)
 
 M2 and M3 are credible **library floors**: a bounded execution substrate and a

@@ -64,6 +64,7 @@ impl Canvas {
         self.node_states.clear();
         self.node_shapes.clear();
         self.node_faces.clear();
+        self.derived_face_cache.clear();
         self.node_sizes.clear();
         self.node_sprites.clear();
         self.node_sprite_hulls.clear();
@@ -141,6 +142,8 @@ impl Canvas {
             node_states: HashMap::new(),
             node_shapes: HashMap::new(),
             node_faces: HashMap::new(),
+            derived_face_palette: DerivedFacePalette::default(),
+            derived_face_cache: HashMap::new(),
             node_sizes: HashMap::new(),
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),

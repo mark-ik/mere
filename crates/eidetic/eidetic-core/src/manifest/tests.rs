@@ -11,7 +11,7 @@ use crate::schema::{
 };
 use std::collections::HashMap;
 
-/// Test schema engram id (just a fixed BLAKE3 hash; in real code a schema
+/// Test schema codicil id (just a fixed BLAKE3 hash; in real code a schema
 /// would be a separate manifest).
 fn test_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::of_blob(b"test-schema"))

@@ -348,7 +348,7 @@ impl ResumableProjectionSource for TransferSourceEndpoint {
 #[cfg(test)]
 mod tests {
     use eidetic::{
-        Engram, Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin,
+        Codicil, Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin,
         ProvenanceRecord, SchemaRef, TimeBounds, Timestamp, TrustEnvelope, TrustLevel,
     };
     use graphshell_endpoint::{
@@ -359,10 +359,10 @@ mod tests {
     use mere::kernel::graph::{Graph, NodeFacetStore};
 
     use super::*;
-    use crate::product::{PRODUCT_ENGRAM_SCHEMA, ProductEngramV1, TransferScope};
+    use crate::product::{PRODUCT_CODICIL_SCHEMA, ProductCodicilV2, TransferScope};
     use crate::transfer::{
         AccessTransferPolicy, TransferBlobV1, TransferEndpointV1, TransferOperation,
-        TransferRouteV1, product_engram_schema,
+        TransferRouteV1, product_codicil_schema,
     };
 
     fn manifest(bytes: &[u8]) -> TransferManifestV1 {
@@ -375,15 +375,15 @@ mod tests {
             "https://example.test/h6-endpoint".to_string(),
             PortablePoint::new(0.0, 0.0),
         );
-        let product = ProductEngramV1 {
-            schema: PRODUCT_ENGRAM_SCHEMA.to_string(),
+        let product = ProductCodicilV2 {
+            schema: PRODUCT_CODICIL_SCHEMA.to_string(),
             scope: TransferScope::ObjectOnly,
             exported_at_ms: 1,
             graph: graph.to_snapshot(),
             facets: NodeFacetStore::new(),
             scene: None,
         };
-        let selection_schema = product_engram_schema();
+        let selection_schema = product_codicil_schema();
         let schema_bytes = serde_json::to_vec(&selection_schema).unwrap();
         TransferManifestV1 {
             schema: crate::transfer::TRANSFER_MANIFEST_SCHEMA.to_string(),
@@ -404,7 +404,7 @@ mod tests {
                 peer: "peer:b".to_string(),
             },
             selection_schema,
-            selection: Engram::new(
+            selection: Codicil::new(
                 SchemaRef::from_id(ManifestId::from_hash(Hash::of(&schema_bytes))),
                 serde_json::to_vec(&product).unwrap(),
                 PrivacyClass::TrustedPeersOnly,

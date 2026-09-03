@@ -62,7 +62,7 @@ impl TypedPayload for DeletedNode {
 
 /// Record a tombstone for a deleted node into the private memory store, returning
 /// its content-addressed manifest id. Local-only, self-asserted,
-/// generated-provenance: a private audit record, not a shared engram.
+/// generated-provenance: a private audit record, not a shared codicil.
 pub async fn record_deleted(store: &mut dyn Store, deleted: &DeletedNode) -> Result<ManifestId> {
     let at = Timestamp(deleted.deleted_at_ms);
     save_typed(

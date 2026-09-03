@@ -4,7 +4,7 @@
 thread map). Kept in place (not archived) as the still-current foundational record of the Phase-1
 consolidation + orrery-as-element architecture that active sibling plans cite. Remaining threads
 re-homed: cond 1 -> [orrery_custom_layout_element_plan](2026-06-23_orrery_custom_layout_element_plan.md);
-slice 5 -> [layout_phase_split_probe_plan](2026-06-23_layout_phase_split_probe_plan.md);
+slice 5 -> [layout_phase_split_probe_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-23_layout_phase_split_probe_plan.md);
 secondary-orreries -> tearout; tiles -> composition spine.
 
 **Rename banner (2026-07-02):** the code pointers throughout this doc (`OrreryCard`,
@@ -834,7 +834,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     [orrery_custom_layout_element_plan](2026-06-23_orrery_custom_layout_element_plan.md) (parked /
     deferred by design; the interim transform-aware ring + the slice-4 a11y bounds hold without it).
   - **Slice 5 (cascade-vs-box-tree-vs-shaping phase-split probe)** -> spun out to
-    [layout_phase_split_probe_plan](2026-06-23_layout_phase_split_probe_plan.md) (the goal-2 perf
+    [layout_phase_split_probe_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-23_layout_phase_split_probe_plan.md) (the goal-2 perf
     measurement gate, owned jointly with the parallelism research §0).
   - **N-secondary-orreries / side-by-side panes** (`secondary_orreries`, render.rs:785/793, still
     standalone Scenes via `set_render_as_cards(false)`) -> co-owned by the

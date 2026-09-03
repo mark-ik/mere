@@ -1,0 +1,45 @@
+# C4b.3: resume on reconnect, with a change during the outage.
+#
+# The page joins the live board, moves it once itself, then drops its link.
+# While it is away the host moves the board natively (`remote-nudge` asks the
+# fixture's `POST /nudge`). The page rejoins as the same subject with the
+# retained delegation — the invitation is not spent again — and the change
+# it missed comes back as a bell, resumed by diff, without a re-snapshot.
+wait
+assert snap remote-link == webrtc
+assert snap remote-state == open
+assert snap remote-revision == 1
+act session-remote
+settle 1
+act invoke-action
+settle 1
+dom click [data-intent="mere.graphshell/live-fixture/append"]
+wait
+assert snap action-status ~ Accepted
+assert snap remote-revision == 2
+assert snap remote-cards == 2
+capture c4b3_before_outage
+wait
+# Down.
+act remote-disconnect
+wait
+assert snap remote-state == disconnected
+assert event remote-channel-closed
+# The host moves on without us.
+act remote-nudge
+wait
+assert event remote-nudged revision 3
+assert snap remote-revision == 2
+# Back, as the same subject.
+act remote-reconnect
+wait
+assert snap remote-state == open
+assert snap remote-rejoins == 1
+assert event remote-rejoined
+assert event remote-bell revision 3
+assert snap remote-revision == 3
+assert snap remote-cards == 3
+assert snap remote-resume ~ diff · 2 → 3
+capture c4b3_resumed
+wait
+log c4b3 reconnect receipt complete

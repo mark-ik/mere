@@ -15,7 +15,8 @@
 //!
 //! [`InviteV1`] is that authority: the redemption secret, the expected host
 //! key, network and profile references, the permitted service action, the
-//! expiry and use ceiling, and a [`ReleaseRefV1`] naming the release the
+//! expiry and use ceiling, and a [`ReleaseRefV1`](luggage::ReleaseRefV1)
+//! naming the release the
 //! inviter claims to be running (browser WebRTC carrier plan §5). It is a
 //! bounded, versioned payload meant to travel in a URL fragment — see
 //! [`InviteV1::to_fragment`] — never in a query string, a referrer, or a log
@@ -35,6 +36,8 @@
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
+
+use luggage::ReleaseRefV1;
 
 use crate::challenge::{LinkChallenge, MAX_TRANSCRIPT_FIELD_BYTES};
 use crate::codec::{b64url_decode, b64url_encode, ct_eq, hex_digit, push_field, to_hex_lower};
@@ -173,25 +176,6 @@ pub const REDEMPTION_PROOF_DOMAIN: &str = "mere.webrtc-carrier/redemption-proof/
 /// long to be a real invite is rejected on a string length, not on the
 /// bytes it would have produced.
 const MAX_FRAGMENT_BODY_BYTES: usize = (MAX_INVITE_BYTES * 4 + 2) / 3;
-
-/// A claim about which signed release an invitation belongs to.
-///
-/// `manifest_blake3` identifies the exact signed manifest bytes; the
-/// publisher trust store, not this crate, is where `publisher_key_id`'s
-/// signature actually gets checked. This type is opaque here on purpose — it
-/// carries no manifest, public key, or feed, so a loader can display or
-/// resolve it, but it must never become an admission input. Notochord admits
-/// on the redemption proof and the link challenge alone; a release reference
-/// is a display and Luggage-lookup concern that happens to ride in the same
-/// invite, not a fact the WebRTC carrier or Notochord ever inspects.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct ReleaseRefV1 {
-    /// The blake3 digest of the exact signed manifest bytes.
-    pub manifest_blake3: [u8; 32],
-    /// Identifies the publisher key a verifier looks up trust for — not the
-    /// key itself.
-    pub publisher_key_id: [u8; 32],
-}
 
 /// The C2 invitation: everything a browser needs to redeem a capability into
 /// a narrow, expiring delegation, and nothing an application ever executes on
@@ -346,8 +330,9 @@ impl InviteV1 {
 
     /// The release this invitation claims to be running.
     ///
-    /// See [`ReleaseRefV1`]: display and Luggage-lookup only, never an
-    /// admission input.
+    /// See [`ReleaseRefV1`](luggage::ReleaseRefV1): display and Luggage-lookup
+    /// only, never an admission input. Luggage owns this type; the carrier
+    /// carries it and never interprets it.
     pub const fn release(&self) -> ReleaseRefV1 {
         self.release
     }

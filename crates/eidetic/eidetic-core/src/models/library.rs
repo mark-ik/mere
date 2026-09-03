@@ -27,11 +27,11 @@ pub struct ModelComponents {
     pub weight_bytes: Vec<u8>,
 }
 
-/// Library API for managing model engrams.
+/// Library API for managing model codicils.
 pub struct ModelLibrary;
 
 impl ModelLibrary {
-    /// Save a model manifest as a typed engram.
+    /// Save a model manifest as a typed codicil.
     pub async fn save_model(store: &mut dyn Store, manifest: ModelManifest) -> Result<ManifestId> {
         save_typed(
             store,

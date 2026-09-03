@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Lexical search over eidetic browsing memory — the Phase 9 producer half: a tantivy index minted from BrowsingTrace engrams, BM25 recall, fast-field reports, and the engine-agnostic hybrid-fusion seam."
+description = "Lexical search over eidetic browsing memory — the Phase 9 producer half: a tantivy index minted from BrowsingTrace codicils, BM25 recall, fast-field reports, and the engine-agnostic hybrid-fusion seam."
 
 [lib]
 name = "eidetic_search"
@@ -14,7 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 eidetic = { workspace = true }
 # The lexical engine (MIT). Stays out of eidetic-core deliberately — the
-# index is derived state minted from trace engrams, not part of the memory
+# index is derived state minted from trace codicils, not part of the memory
 # substrate. Default features include the mmap directory the native produce
 # path uses; the wasm/OPFS question is Phase 7 + the probe, not this crate.
 tantivy = "0.26"

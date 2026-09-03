@@ -17,7 +17,8 @@ use std::sync::{Mutex, OnceLock};
 use std::{fs, io};
 
 use identity::{
-    IdentityError, SealedRecordStorage, StartupUnlockMode, load_or_create_auto_unlock_root,
+    IdentityError, SealedRecordStorage, StartupUnlockMode, load_existing_auto_unlock_root,
+    load_or_create_auto_unlock_root,
 };
 
 use crate::device_settings_store;
@@ -94,6 +95,24 @@ pub(super) fn wallet_local_secret_store(
     }
 }
 
+fn wallet_local_secret_store_read_only(
+    data_root: &Path,
+) -> io::Result<Option<SealedRecordStorage>> {
+    if runtime_manual_unlock_active(data_root) {
+        return load_existing_auto_unlock_root(identity_auto_unlock_root_path(data_root))
+            .map(|root| root.map(|key| SealedRecordStorage::open_with_key(data_root, key)))
+            .map_err(io_backend_error);
+    }
+    match wallet_startup_unlock_mode(data_root) {
+        StartupUnlockMode::AutoOs => {
+            load_existing_auto_unlock_root(identity_auto_unlock_root_path(data_root))
+                .map(|root| root.map(|key| SealedRecordStorage::open_with_key(data_root, key)))
+                .map_err(io_backend_error)
+        }
+        StartupUnlockMode::Prompt | StartupUnlockMode::Locked => Ok(None),
+    }
+}
+
 fn wallet_secret_record_root_key(seed: [u8; 32]) -> [u8; 32] {
     blake3::derive_key(
         "mere.pandect.wallet_store.secret_records.v1",
@@ -155,6 +174,39 @@ pub fn load_identity_seed(data_root: &Path) -> io::Result<Option<[u8; 32]>> {
         save_identity_seed(data_root, seed)?;
     }
     Ok(Some(seed))
+}
+
+/// Read the shared master seed without creating a local unlock root or migrating a record.
+///
+/// An accessible sealed record is decrypted in place. A legacy raw 32-byte seed is read as-is;
+/// unlike [`load_identity_seed`], this loader never upgrades it to a sealed record. A sealed
+/// record that is unavailable under the current startup lock policy returns `None` so callers
+/// can refuse the operation before creating any other state.
+pub fn load_identity_seed_read_only(data_root: &Path) -> io::Result<Option<[u8; 32]>> {
+    let path = identity_seed_path(data_root);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let relative = path
+        .strip_prefix(data_root)
+        .expect("wallet path under data root");
+    if let Some(store) = wallet_local_secret_store_read_only(data_root)? {
+        return store
+            .load_record::<[u8; 32]>(relative)
+            .map_err(io_backend_error);
+    }
+    if looks_like_sealed_record(&path) {
+        return Ok(None);
+    }
+    let bytes = fs::read(&path)?;
+    <[u8; 32]>::try_from(bytes.as_slice())
+        .map(Some)
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("identity seed at {path:?} is neither a sealed record nor 32 raw bytes"),
+            )
+        })
 }
 
 /// Whether the startup seed record exists but is currently inaccessible because
@@ -225,6 +277,21 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    #[test]
+    fn read_only_seed_load_preserves_a_legacy_raw_seed_byte_for_byte() {
+        let root = temp_data_root("seed-read-only-legacy");
+        let seed = [0x6a; 32];
+        let path = identity_seed_path(&root);
+        save_bytes_atomic(&path, &seed).unwrap();
+        let before = fs::read(&path).unwrap();
+
+        assert_eq!(load_identity_seed_read_only(&root).unwrap(), Some(seed));
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert!(!identity_auto_unlock_root_path(&root).exists());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[cfg(windows)]
     #[test]
     fn loading_a_legacy_raw_seed_migrates_it_to_a_sealed_record() {
@@ -244,6 +311,44 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn read_only_seed_load_reads_an_accessible_sealed_record_without_rewriting_it() {
+        let root = temp_data_root("seed-read-only-sealed");
+        let seed = [0x6b; 32];
+        save_identity_seed(&root, seed).unwrap();
+        let path = identity_seed_path(&root);
+        let before = fs::read(&path).unwrap();
+
+        assert_eq!(load_identity_seed_read_only(&root).unwrap(), Some(seed));
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn read_only_seed_load_refuses_a_locked_sealed_record_without_rewriting_it() {
+        let root = temp_data_root("seed-read-only-locked");
+        let seed = [0x6c; 32];
+        save_identity_seed(&root, seed).unwrap();
+        save_device_settings(
+            &root,
+            &DeviceSettings {
+                startup_unlock_mode: StartupUnlockMode::Locked,
+                mesh_lending: None,
+            },
+        )
+        .unwrap();
+        let path = identity_seed_path(&root);
+        let before = fs::read(&path).unwrap();
+
+        assert_eq!(load_identity_seed_read_only(&root).unwrap(), None);
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn explicit_auto_os_unlock_opens_a_locked_seed_without_changing_startup_mode() {
         let root = temp_data_root("explicit-auto-os-unlock");
         let persona = fixture_persona();
@@ -252,6 +357,7 @@ mod tests {
             &root,
             &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Locked,
+                mesh_lending: None,
             },
         )
         .unwrap();
@@ -283,6 +389,7 @@ mod tests {
             &root,
             &DeviceSettings {
                 startup_unlock_mode: StartupUnlockMode::Prompt,
+                mesh_lending: None,
             },
         )
         .unwrap();

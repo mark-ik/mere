@@ -20,7 +20,7 @@ use wasm_bindgen::prelude::Closure;
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{Event, File, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement};
 
-use super::{ActiveSession, BrowserHost, document, update_semantics};
+use super::{ActiveSession, BrowserHost, element, root, update_semantics};
 use crate::web_view::ChromeModel;
 
 const SAVED_SCENE_ADDRESS: &str = "mere://scene/graphshell-h3";
@@ -79,8 +79,8 @@ impl BrowserHost {
             "apply-face" => self.apply_face(),
             "save-scene" => self.save_scene(),
             "reopen-scene" => self.reopen_scene(),
-            "export-engram" => self.export_engram(),
-            "open-engram" => self.open_engram(),
+            "export-codicil" | "export-engram" => self.export_codicil(),
+            "open-codicil" | "open-engram" => self.open_codicil(),
             _ => return false,
         };
         self.product_status = match result {
@@ -461,7 +461,7 @@ impl BrowserHost {
         Ok("Saved scene reopened".to_string())
     }
 
-    fn export_engram(&mut self) -> Result<String, String> {
+    fn export_codicil(&mut self) -> Result<String, String> {
         let focused = self.focused_member()?;
         let scope = TransferScope::from_code(&select_value("transfer-scope")?)
             .ok_or("unknown transfer scope")?;
@@ -478,7 +478,7 @@ impl BrowserHost {
         let bytes = self
             .app
             .host
-            .export_product_engram(ExportRequest {
+            .export_product_codicil(ExportRequest {
                 focused,
                 selected: self.canvas.selected_members(),
                 scope,
@@ -489,7 +489,7 @@ impl BrowserHost {
             .map_err(|error| error.to_string())?;
         self.last_export = String::from_utf8(bytes).map_err(|error| error.to_string())?;
         self.export_bytes = self.last_export.len();
-        set_textarea_value("engram-data", &self.last_export)?;
+        set_textarea_value("codicil-data", &self.last_export)?;
         Ok(format!(
             "Exported {} bytes · {}",
             self.export_bytes,
@@ -497,12 +497,12 @@ impl BrowserHost {
         ))
     }
 
-    fn open_engram(&mut self) -> Result<String, String> {
-        let data = textarea_value("engram-data")?;
+    fn open_codicil(&mut self) -> Result<String, String> {
+        let data = textarea_value("codicil-data")?;
         let (receipt, scene) = self
             .app
             .host
-            .replace_with_product_engram(data.as_bytes())
+            .replace_with_product_codicil(data.as_bytes())
             .map_err(|error| error.to_string())?;
         self.imported_nodes = receipt.nodes;
         let selected = scene
@@ -516,7 +516,7 @@ impl BrowserHost {
         }
         self.detail_open = false;
         Ok(format!(
-            "Opened engram · {} objects, {} relations, {} facets",
+            "Opened codicil · {} objects, {} relations, {} facets",
             receipt.nodes, receipt.relations, receipt.facets
         ))
     }
@@ -531,7 +531,6 @@ pub(super) fn update_product_semantics(
     host: &mut BrowserHost,
     _model: &ChromeModel,
 ) -> Result<(), String> {
-    let document = document()?;
     let member = host.current_primary_member();
     if member != host.last_detail_member {
         if let Some(id) = member
@@ -547,10 +546,10 @@ pub(super) fn update_product_semantics(
         }
         host.last_detail_member = member;
     }
-    if let Some(element) = document.get_element_by_id("product-status") {
+    if let Ok(element) = element("product-status") {
         element.set_text_content(Some(&host.product_status));
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     for (name, value) in [
         ("data-product-status", host.product_status.clone()),
         (
@@ -595,11 +594,9 @@ async fn read_file_metadata(file: &File) -> Result<LocalFileMetadata, String> {
 }
 
 fn element_as<T: JsCast>(id: &str) -> Result<T, String> {
-    document()?
-        .get_element_by_id(id)
-        .ok_or_else(|| format!("missing #{id}"))?
+    element(id)?
         .dyn_into()
-        .map_err(|_| format!("#{id} has the wrong element type"))
+        .map_err(|_| format!("part {id} has the wrong element type"))
 }
 
 fn input_value(id: &str) -> Result<String, String> {

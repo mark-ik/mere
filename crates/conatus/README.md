@@ -7,21 +7,17 @@ workspace.
 
 | Crate | Contents | Depends on |
 |---|---|---|
-| [`numen`](numen) | Field definitions as plain data: `ScalarField` / `VectorField`, `Field`, `Coupling`, `EdgePath`. | serde, uuid, strum |
-| [`quint`](quint) | The runtime algebra: `FieldRegistry`, `FieldProjection`, `eval_scalar` / `eval_vector` / `grad_scalar`, optional Rhai authoring, and two GPU lanes: Burn lowering (`field-burn`) and the **resident lane** (`field-gpu`), whose kernels advance positions that never leave the device — including `ResidentChunk`, the retained, stamped, patch-committed GPU allocation the wing's residency receipts lease from. | numen, serde, uuid, optional burn + rhai + wgpu + cubecl |
-| [`quint-shaders`](quint-shaders) | The resident lane's kernels in Rust, for rust-gpu. Retired for compute 2026-08-16 — the resident lane's kernels moved to CubeCL; see its README. | spirv-std |
-| [`seiche`](seiche) | Force integration: a rapier `Simulation`, built-in layout forces, field couplings, scenes, fluid. | rapier2d, petgraph, quint, numen, euclid, tracing |
-| [`conatus`](conatus) | Host-neutral 3D body, collision, query, and fixed-step runtime: `BodyWorld` with voxel-grid colliders, sparse `edit_voxels`, ray/overlap queries, and a character mover, with Rapier 3D private inside so products hold Conatus ids and arrays only. Mesocosm's runtime became its first product tactile consumer 2026-08-26. | nisus, rapier3d, serde |
+| [`numen`](numen) | Field truth and evaluation: `ScalarField` / `VectorField`, `Field`, `Coupling`, `EdgePath`, `FieldRegistry`, `FieldProjection`, analytic evaluation, plus opt-in Rhai and Burn lowering. | serde, uuid, strum, optional burn + rhai |
+| [`seiche`](seiche) | Force integration and laws: a Rapier `Simulation`, built-in layout forces, tensorized repulsion, field couplings, scenes, fluid. | rapier2d, petgraph, numen, euclid, tracing, optional burn |
+| [`conatus`](conatus) | Host-neutral 3D body, collision, query, and fixed-step runtime. Its opt-in `resident` module owns `ResidentChunk`, CubeCL allocation, and the device-resident spatial lane. | nisus, rapier3d, serde, optional burn + wgpu + cubecl |
 | [`nisus`](nisus) | Generic revisioned voxel chunk and edit mechanics — the *nisus formativus*, the striving by which the world's matter takes and re-takes shape; consumed by Mesocosm's `GroundVoxelProfile` as the disposable view beside its record. Renamed from `conatus-voxel` and claimed on crates.io 2026-08-28. | serde |
+| [`modulus`](modulus) | Product-neutral sparse-brick presentation ABI: deterministic `BrickMap`, `BrickTraceSpace`, the camera-neutral `BRICK_DDA_WGSL`, and a capacity-fixed retargeting mode. Camera, appearance, and composition stay in product lenses. | bytemuck |
 
-A sixth member is staged on the `codex/conatus-brick-lift` branch:
-`modulus` (renamed from `conatus-brick` and claimed on crates.io
-2026-08-28 — the classical architect's base unit of measure, and the
-layout math is literally modular arithmetic), the shared sparse-brick
-presentation ABI (deterministic
-`BrickMap`, `BrickTraceSpace`, the camera-neutral `BRICK_DDA_WGSL`, and a
-capacity-fixed retargeting mode), which Mesocosm and Paredros already
-consume by pinned rev. It joins this table when the branch lands.
+`modulus` is the sixth member, landed from the `codex/conatus-brick-lift`
+branch on 2026-09-02. Renamed from `conatus-brick` and claimed on crates.io
+2026-08-28 (the classical architect's base unit of measure, and the layout
+math is literally modular arithmetic), it is the shared sparse-brick
+presentation ABI, which Mesocosm and Paredros already consume by pinned rev.
 
 The resident lane is the explicit-regime half of the spatial compute
 plan (`design_docs/mere_docs/technical_architecture/2026-08-13_spatial_compute_plan.md`):
@@ -31,11 +27,12 @@ settle word. It sits beside the Burn lane rather than replacing it. Burn
 serves dense field evaluation and semantic couplings; the resident lane
 serves the n-body step, where the tensor formulation's `[n, n]`
 intermediates are the wrong shape. The device is always the host's:
-quint never boots one, because a second device on the same adapter
+Conatus never boots one, because a second device on the same adapter
 cannot share a buffer with the renderer.
 
-Dependency direction is numen to quint to seiche on the field side, and
-nisus to conatus on the runtime side. Each crate publishes under its
+Dependency direction is numen to seiche on the field side, with Conatus
+resident state adjacent to its spatial runtime, and nisus to conatus on the
+runtime side. Each crate publishes under its
 own name and stays independent of any graph kernel or renderer. All of them
 are MPL-2.0 (see LICENSE).
 

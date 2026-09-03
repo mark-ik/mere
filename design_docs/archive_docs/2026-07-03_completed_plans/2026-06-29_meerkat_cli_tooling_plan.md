@@ -19,7 +19,7 @@ Related docs:
 
 - [external_deps_topology_brief](../../2026-05-24_external_deps_topology_brief.md)
   owns the `Code/` workspace split and cross-repo local override convention.
-- [graph_object_roster_detail_cards_plan](2026-06-29_graph_object_roster_detail_cards_plan.md)
+- [graph_object_roster_detail_cards_plan](../2026-09-02_retired_plans/2026-06-29_graph_object_roster_detail_cards_plan.md)
   is the slice whose headed verification exposed the stale target path.
 
 ---

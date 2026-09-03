@@ -124,7 +124,8 @@ pub enum NodeShape {
 /// node with a custom hull body can still show its favicon, and a sprite face can sit on the
 /// default silhouette body. Independent of the node's truth (content, identity, edges stay
 /// authoritative in the kernel). The host pushes per-node overrides via
-/// [`Canvas::set_node_face`]; a node without an override defaults to [`Favicon`](Face::Favicon).
+/// [`Canvas::set_node_face`]; a node without an override uses [`Derived`](Face::Derived) until it
+/// has a favicon source, then [`Favicon`](Face::Favicon).
 /// The card preview is a *separate* layer over the node, not a face, so it is absent here.
 /// (Node body & face model — the Face axis.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -134,6 +135,10 @@ pub enum Face {
     /// this face over the content-type silhouette body.
     #[default]
     Favicon,
+    /// A deterministic vector face derived from the node's canonical address. Its fills name
+    /// palette slots, so the current theme recolors it without changing or storing the face bytes.
+    /// This is the content-sensitive default while a node has no favicon source.
+    Derived,
     /// A custom imported sprite image, cover-fit over the whole face — the "alive graph" form.
     /// The host stores the per-node image (a PNG data-URI) via [`Canvas::set_node_sprite`],
     /// which sets this face. The body (silhouette or a sprite-traced hull) is a separate axis.
@@ -150,6 +155,7 @@ impl Face {
     pub fn as_code(self) -> &'static str {
         match self {
             Face::Favicon => "favicon",
+            Face::Derived => "derived",
             Face::Sprite => "sprite",
             Face::Bare => "bare",
         }
@@ -159,6 +165,7 @@ impl Face {
     /// (Node body & face — face persistence.)
     pub fn from_code(code: &str) -> Self {
         match code {
+            "derived" => Face::Derived,
             "sprite" => Face::Sprite,
             "bare" => Face::Bare,
             _ => Face::Favicon,

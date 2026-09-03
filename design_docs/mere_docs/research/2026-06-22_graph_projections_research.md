@@ -23,7 +23,7 @@ up; this doc is the menu and the shared framing, not a build schedule.
 - [node_representation_arrangement_plan](../implementation_strategy/2026-06-18_node_representation_arrangement_plan.md)
   — representation (a node's look) and arrangement (a layout) are orthogonal to which projection is
   reading the truth. A node's chosen form carries across all five.
-- [command_registry_configurable_menus_plan](../implementation_strategy/2026-06-21_command_registry_configurable_menus_plan.md)
+- [command_registry_configurable_menus_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md)
   — each projection is one registry command (`projection.trail`, `projection.claim-map`, ...),
   applicability-gated, palette- and script-reachable.
 - [edge_system_audit](2026-06-13_edge_system_audit.md) — the kernel relation model is complete and
@@ -76,7 +76,7 @@ not accidentally grow a second Navigator.
 
 The orrery is a map of *what* you have; Trail is a record of *when and how* you moved. It is the
 fuller surface behind the already-named "Trail" shellbar button (the Tier-A sidequest in
-[lane0_sidequests_plan](../implementation_strategy/2026-06-16_lane0_sidequests_plan.md)) and the
+[lane0_sidequests_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-16_lane0_sidequests_plan.md)) and the
 substrate from
 [node_navigation_lineage_wiring_plan](../implementation_strategy/2026-06-05_node_navigation_lineage_wiring_plan.md).
 

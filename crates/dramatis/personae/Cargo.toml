@@ -64,6 +64,25 @@ hex = "0.4"
 tempfile = "3"
 
 # OS-store unlock backend (Windows DPAPI today; other platforms follow).
+# The browser build. Two `getrandom` majors reach this crate — 0.3 directly,
+# 0.4 through the RustCrypto stack under `chacha20poly1305` and
+# `curve25519-dalek` — and each refuses `wasm32-unknown-unknown` unless told
+# to use the JavaScript backend. 0.4 needs only the feature. 0.3 needs the
+# feature *and* `--cfg getrandom_backend="wasm_js"` in the wasm target's
+# rustflags, which cannot be expressed here; the browser crate's build carries
+# it. Declared as target dependencies so no native build pays for them.
+#
+# 0.3 keeps its ordinary name: Cargo merges a target table's features into the
+# same-named entry under `[dependencies]`, and refuses the same package twice
+# under two names. 0.4 is a different package version, so it must be renamed —
+# that is the one case the rename is for.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom_0_4 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+# `uuid` refuses the target too unless told where randomness comes from; `js`
+# is its route for `wasm32-unknown-unknown`. Same merge, same name.
+uuid = { version = "1", features = ["js"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",

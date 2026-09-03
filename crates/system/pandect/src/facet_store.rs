@@ -33,7 +33,7 @@
 //! enabling rung; the migrations follow behind it, opportunistically.
 //!
 //! Validation (a [`FacetValidator`](chartulary::FacetValidator)) is a write-time
-//! host concern (mere backs it with eidetic schema engrams); persistence here is
+//! host concern (mere backs it with eidetic schema codicils); persistence here is
 //! schema-agnostic. One JSON document, atomic write, `Ok(None)` when absent —
 //! deleting it drops facets, never graph truth.
 

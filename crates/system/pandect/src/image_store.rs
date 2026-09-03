@@ -14,7 +14,7 @@
 //! collapse to one blob. The kernel holds only a small [`ImageRef`] (digest +
 //! dimensions); the pixels live here, out of the graph truth.
 //!
-//! Content-addressing is BLAKE3 to match eidetic's engram / manifest identity
+//! Content-addressing is BLAKE3 to match eidetic's codicil / manifest identity
 //! (so an image blob is iroh-sync-portable by the same hash). Bytes are stored
 //! raw (media-friendly, like `content_store` bodies). Deletion is
 //! caller-guarded: a blob is shared, so it is dropped only once no live node

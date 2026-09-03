@@ -12,10 +12,11 @@ use std::rc::Rc;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::Closure;
 use web_sys::{
-    Element, Event, HtmlSelectElement, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent,
+    Element, Event, HtmlInputElement, HtmlSelectElement, HtmlTextAreaElement, KeyboardEvent,
+    MouseEvent, PointerEvent, WheelEvent,
 };
 
-use super::{ActiveSession, BrowserHost, document, update_semantics, window};
+use super::{ActiveSession, BrowserHost, document, root, update_semantics, web_scenario, window};
 
 pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), String> {
     let canvas = state.borrow().canvas_element.clone();
@@ -113,6 +114,12 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         else {
             return;
         };
+        if let Some(panel) = target.get_attribute("data-projection-panel") {
+            let mut host = click_state.borrow_mut();
+            host.select_projection_panel(&panel);
+            let _ = update_semantics(&mut host);
+            return;
+        }
         if target.has_attribute("data-action-draft-submit") {
             let mut host = click_state.borrow_mut();
             host.run_command("submit-action-draft");
@@ -126,7 +133,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.run_command(&command);
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("click", click.as_ref().unchecked_ref())
         .map_err(|_| "could not attach command listener")?;
     click.forget();
@@ -146,10 +153,37 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.choose_action_draft(&field, &select.value());
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("change", change.as_ref().unchecked_ref())
         .map_err(|_| "could not attach action-draft change listener")?;
     change.forget();
+
+    let input_state = state.clone();
+    let input = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+        let Some(target) = event
+            .target()
+            .and_then(|target| target.dyn_into::<Element>().ok())
+        else {
+            return;
+        };
+        let Some(field) = target.get_attribute("data-projection-field") else {
+            return;
+        };
+        let value = if let Ok(input) = target.clone().dyn_into::<HtmlInputElement>() {
+            input.value()
+        } else if let Ok(textarea) = target.dyn_into::<HtmlTextAreaElement>() {
+            textarea.value()
+        } else {
+            return;
+        };
+        let mut host = input_state.borrow_mut();
+        host.update_projection_field(&field, &value);
+        let _ = update_semantics(&mut host);
+    });
+    root()?
+        .add_event_listener_with_callback("input", input.as_ref().unchecked_ref())
+        .map_err(|_| "could not attach projection editor input listener")?;
+    input.forget();
 
     let key_state = state.clone();
     let keydown = Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {
@@ -159,6 +193,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
             .is_some_and(|target| {
                 target.has_attribute("data-action-draft-field")
                     || target.has_attribute("data-action-draft-submit")
+                    || target.has_attribute("data-projection-field")
             })
         {
             return;
@@ -179,7 +214,7 @@ pub(super) fn install_events(state: &Rc<RefCell<BrowserHost>>) -> Result<(), Str
         host.run_command(command);
         let _ = update_semantics(&mut host);
     });
-    document()?
+    root()?
         .add_event_listener_with_callback("keydown", keydown.as_ref().unchecked_ref())
         .map_err(|_| "could not attach keyboard listener")?;
     keydown.forget();
@@ -192,16 +227,30 @@ pub(super) fn schedule_frames(state: Rc<RefCell<BrowserHost>>) -> Result<(), Str
     let next = frame.clone();
     let callback_state = state.clone();
     *next.borrow_mut() = Some(Closure::new(move |host_ms: f64| {
-        {
+        let deferred = {
             let mut host = callback_state.borrow_mut();
             if let Err(error) = host.render(host_ms) {
                 web_sys::console::error_1(&error.clone().into());
                 if let Ok(document) = document() {
                     document.set_title(&format!("GRAPHSHELL H3 FAIL: {error}"));
                 }
+                Vec::new()
             } else {
                 let _ = update_semantics(&mut host);
+                // After the frame and its mirror: a scenario step sees the
+                // DOM as this frame left it.
+                web_scenario::tick(&mut host);
+                let _ = update_semantics(&mut host);
+                std::mem::take(&mut host.deferred_dom)
             }
+        };
+        // The borrow above has ended, so the host's own listeners can take
+        // the host: only now may a step's DOM events be dispatched.
+        if !deferred.is_empty() {
+            let events = web_scenario::run_deferred(deferred);
+            let mut host = callback_state.borrow_mut();
+            host.probe_events.extend(events);
+            let _ = update_semantics(&mut host);
         }
         if let Ok(window) = window()
             && let Some(callback) = frame.borrow().as_ref()

@@ -1,0 +1,16 @@
+[package]
+name = "modulus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92.0"
+license = "MPL-2.0"
+description = "Product-neutral sparse brick atlas ABI and WGSL voxel traversal for Merely spatial applications and games."
+repository = "https://github.com/merely-made/mere"
+keywords = ["game-engine", "voxel", "wgsl", "spatial", "rendering"]
+categories = ["game-engines", "graphics", "rendering::data-formats"]
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

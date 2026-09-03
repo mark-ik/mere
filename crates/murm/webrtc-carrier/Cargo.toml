@@ -64,6 +64,22 @@ path = "src/lib.rs"
 blake3.workspace = true
 thiserror = "1"
 
+# Release identity has one definition in this workspace, and it is Luggage's.
+# `default-features = false` takes the release-identity core only — no feed
+# configuration, no network, no filesystem, nothing that fails to build for
+# `wasm32-unknown-unknown`. The updater pipeline lives behind Luggage's
+# `native` feature and is deliberately not enabled here: this crate names a
+# release, it never fetches or installs one.
+#
+# The alternative was a second `ReleaseRefV1` maintained by hand on this side.
+# Two definitions of an identity that crosses a trust boundary drift silently
+# and are wrong exactly when it matters.
+#
+# The workspace declaration already carries `default-features = false` — Cargo
+# forbids a member turning workspace defaults off, so that posture is set
+# there and inherited plainly here.
+luggage.workspace = true
+
 # No `subtle`: constant-time identifier comparison here is a 20-line fold over
 # two byte slices, and the workspace does not otherwise carry that crate.
 
@@ -145,7 +161,11 @@ str0m = { version = "0.23.1", optional = true, default-features = false, feature
 # `net` for the UDP socket, `time` for the Sans-IO loop's clamped waits, `rt`
 # to spawn the driver, `sync` for the four channels the handles talk over,
 # `macros` for the `select!` that makes one input per turn visible.
+# `io-util` is the pump in `src/native/stream.rs`: `duplex`, `split`, and the
+# read/write extension traits that present the carrier's frames as the byte
+# stream Notochord and the Graphshell session loop both want.
 tokio = { version = "1", optional = true, features = [
+    "io-util",
     "macros",
     "net",
     "rt",

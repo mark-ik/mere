@@ -156,6 +156,7 @@ impl LegacySettingsFields {
             .startup_unlock_mode
             .map(|startup_unlock_mode| DeviceSettings {
                 startup_unlock_mode,
+                mesh_lending: None,
             });
         LegacySettingsMigration {
             application,

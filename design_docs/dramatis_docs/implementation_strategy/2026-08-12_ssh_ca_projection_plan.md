@@ -10,7 +10,7 @@ bilateral toll three ways in one afternoon.
 [device_grant_delegation_reconciliation](../../mere_docs/technical_architecture/2026-08-11_device_grant_delegation_reconciliation.md),
 [device_grant_certificate_migration_plan](../../archive_docs/2026-08-18_completed_plans/2026-08-12_device_grant_certificate_migration_plan.md),
 [mesh_host_lanes_plan](../../mere_docs/implementation_strategy/2026-08-09_mesh_host_lanes_plan.md),
-[kith_capability_sharing_plan](../../mere_docs/implementation_strategy/2026-06-30_kith_capability_sharing_plan.md)
+[kith_capability_sharing_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-30_kith_capability_sharing_plan.md)
 
 ## The ask
 

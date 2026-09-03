@@ -21,6 +21,8 @@ mod body;
 mod clock;
 mod command;
 mod engine;
+#[cfg(feature = "resident")]
+pub mod resident;
 mod schedule;
 mod world;
 
@@ -31,11 +33,11 @@ pub use body::{
 };
 pub use clock::{ClockAdvance, ClockError, FixedClock};
 pub use command::{BodyCommand, CommandEffect, CommandId, CommandResult};
+pub use engine::{Engine, EngineConfig, EngineConfigError, EngineError, FrameUpdate};
 pub use nisus::{
     VoxelAddress, VoxelCellChange, VoxelCellEdit, VoxelChunk, VoxelChunkError, VoxelEdit,
     VoxelPatch, VoxelRegion, split_voxel_address,
 };
-pub use engine::{Engine, EngineConfig, EngineConfigError, EngineError, FrameUpdate};
 pub use schedule::{Phase, Resources, SystemContext, SystemError};
 pub use world::{
     BodyError, BodyWorld, Interaction, InteractionEvent, InteractionState, RayHit, StepUpdate,

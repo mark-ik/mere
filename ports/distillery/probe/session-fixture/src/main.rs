@@ -378,7 +378,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         training_method: serde_json::json!({
             "source": "external PEFT SFT artifact",
             "source_revision": ADAPTER_REVISION,
-            "training_corpus": "not published as an Eidetic engram"
+            "training_corpus": "not published as an Eidetic codicil"
         }),
         eval_results: None,
     };

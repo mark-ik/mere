@@ -23,6 +23,8 @@
 mod web_events;
 mod web_gpu;
 mod web_product;
+mod web_remote;
+mod web_scenario;
 mod web_view;
 
 use std::cell::RefCell;
@@ -32,18 +34,19 @@ use std::rc::Rc;
 use graphshell::browser_storage::{StoragePersistence, decide, status_line};
 use graphshell::client::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
 use graphshell::endpoint::{IntentSink, ProjectionSource};
-use graphshell::protocol::{
-    CapabilityProfile, IntentResult, PresentationCapability, ProjectionSession,
-};
+use graphshell::protocol::{IntentResult, ProjectionSession};
 use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::NodeKey;
+use genet_render::TextSystem;
 use netrender::Scene;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Document, Element, HtmlCanvasElement, Window};
+use web_sys::{
+    Document, Element, HtmlCanvasElement, HtmlInputElement, HtmlTextAreaElement, Window,
+};
 
 use graphshell::access::{AccessRecord, AccessRecordFilter, query_access_records};
 use graphshell::app::GraphshellApp;
@@ -56,12 +59,19 @@ use graphshell::mere_host::{
     FIXTURE_DEVICE_TWO_ADDRESS, FIXTURE_PERSONA_ADDRESS, FIXTURE_WEB_ADDRESS, SelectedPersonaRef,
 };
 use graphshell::product::{ProjectionClock, RelationFamilyFilter, SavedSceneV1};
+use graphshell::projection_editor::{
+    Appearance, Channel, EditorAction, Encoding, Interaction, ProjectionDefinition,
+    ProjectionDefinitionSink, ProjectionDraft, ProjectionEditor, ProjectionPanel, Provenance,
+    Reading, SelectionMode, SourceBinding,
+};
 use graphshell::view::ProjectionLayoutView;
 use graphshell_client::frozen::Satisfaction;
 use muniment::IndexedDbBackend;
 use uuid::Uuid;
 use web_events::{install_events, schedule_frames};
-use web_gpu::GpuPresenter;
+use web_gpu::{GpuPresenter, PendingCapture};
+use web_remote::RemoteLink;
+use web_scenario::{DomAction, ScenarioRun};
 use web_product::update_product_semantics;
 use web_view::{ChromeModel, build_chrome_scene};
 
@@ -70,6 +80,7 @@ const CAPTURE_POLICY_GLOBAL: &str = "graphshellCapturePolicyJson";
 const CAPTURE_VISITS_GLOBAL: &str = "graphshellInitialVisitsJson";
 const HISTORY_FILTER_GLOBAL: &str = "graphshellHistoryFilterJson";
 const HISTORY_FORGET_GLOBAL: &str = "graphshellHistoryForgetJson";
+const PROJECTION_EDITOR_STORAGE_KEY: &str = "graphshellProjectionDefinitionV1";
 
 /// Stable fallback paint for an open backdrop kind. Product hosts can replace
 /// this with native art; an unfamiliar remote scene still gets a distinct,
@@ -271,13 +282,19 @@ impl CanvasTransition {
 
 struct BrowserHost {
     app: GraphshellApp<IndexedDbBackend>,
-    remote: FixtureEndpoint,
-    remote_session: ProjectionSession,
+    /// Where the remote projection lives (`web_remote`).
+    remote: RemoteLink,
+    remote_session: Option<ProjectionSession>,
+    remote_status: String,
+    remote_joining: bool,
+    remote_last_resume: String,
     active: ActiveSession,
     canvas: Canvas,
     canvas_element: HtmlCanvasElement,
     gpu: GpuPresenter,
     chrome_scene: Scene,
+    /// Retained shaping state and the shipped font (see `run`).
+    chrome_text: TextSystem,
     chrome_dirty: bool,
     detail_open: bool,
     action_count: u32,
@@ -305,6 +322,101 @@ struct BrowserHost {
     arrangement_transition: Option<CanvasTransition>,
     primary_member: Option<Uuid>,
     last_detail_member: Option<Uuid>,
+    projection_editor: ProjectionEditor,
+    projection_editor_open: bool,
+    projection_editor_status: String,
+    projection_editor_save_count: u32,
+    /// The scenario lane (`web_scenario`): a script in flight, the semantic
+    /// events it asserts against, and a capture armed or landing.
+    scenario: Option<ScenarioRun>,
+    scenario_frames: u32,
+    probe_events: Vec<String>,
+    /// DOM events a scenario step asked for, dispatched by the frame pump
+    /// once it has let go of the host (`web_scenario::DomAction`).
+    deferred_dom: Vec<DomAction>,
+    capture_request: Option<String>,
+    capture_pending: Option<(String, PendingCapture)>,
+    capture_count: u32,
+}
+
+struct BrowserProjectionSink;
+
+impl ProjectionDefinitionSink for BrowserProjectionSink {
+    type Error = String;
+
+    fn save(&mut self, definition: &ProjectionDefinition) -> Result<(), Self::Error> {
+        let bytes = definition
+            .to_json_bytes()
+            .map_err(|error| format!("could not serialize projection definition: {error}"))?;
+        let storage = window()?
+            .local_storage()
+            .map_err(|_| "could not access browser local storage".to_string())?
+            .ok_or_else(|| "browser local storage is unavailable".to_string())?;
+        let value = String::from_utf8(bytes)
+            .map_err(|error| format!("projection definition was not UTF-8: {error}"))?;
+        storage
+            .set_item(PROJECTION_EDITOR_STORAGE_KEY, &value)
+            .map_err(|_| "could not save projection definition".to_string())
+    }
+}
+
+fn initial_projection_draft() -> ProjectionDraft {
+    ProjectionDraft {
+        version: graphshell::projection_editor::PROJECTION_DEFINITION_VERSION,
+        id: "graphshell-reference".to_string(),
+        label: "Graphshell reference projection".to_string(),
+        source: SourceBinding {
+            authority: "graphshell-reference-host".to_string(),
+            domain: "mere.graph".to_string(),
+            resource: "fixture.graphshell/reference".to_string(),
+        },
+        reading: Reading {
+            kind: "nodes".to_string(),
+            key: "title".to_string(),
+            value: None,
+        },
+        encoding: Encoding {
+            x: Channel::Field("x".to_string()),
+            y: Channel::Field("y".to_string()),
+            color: Some(Channel::Field("kind".to_string())),
+            label: Some(Channel::Field("title".to_string())),
+        },
+        arrangement: graphshell::projection_editor::Arrangement {
+            kind: "phyllotaxis.default".to_string(),
+            direction: "horizontal".to_string(),
+            spacing: 16,
+        },
+        interaction: Interaction {
+            selection: SelectionMode::Single,
+            pan: true,
+            zoom: true,
+        },
+        appearance: Appearance {
+            realization: "canvas".to_string(),
+            title: "Graphshell reference projection".to_string(),
+            theme: "dark".to_string(),
+        },
+        provenance: Provenance {
+            author: "Graphshell reference host".to_string(),
+            source_revision: "fixture-v1".to_string(),
+            note: "Host-owned editor fixture".to_string(),
+        },
+    }
+}
+
+fn draft_from_definition(definition: &ProjectionDefinition) -> ProjectionDraft {
+    ProjectionDraft {
+        version: definition.version,
+        id: definition.id.clone(),
+        label: definition.label.clone(),
+        source: definition.source.clone(),
+        reading: definition.reading.clone(),
+        encoding: definition.encoding.clone(),
+        arrangement: definition.arrangement.clone(),
+        interaction: definition.interaction.clone(),
+        appearance: definition.appearance.clone(),
+        provenance: definition.provenance.clone(),
+    }
 }
 
 impl BrowserHost {
@@ -331,18 +443,13 @@ impl BrowserHost {
                         "Select an object".to_string(),
                     )
                 }),
-            ActiveSession::Remote => (
-                "Projection boundary card".to_string(),
-                "fixture.graphshell/note:recent".to_string(),
-            ),
+            ActiveSession::Remote => self.remote_selection(),
         };
         let (product_status, arrangement, physics_paused) = self.product_chrome();
         // Satisfaction belongs to the remote scene, so it is only spoken when
         // one is mounted. A local canvas has no holds to report on.
         let satisfaction = self
-            .app
-            .client
-            .mounted(&self.remote_session)
+            .remote_mounted()
             .and_then(|mounted| Satisfaction::of(&mounted.scene.tables).line())
             .unwrap_or_default();
         ChromeModel {
@@ -351,7 +458,7 @@ impl BrowserHost {
                     "Local Mere · {} objects",
                     self.app.host.graph().node_count()
                 ),
-                ActiveSession::Remote => REMOTE_LABEL.to_string(),
+                ActiveSession::Remote => self.remote_label(),
             },
             local_active: self.active == ActiveSession::Local,
             detail_open: self.detail_open,
@@ -388,18 +495,52 @@ impl BrowserHost {
     }
 
     fn render(&mut self, host_ms: f64) -> Result<(), String> {
+        self.scenario_frames = self.scenario_frames.wrapping_add(1);
+        self.finish_capture()?;
         self.resize_if_needed();
         self.advance_arrangement_transition(host_ms);
         if self.chrome_dirty {
-            self.chrome_scene = build_chrome_scene(self.chrome_model(), self.width, self.height)?;
+            self.chrome_scene = build_chrome_scene(
+                self.chrome_model(),
+                self.width,
+                self.height,
+                &mut self.chrome_text,
+            )?;
             self.chrome_dirty = false;
         }
         let content = match self.active {
             ActiveSession::Local => self.canvas.frame(self.width, self.height).0,
             ActiveSession::Remote => self.remote_scene(),
         };
+        if let Some(name) = self.capture_request.take() {
+            // The same two scenes this frame presents, composed into an owned
+            // target: a capture is the frame, not a re-rendering of it.
+            let pending = self
+                .gpu
+                .capture(&content, &self.chrome_scene, self.width, self.height);
+            self.capture_pending = Some((name, pending));
+        }
         self.gpu
             .present(&content, &self.chrome_scene, self.width, self.height)
+    }
+
+    /// Publish a capture whose readback has landed, if any.
+    fn finish_capture(&mut self) -> Result<(), String> {
+        let landed = self
+            .capture_pending
+            .as_ref()
+            .is_some_and(|(_, pending)| pending.ready());
+        if !landed {
+            return Ok(());
+        }
+        let Some((name, pending)) = self.capture_pending.take() else {
+            return Ok(());
+        };
+        let (width, height, rgba) = pending.take()?;
+        web_scenario::publish_capture(&name, width, height, &rgba)?;
+        self.capture_count += 1;
+        self.probe_events.push(format!("capture-done {name} {width}x{height}"));
+        Ok(())
     }
 
     fn begin_arrangement_transition(
@@ -437,7 +578,7 @@ impl BrowserHost {
             self.height as f32,
             [0.025, 0.045, 0.057, 1.0],
         );
-        let Some(mounted) = self.app.client.mounted(&self.remote_session) else {
+        let Some(mounted) = self.remote_mounted() else {
             return scene;
         };
         let bounds = mounted.scene.tables.bounds;
@@ -509,8 +650,20 @@ impl BrowserHost {
         scene
     }
 
-    fn run_command(&mut self, command: &str) {
+    /// Run one named command. `false` when no such command exists, so a
+    /// scenario's `act` fails loudly rather than silently doing nothing.
+    fn run_command(&mut self, command: &str) -> bool {
+        self.probe_events.push(format!("command {command}"));
         match command {
+            "open-projection-editor" => {
+                self.projection_editor_open = true;
+                self.projection_editor_status = "Draft ready · unsaved".to_string();
+            }
+            "close-projection-editor" => {
+                self.projection_editor_open = false;
+            }
+            "save-projection" => self.save_projection(),
+            "reload-projection" => self.reload_projection(),
             "session-local" => {
                 self.active = ActiveSession::Local;
                 self.detail_open = false;
@@ -541,15 +694,193 @@ impl BrowserHost {
             "pan-right" => self.pan(42.0, 0.0),
             "pan-up" => self.pan(0.0, -42.0),
             "pan-down" => self.pan(0.0, 42.0),
+            "remote-disconnect" => self.remote_disconnect(),
+            "remote-reconnect" => self.remote_reconnect(),
+            "remote-nudge" => self.remote_nudge(),
+            other if other.starts_with("remote-action-") => {
+                match other["remote-action-".len()..].parse::<usize>() {
+                    Ok(index) => self.invoke_remote_action(index),
+                    Err(_) => {
+                        self.probe_events.push(format!("command-unknown {command}"));
+                        return false;
+                    }
+                }
+            }
             _ => {
                 if !self.run_product_command(command) {
-                    return;
+                    self.probe_events.push(format!("command-unknown {command}"));
+                    return false;
                 }
             }
         }
         if self.active == ActiveSession::Local {
             self.refresh_representation_score();
         }
+        self.chrome_dirty = true;
+        true
+    }
+
+    fn select_projection_panel(&mut self, panel: &str) {
+        let Some(panel) = projection_panel(panel) else {
+            self.projection_editor_status = format!("Unknown editor panel: {panel}");
+            return;
+        };
+        self.projection_editor
+            .reduce(EditorAction::SelectPanel(panel));
+        self.projection_editor_open = true;
+        self.projection_editor_status = format!("Editing {}", panel.label());
+        self.chrome_dirty = true;
+    }
+
+    fn update_projection_field(&mut self, field: &str, value: &str) {
+        let mut draft = self.projection_editor.draft().clone();
+        let action = match field {
+            "source.authority" => {
+                draft.source.authority = value.to_string();
+                EditorAction::SetSource(draft.source)
+            }
+            "source.domain" => {
+                draft.source.domain = value.to_string();
+                EditorAction::SetSource(draft.source)
+            }
+            "source.resource" => {
+                draft.source.resource = value.to_string();
+                EditorAction::SetSource(draft.source)
+            }
+            "reading.key" => {
+                draft.reading.key = value.to_string();
+                EditorAction::SetReading(draft.reading)
+            }
+            "encoding.x" => {
+                draft.encoding.x = Channel::Field(value.to_string());
+                EditorAction::SetEncoding(draft.encoding)
+            }
+            "encoding.y" => {
+                draft.encoding.y = Channel::Field(value.to_string());
+                EditorAction::SetEncoding(draft.encoding)
+            }
+            "arrangement.kind" => {
+                draft.arrangement.kind = value.to_string();
+                EditorAction::SetArrangement(draft.arrangement)
+            }
+            "arrangement.direction" => {
+                draft.arrangement.direction = value.to_string();
+                EditorAction::SetArrangement(draft.arrangement)
+            }
+            "arrangement.spacing" => match value.parse::<u32>() {
+                Ok(spacing) => {
+                    draft.arrangement.spacing = spacing;
+                    EditorAction::SetArrangement(draft.arrangement)
+                }
+                Err(_) => {
+                    self.projection_editor_status =
+                        "Invalid · arrangement.spacing must be a number".to_string();
+                    self.projection_editor_open = true;
+                    self.chrome_dirty = true;
+                    return;
+                }
+            },
+            "appearance.realization" => {
+                draft.appearance.realization = value.to_string();
+                EditorAction::SetAppearance(draft.appearance)
+            }
+            "appearance.title" => {
+                draft.appearance.title = value.to_string();
+                EditorAction::SetAppearance(draft.appearance)
+            }
+            "provenance.author" => {
+                draft.provenance.author = value.to_string();
+                EditorAction::SetProvenance(draft.provenance)
+            }
+            "provenance.source_revision" => {
+                draft.provenance.source_revision = value.to_string();
+                EditorAction::SetProvenance(draft.provenance)
+            }
+            "provenance.note" => {
+                draft.provenance.note = value.to_string();
+                EditorAction::SetProvenance(draft.provenance)
+            }
+            _ => return,
+        };
+        self.projection_editor.reduce(action);
+        self.projection_editor_status = format!("Edited · {field}");
+        self.projection_editor_open = true;
+        self.chrome_dirty = true;
+    }
+
+    fn save_projection(&mut self) {
+        let mut sink = BrowserProjectionSink;
+        match self.projection_editor.save(&mut sink) {
+            Ok(()) => {
+                self.projection_editor_save_count =
+                    self.projection_editor_save_count.saturating_add(1);
+                self.projection_editor_status = format!(
+                    "Saved · {} · {} save(s)",
+                    self.projection_editor.draft().provenance.source_revision,
+                    self.projection_editor_save_count
+                );
+            }
+            Err(graphshell::projection_editor::SaveError::Invalid(issues)) => {
+                let summary = issues
+                    .first()
+                    .map(|issue| format!("{}: {}", issue.field, issue.message))
+                    .unwrap_or_else(|| "invalid projection draft".to_string());
+                self.projection_editor_status = format!("Invalid · {summary}");
+            }
+            Err(graphshell::projection_editor::SaveError::Sink(error)) => {
+                self.projection_editor_status = format!("Save failed · {error}");
+            }
+        }
+        self.projection_editor_open = true;
+        self.chrome_dirty = true;
+    }
+
+    fn reload_projection(&mut self) {
+        let result = (|| -> Result<Option<ProjectionDefinition>, String> {
+            let storage = window()?
+                .local_storage()
+                .map_err(|_| "could not access browser local storage".to_string())?;
+            let Some(storage) = storage else {
+                return Ok(None);
+            };
+            let Some(value) = storage
+                .get_item(PROJECTION_EDITOR_STORAGE_KEY)
+                .map_err(|_| "could not read saved projection definition".to_string())?
+            else {
+                return Ok(None);
+            };
+            serde_json::from_str(&value)
+                .map(Some)
+                .map_err(|error| format!("could not decode saved projection definition: {error}"))
+        })();
+        match result {
+            Ok(Some(definition)) => {
+                let draft = draft_from_definition(&definition);
+                match draft.to_definition() {
+                    Ok(_) => {
+                        self.projection_editor = ProjectionEditor::new(draft);
+                        self.projection_editor_status = format!(
+                            "Reloaded · {} · {}",
+                            definition.id, definition.provenance.source_revision
+                        );
+                    }
+                    Err(issues) => {
+                        self.projection_editor_status = format!(
+                            "Reload failed · {}",
+                            issues
+                                .first()
+                                .map(|issue| issue.message.as_str())
+                                .unwrap_or("invalid saved definition")
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                self.projection_editor_status = "Reload skipped · no saved definition".to_string();
+            }
+            Err(error) => self.projection_editor_status = format!("Reload failed · {error}"),
+        }
+        self.projection_editor_open = true;
         self.chrome_dirty = true;
     }
 
@@ -613,28 +944,33 @@ impl BrowserHost {
     }
 
     fn open_remote_action_draft(&mut self) {
+        let Some(session) = self.remote_session.clone() else {
+            self.action_status = "Failed · remote projection is not mounted".to_string();
+            return;
+        };
         let Some((observed_epoch, observed_revision)) = self
-            .app
-            .client
-            .mounted(&self.remote_session)
+            .remote_mounted()
             .map(|mounted| (mounted.scene.epoch, mounted.scene.revision))
         else {
             self.action_status = "Failed · remote projection is not mounted".to_string();
             return;
         };
-        let tree = match self.app.client.accessibility_tree(
-            &self.remote_session,
-            &CapabilityProfile::new([
-                PresentationCapability::PortableCard,
-                PresentationCapability::Image,
-            ]),
-        ) {
+        let tree = match self
+            .remote_client()
+            .ok_or("remote link is not discovered".to_string())
+            .and_then(|client| {
+                client
+                    .accessibility_tree(&session, &web_remote::remote_profile())
+                    .map_err(|error| format!("{error:?}"))
+            }) {
             Ok(tree) => tree,
             Err(error) => {
-                self.action_status = format!("Failed · remote accessibility tree: {error:?}");
+                self.action_status = format!("Failed · remote accessibility tree: {error}");
                 return;
             }
         };
+        // A bounded form opens as a draft. Plain actions are offered as
+        // buttons by `update_remote_semantics`; opening the detail is enough.
         let Some((target, action)) = tree.children.iter().find_map(|item| {
             item.actions
                 .iter()
@@ -642,14 +978,18 @@ impl BrowserHost {
                 .cloned()
                 .map(|action| (item.instance, action))
         }) else {
-            self.action_status =
-                "Failed · remote projection advertises no bounded action form".to_string();
+            let count = tree
+                .children
+                .iter()
+                .map(|item| item.actions.len())
+                .sum::<usize>();
+            self.action_status = format!("{count} remote action(s) advertised");
             return;
         };
         self.action_status = format!("Choose values · {}", action.label);
         self.action_draft = Some(ActionDraft::new(action));
         self.action_draft_target = Some(ActionDraftTarget {
-            session: self.remote_session.clone(),
+            session,
             target,
             observed_epoch,
             observed_revision,
@@ -669,6 +1009,10 @@ impl BrowserHost {
     }
 
     fn submit_action_draft(&mut self) {
+        if matches!(self.remote, RemoteLink::WebRtc(_)) {
+            self.submit_remote_draft();
+            return;
+        }
         let Some(target) = self.action_draft_target.clone() else {
             self.action_status = "Failed · no remote action draft target is open".to_string();
             return;
@@ -686,16 +1030,20 @@ impl BrowserHost {
             }
         };
         self.action_count = self.action_count.saturating_add(1);
-        match self.remote.invoke(invocation) {
-            Ok(IntentResult::Accepted) => match self.remote.snapshot(self.remote.request()) {
+        let RemoteLink::Fixture(fixture) = &mut self.remote else {
+            return;
+        };
+        match fixture.invoke(invocation) {
+            Ok(IntentResult::Accepted) => match fixture.snapshot(fixture.request()) {
                 Ok(snapshot) => match self.app.mount_remote(snapshot) {
-                    Ok(_) => {
+                    Ok(session) => {
                         let revision = self
                             .app
                             .client
-                            .mounted(&self.remote_session)
+                            .mounted(&session)
                             .map(|mounted| mounted.scene.revision.0)
                             .unwrap_or_default();
+                        self.remote_session = Some(session);
                         self.action_status = format!(
                             "Accepted · resnapshotted revision {revision} · {} invocation(s)",
                             self.action_count
@@ -793,14 +1141,43 @@ fn document() -> Result<Document, String> {
         .ok_or_else(|| "browser document is unavailable".to_string())
 }
 
-fn element(document: &Document, id: &str) -> Result<Element, String> {
-    document
-        .get_element_by_id(id)
-        .ok_or_else(|| format!("missing #{id}"))
+fn projection_panel(value: &str) -> Option<ProjectionPanel> {
+    match value {
+        "source" => Some(ProjectionPanel::Source),
+        "reading" => Some(ProjectionPanel::Reading),
+        "encoding" => Some(ProjectionPanel::Encoding),
+        "arrangement" => Some(ProjectionPanel::Arrangement),
+        "interaction" => Some(ProjectionPanel::Interaction),
+        "preview" => Some(ProjectionPanel::Preview),
+        "provenance" => Some(ProjectionPanel::Provenance),
+        _ => None,
+    }
 }
 
-fn set_text(document: &Document, id: &str, value: &str) {
-    if let Some(element) = document.get_element_by_id(id) {
+thread_local! {
+    /// The element `mount` was given: the component's whole world.
+    static ROOT: RefCell<Option<Element>> = const { RefCell::new(None) };
+}
+
+/// The mount root. Every lookup, token and listener of the component goes
+/// through it, never through the document, so a host page's own ids and
+/// keys are never in play.
+fn root() -> Result<Element, String> {
+    ROOT.with(|slot| slot.borrow().clone())
+        .ok_or_else(|| "the component is not mounted".to_string())
+}
+
+/// One of the component's parts, by its unprefixed name (`detail-surface`
+/// for `#gs-detail-surface`), found under the root.
+fn element(part: &str) -> Result<Element, String> {
+    root()?
+        .query_selector(&format!("#gs-{part}"))
+        .map_err(|_| format!("bad part name {part}"))?
+        .ok_or_else(|| format!("missing part {part}"))
+}
+
+fn set_text(part: &str, value: &str) {
+    if let Ok(element) = element(part) {
         element.set_text_content(Some(value));
     }
 }
@@ -818,9 +1195,9 @@ fn update_action_draft_semantics(
     document: &Document,
     draft: Option<&ActionDraftSemantics>,
 ) -> Result<(), String> {
-    let surface = element(document, "action-draft-surface")?;
+    let surface = element("action-draft-surface")?;
     surface.set_text_content(None);
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     let Some(draft) = draft else {
         surface
             .set_attribute("hidden", "")
@@ -873,7 +1250,7 @@ fn update_action_draft_semantics(
         fieldset
             .append_child(&legend)
             .map_err(|_| "could not append action field label")?;
-        let description_id = format!("action-draft-help-{field_index}");
+        let description_id = format!("gs-action-draft-help-{field_index}");
         let description = document
             .create_element("p")
             .map_err(|_| "could not create action field description")?;
@@ -980,6 +1357,208 @@ fn update_action_draft_semantics(
         body.remove_attribute("data-action-draft-error")
             .map_err(|_| "could not clear action draft error")?;
     }
+    Ok(())
+}
+
+fn projection_panel_key(panel: ProjectionPanel) -> &'static str {
+    match panel {
+        ProjectionPanel::Source => "source",
+        ProjectionPanel::Reading => "reading",
+        ProjectionPanel::Encoding => "encoding",
+        ProjectionPanel::Arrangement => "arrangement",
+        ProjectionPanel::Interaction => "interaction",
+        ProjectionPanel::Preview => "preview",
+        ProjectionPanel::Provenance => "provenance",
+    }
+}
+
+fn set_projection_input_value(id: &str, value: &str) -> Result<(), String> {
+    let node = element(id)?;
+    if let Ok(input) = node.clone().dyn_into::<HtmlInputElement>() {
+        input.set_value(value);
+        return Ok(());
+    }
+    if let Ok(textarea) = node.dyn_into::<HtmlTextAreaElement>() {
+        textarea.set_value(value);
+        return Ok(());
+    }
+    Err(format!("projection editor field #{id} is not an input"))
+}
+
+fn projection_preview(draft: &ProjectionDraft) -> String {
+    let x = match &draft.encoding.x {
+        Channel::Field(value) => value.as_str(),
+        Channel::Constant(value) => value.as_str(),
+    };
+    let y = match &draft.encoding.y {
+        Channel::Field(value) => value.as_str(),
+        Channel::Constant(value) => value.as_str(),
+    };
+    format!(
+        "{} · read {} by {} · {} · x={} y={} · {}",
+        draft.appearance.title,
+        draft.reading.kind,
+        draft.reading.key,
+        draft.arrangement.kind,
+        x,
+        y,
+        draft.appearance.realization
+    )
+}
+
+fn update_projection_editor_semantics(host: &BrowserHost) -> Result<(), String> {
+    let surface = element("projection-editor")?;
+    if host.projection_editor_open {
+        surface
+            .remove_attribute("hidden")
+            .map_err(|_| "could not show projection editor")?;
+        surface
+            .set_attribute("aria-hidden", "false")
+            .map_err(|_| "could not expose projection editor")?;
+    } else {
+        surface
+            .set_attribute("hidden", "")
+            .map_err(|_| "could not hide projection editor")?;
+        surface
+            .set_attribute("aria-hidden", "true")
+            .map_err(|_| "could not hide projection editor semantics")?;
+    }
+    let draft = host.projection_editor.draft();
+    let validation = host.projection_editor.validate();
+    let (validation_token, error_count) = match &validation {
+        Ok(()) => ("valid", 0),
+        Err(issues) => ("invalid", issues.len()),
+    };
+    let panel = projection_panel_key(host.projection_editor.panel());
+    let content_id = host.projection_editor.panel().content_id();
+    let preview = projection_preview(draft);
+    set_projection_input_value("projection-source-authority",
+        &draft.source.authority,
+    )?;
+    set_projection_input_value("projection-source-domain", &draft.source.domain)?;
+    set_projection_input_value("projection-source-resource",
+        &draft.source.resource,
+    )?;
+    set_projection_input_value("projection-reading-key", &draft.reading.key)?;
+    set_projection_input_value("projection-encoding-x",
+        match &draft.encoding.x {
+            Channel::Field(value) | Channel::Constant(value) => value,
+        },
+    )?;
+    set_projection_input_value("projection-encoding-y",
+        match &draft.encoding.y {
+            Channel::Field(value) | Channel::Constant(value) => value,
+        },
+    )?;
+    set_projection_input_value("projection-arrangement-kind",
+        &draft.arrangement.kind,
+    )?;
+    set_projection_input_value("projection-arrangement-direction",
+        &draft.arrangement.direction,
+    )?;
+    set_projection_input_value("projection-arrangement-spacing",
+        &draft.arrangement.spacing.to_string(),
+    )?;
+    set_projection_input_value("projection-appearance-realization",
+        &draft.appearance.realization,
+    )?;
+    set_projection_input_value("projection-appearance-title",
+        &draft.appearance.title,
+    )?;
+    set_projection_input_value("projection-provenance-author",
+        &draft.provenance.author,
+    )?;
+    set_projection_input_value("projection-provenance-revision",
+        &draft.provenance.source_revision,
+    )?;
+    set_projection_input_value("projection-provenance-note",
+        &draft.provenance.note,
+    )?;
+    set_text(
+        "projection-editor-status",
+        &host.projection_editor_status,
+    );
+    set_text(
+        "projection-editor-source",
+        &format!(
+            "{} / {} / {}",
+            draft.source.authority, draft.source.domain, draft.source.resource
+        ),
+    );
+    set_text(
+        "projection-editor-provenance",
+        &format!(
+            "{} · source {} · {}",
+            draft.provenance.author, draft.provenance.source_revision, draft.provenance.note
+        ),
+    );
+    set_text(
+        "projection-editor-validation",
+        &match &validation {
+            Ok(()) => "Valid draft".to_string(),
+            Err(_) => format!("{error_count} validation issue(s)"),
+        },
+    );
+    set_text(
+        "projection-editor-lane",
+        &format!("ContentSource::Open · graphshell.projection-editor.panel · {content_id}"),
+    );
+    set_text(
+        "projection-editor-preview", &preview);
+    set_attr(
+        &element("projection-editor-preview")?,
+        "data-preview-value",
+        &preview,
+    )?;
+    for candidate in ProjectionPanel::ALL {
+        let button = element(
+            &format!("projection-panel-{}", projection_panel_key(candidate)),
+        )?;
+        button
+            .set_attribute(
+                "aria-selected",
+                (candidate == host.projection_editor.panel())
+                    .then_some("true")
+                    .unwrap_or("false"),
+            )
+            .map_err(|_| "could not expose selected projection panel")?;
+        let group = element(
+            &format!("projection-fields-{}", projection_panel_key(candidate)),
+        )?;
+        if candidate == host.projection_editor.panel() {
+            group
+                .remove_attribute("hidden")
+                .map_err(|_| "could not show projection editor panel")?;
+        } else {
+            group
+                .set_attribute("hidden", "")
+                .map_err(|_| "could not hide projection editor panel")?;
+        }
+    }
+    let body = root()?;
+    body.set_attribute(
+        "data-projection-editor-open",
+        &host.projection_editor_open.to_string(),
+    )
+    .map_err(|_| "could not expose projection editor state")?;
+    body.set_attribute("data-projection-editor-panel", panel)
+        .map_err(|_| "could not expose projection editor panel")?;
+    body.set_attribute(
+        "data-projection-editor-content",
+        &format!("open:graphshell.projection-editor.panel:{content_id}"),
+    )
+    .map_err(|_| "could not expose projection editor content lane")?;
+    body.set_attribute("data-projection-editor-preview", &preview)
+        .map_err(|_| "could not expose projection editor preview")?;
+    body.set_attribute("data-projection-editor-validation", validation_token)
+        .map_err(|_| "could not expose projection editor validation")?;
+    body.set_attribute("data-projection-editor-errors", &error_count.to_string())
+        .map_err(|_| "could not expose projection editor errors")?;
+    body.set_attribute(
+        "data-projection-editor-save-count",
+        &host.projection_editor_save_count.to_string(),
+    )
+    .map_err(|_| "could not expose projection editor save count")?;
     Ok(())
 }
 
@@ -1137,7 +1716,7 @@ fn publish_capture_receipt(
     if !summary.active {
         return Ok(());
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute("data-capture-accepted", &summary.accepted.to_string())
         .map_err(|_| "could not expose accepted capture count")?;
     body.set_attribute("data-capture-dropped", &summary.dropped.to_string())
@@ -1158,7 +1737,7 @@ fn publish_history_controls(
     if !summary.active {
         return Ok(());
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute(
         "data-history-result-count",
         &summary.records.len().to_string(),
@@ -1179,7 +1758,7 @@ fn publish_history_controls(
             .map_err(|_| "could not clear history action error")?;
     }
 
-    let results = element(document, "history-results")?;
+    let results = element("history-results")?;
     results.set_text_content(None);
     for record in summary.records.iter().rev().take(100) {
         let item = document
@@ -1205,18 +1784,18 @@ fn publish_history_controls(
 fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     let document = document()?;
     let model = host.chrome_model();
-    set_text(&document, "active-session", &model.active_session);
-    set_text(&document, "selection-status", &model.selection);
-    set_text(&document, "detail-title", &model.selection);
-    set_text(&document, "detail-address", &model.detail_address);
-    set_text(&document, "action-status", &host.action_status);
+    set_text("active-session", &model.active_session);
+    set_text("selection-status", &model.selection);
+    set_text("detail-title", &model.selection);
+    set_text("detail-address", &model.detail_address);
+    set_text("action-status", &host.action_status);
     if !host.action_draft_semantics_ready || model.action_draft != host.rendered_action_draft {
         update_action_draft_semantics(&document, model.action_draft.as_ref())?;
         host.rendered_action_draft = model.action_draft.clone();
         host.action_draft_semantics_ready = true;
     }
+    update_projection_editor_semantics(host)?;
     set_text(
-        &document,
         "capture-attribution",
         &format!(
             "Reference-host attribution · {} · {}",
@@ -1225,18 +1804,18 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         ),
     );
     set_text(
-        &document,
         "viewport-status",
         &format!("{} by {}", host.width, host.height),
     );
     update_product_semantics(host, &model)?;
+    web_remote::update_remote_semantics(host, &document)?;
     set_attr(
-        &element(&document, "detail-surface")?,
+        &element("detail-surface")?,
         "aria-hidden",
         if host.detail_open { "false" } else { "true" },
     )?;
     set_attr(
-        &element(&document, "session-local")?,
+        &element("session-local")?,
         "aria-pressed",
         if host.active == ActiveSession::Local {
             "true"
@@ -1245,7 +1824,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
         },
     )?;
     set_attr(
-        &element(&document, "session-remote")?,
+        &element("session-remote")?,
         "aria-pressed",
         if host.active == ActiveSession::Remote {
             "true"
@@ -1273,7 +1852,7 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
             .remove_attribute("data-focused-node")
             .map_err(|_| "could not clear focused node")?;
     }
-    let body = document.body().ok_or("document has no body")?;
+    let body = root()?;
     body.set_attribute("data-ready", "true")
         .map_err(|_| "could not expose ready state")?;
     body.set_attribute(
@@ -1295,14 +1874,31 @@ fn update_semantics(host: &mut BrowserHost) -> Result<(), String> {
     // than parsing prose that is allowed to change.
     body.set_attribute("data-storage-persistence", host.storage_persistence.token())
         .map_err(|_| "could not expose storage persistence")?;
-    document.set_title("GRAPHSHELL H3 READY");
+    body.set_attribute("data-capture-count", &host.capture_count.to_string())
+        .map_err(|_| "could not expose the capture count")?;
+    if owns_title() {
+        document.set_title("GRAPHSHELL H3 READY");
+    }
     Ok(())
 }
 
-async fn run() -> Result<(), String> {
+/// The component's markup, shipped in the bundle.
+const COMPONENT_MARKUP: &str = include_str!("../web/component.html");
+
+/// Whether this root owns the page title (the full-page surface does; an
+/// embed must not retitle its host).
+fn owns_title() -> bool {
+    root().is_ok_and(|root| root.has_attribute("data-owns-title"))
+}
+
+async fn run(root_element: Element) -> Result<(), String> {
+    root_element.set_inner_html(COMPONENT_MARKUP);
+    ROOT.with(|slot| *slot.borrow_mut() = Some(root_element));
     let document = document()?;
-    document.set_title("Graphshell H3 · booting");
-    let canvas: HtmlCanvasElement = element(&document, "graphshell-canvas")?
+    if owns_title() {
+        document.set_title("Graphshell H3 · booting");
+    }
+    let canvas: HtmlCanvasElement = element("graphshell-canvas")?
         .dyn_into()
         .map_err(|_| "#graphshell-canvas is not a canvas")?;
     let width = canvas.client_width().max(1) as u32;
@@ -1380,6 +1976,11 @@ async fn run() -> Result<(), String> {
     graph_canvas.fit_to_content();
     graph_canvas.select_by_url(FIXTURE_WEB_ADDRESS);
     let primary_member = graph_canvas.focused_member();
+    let initial_face = graph_canvas
+        .graph()
+        .get_node_by_url(FIXTURE_WEB_ADDRESS)
+        .map(|(key, _)| graph_canvas.node_face(key).as_code().to_string())
+        .unwrap_or_else(|| "derived".to_string());
     let node_count = app.host.graph().node_count();
     let product_status = if capture_summary.active {
         format!(
@@ -1406,16 +2007,27 @@ async fn run() -> Result<(), String> {
         physics_paused: false,
         action_draft: None,
     };
-    let chrome_scene = build_chrome_scene(initial_model, width, height)?;
+    // The chrome's font. A browser has no system fonts for fontique to find,
+    // so the page ships one (Roboto Regular, as `GraphshellSans.ttf`) and
+    // registers it once on a text system the host keeps; the chrome sheet
+    // names the family. `genet_layout::register_host_font` did this until
+    // the Livery migration retired that crate, and the glyphs went with it.
+    let mut chrome_text = TextSystem::new();
+    chrome_text.register_font_bytes(include_bytes!("../web/GraphshellSans.ttf").to_vec());
+    let chrome_scene = build_chrome_scene(initial_model, width, height, &mut chrome_text)?;
     let state = Rc::new(RefCell::new(BrowserHost {
         app,
-        remote,
-        remote_session,
+        remote: RemoteLink::Fixture(remote),
+        remote_session: Some(remote_session),
+        remote_status: "fixture".to_string(),
+        remote_joining: false,
+        remote_last_resume: String::new(),
         active: ActiveSession::Local,
         canvas: graph_canvas,
         canvas_element: canvas,
         gpu,
         chrome_scene,
+        chrome_text,
         chrome_dirty: false,
         detail_open: false,
         action_count: 0,
@@ -1435,7 +2047,7 @@ async fn run() -> Result<(), String> {
         handler_id: "graphshell.inspect".to_string(),
         relation_family: RelationFamilyFilter::All,
         filter_count: node_count,
-        face: "favicon".to_string(),
+        face: initial_face,
         last_export: String::new(),
         export_bytes: 0,
         imported_nodes: 0,
@@ -1443,7 +2055,19 @@ async fn run() -> Result<(), String> {
         arrangement_transition: None,
         primary_member,
         last_detail_member: None,
+        projection_editor: ProjectionEditor::new(initial_projection_draft()),
+        projection_editor_open: false,
+        projection_editor_status: "Draft ready · unsaved".to_string(),
+        projection_editor_save_count: 0,
+        scenario: None,
+        scenario_frames: 0,
+        probe_events: Vec::new(),
+        deferred_dom: Vec::new(),
+        capture_request: None,
+        capture_pending: None,
+        capture_count: 0,
     }));
+    web_scenario::install(&state);
     install_events(&state)?;
     web_product::install_product_events(&state)?;
     update_semantics(&mut state.borrow_mut())?;
@@ -1456,12 +2080,22 @@ async fn run() -> Result<(), String> {
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
-    wasm_bindgen_futures::spawn_local(async {
-        if let Err(error) = run().await {
+}
+
+/// Mount the component into `root`: the full page's body-filling element or
+/// a box in someone else's page. One component, whichever surface.
+#[wasm_bindgen]
+pub fn mount(root: Element) -> Result<(), JsValue> {
+    if ROOT.with(|slot| slot.borrow().is_some()) {
+        return Err(JsValue::from_str("Graphshell is already mounted on this page"));
+    }
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Err(error) = run(root).await {
             web_sys::console::error_1(&error.clone().into());
             if let Ok(document) = document() {
                 document.set_title(&format!("GRAPHSHELL H3 FAIL: {error}"));
             }
         }
     });
+    Ok(())
 }

@@ -20,6 +20,7 @@ fn second_owner_is_refused_while_pairing_facts_remain_available() {
         root.path(),
         &DeviceSettings {
             startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+            ..Default::default()
         },
     )
     .unwrap();
