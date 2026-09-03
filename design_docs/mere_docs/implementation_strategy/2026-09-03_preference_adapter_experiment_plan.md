@@ -67,6 +67,19 @@ A negative answer is a valid outcome and is written up the same way.
   them can be scored by a program on unseen output. That gives the
   experiment an automatic adherence metric alongside the human one, and a
   way to tell "learned the rule" from "memorized the examples".
+- **The corpora, as extracted 2026-09-03** (local, `mere/models/corpora/`,
+  gitignored). *Mark's prompts*: 3,138 user turns in 561 transcripts became
+  1,761 pairs after dropping system-injected text (1,621), pasted material
+  over 220 words or with code fences (629), exact repeats (659), and anything
+  secret-shaped (0); each pair is the last 600 characters of the assistant
+  turn it answered and Mark's reply, median 11 words, about 48k words in all.
+  That is small for style learning, and it is also mostly imperative
+  instruction rather than prose, so what an adapter can learn from it is how
+  Mark asks, not how he writes at length. *Workspace voice*: 2,870 body
+  paragraphs of 40–220 words from non-archived design docs (headings, lists,
+  tables, and code excluded), 2,500 kept, about 187k words, each paired with
+  the paragraph before it. The contrast arm is subsampled to the prompt
+  corpus's token budget so the comparison is about voice, not volume.
 - **The receipt schema has one metric.** `EvalMetric::RankingAt` is the only
   variant; held-out loss and rule adherence do not fit it. The experiment
   records its results as a dated testing doc with a JSON sidecar, the way the
