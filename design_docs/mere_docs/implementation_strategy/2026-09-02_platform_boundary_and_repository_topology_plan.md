@@ -1088,3 +1088,25 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize` —
   exactly the trap the root manifest's own comment predicts. Its three pins are
   repointed; making it buildable wants both fixes and is P4 work.
+
+- 2026-09-03: **ortet founded in genet** (`9b32f3defe7` O0, `f41d5bfa2b2`
+  O1; plan `genet/design_docs/2026-09-03_ortet_founding_plan.md`). This
+  answers §9.3 ruling 4 the second way: a smaller host takes the raw-host role
+  rather than Pelt shedding its lanes. `ports/ortet` is one binary over
+  `genet-winit-host`, `genet-render-host`, `genet-documents`' Livery lane,
+  `document-session-api`, `genet-host-api` and `netfetcher`; it drives the
+  session itself, has no chrome, and its receipts are self-driven (`--frames`,
+  `--artifact`, a two-verb `--actions`). The cone witness gained
+  `assert_ortet_cone`: 592 packages from ortet over normal edges, none of
+  inker, workbench, cambium*, mere-*, nematic, errand, document-canvas, pelt*,
+  tabard or knot-editor-host, with a positive control over `pelt-desktop` that
+  reports eleven of them. `fleece` is in the cone through `genet-documents`'
+  clip lane and is named separately on every run; that is consistent with
+  §9.1, which reclassed fleece independent, and the founding plan's first
+  draft, which listed it as Mere, is corrected. Receipts: the article fixture
+  digests identically across two runs (`0x6377ba8a6bf4dbc9`), the scrolled,
+  in-page-link and cross-document runs each move the digest and settle where
+  they should. The Pelt manifest assertion stays in the witness until Pelt
+  moves (ortet plan O4). Name ruled by Mark 2026-09-03; the crates.io claim
+  waits on a publishable dependency set, since the host crates it sits on are
+  `publish = false`.
