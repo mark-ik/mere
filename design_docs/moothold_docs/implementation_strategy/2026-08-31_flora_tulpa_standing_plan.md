@@ -138,3 +138,10 @@ Done conditions:
   landed on `main`. The integrated receipt passed again (1/1), with Distillery
   12/12 and Gemot 122/122; the rerun table lives in the
   [receipt](../../mere_docs/testing/2026-08-31_flora_tulpa_standing_receipt.md).
+- **2026-09-03:** a FLoRA round is trainer-version homogeneous by the
+  stacker's own checks, and that is now proven twice over: the
+  [autodiff trainer plan](../../mere_docs/implementation_strategy/2026-09-02_autodiff_lora_trainer_plan.md)
+  landed `esp-trainer-v1` adapters, a round over two real v1 adapters stacks
+  to identical bytes in either arrival order, and a v0/v1 mix is refused by
+  name on `adapter_format_version` first and on the config bytes'
+  `peft_version` second. The exact stacking mathematics did not change.

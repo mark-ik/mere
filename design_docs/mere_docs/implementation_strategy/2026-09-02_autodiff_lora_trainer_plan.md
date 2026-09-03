@@ -1,8 +1,10 @@
 # Autodiff LoRA trainer plan
 
 **Status (2026-09-02):** in progress. Assessment complete; Mark ruled D1–D3
-on 2026-09-02, each on the recommended option; Phases 1 through 3 landed
-2026-09-03; Phase 4 (receipts and docs) is under way. Follow-on to the
+on 2026-09-02, each on the recommended option; every phase landed 2026-09-03 and the
+receipts were rerun on the rebased tree and on the Fedora ThinkPad. Complete
+once the branch is on `main`; the padding-with-mask follow-on and the burn
+`LoraAdapter` question stay open in Findings. Follow-on to the
 [distillery v0 plan](2026-08-12_distillery_v0_plan.md) (§9 trainer forcing,
 and the 2026-09-02 discrete-GPU trainer entry) and the
 [FLORA, Tulpa, and Standing plan](../../moothold_docs/implementation_strategy/2026-08-31_flora_tulpa_standing_plan.md).
@@ -289,6 +291,21 @@ a byte.
   fmt clean. One finding on the way: removing the feature-varying alias
   exposed that Distillery's `trainer-gpu` re-exports have exactly one
   consumer, Djinn's GPU build, and only that build proves they exist.
+- **2026-09-03:** Phase 4. The branch was rebased onto `origin/main`
+  `129734d1` (thirteen upstream commits, overlapping this work only on
+  Distillery's manifest, where a dev-dependency was added), and the
+  receipts reran on the rebased tree: Distillery 22 tests including
+  upstream's new `walk_fixtures`, esp 137, Djinn CPU autodiff 2/2, Djinn GPU
+  1/1 (152 s on a loaded machine), strict Clippy clean on esp. Strict Clippy
+  on Distillery now trips on upstream's own `walk_fixtures.rs`
+  (`type_complexity`), which this branch did not write and does not fix.
+  The Fedora ThinkPad (`thinkpad-l14-f`, Rust 1.97.1, AMD Renoir) reran the
+  CPU receipts from the pushed branch at a30381a2 in its own worktree: the
+  esp `decoder-autodiff` suite green (v1 forcing receipt 0.42 s against v0's
+  18.0 s), the Djinn CPU receipt on the `trainer-autodiff` build 2/2, and on
+  the `trainer`-only build the by-name refusal 2/2. Nothing in esp or Djinn
+  changed between that commit and the rebased tip. The Distillery and FLORA
+  plans carry their cross-notes; the index names the arm.
 
 - **2026-09-02:** assessment complete; findings above verified against the
   code. Mark ruled D1 (tagged `TrainerSettings` enum on the one trainer

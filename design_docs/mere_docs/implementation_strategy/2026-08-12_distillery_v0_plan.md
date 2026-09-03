@@ -1123,6 +1123,31 @@ are one more job kind on the board, and the
 [projection walk plan](2026-09-02_distillery_projection_walk_plan.md) carries
 them into the board's Chronicle as such.
 
+### The trainer takes real gradients, 2026-09-03
+
+The v0 trainer's central finite differences are now one of two arms. The
+[autodiff LoRA trainer plan](2026-09-02_autodiff_lora_trainer_plan.md) landed
+`esp-trainer-v1-autodiff`: Burn autodiff on the dispatch backend (the
+caller's device wrapped with `Device::autodiff`, base weights detached, the
+LoRA factors the one module Adam from `burn-optim` sees), per-case expected
+tokens, several q/k/v/o target modules, the same PEFT bytes and the same
+loader. `TrainRequest.settings` became the tagged `TrainerSettings`; the
+implementation id became `esp.train.peft-lora.esp-trainer/v2`; Djinn gained
+`trainer-autodiff`, composable with `trainer-gpu`, with a request naming an
+arm the build lacks refused by name at admission.
+
+The GPU timing note above is therefore superseded on its numbers, not its
+posture. Through the composed lane on the same fixture, debug build, this
+machine (RTX 4060 Laptop, vulkan): v0 40 steps 12.4 s CPU / 76.8 s GPU; v1 12
+Adam steps 0.4 s CPU / 4.5 s GPU. Per step the GPU lane is roughly forty
+times cheaper under v1, because autodiff replaces `2N` forwards with one
+forward and one backward, and launch overhead is paid per step rather than
+per parameter. It still says nothing about the GPU being the faster place to
+train at this size; that claim needs a model large enough to fill it, and is
+its own slice. The strict-improvement-only assertion stands as the GPU
+receipt's contract: the v1 CPU and GPU losses agreed to six decimals on the
+fixture, which is more than the receipt claims.
+
 ### Done conditions
 
 An installed Distillery starts a resident on this machine from stated policy,
