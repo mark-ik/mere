@@ -36,10 +36,13 @@ use eidetic::{
 };
 use esp::infer::decoder::{
     DecoderDevice, LoraTrainerSettings, PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader,
-    TRAINED_ADAPTER_FORMAT_VERSION, TrainingCase, ranking_tally, train_peft_lora,
+    TRAINED_ADAPTER_FORMAT_VERSION, TrainedLoraAdapter, TrainingCase, ranking_tally,
+    train_peft_lora,
 };
 #[cfg(feature = "trainer-gpu")]
 use esp::infer::decoder::{DecoderGpuKind as TrainerGpuKind, GpuAdapterFacts, GpuDeviceType};
+#[cfg(feature = "trainer-autodiff")]
+use esp::infer::decoder::{TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, train_peft_lora_autodiff};
 use esp::infer::{AdapterArtifact, AdapterLoader, AdapterSelection, ModelSession};
 use mesh::namespace::BoxFuture;
 use mesh::{
@@ -51,10 +54,164 @@ use tokio::sync::Mutex;
 
 /// The trainer resource a job asks for.
 pub const TRAINER_RESOURCE: &str = "esp.train.peft-lora/v1";
-/// The build answering it: the v0 finite-difference trainer.
+/// The build answering it.
+///
+/// One implementation id for both trainer arms, deliberately. A job asks for
+/// *the* trainer resource and names the method inside its request; which arm
+/// ran is a fact of the published receipt, not of admission. The id keeps the
+/// string it was first admitted under, so a lane written against it does not
+/// have to be re-admitted to gain the autodiff arm.
 const TRAINER_IMPLEMENTATION: &str = "esp.train.peft-lora.finite-difference-1/v1";
 /// The single input slot carrying the JSON [`TrainRequest`].
 pub const TRAINER_REQUEST_INPUT: &str = "request";
+
+/// `training_method.trainer` for the finite-difference arm, and its serde tag.
+pub const TRAINER_FINITE_DIFFERENCE: &str = "esp-trainer-v0";
+/// `training_method.trainer` for the autodiff arm, and its serde tag.
+///
+/// Not the same string as the PEFT stamp inside the adapter. esp writes
+/// `peft_version: "esp-trainer-v1"` into `adapter_config.json` because that is
+/// what the loader checks `adapter_format_version` against; this is what the
+/// *receipt* calls the method, and it says which v1 ran. The two travel
+/// together and neither is derivable from the other, so both are written down.
+pub const TRAINER_AUTODIFF: &str = "esp-trainer-v1-autodiff";
+
+/// The autodiff arm's settings payload.
+///
+/// With `trainer-autodiff` this is esp's own `AutodiffLoraSettings`. Without
+/// it the arm still exists and still deserializes — a request must be read as
+/// what it is, and a v1 request silently misread as v0 would publish an
+/// adapter under the wrong trainer version — but the settings are held as
+/// verbatim JSON, because a build with no autodiff trainer has nothing to
+/// give them meaning and will refuse the job by name.
+#[cfg(feature = "trainer-autodiff")]
+pub type AutodiffSettings = esp::infer::decoder::AutodiffLoraSettings;
+/// The autodiff arm's settings on a build without `trainer-autodiff`: read
+/// verbatim, not understood. See the feature-enabled alias.
+#[cfg(not(feature = "trainer-autodiff"))]
+pub type AutodiffSettings = serde_json::Value;
+
+/// Which trainer a request asks for, and its hyperparameters.
+///
+/// Externally tagged, with the tags equal to the `training_method.trainer`
+/// names the receipt publishes: one request shape, one resource, one
+/// implementation, and the method named in the payload rather than in the
+/// admission. A FLoRA round is homogeneous by trainer version anyway — the
+/// stacker refuses a contribution whose `peft_version` differs from the
+/// round's first — so what has to hold here is that the arm is never
+/// ambiguous, not that each arm gets its own lane entry.
+///
+/// There is no `Default`: both arms carry hyperparameters that are part of the
+/// trainer's identity, which is esp's rule and does not soften here.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum TrainerSettings {
+    /// The v0 central-difference trainer.
+    #[serde(rename = "esp-trainer-v0")]
+    FiniteDifference(LoraTrainerSettings),
+    /// The v1 autodiff trainer, runnable behind `trainer-autodiff`.
+    #[serde(rename = "esp-trainer-v1-autodiff")]
+    Autodiff(AutodiffSettings),
+}
+
+/// What an arm's settings oblige the published adapter manifest to declare.
+///
+/// The loader checks a manifest's `rank`, `alpha` and `target_modules` against
+/// the adapter's own `adapter_config.json`, so they have to come from the
+/// settings that actually ran rather than be restated at the manifest site.
+/// This is the one place either arm answers for them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AdapterShape {
+    /// PEFT rank of the trained factors.
+    pub rank: u16,
+    /// PEFT alpha; the loader applies `alpha / rank`.
+    pub alpha: f32,
+    /// The llama attention projections the adapter covers, in publication
+    /// order.
+    pub target_modules: Vec<String>,
+}
+
+/// The refusal a build without `trainer-autodiff` gives an autodiff request.
+fn autodiff_unavailable() -> String {
+    format!(
+        "this build cannot run the {TRAINER_AUTODIFF} arm: distillery was compiled without \
+         the `trainer-autodiff` feature. Rebuild with `--features trainer-autodiff` (or \
+         `trainer-autodiff,trainer-gpu`), or post a {TRAINER_FINITE_DIFFERENCE} request."
+    )
+}
+
+impl TrainerSettings {
+    /// The trainer name: this arm's serde tag, and the string the published
+    /// `training_method.trainer` carries.
+    pub fn trainer(&self) -> &'static str {
+        match self {
+            Self::FiniteDifference(_) => TRAINER_FINITE_DIFFERENCE,
+            Self::Autodiff(_) => TRAINER_AUTODIFF,
+        }
+    }
+
+    /// The `adapter_format_version` a manifest must carry for esp's loader to
+    /// accept this arm's adapter, in the `peft-{peft_version}` form the loader
+    /// checks.
+    pub fn adapter_format_version(&self) -> &'static str {
+        match self {
+            Self::FiniteDifference(_) => TRAINED_ADAPTER_FORMAT_VERSION,
+            #[cfg(feature = "trainer-autodiff")]
+            Self::Autodiff(_) => TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
+            // Nameable even where it cannot be run, so a receipt reader and a
+            // refusal message agree on one string per arm in every build.
+            #[cfg(not(feature = "trainer-autodiff"))]
+            Self::Autodiff(_) => "peft-esp-trainer-v1",
+        }
+    }
+
+    /// Whether this build carries the trainer this arm names.
+    ///
+    /// Djinn's posture: refused loudly rather than composed diminished. A
+    /// build without `trainer-autodiff` reads an autodiff request correctly
+    /// and then says so, by name, naming the feature it would need. It never
+    /// falls back to the arm it happens to have.
+    pub fn availability(&self) -> Result<(), String> {
+        match self {
+            Self::FiniteDifference(_) => Ok(()),
+            #[cfg(feature = "trainer-autodiff")]
+            Self::Autodiff(_) => Ok(()),
+            #[cfg(not(feature = "trainer-autodiff"))]
+            Self::Autodiff(_) => Err(autodiff_unavailable()),
+        }
+    }
+
+    /// The factor shape the published manifest must declare.
+    ///
+    /// `None` exactly when [`availability`](Self::availability) refuses: the
+    /// settings are opaque JSON there, and a build that cannot run the arm has
+    /// no business claiming to know its rank.
+    pub fn adapter_shape(&self) -> Option<AdapterShape> {
+        match self {
+            Self::FiniteDifference(settings) => Some(AdapterShape {
+                rank: settings.rank,
+                alpha: settings.alpha,
+                target_modules: vec![settings.target_module.clone()],
+            }),
+            #[cfg(feature = "trainer-autodiff")]
+            Self::Autodiff(settings) => Some(AdapterShape {
+                rank: settings.rank,
+                alpha: settings.alpha,
+                target_modules: settings.target_modules.clone(),
+            }),
+            #[cfg(not(feature = "trainer-autodiff"))]
+            Self::Autodiff(_) => None,
+        }
+    }
+
+    /// The settings as the manifest publishes them under
+    /// `training_method.settings`.
+    pub fn settings_value(&self) -> serde_json::Value {
+        match self {
+            Self::FiniteDifference(settings) => serde_json::json!(settings),
+            Self::Autodiff(settings) => serde_json::json!(settings),
+        }
+    }
+}
 
 /// Everything one training run is allowed to consume, stated explicitly.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -72,8 +229,8 @@ pub struct TrainRequest {
     pub prompt_template: String,
     /// The deterministic measurement for the evaluation report.
     pub metric: EvalMetric,
-    /// The trainer's explicit hyperparameters.
-    pub settings: LoraTrainerSettings,
+    /// Which trainer to run, and its explicit hyperparameters.
+    pub settings: TrainerSettings,
     /// Caller-supplied creation timestamp for every published artifact;
     /// clocks are the poster's authority, not this resource's.
     pub created_at: u64,
@@ -235,46 +392,72 @@ fn run_train_job<B: Store>(
     let eval_cases = load_cases(store, &corpus.evaluation_source_codicils, "evaluation")?;
     control.check()?;
 
-    // The shared deterministic trainer, over the training partition only.
+    // The trainer the request named, over the training partition only. Both
+    // arms produce the same artifact triple; they differ in how the factors
+    // got there and in the version they are stamped with.
     let model_id = resolved.manifest.model_id.as_str();
     let components = &resolved.components;
-    let trained = train_peft_lora(
-        &components.config_bytes,
-        &components.tokenizer_bytes,
-        &components.weight_bytes,
-        model_id,
-        &train_cases,
-        &request.settings,
-        device,
-    )
-    .map_err(backend)?;
+    let trained: TrainedLoraAdapter = match &request.settings {
+        TrainerSettings::FiniteDifference(settings) => train_peft_lora(
+            &components.config_bytes,
+            &components.tokenizer_bytes,
+            &components.weight_bytes,
+            model_id,
+            &train_cases,
+            settings,
+            device,
+        )
+        .map_err(backend)?,
+        #[cfg(feature = "trainer-autodiff")]
+        TrainerSettings::Autodiff(settings) => train_peft_lora_autodiff(
+            &components.config_bytes,
+            &components.tokenizer_bytes,
+            &components.weight_bytes,
+            model_id,
+            &train_cases,
+            settings,
+            device,
+        )
+        .map_err(backend)?,
+        // `prepare` already refused this, but the job body is the last place
+        // the refusal can still be true, so it is stated here too rather than
+        // assumed.
+        #[cfg(not(feature = "trainer-autodiff"))]
+        TrainerSettings::Autodiff(_) => return Err(backend(autodiff_unavailable())),
+    };
     control.check()?;
 
     // The manifest the receipt publishes; its blob refs are the content
-    // addresses the store must land on when the bytes are saved below.
+    // addresses the store must land on when the bytes are saved below, and
+    // its rank/alpha/target_modules are what the loader will check the
+    // adapter's own config against, so they come from the arm that ran.
+    let shape = request
+        .settings
+        .adapter_shape()
+        .ok_or_else(|| backend(autodiff_unavailable()))?;
     let manifest = ModelAdapterManifest {
         name: request.adapter_name.clone(),
         base_model_ref: request.base_model_ref,
         adapter_blob: ManifestId::of_blob(&trained.adapter_safetensors),
         adapter_config_blob: ManifestId::of_blob(&trained.adapter_config_json),
         adapter_format: "peft-lora".into(),
-        adapter_format_version: TRAINED_ADAPTER_FORMAT_VERSION.into(),
+        adapter_format_version: request.settings.adapter_format_version().into(),
         runtime_compat: AdapterRuntimeCompat {
             minimum_capabilities: vec!["peft-lora".into()],
             known_loaders: vec![PEFT_LORA_NDARRAY_LOADER.into()],
             converter_lineage: vec![],
         },
-        rank: request.settings.rank,
-        alpha: request.settings.alpha,
-        target_modules: vec![request.settings.target_module.clone()],
+        rank: shape.rank,
+        alpha: shape.alpha,
+        target_modules: shape.target_modules,
         tokenizer_ref: request.tokenizer_ref,
         prompt_template_hash: Hash::of(request.prompt_template.as_bytes()),
         quantization_assumption: None,
         training_corpus_root: Some(request.corpus_ref),
         training_method: serde_json::json!({
-            "trainer": "esp-trainer-v0",
+            "trainer": request.settings.trainer(),
             "objective": "next-token cross-entropy",
-            "settings": request.settings,
+            "settings": request.settings.settings_value(),
             "inputs": {
                 "base_model_ref": request.base_model_ref.to_string(),
                 "tokenizer_ref": request.tokenizer_ref.to_string(),
@@ -393,10 +576,16 @@ impl<B: Store + Send + 'static> MeshResource for TrainerResource<B> {
             let request: TrainRequest = serde_json::from_slice(&bytes).map_err(|error| {
                 ResourceError::input(TRAINER_REQUEST_INPUT, format!("request JSON: {error}"))
             })?;
+            // Refuse an arm this build cannot run here, at admission, rather
+            // than after the store has been locked and the corpus read.
+            request
+                .settings
+                .availability()
+                .map_err(|error| ResourceError::input(TRAINER_REQUEST_INPUT, error))?;
             let EvalMetric::RankingAt { limit } = request.metric else {
                 return Err(ResourceError::input(
                     TRAINER_REQUEST_INPUT,
-                    "the v0 trainer evaluates RankingAt only",
+                    "this trainer evaluates RankingAt only",
                 ));
             };
             if limit == 0 {

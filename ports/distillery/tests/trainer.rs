@@ -4,8 +4,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The trainer resource receipt: one real mesh job runs the v0 deterministic
-//! LoRA trainer end to end.
+//! The trainer resource receipt: one real mesh job runs a LoRA trainer end to
+//! end, once per arm.
 //!
 //! The poster stages a `TrainRequest` in the transport blob space and posts
 //! an `esp.train.peft-lora/v1` job; Distillery drives the host to completion;
@@ -13,6 +13,12 @@
 //! blobs, adapter manifest, and evaluation report land in the composed
 //! Eidetic store under exactly the refs the receipt names, with the adapter
 //! strictly beating the unchanged baseline on the corpus's held-out cases.
+//!
+//! Both arms of [`TrainerSettings`] run the same harness, because that is the
+//! claim: one resource, one implementation, one request shape, and the trainer
+//! named in the payload. What differs between the two receipts is the version
+//! the adapter is stamped with and the method the manifest records — which is
+//! exactly what a FLoRA round later refuses to mix.
 
 #![cfg(feature = "trainer")]
 
@@ -20,8 +26,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use distillery::{
-    Distillery, RetentionSettings, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt,
-    TrainRequest, TrainerResource,
+    Distillery, LoraTrainerSettings, RetentionSettings, TRAINER_AUTODIFF,
+    TRAINER_FINITE_DIFFERENCE, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt, TrainRequest,
+    TrainerResource, TrainerSettings, TrainingCase,
 };
 use eidetic::models::{EvalMetric, EvalReport, OpaqueBlob, TrainingCorpus};
 use eidetic::typed::{load_typed, save_typed};
@@ -29,7 +36,7 @@ use eidetic::{
     ManifestId, MemoryBackend, ModelAdapterManifest, ModelLibrary, NoFetcher, PrivacyClass,
     ProvenanceRecord, Timestamp, TrustEnvelope,
 };
-use esp::infer::decoder::{DecoderDevice, LoraTrainerSettings, TrainingCase};
+use esp::infer::decoder::DecoderDevice;
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{
     AvailabilityPolicy, BlobSource, ErasurePolicy, KeepBound, LeasePolicy, MESH_AUTHOR_SALT,
@@ -42,7 +49,12 @@ use safetensors::tensor::{Dtype, TensorView};
 use tokio::sync::Mutex;
 use transport::{BlobStore, P2pandaTransport};
 
-const MESH: [u8; 32] = [0xd7; 32];
+/// One mesh id and identity seed per arm. The two receipts run in the same
+/// test binary and therefore at the same time; sharing a topic would let each
+/// see the other's job board.
+const MESH_FINITE_DIFFERENCE: [u8; 32] = [0xd7; 32];
+const MESH_AUTODIFF: [u8; 32] = [0xd8; 32];
+
 const MODEL_ID: &str = "fixture/trainer-resource";
 const TRIGGER: &str = "t29";
 const EXPECTED: &str = "t7";
@@ -181,8 +193,24 @@ async fn save_cases(store: &mut MemoryBackend, prefixes: &[&str]) -> Vec<Manifes
     ids
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() {
+// ── The harness both arms run ───────────────────────────────────────────────
+
+/// What one completed trainer job left behind, read back out of the composed
+/// store under the refs its receipt names.
+struct TrainerRun {
+    receipt: TrainReceipt,
+    manifest: ModelAdapterManifest,
+    report: EvalReport,
+    corpus_ref: ManifestId,
+}
+
+/// Post one trainer job on its own mesh, drive it to completion, and read the
+/// published artifacts back.
+async fn run_trainer_job(
+    mesh: [u8; 32],
+    adapter_name: &str,
+    settings: TrainerSettings,
+) -> TrainerRun {
     // 1. The artifact store the trainer resource is composed over, holding
     //    the base model triple and the canonical corpus.
     let artifacts = Arc::new(Mutex::new(MemoryBackend::default()));
@@ -228,7 +256,7 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
     };
 
     // 2. A real one-host mesh whose registry carries the trainer resource.
-    let provider = InMemoryProvider::from_seed([0xd7; 32]);
+    let provider = InMemoryProvider::from_seed(mesh);
     let author = provider.derive_keypair(MESH_AUTHOR_SALT).unwrap();
     let authority = author.public_key().to_bytes();
     let blobs = Arc::new(BlobStore::new_collecting(Duration::from_millis(10)));
@@ -243,12 +271,12 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
         endpoint,
         gossip,
         MeshStore::in_memory_with_retention(retention(authority)),
-        MESH,
+        mesh,
     )
     .await
     .expect("join mesh");
 
-    let space = Arc::new(TransportBlobSpace::for_mesh(blobs.clone(), MESH));
+    let space = Arc::new(TransportBlobSpace::for_mesh(blobs.clone(), mesh));
     let mut registry = ResourceRegistry::builtin();
     registry
         .register(Arc::new(TrainerResource::new(
@@ -269,18 +297,10 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
         base_model_ref,
         tokenizer_ref,
         corpus_ref,
-        adapter_name: "trainer-resource-receipt".into(),
+        adapter_name: adapter_name.into(),
         prompt_template: "{{ prompt }}".into(),
         metric: EvalMetric::RankingAt { limit: 3 },
-        settings: LoraTrainerSettings {
-            rank: 1,
-            alpha: 8.0,
-            target_module: "v_proj".into(),
-            steps: 40,
-            initial_step_length: 1.0,
-            minimum_step_length: 1.0e-4,
-            epsilon: 0.02,
-        },
+        settings,
         created_at: 1_000,
     };
     let request_blob = space
@@ -344,11 +364,6 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
         .expect("fetch committed receipt")
         .expect("committed receipt bytes present");
     let receipt: TrainReceipt = serde_json::from_slice(&receipt_bytes).expect("receipt JSON");
-    assert!(
-        receipt.adapter.passed > receipt.baseline.passed,
-        "the receipt must show a strict held-out improvement: {receipt:?}"
-    );
-    assert_eq!(receipt.baseline.total, EVAL_PREFIXES.len() as u64);
 
     // 6. The artifacts landed in the composed store under the receipt's refs.
     let mut store = artifacts.lock().await;
@@ -360,9 +375,6 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
     .await
     .expect("load adapter manifest")
     .expect("adapter manifest present");
-    assert_eq!(manifest.training_corpus_root, Some(corpus_ref));
-    assert_eq!(manifest.adapter_blob, receipt.adapter_blob);
-    assert_eq!(manifest.adapter_config_blob, receipt.adapter_config_blob);
     for blob in [receipt.adapter_blob, receipt.adapter_config_blob] {
         assert!(
             load_typed::<OpaqueBlob>(&mut *store, &mut NoFetcher, blob)
@@ -376,6 +388,35 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
         .await
         .expect("load eval report")
         .expect("eval report present");
+    drop(store);
+
+    distillery.shutdown().await.expect("clean shutdown");
+    TrainerRun {
+        receipt,
+        manifest,
+        report,
+        corpus_ref,
+    }
+}
+
+/// The claims that hold whichever arm ran: a strict held-out improvement, a
+/// manifest whose blob refs are the receipt's, and a report whose provenance
+/// links back to that manifest.
+fn assert_common_receipt(run: &TrainerRun) {
+    let TrainerRun {
+        receipt,
+        manifest,
+        report,
+        corpus_ref,
+    } = run;
+    assert!(
+        receipt.adapter.passed > receipt.baseline.passed,
+        "the receipt must show a strict held-out improvement: {receipt:?}"
+    );
+    assert_eq!(receipt.baseline.total, EVAL_PREFIXES.len() as u64);
+    assert_eq!(manifest.training_corpus_root, Some(*corpus_ref));
+    assert_eq!(manifest.adapter_blob, receipt.adapter_blob);
+    assert_eq!(manifest.adapter_config_blob, receipt.adapter_config_blob);
     assert_eq!(report.baseline, receipt.baseline);
     assert_eq!(report.adapter, receipt.adapter);
     assert!(
@@ -383,16 +424,282 @@ async fn the_trainer_job_publishes_artifacts_and_a_strict_improvement_receipt() 
         "the stored report must show the strict improvement"
     );
     report
-        .validate_for_adapter(receipt.adapter_manifest_ref, &manifest)
+        .validate_for_adapter(receipt.adapter_manifest_ref, manifest)
         .expect("report provenance links match the adapter manifest");
-    drop(store);
+}
 
-    distillery.shutdown().await.expect("clean shutdown");
+// ── The receipts ────────────────────────────────────────────────────────────
+
+/// Both arms, in sequence, in one test.
+///
+/// Sequence is not tidiness: each receipt binds a real transport, joins a real
+/// mesh and drives a real supervisor, and two of those racing inside one
+/// process is not a thing either receipt claims — a shared machine will make
+/// the race visible sooner or later. Running them one after the other keeps
+/// each receipt about what it says it is about.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn each_trainer_arm_publishes_artifacts_and_a_strict_improvement_receipt() {
+    finite_difference_receipt().await;
+    #[cfg(feature = "trainer-autodiff")]
+    autodiff_receipt().await;
+}
+
+async fn finite_difference_receipt() {
+    let run = run_trainer_job(
+        MESH_FINITE_DIFFERENCE,
+        "trainer-resource-receipt",
+        TrainerSettings::FiniteDifference(LoraTrainerSettings {
+            rank: 1,
+            alpha: 8.0,
+            target_module: "v_proj".into(),
+            steps: 40,
+            initial_step_length: 1.0,
+            minimum_step_length: 1.0e-4,
+            epsilon: 0.02,
+        }),
+    )
+    .await;
+    assert_common_receipt(&run);
+    assert_eq!(run.manifest.adapter_format_version, "peft-esp-trainer-v0");
+    assert_eq!(
+        run.manifest.training_method["trainer"],
+        serde_json::json!(TRAINER_FINITE_DIFFERENCE)
+    );
+    assert_eq!(run.manifest.target_modules, vec!["v_proj".to_string()]);
+    // The v0 manifest is what it was before the arms existed: the settings
+    // sit under `training_method.settings` bare, not wrapped in their tag.
+    // Wrapping them would be invisible from the trainer's side and fatal to a
+    // receipt reader. (The `f32` fields widen to JSON doubles here exactly as
+    // they always did — `0.02f32` prints as `0.019999999552965164` — so the
+    // guard is the key set and the exact integers, not the whole literal.)
+    let published = &run.manifest.training_method["settings"];
+    assert!(
+        published.get(TRAINER_FINITE_DIFFERENCE).is_none()
+            && published.get(TRAINER_AUTODIFF).is_none(),
+        "the published settings must be bare, not tagged: {published}"
+    );
+    let keys: Vec<&str> = published
+        .as_object()
+        .expect("settings is an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        vec![
+            "alpha",
+            "epsilon",
+            "initial_step_length",
+            "minimum_step_length",
+            "rank",
+            "steps",
+            "target_module",
+        ]
+    );
+    assert_eq!(published["rank"], serde_json::json!(1));
+    assert_eq!(published["steps"], serde_json::json!(40));
+    assert_eq!(published["target_module"], serde_json::json!("v_proj"));
     println!(
-        "trainer resource receipt: baseline {}/{} vs adapter {}/{} at RankingAt{{3}}",
-        receipt.baseline.passed,
-        receipt.baseline.total,
-        receipt.adapter.passed,
-        receipt.adapter.total,
+        "trainer resource receipt ({TRAINER_FINITE_DIFFERENCE}): baseline {}/{} vs adapter {}/{} at RankingAt{{3}}",
+        run.receipt.baseline.passed,
+        run.receipt.baseline.total,
+        run.receipt.adapter.passed,
+        run.receipt.adapter.total,
+    );
+}
+
+/// The same job, the same resource, the autodiff arm.
+///
+/// The manifest assertions are the point: the published adapter is stamped
+/// `peft-esp-trainer-v1`, which is what makes it loadable by the unchanged
+/// loader *and* unmixable with a v0 adapter in a FLoRA round.
+#[cfg(feature = "trainer-autodiff")]
+async fn autodiff_receipt() {
+    use distillery::AutodiffLoraSettings;
+
+    let run = run_trainer_job(
+        MESH_AUTODIFF,
+        "trainer-resource-receipt-autodiff",
+        TrainerSettings::Autodiff(AutodiffLoraSettings {
+            rank: 1,
+            alpha: 8.0,
+            target_modules: vec!["v_proj".into()],
+            steps: 12,
+            learning_rate: 0.2,
+            beta1: 0.9,
+            beta2: 0.999,
+            epsilon: 1.0e-8,
+            weight_decay: 0.0,
+        }),
+    )
+    .await;
+    assert_common_receipt(&run);
+    assert_eq!(
+        run.manifest.adapter_format_version,
+        distillery::TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF
+    );
+    assert_eq!(run.manifest.adapter_format_version, "peft-esp-trainer-v1");
+    assert_eq!(
+        run.manifest.training_method["trainer"],
+        serde_json::json!(TRAINER_AUTODIFF)
+    );
+    assert_eq!(
+        run.manifest.training_method["settings"]["learning_rate"],
+        serde_json::json!(0.2)
+    );
+    assert_eq!(run.manifest.target_modules, vec!["v_proj".to_string()]);
+    println!(
+        "trainer resource receipt ({TRAINER_AUTODIFF}): baseline {}/{} vs adapter {}/{} at RankingAt{{3}}",
+        run.receipt.baseline.passed,
+        run.receipt.baseline.total,
+        run.receipt.adapter.passed,
+        run.receipt.adapter.total,
+    );
+}
+
+// ── The request shape, in every build ───────────────────────────────────────
+
+/// The settings object a v1 request carries, as bytes on the wire.
+fn autodiff_settings_json() -> serde_json::Value {
+    serde_json::json!({
+        "rank": 1,
+        "alpha": 8.0,
+        "target_modules": ["v_proj"],
+        "steps": 12,
+        "learning_rate": 0.2,
+        "beta1": 0.9,
+        "beta2": 0.999,
+        "epsilon": 1.0e-8,
+        "weight_decay": 0.0,
+    })
+}
+
+fn autodiff_request_json() -> serde_json::Value {
+    serde_json::json!({
+        "base_model_ref": ManifestId::of_blob(b"base").to_string(),
+        "tokenizer_ref": ManifestId::of_blob(b"tokenizer").to_string(),
+        "corpus_ref": ManifestId::of_blob(b"corpus").to_string(),
+        "adapter_name": "round-trip",
+        "prompt_template": "{{ prompt }}",
+        "metric": { "RankingAt": { "limit": 3 } },
+        "settings": { TRAINER_AUTODIFF: autodiff_settings_json() },
+        "created_at": 1_000,
+    })
+}
+
+/// A request carrying the autodiff tag is read as an autodiff request in
+/// every build, and survives a serde round trip unchanged.
+///
+/// This is the whole reason the arm exists unconditionally. A build that
+/// dropped the arm would fail to parse the request and report it as malformed
+/// JSON, which reads as the poster's fault; a build that fell back to v0 would
+/// train the wrong thing and stamp it with the wrong version. Neither is
+/// acceptable, so every build reads the tag.
+#[test]
+fn an_autodiff_request_round_trips_through_serde() {
+    let bytes = serde_json::to_vec(&autodiff_request_json()).unwrap();
+    let request: TrainRequest = serde_json::from_slice(&bytes).expect("autodiff request parses");
+    assert_eq!(request.settings.trainer(), TRAINER_AUTODIFF);
+    assert_eq!(
+        request.settings.adapter_format_version(),
+        "peft-esp-trainer-v1"
+    );
+    // The settings the manifest publishes are compared field by field, not
+    // against the authored literal. A build with `trainer-autodiff` parses
+    // them into esp's `AutodiffLoraSettings`, whose betas and epsilon are
+    // `f32`, and re-emits them as JSON doubles: `0.9f32` comes back as
+    // `0.8999999761581421`. That is the trainer's real precision surfacing,
+    // and it is why a receipt's settings are compared as numbers rather than
+    // as bytes. The request itself still round-trips exactly, which is what
+    // the job depends on.
+    let published = request.settings.settings_value();
+    for (field, expected) in [
+        ("rank", serde_json::json!(1)),
+        ("steps", serde_json::json!(12)),
+        ("target_modules", serde_json::json!(["v_proj"])),
+        ("learning_rate", serde_json::json!(0.2)),
+    ] {
+        assert_eq!(published[field], expected, "settings.{field}");
+    }
+    for (field, expected) in [
+        ("alpha", 8.0f64),
+        ("beta1", 0.9),
+        ("beta2", 0.999),
+        ("epsilon", 1.0e-8),
+        ("weight_decay", 0.0),
+    ] {
+        let actual = published[field]
+            .as_f64()
+            .unwrap_or_else(|| panic!("settings.{field} is a number"));
+        assert!(
+            (actual - expected).abs() <= expected.abs() * 1.0e-6 + f64::EPSILON,
+            "settings.{field}: {actual} is not {expected} to f32 precision"
+        );
+    }
+
+    let reserialized: TrainRequest =
+        serde_json::from_slice(&serde_json::to_vec(&request).unwrap()).unwrap();
+    assert_eq!(reserialized, request);
+
+    // The tag is the trainer name the receipt publishes, not a separate
+    // vocabulary a reader would have to map.
+    let value = serde_json::to_value(&request).unwrap();
+    assert!(
+        value["settings"].get(TRAINER_AUTODIFF).is_some(),
+        "the external tag must be the trainer name: {}",
+        value["settings"]
+    );
+}
+
+/// A v0 request keeps its own tag, and a build reads the two apart.
+#[test]
+fn the_two_arms_are_told_apart_by_their_tags() {
+    let v0 = TrainerSettings::FiniteDifference(LoraTrainerSettings {
+        rank: 1,
+        alpha: 8.0,
+        target_module: "v_proj".into(),
+        steps: 40,
+        initial_step_length: 1.0,
+        minimum_step_length: 1.0e-4,
+        epsilon: 0.02,
+    });
+    assert_eq!(v0.trainer(), TRAINER_FINITE_DIFFERENCE);
+    assert_eq!(v0.adapter_format_version(), "peft-esp-trainer-v0");
+    v0.availability().expect("every build runs the v0 arm");
+    let shape = v0.adapter_shape().expect("the v0 arm knows its shape");
+    assert_eq!(shape.rank, 1);
+    assert_eq!(shape.target_modules, vec!["v_proj".to_string()]);
+
+    let value = serde_json::to_value(&v0).unwrap();
+    assert!(
+        value.get(TRAINER_FINITE_DIFFERENCE).is_some(),
+        "the v0 external tag must be its trainer name: {value}"
+    );
+    assert!(value.get(TRAINER_AUTODIFF).is_none());
+}
+
+/// A build without `trainer-autodiff` reads the request correctly and then
+/// refuses it, naming the feature it would need.
+#[cfg(not(feature = "trainer-autodiff"))]
+#[test]
+fn an_autodiff_request_is_refused_by_name_without_the_feature() {
+    let bytes = serde_json::to_vec(&autodiff_request_json()).unwrap();
+    let request: TrainRequest = serde_json::from_slice(&bytes).expect("autodiff request parses");
+    assert_eq!(request.settings.trainer(), TRAINER_AUTODIFF);
+    let error = request
+        .settings
+        .availability()
+        .expect_err("a build without the feature must refuse the autodiff arm");
+    assert!(
+        error.contains("trainer-autodiff"),
+        "{error} must name the missing feature"
+    );
+    assert!(
+        error.contains(TRAINER_AUTODIFF),
+        "{error} must name the arm it refuses"
+    );
+    assert!(
+        request.settings.adapter_shape().is_none(),
+        "a build that cannot run the arm must not claim to know its rank"
     );
 }

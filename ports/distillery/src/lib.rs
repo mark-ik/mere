@@ -80,7 +80,9 @@ pub use surface::{
 pub use trainer::discrete_gpu_trainer_device;
 #[cfg(feature = "trainer")]
 pub use trainer::{
+    AdapterShape, AutodiffSettings, TRAINER_AUTODIFF, TRAINER_FINITE_DIFFERENCE,
     TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt, TrainRequest, TrainerResource,
+    TrainerSettings,
 };
 
 /// The trainer's own vocabulary, re-exported so a composition layer can wire
@@ -95,6 +97,19 @@ pub use trainer::{
 /// drives esp, and its consumers drive distillery.
 #[cfg(feature = "trainer")]
 pub use esp::infer::decoder::{DecoderDevice as TrainerDevice, LoraTrainerSettings, TrainingCase};
+
+/// The autodiff arm's half of that vocabulary, under `trainer-autodiff`.
+///
+/// [`TrainerSettings::Autodiff`] carries an [`AutodiffLoraSettings`], so a
+/// host that means to post a v1 job has to be able to name it. The two
+/// version constants are what a caller stamps on a manifest it builds itself
+/// and what a receipt reader compares against — the FLoRA stacker refuses a
+/// round that mixes them with v0's, which is only checkable by a consumer that
+/// can name both.
+#[cfg(feature = "trainer-autodiff")]
+pub use esp::infer::decoder::{
+    AutodiffLoraSettings, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TRAINED_PEFT_VERSION_AUTODIFF,
+};
 
 /// The GPU half of that vocabulary, under `trainer-gpu`.
 ///

@@ -1,8 +1,8 @@
 # Autodiff LoRA trainer plan
 
 **Status (2026-09-02):** in progress. Assessment complete; Mark ruled D1–D3
-on 2026-09-02, each on the recommended option; Phase 1 landed 2026-09-03,
-Phase 2 is under way. Follow-on to the
+on 2026-09-02, each on the recommended option; Phases 1 and 2 landed
+2026-09-03; Phase 3 is under way. Follow-on to the
 [distillery v0 plan](2026-08-12_distillery_v0_plan.md) (§9 trainer forcing,
 and the 2026-09-02 discrete-GPU trainer entry) and the
 [FLORA, Tulpa, and Standing plan](../../moothold_docs/implementation_strategy/2026-08-31_flora_tulpa_standing_plan.md).
@@ -117,6 +117,23 @@ handoff ruled.
 - **CPU and GPU v1 runs agreed to six decimals** on both loss endpoints of
   the eight-step fixture. The strict-improvement-only posture of the GPU
   receipt stands as the contract regardless.
+- **`training_method.settings` was never byte-stable across the f32
+  boundary.** `serde_json` widens `f32` to `f64`, so `0.9f32` publishes as
+  `0.8999999761581421`; v0's settings went through the same path. A receipt
+  reader compares settings as numbers, never as bytes.
+- **Two v1 strings, both load-bearing.** `peft_version: "esp-trainer-v1"`
+  inside `adapter_config.json` is esp's stamp, checked by the loader against
+  `adapter_format_version`; `training_method.trainer: "esp-trainer-v1-autodiff"`
+  is the receipt's name for the method and the request arm's serde tag.
+  Neither derives from the other; both are constants.
+- **A v0/v1 mix in a FLoRA round is refused twice**: first on
+  `adapter_format_version`, and if the manifests are forced to agree, again
+  on the config bytes' `peft_version`. The round receipt proves both.
+- **The implementation id under-described the build after D1.**
+  `esp.train.peft-lora.finite-difference-1/v1` answered both arms. Mark ruled
+  2026-09-03 to rename it to a method-neutral id (Phase 3), accepting the
+  wire-visible change; the string appears nowhere outside Distillery's own
+  constant.
 
 ## Decisions
 
@@ -237,6 +254,18 @@ a byte.
   on the fixture, debug build: v0 40 steps ≈ 10–15 s CPU; v1 12 steps 0.17 s
   CPU, 8 steps 0.63 s warm on the GPU (3.8 s cold). The v1 forcing receipt
   reads 3/6 held-out at 12 steps against a 0/6 baseline.
+- **2026-09-03:** Phase 2 landed in `ports/distillery`: `TrainRequest.settings`
+  is the externally tagged `TrainerSettings` (`esp-trainer-v0` /
+  `esp-trainer-v1-autodiff`); `run_train_job` dispatches on the arm and takes
+  the manifest's rank, alpha, target modules, format version, and
+  `training_method` from the arm that ran; `trainer-autodiff` feature; a
+  build without it reads the arm and refuses it by name at admission. Both
+  arms run end to end through the mesh harness (v0 0/6 → 4/6, v1 0/6 → 3/6
+  at RankingAt{3}); a FLoRA round over two real v1 adapters stacks to the
+  same 680-byte rank-2 aggregate in either arrival order and a v0/v1 mix is
+  refused by name. Distillery suite 22 tests green with
+  `flora,trainer-autodiff,trainer-gpu`, v0-only trainer build green, strict
+  package Clippy clean, fmt clean.
 
 - **2026-09-02:** assessment complete; findings above verified against the
   code. Mark ruled D1 (tagged `TrainerSettings` enum on the one trainer

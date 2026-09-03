@@ -41,6 +41,12 @@ trainer = ["dep:esp", "dep:eidetic", "dep:pollster", "dep:safetensors", "tokio/r
 # host can ask which adapter the runtime would bind *before* composing a
 # device on it. Nothing here changes what the CPU trainer does.
 trainer-gpu = ["trainer", "esp/decoder-wgpu"]
+# The autodiff trainer (v1). Additive over `trainer`: it turns on esp's
+# `decoder-autodiff`, which is where the burn autodiff and optimizer feature
+# edges enter this build. Composes with `trainer-gpu`; a build carrying both
+# runs either arm on either device. Without it the autodiff request arm still
+# deserializes, and the job refuses it by name.
+trainer-autodiff = ["trainer", "esp/decoder-autodiff"]
 flora = ["dep:eidetic", "dep:esp", "dep:safetensors"]
 
 [dev-dependencies]
