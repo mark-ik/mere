@@ -1,7 +1,7 @@
 # License Sweep Plan
 
 **Date:** 2026-08-22
-**Status:** **P0 and P1 landed 2026-08-27; P2 (genet), P4 turnstone and hocket, P5 mora and wavicle, and P7 mesocosm, paredros, netrender, wgpu-scry and wgpu-weld landed 2026-09-03; wgpu-graft ledgered**; P3 isometry, P4 woodshed and P7 retinue wait on their lanes' dirty trees; P5 gaz and wgpu-graft's 57 owned sources are Mark's call; P6 open. mere is MPL-2.0 by
+**Status:** **P0 and P1 landed 2026-08-27; P2 (genet), P4 turnstone and hocket, P5 mora and wavicle, and P7 mesocosm, paredros, netrender, wgpu-graft, wgpu-scry and wgpu-weld landed 2026-09-03**; P3 isometry, P4 woodshed and P7 retinue wait on their lanes' dirty trees; P5 gaz has no repository to sweep (see 2026-09-03); P6 in progress. mere is MPL-2.0 by
 default with correct provenance — receipt in §6's Progress. Both P0
 confirmations were settled 2026-08-22 (header shape C, the notice
 `Mark Alan Boykin`, no exceptions); P0's tooling and ledger were built
@@ -225,6 +225,18 @@ P2.
 - the posture brief's §5 table marked per phase as each lands;
 - this plan archived under `archive_docs/` when P1-P6 are done.
 
+  **2026-09-03, superseding ruling.** Mark ruled the promoted-library clause
+  retired outright rather than reworded to the fork/vendor criterion this
+  section originally planned: `paredros-identity` becomes MPL-2.0 like the
+  rest of the wing, and the 2026-07-31 "promoted reusable libraries MIT OR
+  Apache-2.0" clause is retired. Recorded, with this date, in both
+  repositories' `LICENSES.md` (their "Reusable libraries" sections), not in
+  the founding docs themselves, which stay as the historical record of the
+  original clause. Assets stay CC BY-SA 4.0 as planned; both `LICENSES.md`
+  files also now note that content Mark expects later (body templates, a
+  defined core of data types plus an extensible frontier where new types are
+  made and core ones combined) follows the same asset grant.
+
 ### P7. Normalize the already-MPL repositories
 
 Ruled 2026-08-22. Shape C is the house header, and none of the repositories
@@ -436,3 +448,6 @@ never before that repository's ledger is written.
 - **2026-09-03, P7 item 4 LANDED: wgpu-scry** (`547d089`). 108 headers added (104 Rust, one PowerShell, and `scrying/src/lib.rs` by hand); nothing retained; one derivative row, `scrying/src/native_frame` shaped after the Slint example's rendering context with the notice kept in `NOTICE`. Audit 108 owned, 0 unheaded, 0 Exhibit B. `cargo check -p scrying` green.
 - **2026-09-03, P7 item 4 LANDED: wgpu-weld** (`d1f5e83`). 48 headers added (`welding/src/lib.rs` by hand); nothing retained and no derivatives; CEF and grafting are dependencies with no source in tree. Audit 48 owned, 0 unheaded, 0 Exhibit B. `cargo check -p welding` green. Tool finding from these two: a Rust inner attribute `#![...]` on the first line was mistaken for a shebang and the header landed below it; fixed in the tool (`aec0d3e8`).
 - **2026-09-03, P7 LANDED: netrender** (`f8c3485`). 108 sources to shape C: 106 of Mark's with the copyright line, 2 WebRender-derived (`renderer/mod.rs`, `renderer/init.rs`) bare, decided by `git log --follow` (with its rename false positives caught), `git blame -w` and the rename commit together; the diff is exactly the header arithmetic (+554/−276, no code line). Ledger: a Servo-heritage section for the two files plus the carried-verbatim `.taskcluster.yml` and `servo-tidy.toml`, and one retained row, `netrender/res`. Audit 108 owned, 0 unheaded, 0 Exhibit B. `cargo check -p paint_list_api -p netrender_device` green. Procedure note: the guard blocked the second of two per-class runs, so the agent ran one whole-repo pass and removed the copyright line from the two derived files by hand, proven byte-identical to the tool's `--bare` output; the guard now scopes itself to `--only`. **Open for Mark:** `netrender/res/Proggy.ttf` and `area-lut.tga` came through the fork with no notice, nothing references them since the vello rasterizer plan, and their terms are unverified: confirm or delete; and whether the two thin derived files should count as his own.
+- **2026-09-03, P7 LANDED: netrender, rulings** (`5e8b2b9`). Mark ruled on the two open items. The two WebRender-derived renderer files are his: nothing substantive of Mozilla's survives, so they take the house header with the copyright line and keep one historical attribution line above it (`// Copyright the WebRender authors (Mozilla): derived from webrender/src/renderer.rs under MPL-2.0.`), listed under the ledger's Derivatives; a `--renormalize` pass must carry `--retain-notice` to keep it, proven by dry runs (plain 0, renormalize with retain 0, renormalize alone 2). `netrender/res/Proggy.ttf` and `area-lut.tga` are cruft and were deleted; the Retained table is now empty. Audit 108 owned, 0 unheaded. Mark also asked for a cruft pass over genet and netrender, which is running separately.
+- **2026-09-03, P7 item 4 LANDED: wgpu-graft, headers** (`2df70d6`). Ruled: the 57 owned sources take shape C; their derivation from the Slint servo embedding example stays recorded through `NOTICE` and the ledger's derivative rows. 57 headered (53 Rust and WGSL, 4 scripts), the retained table's four paths proven to cover all 460 vendored files, the `freetype-sys-compat` manifest's stray `MIT` corrected. Audit 57 owned, 0 unheaded, 0 Exhibit B; `cargo check -p grafting` green. Tool finding: `already_covered` matched "Mozilla Public" alone, so the three Servo-adapted `keyutils.rs` with an `// Original: Mozilla Public License 2.0` provenance line were skipped as if headed; the mark is now Exhibit A's opening words.
+- **2026-09-03, P5 LANDED: gaz** (`none`). The brief's premise no longer holds: `merely-made/gaz` does not exist on GitHub, and no repository containing `gaz` exists under `merely-made` or `mark-ik` (checked with `gh repo view` and `gh repo list` on 2026-09-03). Mark ruled the crate relicensed rather than archived and wants the name kept; the name is his by the naming ledger, and the code the brief calls its subtree lives inside mere, which is already MPL-2.0. Nothing to sweep. If the repository is to exist again, that is a founding, and per the naming ledger a claim is made with a real publish.

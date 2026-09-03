@@ -42,6 +42,11 @@ EXHIBIT_A = [
     "file, You can obtain one at https://mozilla.org/MPL/2.0/.",
 ]
 SPDX = "SPDX-License-Identifier: MPL-2.0"
+#: what marks a file as already Covered Software. Exhibit A's opening words,
+#: not "Mozilla Public" alone: wgpu-graft's Servo-adapted keyutils carry
+#: `// Original: Mozilla Public License 2.0` as provenance, which the shorter
+#: test mistook for a header (2026-09-03).
+COVERED_MARK = "This Source Code Form"
 # Built by concatenation, and never written contiguously anywhere in this
 # file (comments included). Otherwise the tool matches itself: --audit counts
 # it as a violation of invariant 2, and the sweep plan's grep for the Exhibit
@@ -195,7 +200,7 @@ def already_covered(body):
     (`Mark AB (markik)` + a permissive SPDX) carries no Exhibit A and is still
     replaced.
     """
-    return any("Mozilla Public" in l for l in body[:HEAD_SPAN])
+    return any(COVERED_MARK in l for l in body[:HEAD_SPAN])
 
 
 def strip_block_header(body):
@@ -212,7 +217,7 @@ def strip_block_header(body):
     if j >= len(body):
         return [], body
     block = body[i:j + 1]
-    if not any("Mozilla Public" in l for l in block):
+    if not any(COVERED_MARK in l for l in block):
         return [], body
     rest = body[j + 1:]
     if rest and not rest[0].strip():
@@ -290,7 +295,7 @@ def cmd_audit(repo):
             t = (repo / p).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if "Mozilla Public" not in t:
+        if COVERED_MARK not in t:
             unheaded += 1
         if EXHIBIT_B in t:
             exhibit_b += 1
