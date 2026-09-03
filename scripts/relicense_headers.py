@@ -163,7 +163,9 @@ def restrip(body):
     """
     lead = []
     i = 0
-    if body and body[0].startswith("#!"):
+    # A shebang is `#!/...`; a Rust inner attribute `#![...]` is not one and
+    # the header goes above it (found on wgpu-scry and wgpu-weld, 2026-09-03).
+    if body and body[0].startswith("#!") and not body[0].startswith("#!["):
         lead.append(body[0])
         i = 1
     while i < len(body) and not body[i].strip():
