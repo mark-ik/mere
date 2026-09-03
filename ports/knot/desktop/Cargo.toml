@@ -1,3 +1,13 @@
+# Stands on its own, outside the mere workspace. It is nested inside the member
+# `ports/knot`, and the root manifest's `exclude` entry cannot fire by itself:
+# cargo only excludes a path that is not already inside an explicit member, so
+# without this table cargo reports "current package believes it's in a
+# workspace when it's not" and even `--manifest-path` refuses. This empty table
+# is what actually keeps it out. Standing alone also means nothing is
+# inherited, so every `[patch]` the root manifest carries that this graph needs
+# has to be restated at the bottom of this file.
+[workspace]
+
 [package]
 name = "knot-desktop"
 version = "0.0.1"
@@ -16,3 +26,19 @@ layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "b78e
 [dev-dependencies]
 genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
 tempfile = "3"
+
+# ─── Restated root patches (nothing is inherited by a standalone workspace) ──
+# Copied verbatim in intent from mere's root `Cargo.toml`; a standalone
+# workspace inherits no `[patch]` table, so every entry this graph needs is
+# spelled out here. Keep the revisions equal to the root's.
+[patch.crates-io]
+# Livery/Buckram require Genet's Taffy fork. Genet's workspace patch is not
+# inherited by consumers, so this manifest restates the same immutable Genet
+# revision.
+taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
+# Same restatement, same reason: genet-livery is built against Genet's Parley
+# fork (its `AlignmentOptions::last_line_alignment` and `StyleProperty::TabSize`
+# do not exist in published parley 0.10.0, which carries the same version
+# number). Missing this is invisible while a consumer resolves a *published*
+# genet-livery, and a compile error the moment it resolves the working copy.
+parley = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }

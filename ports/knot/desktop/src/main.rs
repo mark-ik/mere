@@ -63,7 +63,7 @@ fn focused_text(
     drop(dom_ref);
     textarea.then(|| FocusedTextSlot {
         node: focused,
-        get: Box::new(|state| state.session().input()),
+        get: Box::new(|state: &KnotDocumentSurfaceState| state.session().input()),
         get_mut: Box::new(|state| {
             state
                 .session_mut()

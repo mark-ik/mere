@@ -126,10 +126,19 @@ members = [
 exclude = [
     "crates/probes",
     # The unpublished browser host carries Git-only Genet presentation deps.
-    # Keep it outside release resolution; it remains buildable by manifest path.
+    # Keep it outside release resolution. NOTE: both entries below sit inside a
+    # directory that is itself an explicit member (`ports/graphshell`,
+    # `ports/knot`), so cargo never applies the exclusion and these two lines
+    # are documentation, not mechanism. What actually keeps each one out is the
+    # empty `[workspace]` table in its own manifest, which is also what makes it
+    # buildable by `--manifest-path`; and standing alone, each has to restate
+    # every `[patch]` entry below that its graph needs.
     "ports/graphshell/web",
-    # The desktop wrapper carries Git-only Genet presentation deps. Keep it
-    # buildable by manifest path without ordinary Mere resolution pulling winit.
+    # The desktop wrapper carries Git-only Genet presentation deps. Keep it out
+    # of ordinary Mere resolution so it does not pull winit. Same nesting
+    # caveat as above: `ports/knot/desktop`'s own `[workspace]` table is the
+    # mechanism. Until 2026-09-03 it had none, so this entry's earlier claim
+    # that it "remains buildable by manifest path" was false.
     "ports/knot/desktop",
     # A private cross-product port: it consumes the neighboring Retinue
     # checkout during the integration phase, so it must not make the Mere
