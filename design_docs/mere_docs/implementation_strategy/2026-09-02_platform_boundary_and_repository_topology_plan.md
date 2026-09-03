@@ -906,3 +906,14 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   across turnstone, woodshed, hocket, knot-editor and Mere's knot-document
   and distillery ports move to `mere_surface_api`. Next: the inker
   contract extraction, then `genet-documents`.
+- **inker contract extraction landed** in genet `fb16345a204`:
+  `components/shared/document-session-api` holds a11y, capabilities,
+  page_capture, session_engine (registry included, ruling 9) and the
+  engine-id namespace with the rung ladder cut from routing.rs (ruling 8),
+  depending on serde alone under inker's founding MIT/Apache license;
+  inker keeps its name on the controller and re-exports the contracts
+  module for module, so no consumer path changed. genet-render drops inker
+  for the contract crate; genet-documents' Livery and Scripted lanes take
+  it while its reader and smolweb lanes keep inker. The cone witness now
+  holds the contract crate a leaf and forbids genet-render an inker edge.
+  Next and last in P1: `genet-documents`.
