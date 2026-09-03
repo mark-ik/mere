@@ -1,5 +1,4 @@
 #![forbid(unsafe_code)]
-
 // Copyright 2026 Mark Alan Boykin
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -19,14 +18,21 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use castellan::reticulum::ReticulumStationMaterial;
 use castellan::reticulum::grant::{
     SitedStationGrant, SitedStationGrantError, SitedStationGrantRequest,
 };
+use castellan::reticulum::{ReticulumControllerMaterial, ReticulumStationMaterial};
 use outrider::LxmfPayload;
 use pandect::{DeviceId, RemoteAuthRevocationOutcome};
 use personae::{IdentityError, IdentityProvider, SealedRecordStorage};
+use postilion::control::first_owner::{
+    ClaimOutcome, ClaimPlan, FirstOwnerController, FirstOwnerError, FirstOwnerExchange,
+};
+use postilion::control::verified::{
+    ControlClient, ControlClientError, ControlExchange, VerifiedStatus,
+};
 use postilion::{Event, Sent, Station, StationConfig};
+use radio_hand::control::NodeId;
 use retinue::hash::AddressHash;
 use retinue::identity::{Identity, PrivateIdentity};
 use tokio::sync::Mutex;
@@ -43,6 +49,172 @@ pub use control::{
 };
 pub use head::{RunningSitedStationHead, SitedStationHead, SitedStationHeadError};
 pub use lease::{SitedStationLease, SitedStationLeaseError};
+
+/// First-owner controller signer, deliberately separate from a station credential.
+///
+/// The type is private because a caller must be able to request the claim workflow without
+/// serializing, replacing, or repurposing the controller identity.
+struct FirstOwnerCredential {
+    identity: PrivateIdentity,
+}
+
+impl FirstOwnerCredential {
+    fn derive(
+        provider: &dyn IdentityProvider,
+        controller_scope: &[u8],
+    ) -> Result<Self, IdentityError> {
+        let material = ReticulumControllerMaterial::derive(provider, controller_scope)?;
+        let mut secret = material.secret_bytes();
+        let identity = PrivateIdentity::from_secret_bytes(&secret);
+        secret.zeroize();
+        Ok(Self { identity })
+    }
+
+    async fn claim<C>(
+        &self,
+        controller: &mut FirstOwnerController<C>,
+        plan: ClaimPlan,
+    ) -> Result<ClaimOutcome, FirstOwnerError<C::Error>>
+    where
+        C: FirstOwnerExchange,
+    {
+        controller.claim(&self.identity, plan).await
+    }
+
+    async fn status<C>(
+        &self,
+        carrier: C,
+        node: NodeId,
+        counter: u64,
+    ) -> Result<VerifiedStatus, ControlClientError<C::Error>>
+    where
+        C: ControlExchange,
+    {
+        ControlClient::new(carrier, &self.identity, node)
+            .status(counter)
+            .await
+    }
+}
+
+/// A controller credential could not be derived or its signed status exchange failed.
+pub enum ControllerStatusError<E> {
+    Identity(IdentityError),
+    Status(ControlClientError<E>),
+}
+
+impl<E: fmt::Debug> fmt::Debug for ControllerStatusError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            // The identity error is never printed: it could describe key material.
+            Self::Identity(_) => f
+                .debug_tuple("ControllerStatusError")
+                .field(&"identity")
+                .finish(),
+            Self::Status(error) => f.debug_tuple("ControllerStatusError").field(error).finish(),
+        }
+    }
+}
+
+impl<E: fmt::Debug> fmt::Display for ControllerStatusError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Identity(_) => {
+                f.write_str("first-owner controller credential could not be derived")
+            }
+            Self::Status(error) => write!(f, "signed status exchange failed: {error}"),
+        }
+    }
+}
+
+impl<E> std::error::Error for ControllerStatusError<E> where E: fmt::Debug + 'static {}
+
+/// Ask one claimed board for its control status as the first-owner controller.
+///
+/// The scope selects the same controller identity that claimed the board, so the board's
+/// durable grant verifies the signature. `counter` is this controller's next unused outer
+/// counter; the caller persists it before the exchange, because the board may accept and
+/// journal a command whose reply is then lost.
+pub async fn first_owner_status<C>(
+    provider: &dyn IdentityProvider,
+    controller_scope: &[u8],
+    carrier: C,
+    node: NodeId,
+    counter: u64,
+) -> Result<VerifiedStatus, ControllerStatusError<C::Error>>
+where
+    C: ControlExchange,
+{
+    FirstOwnerCredential::derive(provider, controller_scope)
+        .map_err(ControllerStatusError::Identity)?
+        .status(carrier, node, counter)
+        .await
+        .map_err(ControllerStatusError::Status)
+}
+
+/// A controller credential could not be derived or its bounded claim workflow failed.
+pub enum FirstOwnerCredentialError<E> {
+    Identity(IdentityError),
+    Claim(FirstOwnerError<E>),
+}
+
+impl<E> fmt::Debug for FirstOwnerCredentialError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let kind = match self {
+            Self::Identity(_) => "identity",
+            Self::Claim(_) => "claim",
+        };
+        f.debug_tuple("FirstOwnerCredentialError")
+            .field(&kind)
+            .finish()
+    }
+}
+
+impl<E> fmt::Display for FirstOwnerCredentialError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Identity(_) => {
+                f.write_str("first-owner controller credential could not be derived")
+            }
+            Self::Claim(_) => f.write_str("first-owner claim workflow failed"),
+        }
+    }
+}
+
+impl<E> std::error::Error for FirstOwnerCredentialError<E> where E: fmt::Debug + 'static {}
+
+/// Return the public Reticulum address of a first-owner controller scope.
+///
+/// The scope's private credential remains inside Signalman. This is safe to
+/// print as an initialization receipt before any board carrier is opened.
+pub fn first_owner_controller_fingerprint(
+    provider: &dyn IdentityProvider,
+    controller_scope: &[u8],
+) -> Result<AddressHash, IdentityError> {
+    Ok(FirstOwnerCredential::derive(provider, controller_scope)?
+        .identity
+        .public()
+        .hash())
+}
+
+/// Claim one physically witnessed board with an application-owned controller scope.
+///
+/// The scope selects the controller identity but is not a station id. The private signer stays
+/// inside Signalman; Postilion receives only the portable public claim and its proof.
+pub async fn claim_first_owner<C>(
+    provider: &dyn IdentityProvider,
+    controller_scope: &[u8],
+    controller: &mut FirstOwnerController<C>,
+    plan: ClaimPlan,
+) -> Result<ClaimOutcome, FirstOwnerCredentialError<C::Error>>
+where
+    C: FirstOwnerExchange,
+{
+    FirstOwnerCredential::derive(provider, controller_scope)
+        .map_err(FirstOwnerCredentialError::Identity)?
+        .claim(controller, plan)
+        .await
+        .map_err(FirstOwnerCredentialError::Claim)
+}
 
 /// A Reticulum station credential derived for one sited device.
 ///
@@ -506,11 +678,96 @@ async fn watch_station_lease(lease: SitedStationLease, station: Arc<Mutex<Option
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+
     use pandect::{DeviceId, ensure_wallet_state};
     use personae::{InMemoryProvider, PersonaId};
+    use postilion::control::first_owner::v4_usb_claim_plan;
+    use radio_hand::control::{
+        ClaimResponse, FirstOwnerRequest, FirstOwnerResponse, FirstWriteStatus, NodeId,
+        PairEvidence, ResumeResponse,
+    };
+    use radio_hand::region::Region;
     use tempfile::tempdir;
 
     use super::*;
+
+    struct FirstOwnerScript {
+        replies: VecDeque<Result<FirstOwnerResponse, &'static str>>,
+        requests: Vec<FirstOwnerRequest>,
+    }
+
+    impl FirstOwnerScript {
+        fn new(
+            replies: impl IntoIterator<Item = Result<FirstOwnerResponse, &'static str>>,
+        ) -> Self {
+            Self {
+                replies: replies.into_iter().collect(),
+                requests: Vec::new(),
+            }
+        }
+    }
+
+    impl FirstOwnerExchange for FirstOwnerScript {
+        type Error = &'static str;
+
+        fn exchange(
+            &mut self,
+            request: FirstOwnerRequest,
+        ) -> impl std::future::Future<Output = Result<FirstOwnerResponse, Self::Error>> {
+            self.requests.push(request);
+            std::future::ready(self.replies.pop_front().expect("script reply"))
+        }
+    }
+
+    #[test]
+    fn controller_claims_through_a_carrier_without_exposing_or_reusing_station_identity() {
+        let provider = InMemoryProvider::from_seed([0x44; 32]);
+        let scope = b"first-owner-controller:west-wall";
+        let credential = FirstOwnerCredential::derive(&provider, scope).unwrap();
+        let station =
+            SitedStationCredential::derive_for_device(&provider, DeviceId::new()).unwrap();
+        let mut phy = postilion::profile(250_000);
+        phy.frequency_hz = 906_875_000;
+        phy.tx_power_dbm = 17;
+        let plan = v4_usb_claim_plan(Region::Us915, phy).unwrap();
+        let mut controller = FirstOwnerController::new(FirstOwnerScript::new([
+            Ok(FirstOwnerResponse::Inspect {
+                status: FirstWriteStatus {
+                    control: PairEvidence::Blank,
+                    pending: PairEvidence::Blank,
+                },
+                node: NodeId([0x22; 16]),
+                nonce: [0x51; 32],
+            }),
+            Ok(FirstOwnerResponse::Claim(ClaimResponse::Staged)),
+            Ok(FirstOwnerResponse::Resume(ResumeResponse::Committed)),
+        ]));
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
+        assert!(matches!(
+            runtime.block_on(claim_first_owner(&provider, scope, &mut controller, plan)),
+            Ok(ClaimOutcome::Committed)
+        ));
+
+        let script = controller.into_carrier();
+        assert!(matches!(script.requests[0], FirstOwnerRequest::Inspect));
+        let FirstOwnerRequest::Claim(claim) = &script.requests[1] else {
+            panic!("the credential must claim after a fresh inspection");
+        };
+        assert_eq!(
+            claim.claim().owner_public_identity(),
+            &credential.identity.public().to_public_bytes()
+        );
+        assert_ne!(
+            claim.claim().owner_public_identity(),
+            &station.public_identity().to_public_bytes()
+        );
+        assert!(matches!(script.requests[2], FirstOwnerRequest::Resume));
+    }
 
     #[test]
     fn one_persona_and_station_scope_keep_the_same_reticulum_address() {

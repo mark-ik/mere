@@ -62,34 +62,35 @@ pub fn load_or_create_auto_unlock_root(
     load_or_create_auto_unlock_root_impl(&path)
 }
 
+/// Load an existing local auto-unlock root without creating a file or directory.
+///
+/// This is for read-only consumers such as inspection and explicit claim setup.
+/// It returns `Ok(None)` when the root has not been initialized or when the
+/// current platform has no AutoOs backend.
+pub fn load_existing_auto_unlock_root(
+    path: impl Into<PathBuf>,
+) -> Result<Option<[u8; 32]>, IdentityError> {
+    let path = path.into();
+    if !path.exists() {
+        return Ok(None);
+    }
+    load_existing_auto_unlock_root_impl(&path)
+}
+
 #[cfg(not(windows))]
 fn load_or_create_auto_unlock_root_impl(_path: &Path) -> Result<Option<[u8; 32]>, IdentityError> {
+    Ok(None)
+}
+
+#[cfg(not(windows))]
+fn load_existing_auto_unlock_root_impl(_path: &Path) -> Result<Option<[u8; 32]>, IdentityError> {
     Ok(None)
 }
 
 #[cfg(windows)]
 fn load_or_create_auto_unlock_root_impl(path: &Path) -> Result<Option<[u8; 32]>, IdentityError> {
     if path.exists() {
-        let bytes = std::fs::read(path).map_err(|err| {
-            IdentityError::Backend(format!("read auto-unlock root {:?}: {err}", path))
-        })?;
-        let file: AutoUnlockKeyFile = serde_json::from_slice(&bytes).map_err(|err| {
-            IdentityError::Backend(format!("parse auto-unlock root {:?}: {err}", path))
-        })?;
-        if file.version != AUTO_UNLOCK_KEY_FILE_VERSION {
-            return Err(IdentityError::Backend(format!(
-                "unsupported auto-unlock root version {} at {:?}",
-                file.version, path
-            )));
-        }
-        let plaintext = dpapi_unprotect(&file.wrapped_key)?;
-        let root = <[u8; 32]>::try_from(plaintext.as_slice()).map_err(|_| {
-            IdentityError::Backend(format!(
-                "auto-unlock root {:?} did not decrypt to 32 bytes",
-                path
-            ))
-        })?;
-        return Ok(Some(root));
+        return load_existing_auto_unlock_root_impl(path);
     }
 
     if let Some(parent) = path.parent() {
@@ -106,6 +107,30 @@ fn load_or_create_auto_unlock_root_impl(path: &Path) -> Result<Option<[u8; 32]>,
         wrapped_key,
     };
     save_json_atomic(path, &file)?;
+    Ok(Some(root))
+}
+
+#[cfg(windows)]
+fn load_existing_auto_unlock_root_impl(path: &Path) -> Result<Option<[u8; 32]>, IdentityError> {
+    let bytes = std::fs::read(path).map_err(|err| {
+        IdentityError::Backend(format!("read auto-unlock root {:?}: {err}", path))
+    })?;
+    let file: AutoUnlockKeyFile = serde_json::from_slice(&bytes).map_err(|err| {
+        IdentityError::Backend(format!("parse auto-unlock root {:?}: {err}", path))
+    })?;
+    if file.version != AUTO_UNLOCK_KEY_FILE_VERSION {
+        return Err(IdentityError::Backend(format!(
+            "unsupported auto-unlock root version {} at {:?}",
+            file.version, path
+        )));
+    }
+    let plaintext = dpapi_unprotect(&file.wrapped_key)?;
+    let root = <[u8; 32]>::try_from(plaintext.as_slice()).map_err(|_| {
+        IdentityError::Backend(format!(
+            "auto-unlock root {:?} did not decrypt to 32 bytes",
+            path
+        ))
+    })?;
     Ok(Some(root))
 }
 
@@ -235,6 +260,21 @@ mod tests {
         let first = load_or_create_auto_unlock_root(&path).unwrap().unwrap();
         let second = load_or_create_auto_unlock_root(&path).unwrap().unwrap();
         assert_eq!(first, second);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn loading_existing_auto_unlock_root_never_initializes_it() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("vault-root.auto.json");
+        assert_eq!(load_existing_auto_unlock_root(&path).unwrap(), None);
+        assert!(!path.exists());
+
+        let created = load_or_create_auto_unlock_root(&path).unwrap().unwrap();
+        assert_eq!(
+            load_existing_auto_unlock_root(&path).unwrap(),
+            Some(created)
+        );
     }
 
     #[cfg(not(windows))]
