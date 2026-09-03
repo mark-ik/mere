@@ -1106,10 +1106,18 @@ composed. Apple Silicon iMac `Mayolas-iMac` (M4, macOS 26.5.1, Rust 1.97.1):
 `hw.memsize` 17,179,869,184 read through `sysctlbyname`; the same 62 + 5 + 2
 green, the trainer receipt at 0/6 vs 4/6 in 5.9 s; the GPU receipt took the
 refusing branch on the metal backend with the same account, since wgpu classes
-Apple GPUs as integrated. The forcing fixture therefore reaches the same
-tallies on three operating systems and two CPU architectures; that is an
-observation, not a cross-device bit claim, which the trainer still does not
-make.
+Apple GPUs as integrated. Intel iMac `Q-PC` (x86_64, macOS 15.7.9, Rust
+1.97.1, 32 GiB): `hw.memsize` read; the same 62 + 5 + 2 green, the CPU
+trainer receipt at 0/6 vs 4/6 in 13.5 s; and the GPU receipt took the
+*training* branch, because that machine carries a discrete AMD Radeon Pro
+Vega 56 — probe and lane both reported it as `(metal, discrete adapter)`, the
+lane composed on it, and the adapter trained to 0/6 vs 4/6 in 88.0 s. That is
+the second discrete-GPU training receipt, on a second backend (metal after
+vulkan) and a second vendor (AMD after NVIDIA). The forcing fixture therefore
+reaches the same tallies on three operating systems, two CPU architectures,
+and three compute devices (ndarray, an NVIDIA GPU over vulkan, an AMD GPU
+over metal); that is an observation, not a cross-device bit claim, which the
+trainer still does not make.
 
 ### Components founded, 2026-09-02
 
