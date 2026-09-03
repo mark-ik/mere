@@ -426,7 +426,8 @@ keeping the proposals-not-truth invariant. **Shape:** flat under the port, as
 `ports/distillery/alembic` (moved) and `ports/distillery/athanor` (founded);
 no intermediate `ports/` or `crates/` directory. **Names:** `mere-alembic` /
 `alembic` unchanged; `mere-athanor` / `athanor`, free on crates.io at the
-ruling and claimed by a real publish of the founding reservation.
+ruling and claimed the same day: `mere-athanor 0.0.1` published from mere
+`c0216cad`.
 
 ## 8. Capabilities that need exposure, not another port
 
