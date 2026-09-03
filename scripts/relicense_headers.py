@@ -344,6 +344,13 @@ def main():
             capture_output=True, text=True, check=True,
         ).stdout.splitlines()
         dirty = [l for l in status if Path(l[3:].strip().strip('"')).suffix in COMMENT]
+        if args.only:
+            # A run limited to a prefix writes nothing outside it, so a dirty
+            # source elsewhere is not its concern; this is what lets a
+            # two-class repository (Servo-derived bare, Mark's own with the
+            # copyright line) be swept in two runs before one commit.
+            dirty = [l for l in dirty
+                     if Path(l[3:].strip().strip('"')).as_posix().startswith(args.only.replace("\\", "/"))]
         if dirty:
             print("refusing --apply: source files have uncommitted changes (invariant 7):")
             print("\n".join(dirty))

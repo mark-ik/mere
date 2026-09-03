@@ -153,7 +153,7 @@ sweep.
 |---|---|---|---|
 | mere | MIT OR Apache-2.0 (2 probe crates and signalman MPL-2.0) | MPL-2.0 | P1 — landed 2026-08-27 |
 | genet | MPL-2.0 default; ~25 own and cambium manifests permissive | MPL-2.0 throughout, no exceptions | P2 — landed 2026-09-03 |
-| netrender | MPL-2.0, block-form headers | MPL-2.0, shape C | P7 — in progress 2026-09-03 |
+| netrender | MPL-2.0, block-form headers | MPL-2.0, shape C | P7 — landed 2026-09-03 (two WebRender-derived files bare, the rest with the copyright line) |
 | retinue household | MPL-2.0, 383 of 388 files headerless | MPL-2.0, shape C | P7, first — waits on its lane's dirty tree |
 | mesocosm, paredros | MPL-2.0, shape A headers | MPL-2.0, shape C | P7 + the promoted-library clause — headers landed 2026-09-03; the clause and the single-`LICENSE` layout pending, with `paredros-identity`'s grant needing a ruling |
 | isometry | MIT OR Apache-2.0, edition 2021 | MPL-2.0 (edition separate) | P3 — waits on its lane's dirty tree |
