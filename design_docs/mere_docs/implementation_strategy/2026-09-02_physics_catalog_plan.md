@@ -1,7 +1,7 @@
 # Physics Catalog Plan
 
 **Date:** 2026-09-02
-**Status:** in progress (P1 landed 2026-09-02, P1b the petgraph sources and P2's web half 2026-09-03; P2's native half waits on the picker decision, then P3).
+**Status:** in progress (P1 landed 2026-09-02; P1b the petgraph sources and P2 on both hosts 2026-09-03; P3 next).
 **Scope:** A catalog of *distinct physics layout laws* — dynamical systems
 over the graph's bodies that produce different layouts because they are
 different physics — as a lever beside the arrangement catalog, plus the
@@ -411,6 +411,29 @@ and the native host shows the same by hand.
 - 2026-09-03 (P2): `Canvas::layout_stats` runs a BFS from every node per
   frame for `stretch`; trivial on the fixture, `O(n·m)` on a large graph.
   Worth gating on node count if the web host ever carries thousands.
+- 2026-09-03 (P2, native): the native Graphshell is **turnstone**; the
+  binary called `graphshell_native_host` is the browser extension's
+  native-messaging relay, not a windowed app. Turnstone's commands are its
+  palette `Action`s (self-drive scenarios fire them by label with `act`),
+  its panes are registered definitions over a renderer, and its settings
+  pane already renders real choice and toggle controls from cambium's
+  `setting_row`. No native surface carried an arrangement picker before
+  this; the Arrange pane is the first.
+- 2026-09-03 (P2, native): turnstone pins mere by git rev. Between its pin
+  (`541f5ad7`) and origin/main (`8bb15d78`) the other lane moved mere's
+  genet pin 72 commits (`eff0cb6` → `b78e2b9`): the document lanes, the
+  knot editor host, Pelt and the surface API left genet for mere. Pinning
+  turnstone at `8bb15d78` therefore splits the genet lineage (cambium,
+  workbench, the scripted DOM twice in the graph), and matching its genet
+  pin runs into the moved crates — the other lane's migration, not this
+  plan's. The way through: the other lane rebased this plan's P2 commit
+  onto their work as `ca47d6ef`, four commits *before* the genet bump, so
+  turnstone pins mere at `ca47d6ef` — the catalog on the old lineage. The
+  catch-up to `b78e2b9` stays with the migration lane.
+- 2026-09-03 (P2, native): this plan's mere commits were rebased by the
+  other lane (`7f4bb8c7` → `ca47d6ef`, and P1/P1b likewise); the plan's
+  earlier hashes name commits that no longer exist on main. Subjects are
+  the durable handle.
 
 ## 5. Decisions
 
@@ -462,3 +485,20 @@ inference carried.
   explosion); `Hold` joins the laws. seiche 76/76, canvas 193/193. Receipt:
   `Code/testing/mere/physics_p2_receipt.md`. Native half open on the
   picker decision.
+- 2026-09-03: Mark ruled the native half: turnstone, pin bumped, an
+  **Arrange pane** (arrangement + physics + overlays + sources + profile on
+  the settings-row controls), and every physics choice as a palette row.
+  Landed in turnstone: `Action::{SetPhysicsLaw, SetPhysicsOverlay,
+  SetPhysicsKindSource, SetPhysicsMassSource, SetPhysicsDepthSource,
+  ApplyPhysicsProfile}` with palette rows derived from the canvas catalogs
+  (`Physics:` ×11, `Overlay on/off:` ×16, `Profile:` ×18, `Kinds:` ×5,
+  `Mass:` ×2, `Depth:` ×3, after the Layout group); `arrange_pane.rs`
+  (kind `turnstone.arrange`, renderer `Arrange`, palette "Open Arrange
+  pane"), whose applied rows leave as `ArrangeIntent`s the shell lowers to
+  the same actions; `ViewIntentV1` carries the law, overlays and three
+  sources beside the arrangement, saved with the session and re-applied on
+  open; the observe snapshot's `arrange_rows` feed `assert row`;
+  `scenarios/physics_native.scn` is the receipt: `RESULT ok`, two
+  captures, turnstone 30/30 in the targeted tests. Native receipt notes in
+  `Code/testing/mere/physics_p2_receipt.md`. P2 is complete on both hosts;
+  P3 next.
