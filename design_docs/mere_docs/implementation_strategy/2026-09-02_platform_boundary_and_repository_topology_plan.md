@@ -1419,3 +1419,38 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   **Still open after this.** Nothing from the landing's list. P3's other half —
   Cambium and Workbench, with no genet consumer left — is in flight in genet as
   this is written, and Pelt's genet pins become workspace paths in that motion.
+
+- 2026-09-03: **P2 assessment, second pass, after Pelt left.** The cluster
+  is now a leaf. `cargo tree -i` over the nine Cambium members (`cambium`,
+  `cambium-rootstock`, `cambium-winit`, `cambium-winit-a11y`,
+  `cambium-genet-winit-host`, `cambium-genet-web-host`, `cambium-nematic`,
+  `meristem`, `sprigging`), `workbench` and `mere-surface-api` reports no
+  dependent in genet outside the cluster itself, so the eleven can leave in
+  one commit without breaking any member that stays, and invariant 1 holds
+  at that commit by construction. History travels the way Pelt's did:
+  path-limited `git fast-export` from the last commit that has the code,
+  prefixes rewritten in the stream to the landing paths, trees verified
+  identical; the July `cambium-history-probe` branch (328 commits) is
+  superseded, since its tip predates three Cambium commits and the export
+  takes seconds. Landing shape as proposed and ruled: the nine under
+  `crates/cambium/`, Workbench at `crates/cambium/workbench`,
+  `mere-surface-api` at `crates/system/surface-api`, the scene family
+  (`sceno`, `scenomise`, `scenotime`) from `crates/scenograph/` to
+  `crates/cambium/scenes/`, and the `scenograph` facade crate deleted: it
+  has no consumer left in mere, and its one substantive file, the 528-line
+  solver registry behind `sceno::Arrangement::Custom`, moves into
+  `scenomise`, which already owns the families and the solve path. The
+  published `scenograph 0.0.4` name stays held for the editor. Cambium's own
+  documents (`components/cambium/docs/`, with its history and receipts)
+  travel inside the exported tree; the two live plans in genet's
+  `design_docs/` (`2026-08-31_workbench_component_plan.md`,
+  `2026-09-03_host_ui_zoom_plan.md`) and their index entries move to mere's
+  `design_docs/` in the same change, per the plan's "docs with their code";
+  the older engine-era notes in genet's `docs/` stay where they are and are
+  cited by path. On the genet side the witness loses `mere-surface-api` from
+  its leaf table and `cambium*` from every positive control, so the ortet
+  cone's prefix half of `is_ortet_forbidden` gets a direct unit assertion in
+  place of a live crate. Blocker at assessment time: none. The Cambium lane
+  that was dirty all day committed its work at 14:56 (two commits, unpushed);
+  genet's tree is clean, and those two commits ride to origin with the
+  removal.
