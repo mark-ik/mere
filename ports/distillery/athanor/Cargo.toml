@@ -1,0 +1,19 @@
+[package]
+name = "mere-athanor"
+version = "0.0.1"
+edition.workspace = true
+license = "MPL-2.0"
+repository.workspace = true
+description = "Founding reservation. Athanor is the distillation furnace of Distillery, the Mere platform's works: the authority half of Alembic's workshop — what a furnace pass is, what it may propose (distillation, cleanup, facet proposals), and the grants, runs, petitions, and revocation over bounded actors. It proposes and never becomes graph-truth authority; Djinn schedules it as one resident service."
+readme = "README.md"
+keywords = ["memory", "agents", "distillation", "automation", "local-first"]
+categories = ["development-tools"]
+
+[lib]
+name = "athanor"
+path = "src/lib.rs"
+
+[dependencies]
+# Deliberately empty, as for the other reservation stubs (alembic, chatelaine,
+# insigne). Dependencies arrive with the first furnace pass that consumes
+# them, each with a version, so the reservation stays publishable.

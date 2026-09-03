@@ -182,9 +182,10 @@ existing extraction triggers.
 ### Consolidate or clarify
 
 - Keep `knot-editor` and retire duplicate Knot authority from Mere.
-- Alembic folds into Distillery as a core component crate (ruled 2026-09-02;
-  the suite census §7.4 carries the ruling and what it leaves open). A
-  Mere-internal move; the published `mere-alembic` name can survive it.
+- Alembic folds into Distillery as a core component crate, and Athanor with
+  it (ruled and executed 2026-09-02; the suite census §7.4 carries the ruling
+  and the argument). Flat under the port as `ports/distillery/{alembic,athanor}`;
+  `mere-alembic` unchanged, `mere-athanor` founded.
 - Treat `sonance` as a dormant name reservation while implementation remains
   in Mora: archive the placeholder or fold its notice into Mora's docs.
 - `anise` is currently an organization fork used by an exact Turquet pin. Pin

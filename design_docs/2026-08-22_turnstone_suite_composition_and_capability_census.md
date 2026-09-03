@@ -412,12 +412,21 @@ them. What carries over unchanged: the `recall` feature as the embeddable
 memory half; the two-host receipt as the founding gate; and the package
 identity `mere-alembic` / `[lib] name = "alembic"`, which a move inside
 Distillery's tree does not need to change (package identity is not a reason to
-preserve the wrong boundary, per the boundary plan). Left open by the
-re-ruling: whether the authority half — Athanor, agent grants, runs,
-petitions, revocation — still lives with Djinn as the 08-22 text placed it, or
-follows the component into Distillery; and the mechanical shape of the move
-(`ports/alembic` into Distillery's tree, and the Distillery v0 plan gaining
-the component as a lane).
+preserve the wrong boundary, per the boundary plan). Both questions the
+re-ruling left open were ruled and executed the same day. **Athanor goes to
+Distillery**, the domain, not Djinn, the resident: the argument for Djinn was
+lifetime and scheduling ("Djinn contains the scheduler; Athanor is one
+scheduled service"), and Djinn itself already separated ownership from
+hosting for the works — `resident_distillery` composes Distillery's authority
+and invents nothing — so the same precedent puts Athanor's authority (what a
+furnace pass is, what it may propose, the grants, runs, petitions, and
+revocation over bounded actors) in Distillery, with Djinn scheduling it and
+keeping the proposals-not-truth invariant. **Shape:** flat under the port, as
+`ports/graphshell/web` and `ports/knot/desktop` already are —
+`ports/distillery/alembic` (moved) and `ports/distillery/athanor` (founded);
+no intermediate `ports/` or `crates/` directory. **Names:** `mere-alembic` /
+`alembic` unchanged; `mere-athanor` / `athanor`, free on crates.io at the
+ruling and claimed by a real publish of the founding reservation.
 
 ## 8. Capabilities that need exposure, not another port
 

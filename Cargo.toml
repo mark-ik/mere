@@ -101,7 +101,8 @@ members = [
     "ports/castellan",
     "ports/distillery",
     "ports/moot",
-    "ports/alembic",
+    "ports/distillery/alembic",
+    "ports/distillery/athanor",
     "ports/gazette",
 ]
 exclude = [
@@ -210,7 +211,8 @@ moot = { package = "mere-moot", version = "0.0.1", path = "ports/moot" }
 # agent workshop over them, Athanor as its first actor. Founding reservation,
 # no implementation. Package is `mere-alembic`; crates.io `alembic` is the
 # Linux Foundation VFX binding.
-alembic = { package = "mere-alembic", version = "0.0.1", path = "ports/alembic" }
+alembic = { package = "mere-alembic", version = "0.0.1", path = "ports/distillery/alembic" }
+athanor = { package = "mere-athanor", version = "0.0.1", path = "ports/distillery/athanor" }
 # Shared pins the graphshell crates inherit.
 base64 = "0.22"
 blake3 = "1"

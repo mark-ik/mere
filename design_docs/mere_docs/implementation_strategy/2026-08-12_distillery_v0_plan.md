@@ -1111,6 +1111,18 @@ tallies on three operating systems and two CPU architectures; that is an
 observation, not a cross-device bit claim, which the trainer still does not
 make.
 
+### Components founded, 2026-09-02
+
+Alembic (the recall and workshop component) moved from `ports/alembic` to
+`ports/distillery/alembic`, and Athanor (its authority half, the furnace) was
+founded at `ports/distillery/athanor` as `mere-athanor`, on the suite census
+§7.4 re-ruling and the same-day ruling that the authority lives with the
+domain rather than the resident. Both are reservation stubs with no
+dependencies; neither opens a lane in this plan. When Alembic emits runs they
+are one more job kind on the board, and the
+[projection walk plan](2026-09-02_distillery_projection_walk_plan.md) carries
+them into the board's Chronicle as such.
+
 ### Done conditions
 
 An installed Distillery starts a resident on this machine from stated policy,
