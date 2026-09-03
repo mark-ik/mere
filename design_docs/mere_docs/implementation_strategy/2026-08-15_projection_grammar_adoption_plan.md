@@ -1,11 +1,16 @@
 # Projection Grammar Adoption Plan
 
 **Date**: 2026-08-15
-**Status (reconciled 2026-08-25)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
+**Status (reconciled 2026-09-01)**: A0, A6, A1, C1, B1, B2, B3, C3, A3 stage
 one, A4+C2, and A2 are closed. Turnstone `648bf19` is B1's definitive close,
 including routed screen-reader interaction. The Projection Receipts Plan's
 coordinated spatial/Matrix views close A2's resolution half. A3 stage two and
-A5 retain their entrance gates. FT7 is closed through the local, admitted
+A5 retain their entrance gates. A3 stage two's gate was sharpened 2026-09-01
+against C4a: it waits for a remote viewer with a local camera over a served
+scene, which C4b is not; its fact-transport shape is ruled (evaluation must
+work without the host facts; carrying them is the stretch). A5 waits for a named product consumer to open
+its first proof; the promotion suite begins with that proof and is an evidence
+harness rather than a consumer. FT7 is closed through the local, admitted
 remote, and frozen Matrix parity receipt. FT8 is closed through Retinue
 Signalman's mixed-realization receipt at `8cea8f9`.
 The Scenograph family is now on an unpublished 0.0.4 development line with
@@ -25,9 +30,20 @@ scene contract note
 (`design_docs/scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md`),
 [multi_window_plan](2026-06-10_multi_window_plan.md),
 [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md),
-[accesskit_screen_reader_verification](2026-06-09_accesskit_screen_reader_verification.md).
+[accesskit_screen_reader_verification](../../archive_docs/2026-09-02_retired_plans/2026-06-09_accesskit_screen_reader_verification.md).
 
 ## Ruling context
+
+
+### Workbench component adoption (2026-08-31)
+
+Platen now names its graph-specific split/tab cache `TileLayout`; `Workbench` is a compatibility
+alias. Its structural AccessKit projection lives at
+`platen::accessibility::project_tile_layout`, beside the layout it reads. The old Mere
+`workbench` package is retired. Mere and Graphshell consume Genet's reusable `workbench` package
+at immutable revision `eff0cb6df4834ecce9ac552a055c1c459befa7c3`. The component boundary and
+remaining headed-host receipts are in
+`genet/design_docs/2026-08-31_workbench_component_plan.md`.
 
 The report reviewed the catalog against eleven external systems (Vega-Lite,
 Draco, SetCoLa, Gemini, GoTree, ATOM; then Mosaic, Gosling, Penrose, Bluefish,
@@ -108,7 +124,7 @@ Validation: catalog cites all eleven; DOC_README updated.
 Done when: a reader of the catalog can find every system the report verified
 without leaving the repo.
 
-**A6. The placement seam (numbered late, sequenced first).**
+**A6. The placement seam (numbered late, sequenced first) - CLOSED 2026-08-16.**
 Context: mer3ly consumes the stack along two disjoint paths. The portable path
 builds a `Score` with `Placement::Ordinal` and solves it; the live path runs a
 seiche simulation with `pin_node`, three-way mobility, and backdrops. `Score`
@@ -187,7 +203,7 @@ trip is deterministic; clause removal restores the unfiltered reading.
 Done when: brush, filter, and focus are named, serialized citizens rather
 than host-only state.
 
-**A3. LOD rungs as declarative conditions - STAGE ONE LANDED 2026-08-19 (via P3b); stage two stays gated.**
+**A3. LOD rungs as declarative conditions - STAGE ONE LANDED 2026-08-19 (via P3b); stage two stays gated, gate sharpened 2026-09-01.**
 Context: `ScoreItem.representation` is a pre-selected rung; the conditions
 that select it live in host code, so a remote client cannot re-select on its
 own zoom and a static realization cannot state why a rung was chosen.
@@ -198,9 +214,16 @@ conditions are realization-dependent, data-space conditions are
 reading-dependent.
 Tasks: stage one, conditions as data in cartography's representation
 profiles (host-side registry; the P3b card-to-glyph traversal is the named
-consumer). Stage two, portable only when a remote consumer needs client-side
-re-selection: rung conditions travel beside the score, and a static
-realization evaluates them at its declared zoom deterministically.
+consumer). Stage two, portable only when a remote viewer re-selects on a
+camera of its own: rung conditions travel beside the score, and a static
+realization evaluates them at its declared zoom deterministically. Stage two
+is larger than the ladder alone: `ScreenWidth`, `ScreenHeight` and `ZoomLevel`
+are viewer facts, but `Recency` and `Focused` are host facts the wire does not
+carry (recency derives from `graph.node_last_visited` in
+`cartography/src/spiral_score.rs`), so either they travel per item or the
+ladder is split-evaluated. Ruled 2026-09-01: both, in that order of
+obligation; see
+[Stage-two fact transport](#resolved-ruling-and-open-question).
 Forcing consumer: P3b (the recorded remaining half of P3: representation
 degrades card to glyph with recency and zoom, focus stays live). Mer3ly does
 not force this one: it exports `representation_registry()` to JavaScript for
@@ -212,6 +235,20 @@ selected rungs, deterministic; a hysteresis test shows a rung boundary does
 not flicker under small zoom oscillation.
 Stage-one done when: the representation ladder is registry data and one live
 host selects from it using declared view facts rather than a hardcoded branch.
+Entrance gate (sharpened 2026-09-01): a remote viewer with a local camera
+over a served scene. The earlier wording, "a remote re-selection consumer",
+made C4a's browser peer look like a candidate; it is not. The browser's
+remote view has no camera (`ports/graphshell/src/web.rs` `zoom` and `pan`
+return unless the session is local; `remote_scene` fits the served bounds at
+scale <= 1.0), the served rung is fixed by the endpoint
+(`MereHost::build_snapshot` hardcodes `Representation::Card` at
+`ports/graphshell/src/mere_host.rs`), and the client's own resolution is
+capability-based offer choice within that rung, the presentation plane the
+remote projection host plan ruled in §4.3 and landed at G1. C4b's
+done-conditions are keyboard and accessibility-tree checks on the embedded
+and full-page surfaces; they add no camera. The gate opens the moment a
+served scene is composed on the local canvas's camera, which the remote
+projection host plan §1 permits as curation truth.
 Stage-two done when: the ladder travels beside the score because a second host
 needs to re-select locally, and that host honors it without porting Mere's
 selection code.
@@ -241,10 +278,13 @@ stays out of arrangement types (the catalog's motion taxonomy holds).
 Done when: a projection switch reads as a staged transition, specified as
 data, on at least one consumer, with snapping still the default elsewhere.
 
-**A5. Gap proofs adopt named anatomies (gated on the promotion suite).**
-Context: the catalog's first promotion suite (one heterogeneous fixture as
-orrery, matrix, Cartesian chart, hierarchy, schematic) will force contract
-material. The report's job was to make sure none of it is invented fresh.
+**A5. Gap proofs adopt named anatomies (gated on a named first proof consumer).**
+Context: the catalog's promotion suite is an evidence harness, not a consumer.
+It begins when a named product needs one of these proofs. Reusing one
+heterogeneous fixture as orrery, matrix, Cartesian chart, hierarchy, and
+schematic then tests whether the resulting contract material composes beyond
+that first ask. The report's job was to make sure none of that material is
+invented fresh.
 Tasks, each strictly behind its proof:
 - Chart proof (gap 1): scales, axes, legends filled by rule with derivation
   recoverable, per Vega-Lite; the unit/aggregate distinction per ATOM ("a bar
@@ -262,9 +302,16 @@ Tasks, each strictly behind its proof:
 - Every proof: an accessible static realization in the receipt (B1 defines
   the shape). Read GoFish in full before the facet and flow proofs; it is the
   chart-side proof of the catalog's central bet.
+Forcing consumer: unassigned. Entrance gate: a named product consumer needs
+one proof strongly enough to state its task, source facts, interaction, and
+accessible output. Found the suite around that proof. Any portable addition
+still needs the catalog's second heterogeneous consumer; the other suite views
+do not count as substitutes merely because they share a fixture.
 Validation: per the catalog's promotion checklist, unchanged.
-Done when: each gap's contract addition cites the anatomy it lifted and the
-proof that forced it.
+Per-proof done when: the contract addition cites the anatomy it lifted, the
+first proof that forced it, and the second heterogeneous consumer that proves
+it portable. A5 stays open until every A5 proof family is either promoted
+through that evidence or ruled unnecessary by a forcing proof.
 
 ### Track B: genet (realization receipts)
 
@@ -291,12 +338,14 @@ DOM lane; verify with the AccessKit lane precedent
 (accesskit_screen_reader_verification, 2026-06-09) and a genet-probe scenario
 asserting the semantic tree (apps self-drive via genet-probe; never synthetic
 OS input).
-Forcing consumer: the promotion suite itself; every proof's receipt cites this
-shape. Mer3ly is the standing argument for it: its sandbox is JavaScript-only,
-shipping `data-graph-interface` hidden with a runtime-built node list and a
-no-script status reading "Graphshell sandbox not initialized", so the site
-serves accessibility by rendering an entirely separate authority-derived static
-index instead. That workaround is what B1 retires.
+Forcing consumers: Mer3ly's shipping accessibility gap opened the static form,
+and Turnstone `648bf19` supplied the definitive headed traversal and routed
+interaction close. The promotion suite reuses this receipt shape; it is the
+harness that made the need visible, not a substitute consumer. Mer3ly's sandbox
+was JavaScript-only, shipping `data-graph-interface` hidden with a runtime-built
+node list and a no-script status reading "Graphshell sandbox not initialized",
+so the site served accessibility by rendering an entirely separate
+authority-derived static index instead. That workaround is what B1 retires.
 Validation: a screen-reader traversal of the static projection enumerates
 instances and relations with names; a probe scenario asserts structure
 deterministically; the same scene still produces its interactive realization.
@@ -407,8 +456,8 @@ Closed: **A0**, **A6**, **A1**, **C1**, **B1**, **B2**, **B3**, **C3**, **A2**,
 Turnstone `648bf19` closes B1's readable and routed-interaction receipts.
 
 The remaining implementation targets keep their entrance gates. **A3 stage
-two** waits for a remote re-selection consumer. **A5** stays behind the
-promotion suite.
+two** waits for a remote re-selection consumer. **A5** waits for a named first
+proof consumer; the promotion suite is founded with that proof.
 
 Non-goals, restated from the governing docs and the report: no intent
 vocabulary in sceno (D1 stands); no global nonconvex solver
@@ -418,9 +467,9 @@ its proof); no new grammar DSL (the score is the spec; the report's
 what-a-spec-means table describes meanings the score may adopt, not syntaxes
 to build).
 
-## Open rulings
+## Resolved ruling and open question
 
-**The site's wire as an index.** Mark's framing, 2026-08-16: the wire has its
+**The site's wire as an index - ruled 2026-08-16.** Mark's framing, 2026-08-16: the wire has its
 own utility as an index, and that may be a better way to think about it than
 promotion. The argument in its favor is already in the code. `score.generation`
 is derived from the authority's SHA-256, so a score is a pure function of its
@@ -440,13 +489,85 @@ with chirograph the fallback; checkability (`expects.generation`) is required in
 v1. The [scene citation index brief](../research/2026-08-16_scene_citation_index_brief.md)
 holds the reasoning.
 
-**Apps embedded in the site.** Mark, 2026-08-16: if he could embed full
+**Apps embedded in the site - ruled 2026-09-01, two sites, two answers.** Mark, 2026-08-16: if he could embed full
 versions of all his apps in the site, he would. That is a larger scope question
 than this plan carries, but it bears on the index ruling directly. An index is
 exactly the addressing an embedded app needs for a deep link, and under that
 reading authority-grade consumption stops being one site consuming one stack
 and becomes the site hosting the family. Recorded here so the index question is
 not settled without it.
+Ruled 2026-09-01. There are two sites and the answer differs. For
+**merelyllc.com**, the company site: it hosts Graphshell embeds, and every
+other application reaches it as a served projection through Graphshell, which
+is the remote projection host plan's product ruling (§1) applied; shelfmark is
+the deep link, C4b of the browser WebRTC carrier plan is the embed component,
+and C5 public rendezvous is what lets a visitor reach a device. For
+**mer3ly.net**: full versions of the applications embedded in the site as
+their own browser builds, the site hosting the family. Forced to one answer
+for both, the second wins. Refined the same day: the first of those
+applications is Graphshell, and its job on mer3ly.net is to **supersede the
+site's own canvas** (the seiche sandbox the consumer survey found consuming
+the stack along its second, non-portable path) and to **serve as the site
+index** beside everything else it does. That reading joins the two rulings
+above: shelfmark is already the index layer, and Graphshell as the site's
+canvas is the thing that reads it. It also answers the prover-or-demand
+question raised in Progress for mer3ly's own case: once Graphshell is the
+site's index, the graph view stops being a stress-test toy and becomes the
+site's navigation, which is a product pull. The mer3ly.net direction is a
+new objective, not a target in this plan: it needs its own assessment,
+Graphshell-supersedes-the-canvas first and one per further application,
+since each has its own browser story. Nothing in the ruled scope of this
+plan starts it.
+
+**Stage-two fact transport - ruled 2026-09-01.** Found 2026-09-01 while testing C4b
+against A3's gate. `RepresentationLadder::select` evaluates five facts;
+three are the viewer's (`ScreenWidth`, `ScreenHeight`, `ZoomLevel`) and two
+are the host's (`Recency`, `Focused`), and neither the score nor the scene
+carries the host pair. When stage two opens, one of two shapes has to be
+chosen: the host pair travels per item beside the ladder, or the ladder is
+split-evaluated, host clauses resolved before serving and viewer clauses at
+the viewer. The choice fixes what a static realization can claim about why a
+rung was chosen, so it is ruled before the consumer exists, not under it.
+Ruled: not a choice between the two. **Evaluation without the host facts is
+the baseline obligation**: a viewer given a ladder and no `Recency` or
+`Focused` must still select a rung, so the host's clauses resolve to a
+per-item ceiling before serving and the viewer evaluates the rest. **Carrying
+the facts is the stretch**: a host may disclose them per item, and a viewer
+that receives them evaluates the full ladder. Disclosure is therefore never
+required for the ladder to work, which is what makes it a host's choice
+rather than a wire obligation. Design consequence for stage two: a condition
+whose fact is absent must have a defined result (the ceiling stands in for
+the host clauses; an absent viewer fact is the existing non-finite path,
+which never selects), and a static realization states whichever half it had.
+The ladder types move out of cartography (they depend only on
+`sceno::Representation`) when stage two opens. `ProjectedItem.channels` is
+the natural carrier for the disclosed pair if the stretch is taken; its doc
+already reserves it for host-side signals a remote viewer cannot read.
+
+**Served endpoint selects at a declared zoom - ruled and landed 2026-09-01.** Found the
+same day: `MereHost::local_request` builds the offer's score through the
+strategy at 1280 x 720, zoom 1.0, no extents, so the ladder's Card rung fails
+`ScreenWidth > 0` and every item scores Glyph, while `build_snapshot`
+hardcodes every item as Card at 240 x 112. The offer and the snapshot
+disagree on every item; nothing breaks because endpoints ignore the request
+score for shape, but the wire carries two answers. Ruled: the served snapshot
+selects from the ladder at declared zoom 1.0 with the served footprint as the
+measured extent, and the hardcode goes. That makes stage one's "one live host
+selects from it" true of the product endpoint, and the offer and snapshot
+agree. A3 stage-one task; the landing is recorded in Progress.
+
+**What mer3ly is, clear-eyed - recorded 2026-09-01.** Mark's framing when
+ruling the two 2026-08-16 leftovers below: the graph view of an index of his
+own site is a toy, and a fine one, whose purpose is stress-testing an embedded
+canvas. There are zero consumers for sharing how people arrange it, and no
+need for any. The feature would have real utility over a real dataset, which
+needs other embeds and other data than descriptions of his GitHub repositories.
+Recorded beside the 2026-08-16 consumer ruling above because the two must be
+read together: mer3ly is live, public, pinned, and the shipping prover of the
+receipts plan, and that is what makes it authority-grade; what it is not is
+evidence of product demand for the features its receipts prove. Whether that
+qualifies the consumer ruling's "its asks open gates" is not settled here; it
+is raised in Progress for Mark.
 
 ## Progress
 
@@ -905,3 +1026,126 @@ not settled without it.
   reused Cambium's existing `graph_canvas`; it did not force a generic
   scene-hosting abstraction or keyboard-navigable Cambium Matrix. A3 stage two
   and A5 remain gated by their own consumer rules.
+- 2026-08-29: **governing documents reconciled against landed code and the
+  promotion rule** at Mere `caf19a014766ae08e3231d9963d5edfaec945dd7`. The
+  catalog now describes Score v4's actual arrangement surface, distinguishes
+  C3's closed minimum backdrop contract from richer raster and scalar field
+  work, and states that the promotion suite is an evidence harness rather than
+  a forcing consumer. A5 now waits for a named first proof consumer and still
+  requires a second heterogeneous consumer for every portable addition. The
+  shelfmark/index ruling is labeled resolved; the embedded-app question
+  remains open.
+- 2026-08-31: **Graphshell Projection Editor component and first authoring
+  loop landed through Mere `77369f6f0c03b301c398ad65107114080c4ba630`.** The
+  host-neutral `ports/graphshell/src/projection_editor.rs` now models source
+  and domain binding, reading, encoding, arrangement, interaction,
+  appearance/realization, and provenance as an editable definition with
+  field-level validation, panel taxonomy, reducer actions, deterministic JSON,
+  and a sink-only save boundary. Its seven tools are `workbench::Tile`s in an
+  open Graphshell content lane, so selection and typed tearout use the shared
+  reducer without granting graph or endpoint authority. A focused standalone
+  cross-repo harness passed eight tests, including Platen projection, editor
+  activation, tearout custody, validation, provenance, serialization, and sink
+  refusal. The standalone web manifest now restates its inherited immutable
+  Genet patches, and the host `x86_64-pc-windows-msvc` cargo check passes
+  offline with the immutable G1 Genet revision. G1's native-only `fontsan`
+  policy closes the prior C++/WASI sysroot blocker for the wasm dependency
+  cone. The standalone wasm build now passes with an isolated target and the
+  matching `wasm-bindgen 0.2.126` package is generated under the ignored web
+  package directory. The headed Graphshell browser receipt is now green:
+  localhost reported title `GRAPHSHELL H3 READY` and `ready=true`; the editor
+  opened the source panel, authored `local-workbench-receipt`,
+  `woodshed.practice`, `fixture.projection/workbench`, `practice_title`,
+  `tempo`/`difficulty`, `grid.default`/vertical/24, `canvas.points`, title
+  `Workbench projection receipt`, and provenance
+  `Projection Editor receipt` / `workbench-w4` / `Saved and reloaded in the Graphshell browser receipt`. The deterministic preview was `Workbench projection receipt · read nodes by practice_title · grid.default · x=tempo y=difficulty · canvas.points`. Save reported `saveCount=1`,
+  `validation=valid`, `errors=0`, and `Saved · workbench-w4 · 1 save(s)`;
+  after mutation, reload restored every authored field and reported
+  `Reloaded · graphshell-reference · workbench-w4`. The bound stripped artifact
+  is 34,679,440 bytes with SHA256
+  `A6A43EA0D1FB510E9EEF897B6C9232BB66F5D1F5927DF54DADE3463F55D3DB85`.
+  This closes the browser authoring receipt, while broader headed verification
+  and A5 remain open. Woodshed is Workbench's second
+  heterogeneous consumer, but it is not itself A5's named portable projection
+  proof; A5 still needs a named proof consumer and its per-proof evidence. The
+  component follows the component seam in
+  `genet/design_docs/2026-08-31_workbench_component_plan.md`.
+- 2026-09-01: **C4a landed; A3 stage two tested against it and the gate
+  sharpened.** Mere `d10e04da` serves a live Graphshell projection to a
+  browser-shaped WebRTC peer (admitted by Notochord, sans-I/O `SessionCore`
+  with blocking and event-driven adapters, `LiveEndpoint` moving only for
+  admitted intent), tracked in the browser WebRTC carrier plan; C4b, the
+  embedded and full-page surfaces, was split out 2026-08-31. Checked whether
+  C4b is A3 stage two's remote re-selection consumer: it is not. The served
+  rung is endpoint-fixed, the browser's remote view has no camera, and the
+  client's only resolution is capability-based offer choice within the rung.
+  The gate now reads "a remote viewer with a local camera over a served
+  scene". Opened the stage-two fact transport ruling, since `Recency` and
+  `Focused` are host facts the wire does not carry. No code changed.
+- 2026-09-01: **the open rulings and two deferred questions scoped and
+  ruled by Mark.** Stage-two fact transport: evaluation without host facts
+  is the baseline, carrying them the stretch; disclosure is a host's choice.
+  Apps embedded: two sites, two answers; merelyllc.com hosts Graphshell
+  embeds with other applications as served projections, mer3ly.net embeds
+  the full applications, and the latter is a new objective needing its own
+  assessment. Served endpoint: select from the ladder at declared zoom 1.0
+  rather than hardcode Card; code to follow. Two 2026-08-16 leftovers: A1's
+  `honored_holds` half is closed, since `Scene.honored_holds` was promoted
+  the same day, while displacement by a consumer's own physics or viewport
+  fit stays gated on a consumer asking; C1's mer3ly unmet-count beside
+  "1 pin honored" is approved and folds into the next mer3ly wasm rebuild
+  rather than earning a deploy. Both carry Mark's framing, recorded in the
+  rulings section: mer3ly's graph view is a stress-test toy for an embedded
+  canvas, not a product pull.
+  Raised the same day and answered by Mark's refinement of the embedded-app
+  ruling: mer3ly's asks are a prover's until Graphshell supersedes the site
+  canvas and becomes the site index, at which point the graph view is the
+  site's navigation and its asks are product demand. The 2026-08-16
+  consumer ruling stands unchanged; this records what would change its
+  character and when.
+- 2026-09-01: **served endpoint selects from the ladder: code written,
+  receipt written, receipt not yet run.** `MereHost` now builds the offer's
+  score and the snapshot from one `served_layout` (phyllotaxis at 1280 x 720,
+  every node measured at the served 240 x 112 footprint, ladder evaluated at
+  `SERVED_ZOOM = 1.0`), and each served item carries the rung the registry
+  selected, Glyph when the score does not name it. The receipt
+  `served_snapshot_selects_rungs_from_the_ladder_at_declared_zoom` asserts
+  the fixture's visit spread as its control, then web (10 ms) as Glyph,
+  receipt (110 ms) as Card, and offer/snapshot agreement on every item.
+  Verification so far: the change compiles for its real target
+  (`cargo check -p graphshell --target wasm32-unknown-unknown
+  --no-default-features --features web`, clean). It could not be *run*:
+  `mere_host` is `web`-gated, the default `native` suite never compiles it
+  (149 tests pass and prove nothing about this file), and the native
+  `--no-default-features --features web` test build fails at link with
+  unresolved `canvas` symbols even after `cargo clean -p mere-canvas
+  -p mere-cartography -p graphshell`. That failure predates this work: it is
+  the invocation the 2026-07-27 H1 receipt ran, and every MereHost-testing
+  module (`app`, `capture`, `product`, `mere_host`) is `web`-gated, so the
+  whole MereHost test surface has been unrunnable natively on this machine
+  for some time without anything noticing. Swept in on the way: the
+  `sessions.rs` test module used `native`-only imports under a bare
+  `cfg(test)`, which was the first compile error the web build hit; it is
+  now gated like its imports. Visible effect of the change, for the record:
+  none on the rich viewer, which picks offers by capability and never
+  branches on the rung; the frozen realization now calls stale served items
+  Symbol and recent ones Object, and the offer's score stops contradicting
+  the snapshot.
+- 2026-09-01: **the link break chased to its cause; the receipt ran.** After
+  a real clean the 103 unresolved externals fell to one symbol,
+  `drop_glue<canvas::geometry::CartographyGeometry>`, advertised in
+  mere-canvas's metadata and absent from its incremental object cache: the
+  shape of rust-lang/rust#86049 (open; windows-msvc; incremental;
+  LNK2019/2001 on allocator and drop glue; no cause identified upstream;
+  "disable incremental" the standing workaround). Turning incremental off
+  for `mere-canvas` alone links: the receipt passes and the full web-feature
+  suite passes, 39 of 39, with graphshell still incremental. The fix is
+  scoped to the invocation rather than the workspace because a canvas
+  edit-loop rebuild measures ~9 s incremental against ~2.5 min without, a
+  penalty the Mac and Linux boxes have no reason to pay: `cargo test-web`,
+  an alias in `.cargo/config.toml.example`, carries
+  `--config profile.dev.package.mere-canvas.incremental=false`, and the H1
+  receipt doc points at it. Retire condition: run the bare invocation on
+  each toolchain bump; if it links, drop the override. The served-endpoint
+  ruling is closed by this receipt; A3 stage one now holds for the product
+  endpoint.

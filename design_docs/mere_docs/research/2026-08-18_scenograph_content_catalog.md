@@ -257,7 +257,7 @@ face, and a sprite seeds a body without owning it.
    LOD ladder.
 6. **Badge glyph**: a glyph carrying one live scalar, unread count, signal
    strength, due state. Forcing: signalman liveness, inbox-shaped graphs.
-7. **Portrait**: identity-first emblem or avatar as the Face. It can sit on
+7. **Portrait**: identity-first insigne or avatar as the Face. It can sit on
    any Body; contact nodes and personae surfaces are likely consumers.
 8. **Meter**: a sparkline or gauge as the face, the node as its own recent
    history. Forcing: telemetry, practice stats.

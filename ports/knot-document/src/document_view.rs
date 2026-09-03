@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 use crate::{
     DocumentFormat, KnotDocumentIntentErrorV1, KnotDocumentIntentV1, KnotDocumentSession,
     KnotDocumentSnapshotV1, KnotDocumentSourceKindV1, KnotDocumentWritePostureV1,
@@ -7,8 +13,7 @@ use cambium::{
     button, div, el, lens, span, textarea_typed,
 };
 use genet_host_api::{
-    CapabilityId, PlacementHint, ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor,
-    SurfaceId, SurfaceMultiplicity, SurfaceRole, SurfaceSourceShape,
+    ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId, SurfaceSourceShape,
 };
 
 pub const KNOT_DOCUMENT_CSS: &str = ".knot-document { display: flex; flex-direction: column; gap: 8px; } .knot-document-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .knot-document-status-item { white-space: nowrap; } .knot-document-save { margin-left: auto; } .knot-document-body { min-height: 240px; white-space: pre-wrap; } .knot-document-read-only { cursor: default; user-select: text; }";
@@ -108,10 +113,6 @@ pub fn knot_document_descriptor() -> SurfaceDescriptor {
         surface_id: SurfaceId::from("knot.document.v1"),
         label: "Knot document".to_owned(),
         accepted_source: SurfaceSourceShape::One(SourceKindId::from("knot.document.v1")),
-        roles: vec![SurfaceRole::from("document"), SurfaceRole::from("editor")],
-        multiplicity: SurfaceMultiplicity::PerSource,
-        placement_hint: PlacementHint::from("main"),
-        potential_capabilities: vec![CapabilityId::from("edit"), CapabilityId::from("save")],
     }
 }
 pub fn knot_document_surface(

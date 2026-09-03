@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Mere graph truth adapted to Graphshell's portable endpoint vocabulary.
 
 use std::collections::{BTreeMap, HashMap};
@@ -27,6 +33,15 @@ use crate::access::{AccessContext, AccessError, AccessHistory, access_history, r
 use crate::handlers::{
     HandlerOffer, HandlerRegistry, OpenAddressV1, handler_from_intent, intent_id,
 };
+
+/// The footprint every served item is measured at, in scene units.
+const SERVED_FOOTPRINT: (f32, f32) = (240.0, 112.0);
+/// The viewport the served arrangement is solved for.
+const SERVED_VIEWPORT: (u32, u32) = (1280, 720);
+/// The zoom the representation ladder is evaluated at. A served scene has no
+/// viewer camera to read, so the rung is selected at this declared zoom and a
+/// viewer scales it; see the projection grammar adoption plan, A3.
+const SERVED_ZOOM: f32 = 1.0;
 
 pub const HOST_SLOT: &str = "graphshell/mere-host/v1";
 pub const LOCAL_SESSION: &str = "local:mere";
@@ -294,18 +309,36 @@ impl<B: Backend> MereHost<B> {
     }
 
     pub(crate) fn score(&self) -> Score {
-        mere::canvas::project_canvas_strategy_with_score(
+        self.served_layout()
+            .score
+            .unwrap_or_else(|| Score::new(Arrangement::Spiral(Default::default())))
+    }
+
+    /// The one layout every served projection is built from.
+    ///
+    /// Every node is measured at the served card footprint and the ladder is
+    /// evaluated at a declared zoom of 1.0, so the representation each item
+    /// carries is the registry's selection rather than an assertion. The
+    /// offer's score and the snapshot come from this same call, which is what
+    /// keeps them from disagreeing about a rung.
+    fn served_layout(&self) -> mere::canvas::CanvasStrategyProjection {
+        let extents: HashMap<NodeKey, (f32, f32)> = self
+            .graph
+            .nodes()
+            .map(|(key, _)| (key, SERVED_FOOTPRINT))
+            .collect();
+        mere::canvas::project_canvas_strategy_with_score_for_view(
             "phyllotaxis.default",
             &self.graph,
             None,
-            1280,
-            720,
+            SERVED_VIEWPORT.0,
+            SERVED_VIEWPORT.1,
             None,
-            None,
+            Some(&extents),
             true,
+            SERVED_ZOOM,
+            None,
         )
-        .score
-        .unwrap_or_else(|| Score::new(Arrangement::Spiral(Default::default())))
     }
 
     pub(crate) fn set_facet(
@@ -351,16 +384,16 @@ impl<B: Backend> MereHost<B> {
     }
 
     fn build_snapshot(&mut self) -> Result<ProjectionSnapshot, MereHostError> {
-        let layout = mere::canvas::project_canvas_strategy_with_score(
-            "phyllotaxis.default",
-            &self.graph,
-            None,
-            1280,
-            720,
-            None,
-            None,
-            true,
-        );
+        let layout = self.served_layout();
+        // The ladder's fallback is Glyph; an item the score does not name gets
+        // the same answer the ladder would have given it.
+        let rungs: HashMap<&str, &Representation> = layout
+            .score
+            .iter()
+            .flat_map(|score| score.items.iter())
+            .filter(|item| item.source.adapter == mere::canvas::MERE_GRAPH_ADAPTER)
+            .map(|item| (item.source.id.as_str(), &item.representation))
+            .collect();
         let mut scene = Scene::new();
         let mut presentation = PresentationManifest::default();
         let mut resources = BTreeMap::new();
@@ -390,9 +423,12 @@ impl<B: Backend> MereHost<B> {
                 space: Scene::WORLD,
                 transform: Transform2::translation(position.x, position.y),
                 footprint: Footprint::Rect {
-                    size: Size2::new(240.0, 112.0),
+                    size: Size2::new(SERVED_FOOTPRINT.0, SERVED_FOOTPRINT.1),
                 },
-                representation: Representation::Card,
+                representation: rungs
+                    .get(node.id.to_string().as_str())
+                    .map(|rung| (*rung).clone())
+                    .unwrap_or(Representation::Glyph),
                 layer: 0,
                 visible: true,
                 hit: None,
@@ -476,7 +512,10 @@ impl<B: Backend> MereHost<B> {
         } else {
             Rect::new(
                 Vec2::new(min_x - 120.0, min_y - 56.0),
-                Size2::new(max_x - min_x + 240.0, max_y - min_y + 112.0),
+                Size2::new(
+                    max_x - min_x + SERVED_FOOTPRINT.0,
+                    max_y - min_y + SERVED_FOOTPRINT.1,
+                ),
             )
         };
         scene.generation = self.projection_revision;
@@ -658,4 +697,85 @@ pub fn fixture_handlers() -> HandlerRegistry {
             ],
         },
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use muniment::MemoryBackend;
+
+    use super::*;
+
+    fn selected_persona() -> SelectedPersonaRef {
+        SelectedPersonaRef {
+            persona: FIXTURE_PERSONA_ADDRESS.to_string(),
+            profile: "profile:graphshell-a3".to_string(),
+        }
+    }
+
+    /// The rung a served item carries, looked up by the node's address.
+    fn served_rung(snapshot: &ProjectionSnapshot, graph: &Graph, address: &str) -> Representation {
+        let id = graph.get_node_by_url(address).expect("fixture node").1.id.to_string();
+        snapshot
+            .scene
+            .active_items_in_order()
+            .into_iter()
+            .map(|(_, item)| item)
+            .find(|item| {
+                snapshot.scene.tables.sources[item.source.0 as usize]
+                    .as_ref()
+                    .is_some_and(|source| source.id == id)
+            })
+            .map(|item| item.representation.clone())
+            .expect("the address is served")
+    }
+
+    /// A3 stage one, applied to the product endpoint: the served snapshot
+    /// carries the rung the registry selected at the declared zoom, and the
+    /// offer's score says the same thing about every item. The fixture spreads
+    /// last-visited times from 10 ms to 110 ms, so the default ladder has a
+    /// recency split to make; that spread is asserted first, as the control.
+    #[test]
+    fn served_snapshot_selects_rungs_from_the_ladder_at_declared_zoom() {
+        let mut host =
+            MereHost::fixture(MemoryBackend::new(), selected_persona(), fixture_handlers())
+                .expect("fixture");
+        let oldest = host.graph().get_node_by_url(FIXTURE_WEB_ADDRESS).unwrap().0;
+        let newest = host.graph().get_node_by_url(FIXTURE_RECEIPT_ADDRESS).unwrap().0;
+        assert!(
+            host.graph().node_last_visited(oldest) < host.graph().node_last_visited(newest),
+            "the fixture must spread visit times or the ladder has nothing to select on"
+        );
+
+        let request = host.local_request();
+        let snapshot = host.snapshot(request).expect("snapshot");
+
+        assert_eq!(
+            served_rung(&snapshot, host.graph(), FIXTURE_WEB_ADDRESS),
+            Representation::Glyph,
+            "the least recently visited node falls to the ladder's fallback"
+        );
+        assert_eq!(
+            served_rung(&snapshot, host.graph(), FIXTURE_RECEIPT_ADDRESS),
+            Representation::Card,
+            "a recent node measured at the served footprint earns a card at zoom 1.0"
+        );
+
+        // The offer's score and the snapshot come from one layout, so they
+        // agree about every item, not only the two named above.
+        let score = host.score();
+        let mut compared = 0;
+        for (_, item) in snapshot.scene.active_items_in_order() {
+            let source = snapshot.scene.tables.sources[item.source.0 as usize]
+                .as_ref()
+                .expect("served items name a source");
+            let scored = score
+                .items
+                .iter()
+                .find(|scored| scored.source == *source)
+                .expect("every served item is in the offer's score");
+            assert_eq!(scored.representation, item.representation, "{}", source.id);
+            compared += 1;
+        }
+        assert_eq!(compared, score.items.len(), "the score names exactly the served items");
+    }
 }

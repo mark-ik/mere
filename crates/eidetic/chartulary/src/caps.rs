@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Capability traits.
 //!
 //! A node needs exactly one thing to live in a [`Graph`](crate::Graph): a stable
@@ -20,8 +26,8 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use codicil::LogId;
 use muniment::Hash as ContentHash;
+use muniment::LogId;
 
 use crate::taxonomy::RelationClass;
 

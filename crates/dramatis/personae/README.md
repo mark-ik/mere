@@ -78,5 +78,5 @@ Design notes live in `design_docs/` beside this file.
 
 ## License
 
-MIT or Apache-2.0, at your option. The name is the plural of *persona*,
+MPL-2.0 (see LICENSE). The name is the plural of *persona*,
 unrelated to Mozilla's discontinued Persona / BrowserID.

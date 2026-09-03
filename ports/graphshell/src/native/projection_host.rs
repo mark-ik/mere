@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! K2: product endpoints served to network peers by one resident host.
 //!
 //! [`crate::native::browser_host`] serves a catalog route to a browser that
@@ -19,6 +25,15 @@
 //! wait at the door until the first one left. So each admitted session is
 //! spawned, and the host returns to accepting immediately.
 //!
+//! ## Two ways in, one way to serve
+//!
+//! [`ResidentProjectionHost::accept_one`] admits a peer that dialled a
+//! transport. [`ResidentProjectionHost::serve_admitted`] takes one somebody
+//! else already admitted — the WebRTC door reaches admission over a link
+//! challenge and a redemption proof this host has no opinion about, and hands
+//! the conclusion over. Both run the same code after the decision, because
+//! after the decision there is no difference worth having.
+//!
 //! Each session opens its own endpoint from the catalog, because the catalog
 //! is a factory rather than a registry of live objects. Two visitors to one
 //! Knot vault therefore hold two `KnotEndpoint`s over the same files, and
@@ -31,7 +46,8 @@ use std::sync::RwLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use chirograph::{ProjectionSession, ResumeRequest};
-use notochord::{LocalNetworkPolicy, RevocationLedger};
+use notochord::{AdmittedSession, LocalNetworkPolicy, RevocationLedger};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::task::JoinHandle;
 use transport::Transport;
 
@@ -177,11 +193,42 @@ impl ResidentProjectionHost {
         let outcome =
             accept_projection_session(transport, &self.policy, &admission_ledger, now_ms(), live)
                 .await?;
-        let mut admitted = match outcome {
+        let admitted = match outcome {
             Ok(session) => session,
             Err(refusal) => return Ok(Err(refusal)),
         };
+        self.serve_admitted(admitted, now_ms).map(Ok)
+    }
 
+    /// Serve a session somebody else already admitted.
+    ///
+    /// The half of [`accept_one`](Self::accept_one) after the decision, for a
+    /// carrier that reaches admission by its own route. The WebRTC door is
+    /// that carrier: a browser is admitted through
+    /// [`crate::webrtc_session::serve_webrtc_join`], over a link challenge and
+    /// a redemption proof this host has no opinion about, and arrives here
+    /// holding an [`AdmittedSession`] rather than a transport to accept on.
+    ///
+    /// What the host still owns is everything downstream of the decision, and
+    /// that is the point of the split rather than a second serving path:
+    /// authority retained from the chain the conclusion was drawn from, the
+    /// route opened from the catalog, the live-session count, and the
+    /// notifying loop. A pre-admitted session is served exactly as a dialled
+    /// one is, because after admission there is no difference worth having.
+    ///
+    /// It does not consult `max_sessions`. The caller admitted this peer, so
+    /// the ceiling was that decision's to apply — this host is being told the
+    /// outcome, not asked for one. [`live_sessions`](Self::live_sessions) is
+    /// what a caller passes to its own admission to make that check.
+    pub fn serve_admitted<S, N>(
+        &mut self,
+        mut admitted: AdmittedSession<S>,
+        now_ms: N,
+    ) -> Result<ServedProjection, ResidentProjectionError>
+    where
+        S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        N: Fn() -> u64 + Send + 'static,
+    {
         // `retain_admitted` rather than `retain`, so the session cannot lose
         // the chain its conclusion was drawn from and go blind to revocation.
         let authority = SessionAuthority::retain_admitted(&admitted);
@@ -214,11 +261,11 @@ impl ResidentProjectionHost {
             .await
         });
 
-        Ok(Ok(ServedProjection {
+        Ok(ServedProjection {
             subject,
             session,
             handle,
-        }))
+        })
     }
 }
 

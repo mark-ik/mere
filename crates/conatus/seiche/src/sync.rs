@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Node-body lifecycle on [`Simulation`]: reconciling the rapier body set with the graph
 //! (`sync_with_graph` / `sync_nodes`), the spring-edge topology (`sync_edges`), and the body
 //! accessors (`positions` / `position_of` / `body_for`) the read model is built from. Split from

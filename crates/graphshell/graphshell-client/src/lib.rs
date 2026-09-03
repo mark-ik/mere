@@ -1,10 +1,20 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Transport-independent, endpoint-scoped projection state.
 
 pub mod action_draft;
+pub mod core;
+pub mod driver;
 pub mod frozen;
 pub mod session;
 
 pub use action_draft::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
+pub use core::{Outcome, Progress, RESUME_ATTEMPTS, SessionCore};
+pub use driver::{Advance, SessionDriver};
 pub use session::{
     RetainedEndpointSession, resume_after_notice, resume_request_for_notice, unexpected,
 };

@@ -4,10 +4,12 @@
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic
 host receipt implemented and independently green; Turnstone T0 consumer core
-and user invocation landed, including explicit read-only admission; Distillery
-now supplies P0's second product descriptor/erased-session half; generic
-accessibility landed, while Distillery's Turnstone registration/admission
-receipt and the full shell build receipt remain open
+and user invocation landed, including explicit read-only admission; generic
+accessibility landed; P0 is complete — Turnstone admits
+`distillery.installed.v1` through the existing registry with no
+provider-specific renderer arm, the full shell binary builds from published
+sources, and the contract is reduced and frozen at v1 (Genet `001448d55`,
+Turnstone `3f63671`); F0 is the next gated lane
 **Scope:** prove one Knot document surface in a standalone host and Turnstone,
 then prove the contribution seam with a second port. This plan does not require
 or privilege a `.knot` container format, a subprocess boundary, or a universal
@@ -189,6 +191,102 @@ fragment default is disabled for this dependency because Knot uses only its
 Djot and Markdown engines. The remaining engine cost is Nematic's current
 unconditional Errand dependency, not Knot vault, replication, inference, or
 endpoint code.
+
+### 2026-08-26: the pre-freeze census
+
+With both providers admitted, every contract item was censused across its
+three homes: the Genet definitions (`genet-host-api/surface.rs` and
+`cambium/src/surface.rs`, untouched since founding commit `bbd0906`, with no
+consumer inside Genet), the two mere providers (`knot-document`,
+`distillery`), and the one erased host (Turnstone's `contributed_surface`).
+Standalone Knot bypasses the erasure by design and consumes the concrete
+state/view directly, so Turnstone is the seam's only host.
+
+**Load-bearing on both sides** — eleven of the fourteen
+`RetainedSurfaceSession` methods (`descriptor`, `availability`, `dom`,
+`focus`, `set_focus`, `focus_traverse`, `pointer_target`, `hover_target`,
+`wheel_target`, `sync_viewport`, `dispatch`); all seven
+`ResolvedSurfaceEvent` variants through Turnstone's one dispatch funnel;
+`RunnerSurfaceSession::new` with its five product-owned parts;
+`SurfaceEffect::Redraw` (the sole variant, matched at the host);
+`SurfaceViewport` width/height (Sky reads them; `scale_factor` is consulted
+only by Cambium's own dedup); and the descriptor identity trio the host
+actually reads: `provider_id` and `surface_id` (registry dedup) plus `label`
+(AccessKit root name and the unavailable view).
+
+**Dead trait surface** — `root()`, `focusables()`, and `pointer_capture()`
+have no caller in any repository.
+
+**Descriptor fields set but never read** — `accepted_source` (admission is
+gated by Turnstone's `SurfaceProvider::source_schema()` instead, a second
+source of truth for the same fact), `roles`, `multiplicity` (shadowed by
+Turnstone's own `PaneMultiplicity`), `placement_hint` (all three providers
+say `"main"`), and `potential_capabilities` with `CapabilityId` (read only
+by one Sky unit test). `SurfaceSourceShape::None`/`Many` and every
+`SurfaceMultiplicity` variant except `PerSource` are never constructed.
+
+**Availability in practice** — all three providers' live availability
+closures return `Available` unconditionally; production unavailability
+exists only as admission-time error translation into the generic
+unavailable session. Four of the eight `SurfaceUnavailableReason` variants
+are produced (`Absent`, `Denied`, `Unsupported`, `Other`, all by the Knot
+provider), rendered through one `Debug` format rather than per-variant
+branches; `Locked` is test-only; `Stale`, `Unconfigured`, and `Unhealthy`
+are unexercised but are exactly the states §F0 names for future snapshots.
+
+**The freeze decisions this forces** (F-1 ruled 2026-08-26: unify; the
+rest scoped below and open until ruled):
+
+- **F-1, `accepted_source` — ruled: unify.** Registration asserts the
+  descriptor's declared source kind equals the provider's admission schema,
+  making the descriptor the stated truth the host enforces and turning
+  today's silent redundancy into a checked invariant.
+- **F-2, the unread descriptor tail.** Provenance of each field's intended
+  consumer, traced 2026-08-26:
+  - `potential_capabilities`/`CapabilityId` and `roles`/`SurfaceRole` were
+    seeded for the suite-composition census's routing pipeline (address →
+    advertised capabilities → compatible surface offers) and its §8
+    per-role handler preference. That scheme was never assigned a lane, and
+    its explicit role vocabulary (`view, edit, manage, …`) was adopted by
+    neither real provider (Knot says `document`/`editor`, Distillery says
+    `pane`/`status`).
+  - `placement_hint` has no consumer beyond a one-line "host owns
+    placement" aspiration; Turnstone's own hardcoded `PlacementPolicy` per
+    pane definition governs in practice and never reads it.
+  - `multiplicity`/`SurfaceMultiplicity` is a parallel invention of
+    Turnstone's `PaneMultiplicity` (A1, landed, hardened by the 2026-08-16
+    duplicate-pane incident); no bridge between the two was ever proposed.
+  Recommendation stands: cut all four from v1, leaving identity, `label`,
+  and `accepted_source`. If the capability-routing pipeline ever gets a
+  lane, capabilities and roles return additively with it.
+- **F-3, the uncalled trait methods — recommendation revised by scoping.**
+  All three mirror load-bearing concrete-host machinery, not speculation:
+  `pointer_capture()` is how `cambium-rootstock` computes correct local
+  coordinates mid-drag (`input.rs` reads it before every captured
+  move/up), and an erased host must consult it before building
+  `PointerMove` events the moment a contributed surface carries any
+  `on_pointer` widget (slider, split, resize handle, reorderable list,
+  graph canvas); `focusables()` is the runner's half of the shipped
+  spatial 2D focus navigation, which geometry-blind `focus_traverse()`
+  structurally cannot replace; `root()` names the runner's own subtree in
+  a shared document, the question two production hosts already answer with
+  the concrete counterpart. Revised recommendation: keep all three.
+  Corollary finding: Turnstone's contributed pane path currently forwards
+  pointer moves without consulting `pointer_capture()`, a latent
+  correctness gap for the first drag-widget surface — noted for T-lane
+  follow-up rather than fixed here.
+- **F-4, unavailable-reason breadth**: the four unproduced variants map
+  variant-for-variant onto §F0's named snapshot states (locked vault,
+  stale resident snapshot, unconfigured provider, unhealthy resident), and
+  F0 is live gated work now that P0's proof is complete. Recommendation
+  stands: keep all eight.
+
+Reduction is a breaking Genet change: one commit over the two contract
+modules and their tests, module docs declaring the v1 freeze (additive-only
+until a v2), a Cambium changelog entry, then a Genet rev bump consumed by
+mere and Turnstone through the established alignment cadence. Expected
+churn outside Genet: the two mere descriptor literals shrink; Turnstone
+needs nothing beyond the rev bump.
 
 ## 3. Boundary
 
@@ -546,6 +644,49 @@ through UI admission.
   five library tests, including the surface snapshot and exact receipt render;
   the installed configure/inspect binary check and package Clippy with warnings
   denied passed against the same integrated source graph.
+- 2026-08-26: Turnstone `9d3a7d8` admits `distillery.installed.v1` — the P0
+  second-provider proof. `DistilleryInstalledProvider` registers through the
+  same `SurfaceProviderRegistry` as Knot and Sky with no Distillery-specific
+  renderer arm; its versioned source carries only installed-bootstrap
+  projection facts (profile, protection, mesh id, private paths, optional
+  resident cadences), so a pane grant conveys projection, never Distillery
+  authority. Malformed mesh ids, spinning cadences, and unknown payload
+  versions are refused before admission. Receipts ran from a clean Turnstone
+  worktree resolving the published mere pin with no local patch config: six
+  provider tests (rendered projection, resident cadence round trip, generic
+  AccessKit `Status` role), the seven existing contributed-surface registry
+  tests, an all-targets check, and — closing the long-open gate — the full
+  shell binary build reaching and completing `rustc`. The full lib suite
+  passes 394 tests; its two failures (chrome_view document find, place lane
+  partition heal) reproduce identically on `origin/main` without the change.
+  P0's remaining step is the contract reduction and freeze.
+- 2026-08-26: the pre-freeze census ran across Genet, mere, and Turnstone and
+  is recorded as a finding above, with four open freeze decisions (F-1
+  through F-4): unify or cut `accepted_source`, cut the unread descriptor
+  tail, cut the three uncalled trait methods, and keep or trim the
+  unavailable-reason set. The reduction itself waits on those rulings.
+- 2026-08-26: F-1 ruled (unify), and the remaining decisions were scoped by
+  tracing each item's intended consumer through the suite-composition
+  census, the pane-registry plan, and the concrete-host call graph. The
+  scoping flipped F-3's recommendation from cut to keep — the three
+  methods erase real shipped host machinery — and surfaced the
+  pointer-capture routing gap in Turnstone's contributed pane path. F-2
+  through F-4 remain open for ruling.
+- 2026-08-26: all four decisions ruled (F-1 unify; F-2 cut all four; F-3
+  keep all three; F-4 keep all eight) and the freeze landed. Genet
+  `001448d55` reduces the descriptor to identity, `label`, and
+  `accepted_source`, documents `accepted_source` as the admission truth,
+  keeps the fourteen-method trait, and stamps both modules frozen at v1
+  (additive until a v2), with a Cambium changelog entry; `genet-host-api`
+  21 and `cambium` 179 tests pass. Turnstone `3f63671` lands the F-1
+  invariant: `SurfaceRegistrationError::SourceShapeMismatch` refuses a
+  provider whose declared source kind disagrees with its admission
+  schema, and all four provider suites pass against it. Follow-through
+  rides the next Genet pin bumps: the descriptor literals in
+  `knot-document`, `distillery`, Turnstone's Sky provider, and Turnstone's
+  test fixtures drop the removed fields when each repo aligns past
+  `001448d55`; the pointer-capture routing gap stays noted for the T lane.
+  P0 is complete.
 
 ## 8. Final done conditions
 

@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 use chartulary::stemma::TransitionKind;
 use euclid::default::Point2D;
@@ -240,7 +243,7 @@ pub enum GraphDelta {
     },
     SetNodeNested {
         key: NodeKey,
-        nested: Option<codicil::LogId>,
+        nested: Option<muniment::LogId>,
     },
     SetNodePinned {
         key: NodeKey,
@@ -787,7 +790,7 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             GraphDeltaResult::NodeMetadataUpdated(updated)
         }
         GraphDelta::ReplaySetNodeNestedById { node_id, nested } => {
-            let log = nested.clone().map(codicil::LogId::new);
+            let log = nested.clone().map(muniment::LogId::new);
             let updated = graph
                 .get_node_key_by_id(node_id)
                 .is_some_and(|key| graph.set_node_nested(key, log.clone()));

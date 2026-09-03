@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Graph identity types and rkyv archive helpers.
 //!
@@ -119,35 +122,35 @@ where
 // velocity field: seiche owns live velocity, so the graph node no longer carries
 // it. `Point2DAsTuple` remains for the transient projected position.
 
-/// rkyv with-adapter archiving a codicil [`LogId`](codicil::LogId) as its
+/// rkyv with-adapter archiving a journal [`LogId`](muniment::LogId) as its
 /// string form — for `Node.nested` (the borne graph's identity; the one-node
 /// ruling's containment tier). Wrap `Option<LogId>` fields as
 /// `#[rkyv(with = rkyv::with::Map<LogIdAsString>)]`.
 pub(crate) struct LogIdAsString;
 
-impl ArchiveWith<codicil::LogId> for LogIdAsString {
+impl ArchiveWith<muniment::LogId> for LogIdAsString {
     type Archived = Archived<String>;
     type Resolver = Resolver<String>;
 
-    fn resolve_with(field: &codicil::LogId, resolver: Self::Resolver, out: Place<Self::Archived>) {
+    fn resolve_with(field: &muniment::LogId, resolver: Self::Resolver, out: Place<Self::Archived>) {
         field.as_str().to_string().resolve(resolver, out);
     }
 }
 
-impl<S> SerializeWith<codicil::LogId, S> for LogIdAsString
+impl<S> SerializeWith<muniment::LogId, S> for LogIdAsString
 where
     S: Fallible + ?Sized,
     String: Serialize<S>,
 {
     fn serialize_with(
-        field: &codicil::LogId,
+        field: &muniment::LogId,
         serializer: &mut S,
     ) -> Result<Self::Resolver, S::Error> {
         field.as_str().to_string().serialize(serializer)
     }
 }
 
-impl<D> DeserializeWith<Archived<String>, codicil::LogId, D> for LogIdAsString
+impl<D> DeserializeWith<Archived<String>, muniment::LogId, D> for LogIdAsString
 where
     D: Fallible + ?Sized,
     Archived<String>: Deserialize<String, D>,
@@ -155,8 +158,8 @@ where
     fn deserialize_with(
         field: &Archived<String>,
         deserializer: &mut D,
-    ) -> Result<codicil::LogId, D::Error> {
+    ) -> Result<muniment::LogId, D::Error> {
         let raw: String = field.deserialize(deserializer)?;
-        Ok(codicil::LogId::new(raw))
+        Ok(muniment::LogId::new(raw))
     }
 }

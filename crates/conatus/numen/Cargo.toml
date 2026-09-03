@@ -2,8 +2,8 @@
 name = "numen"
 version = "0.2.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
-description = "The portable field-primitive definitions for a graph-canvas physics substrate: the scalar/vector field algebra as data, the Field truth primitive (definition + extent + lifecycle), and Coupling (field -> node-selector -> response) with its open response vocabulary. Fields are a third graph primitive beside nodes and edges; `quint` evaluates these definitions and `seiche` integrates the forces. Plain data, WASM-clean."
+license.workspace = true
+description = "Field algebra for graph canvases: portable field truth plus evaluation, registry, projection, Rhai authoring, and opt-in Burn lowering. Seiche integrates the force laws."
 repository = "https://github.com/merely-made/mere"
 keywords = ["field", "physics", "force-directed", "graph", "spatial"]
 categories = ["data-structures", "science"]
@@ -14,11 +14,29 @@ serde = { version = "1", features = ["derive"] }
 uuid = { version = "1", features = ["serde"] }
 # EnumIter over the recognized force-core coupling responses (IRI round-trips).
 strum = { version = "0.28", features = ["derive"] }
+# Optional authoring and tensor-lowering backends. The default path remains
+# serde/UUID data plus the analytic evaluator; neither Burn nor Rhai reaches a
+# portable consumer unless it selects the corresponding feature.
+burn = { version = "0.22.0-pre.2", default-features = false, features = ["std"], optional = true }
+burn-wgpu = { version = "0.22.0-pre.2", default-features = false, features = ["std", "autotune"], optional = true }
+rhai = { version = "1.20", default-features = false, features = ["std"], optional = true }
 
 # v4 (random) is native-only; WASM hosts mint ids via `from_uuid` with a
 # host-supplied UUID (no OS randomness on wasm32-unknown-unknown).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 uuid = { version = "1", features = ["v4"] }
+
+# Burn reaches getrandom on wasm. This target-only dependency switches on its
+# supported browser backend when a host explicitly enables Burn lowering.
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
+uuid = { version = "1", default-features = false, features = ["js"] }
+
+[features]
+default = []
+field-burn = ["dep:burn", "burn/ndarray", "dep:getrandom"]
+field-burn-wgpu = ["field-burn", "burn/wgpu", "burn/extension", "dep:burn-wgpu", "dep:getrandom"]
+field-rhai = ["dep:rhai"]
 
 [dev-dependencies]
 serde_json = "1"

@@ -1,44 +1,57 @@
-//! One mounted endpoint and the client state behind it.
-//!
-//! The session machinery every Graphshell host repeats: discover once, mount
-//! projections, resolve presentations on demand, submit advertised actions,
-//! and recover through resume when a revision bell arrives.
-//!
-//! It holds a [`Carrier`] as a trait object and never asks which one, which
-//! is what makes "an embedded endpoint" and "a remote one" the same code path
-//! with a different argument. Constructing the carrier is the host's business:
-//! a stdio carrier needs a program to spawn, a network carrier needs a peer to
-//! dial and a service to be admitted to, and neither concern belongs to the
-//! state machine that follows.
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
-use std::collections::{BTreeMap, BTreeSet};
+//! One mounted endpoint over a blocking carrier.
+//!
+//! The session machinery every native Graphshell host repeats: discover once,
+//! mount projections, resolve presentations on demand, submit advertised
+//! actions, and recover through resume when a revision bell arrives.
+//!
+//! It holds a [`Carrier`] as a trait object and never asks which one, which is
+//! what makes "an embedded endpoint" and "a remote one" the same code path with
+//! a different argument. Constructing the carrier is the host's business: a
+//! stdio carrier needs a program to spawn, a network carrier needs a peer to
+//! dial and a service to be admitted to, and neither concern belongs to the
+//! state machine behind it.
+//!
+//! ## This is now an adapter, not the protocol
+//!
+//! The sequencing moved to [`SessionCore`], which owns no carrier and performs
+//! no I/O. What remains here is the blocking half: take the request the core
+//! asks for, put it to the carrier, hand the answer back, repeat until the core
+//! says the operation is done. That loop is `drive`, private to this file,
+//! and the only place in it that blocks.
+//!
+//! The split exists because the browser cannot block — see the [`crate::core`]
+//! module doc for why a worker does not rescue it either. Every public method
+//! below keeps its exact signature and behaviour, so no native host changes;
+//! the browser writes a second, event-driven adapter over the same core.
 
 use chirograph::{
     AdvertisedAction, CapabilityProfile, Carrier, CarrierError, CarrierNotice, CarrierRequestBody,
-    CarrierResponseBody, EndpointDescriptor, IntentInvocation, IntentResult, ProjectionRequest,
-    ProjectionSession, ResumeRequest,
+    CarrierResponseBody, EndpointDescriptor, IntentResult, ProjectionSession, ResumeRequest,
 };
 use sceno::InstanceId;
 use serde::Serialize;
 
 use crate::action_draft::{ActionDraft, ActionDraftTarget};
-use crate::{ClientState, PresentationResolution, ResolvedPresentation, ResumeApplication};
+use crate::core::{Outcome, Progress, SessionCore};
+use crate::{ClientState, ResolvedPresentation};
 
 /// One retained endpoint and its Graphshell client state.
 ///
-/// Resource bytes remain in `ClientState` only for this object's lifetime.
+/// Resource bytes remain in client state only for this object's lifetime.
 /// `close` and `Drop` both release the carrier and discard every mounted
 /// session, including memory-only editable source.
 pub struct RetainedEndpointSession {
     /// Boxed rather than concrete: the protocol has always described itself as
     /// running over an unspecified carrier, and this is the field that makes
-    /// that true. Every constructor above supplies one already built.
+    /// that true. Every constructor supplies one already built.
     carrier: Option<Box<dyn Carrier>>,
-    client: ClientState,
-    profile: CapabilityProfile,
-    descriptor: EndpointDescriptor,
-    mounted: BTreeSet<ProjectionSession>,
-    requests: BTreeMap<ProjectionSession, ProjectionRequest>,
+    core: SessionCore,
 }
 
 impl RetainedEndpointSession {
@@ -52,7 +65,7 @@ impl RetainedEndpointSession {
     /// argument.
     pub fn over(mut carrier: Box<dyn Carrier>, profile: CapabilityProfile) -> Result<Self, String> {
         let descriptor = match carrier
-            .request(CarrierRequestBody::Discover)
+            .request(SessionCore::discover_request())
             .map_err(|error| error.to_string())?
         {
             CarrierResponseBody::Descriptor(descriptor) => descriptor,
@@ -60,118 +73,61 @@ impl RetainedEndpointSession {
         };
         Ok(Self {
             carrier: Some(carrier),
-            client: ClientState::default(),
-            profile,
-            descriptor,
-            mounted: BTreeSet::new(),
-            requests: BTreeMap::new(),
+            core: SessionCore::from_descriptor(descriptor, profile),
         })
     }
 
     pub fn descriptor(&self) -> &EndpointDescriptor {
-        &self.descriptor
+        self.core.descriptor()
     }
 
     pub fn client(&self) -> &ClientState {
-        &self.client
+        self.core.client()
     }
 
     pub fn profile(&self) -> &CapabilityProfile {
-        &self.profile
+        self.core.profile()
     }
 
     /// Forget one mounted projection and every resource cached beneath it.
     ///
-    /// The endpoint process may remain alive for another document, but a
-    /// closed editor must not leave its memory-only source in client state.
+    /// The endpoint process may remain alive for another document, but a closed
+    /// editor must not leave its memory-only source in client state.
     pub fn forget(&mut self, session: &ProjectionSession) {
-        self.mounted.remove(session);
-        self.requests.remove(session);
-        self.client.forget_session(session);
+        self.core.forget(session);
     }
 
     /// Mount one discovered projection without resolving resources or invoking
     /// any of its actions.
     pub fn mount(&mut self, offer_index: usize) -> Result<ProjectionSession, String> {
-        let request = self
-            .descriptor
-            .projections
-            .get(offer_index)
-            .map(|offer| offer.request.clone())
-            .ok_or_else(|| format!("endpoint has no projection {offer_index}"))?;
-        let snapshot = match self.ask(CarrierRequestBody::Snapshot(request.clone()))? {
-            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
-            other => return Err(unexpected("snapshot", &other)),
-        };
-        self.apply_snapshot(snapshot, request)
+        let start = self.core.mount(offer_index)?;
+        match self.drive(start)? {
+            Outcome::Mounted(session) => Ok(session),
+            other => Err(misdriven("a mounted session", &other)),
+        }
     }
 
     /// Request a fresh full snapshot using the same projection request that
     /// mounted this session. This is the simple, source-authoritative recovery
     /// path after an accepted action when a host is not waiting on notices.
     pub fn resnapshot(&mut self, session: &ProjectionSession) -> Result<(), String> {
-        let request = self
-            .requests
-            .get(session)
-            .cloned()
-            .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?;
-        let snapshot = match self.ask(CarrierRequestBody::Snapshot(request.clone()))? {
-            CarrierResponseBody::Snapshot(snapshot) => *snapshot,
-            other => return Err(unexpected("snapshot", &other)),
-        };
-        if snapshot.session != *session {
-            return Err(format!(
-                "endpoint resnapshot changed session {} to {}",
-                session.0, snapshot.session.0
-            ));
+        let start = self.core.resnapshot(session)?;
+        match self.drive(start)? {
+            Outcome::Resnapshotted => Ok(()),
+            other => Err(misdriven("a refreshed snapshot", &other)),
         }
-        self.apply_snapshot(snapshot, request).map(|_| ())
     }
 
-    /// Open one endpoint-advertised bounded action form at the client's
-    /// current acknowledgement. The action remains endpoint-authored; this
-    /// method only captures the exact action and the snapshot position that
-    /// may submit it.
+    /// Open one endpoint-advertised bounded action form at the client's current
+    /// acknowledgement. The action remains endpoint-authored; this method only
+    /// captures the exact action and the snapshot position that may submit it.
     pub fn open_action_draft(
         &self,
         session: &ProjectionSession,
         target: InstanceId,
         intent: &str,
     ) -> Result<(ActionDraft, ActionDraftTarget), String> {
-        let tree = self
-            .client
-            .accessibility_tree(session, &self.profile)
-            .map_err(|error| format!("could not inspect {}: {error:?}", session.0))?;
-        let action = tree
-            .children
-            .iter()
-            .find(|item| item.instance == target)
-            .and_then(|item| item.actions.iter().find(|action| action.intent.0 == intent))
-            .cloned()
-            .ok_or_else(|| {
-                format!(
-                    "intent {intent} was not advertised for {} in {}",
-                    target.0, session.0
-                )
-            })?;
-        if action.input_form.is_none() {
-            return Err(format!(
-                "intent {intent} does not advertise a bounded action form"
-            ));
-        }
-        let acknowledgement = self
-            .client
-            .acknowledgement(session)
-            .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
-        Ok((
-            ActionDraft::new(action),
-            ActionDraftTarget {
-                session: session.clone(),
-                target,
-                observed_epoch: acknowledgement.epoch,
-                observed_revision: acknowledgement.revision,
-            },
-        ))
+        self.core.open_action_draft(session, target, intent)
     }
 
     /// Submit a draft composed from endpoint-advertised values. Missing or
@@ -182,30 +138,11 @@ impl RetainedEndpointSession {
         target: &ActionDraftTarget,
         draft: &mut ActionDraft,
     ) -> Result<IntentResult, String> {
-        if !self.mounted.contains(&target.session) {
-            return Err(format!("Graphshell did not mount {}", target.session.0));
+        let start = self.core.submit_action_draft(target, draft)?;
+        match self.drive(start)? {
+            Outcome::Intent(result) => Ok(*result),
+            other => Err(misdriven("an intent result", &other)),
         }
-        let invocation = draft
-            .invocation(target)
-            .map_err(|error| format!("could not compose advertised action: {error}"))?;
-        match self.ask(CarrierRequestBody::Intent(invocation))? {
-            CarrierResponseBody::Intent(result) => Ok(result),
-            other => Err(unexpected("intent result", &other)),
-        }
-    }
-
-    fn apply_snapshot(
-        &mut self,
-        snapshot: chirograph::ProjectionSnapshot,
-        request: ProjectionRequest,
-    ) -> Result<ProjectionSession, String> {
-        let session = snapshot.session.clone();
-        self.client
-            .apply_snapshot(snapshot)
-            .map_err(|error| format!("Graphshell rejected {session:?}: {error:?}"))?;
-        self.mounted.insert(session.clone());
-        self.requests.insert(session.clone(), request);
-        Ok(session)
     }
 
     /// Resolve one presentation on demand, fetching only the selected
@@ -215,23 +152,10 @@ impl RetainedEndpointSession {
         session: &ProjectionSession,
         instance: InstanceId,
     ) -> Result<ResolvedPresentation, String> {
-        loop {
-            match self
-                .client
-                .resolve(session, instance, &self.profile)
-                .map_err(|error| format!("could not resolve {}: {error:?}", session.0))?
-            {
-                PresentationResolution::Ready(presentation) => return Ok(presentation),
-                PresentationResolution::NeedsResource(request) => {
-                    let response = match self.ask(CarrierRequestBody::Resource(request))? {
-                        CarrierResponseBody::Resource(response) => response,
-                        other => return Err(unexpected("resource", &other)),
-                    };
-                    self.client
-                        .apply_resource(response)
-                        .map_err(|error| format!("resource was rejected: {error:?}"))?;
-                }
-            }
+        let start = self.core.resolve(session, instance)?;
+        match self.drive(start)? {
+            Outcome::Resolved(presentation) => Ok(*presentation),
+            other => Err(misdriven("a resolved presentation", &other)),
         }
     }
 
@@ -240,7 +164,8 @@ impl RetainedEndpointSession {
         session: &ProjectionSession,
     ) -> Result<Vec<(InstanceId, ResolvedPresentation)>, String> {
         let instances = self
-            .client
+            .core
+            .client()
             .mounted(session)
             .ok_or_else(|| format!("Graphshell did not mount {}", session.0))?
             .scene
@@ -266,41 +191,10 @@ impl RetainedEndpointSession {
         action: &AdvertisedAction,
         payload: &T,
     ) -> Result<IntentResult, String> {
-        let advertised = self
-            .client
-            .mounted(session)
-            .and_then(|mounted| mounted.presentation.offers_for(target))
-            .and_then(|offers| {
-                offers
-                    .iter()
-                    .find(|offer| self.profile.supports(offer.requires))
-            })
-            .is_some_and(|offer| {
-                offer
-                    .semantics
-                    .actions
-                    .iter()
-                    .any(|candidate| candidate == action)
-            });
-        if !advertised {
-            return Err("intent was not advertised for the selected presentation".into());
-        }
-        let ack = self
-            .client
-            .acknowledgement(session)
-            .ok_or_else(|| format!("Graphshell did not acknowledge {}", session.0))?;
-        let payload = serde_json::to_vec(payload)
-            .map_err(|error| format!("could not encode intent payload: {error}"))?;
-        match self.ask(CarrierRequestBody::Intent(IntentInvocation {
-            session: session.clone(),
-            target,
-            observed_epoch: ack.epoch,
-            observed_revision: ack.revision,
-            intent: action.intent.0.clone(),
-            payload,
-        }))? {
-            CarrierResponseBody::Intent(result) => Ok(result),
-            other => Err(unexpected("intent result", &other)),
+        let start = self.core.invoke(session, target, action, payload)?;
+        match self.drive(start)? {
+            Outcome::Intent(result) => Ok(*result),
+            other => Err(misdriven("an intent result", &other)),
         }
     }
 
@@ -309,27 +203,21 @@ impl RetainedEndpointSession {
     pub fn wait_for_change(&mut self) -> Result<bool, String> {
         let heard = match self.carrier.as_deref_mut() {
             Some(carrier) => carrier.wait_for_notice(),
-            None => return Err("endpoint carrier is closed".to_string()),
+            None => return Err(CLOSED.to_string()),
         };
         let notice = self.observe(heard)?;
-        let carrier = self
-            .carrier
-            .as_deref_mut()
-            .ok_or_else(|| "endpoint carrier is closed".to_string())?;
-        resume_after_notice(carrier, &mut self.client, &notice)
+        self.resume(notice)
     }
 
     /// Pump the carrier without waiting for a notice.
     ///
     /// The discovery request is a harmless round trip that lets the carrier
-    /// collect any notices already written by the endpoint. This is intended
-    /// for a background owner that polls on a short cadence while its UI
-    /// remains entirely local.
+    /// collect any notices already written by the endpoint. This is intended for
+    /// a background owner that polls on a short cadence while its UI remains
+    /// entirely local.
     pub fn poll_for_change(&mut self) -> Result<bool, String> {
-        match self.ask(CarrierRequestBody::Discover)? {
-            CarrierResponseBody::Descriptor(_) => {}
-            other => return Err(unexpected("descriptor", &other)),
-        }
+        let start = self.core.poll();
+        self.drive(start)?;
         let mut changed = false;
         loop {
             let notice = self
@@ -339,23 +227,17 @@ impl RetainedEndpointSession {
             let Some(notice) = notice else {
                 break;
             };
-            let carrier = self
-                .carrier
-                .as_deref_mut()
-                .ok_or_else(|| "endpoint carrier is closed".to_string())?;
-            changed |= resume_after_notice(carrier, &mut self.client, &notice)?;
+            changed |= self.resume(notice)?;
         }
         Ok(changed)
     }
 
     pub fn close(mut self) -> Result<(), String> {
-        let carrier_result = if let Some(mut carrier) = self.carrier.take() {
-            let response = carrier.request(CarrierRequestBody::Close);
-            let close = match response {
-                Ok(CarrierResponseBody::Closed) => Ok(()),
-                Ok(other) => Err(unexpected("session close", &other)),
-                Err(error) => Err(error.to_string()),
-            };
+        let carrier_result = if self.carrier.is_some() {
+            let start = self.core.close();
+            let close = self.drive(start).map(|_| ());
+            // Taken after the request, so the close verb still travels.
+            let mut carrier = self.carrier.take().expect("carrier was present");
             let shutdown = carrier
                 .shutdown()
                 .map_err(|error| format!("endpoint did not stop cleanly: {error}"));
@@ -363,8 +245,40 @@ impl RetainedEndpointSession {
         } else {
             Ok(())
         };
-        self.purge();
+        self.core.purge();
         carrier_result
+    }
+
+    /// The carrier itself, for a host sending a verb this wrapper does not
+    /// model.
+    ///
+    /// An escape hatch rather than the ordinary path: everything above keeps
+    /// client state consistent with what the endpoint was told, and a caller
+    /// reaching past it owns that consistency itself.
+    pub fn carrier_mut(&mut self) -> Result<&mut (dyn Carrier + 'static), String> {
+        self.carrier
+            .as_deref_mut()
+            .ok_or_else(|| CLOSED.to_string())
+    }
+
+    // ── The blocking half ───────────────────────────────────────────────────
+
+    /// Carry the core's requests to the carrier until the operation finishes.
+    ///
+    /// The whole of this adapter. Every multi-step operation — a resolve that
+    /// needs two resources, a resume the endpoint answers with a resynchronize —
+    /// is the core asking again, so this loop does not know or care which
+    /// operation it is driving.
+    fn drive(&mut self, mut progress: Progress<Outcome>) -> Result<Outcome, String> {
+        loop {
+            match progress {
+                Progress::Done(outcome) => return Ok(outcome),
+                Progress::Ask(body) => {
+                    let answer = self.ask(body)?;
+                    progress = self.core.on_response(answer)?;
+                }
+            }
+        }
     }
 
     /// Send one request, and notice when the answer means the session is gone.
@@ -376,7 +290,7 @@ impl RetainedEndpointSession {
     fn ask(&mut self, body: CarrierRequestBody) -> Result<CarrierResponseBody, String> {
         let outcome = match self.carrier.as_deref_mut() {
             Some(carrier) => carrier.request(body),
-            None => return Err("endpoint carrier is closed".to_string()),
+            None => return Err(CLOSED.to_string()),
         };
         self.observe(outcome)
     }
@@ -387,56 +301,40 @@ impl RetainedEndpointSession {
             Ok(value) => Ok(value),
             Err(error) => {
                 if error.is_disconnected() {
-                    self.disconnect();
+                    self.core.disconnect();
                 }
                 Err(error.to_string())
             }
         }
     }
 
-    /// Every mounted projection stops being live.
-    ///
-    /// The scene is kept rather than dropped: a host still wants to show what
-    /// was there, it just must not offer to save into it.
-    fn disconnect(&mut self) {
-        let Self {
-            mounted, client, ..
-        } = self;
-        for session in mounted.iter() {
-            client.mark_disconnected(session);
+    /// Drive one notice through the core's resume machine.
+    fn resume(&mut self, notice: CarrierNotice) -> Result<bool, String> {
+        let start = self.core.resume_from_notice(notice)?;
+        match self.drive(start)? {
+            Outcome::Changed(changed) => Ok(changed),
+            other => Err(misdriven("a resume result", &other)),
         }
-    }
-
-    /// The carrier itself, for a host sending a verb this wrapper does not
-    /// model.
-    ///
-    /// An escape hatch rather than the ordinary path: everything above keeps
-    /// client state consistent with what the endpoint was told, and a caller
-    /// reaching through here owns that consistency itself.
-    pub fn carrier_mut(&mut self) -> Result<&mut (dyn Carrier + 'static), String> {
-        self.carrier
-            .as_deref_mut()
-            .ok_or_else(|| "endpoint carrier is closed".to_string())
-    }
-
-    fn purge(&mut self) {
-        for session in std::mem::take(&mut self.mounted) {
-            self.client.forget_session(&session);
-        }
-        self.requests.clear();
     }
 }
 
 impl Drop for RetainedEndpointSession {
     fn drop(&mut self) {
-        self.purge();
         // A carrier may hold a process, a socket, or nothing. Taking it makes
-        // the order explicit: source bytes are purged before whatever the
-        // carrier holds is released.
+        // the release unconditional, so whatever the carrier holds is released.
         drop(self.carrier.take());
+        self.core.purge();
     }
 }
 
+const CLOSED: &str = "endpoint carrier is closed";
+
+/// Recover from a revision notice over a blocking carrier.
+///
+/// Retained for hosts that drive a carrier directly rather than through a
+/// [`RetainedEndpointSession`]. New code should prefer
+/// [`SessionCore::resume_from_notice`], which is the same sequencing without
+/// the carrier.
 pub fn resume_after_notice(
     carrier: &mut (dyn Carrier + 'static),
     client: &mut ClientState,
@@ -445,7 +343,7 @@ pub fn resume_after_notice(
     let Some(mut request) = resume_request_for_notice(client, notice)? else {
         return Ok(false);
     };
-    for _ in 0..4 {
+    for _ in 0..crate::core::RESUME_ATTEMPTS {
         let reply = match carrier
             .request(CarrierRequestBody::Resume(request))
             .map_err(|error| error.to_string())?
@@ -461,8 +359,10 @@ pub fn resume_after_notice(
                     notice.session.0
                 )
             })? {
-            ResumeApplication::Current(_) | ResumeApplication::Applied(_) => return Ok(true),
-            ResumeApplication::Resynchronize(next) => request = next,
+            crate::ResumeApplication::Current(_) | crate::ResumeApplication::Applied(_) => {
+                return Ok(true);
+            }
+            crate::ResumeApplication::Resynchronize(next) => request = next,
         }
     }
     Err("endpoint did not produce an applicable resume after four attempts".into())
@@ -498,4 +398,15 @@ pub fn unexpected(expected: &str, actual: &CarrierResponseBody) -> String {
             CarrierResponseBody::Suspended => "a session suspend",
         }
     )
+}
+
+/// Name the outcome the core produced when it was not the one this operation
+/// started.
+///
+/// Unreachable unless the core and this adapter disagree about which operation
+/// is in flight, which would be a bug in one of them rather than anything an
+/// endpoint can cause. It is a message rather than a panic because a host
+/// should be able to report it and carry on.
+fn misdriven(expected: &str, actual: &Outcome) -> String {
+    format!("Graphshell expected {expected} but the session core produced {actual:?}")
 }

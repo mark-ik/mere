@@ -12,14 +12,37 @@ categories = ["command-line-utilities", "authentication"]
 [features]
 default = ["personal-sync"]
 personal-sync = []
+# The Distillery trainer resource, composed into the works lane
+# (`src/resident_distillery.rs`). Gated because it pulls the burn stack into
+# the desktop resident: a default build must stay light, and a lane whose
+# settings name a trainer this build does not carry is refused loudly rather
+# than composed diminished.
+trainer = ["distillery/trainer"]
+# The same trainer, composed on this machine's discrete GPU. Additive over
+# `trainer`, and honest about the difference: a lane that says `device: "gpu"`
+# on a build without this feature refuses `open` by name rather than quietly
+# training on the CPU, and `HostFacts.gpu` follows the composed resource
+# rather than the hardware — a device with an RTX in it still advertises no
+# GPU unless a GPU resource was actually registered.
+trainer-gpu = ["trainer", "distillery/trainer-gpu"]
 
 [dependencies]
 blake3.workspace = true
 castellan = { workspace = true, features = ["keeper"] }
 chirograph.workspace = true
+# The operational works composed as this resident's fourth lane
+# (`src/resident_distillery.rs`). Default features only unless djinn's own
+# `trainer` feature is on: `remote` would pull the burn stack into the desktop
+# resident, and `trainer` pulls it deliberately and by the owner's request.
+distillery.workspace = true
 graphshell = { version = "0.0.2", path = "../graphshell", features = ["personal-sync"] }
 knot-editor = { version = "0.0.3", path = "../knot" }
 mere-resident.workspace = true
+# The policy vocabulary the device sensor fills in (`DeviceConditions`), and
+# the `ConditionSource` seam it plugs into. `mere-mesh` refuses to touch the
+# OS; `src/conditions.rs` is the Windows-facing half that seam expects.
+mesh.workspace = true
+mesh-host.workspace = true
 muniment.workspace = true
 pandect.workspace = true
 personae = { workspace = true, features = ["agent"] }
@@ -28,12 +51,44 @@ serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 ssh-agent-lib = "0.6"
 thiserror = "1"
-tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+# "signal" is what lets the run loop stop the mesh works deliberately on Ctrl-C
+# rather than being killed mid-lease.
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 transport = { workspace = true, features = ["notochord"] }
 uuid = { workspace = true, features = ["v5"] }
 zeroize = "1"
+
+# Device condition sensing (`src/conditions.rs`). Win32 only — no COM, no WMI,
+# no WinRT, so the resident never pays for a COM apartment to read a battery.
+# `Win32_NetworkManagement_Ndis` and `Win32_Networking_WinSock` are not called
+# directly; `IP_ADAPTER_ADDRESSES_LH` is cfg-gated on both.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_NetworkManagement_Ndis",
+  "Win32_Networking_WinSock",
+  "Win32_System_Power",
+  "Win32_System_SystemInformation",
+  "Win32_UI_Input_KeyboardAndMouse",
+] }
+
+# The local clock for `src/conditions.rs` off Windows, where `GetLocalTime` is
+# not available and `std` carries no timezone. chrono rather than `time`:
+# `time`'s local-offset lookup refuses in a multi-threaded process on Unix, and
+# the resident is one. Default features off — "clock" is the whole reason.
+[target.'cfg(not(windows))'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# `sysctlbyname("hw.memsize")` for `HostFacts::memory_mib`
+# (`src/resident_distillery.rs`). macOS has no `/proc/meminfo`, and the sysctl
+# is the kernel's own answer; libc rather than spawning `sysctl(8)`, because a
+# resident should not fork a process to learn its own memory size. 0.2 is
+# already in this workspace's graph.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
 
 [[bin]]
 name = "djinn"
@@ -41,7 +96,14 @@ path = "src/bin/djinn.rs"
 required-features = ["personal-sync"]
 
 [dev-dependencies]
+# The trainer receipt (`tests/distillery_trainer.rs`) authors the synthetic
+# base model and reads the published artifacts back out of the model library,
+# so the *test* names eidetic and safetensors. Production djinn does not:
+# `src/resident_distillery.rs` speaks only `muniment::RedbBackend` and
+# distillery's own re-exported trainer vocabulary.
+eidetic.workspace = true
 graphshell-endpoint.workspace = true
 p2panda-core = "0.7.0"
+safetensors = "0.4"
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }

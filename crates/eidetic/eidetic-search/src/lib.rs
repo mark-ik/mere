@@ -1,10 +1,13 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! eidetic-search — lexical recall over your own trail (Phase 9, producer half).
 //!
 //! The [`TrailIndex`] is a tantivy index minted **from** `BrowsingTrace`
-//! engrams: derived state, never the source of truth. The trace corpus in
+//! codicils: derived state, never the source of truth. The trace corpus in
 //! the eidetic store is the authority; the index can always be re-minted
 //! from it ([`TrailIndex::rebuild`]), which is exactly what happens when the
 //! on-disk index's format no longer matches the linked tantivy
@@ -15,8 +18,9 @@
 //!
 //! Three surfaces:
 //!
-//! - **Recall** — [`TrailIndex::search`]: BM25 over titles, URLs, and
-//!   domains. "Where did I read about X?"
+//! - **Recall** — [`TrailIndex::search`]: BM25 over tokenized titles, page
+//!   text, and URL components; a single absolute URL takes an exact canonical
+//!   URL path. "Where did I read about X?"
 //! - **Reports** — [`TrailIndex::top_domains`] /
 //!   [`TrailIndex::visits_histogram`] over the reserved fast-field columns
 //!   (domain / owner / time / transition are columnar from day one, so
@@ -26,10 +30,10 @@
 //!   other) by reciprocal-rank fusion. This crate deliberately does not
 //!   depend on an embedding engine; the caller brings both rankings.
 //!
-//! The `SearchIndexSpec` engram ([`spec`]) is the hand-off contract: it
+//! The `SearchIndexSpec` codicil ([`spec`]) is the hand-off contract: it
 //! names the field set, tokenizer, and tantivy format version. Locally it
 //! also rides a sidecar file in the index directory so `open` can check
-//! compatibility before tantivy touches the segments; as an engram it is
+//! compatibility before tantivy touches the segments; as an codicil it is
 //! what a moot's consume half (deferred) would verify before merging.
 
 pub mod fusion;

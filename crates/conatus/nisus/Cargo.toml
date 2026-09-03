@@ -1,0 +1,19 @@
+[package]
+name = "nisus"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92.0"
+license.workspace = true
+description = "Generic revisioned voxel chunk and edit mechanics for Merely spatial applications and games."
+repository = "https://github.com/merely-made/mere"
+keywords = ["game-engine", "voxel", "spatial", "simulation"]
+categories = ["game-engines", "simulation", "data-structures"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

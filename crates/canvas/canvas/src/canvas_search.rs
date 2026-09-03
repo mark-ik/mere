@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! `CanvasSearchSurface` — host-agnostic adapter combining
 //! [`SemanticSearch`], per-node 2D positions, current focus query, and
@@ -13,15 +16,14 @@
 //! couplings.
 //!
 //! This module does **not** know about graphshell or any UI toolkit —
-//! it composes existing embed + quint
+//! it composes existing embed + numen
 //! primitives. Graphshell-side palette wiring (action registration,
 //! input event routing) is its own slice.
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use quint::projection::FieldProjection;
-use quint::registry::FieldId;
+use numen::{FieldId, FieldProjection};
 
 use crate::field_bridge::register_query_similarity_field;
 use esp::embed::VectorIndex;
@@ -181,8 +183,7 @@ impl<K: Hash + Eq + Clone, P: EmbeddingProvider> CanvasSearchSurface<K, P> {
 mod tests {
     use super::*;
     use esp::embed::StubEmbeddingProvider;
-    use quint::eval::eval_scalar;
-    use quint::registry::{FieldDef, FieldRegistry};
+    use numen::{FieldDef, FieldRegistry, eval_scalar};
 
     fn provider() -> StubEmbeddingProvider {
         StubEmbeddingProvider::new(64).unwrap()

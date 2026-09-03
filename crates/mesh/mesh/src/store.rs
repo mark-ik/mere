@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! The mesh's store of record — muniment behind the p2panda-store adapter.
 //!
@@ -12,7 +15,7 @@
 //!
 //! This is the M1 plan's step-0 seam, now over the shared substrate: where the
 //! mesh once carried p2panda-store's own SQLite store, it rides the same
-//! muniment-backed adapter murm and tessera converge on, so all three share one
+//! muniment-backed adapter Murm and Standing converge on, so all three share one
 //! store family (redb desktop, IndexedDB + OPFS in the browser).
 //!
 //! Each author has an event log and a checkpoint log under the mesh topic. An

@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Model library — API for resolving model artifacts.
 
@@ -24,11 +27,11 @@ pub struct ModelComponents {
     pub weight_bytes: Vec<u8>,
 }
 
-/// Library API for managing model engrams.
+/// Library API for managing model codicils.
 pub struct ModelLibrary;
 
 impl ModelLibrary {
-    /// Save a model manifest as a typed engram.
+    /// Save a model manifest as a typed codicil.
     pub async fn save_model(store: &mut dyn Store, manifest: ModelManifest) -> Result<ManifestId> {
         save_typed(
             store,

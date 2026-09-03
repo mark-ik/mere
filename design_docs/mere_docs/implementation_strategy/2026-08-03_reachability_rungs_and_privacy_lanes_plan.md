@@ -1,7 +1,7 @@
 # Reachability Rungs and Privacy Lanes
 
 **Date:** 2026-08-03
-**Status:** R1 in progress; R2 scoped; R3 scoped, gated on emissary entering the tree.
+**Status:** R0 landed, recorded 2026-09-01; R1 landed 2026-08-03 (Graphshell) and 2026-08-06 (Knot), the genuinely remote receipt still open; R2 scoped; R3 scoped, gated on emissary entering the tree. Veilid retired 2026-09-01.
 **Depends on:** the S1 findings recorded in the
 [reference host plan](2026-07-27_graphshell_reference_host_plan.md) H6 addendum;
 the retinue lane in `mere-transport` (feature-gated, trusted-mesh only until
@@ -44,6 +44,72 @@ The resulting plane split, which every rung below serves:
 > emissary destinations) are the control and rendezvous plane. Radio is the
 > constrained plane and the zero-infrastructure rendezvous. Nothing below
 > moves blobs off iroh.
+
+## R0. Local-link discovery (the landed rung)
+
+Recorded 2026-09-01, after the fact. The bottom rung of the ladder was built
+under the reference host plan's H10 and the device resident consolidation
+plan's R5, and no single document said so. This section is the home: the
+standards survey §4, H10 and the Djinn plan's F3 point here.
+
+**What is in production.** p2panda's mDNS (`MdnsDiscoveryMode`,
+`P2pandaTransportBuilder::mdns`) runs `Active` in Turnstone's Knot publish and
+share-reader services, Graphshell's personal sync host, Knot's sync host and
+Djinn: LAN-first, an exported ticket as the deliberate off-LAN fallback, no
+relay by default. Five product crates enable `p2panda-net`'s `iroh_mdns`
+feature. The service on the wire is `_p2pandav1._udp.local`, not `irohv1`;
+every early instrument filtered for the wrong string, and `avahi-browse` never
+surfaces it, so observe with a raw multicast listener armed before the peer
+starts.
+
+**Where the policy lives.** `P2pandaHostPolicy` and `P2pandaOverlayHost` in
+`crates/murm/transport/src/p2panda_host.rs` (landed 2026-08-22, `0f0a8006`,
+device resident R5) own discovery mode, relays, route seeding, endpoint
+reporting and shutdown once; product hosts keep identity, admission, stores and
+protocol handlers. Default policy is `Active` mDNS and no relay. A new host
+configures discovery through this type, not the builder.
+
+**Two forks pinned by branch** (root `Cargo.toml`, the "LAN peer discovery
+(H10)" block):
+
+- `iroh-mdns-address-lookup`, `mere` branch: upstream
+  n0-computer/iroh-address-lookups PR #7, per-interface multicast sockets kept
+  in sync through netwatch. The real fix. 0.4.0 joins only the default-route
+  interface, so a multi-homed Windows host whose WSL/Hyper-V adapter holds the
+  multicast route never hears LAN mDNS. Drop the patch when a release contains
+  it.
+- `swarm-discovery`, `mere` branch: rebuilds a socket after three consecutive
+  send failures. A dead theory (H10 final, `dfe95f3e`). The macOS stall is
+  policy, not sockets: an unsigned binary with no responsible GUI app is denied
+  local-network egress on Sequoia and never becomes grantable. A resident Mere
+  peer on macOS must ship as a signed app carrying the local-network usage
+  declaration. The pin is harmless and fixes nothing; drop it at the next
+  revisit.
+
+**The client-side race**, fixed in `g5_peer` and inherited by every host:
+p2panda builds the endpoint and its mDNS actor lazily on the first dial and
+reads the address book synchronously, so a ticketless dial straight after
+start loses on any real link and wins on loopback. Force endpoint construction
+before dialing and retry to a deadline. `network_carrier.rs` records that the
+retry belongs to the caller that knows its deadline, never to the carrier.
+
+**What the rung does not do.** It resolves an address for a peer id you
+already hold; `mere-transport` still exposes no way to enumerate what
+discovery found. Service browsing and advertisement (DNS-SD, RFC 6763:
+`_ipp._tcp`, `_http._tcp`, arbitrary services) exist nowhere in the tree. That
+is planned work with owners rather than a gap in this rung: Murm implements
+browsing and advertisement and Djinn supplies the registry of disclosure-safe
+records ([Djinn family resident services plan](2026-08-22_djinn_family_resident_services_plan.md), F3);
+H10 in the [reference host plan](2026-07-27_graphshell_reference_host_plan.md)
+scopes the consumer, where a printer is a node, a TXT record is a claim and
+never a fact, and browsing never implies admission. The transport-level
+device-list accessor is the seam both need first.
+
+**Done when** (met for peer discovery): ticketless connect across two physical
+machines, proven Fedora-to-Windows and Windows-to-Fedora under H10 and
+Q-PC-to-Windows for Knot's K2. Open: macOS as a discoverable peer waits on a
+signed bundle, and cross-LAN discovery stays convenience coverage by G5's own
+terms.
 
 ## R1. Cached dial hints (the workhorse rung)
 
@@ -253,6 +319,10 @@ lane. Nothing depends on it; evaluate when that toggle is wanted.
   only mints the field so the schema moves once.
 - **The emissary parity checklist.** Its own document, once the rendezvous
   receipt exists to anchor it.
+- **Veilid.** The [event DAG brief](2026-05-07_event_dag_substrate_brief.md)
+  §6 once made it an optional per-moot privacy transport. Retired 2026-09-01:
+  it replaces transport rather than sync, so the plane split above leaves it
+  no role that emissary and retinue do not already fill.
 
 ## Ordering
 
@@ -261,3 +331,27 @@ on the path between two machines on the same desk. R2 after the H6 addendum's
 S2/S3 or beside them, since the transfer lane is the first real consumer of
 durable remote reachability. R3's rendezvous receipt whenever emissary enters
 the tree as a dependency; it does not block R1 or R2.
+
+## Findings
+
+### 2026-09-01 — the ladder's bottom rung was built without a home
+
+- R0 recorded from code: `P2pandaOverlayHost` (2026-08-22), the two
+  branch-pinned forks and their verdicts in the root `Cargo.toml`, active mDNS
+  in five product surfaces. The standards survey §4 (2026-08-24) claimed no
+  local-link discovery story existed anywhere in the stack: true for DNS-SD
+  service browsing, false for peer discovery. Corrected there.
+- R1's status line said "in progress" while its own body recorded the receipt
+  of 2026-08-03 and Knot's half on 2026-08-06. Corrected. The genuinely remote
+  receipt, which isolates whether the direct address or the relay component
+  carried a dial, remains open.
+- Veilid, named in the event DAG brief §6 as a per-moot privacy transport,
+  retired in favour of R3's lanes; cross-referenced under Not in scope.
+
+## Progress
+
+### 2026-09-01
+
+- R0 section added; status line corrected; Findings and Progress sections
+  added per DOC_POLICY §8; Veilid entry added to Not in scope. Survey §4,
+  reference host H10 and Djinn F3 now point here.

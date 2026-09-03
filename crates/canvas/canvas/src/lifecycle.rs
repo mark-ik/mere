@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Construction, graph/physics lifecycle, and per-frame derived-state reconcile.
 
@@ -61,6 +64,7 @@ impl Canvas {
         self.node_states.clear();
         self.node_shapes.clear();
         self.node_faces.clear();
+        self.derived_face_cache.clear();
         self.node_sizes.clear();
         self.node_sprites.clear();
         self.node_sprite_hulls.clear();
@@ -138,6 +142,8 @@ impl Canvas {
             node_states: HashMap::new(),
             node_shapes: HashMap::new(),
             node_faces: HashMap::new(),
+            derived_face_palette: DerivedFacePalette::default(),
+            derived_face_cache: HashMap::new(),
             node_sizes: HashMap::new(),
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),

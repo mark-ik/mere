@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 use std::ffi::OsStr;
 use std::fs;
 
@@ -122,6 +128,7 @@ fn a_real_startup_unlocked_vault_process_saves_restarts_and_stays_sealed() {
     let persona = personae::PersonaId::new();
     let settings = pandect::DeviceSettings {
         startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+        ..Default::default()
     };
     pandect::save_device_settings(root.path(), &settings).unwrap();
     pandect::wallet_store::ensure_wallet_state(root.path(), persona, "Knot process receipt")

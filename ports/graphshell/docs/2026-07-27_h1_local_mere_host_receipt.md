@@ -64,6 +64,13 @@ All commands used the ignored `target-plan-graphshell` proof target.
 cargo test -p graphshell --no-default-features --features web
 ```
 
+> **2026-09-01.** On windows-msvc this bare invocation no longer links
+> (`LNK1120`, one unresolved `drop_glue<CartographyGeometry>` from an
+> incremental `mere-canvas`); run it as `cargo test-web`, the alias in
+> `.cargo/config.toml.example`, which adds
+> `--config profile.dev.package.mere-canvas.incremental=false`. Cause, cost and
+> retire condition are on the alias. 39 tests pass under it as of that date.
+
 Result: 10 passed, 0 failed. This includes the H1 load, project, typed-intent
 mutation, persistence, reopen, remote remount, unknown-facet, and byte-equivalent
 unchanged-save proof.

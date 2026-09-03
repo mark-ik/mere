@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! PEFT LoRA adapter loading for the llama-family decoder.
 //!
 //! The implementation keeps base safetensors immutable, decodes a fresh
@@ -58,7 +64,10 @@ fn tensor<'a>(tensors: &'a SafeTensors<'_>, name: &str) -> Result<TensorView<'a>
         .map_err(|_| InferError::InvalidWeights(format!("missing adapter tensor: {name}")))
 }
 
-fn dimensions(config: &DecoderConfig, module: &str) -> Result<(usize, usize), InferError> {
+pub(crate) fn dimensions(
+    config: &DecoderConfig,
+    module: &str,
+) -> Result<(usize, usize), InferError> {
     let h = config.hidden_size;
     let kv = config.kv_heads() * config.head_dim();
     match module {
@@ -70,7 +79,7 @@ fn dimensions(config: &DecoderConfig, module: &str) -> Result<(usize, usize), In
     }
 }
 
-fn add_delta(base: Tensor<2>, a: Tensor<2>, b: Tensor<2>, scale: f32) -> Tensor<2> {
+pub(crate) fn add_delta(base: Tensor<2>, a: Tensor<2>, b: Tensor<2>, scale: f32) -> Tensor<2> {
     // PEFT stores A [rank, in] and B [out, rank]. Burn linears store
     // [in, out], so the resident delta is A^T @ B^T.
     base + a.transpose().matmul(b.transpose()).mul_scalar(scale)
@@ -210,6 +219,7 @@ pub struct PeftLoraAdapterLoader<'a> {
 
 impl<'a> PeftLoraAdapterLoader<'a> {
     /// Construct a loader over immutable base artifacts and a host-selected device.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         base_model_ref: eidetic::ManifestId,
         tokenizer_ref: eidetic::ManifestId,

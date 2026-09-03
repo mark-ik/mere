@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Projection geometry — the geometry sidecar for a forme's **Tree** projection.
 //! (Cartography geometry moved to the canvas crate in the 2026-07-09 platen
@@ -18,18 +21,20 @@
 //! *forked formes*, not one bench in two views). Leaves are **member-keyed** so a
 //! saved geometry survives re-projection and reconciles against the arrangement.
 //!
-//! A [`TreeGeometry`] is a structural mirror of the workbench's live split tree
-//! (platen's `Workbench`): the bridge ([`Workbench::to_arrangement`] /
-//! [`Workbench::from_arrangement`]) derives an `(Arrangement, TreeGeometry)` pair
+//! A [`TreeGeometry`] is a structural mirror of the tiled layout's live split tree
+//! (platen's [`TileLayout`](crate::TileLayout)): the bridge
+//! ([`TileLayout::to_arrangement`](crate::TileLayout::to_arrangement) /
+//! [`TileLayout::from_arrangement`](crate::TileLayout::from_arrangement)) derives an
+//! `(Arrangement, TreeGeometry)` pair
 //! from a tree and rebuilds the tree from the pair, losslessly. The arrangement
 //! is the semantic + re-projection truth; this is the layout refinement over the
 //! arrangement's default flat projection ([`crate::project_tree`]).
 
 use forme::GraphMemberId;
-use genet_host_api::tile::SplitAxis;
 use serde::{Deserialize, Serialize};
+use workbench::SplitAxis;
 
-/// Split orientation. Mirrors [`genet_host_api::tile::SplitAxis`] with a serde impl —
+/// Split orientation. Mirrors [`workbench::SplitAxis`] with a serde impl —
 /// Genet's axis is a render contract and is deliberately serde-free, while
 /// projection geometry persists (the `(FormeRef, ProjectionKind)` store).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

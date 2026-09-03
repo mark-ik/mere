@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! One decoder layer: pre-norm attention and pre-norm SwiGLU MLP, each
 //! with a residual — the llama-family block, assembled from burn-nn's
 //! `RmsNorm` + `SwiGlu` plus this crate's [`DecoderAttention`].
@@ -46,6 +52,7 @@ pub struct DecoderLayer {
 }
 
 /// The pre-loaded tensors for one layer, in Burn `[in, out]` convention.
+#[derive(Clone)]
 pub struct LoadedDecoderLayer {
     pub input_norm_gamma: Tensor<1>,
     pub q_w: Tensor<2>,

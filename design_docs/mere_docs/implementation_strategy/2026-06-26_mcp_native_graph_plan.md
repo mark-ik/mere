@@ -13,7 +13,7 @@ without bespoke glue. No work scheduled.
 **Expose: Mere as an MCP server.** The graph (nodes, edges, queries, crawl, clip)
 offered as MCP tools and resources, so an external agent (Claude or any MCP client)
 operates on the user's space. The clean substrate is the existing
-[command registry](2026-06-21_command_registry_configurable_menus_plan.md): the agent's
+[command registry](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md): the agent's
 API is already the same `ActionRegistry` the user drives (the agent harness already runs
 over `Command::ALL`), so the MCP tool set is that registry exposed over MCP, plus
 read-only resources for nodes and subgraphs. Mutating tools route through the same
@@ -45,7 +45,7 @@ outbound half of the same boundary.
 ## Cross-references
 
 - [borrowed-ideas brief](../research/2026-06-25_borrowed_ideas_brief.md): the source.
-- [command registry plan](2026-06-21_command_registry_configurable_menus_plan.md): the
+- [command registry plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md): the
   `ActionRegistry` that becomes the MCP tool set.
 - [capability-gate catalogue brief](../research/2026-05-14_capability_gate_catalogue_brief.md):
   the gating the exposed tools sit behind.

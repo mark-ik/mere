@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Content-addressed model-adapter manifests.
 //!
@@ -12,10 +15,10 @@ use serde::{Deserialize, Serialize};
 use crate::schema::{Hash, ManifestId, SchemaRef};
 use crate::typed::TypedPayload;
 
-/// Canonical bytes of the `ModelAdapterManifest` schema engram payload.
+/// Canonical bytes of the `ModelAdapterManifest` schema codicil payload.
 const MODEL_ADAPTER_MANIFEST_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.ModelAdapterManifest/v1","body":{"version":1,"description":"Compatibility-bound model adapter manifest.","required":["name","base_model_ref","adapter_blob","adapter_config_blob","adapter_format","adapter_format_version","runtime_compat","rank","alpha","target_modules","tokenizer_ref","prompt_template_hash"],"fields":{"name":{"type":"string"},"base_model_ref":{"type":"string"},"adapter_blob":{"type":"string"},"adapter_config_blob":{"type":"string"},"adapter_format":{"type":"string"},"adapter_format_version":{"type":"string"},"runtime_compat":{"type":"object"},"rank":{"type":"integer"},"alpha":{"type":"number"},"target_modules":{"type":"array"},"tokenizer_ref":{"type":"string"},"prompt_template_hash":{"type":"string"},"quantization_assumption":{"type":["string","null"]},"training_corpus_root":{"type":["string","null"]},"training_method":{"type":"object"},"eval_results":{"type":["string","null"]}}}}"#;
 
-/// The well-known schema reference for `ModelAdapterManifest` engrams.
+/// The well-known schema reference for `ModelAdapterManifest` codicils.
 pub static MODEL_ADAPTER_MANIFEST_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(|| {
         SchemaRef::from_id(ManifestId::from_hash(Hash::of(
@@ -67,13 +70,13 @@ pub struct ModelAdapterManifest {
     /// Quantization assumed while training, or `None` for unquantized weights.
     #[serde(default)]
     pub quantization_assumption: Option<String>,
-    /// Training-corpus engram, when the source publishes one.
+    /// Training-corpus codicil, when the source publishes one.
     #[serde(default)]
     pub training_corpus_root: Option<ManifestId>,
     /// Structured training method and hyperparameters.
     #[serde(default)]
     pub training_method: serde_json::Value,
-    /// Evaluation-report engram, when the source publishes one.
+    /// Evaluation-report codicil, when the source publishes one.
     #[serde(default)]
     pub eval_results: Option<ManifestId>,
 }

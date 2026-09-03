@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Transfer offers: how a source tells a destination device that a transfer is
 //! waiting, over the personal graph the two already share.
 //!
@@ -22,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::personal_sync::{PersonalGraphEvent, SyncProjection, SyntheticAddressRule};
-use crate::product::decode_engram;
+use crate::product::decode_codicil;
 use crate::transfer::{TransferEndpointV1, TransferManifestV1, TransferOperation};
 
 pub const TRANSFER_OFFER_FACET: &str = "graphshell.transfer-offer/v1";
@@ -104,7 +110,7 @@ pub fn offer_for(
     pairing_id: impl Into<String>,
     offered_at_ms: u64,
 ) -> Result<TransferOfferV1, OfferError> {
-    let product = decode_engram(&manifest.selection.payload)
+    let product = decode_codicil(&manifest.selection.payload)
         .map_err(|error| OfferError::Selection(error.to_string()))?;
     Ok(TransferOfferV1 {
         schema: TRANSFER_OFFER_FACET.to_string(),

@@ -1,237 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="full-page">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Graphshell H3</title>
     <link rel="stylesheet" href="./styles.css?h3=1">
   </head>
-  <body data-ready="false">
-    <canvas
-      id="graphshell-canvas"
-      tabindex="0"
-      role="application"
-      aria-label="Graphshell graph canvas. Use arrow keys to pan, plus and minus to zoom, and Enter to open object detail."
-    ></canvas>
+  <body class="full-page">
+    <!-- The full-page surface: the component fills the body and owns the
+         title. The same element embedded beside other content is the other
+         surface (embed.html); both run the same bundle and the same host. -->
+    <graphshell-view id="graphshell" data-owns-title data-ready="false"></graphshell-view>
 
-    <main id="semantic-host" aria-label="Graphshell reference host">
-      <header aria-label="Mounted sessions">
-        <button
-          id="session-local"
-          data-command="session-local"
-          aria-pressed="true"
-        >Local Mere</button>
-        <button
-          id="session-remote"
-          data-command="session-remote"
-          aria-pressed="false"
-        >Remote mount</button>
-      </header>
-
-      <nav aria-label="Graph controls">
-        <button data-command="select-web">Select research object</button>
-        <button data-command="open-detail">Edit selected object</button>
-        <button data-command="pan-left" aria-label="Pan left">Pan left</button>
-        <button data-command="pan-right" aria-label="Pan right">Pan right</button>
-        <button data-command="pan-up" aria-label="Pan up">Pan up</button>
-        <button data-command="pan-down" aria-label="Pan down">Pan down</button>
-        <button data-command="zoom-in" aria-label="Zoom in">Zoom in</button>
-        <button data-command="zoom-out" aria-label="Zoom out">Zoom out</button>
-      </nav>
-
-      <aside id="product-panel" aria-label="Graph tools">
-        <section id="capture-panel" hidden>
-          <h2>Browser history</h2>
-          <p id="capture-status" role="status">Checking capture permission…</p>
-          <p id="capture-attribution">
-            Attribution is supplied by the Graphshell host.
-          </p>
-          <label for="capture-range">First import</label>
-          <select id="capture-range">
-            <option value="0">Live visits only</option>
-            <option value="1">Last day</option>
-            <option value="7" selected>Last 7 days</option>
-            <option value="30">Last 30 days</option>
-          </select>
-          <label class="check">
-            <input id="capture-strip-query" type="checkbox">
-            Remove query strings before storage
-          </label>
-          <label for="capture-exclusions">Excluded origins</label>
-          <textarea
-            id="capture-exclusions"
-            placeholder="https://private.example"
-          ></textarea>
-          <div class="button-row">
-            <button id="capture-enable" type="button">Enable capture</button>
-            <button id="capture-save" type="button">Save privacy settings</button>
-            <button id="capture-disable" type="button">Stop capture</button>
-          </div>
-          <h3>Stored visits</h3>
-          <label for="history-filter-range">When</label>
-          <select id="history-filter-range">
-            <option value="0">All time</option>
-            <option value="1">Last day</option>
-            <option value="7" selected>Last 7 days</option>
-            <option value="30">Last 30 days</option>
-          </select>
-          <label for="history-filter-persona">Persona, exact address (optional)</label>
-          <input id="history-filter-persona" placeholder="personae://persona/alice">
-          <label for="history-filter-device">Device, exact address (optional)</label>
-          <input id="history-filter-device" placeholder="personae://device/phone">
-          <button id="history-filter-apply" type="button">Filter stored visits</button>
-          <p id="history-result-status" role="status">Loading stored visits…</p>
-          <ol id="history-results"></ol>
-          <h3>Forget an address</h3>
-          <label for="history-forget-address">Exact stored address</label>
-          <input id="history-forget-address" placeholder="https://example.net/page">
-          <label class="check">
-            <input id="history-forget-object" type="checkbox">
-            Also remove the graph object if capture created it
-          </label>
-          <button id="history-forget" type="button">Forget this address</button>
-          <a href="bridge.html">Open Identity</a>
-        </section>
-
-        <section>
-          <h2>Add an object</h2>
-          <label for="address-input">Address</label>
-          <input id="address-input" value="https://example.net/new-object">
-          <label for="address-title">Title</label>
-          <input id="address-title" value="New research object">
-          <button data-command="add-address">Add address</button>
-          <label class="file-picker" for="file-input">Choose a file</label>
-          <input id="file-input" type="file">
-        </section>
-
-        <section>
-          <h2>Find and arrange</h2>
-          <label for="search-input">Search</label>
-          <input id="search-input" placeholder="title, tag, facet, or address">
-          <label for="relation-filter">Relation family</label>
-          <select id="relation-filter">
-            <option value="all">All families</option>
-            <option value="semantic">Semantic</option>
-            <option value="traversal">Traversal</option>
-            <option value="containment">Containment</option>
-            <option value="arrangement">Arrangement</option>
-            <option value="imported">Imported</option>
-            <option value="provenance">Provenance</option>
-          </select>
-          <div class="button-row">
-            <button data-command="apply-filter">Apply</button>
-            <button data-command="clear-filter">Clear</button>
-          </div>
-          <label for="arrangement-select">Arrangement</label>
-          <select id="arrangement-select">
-            <option value="phyllotaxis.default">Spiral</option>
-            <option value="grid.default">Grid</option>
-            <option value="spectral.default">Spectral</option>
-            <option value="kanban.default">Kanban by site</option>
-            <option value="timeline.default">Timeline</option>
-          </select>
-          <div class="button-row">
-            <button data-command="apply-arrangement">Arrange</button>
-            <button data-command="toggle-physics">Pause physics</button>
-          </div>
-        </section>
-
-        <section>
-          <h2>Scene and transfer</h2>
-          <div class="button-row">
-            <button data-command="save-scene">Save scene</button>
-            <button data-command="reopen-scene">Reopen</button>
-          </div>
-          <label for="transfer-scope">Transfer scope</label>
-          <select id="transfer-scope">
-            <option value="object-only">Object only</option>
-            <option value="direct-relations">Object and direct relations</option>
-            <option value="selected-subgraph" selected>Selected subgraph</option>
-            <option value="saved-scene">Saved scene and selection</option>
-          </select>
-          <label class="check">
-            <input id="include-local-file" type="checkbox">
-            Include device-local file metadata
-          </label>
-          <div class="button-row">
-            <button data-command="export-engram">Export</button>
-            <button data-command="open-engram">Open export</button>
-          </div>
-          <textarea id="engram-data" aria-label="Graph engram JSON" placeholder="Exported graph engram"></textarea>
-        </section>
-      </aside>
-
-      <section
-        id="detail-surface"
-        aria-label="Object detail"
-        aria-hidden="true"
-      >
-        <h1 id="detail-title">No object selected</h1>
-        <p id="detail-address"></p>
-        <section
-          id="action-draft-surface"
-          aria-label="Endpoint action input"
-          aria-hidden="true"
-          hidden
-        ></section>
-        <label for="edit-title">Title</label>
-        <input id="edit-title">
-        <label for="edit-tags">Tags</label>
-        <input id="edit-tags" placeholder="comma, separated">
-        <label for="facet-id">Facet id and JSON</label>
-        <input id="facet-id" value="notes.user/v1">
-        <textarea id="facet-json">{"note":"Graphshell H3"}</textarea>
-        <button data-command="save-metadata">Save metadata</button>
-
-        <label for="relation-target">Relate to address</label>
-        <input id="relation-target" value="i2p://reference/service">
-        <select id="relation-kind" aria-label="Relation kind">
-          <option value="user-grouped">Grouped with</option>
-          <option value="cites">Cites</option>
-          <option value="hyperlink">Links to</option>
-          <option value="collection-member">Contains</option>
-          <option value="frame-member">Shares scene</option>
-        </select>
-        <div class="button-row">
-          <button data-command="add-relation">Add relation</button>
-          <button data-command="select-pair">Select pair</button>
-        </div>
-
-        <label for="face-select">Representation</label>
-        <select id="face-select">
-          <option value="favicon">Favicon</option>
-          <option value="bare">Bare</option>
-          <option value="sprite">Sprite</option>
-        </select>
-        <button data-command="apply-face">Use representation</button>
-
-        <label for="handler-select">Open handler</label>
-        <select id="handler-select">
-          <option value="graphshell.inspect">Graphshell Inspect</option>
-          <option value="system.default">Another application</option>
-        </select>
-        <div class="button-row">
-          <button data-command="invoke-action">Open selected</button>
-          <button data-command="close-detail">Close</button>
-        </div>
-      </section>
-
-      <section class="semantic-status" aria-label="Host status">
-        <h2>Current state</h2>
-        <dl>
-          <dt>Session</dt>
-          <dd id="active-session">Booting</dd>
-          <dt>Selection</dt>
-          <dd id="selection-status">None</dd>
-          <dt>Action</dt>
-          <dd id="action-status" role="status">Ready</dd>
-          <dt>Viewport</dt>
-          <dd id="viewport-status">Unknown</dd>
-          <dt>Product</dt>
-          <dd id="product-status" role="status">Booting</dd>
-        </dl>
-      </section>
-    </main>
+    <!-- The scenario lane's output. Page-level, outside the component, and
+         hidden from the accessibility tree: a receipt must not change the
+         surface it measures. -->
+    <section id="scenario-host" aria-hidden="true" hidden>
+      <pre id="scenario-log"></pre>
+      <pre id="scenario-result"></pre>
+      <div id="scenario-captures"></div>
+    </section>
 
     <script type="module" src="./loader.js"></script>
   </body>

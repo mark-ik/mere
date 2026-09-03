@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! The three memory levels' read-model: classifying a node as short-term or
 //! long-term, and computing which short-term nodes an eviction policy would drop.
@@ -12,7 +15,7 @@
 //!
 //! The model (Alembic plan, decision #2, confirmed with Mark): **a tag or a pin
 //! promotes a node to long-term**, retained and never evicted. Everything else is
-//! short-term working memory, subject to the eviction policy. Engrams (slice A) are
+//! short-term working memory, subject to the eviction policy. Codicils (slice A) are
 //! the third level and are not nodes, so they are out of scope here.
 
 use std::collections::HashMap;

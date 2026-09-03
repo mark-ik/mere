@@ -1,11 +1,17 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! # seiche
 //!
 //! Rapier-backed force integration for Mere: the crate that realizes the graph's
 //! bodies as motion. A *seiche* is the standing-wave oscillation of a lake or bay,
 //! the whole body of water rocking rhythmically back and forth; it moves the *mere*
 //! (a mere is a lake) the way this crate moves the graph's bodies. Sibling to the
-//! `quint` field-algebra crate: `quint` defines the fields and couplings and resolves
-//! them into forces; `seiche` integrates those forces (rapier bodies, collision,
+//! `numen` field-algebra crate: numen defines and evaluates fields and couplings;
+//! `seiche` applies and integrates the force laws (rapier bodies, collision,
 //! stepping) into positions.
 //!
 //! ## Place in the architecture
@@ -28,7 +34,7 @@
 //!   and edge topology in step with the host's node/edge lists. Idempotent.
 //! - [`Simulation::tick`] — apply each registered [`Force`], then step the world.
 //! - Built-in forces ([`NodeExclusion`], [`EdgeSpring`], [`Boundary`]) are the
-//!   fast Rust default-path; `quint`'s couplings are the general, scriptable
+//!   fast Rust default-path; numen's couplings are the general, scriptable
 //!   path that compiles to the same [`Force`] contract.
 //!
 //! Until a [`Force`] is registered, the world ticks empty — bodies settle to
@@ -59,6 +65,18 @@ pub type NodeKey = petgraph::stable_graph::NodeIndex;
 /// Built-in force forces for the force-directed orrery layout.
 pub mod forces;
 pub use forces::{Boundary, EdgeSpring, NodeExclusion};
+
+/// Tensorized N-body force laws. Burn stays opt-in behind `tensor-burn` so
+/// ordinary layout consumers do not acquire the GPU/runtime stack.
+pub mod tensor_forces;
+pub use tensor_forces::{
+    NodeExclusionParams, RepulsionInputError, RepulsionParams, node_exclusion_reference,
+    repulsion_reference,
+};
+#[cfg(feature = "tensor-burn")]
+pub use tensor_forces::{node_exclusion, repulsion};
+#[cfg(feature = "tensor-burn-wgpu")]
+pub use tensor_forces::{node_exclusion_wgpu_roundtrip, repulsion_wgpu_roundtrip};
 
 /// Barnes–Hut quadtree for O(n log n) approximate n-body repulsion — harvested
 /// from the retired `graph-layout`, for big-graph charge repulsion. The
@@ -317,7 +335,7 @@ impl std::error::Error for RepulsionSolverError {}
 ///
 /// This is a staging seam: positions are supplied as host slices and validated
 /// forces return to Rapier. It is not the GPU-resident simulation interface;
-/// resident hosts keep buffers and scheduling at `quint::resident` instead.
+/// resident hosts keep buffers and scheduling at `conatus::resident` instead.
 /// [`NodeExclusion`] routes to it above [`Simulation::set_repulsion_solver`]'s
 /// threshold, falling back to its CPU law if it fails.
 pub type RepulsionSolver = std::sync::Arc<

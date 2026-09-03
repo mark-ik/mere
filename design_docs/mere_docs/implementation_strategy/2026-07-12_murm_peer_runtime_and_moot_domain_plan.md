@@ -31,7 +31,7 @@ purity rule and host-composition target are retired.
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md)
   remains useful history for direct exchange, but its claim that bilateral
   communication defines the whole Murm family is superseded here.
-- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](2026-07-06_comms_gating_and_key_addressing_plan.md)
+- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](../../archive_docs/2026-09-02_retired_plans/2026-07-06_comms_gating_and_key_addressing_plan.md)
   owns native sealed mail and comms-facing key addressing.
 - [`2026-06-06_moot_constitution_brief.md`](2026-06-06_moot_constitution_brief.md)
   owns the distinction between constitutional authority and governed settings.

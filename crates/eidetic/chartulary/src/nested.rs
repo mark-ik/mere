@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Nested graphs: a graph contained within a node.
 //!
 //! A node that implements [`GraphBearing`] carries the log identity of a
@@ -14,7 +20,7 @@
 //! live ones, `keys("archive/nested/")` the archived ones, and a failed
 //! archive leaves the bearing node in place.
 
-use codicil::LogId;
+use muniment::LogId;
 use muniment::{Backend, Codec, SlotStore, StoreError, WriteOp};
 
 use crate::caps::{GraphBearing, Identified};

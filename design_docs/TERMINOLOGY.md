@@ -16,7 +16,7 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 - **Platen** — graph-aware composition surface. Knows graph semantics; presses node-data into renderable form for the verso-tile layer to receive.
 - **Verso** — rendering-surface manager. Receives engine output (via inker) and places it into tile slots. *Verso* is the brand-level concept (the page that catches the impression); the crate family is `verso` (`verso-core`, `tile-state`).
 - **Graphshell** — the Merely family's remote projection host: a wasm-first web/mobile client that connects to applications running on the user's devices, receives Scenograph scenes and diffs, and returns granted intents. It owns saved remote views and cross-application curation, while each application owns its source truth. This is a new product role, distinct from both the archived donor browser and Mere's internal `shell` crates (`mere-chrome`, `mere-comms`).
-- **Eidetic** — private local memory crate (formerly *Mnem*). Persistence layer for graph snapshots, traversal logs, settings, browsing memory. Distinct from any moot's flora. Name evokes eidetic memory ("remembered with high fidelity"). The substrate engrams are distilled from.
+- **Eidetic** — private local memory crate (formerly *Mnem*). Persistence layer for graph snapshots, traversal logs, settings, browsing memory. Distinct from a Moot's shared lanes. Name evokes eidetic memory ("remembered with high fidelity"). The substrate codicils are distilled from.
 
 ## Engine layer (inker / nematic / document model)
 
@@ -50,7 +50,8 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
     mechanics use `ConversationEngine` and `ConversationStore`.
 - **Moot** — the governed-space domain over Stickleback. It owns community
   identity, membership, constitution, governed settings, moderation,
-  recognition, tessera, and community projections.
+  recognition, Standing, Tulpa adoption, FLORA receipts, and community
+  projections.
   - **Mooting** — current home of recognition policy and, temporarily, the
     generic `MunimentStore`. The store moves to `stickleback`; the name is
     not a generic-plumbing law.
@@ -83,20 +84,19 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 - **fili** — reserved name for Moot lineage: community ancestry, forks, and
   genealogy across related moots. Do not use it for ordinary event history,
   retention, or storage mechanics.
-- **tulpa** — the legend and memorial layer: what memory makes of history
-  (legends, memorials, epithets, the manifestations of the dead), sustained
-  by continued attention — presence scales with retelling, and a legend
-  nobody tells fades. A *view* over a codicil log holding the retold subset,
-  never the log itself. Do not use it for ordinary event history (that is
-  **codicil**) or for descent (that is **fili**): where fili tracks who
-  carried the line, tulpa holds what is remembered when nobody did. Chosen by
-  Mark 2026-07-30 and published the same day (crates.io `tulpa` 0.0.1,
-  `merely-made/tulpa`). Completes the thoughtform triad the stack already
-  held: **servitor** (created and bounded) → **tulpa** (remembered and
-  autonomous) → **egregore** (collective and emergent). From Tibetan
-  *sprul-pa* by way of two westernizations; the living-office cousin *tulku*
-  is deliberately not used.
-- **gemot** *(count noun)* — a sovereign assembly of mootholds (t4; renamed from *coalition* 2026-07-30, which had renamed *demesne* 2026-06-04). OE *gemōt*, the collective form of *mōt* itself: the assembly of assemblies, rejoining the moot/moothold word-family where *coalition* was the Latinate outlier. crates.io `gemot` already held (0.1.0, claimed 2026-07-14 as the assembly-layer crate: Moot lifecycle, governance, replication, Tessera), so the t4 count noun and the governance crate share the name deliberately
+- **Hagiograph** — the legend and memorial layer: what memory makes of history
+  through legends, memorials, epithets, and retelling. It is a view over event
+  journals, distinct from the journal itself, an immutable Eidetic Codicil,
+  and Moot descent in **fili**. This is the meaning formerly assigned to the
+  standalone `tulpa` reservation; renamed 2026-08-31.
+- **Tulpa** — a Moot's community-recognized, revisioned shared artifact and
+  persistent collective identity. Signed proposals freeze their recognition
+  electorate; endorsements adopt an exact artifact version; revocation and
+  rollback change the effective projection while retaining every source fact.
+  Tulpa takes the collective role formerly discussed as *egregore* and lives
+  inside `gemot`, not as a standalone crate. A FLORA candidate may become a
+  Tulpa through this adoption lane, but Tulpa is not limited to model weights.
+- **gemot** *(count noun)* — a sovereign assembly of mootholds (t4; renamed from *coalition* 2026-07-30, which had renamed *demesne* 2026-06-04). OE *gemōt*, the collective form of *mōt* itself: the assembly of assemblies, rejoining the moot/moothold word-family where *coalition* was the Latinate outlier. crates.io `gemot` already held (0.1.0, claimed 2026-07-14 as the assembly-layer crate: Moot lifecycle, governance, replication, Standing, Tulpa, and FLORA), so the t4 count noun and the governance crate share the name deliberately
 - **suzerainty** *(relation)* — the outer-tier ↔ inner-member relationship (moothold ↔ moot, gemot ↔ moothold); overlordship without absorbing internal sovereignty
 - **volvelle** — UI form factor: a moot expanded radially in the Navigator (medieval rotating-disc knowledge instrument)
 - **astroid** — internal UX vocab for graphlet hub-collapse: collapsing a graphlet to its central node forms an astroid-shaped boundary curve
@@ -104,14 +104,27 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 - **denizen** — the umbrella word for anything admitted to act through the gate: a personae identity holding a grant and the right to submit petitions. Human moot peers, servitors, and scenario runners are all denizens; the trusted UI is not (it writes the journal directly). From English legal history: denization admitted an outsider by letters patent with a defined subset of rights, which is exactly the signed manifest plus grant. Ruled 2026-07-17 (replaces the working word *participant*)
 - **petition** — a denizen's proposed change: a typed batch (graph edits lowering to captured deltas, app effects as Actions) validated against the grant and the journal revision before atomic, attributed apply. The journal records granted petitions. Ruled 2026-07-17 (replaces the working word *proposal*)
 - **watch** — a denizen's standing subscription: the scope of the graph whose committed changes wake its body, with the containment law watch ⊆ read ⊆ grant (you cannot be woken by what you cannot read). Watches are declared in the pack manifest and reviewed at install beside the rings; a chain of wakes is a *cascade*, bounded by a budget that is a setting. Ruled by Mark 2026-08-13. See the [graph behaviors plan](mere_docs/implementation_strategy/2026-08-13_graph_behaviors_plan.md)
-- **pack / mod** — the installable-bundle words, split by trust depth (ruled 2026-07-17): a **pack** is the plain user-facing word for a shallow-rung bundle (scenario/macro data, scripts; "campaign pack", "command pack"), a **mod** is a deeper-rung bundle (wasm components and beyond) whose grant reaches further. One envelope underneath, expected to be an engram profile (B4 confirms). Coheres with the existing `register-mod-loader` / `WasmModRuntime` naming
+- **pack / mod** — the installable-bundle words, split by trust depth (ruled 2026-07-17): a **pack** is the plain user-facing word for a shallow-rung bundle (scenario/macro data, scripts; "campaign pack", "command pack"), a **mod** is a deeper-rung bundle (wasm components and beyond) whose grant reaches further. One Eidetic Codicil envelope sits underneath. Coheres with the existing `register-mod-loader` / `WasmModRuntime` naming
 - **swatch** — a compact graph-canvas projection embedded in a pane: a scoped rendering of a graph or nested graph, either mirroring the main view (a minimap) or projecting through its own lens (independent layout, scope, or overlays; the gloss is a pane containing a swatch). A representation, never an identity: gnodes render in an orrery or swatch, while the graph itself lives in the kernel. A swatch over a servitor's nested graph is that servitor's inspection UI. Wording ruled 2026-07-17
 - **nested graph** — a graph (a set of relations) contained *within* a node; the only containment sense of "subgraph" (avoid the bare word). Contrast: a *graphlet* is a forme scope over real kernel nodes (peer-scoping, never containment); a *swatch* is a canvas representation that may render a nested graph but never is one. Ruled 2026-07-17; realized by the chartulary containment capability per the [participant gate and packs plan](mere_docs/implementation_strategy/2026-07-17_participant_gate_packs_plan.md)
 - **mere** *(lowercase, count noun)* — a configurable spatial dataspace: the unit an application integrates. Isometry's overmap, Woodshed's stage, Strophe's arrangement, and Turnstone's canvas are each a mere; a user has many. Capital **Mere** is the platform, lowercase **a mere** is one dataspace, and the platform is deliberately named for its unit. The word is the lake sense already carried in Mere's own positioning above (a small lake, still-water surface). **Amended 2026-08-13 (with Mark):** two borrowed terms of art apply on different axes, and a mere is genuinely both. *Dataspace* is the integration axis ([Franklin, Halevy & Maier, SIGMOD Record 34:4, 2005](https://dl.acm.org/doi/10.1145/1107499.1107502)): interrelated heterogeneous sources queried and navigated without full upfront integration, with relationships added *pay-as-you-go* — which is precisely cross-application linking between applications that never agree on a schema. *Datalake* is the storage axis (Dixon, 2010): raw native retention, schema-on-read, one accretive pool — of which this stack's *schema at the engram boundary* is the sharper statement. The lake term's usual "derivative copies beside someone else's system of record" reading is deployment practice accreted onto Dixon's actual contrast (natural versus cleansed-and-bottled), not part of the definition, so it does not contradict a mere holding source truth. Where that connotation would mislead, say **reservoir**: the engineered impoundment with a catalog and a drain valve, which is [IBM's own coinage](https://www.redbooks.ibm.com/Redbooks.nsf/RedpieceAbstracts/sg248274.html) for the governed lake, and which retention epochs, provenance, and native drop are what actually supply. Reservoir is a gloss for explaining the distinction, not a minted term. Ruled with Mark 2026-07-26: the concept had no name and was informally covered by *orrery* while the reference host was the only application, which is why the word stopped stretching once four products each integrated one. Tier 1 is *your root mere*, replacing *orrery* at that tier. Amended 2026-07-30: the tiers are escalating socialization of the mere itself, so solo is just a mere (not a moot-of-one), a moot is when your mere is shared, and sharing never stops a mere being a mere
 - **orrery** *(form factor)* — the cosmos-style spatial form factor: a whole dataspace seen at once, force-directed and in-scene. A way a **mere** is *rendered*, exactly as **volvelle** names the radial-moot form factor. Narrowed 2026-07-26 from its former lexicon sense ("a user's root graph view", tier 1), which **mere** now carries. Not a tier and not a container; `Scope::Orrery` and "orrery root" in code already mean this form factor
-- **tessera** — trust / contribution / reputation token; validated across gemots (Roman *tessera hospitalis* — guest-friendship token between communities)
-- **engram** — canonical portable contribution payload; `TransferProfile` envelope plus typed `EngramMemory` items (see inherited `graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md`)
-- **flora** — accumulated body of engrams that constitutes a moot's culture / geist
+- **Standing** — community-scoped reputation derived from signed receipts of
+  commitment follow-through. It accrues against a persona-chain root and is a
+  deterministic projection, not a transferable token. The previous name was
+  **Tessera**. Existing `tessera.redb` stores and serialized
+  `tessera_operations` remain readable during migration.
+- **Codicil** — Eidetic's canonical schema-typed, immutable,
+  content-addressed exchange record. This replaces **Engram**. The old source
+  alias and legacy schema tags remain readable; new schemas and APIs use
+  Codicil. An append-only sequence of events is instead a
+  `muniment::Journal<T>`.
+- **FLORA** — federated LoRA. In the Wang et al. FLoRA protocol, participant A
+  factors stack vertically and B factors horizontally, with each participant's
+  scale applied once to B. Heterogeneous ranks sum to the exact global rank
+  under an explicit budget. Lower-case *flora* meaning a Moot's accumulated
+  payload collection is retired; that was a capitalization-driven
+  misunderstanding.
 - **kith / kin** — contact tier distinction: *kith* = those known to you; *kin* = close. Orthogonal to moot membership.
 - **gnode** — a node's rendered body on a graph canvas: the visible, spatially-placed object standing at the node's position in an orrery or swatch. A projection, never truth: rebuilt per frame from kernel truth plus seiche's live state, stores nothing. At most one per (node, pane instance); zero when off-scope/off-pane (the node demotes to an underlay dot, which is not a gnode). Anatomy: **body** (silhouette or custom hull, spatially coincident with the seiche collider: the face IS the collider), **face** (the body's texture: state color, favicon, or sprite), **caption** (label beside, LOD-driven); emphasis channels: selection = ring + lift, hover = wash, focus = focus ring, with color reserved for activation state. One primitive, two render tiers: a chrome-DOM `.gnode` element (focused pane) or an in-scene Scene layer (secondary panes; `render_gnodes_as_dom` picks per pane). Pointer-inert: seiche owns press/select/drag through the collider; a11y bounds are read off the gnode's painted rect. Distinct from the **node** (the graph object that references addressed things), from a **card** (summoned *about* a node or selection), and from non-spatial representations (roster row, tile tab, session chip). Etymology: g(raph)-node, coined 2026-06-02 as the orrery pool's CSS class; kept 2026-07-02 for the gnostic reading (the knowable body of the node). Full model: [node_card_summoning_design](mere_docs/design/2026-07-01_node_card_summoning_design.md).
 - **strophalos** *(optional, lowercase)* — evocative term for an individual user's running Mere instance ("your strophalos has 47 moots")

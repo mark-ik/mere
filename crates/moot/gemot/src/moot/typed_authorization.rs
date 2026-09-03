@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The moot authorization seam over the TYPED capability vocabulary — the
 //! capability-model round's OQ3 unification (ruled 2026-07-24: unify, on the
 //! trait, when the caller exists; this is that caller).
@@ -135,7 +141,7 @@ mod tests {
     use super::*;
     use crate::moot::constitution::CapabilityGrant;
     use crate::moot::delegation::{MOOT_ACT_ACTION, MOOT_DELEGATION_DOMAIN};
-    use crate::moot::tessera::gate::TesseraFacts;
+    use crate::moot::standing::gate::StandingFacts;
     use capability::ScopePath;
     use chartulary::{Container, EditSpec, GraphLog, Relation};
     use identity::delegation::{
@@ -157,7 +163,7 @@ mod tests {
         fn inputs(&self, _request: &MootAuthorizationRequest) -> MootAuthorizationInputs {
             MootAuthorizationInputs {
                 capability_covers: false,
-                facts: TesseraFacts {
+                facts: StandingFacts {
                     is_member: true,
                     ..Default::default()
                 },

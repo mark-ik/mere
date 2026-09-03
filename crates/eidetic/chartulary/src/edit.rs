@@ -1,13 +1,19 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Graph edits: the entries of the edit spine.
 //!
-//! A [`GraphEdit`] is one mutation. A [`Codicil`](codicil::Codicil) of them is the
+//! A [`GraphEdit`] is one mutation. A [`Journal`](muniment::Journal) of them is the
 //! graph's history; replaying it materializes the graph. Edits reference nodes by
 //! their **stable identity** ([`Identified::Id`]), never by an ephemeral graph key,
 //! so replay into a fresh graph reconstructs the same result. Edges get a stable
 //! [`EdgeId`] at connect time (assigned by the [`GraphLog`](crate::GraphLog) and
 //! carried in the edit) so a specific edge can be retracted across replay.
 
-use codicil::LogId;
+use muniment::LogId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -143,7 +149,7 @@ pub enum DerivationKind {
 /// A record that a node in this graph derives from a node in another graph. The
 /// node-level provenance that tracks duplicates across graphs, rather than
 /// deduplicating them (the whole-graph fork provenance lives on the log; see
-/// [`codicil::Provenance`]).
+/// [`muniment::Provenance`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DerivationRecord<Id> {
     /// The identity of the graph (log) the source node lives in.

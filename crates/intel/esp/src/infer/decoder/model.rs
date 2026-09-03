@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The full decoder stack: token embedding → N layers → final RmsNorm →
 //! LM head. One model-owned [`RotaryEncoding`] is shared by every layer.
 //!
@@ -24,6 +30,7 @@ pub(crate) fn embedding_from_loaded(weight: Tensor<2>, device: &Device) -> Embed
 
 /// All pre-loaded tensors for a decoder, in Burn conventions
 /// (`[in, out]` linears; `[vocab, hidden]` embedding).
+#[derive(Clone)]
 pub struct LoadedDecoder {
     pub embed_w: Tensor<2>,
     pub layers: Vec<LoadedDecoderLayer>,

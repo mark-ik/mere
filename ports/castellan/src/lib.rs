@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! **Castellan**, the credential-keeper port of the Mere platform.
 //!
 //! A castellan holds a keep in trust for its lord: custody without ownership,
@@ -16,7 +22,7 @@
 //!
 //! - **chatelaine**: the secrets. Passwords, 2FA seeds, tokens, foreign key
 //!   material. Never presented, only exercised.
-//! - **emblem**: the proofs. Graded presentations of identity a persona hands
+//! - **insigne**: the proofs. Graded presentations of identity a persona hands
 //!   out, from a bare handle to signed cross-attestations. Made to be shown;
 //!   what lands in someone else's gaz.
 //!

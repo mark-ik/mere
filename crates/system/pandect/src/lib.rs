@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! # graphshell session runtime
 //!
@@ -49,13 +52,15 @@ pub mod application_settings_store;
 // images dedup. The pixels live here; the kernel Node holds only an ImageRef.
 pub mod image_store;
 // Per-node browser-state working set (scroll / form draft / viewer override /
-// compat mode / content-on) — browser-runtime state that doesn't belong in
-// graph truth (boundary pass slice C). Persistence converged onto web.* facets
-// (web_facets); the module's browser_nodes.json IO remains as legacy read-only.
+// compat mode / content-on / page-zoom scale) — browser-runtime state that
+// doesn't belong in graph truth (boundary pass slice C). Persistence converged
+// onto web.* facets (web_facets); the module's browser_nodes.json IO remains
+// as legacy read-only.
 pub mod browser_node_state;
 // The web.* facet namespace: browser_node_state's persistence boundary — one
-// atomic facet per field (web.scroll / form_draft / viewer / compat / content)
-// in facets.json, replacing the bespoke browser_nodes.json document.
+// atomic facet per field (web.scroll / form_draft / viewer / compat / content
+// / page_scale) in facets.json, replacing the bespoke browser_nodes.json
+// document.
 pub mod web_facets;
 // The denizen.* facet namespace: which graph nodes are denizens (servitor /
 // agent / peer / scenario / pack) and where each one's nested graph lives —
@@ -71,7 +76,7 @@ pub mod shared_root;
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
 // arrangement) converge onto. Wraps chartulary's FacetStore.
 pub mod facet_store;
-// Mere-side adapter from eidetic SchemaDefinition engrams to chartulary's
+// Mere-side adapter from eidetic SchemaDefinition codicils to chartulary's
 // synchronous FacetValidator seam.
 pub mod schema_facets;
 // The arrangement.* facet namespace: cartography's per-node data (position
@@ -86,17 +91,17 @@ pub mod atomic_file;
 // (keyed by the session's root_graph_id) — scene-scoped, not per-node.
 pub mod engine_profile_store;
 pub mod scene_facets;
-// Freeze/thaw a live graph into an immutable, content-addressed graph engram over
+// Freeze/thaw a live graph into an immutable, content-addressed graph codicil over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
 // filesystem). Save redacts private fields by default; open thaws read-only.
-pub mod engram_seal;
-pub mod graph_engram;
+pub mod codicil_seal;
+pub mod graph_codicil;
 // Producer-owned, content-addressed recipes for reopening a source at a
 // cursor with existing durable curation. Source resolution stays at the host.
 pub mod live_view;
-// Snapshot-level merge for engram compose (Alembic tail B7): union two graph
-// snapshots by URL identity, retaining per-member provenance. Pure; the engram
-// compose op (`graph_engram::compose_graph_engrams`) layers on top.
+// Snapshot-level merge for codicil compose (Alembic tail B7): union two graph
+// snapshots by URL identity, retaining per-member provenance. Pure; the codicil
+// compose op (`graph_codicil::compose_graph_codicils`) layers on top.
 pub mod snapshot_merge;
 // The three memory levels' read-model (Alembic slice C): classify a node as
 // short-term vs long-term (a tag/pin promotes), and compute which short-term nodes
@@ -106,7 +111,7 @@ pub mod memory_levels;
 pub mod notochord_policy_store;
 // Athanor's forgetting pass (Alembic slice D): propose which short-term cached
 // content to evict (pure, R0) and apply it by dropping content blobs (never graph
-// truth or engrams). The pass logic; the armillary actor that schedules it layers on top.
+// truth or codicils). The pass logic; the armillary actor that schedules it layers on top.
 pub mod athanor;
 // The frame.json pane-layout store moved OUT with the pane model at
 // meerkat's deletion (2026-07-18): it lives in turnstone's `frisket::store`
@@ -156,19 +161,20 @@ pub use arrangement_facets::{
     write_arrangement_sprites,
 };
 pub use atomic_file::write_bytes_with_backup;
+pub use codicil_seal::WalletEpochSealer;
 pub use denizen_facets::{
     DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
     read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
 };
 pub use device_settings_store::{
-    DEVICE_SETTINGS_DIR, DEVICE_SETTINGS_FILENAME, DeviceSettings, device_settings_exist,
-    device_settings_path, load_device_settings, save_device_settings,
+    DEVICE_SETTINGS_DIR, DEVICE_SETTINGS_FILENAME, DeviceSettings, MeshLendingSettings,
+    QuietHoursSettings, StatedConditionSettings, device_settings_exist, device_settings_path,
+    load_device_settings, save_device_settings,
 };
 pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
 };
-pub use engram_seal::WalletEpochSealer;
 pub use facet_store::{
     AcceptAll, ExpiringFacet, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE,
     NodeFacetStore, NodeFacets, copy_node_facets, load_node_facets, node_facets_path,
@@ -182,7 +188,7 @@ pub use live_view::{
     open_live_view_record, save_live_view_record, save_live_view_record_sealed,
 };
 pub use manifest::{
-    EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
+    CodicilId, EngineProfileBinding, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
     SessionPolicy, SessionPolicyOverride, WorkerKind,
 };
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
@@ -200,7 +206,7 @@ pub use scene_facets::{
     write_scene_facets,
 };
 pub use schema_facets::{
-    ContentClassEngram, SchemaFacetValidator, content_class_schema_definition,
+    ContentClassCodicil, SchemaFacetValidator, content_class_schema_definition,
     content_class_schema_ref, load_content_class, save_content_class,
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -254,16 +260,16 @@ pub use wallet_store::{
     device_roster_ref, ensure_local_device_identity, ensure_persona_epoch_bridge,
     ensure_wallet_state, identity_dir, identity_grants_dir, identity_seed_locked_at_startup,
     identity_seed_path, identity_wallet_path, load_current_private_epoch, load_device_grant,
-    load_device_roster, load_identity_seed, load_identity_wallet, load_local_device_identity,
-    load_persona_epoch_bridge, load_persona_wallet, load_remote_auth_wrapping_key_bridge,
-    local_device_identity_path, persona_epoch_bridge_path, persona_wallet_path,
-    persona_wallet_salt, relock_wallet_after_manual_unlock, remote_auth_wrapping_keys_path,
-    save_device_grant, save_device_roster, save_identity_seed, save_identity_wallet,
-    save_local_device_identity, save_persona_epoch_bridge, save_persona_wallet,
-    save_remote_auth_wrapping_key_bridge, stage_persona_private_epoch, unlock_wallet_with_auto_os,
-    wallet_local_secrets_locked,
+    load_device_roster, load_identity_seed, load_identity_seed_read_only, load_identity_wallet,
+    load_local_device_identity, load_persona_epoch_bridge, load_persona_wallet,
+    load_remote_auth_wrapping_key_bridge, local_device_identity_path, persona_epoch_bridge_path,
+    persona_wallet_path, persona_wallet_salt, relock_wallet_after_manual_unlock,
+    remote_auth_wrapping_keys_path, save_device_grant, save_device_roster, save_identity_seed,
+    save_identity_wallet, save_local_device_identity, save_persona_epoch_bridge,
+    save_persona_wallet, save_remote_auth_wrapping_key_bridge, stage_persona_private_epoch,
+    unlock_wallet_with_auto_os, wallet_local_secrets_locked,
 };
 pub use web_facets::{
-    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_SCROLL, WEB_VIEWER, read_web_states,
-    write_web_state, write_web_states,
+    WEB_COMPAT, WEB_CONTENT, WEB_FORM_DRAFT, WEB_PAGE_SCALE, WEB_SCROLL, WEB_VIEWER,
+    read_web_states, write_web_state, write_web_states,
 };

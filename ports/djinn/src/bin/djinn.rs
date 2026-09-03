@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Resident Djinn authority.
 //!
 //! One process owns the selected Personae profile, OpenSSH agent endpoint, and
@@ -9,6 +15,8 @@ use std::sync::Arc;
 #[cfg(feature = "personal-sync")]
 use std::time::Duration;
 
+#[cfg(feature = "personal-sync")]
+use distillery::ResidentReceipt;
 #[cfg(feature = "personal-sync")]
 use djinn::pairing;
 #[cfg(feature = "personal-sync")]
@@ -597,8 +605,29 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let owner =
         owner_settings::OwnerSettings::load(&owner_settings::settings_path(&app_dir, &profile_id))?;
     #[cfg(feature = "personal-sync")]
-    let mut resident =
-        DjinnResident::open(personae.as_ref(), &data_root, &profile_id, owner).await?;
+    let mut resident = DjinnResident::open(
+        personae.as_ref(),
+        &data_root,
+        &profile_id,
+        owner,
+        &args.vault_dir,
+        // The lane derives a mesh author from the profile's vault, so it opens
+        // the same vault directory a second time under the same unlock. `Unlock`
+        // is not `Clone` (it holds zeroizing bytes), so this reads the
+        // environment again rather than keeping a copy of the passphrase alive.
+        Unlock::from_env(),
+    )
+    .await?;
+    #[cfg(feature = "personal-sync")]
+    if let Some(works) = resident.distillery() {
+        tracing::info!(
+            profile = works.profile(),
+            mesh = owner_settings::hex32(&works.mesh_id()),
+            author = owner_settings::hex32(&works.author()),
+            root = %works.mesh_root().display(),
+            "resident Distillery works open"
+        );
+    }
     #[cfg(feature = "personal-sync")]
     if resident.knot_enabled() {
         if let Some((node, space)) = resident.knot_network_facts() {
@@ -612,6 +641,13 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             tracing::info!(sync = false, "resident Knot route open");
         }
     }
+
+    // The works run for the whole length of the loop and need `&mut` on the
+    // lane the entire time, while the Knot arm of the same `select!` still
+    // needs `&mut` on the resident. Lifting the lane out for the duration
+    // splits a borrow Rust cannot split on its own; it goes back in below,
+    // before the ordered shutdown that owns its close.
+    let mut works = resident.take_distillery();
 
     // Keep every broker future inside this async block.  Its captures, most
     // notably the blob-store clones held by personal sync, are dropped before
@@ -725,35 +761,100 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         tokio::pin!(apps);
         let mut knot_refresh = tokio::time::interval(Duration::from_secs(1));
         knot_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        // The works stop on request rather than on process death: a lease is a
+        // promise to let go, and a device killed mid-lease leaves the ring
+        // waiting out a lapse for work that is already gone.
+        let works_enabled = works.is_some();
+        let stop_works = Arc::new(tokio::sync::Notify::new());
+        let works_stop = Arc::clone(&stop_works);
+        let works_run = async {
+            match works.as_mut() {
+                // `notify_one` stores a permit when nothing is waiting yet, so
+                // a Ctrl-C that lands before the first poll is not lost.
+                Some(lane) => {
+                    lane.run_until(async move { works_stop.notified().await }, |receipt| {
+                        observe_distillery(&receipt)
+                    })
+                    .await
+                }
+                None => std::future::pending::<Result<(), String>>().await,
+            }
+        };
+        tokio::pin!(works_run);
+        let interrupt = tokio::signal::ctrl_c();
+        tokio::pin!(interrupt);
+
+        // The loop does not leave the moment it knows how the run ended. It
+        // records the outcome, asks the works to stop, and waits for them,
+        // because whichever arm ended the run — Ctrl-C or a broker failing —
+        // the ring on the other side of a lease deserves the same deliberate
+        // release. `stopping` and `works_running` exist to keep a resolved
+        // future from being polled again.
+        let mut stopping = false;
+        let mut works_running = works_enabled;
+        let mut exit: Option<Result<(), Box<dyn std::error::Error>>> = None;
+
         loop {
+            if exit.is_some() && !works_running {
+                break exit.take().expect("just checked");
+            }
             tokio::select! {
-                result = &mut agent => {
-                    match result {
-                        Ok(()) => break Err("SSH agent listener ended unexpectedly".into()),
-                        Err(error) => break Err(error.into()),
+                result = &mut interrupt, if !stopping => {
+                    tracing::info!("shutdown requested");
+                    exit = Some(result.map_err(Into::into));
+                }
+                result = &mut works_run, if works_running => {
+                    works_running = false;
+                    let ended = match result {
+                        // Only a stop we asked for is an ordinary ending.
+                        Ok(()) if stopping => Ok(()),
+                        Ok(()) => Err("resident Distillery works ended unexpectedly".into()),
+                        Err(error) => Err(error.into()),
+                    };
+                    // A failure already recorded is the one that explains the
+                    // run; the works stopping afterwards is a consequence.
+                    if exit.is_none() {
+                        exit = Some(ended);
                     }
                 }
-                result = &mut browser => {
-                    match result {
-                        Ok(()) => break Err("browser device broker ended unexpectedly".into()),
-                        Err(error) => break Err(error.into()),
-                    }
+                result = &mut agent, if exit.is_none() => {
+                    exit = Some(match result {
+                        Ok(()) => Err("SSH agent listener ended unexpectedly".into()),
+                        Err(error) => Err(error.into()),
+                    });
                 }
-                result = &mut apps => {
-                    match result {
-                        Ok(()) => break Err("first-party application broker ended unexpectedly".into()),
-                        Err(error) => break Err(error.into()),
-                    }
+                result = &mut browser, if exit.is_none() => {
+                    exit = Some(match result {
+                        Ok(()) => Err("browser device broker ended unexpectedly".into()),
+                        Err(error) => Err(error.into()),
+                    });
                 }
-                _ = knot_refresh.tick(), if resident.knot_enabled() => {
+                result = &mut apps, if exit.is_none() => {
+                    exit = Some(match result {
+                        Ok(()) => Err("first-party application broker ended unexpectedly".into()),
+                        Err(error) => Err(error.into()),
+                    });
+                }
+                _ = knot_refresh.tick(), if resident.knot_enabled() && exit.is_none() => {
                     if let Err(error) = resident.refresh().await {
                         tracing::warn!(%error, "could not refresh resident Knot authority");
                     }
                 }
             }
+            if exit.is_some() && works_running && !stopping {
+                stopping = true;
+                // Let `run_until` return on its own rather than dropping it
+                // mid-tick, so the works stop the way the ring expects.
+                stop_works.notify_one();
+            }
         }
     }
     .await;
+
+    // The run loop borrowed the works; hand them back so the ordered shutdown
+    // below is the one thing that closes them.
+    resident.restore_distillery(works);
 
     // A listener failure is not permission to leave sealed credentials or
     // content custody open. Preserve the listener outcome, but make the
@@ -765,6 +866,43 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         (Err(outcome), Err(shutdown)) => {
             Err(format!("{outcome}; resident shutdown: {shutdown}").into())
         }
+    }
+}
+
+/// Report exactly what the works did, without building a second lifecycle
+/// model beside the receipts.
+#[cfg(feature = "personal-sync")]
+fn observe_distillery(receipt: &ResidentReceipt) {
+    match receipt {
+        // A supervisor turn with nothing to do is the common case at any
+        // useful tick cadence, so it stays out of the INFO log.
+        ResidentReceipt::Tick { steps }
+            if steps.is_empty()
+                || steps
+                    .iter()
+                    .all(|step| matches!(step, mesh_host::Step::Idle)) =>
+        {
+            tracing::debug!("Distillery supervisor turn with nothing to do")
+        }
+        ResidentReceipt::Tick { steps } => {
+            tracing::info!(steps = steps.len(), "Distillery supervisor turn")
+        }
+        ResidentReceipt::MaintenanceCompleted(report) => tracing::info!(
+            candidates = report.candidates,
+            collected = report.collected,
+            "Distillery retention checkpoint accepted"
+        ),
+        ResidentReceipt::MaintenanceIdle => {
+            tracing::debug!("Distillery frontier unchanged; nothing to checkpoint")
+        }
+        // Non-fatal and expected: a live lease is the ordinary reason.
+        ResidentReceipt::MaintenanceFailed { error } => {
+            tracing::warn!(%error, "Distillery maintenance refused")
+        }
+        ResidentReceipt::SupervisorFailed { error } => {
+            tracing::error!(%error, "Distillery supervisor failed")
+        }
+        ResidentReceipt::StopRequested => tracing::info!("Distillery works stopping"),
     }
 }
 

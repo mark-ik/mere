@@ -11,7 +11,10 @@ shared contract.
 ## Direction
 
 The engine is the composition a product runtime profile conducts. It is not a
-crate and does not need one universal owner. A profile chooses its clocks,
+crate and does not need one universal owner. ("Engine" here is the
+product-level assembly; it is distinct from the platform's two engines —
+projection and inference — in the consolidation map ruled 2026-08-28 in
+`2026-08-22_conatus_engine_plan.md`.) A profile chooses its clocks,
 triggers, input-to-intent mapping, authorization, source bindings, spatial and
 inference organs, render tenants, audio adapters, persistence route, and
 diagnostics. Each organ retains its own state and authority boundary.
@@ -35,12 +38,13 @@ Two extraction rules govern every row:
 | Concern | Authority and natural owner | Product-profile seam | First executable proof | Promotion gate | State |
 |---|---|---|---|---|---|
 | Durable rules and consequences | Each product core and ordered record | Accepted product intent or event enters adapters | Isometry `Intent -> Resolved`; Mesocosm ordered `Intent` and replay | Never promoted as one game-rule vocabulary | Established product-local |
+| Semantic runtime projection | Each product's durable domain record; the product profile owns semantic selection, recipe version, and source bindings | Accepted facts compile into rebuildable typed records, relationship indexes, and subsystem bindings | Isometry's accepted-map body profile is the narrow first instance; Paredros's post-F3 world-compiler receipt is the first semantic challenge | A heterogeneous second product must prove the same rebuild, delta, removal, and one-source-to-many lifecycle; product vocabulary never promotes with the mechanics | Direction settled; semantic receipt open |
 | Runtime cadence | Product profile | Exact step, elapsed frame, turn, epoch, or event trigger | Isometry profile uses event-driven zero-step spatial publication | A second game must need the same trigger vocabulary | Provisional product-local |
 | Input and actions | Genet/Cambium captures input; product maps it to intents | Authorized intent lowering | Isometry protocol refusal and application tests | Two products must share semantics, not merely devices | No shared action contract |
-| Tactile bodies and spatial queries | Conatus owns the state it advances | Product source bindings to runtime `BodyId`s | Isometry product profile mirrors accepted map tokens | Paredros or Mesocosm must consume and challenge the profile shape | First profile proven product-local |
-| CPU voxel patch mechanics | `conatus-voxel` owns generic value mechanics; product owns voxel identity, material meaning, and durable authority | Product adapter supplies admitted source revisions | Mesocosm `GroundVoxelProfile` preserves `Ground`, replay, refusal, occupancy lowering, and silence without resolving Rapier | A second product tests mechanics; identity/frame contracts remain local regardless | Narrow package adopted locally |
-| Resident fields and chunks | Quint owns resident allocations and typed views for its advanced state | Profile orders passes and binds product source revisions | Mesocosm resident-ground plus Isometry resident body-position receipts | Second product proves any shared lease or identity vocabulary | Reusable mechanics proven twice; contract provisional |
-| DDA traversal | `conatus-brick` owns the product-free pointer/atlas ABI and ray-in WGSL DDA | Product lens owns source binding, camera, material, and composition | Mesocosm and Paredros compile the same platform module under orthographic and perspective profiles | Permanent tracked adoption by the second product | Core promoted; lens and depth composition remain product-local |
+| Tactile bodies and spatial queries | Conatus owns the state it advances | Product source bindings to runtime `BodyId`s | Isometry product profile mirrors accepted map tokens; Mesocosm's `mesocosm-runtime` tactile adapter (terrarium picking, T1 2026-08-26) is the second, oracle-judged consumer | Met 2026-08-26 by Mesocosm; the shared vocabulary stays Conatus ids and arrays, Rapier private | Two profiles proven; contract held by Conatus's public vocabulary |
+| CPU voxel patch mechanics | `nisus` (renamed from `conatus-voxel` 2026-08-28, published) owns generic value mechanics; product owns voxel identity, material meaning, and durable authority | Product adapter supplies admitted source revisions | Mesocosm `GroundVoxelProfile` preserves `Ground`, replay, refusal, occupancy lowering, and silence without resolving Rapier | A second product tests mechanics; identity/frame contracts remain local regardless | Narrow package adopted locally |
+| Resident fields and chunks | Quint owns resident allocations and typed views for its advanced state | Profile orders passes and binds product source revisions | Mesocosm resident-ground (now per-brick patches, tracer-validated read epochs, allocator-observed bytes; V1b 2026-08-26) plus Isometry resident body-position receipts | Second product proves any shared lease or identity vocabulary; the lease itself is now consumed cross-crate by the brick tracer | Reusable mechanics proven twice and epoch-validated; cross-product identity contract still provisional |
+| DDA traversal | `modulus` (renamed from `conatus-brick` 2026-08-28) owns the product-free pointer/atlas ABI and ray-in WGSL DDA | Product lens owns source binding, camera, material, and composition | Mesocosm and Paredros compile the same platform module under orthographic and perspective profiles | Permanent tracked adoption by the second product | Core promoted; lens and depth composition remain product-local |
 | Scene facts and transitions | Sceno/scenomise/scenotime; product adapter owns meaning | Profile chooses scene recipe and realization | Existing Mere and game consumers | Governed by Scenograph's own two-consumer receipts | Outside Conatus |
 | Device tenancy and final composition | Netrender | Profile selects tenants on host device and queue | Existing same-device composition receipts | New contract only if a second host needs it | Established seam |
 | 2D resident body realization | Isometry product tenant | Stamped Quint position view to tenant-owned same-device texture | Isometry `7d45c40` direct-buffer and Netrender boundary receipt | Second product or renderer challenges the tenant and frame shape | First product adapter complete; contract provisional |
@@ -96,9 +100,13 @@ Mesocosm-owned.
 ### Paredros
 
 Paredros continues its product sequence. F3 memory/belief/standing does not
-wait for engine adoption. Its first Conatus use should be pulled by an embodied
-spatial requirement and then serve as the likely second challenge to
-Isometry's body/profile seam. A shared conductor is not declared in advance.
+wait for engine adoption. Its durable observations, claims, reports, norms,
+and corrections are product facts; any belief index or later ECS is a
+rebuildable product projection. F3 may prove that nonspatial lifecycle without
+Conatus, but that proof does not satisfy C4: the first Conatus use must still
+be pulled by an embodied spatial requirement and challenge Isometry's body
+identity, cadence, authorization, and frame consumption. A shared conductor
+or semantic vocabulary is not declared in advance.
 
 ## Gates and done-conditions
 
@@ -156,8 +164,12 @@ without any peer or Conatus re-derivation.
 
 **Open.** Paredros or Mesocosm consumes the relevant Isometry profile shape and
 forces at least one real comparison of source identity, trigger cadence,
-authorization, and frame consumption. Only the common minimum may then move to
-a shared contract. Product-specific fields remain local.
+authorization, subsystem selection, and frame consumption. Paredros's
+nonspatial F3 proof may establish cold rebuild versus incremental delta,
+recipe-version refusal, removal-before-replacement, and one durable source
+materializing into several runtime bindings, but it cannot close C4 without an
+embodied spatial consumer. Only the common minimum may then move to a shared
+contract. Product-specific fields and epistemic vocabulary remain local.
 
 ## Stop rules
 
@@ -196,11 +208,16 @@ a shared contract. Product-specific fields remain local.
   through Netrender at an explicit scene boundary. Host adoption, 3D
   realization, broader resident body planes, direct-GPU advancement, and the
   second-consumer challenge stay open.
-- **2026-08-26:** `conatus-brick` became the narrow permanent owner of the
-  sparse pointer/atlas ABI, projection identity, trace-space uniform, and
-  ray-in WGSL DDA. Mesocosm retains only its Ground adapter and presentation
-  shader; Paredros owns a separate Ground source binding. Both product profiles
-  compile the same platform module, while camera construction, material look,
-  body composition, residency policy, and source revision remain local. This
-  closes the DDA promotion gate without promoting a frame, lease, camera, or
-  renderer contract.
+- **2026-08-26:** `modulus` (then `conatus-brick`) became the narrow permanent
+  owner of the sparse pointer/atlas ABI, projection identity, trace-space
+  uniform, and ray-in WGSL DDA. Mesocosm retains only its Ground adapter and
+  presentation shader; Paredros owns a separate Ground source binding. Both
+  product profiles compile the same platform module, while camera
+  construction, material look, body composition, residency policy, and source
+  revision remain local. This closes the DDA promotion gate without promoting
+  a frame, lease, camera, or renderer contract. Landed on main 2026-09-02.
+- **2026-08-26:** The semantic-world/ECS review named runtime world compilation
+  as another product-profile responsibility. Paredros F3 remains product work;
+  its later compiler receipt may prove the general rebuild lifecycle, while C4
+  still requires an embodied spatial consumer before any shared contract moves
+  upward.

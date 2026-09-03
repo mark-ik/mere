@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! # mesh
 //!
@@ -7,7 +10,7 @@
 //! one owned device posts a job into the shared space, another claims it and
 //! runs it against a *restricted namespace*, returning a content-addressed
 //! output; all of it replicated over the same signed-operation event-DAG
-//! tessera and murm ride (LogSync underneath). **No economy**: every peer
+//! Standing and Murm ride (LogSync underneath). **No economy**: every peer
 //! holding the mesh id is trusted (the own-devices ring, where sharing is
 //! scheduling and permissions, never verification markets). Trusted still does
 //! not mean unbounded — a worker sees only the inputs and output slot one job
@@ -58,7 +61,7 @@
 //! - [`drop_export`] — mesh-owned catch-up, archive, and radio selection over
 //!   the shared native-drop exporter. Privacy and priority remain explicit
 //!   settings; catch-up selects the current checkpoint plus its replay tail.
-//! - [`sync`] — [`SyncedMesh`], mirroring tessera's `SyncedMoot`: the LogSync
+//! - [`sync`] — [`SyncedMesh`], mirroring Standing's synced Moot: the LogSync
 //!   catch-up + live session over the store, plus the device's authoring
 //!   path ([`SyncedMesh::author`]) and a real, non-placebo [`SyncStatus`].
 //!

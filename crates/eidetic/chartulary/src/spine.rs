@@ -1,8 +1,14 @@
-//! The edit spine: an event-sourced graph over codicil.
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+//! The edit spine: an event-sourced graph over a muniment journal.
 //!
 //! [`GraphLog`] is the write side of the graph. Every mutation travels one
 //! path: build an attributed [`Batch`], apply it to the materialized graph,
-//! append it to a [`Codicil`]. The graph is the replay of the log, and because
+//! append it to a [`Journal`]. The graph is the replay of the log, and because
 //! live editing and replay share the same apply, they cannot diverge. The
 //! convenience mutators here are single-spec commits at the current revision
 //! (the trusted-UI path: attributed, no optimistic retry); a gate commits
@@ -24,8 +30,8 @@
 
 use std::collections::HashMap;
 
-use codicil::{Codicil, LogId, Provenance, Seq};
 use muniment::{Backend, Codec, SlotStore, StoreError};
+use muniment::{Journal, LogId, Provenance, Seq};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -35,11 +41,11 @@ use crate::edit::{DerivationRecord, EdgeId, GraphEdit, WriterId};
 use crate::facet::{AcceptAll, FacetId, FacetStore};
 use crate::graph::{EdgeKey, Graph, NodeKey};
 
-/// An event-sourced graph: a materialized [`Graph`] plus the [`Codicil`] of
+/// An event-sourced graph: a materialized [`Graph`] plus the [`Journal`] of
 /// attributed batches that produced it.
 pub struct GraphLog<N: Identified, E> {
     pub(crate) graph: Graph<N, E>,
-    pub(crate) log: Codicil<Batch<N, E>>,
+    pub(crate) log: Journal<Batch<N, E>>,
     pub(crate) by_edge_id: HashMap<EdgeId, EdgeKey>,
     pub(crate) by_edge_key: HashMap<EdgeKey, EdgeId>,
     pub(crate) derivations: HashMap<N::Id, Vec<DerivationRecord<N::Id>>>,
@@ -76,7 +82,7 @@ impl<N: Identified, E> Default for GraphLog<N, E> {
     fn default() -> Self {
         Self {
             graph: Graph::new(),
-            log: Codicil::new(),
+            log: Journal::new(),
             by_edge_id: HashMap::new(),
             by_edge_key: HashMap::new(),
             derivations: HashMap::new(),
@@ -97,7 +103,7 @@ impl<N: Identified, E> GraphLog<N, E> {
     /// be forked with provenance pointing back at it.
     pub fn with_id(id: LogId) -> Self {
         let mut this = Self::new();
-        this.log = Codicil::with_id(id);
+        this.log = Journal::with_id(id);
         this
     }
 
@@ -139,7 +145,7 @@ impl<N: Identified, E> GraphLog<N, E> {
     }
 
     /// The edit log.
-    pub fn log(&self) -> &Codicil<Batch<N, E>> {
+    pub fn log(&self) -> &Journal<Batch<N, E>> {
         &self.log
     }
 
@@ -349,7 +355,7 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
     }
 
     /// Rebuild a graph by replaying a batch log from empty.
-    pub fn replay(log: Codicil<Batch<N, E>>) -> Self {
+    pub fn replay(log: Journal<Batch<N, E>>) -> Self {
         Self::replay_for_writer(log, WriterId::LOCAL)
     }
 
@@ -359,7 +365,7 @@ impl<N: Identified + Clone, E: Clone> GraphLog<N, E> {
     /// this replica restore its counter frontier. This is the multi-writer
     /// recovery path; [`replay`](Self::replay) remains the legacy
     /// single-writer path.
-    pub fn replay_for_writer(log: Codicil<Batch<N, E>>, writer: WriterId) -> Self {
+    pub fn replay_for_writer(log: Journal<Batch<N, E>>, writer: WriterId) -> Self {
         let mut this = Self::new().for_writer(writer);
         for batch in log.entries() {
             this.apply_batch(batch);
@@ -404,11 +410,11 @@ where
     async fn load_log<B: Backend, C: Codec>(
         slots: &SlotStore<B, C>,
         key: &str,
-    ) -> Result<Codicil<Batch<N, E>>, StoreError> {
-        match Codicil::load(slots, key).await {
+    ) -> Result<Journal<Batch<N, E>>, StoreError> {
+        match Journal::load(slots, key).await {
             Ok(log) => Ok(log),
             Err(StoreError::Codec(_)) => {
-                let legacy: Codicil<GraphEdit<N, E>> = Codicil::load(slots, key).await?;
+                let legacy: Journal<GraphEdit<N, E>> = Journal::load(slots, key).await?;
                 Ok(crate::commit::migrate_pre_gate(legacy))
             }
             Err(other) => Err(other),

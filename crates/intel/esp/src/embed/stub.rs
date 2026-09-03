@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Deterministic **stub** [`EmbeddingProvider`] — a test double, not a usable
 //! similarity signal.
 //!
@@ -181,7 +187,7 @@ mod tests {
     #[test]
     fn long_input_does_not_panic() {
         let p = StubEmbeddingProvider::new(16).unwrap();
-        let long: String = std::iter::repeat('x').take(10_000).collect();
+        let long: String = "x".repeat(10_000);
         let v = p.embed_one(&long).unwrap();
         assert_eq!(v.len(), 16);
     }

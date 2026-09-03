@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Visual couplings → paint overlays: the paint-side consumer of the field
 //! system's open response tail.
@@ -29,10 +32,10 @@ use std::collections::HashMap;
 use cartography::Projection;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{COUPLING_VOCAB, FieldDefinition, Graph, NodeKey};
+use numen::{FieldRegistry, eval_scalar};
 use paint_list_api::{
     ColorF, CommonPlacement, DeviceIntSize, LayoutPoint, LayoutRect, PaintCmd, RectItem,
 };
-use quint::{FieldRegistry, eval_scalar};
 
 use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle, paint_projection};
 

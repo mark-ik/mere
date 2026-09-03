@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 use super::*;
 use crate::manifest::NoFetcher;
@@ -272,7 +275,7 @@ fn json_ld_rejects_type_mismatch() {
 // --- Recursion / round-trip ------------------------------------------
 
 #[test]
-fn schema_engram_round_trips_through_save_and_load() {
+fn schema_codicil_round_trips_through_save_and_load() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let mut fetcher = NoFetcher;
@@ -300,13 +303,13 @@ fn schema_engram_round_trips_through_save_and_load() {
         let loaded = load_schema(&mut store, &mut fetcher, schema_id)
             .await
             .unwrap()
-            .expect("schema engram present after save");
+            .expect("schema codicil present after save");
         assert_eq!(loaded, definition);
     });
 }
 
 #[test]
-fn validate_against_schema_resolves_engram_and_runs_validator() {
+fn validate_against_schema_resolves_codicil_and_runs_validator() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let mut fetcher = NoFetcher;
@@ -359,7 +362,7 @@ fn validate_against_unknown_schema_is_tolerant() {
 }
 
 #[test]
-fn bootstrap_meta_schema_seeds_engram_idempotently() {
+fn bootstrap_meta_schema_seeds_codicil_idempotently() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
 
@@ -437,7 +440,7 @@ fn mere_native_builder_produces_validating_schema() {
 }
 
 #[test]
-fn find_schema_by_id_locates_matching_engram() {
+fn find_schema_by_id_locates_matching_codicil() {
     pollster::block_on(async {
         let mut store = InMemoryStore::default();
         let mut fetcher = NoFetcher;
@@ -486,13 +489,13 @@ fn find_schema_by_id_locates_matching_engram() {
 }
 
 #[test]
-fn meta_schema_engram_id_is_stable_and_self_describing() {
-    // The meta-schema engram's id depends only on META_SCHEMA_PAYLOAD,
+fn meta_schema_codicil_id_is_stable_and_self_describing() {
+    // The meta-schema codicil's id depends only on META_SCHEMA_PAYLOAD,
     // so it's stable across runs and instances.
-    let engram = meta_schema_engram();
-    assert_eq!(engram.schema, *META_SCHEMA_REF);
-    assert_eq!(engram.id(), (*META_SCHEMA_REF).0);
-    engram.verify_integrity().unwrap();
+    let codicil = meta_schema_codicil();
+    assert_eq!(codicil.schema, *META_SCHEMA_REF);
+    assert_eq!(codicil.id(), (*META_SCHEMA_REF).0);
+    codicil.verify_integrity().unwrap();
 }
 
 #[test]

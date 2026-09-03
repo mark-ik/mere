@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Per-node facet-store sidecar (`facets.json`) — the durable home for atomic,
 //! typed per-node metadata.
@@ -30,7 +33,7 @@
 //! enabling rung; the migrations follow behind it, opportunistically.
 //!
 //! Validation (a [`FacetValidator`](chartulary::FacetValidator)) is a write-time
-//! host concern (mere backs it with eidetic schema engrams); persistence here is
+//! host concern (mere backs it with eidetic schema codicils); persistence here is
 //! schema-agnostic. One JSON document, atomic write, `Ok(None)` when absent —
 //! deleting it drops facets, never graph truth.
 

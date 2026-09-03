@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The own llama-family decoder body (inference plan P1).
 //!
 //! HF-config-driven: [`config::DecoderConfig`] parses a HuggingFace
@@ -20,6 +26,8 @@
 pub mod attention;
 pub mod config;
 pub mod generate;
+#[cfg(feature = "decoder-wgpu")]
+pub mod gpu_probe;
 pub mod layer;
 pub mod loader;
 #[cfg(feature = "decoder-lora")]
@@ -28,6 +36,8 @@ pub mod model;
 pub mod provider;
 pub mod sample;
 pub mod tensors;
+#[cfg(feature = "decoder-lora")]
+pub mod train;
 
 pub use attention::{DecoderAttention, LayerKvCache, LlamaRotaryEncoding};
 pub use config::DecoderConfig;
@@ -41,10 +51,21 @@ pub use model::{DecoderModel, KvCache, LoadedDecoder};
 
 #[cfg(feature = "decoder-wgpu")]
 use burn::tensor::Device;
+#[cfg(feature = "decoder-wgpu")]
+pub use gpu_probe::{DecoderGpuKind, GpuAdapterFacts, GpuDeviceType, probe_gpu_adapter};
 #[cfg(feature = "decoder-lora")]
 pub use lora::{PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader};
 pub use provider::{DecoderGeneration, DecoderProvider};
 pub use sample::Sampler;
+#[cfg(feature = "decoder-lora")]
+pub use train::{
+    LoraTrainerSettings, TRAINED_ADAPTER_FORMAT_VERSION, TRAINED_PEFT_VERSION, TrainedLoraAdapter,
+    TrainingCase, expected_token_rank, ranking_tally, train_peft_lora,
+};
+
+/// The device vocabulary hosts select from, re-exported so a composition
+/// layer never names `burn` itself.
+pub use burn::tensor::Device as DecoderDevice;
 
 /// The decoder on the wgpu backend — the concrete inference lane hosts use
 /// so they never name `burn` themselves.

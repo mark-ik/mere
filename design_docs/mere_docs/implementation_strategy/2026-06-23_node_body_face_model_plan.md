@@ -94,7 +94,7 @@ the body.
 Re-base `Representation` onto the Body × Face model: tile = standard body + favicon, shape =
 customized body + any face. The existing `Sprite` nodes migrate cleanly (body = the traced hull,
 face = the sprite image). The user picker (the context-menu Form/Face entries, and the object-card
-widgets owned by [object_card_plan](2026-06-21_object_card_plan.md)) sets Body and Face as two
+widgets owned by [object_card_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md)) sets Body and Face as two
 choices, not one.
 
 Done when tile and shape are body presets, Body and Face are set independently in the picker, and
@@ -185,7 +185,7 @@ Open representation threads, each with its home, so closing the predecessor plan
   in what order, and which scattered context-menu toggles it consolidates (Form / Face / size /
   material / tags / engine pin / relations). The panel is owned by
   [settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md)'s `node:<id>`
-  provider; the compact in-canvas form is [object_card_plan](2026-06-21_object_card_plan.md). This
+  provider; the compact in-canvas form is [object_card_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md). This
   plan supplies the Body / Face / material setters those surfaces bind.
 - **Arrangement surface + persistence (Decision 7, P3).** Per-scene arrangement *persistence* is
   already shipped (the picker writes `ViewIntent.strategy` + `save_session`, restored on boot /
@@ -201,7 +201,7 @@ Open representation threads, each with its home, so closing the predecessor plan
   ring/halo) are owned by [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md);
   cross-ref only.
 - **The per-object widget surface** (Body / Face / material widgets in the in-canvas card) is
-  owned by [object_card_plan](2026-06-21_object_card_plan.md); this plan supplies the underlying
+  owned by [object_card_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_object_card_plan.md); this plan supplies the underlying
   setters it binds.
 - **The `node:<id>` facet pane** (the deep editor's home) is owned by
   [settings_lane_consolidation_plan](../../archive_docs/2026-07-13_superseded_plans/2026-06-21_settings_lane_consolidation_plan.md).

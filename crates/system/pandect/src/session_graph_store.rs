@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Session graph store — a session's graph persisted as hand-inspectable JSON
 //! (`graph.json`).
@@ -8,7 +11,7 @@
 //! its serde [`GraphSnapshot`] — the URL-stable form, since petgraph NodeIndex
 //! keys are not stable across sessions. This is the "serde `graph.json` as the
 //! live store" cut; a content-addressed eidetic layer (blobs / manifests /
-//! engrams) sits behind it later for media + history.
+//! codicils) sits behind it later for media + history.
 //!
 //! Native-only: this is filesystem persistence. wasm hosts persist through a
 //! different backend (IndexedDB / OPFS), so the module is excluded from

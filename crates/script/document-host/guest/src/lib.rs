@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The `document-core` guest, P2.1b shape: it operates on the real HTML DOM the
 //! host now backs `inspect`/`apply` with — elements (named by tag) and `#text`
 //! nodes — rather than the P2.0 abstract `Doc` model. Per-turn `handle-event`

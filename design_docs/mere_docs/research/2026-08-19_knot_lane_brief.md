@@ -184,3 +184,52 @@ evidence retention transitions, and whether a portable enriched object is
 actually better than a document beside a content-addressed store.
 
 That work may eventually justify `.knot`. Cuts 1 through 3 do not.
+
+## External prior art (2026-08-28)
+
+An Ink & Switch harvest, read 2026-08-28. Three of the pieces bear directly on
+the cuts above; the scene and materials half of the same harvest (PlayBook,
+Drawdeck, Portemine, Potluck's reading shape) lands in the
+[projection grammar catalog](2026-08-15_projection_grammar_catalog.md) under
+"Material systems and dynamic documents". Nothing here changes a cut's
+semantics; each entry states what it validates and what it warns against.
+
+**[Upwelling](https://www.inkandswitch.com/upwelling/) — the collaboration
+model around cut 2.** Their user research names the "fishbowl effect": writers
+do not want first drafts visible, which is the argument *for* Knot's
+no-live-cursors, exchange-causal-versions posture, from evidence rather than
+taste. Their draft/stack model maps cleanly onto it: a draft is a titled group
+of related edits and the unit of sharing and review; a merged draft becomes an
+immutable layer; other active drafts rebase over each merge so conflicts
+surface early, before acceptance. The transferable idea when Knot grows a
+drafting UX is the **titled draft as the review unit** — group and name the
+exchanged version set, merge whole drafts rather than individual edits. Equally
+useful is their negative space: character-level accept/reject proved too
+granular, git-style cherry-picking and squashing added complexity without
+value, and dependent long-lived drafts bred conflicts. A caution against
+over-importing git idioms into the UX even while the replication stays
+git-like underneath.
+
+**[Backstitch](https://www.inkandswitch.com/project/backstitch/notebook/01/) —
+cut 2's thesis in a different substrate.** Structure-aware merge of Godot scene
+files over Automerge, with the guarantee stated as "you always get a loadable
+scene when merging", and diffs displayed inside the spatial editor with changed
+objects highlighted in the viewport. Knot's source-preserving conservative
+structural merge is the same thesis on Djot, and weave is the code-side
+sibling. The in-editor diff display is the reference to revisit when Knot's
+conflict records get a surface: show the conflict in the projection the author
+works in, not in a raw text pane.
+
+**[Potluck](https://www.inkandswitch.com/potluck/) — the shape cut 3 grows
+into, if it ever opens to user definition.** Potluck generalizes exactly what
+the lexical lenses do: named, composable live searches over plain text
+(`{number}` reused by later patterns) detect structure, computations derive
+values, and annotations overlay the document while the text stays authoritative
+and editable — the same derived-and-discardable contract as Rosette's lenses,
+with the patterns user-authored instead of built in. Two confirmations and one
+ordering lesson. Their limitations list (fuzzy parsing risk, heavy enrichments
+becoming unmaintainable) is the independent case for the coverage-report rule
+cut 3 already enforces. Annotations-as-overlay matches lenses-as-projections.
+And Potluck got broad utility from patterns alone, with no ontology — which
+supports this brief's WordNet deferral: patterns first, a lexical graph
+vocabulary only when a real consumer forces it.

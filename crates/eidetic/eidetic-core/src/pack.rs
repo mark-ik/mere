@@ -1,10 +1,13 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! The pack schema (participant gate B4): a portable denizen as an eidetic
-//! engram under `mere.pack/v1`.
+//! codicil under `mere.pack/v1`.
 //!
-//! The envelope was never the work — an eidetic [`Engram`](crate::Engram) /
+//! The envelope was never the work — an eidetic [`Codicil`](crate::Codicil) /
 //! typed payload already carries content-hash identity and the orthogonal
 //! privacy / provenance / trust axes. B4 defines only what rides it:
 //!
@@ -15,7 +18,7 @@
 //!   The donor TransferProfile v1's multi-part inventory imports as this
 //!   vocabulary; its model-adaptation half stays out.
 //! - The **personae signing binding**: an Ed25519 signature over the
-//!   manifest's canonical bytes, carried in the engram's
+//!   manifest's canonical bytes, carried in the codicil's
 //!   [`TrustEnvelope::signatures`] as a [`SignatureRef`] string
 //!   (`personae:ed25519:<pubkey-hex>:<sig-hex>` — the "concrete shape lands
 //!   with identity" note on `SignatureRef`, landed).
@@ -78,7 +81,7 @@ pub struct PackPart {
     pub bytes: u64,
 }
 
-/// The pack manifest: the typed payload of a `mere.pack/v1` engram.
+/// The pack manifest: the typed payload of a `mere.pack/v1` codicil.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackManifest {
     /// The pack's display name.
@@ -122,7 +125,7 @@ pub fn canonical_bytes(manifest: &PackManifest) -> Vec<u8> {
 }
 
 /// Sign `manifest` with the author's keypair, returning the [`SignatureRef`]
-/// to carry in the engram's [`TrustEnvelope::signatures`]. The manifest's
+/// to carry in the codicil's [`TrustEnvelope::signatures`]. The manifest's
 /// `author` field must be this keypair's public key (verification checks it).
 #[cfg(feature = "pack-signing")]
 pub fn sign_pack(manifest: &PackManifest, keypair: &Ed25519Keypair) -> SignatureRef {

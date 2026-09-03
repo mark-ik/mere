@@ -28,7 +28,7 @@ layer), `crates/meerkat` (the tangibility command + scene picker), optional new 
   gravity well) rides that substrate. The environment is the global cousin.
 - [cartography_aether_layout_seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
   — gyre is already the rapier object world; this adds non-node citizens to it.
-- [command_registry_configurable_menus_plan](2026-06-21_command_registry_configurable_menus_plan.md)
+- [command_registry_configurable_menus_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md)
   — the tangibility toggle and the scene picker are registry commands.
 
 ---

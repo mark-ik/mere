@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Read-only Cambium projection of installed Distillery authority.
 //!
@@ -15,8 +18,7 @@ use cambium::{
     AnyView, DomHandle, GenetAppRunner, GenetCtx, GenetElement, RunnerSurfaceSession, div, el, span,
 };
 use genet_host_api::{
-    PlacementHint, ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId,
-    SurfaceMultiplicity, SurfaceRole, SurfaceSourceShape,
+    ProviderId, SourceKindId, SurfaceAvailability, SurfaceDescriptor, SurfaceId, SurfaceSourceShape,
 };
 use muniment::Backend;
 
@@ -183,10 +185,6 @@ pub fn distillery_installed_descriptor() -> SurfaceDescriptor {
         surface_id: SurfaceId::from(SURFACE_ID),
         label: "Distillery".to_owned(),
         accepted_source: SurfaceSourceShape::One(SourceKindId::from(SURFACE_ID)),
-        roles: vec![SurfaceRole::from("pane"), SurfaceRole::from("status")],
-        multiplicity: SurfaceMultiplicity::PerSource,
-        placement_hint: PlacementHint::from("main"),
-        potential_capabilities: Vec::new(),
     }
 }
 

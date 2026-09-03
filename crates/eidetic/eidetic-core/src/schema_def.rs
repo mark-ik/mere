@@ -1,9 +1,12 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
-//! Polyglot schema definitions for schema engrams.
+//! Polyglot schema definitions for schema codicils.
 //!
-//! A schema engram's payload is a [`SchemaDefinition`]. The definition
+//! A schema codicil's payload is a [`SchemaDefinition`]. The definition
 //! declares its format (Mere-native / JSON Schema / JSON-LD) and carries the
 //! format-specific schema body. [`validate_payload`] dispatches to the
 //! matching validator.
@@ -25,14 +28,14 @@
 //!
 //! ## Recursion and the meta-schema
 //!
-//! A schema engram is itself an engram, so it has a schema reference of its
+//! A schema codicil is itself a codicil, so it has a schema reference of its
 //! own — the **meta-schema**, identified by [`META_SCHEMA_REF`]. The
 //! meta-schema describes "this is a [`SchemaDefinition`]." Its own `schema`
 //! field is `META_SCHEMA_REF` — self-referential, terminating the recursion.
 
 use serde::{Deserialize, Serialize};
 
-use crate::engram::{Engram, TimeBounds};
+use crate::codicil::{Codicil, TimeBounds};
 use crate::manifest::{BlobFetcher, BlobSource};
 use crate::schema::{
     Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
@@ -41,9 +44,9 @@ use crate::schema::{
 use crate::typed::{TypedPayload, load_typed, save_typed};
 use crate::{Error, Result, Store};
 
-/// The schema-definition format used by a schema engram. Open-ended
+/// The schema-definition format used by a schema codicil. Open-ended
 /// architecturally; new variants can be added without breaking existing
-/// schema engrams (other consumers see an unknown variant and either skip
+/// schema codicils (other consumers see an unknown variant and either skip
 /// validation or surface a "validator not available" error per their own
 /// policy).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,7 +62,7 @@ pub enum SchemaFormat {
     JsonLd,
 }
 
-/// Schema-definition payload for a schema engram.
+/// Schema-definition payload for a schema codicil.
 ///
 /// `body` carries the format-specific schema document. For Mere-native, this
 /// is a [`MereNativeSchemaBody`]-shaped JSON value. For JSON Schema, it is
@@ -69,7 +72,7 @@ pub enum SchemaFormat {
 pub struct SchemaDefinition {
     pub format: SchemaFormat,
     /// Human-readable identifier (e.g. `"VectorIndex/v1"`). Not load-bearing
-    /// for identity — content hash of the engram is. Used for diagnostics
+    /// for identity — content hash of the codicil is. Used for diagnostics
     /// and authoring tooling.
     pub schema_id: String,
     /// Format-specific schema body. Interpreted by the validator that
@@ -87,14 +90,14 @@ impl TypedPayload for SchemaDefinition {
 // Meta-schema bootstrap
 // ---------------------------------------------------------------------------
 
-/// Canonical bytes of the meta-schema engram's payload.
+/// Canonical bytes of the legacy-vocabulary meta-schema payload.
 ///
 /// These bytes describe the [`SchemaDefinition`] shape itself, in
 /// Mere-native format. They are constant across all eidetic instances and
 /// versions; their BLAKE3 hash is [`META_SCHEMA_REF`]'s id.
 const META_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.meta-schema/v1","body":{"version":1,"description":"Schema engram payload describing another schema in one of: mere-native, json-schema, json-ld.","required":["format","schema_id","body"],"fields":{"format":{"type":"enum","values":["mere-native","json-schema","json-ld"]},"schema_id":{"type":"string"},"body":{"type":"object"}}}}"#;
 
-/// The well-known schema reference for schema engrams.
+/// The well-known schema reference for schema codicils.
 ///
 /// Equal to `SchemaRef::from_id(ManifestId::of_blob(META_SCHEMA_PAYLOAD))`.
 /// Computed lazily because BLAKE3 hashing isn't const-fn yet.
@@ -102,7 +105,7 @@ pub fn meta_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::from_hash(Hash::of(META_SCHEMA_PAYLOAD)))
 }
 
-/// The well-known schema reference for schema engrams.
+/// The well-known schema reference for schema codicils.
 ///
 /// Computed lazily at first use from `META_SCHEMA_PAYLOAD`; stable for the
 /// process lifetime. Callers that need a value rather than a static can use
@@ -110,7 +113,7 @@ pub fn meta_schema_ref() -> SchemaRef {
 pub static META_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(meta_schema_ref);
 
-/// Idempotently seed the meta-schema engram into a Store.
+/// Idempotently seed the meta-schema codicil into a Store.
 ///
 /// On first call against a fresh Store, writes the meta-schema's payload
 /// bytes (BLAKE3-anchored to [`META_SCHEMA_REF`]) and its manifest. On
@@ -118,7 +121,7 @@ pub static META_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
 /// present.
 ///
 /// **Call this once during init** for any consumer that will use schema
-/// engrams. Without it, [`validate_against_schema`] silently tolerates
+/// codicils. Without it, [`validate_against_schema`] silently tolerates
 /// missing schemas (per the design pass's "tolerant on read" rule), so
 /// forgetting bootstrap masks bugs rather than surfacing them.
 pub async fn bootstrap_meta_schema(store: &mut dyn Store) -> Result<()> {
@@ -163,13 +166,13 @@ pub async fn bootstrap_meta_schema(store: &mut dyn Store) -> Result<()> {
     Ok(())
 }
 
-/// Build the canonical meta-schema engram. Call this once at first init to
-/// populate the Store with the bootstrap engram, so subsequent schema
-/// engrams resolve their `schema` field correctly. Most consumers should
-/// use [`bootstrap_meta_schema`] instead, which writes the engram into
+/// Build the canonical meta-schema codicil. Call this once at first init to
+/// populate the Store with the bootstrap codicil, so subsequent schema
+/// codicils resolve their `schema` field correctly. Most consumers should
+/// use [`bootstrap_meta_schema`] instead, which writes the codicil into
 /// the Store idempotently.
-pub fn meta_schema_engram() -> Engram {
-    Engram::new(
+pub fn meta_schema_codicil() -> Codicil {
+    Codicil::new(
         *META_SCHEMA_REF,
         META_SCHEMA_PAYLOAD.to_vec(),
         PrivacyClass::PublicPortable,
@@ -186,6 +189,12 @@ pub fn meta_schema_engram() -> Engram {
         },
         TimeBounds::at(Timestamp::ZERO),
     )
+}
+
+/// Compatibility constructor for callers using the former vocabulary.
+#[deprecated(since = "0.0.3", note = "use meta_schema_codicil")]
+pub fn meta_schema_engram() -> Codicil {
+    meta_schema_codicil()
 }
 
 // ---------------------------------------------------------------------------
@@ -211,9 +220,9 @@ pub fn validate_payload(definition: &SchemaDefinition, payload_bytes: &[u8]) -> 
     }
 }
 
-/// Save a schema engram to the Store. Returns its manifest id.
+/// Save a schema codicil to the Store. Returns its manifest id.
 ///
-/// The schema engram's content is a [`SchemaDefinition`] serialized as JSON;
+/// The schema codicil's content is a [`SchemaDefinition`] serialized as JSON;
 /// its own `schema` field is [`META_SCHEMA_REF`].
 pub async fn save_schema(
     store: &mut dyn Store,
@@ -235,8 +244,8 @@ pub async fn save_schema(
     .await
 }
 
-/// Load a schema engram by its manifest id. Returns `Ok(None)` if no such
-/// engram is stored.
+/// Load a schema codicil by its manifest id. Returns `Ok(None)` if no such
+/// codicil is stored.
 pub async fn load_schema(
     store: &mut dyn Store,
     fetcher: &mut dyn BlobFetcher,
@@ -245,10 +254,10 @@ pub async fn load_schema(
     load_typed::<SchemaDefinition>(store, fetcher, schema_id).await
 }
 
-/// Recursive resolution: load the schema engram referenced by `schema_ref`,
+/// Recursive resolution: load the schema codicil referenced by `schema_ref`,
 /// then validate `payload_bytes` against it.
 ///
-/// Forward-compatibility: if the schema engram is missing, returns
+/// Forward-compatibility: if the schema codicil is missing, returns
 /// `Ok(())` rather than erroring (per the design pass's "tolerant on read,
 /// strict on required_for_application" rule). Callers that need strict
 /// validation can check schema presence themselves before calling.
@@ -345,9 +354,9 @@ impl MereNativeSchemaBuilder {
     }
 }
 
-/// Find a schema engram by its human-readable `schema_id`.
+/// Find a schema codicil by its human-readable `schema_id`.
 ///
-/// Walks every schema engram in the Store (i.e. manifests with
+/// Walks every schema codicil in the Store (i.e. manifests with
 /// `schema == META_SCHEMA_REF`), loads each as a [`SchemaDefinition`],
 /// and returns the first match. Useful when consumers want to find a
 /// schema by name rather than by content hash.

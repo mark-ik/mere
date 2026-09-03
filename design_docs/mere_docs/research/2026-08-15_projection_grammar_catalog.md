@@ -1,7 +1,8 @@
 # Mere projection grammar catalog
 
-Status: research catalog and boundary map  
-Date: 2026-08-15  
+Status: governing research catalog and boundary map
+Founded: 2026-08-15
+Last reconciled: 2026-08-29
 Scope: portable graph readings, visual encodings, arrangements, realization, and interaction  
 Governs: the primitive vocabulary and promotion rules used to construct scenes  
 Consumed by: [`2026-08-18_scenograph_content_catalog.md`](2026-08-18_scenograph_content_catalog.md), the collection of complete scene recipes  
@@ -188,22 +189,33 @@ An arrangement computes geometry under constraints. A reading may support severa
 | --- | --- | --- |
 | Authored spatial | Free placement, pinned ground, tabletop | Expressible through positions and constraints; product recipes remain host-owned |
 | Force and constraint | Spring, collision, gravity, clusters | Landed in Seiche; portable score promotion requires a forcing consumer |
-| Grid and stack | Rows, columns, masonry, ordered stack | Landed in the local arrangement registry |
-| Axial and lanes | Timeline, Gantt, swimlane, categorical columns | Timeline and Columns are local registry entries; generalized axes and guides are a gap |
-| Radial and spiral | Radial, phyllotaxis, polar, concentric | Radial and spiral are landed locally; spiral is portable in `score::Arrangement` |
+| Grid and stack | Rows, columns, masonry, ordered stack | Grid and Stack are portable in Score v4; Grid has a Cartography adapter, while Stack still lacks a current adapter consumer |
+| Axial and lanes | Timeline, Gantt, swimlane, categorical columns | Timeline and Kanban are portable in Score v4; generalized axes and guides remain a gap |
+| Radial and spiral | Radial, phyllotaxis, polar, concentric | Radial and Spiral are portable in Score v4 and have Cartography adapters |
 | Tree and DAG | Tidy tree, cluster, layered DAG, radial tree | Contract gap pending hierarchy and schematic proofs |
 | Space-filling hierarchy | Treemap, partition, sunburst, pack | Contract gap pending a hierarchy proof |
 | Matrix | Adjacency matrix, heatmap, table matrix | Expressible as a reading; general cell marks and guides remain a gap |
 | Flow | Sankey, alluvial, river | Contract gap pending aggregate-flow proof |
 | Circular relation | Chord, arc diagram, Rosette | Rosette is landed through Knot over two text datasets |
-| Geographic | Map projection, region, route, hull | Geographic and hull arrangements are portable; basemap/backdrop remains a gap |
+| Geographic | Map projection, region, route, hull | Geographic and Hulls are portable; the minimum backdrop contract is landed, while raster and scalar field context remains open |
 | Cartesian statistical | Bar, line, area, scatter, distribution | Contract gap in derived marks, scales, and guides |
-| Tiling and packing | Mosaic, bin pack, Voronoi, Penrose | Penrose is landed locally; generic tiling remains recipe-level |
-| Generative | L-system, procedural field, semantic embedding | L-system and semantic embedding are local registry entries |
+| Tiling and packing | Mosaic, bin pack, Voronoi, Penrose | Penrose is portable in Score v4; generic tiling remains recipe-level |
+| Generative | L-system, procedural field, semantic embedding | L-system and Embedded are portable in Score v4; procedural field semantics remain product-owned |
 | Nested and faceted | Small multiples, compound nodes, nested canvases | Nested spaces are portable; facet composition needs a forcing proof |
 | Three-dimensional | Spatial volume, layered depth, immersive graph | Deferred until a real second consumer forces portable depth semantics |
 
-Portable `score::Arrangement` version 3 names Spiral, Grid, Geographic, and Hulls. `Grid` means regular cells. The local `Columns` arrangement means categorical column placement. `Plotted` is the ratified future name for direct supplied-coordinate placement when a forcing proof converges the current coordinate families. `Tabletop` remains a complete authored-ground scene, not an arrangement synonym. Mere's local arrangement registry is intentionally broader: Grid, Radial, Stack, Spiral, Timeline, Columns, Penrose, Fractal, Semantic Embedding, and Spectral. A local implementation may be useful before it earns a portable wire contract.
+Portable `score::Arrangement` version 4 names Spiral, Grid, Geographic, Hulls,
+Stack, Penrose, LSystem, Timeline, Kanban, Embedded, and Radial, plus the
+explicitly untyped `Custom` escape for a registered external solver. `Grid`
+means regular cells; `Kanban` is the current categorical-column form;
+`Embedded` carries supplied coordinates. `Plotted` remains the ratified future
+name if a forcing proof converges the coordinate families on a clearer common
+contract. `Tabletop` remains a complete authored-ground scene, not an
+arrangement synonym. Cartography currently exposes adapters for Grid,
+Phyllotaxis/Spiral, Penrose, L-system, Timeline, Kanban, Semantic Embedding,
+Spectral, and Radial. A portable family may exist before Cartography has a
+consumer for it, and a local recipe may remain useful without becoming a new
+portable variant.
 
 ### 7. Interaction and change over time
 
@@ -255,7 +267,7 @@ These families are capability tests. They are not mutually exclusive chart types
 | Flow | Quantity moving through stages | Aggregate paths; widths and ribbons encode quantity | Contract gap | Sankey-style projection with traceable constituent relations |
 | Circular or chord | Pairwise exchange among ordered groups | Polar positions; arcs or ribbons | Expressible recipe | Chord and arc views from the same grouped relation reading |
 | Set membership | Overlap and combinations | Set derivation; regions or membership matrix | Contract gap | Venn-like and matrix realization from one membership reading |
-| Geographic | Location, route, region, spatial field | Geographic transform; symbols, regions, paths, raster | Partly landed | Basemap plus selectable graph entities and source-safe routes |
+| Geographic | Location, route, region, spatial field | Geographic transform; symbols, regions, paths, raster | Minimum scene and backdrop contract landed; raster/scalar field semantics open | Basemap plus selectable graph entities and source-safe routes; field proof remains consumer-gated |
 | Schematic or flowchart | Ports, direction, stages, constraints | Typed entities; port-anchored orthogonal connectors | Contract gap | Flowchart and architecture diagram with stable ports and labels |
 | Sequence or state | Ordered interaction and transitions | Participants/states plus messages or transitions | Contract gap | Sequence and state views preserve transition identity |
 | Authored board or tabletop | Deliberate composition and tangible grouping | Authored positions, zones, props, collision | Expressible product recipe | Cleromancy-style layout stays authored without a generic spread DSL |
@@ -272,7 +284,7 @@ The earlier Scenograph catalog's names remain useful for product design. They sh
 | Prior scene | Grammar composition | Classification |
 | --- | --- | --- |
 | Mosaic | Tiling arrangement + image/snapshot marks + optional groups | Product recipe |
-| Atlas | Geographic reading + map projection + basemap + symbols/routes/regions | Product recipe; backdrop contract gap |
+| Atlas | Geographic reading + map projection + basemap + symbols/routes/regions | Product recipe; minimum backdrop contract landed, richer raster/field context open |
 | Tabletop | Authored ground + zones/props + collision + free/pinned items | Product recipe |
 | Chronicle | Temporal reading + axis/lanes + epochs/trails | Product recipe; guide gap |
 | Circuit | Layered or authored arrangement + ports + orthogonal routes | Product recipe; port/routing gap |
@@ -289,9 +301,9 @@ This reclassification keeps the evocative scene names available to Turnstone and
 ### Already present
 
 - `sceno::Scene` carries separate source and instance identity, nested spaces, projected items, transforms, footprints, representation requests, layers, visibility, hit policy, scalar channels, routed relations, and regions.
-- `sceno::Score` version 3 supplies a portable arrangement vocabulary, authored holds, and data needed for deterministic solving. `Scene` reports both honored and unmet pins.
+- `sceno::Score` version 4 supplies the expanded portable arrangement vocabulary, authored holds, and per-item axis, embedding, and weight disclosures needed for deterministic solving. `Scene` reports both honored and unmet pins.
 - Scenomise owns placement; Scenotime owns portable epochs, diffs, and picking.
-- Mere's local arrangement registry includes Grid, Radial, Stack, Spiral, Timeline, Columns, Penrose, Fractal, Semantic Embedding, and Spectral. Force physics lives in Seiche.
+- Mere's Cartography adapter surface includes Grid, Phyllotaxis/Spiral, Penrose, L-system, Timeline, Kanban, Semantic Embedding, Spectral, and Radial. Score v4 additionally carries portable families such as Stack, Geographic, and Hulls without pretending Cartography has a current consumer for each. Force physics lives in Seiche.
 - Cartography provides a representation registry and host-selectable profiles rather than hardwiring one face for every graph class.
 - Canvas separates face, body, collider, placement, and behavior concerns.
 - Numen defines fields with global, regional, node-attached, and polygon extents plus lifecycle.
@@ -306,15 +318,25 @@ This reclassification keeps the evocative scene names available to Turnstone and
 
 1. **Derived marks, scales, and guides.** Bar, line, scatter, histogram, and accessible chart proofs need scene objects that can cite their derivation without masquerading as graph nodes.
 2. **Relation endpoints and routing constraints.** Schematics need ports, endpoint anchors, labels, and orthogonal routing while preserving relation identity.
-3. **Backdrop and underlay data.** Atlas, Tabletop, field rasters, and remote viewing need portable scene context with explicit visibility, collision, hit, and provenance policies.
+3. **Richer underlay and field data.** C3 closed the minimum portable backdrop
+   contract: source-backed identity, kind, transform and footprint, visibility,
+   collision, structural hit transparency, and remote carriage. Atlas basemap
+   resources, field rasters, scalar legends, and derivation policy beyond that
+   minimum still wait on a field consumer.
 4. **Facet and shared-scale composition.** Small multiples need nested scenes with declared shared or independent domains.
 5. **Headed accessibility receipt — closed.** Graphshell produces semantic structure, HTML, an AccessKit tree, a long-form table, and honored/unmet placement reporting. Turnstone `648bf19` supplies the definitive headed OS screen-reader traversal and routed-interaction receipt.
 
-These are research findings, not an instruction to enlarge Scenograph immediately. Each addition needs a projection proof that fails cleanly without it.
+The open items are research findings, not an instruction to enlarge Scenograph immediately. Each addition needs a projection proof that fails cleanly without it.
 
 ## Promotion rules
 
 A capability enters a portable contract only when a named consumer forces it.
+
+The promotion suite is a shared evidence harness, not a forcing consumer. It
+begins when a named product consumer opens one proof. The other projections in
+the suite test reuse and expose missing contract material; they do not authorize
+portable additions that the first consumer did not ask for. Every promoted
+addition still requires the second heterogeneous consumer named below.
 
 For every proposed addition, record:
 
@@ -329,7 +351,8 @@ For every proposed addition, record:
 - second heterogeneous consumer;
 - receipt proving deterministic portable behavior.
 
-The first promotion suite should use one heterogeneous fixture and project it as:
+When that first consumer opens a proof, found the promotion suite with one
+heterogeneous fixture and project it as:
 
 1. a node-link orrery;
 2. a dense relation matrix;
@@ -387,6 +410,59 @@ Eleven systems reviewed against this catalog in the projection grammar report (2
 - [GoFish](https://vis.csail.mit.edu/pubs/gofish/) formalizes Gestalt relations such as uniform spacing, containment, and connection inside one grammar that covers charts and diagrams alike. Transfers: the chart-side evidence for this catalog's central bet, that a chart, a diagram, and a spatial graph can be projections of one system.
 
 **Name collisions.** Two systems on this shelf share a name with a variant in [Arrangement families](#6-arrangement-families) and mean something unrelated. CMU's Penrose is a diagram specification language; Mere's is `graph_layout:penrose`, the aperiodic tiling arrangement (P2 kite-dart or P3 rhombus via Robinson subdivision) registered in `crates/canvas/arrangements`, reached through `PenroseAdapter` under the projection id `penrose.default`. UW IDL's Mosaic is a view-coordination architecture; "Mosaic" in the tiling row is a packing variant with no implementation in the tree. Both names stay, because both are established in their own domain. Cite the shelf when the specification language is meant.
+
+### Material systems and dynamic documents (Ink & Switch, read 2026-08-28)
+
+A third shelf, added 2026-08-28 from an Ink & Switch harvest. These systems are
+prior art for neither the renderer nor the compiler but for the **intent
+column**: what it looks like when readings, bindings, and overrides are
+tangible, manipulable objects in the scene rather than host-only state. Mosaic
+(specification shelf) made selections serializable data; these make them
+*material*. The collaboration and merge half of the same harvest lands in the
+[knot lane brief](2026-08-19_knot_lane_brief.md) rather than here.
+
+- **PlayBook** ([project 032](https://www.inkandswitch.com/project/playbook/),
+  plus the internal-draft *User's Guide Volume I* — the system was designed by
+  writing its manual first, a use-case-first instrument worth copying as a doc
+  genre). Five materials (ink, paper, pin, beam, flux) with physics: paper
+  carries ink and composes by size; pin/beam are couplers and linear/radial
+  actuators; ink drawn on a beam follows the beam. Transfers, four:
+  **flux** is a drawn material whose `contents` property is a live, spreading
+  selection — a reading reified as a scene object with properties, the spatial
+  cousin of Mosaic's selection-as-clauses, and the first concrete answer this
+  shelf has to "what does a first-class reading look like on screen".
+  **Slot/card/whisker** is binding vocabulary: a slot is the binding site that
+  establishes a property's meaning, a card is a value object that *copies* when
+  dragged out, and copying a slot leaves a whisker — a visible live-binding
+  edge along which changes propagate, i.e. provenance drawn in the scene.
+  **Overriding** is reversible intent: dropping a compatible slot atop another
+  substitutes its value temporarily and pulling it away restores the original —
+  a "change encoding parameter" intent whose reversal is spatial, never a
+  silent scene mutation. And **selections are non-exclusive**: the same
+  material may belong to several selections at once, which is this catalog's
+  instance/source split stated as a UX principle. Also self-hosting as a test:
+  every PlayBook panel is made of the same materials it manipulates.
+- **[Drawdeck](https://www.inkandswitch.com/ink/notes/drawdeck/)** (lab note):
+  piles (proximity grouping), runestones (behavior tiles), and *curses* —
+  temporary modifiers that revert naturally, an independent rediscovery of
+  override-and-revert. Side finding: visual-model spatial queries answer
+  spatial predicates directly, where indirect metrics struggle.
+- **[Portemine](https://www.inkandswitch.com/ink/notes/portemine/)** (lab
+  note): propagator networks as PlayBook's candidate compute model —
+  bidirectional constraints, explicit monotonic time against cycles, constraint
+  solving in userspace. Transfers: prior art for any future reactive or
+  constraint lane, sitting beside Penrose's ensure/encourage on the solver
+  question rather than replacing it.
+- **[Potluck](https://www.inkandswitch.com/potluck/)** (essay): gradual
+  enrichment of plain text — named, composable live searches (`{number}`
+  referenced by later patterns) act as readings over a text authority,
+  spreadsheet-style computations derive values, and dynamic annotations
+  overlay the document without ever mutating it. Transfers: the reading shape
+  for the document/text projection family — a Potluck search is a selection
+  reading over spans, and its annotations are derived marks whose provenance
+  is a span. Their stated limitations (fuzzy parsing, maintenance of heavy
+  enrichments) are the argument for coverage reporting, which Knot's lens
+  doctrine already requires.
 
 ## Related Mere research
 

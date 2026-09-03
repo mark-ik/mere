@@ -2,7 +2,7 @@
 name = "armillary"
 version = "0.1.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 description = "A host-neutral actor-kernel runtime: a !Send host-kernel boundary, a Send actor harness (thread-per-actor or pooled), generation counters for backpressure, and a growable reusing worker pool. GPUI's kernel/actor discipline made structural."
 repository = "https://github.com/merely-made/mere"
 keywords = ["actor", "concurrency", "threading", "runtime", "gpui"]

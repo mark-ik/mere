@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Continuous body **emitters** (fountains / streams) on [`Simulation`]: spawn scene bodies over
 //! time and reap them by age, with a tiny deterministic PRNG jittering each spawn (no `rand` dep,
 //! reproducible headless). Split from `lib.rs` to keep the simulation core under the per-file size

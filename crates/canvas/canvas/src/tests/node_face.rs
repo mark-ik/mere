@@ -1,44 +1,63 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The node-representation axes: face (what the tile shows), body / material,
 //! and how each round-trips through cartography.
 
 use super::*;
 
 #[test]
-fn node_face_defaults_to_favicon_and_takes_a_per_node_override() {
+fn node_face_default_tracks_favicon_source_and_takes_a_per_node_override() {
     let mut graph = Graph::new();
-    graph.add_node(
+    let derived_key = graph.add_node(
         "https://one.example".to_string(),
         PortablePoint::new(0.0, 0.0),
     );
+    let favicon_key = graph.add_node(
+        "https://two.example".to_string(),
+        PortablePoint::new(0.0, 0.0),
+    );
+    assert!(graph.set_node_image(
+        favicon_key,
+        kernel::types::ImageRole::Favicon,
+        kernel::types::ImageRef::new([7; 32], 16, 16),
+    ));
     let mut canvas = Canvas::with_graph(graph);
-    let (key, id) = {
-        let (key, node) = canvas
-            .graph()
-            .get_node_by_url("https://one.example")
-            .unwrap();
-        (key, node.id)
-    };
+    let derived_id = canvas.graph().get_node(derived_key).unwrap().id;
+    let favicon_id = canvas.graph().get_node(favicon_key).unwrap().id;
     assert_eq!(
-        canvas.node_face(key),
+        canvas.node_face(derived_key),
+        Face::Derived,
+        "a node without a favicon source derives its default face",
+    );
+    assert_eq!(
+        canvas.node_face(favicon_key),
         Face::Favicon,
-        "the default face is Favicon, so the look is unchanged",
+        "a favicon source replaces the derived default",
     );
 
     // A per-node override is the user's face choice; it wins over the default.
-    canvas.set_node_face(id, Face::Bare);
+    canvas.set_node_face(derived_id, Face::Favicon);
     assert_eq!(
-        canvas.node_face(key),
-        Face::Bare,
-        "the per-node override wins over the default"
-    );
-
-    // Clearing the override reverts the node to the default face.
-    canvas.clear_node_face(id);
-    assert_eq!(
-        canvas.node_face(key),
+        canvas.node_face(derived_key),
         Face::Favicon,
-        "clearing the override reverts to Favicon"
+        "an explicit Favicon wins even before a source exists"
     );
+    canvas.set_node_face(favicon_id, Face::Derived);
+    assert_eq!(canvas.node_face(favicon_key), Face::Derived);
+
+    // Clearing each override re-evaluates the content-sensitive default.
+    canvas.clear_node_face(derived_id);
+    canvas.clear_node_face(favicon_id);
+    assert_eq!(
+        canvas.node_face(derived_key),
+        Face::Derived,
+        "clearing returns a favicon-less node to Derived"
+    );
+    assert_eq!(canvas.node_face(favicon_key), Face::Favicon);
 }
 
 #[test]
@@ -98,7 +117,7 @@ fn face_and_body_are_independent_axes() {
         "reset body leaves the face untouched"
     );
 
-    // Removing the sprite drops the image and reverts a still-Sprite face to Favicon.
+    // Removing the sprite drops the image and clears a still-Sprite override.
     canvas.set_node_face(id, Face::Sprite);
     canvas.clear_node_sprite(id);
     assert_eq!(
@@ -108,8 +127,8 @@ fn face_and_body_are_independent_axes() {
     );
     assert_eq!(
         canvas.node_face(key),
-        Face::Favicon,
-        "and reverts a Sprite face to Favicon"
+        Face::Derived,
+        "and returns a favicon-less node to its derived default"
     );
 }
 
@@ -187,27 +206,17 @@ fn node_face_override_round_trips_through_cartography() {
         (key, node.id)
     };
 
-    // A per-node face override travels to the sidecar as a string code.
-    canvas.set_node_face(id, Face::Bare);
-    let geom = canvas.cartography_geometry();
-    let faces: std::collections::HashMap<_, _> = geom.face_iter().collect();
-    assert_eq!(
-        faces.get(&id),
-        Some(&"bare"),
-        "the face override is exported"
-    );
+    for face in [Face::Favicon, Face::Derived, Face::Sprite, Face::Bare] {
+        // Every existing arm plus Derived remains an explicit override in the sidecar.
+        canvas.set_node_face(id, face);
+        let geom = canvas.cartography_geometry();
+        let faces: std::collections::HashMap<_, _> = geom.face_iter().collect();
+        assert_eq!(faces.get(&id), Some(&face.as_code()));
 
-    // Clearing reverts to the default; re-applying from the sidecar restores it.
-    canvas.clear_node_face(id);
-    assert_eq!(
-        canvas.node_face(key),
-        Face::Favicon,
-        "cleared reverts to the default face"
-    );
-    canvas.apply_cartography_faces(geom.face_iter());
-    assert_eq!(
-        canvas.node_face(key),
-        Face::Bare,
-        "the sidecar round-trips the face"
-    );
+        // Clear still means revert; apply still restores the exact explicit arm.
+        canvas.clear_node_face(id);
+        assert_eq!(canvas.node_face(key), Face::Derived);
+        canvas.apply_cartography_faces(geom.face_iter());
+        assert_eq!(canvas.node_face(key), face);
+    }
 }

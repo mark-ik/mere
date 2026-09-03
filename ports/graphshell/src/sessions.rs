@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The G4 cross-product proof: mount several endpoints and render them behind
 //! one switcher.
 //!
@@ -245,7 +251,7 @@ fn escape(input: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "native", not(target_arch = "wasm32")))]
 mod tests {
     use chirograph::{
         CachePolicy, CarrierNotice, PresentationManifest, ProjectionSnapshot, ProtocolVersion,

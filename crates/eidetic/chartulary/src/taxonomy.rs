@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The relation taxonomy: two rings.
 //!
 //! Relations come in two kinds, per the substrate plan:
@@ -12,13 +18,14 @@
 //! The family registry is the "compact core + open app namespace" shape (plan
 //! section 4, option a): a fixed recognized enum, plus a `(family, kind)` pair
 //! for app relations. Standard-vocabulary alignment (mapping [`Recognized`] to
-//! schema.org / CiTO / SKOS) is `scholia`'s job at G4, not the substrate's.
+//! schema.org / CiTO / SKOS) belongs to the [`rdf`](crate::rdf) projection,
+//! not the substrate taxonomy.
 
 use serde::{Deserialize, Serialize};
 
 /// The chartulary namespace for recognized-core predicate IRIs. `urn:`-scoped so
-/// the substrate claims no domain; `scholia` aligns these to standard vocabularies
-/// downstream.
+/// the substrate claims no domain; [`rdf`](crate::rdf) can align them to standard
+/// vocabularies downstream.
 pub const REL_NS: &str = "urn:chart:rel:";
 
 /// The class of a relation: which ring it belongs to.

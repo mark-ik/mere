@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Mesh sync over LogSync — the personal space's job log, replicated.
 //!
@@ -261,7 +264,7 @@ mod tests {
     const MESH: [u8; 32] = [0x77; 32];
 
     /// Two bound transports tagged with each other on the mesh's overlay
-    /// topic (the tessera two-peer bootstrap, verbatim).
+    /// topic (the Standing two-peer bootstrap, verbatim).
     async fn two_peers() -> (P2pandaTransport, P2pandaTransport) {
         let alice_provider = StdArc::new(InMemoryProvider::from_seed([60; 32]));
         let bob_provider = StdArc::new(InMemoryProvider::from_seed([61; 32]));

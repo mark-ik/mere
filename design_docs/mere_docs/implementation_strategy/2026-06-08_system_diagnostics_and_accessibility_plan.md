@@ -379,7 +379,7 @@ accessibility states.
   Unix AT-SPI adapter behind the same host-local snapshot/action queue used on
   Windows. Focus updates are forwarded through the platform bridge where the
   adapter exposes that hook. The manual screen-reader pass is captured in
-  [2026-06-09_accesskit_screen_reader_verification.md](2026-06-09_accesskit_screen_reader_verification.md):
+  [2026-06-09_accesskit_screen_reader_verification.md](../../archive_docs/2026-09-02_retired_plans/2026-06-09_accesskit_screen_reader_verification.md):
   Narrator, VoiceOver, and Orca still need real local runs before D6 can be
   called screen-reader verified.
 - 2026-06-09: **D8 pane split seed landed.** `frame::PaneContent` now has

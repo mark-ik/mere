@@ -10,7 +10,7 @@ by disclosure, so chatelaine items are exercised (filled, generated, released
 through the gate), never presented.
 
 The boundaries are the point: not the proofs (that is
-[emblem](https://crates.io/crates/emblem): public-key artifacts made to be
+[insigne](https://crates.io/crates/insigne): public-key artifacts made to be
 shown; the boundary is cryptographic, not filing), not the keeper (that is
 [castellan](https://crates.io/crates/castellan)), and not the storage
 substrate (that is [personae](https://crates.io/crates/personae)'s vault; the
@@ -21,4 +21,4 @@ Lives in the [mere](https://github.com/merely-made/mere) workspace under
 
 ## License
 
-MIT OR Apache-2.0
+MPL-2.0

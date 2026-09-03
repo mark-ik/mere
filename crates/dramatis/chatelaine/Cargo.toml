@@ -1,10 +1,10 @@
 [package]
 name = "chatelaine"
-version = "0.0.1"
+version = "0.0.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Name reservation. The chatelaine is the secret half of the Mere platform's credential model: passwords, 2FA seeds, tokens, and foreign key material, exercised but never shown, kept by castellan in trust for your personae. Named for the waist-worn chain that held the household's keys. Not the proofs (that is emblem)."
+description = "Name reservation. The chatelaine is the secret half of the Mere platform's credential model: passwords, 2FA seeds, tokens, and foreign key material, exercised but never shown, kept by castellan in trust for your personae. Named for the waist-worn chain that held the household's keys. Not the proofs (that is insigne)."
 readme = "README.md"
 keywords = ["credentials", "secrets", "vault", "passwords", "totp"]
 categories = ["authentication"]

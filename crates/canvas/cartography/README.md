@@ -95,4 +95,4 @@ Pre-1.0.
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

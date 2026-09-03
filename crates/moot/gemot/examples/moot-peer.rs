@@ -1,9 +1,12 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! moot-peer — the moot-object M1 rehearsal bin.
 //!
-//! Declare a moot, join it, share an engram reference into its fauna, and
+//! Declare a moot, join it, share an codicil reference into its fauna, and
 //! watch the roster converge across devices — the moot-tier mirror of
 //! `mesh-peer`. Both modes print the live roster and real sync status.
 //!

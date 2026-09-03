@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! The node accent palette: the one table every representation of a node tints
 //! from, so a node reads as the same node wherever it appears (canvas gnode,
@@ -19,6 +22,69 @@
 //!   cascade and cannot resolve a `var()`.
 
 use crate::types::NodeState;
+pub use tincture::{Seeds as ThemeSeeds, Srgb as ThemeColor};
+use tincture::{derive_palette, mix};
+
+/// Number of caller-controlled colors a derived face may address.
+pub const DERIVED_FACE_COLOR_COUNT: usize = 8;
+const _: () = assert!(DERIVED_FACE_COLOR_COUNT == pictograph::PALETTE_SPAN as usize);
+
+/// The seed set behind Canvas's built-in derived-face palette. Hosts can replace it at runtime
+/// with [`DerivedFacePalette::from_seeds`] and [`crate::Canvas::set_derived_face_palette`].
+pub const DEFAULT_DERIVED_FACE_SEEDS: ThemeSeeds = ThemeSeeds {
+    primary: ThemeColor::rgb(0x33, 0x66, 0xC8),
+    secondary: ThemeColor::rgb(0x2E, 0x9D, 0xA6),
+    tertiary: ThemeColor::rgb(0xE0, 0xA8, 0x46),
+    neutral: ThemeColor::rgb(0x10, 0x14, 0x22),
+    text_header: None,
+    text_body: None,
+    success: ThemeColor::rgb(0x4F, 0xB3, 0x6E),
+    danger: ThemeColor::rgb(0xD5, 0x4E, 0x4E),
+    dark: true,
+};
+
+/// Eight straight-alpha sRGB colors supplied to pictograph's palette-indexed fills.
+///
+/// This is live Canvas state, separate from deterministic face bytes. Replacing it recolors every
+/// derived face on the next frame, including already-cached faces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DerivedFacePalette {
+    colors: [[u8; 4]; DERIVED_FACE_COLOR_COUNT],
+}
+
+impl DerivedFacePalette {
+    /// A caller-authored palette. Colors are straight-alpha sRGB.
+    pub const fn new(colors: [[u8; 4]; DERIVED_FACE_COLOR_COUNT]) -> Self {
+        Self { colors }
+    }
+
+    /// Derive the face colors from the same seed vocabulary as Mere themes.
+    pub fn from_seeds(seeds: &ThemeSeeds) -> Self {
+        let palette = derive_palette(seeds);
+        let companion = palette.text;
+        Self::new([
+            palette.primary.to_array(),
+            palette.secondary.to_array(),
+            palette.tertiary.to_array(),
+            palette.success.to_array(),
+            palette.danger.to_array(),
+            mix(palette.primary, companion, 0.28).to_array(),
+            mix(palette.secondary, companion, 0.28).to_array(),
+            mix(palette.tertiary, companion, 0.28).to_array(),
+        ])
+    }
+
+    /// The straight-alpha sRGB entries, in pictograph slot order.
+    pub const fn colors(self) -> [[u8; 4]; DERIVED_FACE_COLOR_COUNT] {
+        self.colors
+    }
+}
+
+impl Default for DerivedFacePalette {
+    fn default() -> Self {
+        Self::from_seeds(&DEFAULT_DERIVED_FACE_SEEDS)
+    }
+}
 
 /// A node's fill and label color for one activation state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -166,5 +232,21 @@ mod tests {
         assert!((r - 58.0 / 255.0).abs() < 1e-6);
         assert!((g - 140.0 / 255.0).abs() < 1e-6);
         assert!((b - 94.0 / 255.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn derived_face_palette_comes_from_theme_seeds() {
+        let palette = DerivedFacePalette::from_seeds(&DEFAULT_DERIVED_FACE_SEEDS);
+        let colors = palette.colors();
+        assert_eq!(colors.len(), pictograph::PALETTE_SPAN as usize);
+        assert_eq!(colors[0], [0x33, 0x66, 0xC8, 255]);
+        assert_eq!(colors[1], [0x2E, 0x9D, 0xA6, 255]);
+        assert_eq!(colors[2], [0xE0, 0xA8, 0x46, 255]);
+        let distinct = colors.into_iter().collect::<std::collections::HashSet<_>>();
+        assert_eq!(
+            distinct.len(),
+            colors.len(),
+            "the default exposes eight visual choices"
+        );
     }
 }

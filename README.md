@@ -54,7 +54,7 @@ cargo run -p mere-canvas --features native-present --bin canvas
 
 ## License
 
-MIT OR Apache-2.0 (see `LICENSE-MIT` and `LICENSE-APACHE`).
+MPL-2.0 (see `LICENSE`).
 
 ---
 

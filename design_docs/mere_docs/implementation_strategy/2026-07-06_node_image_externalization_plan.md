@@ -20,7 +20,7 @@ Cross-refs:
   the three-level memory model and the eidetic store this rides on.
 - [athanor_steady_heat_actor_plan](2026-06-25_athanor_steady_heat_actor_plan.md) —
   the forgetting daemon that will garbage-collect orphaned image blobs.
-- [meerkat_render_perf_plan](2026-06-24_meerkat_render_perf_plan.md) — the render
+- [meerkat_render_perf_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-24_meerkat_render_perf_plan.md) — the render
   path whose card-raster cost the decoded-image cache must not regress.
 - [two_natured_kernel_brief](../research/2026-05-30_two_natured_kernel_brief.md) —
   the truth-vs-experience cut this applies: preview imagery is experience.

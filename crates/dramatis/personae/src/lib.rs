@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! # personae
 //!
 //! The identity and carry layer for the Merely ecosystem. personae owns a
@@ -94,7 +100,8 @@ pub use crate::seal::{seal_bytes, unseal_bytes};
 pub use crate::sealed_profile_storage::SealedProfileStorage;
 pub use crate::sealed_record_storage::{SealedRecordChange, SealedRecordStorage};
 pub use crate::startup_unlock::{
-    StartupUnlockMode, auto_unlock_backend_available, load_or_create_auto_unlock_root,
+    StartupUnlockMode, auto_unlock_backend_available, load_existing_auto_unlock_root,
+    load_or_create_auto_unlock_root,
 };
 pub use crate::vault::{
     CredentialLineage, IdentitySlot, IdentityStorage, IdentityVault, InMemoryStorage, Profile,

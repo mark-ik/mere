@@ -2,7 +2,7 @@
 name = "distillery-model-probe"
 version = "0.0.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/merely-made/mere"
 publish = false
 description = "Headed browser evidence surface for Distillery's local model corridor."

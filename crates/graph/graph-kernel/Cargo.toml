@@ -2,7 +2,7 @@
 name = "mere-kernel"
 version = "0.0.2"
 authors = ["@mark-ik"]
-license = "MIT OR Apache-2.0"
+license.workspace = true
 edition = "2024"
 # Publishable from 2026-08-14: pandect (now pandect) is going to
 # crates.io and this is in its dependency closure. Bare `kernel` belongs to
@@ -34,7 +34,7 @@ path = "src/lib.rs"
 # near-verbatim (GraphMemory -> Stemma), so the nav model is unchanged. Git
 # sibling; local checkout via the gitignored `.cargo/config.toml` patch.
 # The portable field-primitive definitions (Field / Coupling / the scalar & vector
-# field AST / EdgePath) that the kernel's field store and quint both consume.
+# field AST / EdgePath) that the kernel's field store and numen evaluator consume.
 # Promoted out of this kernel so the third graph primitive sits at the portable tier
 # beside chartulary's nodes/edges. On crates.io; local checkout via the gitignored
 # `.cargo/config.toml` `[patch.crates-io]`.
@@ -66,12 +66,8 @@ strum = { version = "0.28", features = ["derive"] }
 # onto chartulary. Git sibling; local checkout via the gitignored
 # `.cargo/config.toml` patch.
 chartulary.workspace = true
-# The append-only log primitive (codicil) and its store (muniment): mere's
-# captured-delta stream persists as a codicil, the edit spine over the substrate
-# (see graph/journal.rs). Both already build in the tree via chartulary; these are
-# direct deps so the journal can name them. Git siblings; local checkouts via
-# the gitignored `.cargo/config.toml` patches.
-codicil.workspace = true
+# The captured-delta stream persists as a muniment journal, the edit spine over
+# the substrate (see graph/journal.rs). This is direct so the kernel can name it.
 muniment.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

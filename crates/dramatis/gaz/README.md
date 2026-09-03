@@ -53,4 +53,4 @@ the adapters that turn resolver output into records are the next lifts. See
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

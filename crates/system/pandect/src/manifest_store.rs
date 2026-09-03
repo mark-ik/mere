@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! In-memory + on-disk store for [`GraphSessionManifest`]s.
 //!
@@ -412,7 +415,7 @@ impl ManifestStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{EngineProfileBinding, EngramId, GraphSessionManifest};
+    use crate::manifest::{CodicilId, EngineProfileBinding, GraphSessionManifest};
     use incipit::{GraphId, SessionId};
     use uuid::Uuid;
 
@@ -628,17 +631,17 @@ mod tests {
             let mut store = ManifestStore::with_root(&root);
             store.insert(GraphSessionManifest::new(sid, gid));
             store.update(sid, |m| {
-                m.record_consolidation(EngramId("engram-receipt-xyz".to_string()));
+                m.record_consolidation(CodicilId("codicil-receipt-xyz".to_string()));
             });
             store.flush_dirty().unwrap();
         }
         let mut store = ManifestStore::new();
         store.load_from_disk(&root).unwrap();
         let restored = store.get(sid).unwrap();
-        assert_eq!(restored.consolidated_engrams.len(), 1);
+        assert_eq!(restored.consolidated_codicils.len(), 1);
         assert_eq!(
-            restored.consolidated_engrams[0],
-            EngramId("engram-receipt-xyz".to_string())
+            restored.consolidated_codicils[0],
+            CodicilId("codicil-receipt-xyz".to_string())
         );
         assert!(restored.last_consolidated_at.is_some());
         fs::remove_dir_all(&root).ok();

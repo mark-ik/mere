@@ -1,5 +1,12 @@
 #![cfg(windows)]
 
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
+
 use knot_editor::{StartupUnlockedPersonalVault, local_device_root, personal_vault_writer};
 use pandect::{DeviceSettings, save_device_settings, wallet_store};
 use personae::PersonaId;
@@ -13,6 +20,7 @@ fn second_owner_is_refused_while_pairing_facts_remain_available() {
         root.path(),
         &DeviceSettings {
             startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+            ..Default::default()
         },
     )
     .unwrap();

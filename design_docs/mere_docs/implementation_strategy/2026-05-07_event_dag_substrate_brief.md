@@ -29,7 +29,7 @@ Today's analysis (2026-05-07) shifted those decisions:
 - **Drop Cable.** BLAKE3 unification. Replace with a Mere-native event DAG that keeps Cable's *semantic* model (signed-post DAG, channels, time-range sync) while shedding the wire format and BLAKE2b lock-in.
 - **Mere-native event DAG as the protocol identity.** Sync layers (iroh-docs, p2panda, Willow, NextGraph) become projections of the event DAG, not the architectural identity itself.
 - **Schema crystallizes at the engram boundary**, not at write time. eidetic stays untyped; engrams carry the schema discipline.
-- **Privacy transport as an optional per-moot policy** (Veilid for sensitive communities; iroh for ergonomic default).
+- **Privacy transport as an optional per-moot policy** (Veilid for sensitive communities; iroh for ergonomic default). *(Veilid retired 2026-09-01; see the §6 banner.)*
 - **Multi-protocol moot hosting + outbound bridges as fallback.** Matrix / Nostr / ATProto / ActivityPub move from `mooting`-internal trait dispatch to **per-protocol sibling adapter crates** (`mooting-mere`, `mooting-matrix`, `mooting-nostr`, …) when the foreign protocol can host moot semantics natively (Pattern A); to **outbound bridge crates** (`mere-bridge-*`) when it cannot (Pattern B). The middlenet pattern, applied to p2p protocols. (Earlier in this brief I framed this as "bridges only"; §7 restores the Pattern A / Pattern B distinction after a later-day revision.)
 
 This brief captures those shifts. The 5/5 plan's identity vault (§3), self-host-with-fallback (§4), and the *concept* of protocol mods (§5) survive; their *internal vs bridge* framing changes.
@@ -188,7 +188,7 @@ Each candidate evaluated as: "can it carry MereEvents, and at what cost?"
 
 → Best fit for: **derived RDF projection and linked-data tooling.** Evaluate narrow reuse or a patch-series fork of NextGraph's `engine/oxigraph`; study `engine/verifier` as a design donor around accepted Mere contributions and engrams. Do not adopt NextGraph's repository, broker, networking, or identity stack as substrate. See [Nonstandard browsing profiles and semantic-web donors](../research/2026-05-30_nonstandard_browsing_profiles_brief.md).
 
-**Veilid.** Privacy-routed P2P substrate; DHT routing with built-in onion-routing privacy. BLAKE3 + Ed25519 native. Pros: closes the metadata-leakage gap iroh leaves open; live development; opinionated. Cons: less ergonomic than iroh; smaller ecosystem; replaces transport, not sync.
+**Veilid (retired 2026-09-01, see §6 banner).** Privacy-routed P2P substrate; DHT routing with built-in onion-routing privacy. BLAKE3 + Ed25519 native. Pros: closes the metadata-leakage gap iroh leaves open; live development; opinionated. Cons: less ergonomic than iroh; smaller ecosystem; replaces transport, not sync.
 
 → Best fit for: **optional per-moot privacy transport** (see §6).
 
@@ -205,6 +205,20 @@ Each candidate evaluated as: "can it carry MereEvents, and at what cost?"
 ---
 
 ## 6. Privacy transport: Veilid as a per-moot policy
+
+> **Retired 2026-09-01.** The per-moot Veilid policy below is superseded by
+> the plane split ruled in the
+> [reachability rungs and privacy lanes plan](2026-08-03_reachability_rungs_and_privacy_lanes_plan.md):
+> iroh is the byte plane; the identity-routed lanes (retinue announces,
+> emissary/I2P destinations) are the control and rendezvous plane; arti stays
+> consumer-posture for a later clearnet browse toggle. No
+> `mere-transport[veilid]` feature was ever built, `TransportKind` in
+> `crates/murm/transport/src/accepted.rs` carries no Veilid variant, and no
+> plan since 2026-08-03 names it. Veilid replaces transport rather than sync,
+> and "nothing moves blobs off iroh" leaves it no plane to occupy. The text
+> below stays as the record of the *pattern* — a moot constitution declaring
+> a transport policy that member clients enforce — which survives in the
+> privacy lanes even though the named carrier does not.
 
 Decision: **iroh is the default transport; Veilid is available as an optional per-moot transport policy** for privacy-sensitive communities.
 
@@ -479,7 +493,7 @@ Concrete moves implied by this brief, in rough order:
 2. **murm / murmuring: drop Cable wire format.** Replace with the Mere event grammar (§4) over CBOR over iroh streams. Rename `murmurings` connotation: still bilateral chat semantics, but the wire is now MereEvent-shaped, not Cable.
 3. **moothold / mooting: multi-protocol moot hosting via sibling adapter crates.** mooting becomes the protocol-core (a thin trait surface + dispatcher) for moot semantics; per-protocol concrete adapters live as sibling crates (`mooting-mere`, `mooting-matrix`, `mooting-nostr`, `mooting-atproto`, `mooting-activitypub`, …) following the `middlenet-{gemini, gopher, …}` precedent. Foreign systems that can't host the moot abstraction natively get separate outbound `mere-bridge-*` crates above moothold.
 4. **New bridge crates** (separate workspace members, opt-in): `mere-bridge-matrix`, `mere-bridge-nostr`, `mere-bridge-activitypub`, `mere-bridge-atproto`, `mere-bridge-irc`. Each maps a subset of MereEvent types into the foreign vocabulary. None of these need to land for 0.0.x; the architecture clears space for them.
-5. **mere-transport: Veilid feature flag.** Behind `mere-transport[veilid]`; default build is iroh-only. Moots can declare transport policy in their constitution.
+5. **mere-transport: Veilid feature flag (retired 2026-09-01, never built; see §6 banner).** Behind `mere-transport[veilid]`; default build is iroh-only. Moots can declare transport policy in their constitution.
 6. **Event DAG core (new crate or murmuring-internal module):** `MereEvent`, `MereSpace`, signing / verification / canonical encoding, in-memory event store, hash-chained DAG walk, basic sync state machine over iroh-docs. This is the new load-bearing module.
 7. **eidetic stays a leaf substrate.** No schema imposed at the storage layer. Higher-level subsystems (event store, AWAL, STM/LTM indexes) build on top.
 
@@ -582,6 +596,10 @@ This is substantial enough to warrant its own design brief. See [`2026-05-10_gra
 
 ## Findings
 
+### 2026-09-01 — Veilid retired; privacy lanes own the role
+
+The 2026-05-07 §6 decision (Veilid as an optional per-moot transport policy) and the 2026-08-03 reachability rungs plan disagreed: the newer plan assigns the privacy role to emissary (I2P, in-network rendezvous), retinue (identity-routed mesh), Noise (in-stream), and arti (clearnet browse, consumer posture), and never mentions Veilid. Verified against code: `TransportKind` has five variants (Memory, P2panda, Reticulum, Noise, WebRtc) and no `veilid` feature exists anywhere under `crates/murm/transport`. §6 is banner-retired above; the reachability plan's "Not in scope" list now names Veilid so the two docs point at each other.
+
 ### 2026-05-07 — substrate decisions consolidated
 
 Conversation review: today's analysis converged on the event-DAG-as-core inversion (rather than picking a sync layer as architectural identity). The shift is structural, not cosmetic — it reframes Willow / p2panda / NextGraph as candidate projections rather than candidate substrates, and it isolates the BLAKE3 unification cost to a clean break with Cable.
@@ -612,6 +630,10 @@ Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, w
 ---
 
 ## Progress
+
+### 2026-09-01
+
+- §6 retired by banner: Veilid superseded by the reachability rungs plan's plane split. Findings entry added. DOC_README one-liner updated.
 
 ### 2026-05-07
 

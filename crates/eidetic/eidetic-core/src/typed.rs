@@ -1,10 +1,13 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Layer 3 — Rust-side bindings for schema-conformant typed payloads.
 //!
 //! Layer 3 is **not** the schema. The schema lives one level up as a
-//! content-addressed engram (Phase 4 work). Layer 3 is the language-specific
+//! content-addressed codicil (Phase 4 work). Layer 3 is the language-specific
 //! binding to a schema — Rust structs that serialize/deserialize bytes that
 //! conform to a known schema, given a [`SchemaRef`] declared by the type.
 //! Other implementations in other languages would bind the same schemas to
@@ -46,7 +49,7 @@ use crate::{Error, Result, Store};
 pub trait TypedPayload: Serialize + DeserializeOwned + Sized {
     /// Content-addressed reference to the schema this type conforms to.
     /// In practice this is typically a `const fn`-computed `SchemaRef` or a
-    /// lazily-computed one keyed by the schema engram's known content hash.
+    /// lazily-computed one keyed by the schema codicil's known content hash.
     fn schema_ref() -> SchemaRef;
 
     /// Serialize the value to bytes. Default implementation uses

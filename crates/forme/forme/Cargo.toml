@@ -2,7 +2,7 @@
 name = "mere-forme"
 version = "0.1.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 # Publishable from 2026-08-14, in pandect's dependency closure. The
 # mere- prefix is long-standing: bare `forme` is an HTML template engine.
 publish = true

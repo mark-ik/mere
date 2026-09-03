@@ -1,13 +1,18 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The `Field` truth primitive — fields as a third graph element beside nodes
 //! and edges (the field-system extraction
 //! decision; this is its step-3 kernel slice).
 //!
 //! A [`Field`] is identity + a portable [`FieldDefinition`] (the scalar/vector
 //! AST as data) + a [`FieldExtent`] + a [`FieldLifecycle`]. The definition is
-//! truth the kernel owns and persists; `quint` evaluates it. Identity is a
-//! stable, federatable UUID ([`FieldId`]), unlike `quint`'s original
-//! registry-local `FieldId(u64)` — the kernel id is canonical once fields are
-//! kernel truth.
+//! truth the kernel owns and persists; numen evaluates it. Identity is a
+//! stable, federatable UUID ([`FieldId`]); the kernel id is canonical once
+//! fields are graph truth.
 //!
 //! Storage (plan Phase 1) is a parallel keyed store on `Graph`, **not** a
 //! petgraph node weight and **not** an `EdgePayload` sidecar: a coupling is
@@ -21,8 +26,7 @@ use uuid::Uuid;
 
 use super::field_ast::{ScalarField, VectorField};
 
-/// Stable, federatable field identity. UUID-backed (vs `quint`'s original
-/// registry-local `FieldId(u64)`); this is the canonical id for kernel truth.
+/// Stable, federatable field identity. UUID-backed and canonical for graph truth.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FieldId(pub Uuid);
 
@@ -64,7 +68,7 @@ impl CouplingId {
 }
 
 /// A field's portable definition: scalar- or vector-valued. The AST is data;
-/// `quint` evaluates it.
+/// numen evaluates it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FieldDefinition {
     Scalar(ScalarField),
@@ -197,7 +201,7 @@ pub enum FieldLifecycle {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Field {
     pub id: FieldId,
-    /// Optional authoring name (parity with `quint`'s named registry; lets
+    /// Optional authoring name (parity with numen's named registry; lets
     /// definitions reference each other by a human label before id resolution).
     pub name: Option<String>,
     pub definition: FieldDefinition,

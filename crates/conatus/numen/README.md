@@ -1,17 +1,23 @@
 # numen
 
-The field-primitive definitions of the conatus physics family: fields and
-couplings as plain, serde-serializable data. [`quint`](../quint) evaluates these
-definitions; [`seiche`](../seiche) integrates the forces they produce.
+The field truth, evaluation, and authoring layer of the conatus physics family:
+fields and couplings as plain, serde-serializable data, an analytic evaluator,
+registries and projections, plus opt-in Rhai authoring and Burn lowering.
+[`seiche`](../seiche) integrates the force laws they produce.
 
 ## Modules
 
 | Module | Public items | Contents |
 |---|---|---|
 | `field_ast` | `ScalarField`, `VectorField`, `Falloff` | The field algebra as recursive data (`f: R² → R` and `f: R² → R²`), with `Sample(FieldId)` references to other fields. Constructors like `ScalarField::gaussian_at` / `disk_at`. |
-| `field` | `Field`, `FieldId`, `CouplingId`, `FieldDefinition`, `FieldExtent`, `FieldLifecycle` | A field as truth: identity, definition, extent, lifecycle. |
+| `field` | `Field`, `FieldId`, `CouplingId`, `FieldDefinition`, `FieldExtent`, `FieldLifecycle` | The field vocabulary the graph realm persists as truth: identity, definition, extent, lifecycle. |
 | `coupling` | `Coupling`, `CouplingResponse`, `NodeSelector`, `COUPLING_VOCAB` | One coupling rule: `id`, `field`, `selector`, `response`, `strength`. |
 | `edge_path` | `EdgePath`, `EdgePathRule` | Per edge-kind curve generation: `Straight`, `Spline { tension }`, `FieldLine { field, max_steps, step_size }`. |
+| `eval` | `eval_scalar`, `eval_vector`, `grad_scalar` | Analytic evaluation for the portable field algebra. |
+| `registry` | `FieldRegistry`, `FieldDef` | Named field definitions and sample resolution. |
+| `projection` | `FieldProjection`, `FieldProjectionBuilder` | Composes fields for consumers without moving source authority. |
+| `rhai_bindings` | Rhai field authoring surface | Available with `field-rhai`. |
+| `lower_burn` | Burn tensor lowering | Available with `field-burn`; WGPU support is selected by `field-burn-wgpu`. |
 
 ## Field extent and lifecycle
 
@@ -57,4 +63,4 @@ Everything compiles to `wasm32-unknown-unknown`. `FieldId::new` and
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

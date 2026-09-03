@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! sibylla — a local-embedding and semantic-retrieval seam.
 //!
 //! One trait ([`EmbeddingProvider`]) that turns text into fixed-dimension
@@ -52,7 +58,7 @@ pub use bert::{
 pub use index::{IndexError, VectorIndex};
 #[cfg(feature = "index-burn")]
 pub use index_burn::cosine_top_k;
-pub use lexical::LexicalEmbeddingProvider;
+pub use lexical::{DEFAULT_TOKEN_NGRAM_ORDERS, LexicalEmbeddingProvider};
 #[cfg(feature = "persistence")]
 pub use persistence::{
     VECTOR_INDEX_SCHEMA_REF, list_from_eidetic, load_from_eidetic, save_to_eidetic,

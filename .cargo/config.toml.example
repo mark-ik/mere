@@ -104,3 +104,29 @@ retinue = { path = "../retinue/crates/retinue" }
 postilion = { path = "../retinue/crates/postilion" }
 outrider = { path = "../retinue/crates/outrider" }
 tulle = { path = "../retinue/crates/tulle" }
+
+# ---------------------------------------------------------------------------
+# Aliases
+#
+# `cargo test-web` is the graphshell web-feature test build — the only build
+# that compiles `mere_host`, `app`, `capture` and `product`. It carries a
+# per-package override that turns incremental compilation off for
+# `mere-canvas` alone. Without it, on windows-msvc, the link fails with one
+# unresolved symbol (`drop_glue<canvas::geometry::CartographyGeometry>`):
+# canvas's metadata advertises an export its incremental object cache never
+# emitted. That is rust-lang/rust#86049's shape (open; "disable incremental"
+# is the standing workaround). Scoping it to this invocation keeps the
+# ordinary edit loop incremental: a canvas rebuild is ~9 s incremental and
+# ~2.5 min without, measured 2026-09-01. The non-incremental artifact has
+# its own profile hash, so the two coexist in target/.
+#
+# Retire condition: on each toolchain bump, run the bare invocation once
+# (`cargo test -p graphshell --no-default-features --features web`); if it
+# links, delete this alias's --config and the note.
+[alias]
+test-web = [
+    "test",
+    "--config", "profile.dev.package.mere-canvas.incremental=false",
+    "-p", "graphshell",
+    "--no-default-features", "--features", "web",
+]

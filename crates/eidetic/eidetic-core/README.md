@@ -5,7 +5,7 @@ Package `mere-eidetic`; the library is `eidetic`, so consumers write
 
 The owner-scoped local memory lane for the [mere](https://crates.io/crates/mere)
 browser. It owns the durable typed vocabulary: blob manifests, typed payloads,
-schemas, engrams, bundles, packs, encrypt-at-rest markers, browsing traces, and
+schemas, codicils, bundles, packs, encrypt-at-rest markers, browsing traces, and
 content-addressed model artifacts. Storage-backend-agnostic and host-agnostic.
 
 ## Modules
@@ -17,7 +17,7 @@ content-addressed model artifacts. Storage-backend-agnostic and host-agnostic.
 | `manifest` | `BlobManifest`, `BlobSource` (`Local`, `Embedded`, `Https`, `Iroh`, `LocalFile`, `LocalOnlyRef`), `BlobFetcher`, `NoFetcher`, `save_manifest`, `load_manifest`, `list_manifests`, `delete_manifest`, `resolve_blob` |
 | `typed` | `TypedPayload`, `save_typed`, `load_typed`, `list_typed`, `save_typed_sealed`, `load_typed_sealed` |
 | `schema_def` | `SchemaDefinition`, `SchemaFormat`, `SchemaValidator`, `MereNativeSchemaBuilder`, `MereNativeSchemaBody`, `MereNativeFieldSpec`, `MereNativeValidator`, `JsonSchemaValidator`, `JsonLdValidator`, `bootstrap_meta_schema`, `save_schema`, `load_schema`, `find_schema_by_id`, `validate_payload`, `validate_against_schema` |
-| `engram` | `Engram`, `TimeBounds` |
+| `codicil` | `Codicil`, `TimeBounds` |
 | `bundle` | `Bundle`, `BundleMember`, `save_bundle`, `load_bundle`, `verify_required_members` |
 | `pack` | `PackManifest`, `PackPart`, `PackPartRole`, `PackVerdict`, `canonical_bytes`, `sign_pack`, `verify_pack` |
 | `seal` | `PayloadSealer`, `SealEpochId`, `SealedBlobRef`, `seal_marker`, `seal_payload_for_store`, `resolve_sealed_blob`, `is_private_lane` |
@@ -41,7 +41,7 @@ stores return ready futures.
 |---|---|---|
 | `pack-signing` | yes | Pack signing and verification via `personae` (`dep:identity`) |
 | `json-schema` | yes | Full JSON Schema validation via `jsonschema`. Without it, stored JSON Schema definitions return a "validator unavailable" error |
-| `lineage` | no | `browsing::lineage`, which projects a `chartulary::stemma` into `BrowsingTrace` engrams (`dep:chartulary`) |
+| `lineage` | no | `browsing::lineage`, which projects a `chartulary::stemma` into `BrowsingTrace` codicils (`dep:chartulary`) |
 
 ## Dependencies
 
@@ -54,10 +54,10 @@ stores return ready futures.
 - `mere-eidetic-https-fetcher`, `mere-eidetic-iroh-fetcher`: `BlobFetcher`
   implementations for non-local `BlobSource` variants.
 - `mere-eidetic-search`: a tantivy `TrailIndex` minted from `BrowsingTrace`
-  engrams.
+  codicils.
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).
 
 [`muniment::Backend`]: https://docs.rs/muniment/latest/muniment/trait.Backend.html

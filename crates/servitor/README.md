@@ -80,4 +80,4 @@ verifies chains (`verify_chain`, `ChainError`). `cap_path`, `mode_action`,
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

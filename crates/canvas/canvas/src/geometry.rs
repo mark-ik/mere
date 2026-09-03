@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Cartography geometry — the canvas's settled-layout read surface.
 //!
@@ -49,8 +52,8 @@ pub struct CartographyGeometry {
     #[serde(default)]
     importance_metric: String,
     /// Per-member sprite faces: the imported image as a PNG data-URI, for members the user
-    /// gave a custom face. A member absent here has no sprite (its content-type default /
-    /// favicon applies). Serde-defaulted, so a pre-sprite sidecar still loads. The data-URIs
+    /// gave a custom face. A member absent here has no sprite (its content-sensitive default
+    /// applies). Serde-defaulted, so a pre-sprite sidecar still loads. The data-URIs
     /// add bulk to the sidecar — acceptable for a handful of faces (a future optimization
     /// could externalize the blobs). (Node-rep — sprite persistence.)
     #[serde(default)]
@@ -66,8 +69,8 @@ pub struct CartographyGeometry {
     /// Serde-defaulted. (Node body & face — material.)
     #[serde(default)]
     materials: Vec<(GraphMemberId, (f32, f32, f32))>,
-    /// Per-member **face** overrides on the Face axis, as a string code (`favicon` / `sprite` /
-    /// `bare`), so a node's chosen texture re-opens that way. Stored as a string to keep this
+    /// Per-member **face** overrides on the Face axis, as a string code (`favicon` / `derived` /
+    /// `sprite` / `bare`), so a node's chosen texture re-opens that way. Stored as a string to keep this
     /// crate canvas-free; the canvas maps it to/from `canvas::Face`. Serde-defaulted. (Node body
     /// & face — face persistence.)
     #[serde(default)]
@@ -139,7 +142,7 @@ impl CartographyGeometry {
         self
     }
 
-    /// Attach per-member face overrides (string codes `favicon` / `sprite` / `bare`)
+    /// Attach per-member face overrides (string codes `favicon` / `derived` / `sprite` / `bare`)
     /// (chainable). (Node body & face — face persistence.)
     pub fn with_faces(mut self, faces: impl IntoIterator<Item = (GraphMemberId, String)>) -> Self {
         self.faces = faces.into_iter().collect();

@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! The per-frame render step for [`Canvas`](crate::Canvas). Factored from
 //! `lib.rs` to keep files under the workspace 600-LOC ceiling.
@@ -29,7 +32,7 @@ use super::edge_cells::{
     edge_cell_for_relation, relation_cell_overlay, relation_family_color, selected_edge_overlay,
 };
 use super::fold_projection::{FOLD_SUMMARY_RADIUS, FoldProjection};
-use super::{Canvas, NodeShape, NodeState, PAN_DECAY};
+use super::{Canvas, FACE_INSET, Face, NodeShape, NodeState, PAN_DECAY};
 
 /// Paint a fold's boundary bundles and its synthetic summary body. These are
 /// world-space commands only: neither the summary nor its boundary cells enter
@@ -384,10 +387,9 @@ impl Canvas {
             .frame(w, h)
             .expect("canvas Livery/Buckram node frame");
 
-        // Favicon layer: a textured quad over each on-screen tile that carries a
-        // favicon, above the colored tile square and below the marquee.
-        // (Favicon-on-tile.)
-        let (favicon_cmds, favicon_images) = self.favicon_layer(&on_screen, &positions);
+        // Face layer: either a palette-decoded derived vector or a resolved favicon over each
+        // on-screen tile, above the colored body and below the marquee.
+        let (face_cmds, face_images) = self.face_layer(&on_screen, &positions);
 
         // P3 fake height: a stem from each raised node's ground anchor up to its
         // floating gnode. (Isometric camera P3.)
@@ -437,7 +439,7 @@ impl Canvas {
             layers.push(CompositeLayer::commands_only(&fluid_cmds));
         }
         layers.push(CompositeLayer::commands_only(underlay.commands()));
-        // The on-screen gnode + favicon layers, unless the host renders these gnodes as
+        // The on-screen gnode + face layers, unless the host renders these gnodes as
         // chrome DOM elements instead (canvas-as-element); then only edges + demoted
         // dots remain as the underlay. (Canvas-as-element — Phase 2.)
         if !self.render_gnodes_as_dom {
@@ -450,11 +452,11 @@ impl Canvas {
                 fonts: nodes_plist.fonts(),
                 images: nodes_plist.images(),
             });
-            if !favicon_cmds.is_empty() {
+            if !face_cmds.is_empty() {
                 layers.push(CompositeLayer {
-                    commands: &favicon_cmds,
+                    commands: &face_cmds,
                     fonts: &[],
-                    images: &favicon_images,
+                    images: &face_images,
                 });
             }
         }
@@ -467,33 +469,63 @@ impl Canvas {
         (scene, needs_redraw)
     }
 
-    /// The favicon layer: a textured quad over each on-screen tile that carries
-    /// a favicon, with the image resources it needs.
+    /// The face layer: a palette-decoded derived vector or a textured favicon for each visible
+    /// node, with any image resources the latter needs. Bare and Sprite currently add nothing;
+    /// Sprite's stored data-URI still belongs to the host-facing representation path.
     ///
     /// This layer is NOT under the `.stage` camera transform (it is a bare
     /// command list, not the genet DOM), so the camera is applied here by
     /// projecting through `Camera::to_screen` (at the default camera that is
-    /// `world * zoom + offset`). The favicon's RGBA is already the
-    /// `ImageResource` shape (RGBA8, straight alpha), so the host's existing
-    /// rasterize uploads it with no GPU plumbing in the canvas.
-    /// (Favicon-on-tile.)
-    fn favicon_layer(
+    /// `world * zoom + offset`). Favicon RGBA already has the `ImageResource` shape (RGBA8,
+    /// straight alpha); derived IconVG lowers to the paint list's arbitrary paths. Both reach the
+    /// host through its existing renderer contract.
+    fn face_layer(
         &mut self,
         on_screen: &HashSet<NodeKey>,
         positions: &HashMap<NodeKey, PortablePoint>,
     ) -> (Vec<PaintCmd>, Vec<ImageResource>) {
-        let mut favicon_cmds: Vec<PaintCmd> = Vec::new();
-        let mut favicon_images: Vec<ImageResource> = Vec::new();
+        let mut face_cmds: Vec<PaintCmd> = Vec::new();
+        let mut face_images: Vec<ImageResource> = Vec::new();
         for &key in on_screen {
             let Some(pos) = positions.get(&key) else {
                 continue;
             };
-            let Some(node) = self.graph.get_node(key) else {
+            let face = self.node_face(key);
+            if face == Face::Derived {
+                let Some(address) = self.graph.get_node(key).map(|node| node.url().to_owned())
+                else {
+                    continue;
+                };
+                let (cx, cy) = self.camera.to_screen(*pos);
+                let side = self.node_size(key) * FACE_INSET * self.camera.zoom;
+                let half = side * 0.5;
+                let bounds = LayoutRect::new(
+                    LayoutPoint::new(cx - half, cy - half),
+                    LayoutPoint::new(cx + half, cy + half),
+                );
+                let file = self
+                    .derived_face_cache
+                    .entry((pictograph::DERIVATION_VERSION, address.clone()))
+                    .or_insert_with(|| {
+                        pictograph::derive(address.as_bytes())
+                            .expect("pictograph must encode every canonical node address")
+                    });
+                let commands =
+                    crate::derived_face::commands(file, self.derived_face_palette, side, bounds)
+                        .expect("pictograph output must decode into flat paint-list paths");
+                face_cmds.extend(commands);
                 continue;
-            };
+            }
+            if face != Face::Favicon {
+                continue;
+            }
             // The node carries a reference; the pixels come from the
             // host-registered cache. An unresolved reference does not paint.
-            let Some(favicon) = node.favicon().copied() else {
+            let Some(favicon) = self
+                .graph
+                .get_node(key)
+                .and_then(|node| node.favicon().copied())
+            else {
                 continue;
             };
             // Bump the LRU clock, then *borrow* the pixels: the degenerate
@@ -510,8 +542,8 @@ impl Canvas {
             if rgba.is_empty() || fav_w == 0 || fav_h == 0 {
                 continue;
             }
-            let img_key = ImageKey::new(IdNamespace(0), favicon_images.len() as u32);
-            favicon_images.push(ImageResource {
+            let img_key = ImageKey::new(IdNamespace(0), face_images.len() as u32);
+            face_images.push(ImageResource {
                 key: img_key,
                 width: fav_w,
                 height: fav_h,
@@ -526,9 +558,9 @@ impl Canvas {
             let (cx, cy) = self.camera.to_screen(*pos);
             // Inset within the node's *resolved* face, so a resized node carries
             // its icon proportionally (identical at the default size).
-            let half = self.node_size(key) * 0.5 * super::FAVICON_INSET * self.camera.zoom;
+            let half = self.node_size(key) * 0.5 * FACE_INSET * self.camera.zoom;
             let (x0, y0, x1, y1) = (cx - half, cy - half, cx + half, cy + half);
-            favicon_cmds.push(PaintCmd::DrawImage(ImageItem {
+            face_cmds.push(PaintCmd::DrawImage(ImageItem {
                 placement: CommonPlacement::new(LayoutRect::new(
                     LayoutPoint::new(x0, y0),
                     LayoutPoint::new(x1, y1),
@@ -544,7 +576,7 @@ impl Canvas {
                 },
             }));
         }
-        (favicon_cmds, favicon_images)
+        (face_cmds, face_images)
     }
 
     /// P3 fake height: a stem from each raised node's ground anchor up to its floating
@@ -803,7 +835,7 @@ fn scene_body_half(collider: &NodeCollider) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::Canvas;
+    use crate::{Canvas, DerivedFacePalette, Face};
     use euclid::default::Point2D;
     use kernel::graph::Graph;
     use kernel::graph::fixtures::GraphFixtures;
@@ -824,6 +856,12 @@ mod tests {
             .iter()
             .filter(|op| matches!(op, netrender::SceneOp::Image(_)))
             .count()
+    }
+
+    fn has_shape_fill(scene: &netrender::Scene, fill: [f32; 4]) -> bool {
+        scene
+            .iter_shapes()
+            .any(|shape| shape.fill_color == Some(fill))
     }
 
     /// A node carrying favicon RGBA emits an image op over its on-screen tile, so the
@@ -865,13 +903,49 @@ mod tests {
         );
     }
 
-    /// Without a favicon, no image op is emitted (the tile is just a colored square).
+    /// Without a favicon, the default is a vector face rather than an image.
     #[test]
-    fn node_without_favicon_emits_no_image_op() {
-        let (graph, _key) = graph_with_one_node("https://ex.test/");
+    fn node_without_favicon_emits_a_derived_path() {
+        let (graph, _key) = graph_with_one_node("mere://note/one");
         let mut canvas = Canvas::with_graph(graph);
+        canvas.set_derived_face_palette(DerivedFacePalette::new([[255, 0, 0, 255]; 8]));
         let (scene, _) = canvas.frame(800, 600);
         assert_eq!(image_op_count(&scene), 0, "no favicon -> no image op");
+        assert!(
+            has_shape_fill(&scene, [1.0, 0.0, 0.0, 1.0]),
+            "the favicon-less node emits palette-resolved vector paths"
+        );
+    }
+
+    #[test]
+    fn explicit_face_override_suppresses_the_content_default() {
+        let (graph, key) = graph_with_one_node("mere://note/bare");
+        let mut canvas = Canvas::with_graph(graph);
+        let id = canvas.graph().get_node(key).unwrap().id;
+        canvas.set_derived_face_palette(DerivedFacePalette::new([[255, 0, 0, 255]; 8]));
+        canvas.set_node_face(id, Face::Bare);
+
+        let (scene, _) = canvas.frame(800, 600);
+        assert!(!has_shape_fill(&scene, [1.0, 0.0, 0.0, 1.0]));
+    }
+
+    #[test]
+    fn palette_swap_recolors_the_cached_face_without_rederiving() {
+        let (graph, _key) = graph_with_one_node("mere://note/recolor");
+        let mut canvas = Canvas::with_graph(graph);
+        canvas.set_derived_face_palette(DerivedFacePalette::new([[255, 0, 0, 255]; 8]));
+        let (red_scene, _) = canvas.frame(800, 600);
+        let cached = canvas.derived_face_cache.clone();
+
+        canvas.set_derived_face_palette(DerivedFacePalette::new([[0, 0, 255, 255]; 8]));
+        let (blue_scene, _) = canvas.frame(800, 600);
+
+        assert!(has_shape_fill(&red_scene, [1.0, 0.0, 0.0, 1.0]));
+        assert!(has_shape_fill(&blue_scene, [0.0, 0.0, 1.0, 1.0]));
+        assert_eq!(
+            canvas.derived_face_cache, cached,
+            "theme swaps keep the bytes"
+        );
     }
 
     /// A scene prop carrying a *registered* sprite handle paints as a textured billboard, so the

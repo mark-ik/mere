@@ -3,7 +3,7 @@
 **Date**: 2026-06-30  
 **Status**: Planned.  
 **Related**:
-[`2026-06-21_command_registry_configurable_menus_plan.md`](2026-06-21_command_registry_configurable_menus_plan.md),
+[`2026-06-21_command_registry_configurable_menus_plan.md`](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md),
 [`2026-06-21_document_script_substrate_plan.md`](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md),
 [`2026-06-23_document_script_followons_plan.md`](../../archive_docs/2026-07-03_completed_plans/2026-06-23_document_script_followons_plan.md),
 [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md)

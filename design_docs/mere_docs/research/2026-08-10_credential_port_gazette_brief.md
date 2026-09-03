@@ -113,28 +113,28 @@ bench to vocabulary by Mark in the same round:
   material. Historically the waist-worn chain holding the household's keys.
   Chatelaine items are *exercised*, never shown: showing a password burns it,
   showing a TOTP seed clones it.
-- **emblem**: the proofs. Graded presentations of identity a persona hands
-  out. Emblems are *made to be shown* and survive showing: a signature
-  reveals no key. An emblem needn't be the most stringent proof available;
+- **insigne**: the proofs. Graded presentations of identity a persona hands
+  out. Insignia are *made to be shown* and survive showing: a signature
+  reveals no key. An insigne needn't be the most stringent proof available;
   the grade is chosen per audience.
 
 The boundary between the two nouns is cryptographic, not just filing:
-chatelaine holds bearer/symmetric material (damaged by disclosure), emblem
+chatelaine holds bearer/symmetric material (damaged by disclosure), insigne
 holds public-key artifacts (designed for disclosure). Castellan's two halves
-map onto them: the authority half exercises chatelaine and signs emblem
+map onto them: the authority half exercises chatelaine and signs insigne
 presentations; the embeddable half browses both and contains neither.
 
-**The emblem/gaz relation (Mark's framing):** your emblem is what someone
-else's gaz keeps. The emblem is the interchange artifact between one person's
-dramatis and another's; the gaz record is the ledger of emblems received,
+**The insigne/gaz relation (Mark's framing):** your insigne is what someone
+else's gaz keeps. The insigne is the interchange artifact between one person's
+dramatis and another's; the gaz record is the ledger of insignia received,
 with verification state and petname/tier annotations. The receipt already
 ships: hocket's contact token (the full master pubkey pasted between
-musicians) is a v0 emblem, load-bearing in the wild. Emblem grades map onto
+musicians) is a v0 insigne, load-bearing in the wild. Insigne grades map onto
 existing machinery: bare key (continuity), signed claims binding handles and
 endpoints to a persona key (cross-attestation), personae's delegation
 certificates, up to chain-root linkage, which is where tessera already
-accrues. A published emblem is what gazette resolves (a WebFinger JRD is
-exactly one); a handed emblem travels bilaterally (paste, QR, misfin). Same
+accrues. A published insigne is what gazette resolves (a WebFinger JRD is
+exactly one); a handed insigne travels bilaterally (paste, QR, misfin). Same
 artifact, two carriages.
 
 ### Open questions for the port's own plan
@@ -147,9 +147,9 @@ artifact, two carriages.
    browse half shows origin-match warnings is a product decision.
 3. Rate/abuse posture on the authority half: per-persona release policies,
    "ask every time" vs session grants (wallet_grant already models this).
-4. Where emblem and chatelaine live as code: chatelaine is plausibly the
+4. Where insigne and chatelaine live as code: chatelaine is plausibly the
    vault's stored-item taxonomy (personae substrate, castellan surface);
-   emblem's spine is personae's delegation module. Both names claimed as
+   insigne's spine is personae's delegation module. Both names claimed as
    0.0.1 reservations under crates/dramatis (2026-08-10, Mark authorized);
    whether either grows real code there follows the module/crate/publish
    three-decisions rule.

@@ -1,9 +1,12 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Mesh operation-wire bridge — job events as signed p2panda operations.
 //!
-//! Mirrors tessera's `wire` (and Murm's `Post` ↔ `Operation<CabalExt>`
+//! Mirrors Standing's `wire` (and Murm's `Post` ↔ `Operation<CabalExt>`
 //! split): a [`MeshEvent`] (the logical form the [board](crate::board) folds)
 //! rides the synced event-DAG as a signed `Operation<MeshExt>`. The mesh id is
 //! the signed addressing extension, so a job posted into one mesh cannot be

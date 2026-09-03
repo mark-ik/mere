@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Knot's three-way merge: source-preserving merge at Djot block boundaries,
 //! the line merge it falls back to, and the entry point the sync projection
 //! calls to settle a two-writer document without asking a person.

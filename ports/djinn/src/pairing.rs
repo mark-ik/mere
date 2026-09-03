@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Recording, forgetting and disclosing paired devices.
 //!
 //! These edit the settings file and compute public key material; none of them
@@ -215,6 +221,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            distillery: None,
             content: Default::default(),
         }
         .save(&path)
@@ -285,6 +292,7 @@ mod tests {
                 ..SyncSettings::default()
             }),
             knot: None,
+            distillery: None,
             content: Default::default(),
         }
         .save(&path)

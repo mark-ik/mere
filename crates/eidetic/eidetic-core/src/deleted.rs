@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Deleted-node tombstones: an append-only record of nodes removed from a
 //! session graph, kept in the private eidetic memory so a deletion is auditable
@@ -59,7 +62,7 @@ impl TypedPayload for DeletedNode {
 
 /// Record a tombstone for a deleted node into the private memory store, returning
 /// its content-addressed manifest id. Local-only, self-asserted,
-/// generated-provenance: a private audit record, not a shared engram.
+/// generated-provenance: a private audit record, not a shared codicil.
 pub async fn record_deleted(store: &mut dyn Store, deleted: &DeletedNode) -> Result<ManifestId> {
     let at = Timestamp(deleted.deleted_at_ms);
     save_typed(

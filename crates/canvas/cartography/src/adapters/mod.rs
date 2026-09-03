@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! [`LayoutStrategy`] adapters over the `scenograph` solvers.
 //!
@@ -196,13 +199,13 @@ analytic_adapter!(
     Arrangement::Kanban
 );
 
-analytic_adapter!(
-    /// Layered stack. Reads `ViewIntent::axis_values` for the layer index.
-    StackAdapter,
-    "stack.default",
-    sceno::Stack,
-    Arrangement::Stack
-);
+// No `StackAdapter`. `sceno::Stack` exists and is solved by `scenomise`, but
+// nothing on this side asks for it: `stack.default` is absent from the canvas's
+// `CANVAS_LAYOUT_STRATEGIES`, and mer3ly builds its own score with its own
+// topological-rank producer rather than going through a cartography adapter. An
+// adapter with no caller is a guess about a future one, and it would have to be
+// re-derived against whatever that caller actually needs. Add it when something
+// asks.
 
 /// Placement at coordinates a dimensionality reduction produced.
 ///

@@ -1,12 +1,15 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! The edit spine: mere's captured-delta stream over the substrate log.
 //!
 //! The graph's durable mutations already exist as a stream of [`CapturedDelta`]s
 //! (stable-id, serializable), emitted through the capture hook as each live
 //! [`GraphDelta`](super::apply::GraphDelta) applies (see `capture.rs`). This module
-//! gives that stream its principled home: a [`codicil::Codicil`] of captured
+//! gives that stream its principled home: a [`muniment::Journal`] of captured
 //! deltas, the append-only log primitive shared across the Merely apps. The
 //! materialized graph is the *replay* of the journal, and because live editing and
 //! replay both funnel through `apply_graph_delta`, the two cannot diverge.
@@ -14,19 +17,19 @@
 //! This is the edit spine over the substrate. mere keeps its own rich edit
 //! vocabulary — `CapturedDelta` carries content edits (title, tags, body,
 //! navigation) that chartulary's topology-only `GraphEdit` deliberately cannot
-//! express — and codicil supplies the ordered, forkable, persistable log beneath
+//! express, and muniment supplies the ordered, forkable, persistable log beneath
 //! it. Checkpointing reuses mere's existing `GraphSnapshot`: load a snapshot, then
 //! [`replay_from`](GraphJournal::replay_from) the journal tail past its sequence,
 //! mirroring `chartulary::GraphLog::load_checkpointed`.
 //!
-//! WASM-clean: codicil and muniment are the substrate's portable primitives (the
+//! WASM-clean: muniment is the substrate's portable persistence primitive (the
 //! same ones the browser persists through), so this module compiles to
 //! `wasm32-unknown-unknown` like the rest of `graph/`.
 
 use std::sync::{Arc, Mutex};
 
-use codicil::{Codicil, LogId, Provenance, Seq};
 use muniment::{Backend, Codec, SlotStore, StoreError};
+use muniment::{Journal, LogId, Provenance, Seq};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
@@ -53,13 +56,13 @@ pub struct AttributedDelta {
     pub delta: CapturedDelta,
 }
 
-/// An append-only journal of a graph's captured edits: the codicil-backed edit
+/// An append-only journal of a graph's captured edits: the persisted edit
 /// spine. The materialized [`Graph`] is the replay of this log; forking it forks
 /// the graph's whole history with provenance, and it persists whole through one
 /// muniment slot.
 #[derive(Clone, Debug)]
 pub struct GraphJournal {
-    log: Codicil<AttributedDelta>,
+    log: Journal<AttributedDelta>,
     /// The author the next [`record`](Self::record) attributes — `user` by
     /// default; a host scopes a denizen run with [`set_author`](Self::set_author)
     /// and restores afterwards.
@@ -69,7 +72,7 @@ pub struct GraphJournal {
 impl Default for GraphJournal {
     fn default() -> Self {
         Self {
-            log: Codicil::default(),
+            log: Journal::default(),
             author: USER_AUTHOR.to_string(),
         }
     }
@@ -85,14 +88,14 @@ impl GraphJournal {
     /// provenance pointing back at it.
     pub fn with_id(id: LogId) -> Self {
         Self {
-            log: Codicil::with_id(id),
+            log: Journal::with_id(id),
             author: USER_AUTHOR.to_string(),
         }
     }
 
-    /// Adopt an existing codicil of attributed deltas (e.g. one just loaded
+    /// Adopt an existing journal of attributed deltas (e.g. one just loaded
     /// from a store or received from a peer).
-    pub fn from_log(log: Codicil<AttributedDelta>) -> Self {
+    pub fn from_log(log: Journal<AttributedDelta>) -> Self {
         Self {
             log,
             author: USER_AUTHOR.to_string(),
@@ -126,8 +129,8 @@ impl GraphJournal {
         })
     }
 
-    /// The underlying codicil, for cursors, replication, and persistence.
-    pub fn log(&self) -> &Codicil<AttributedDelta> {
+    /// The underlying journal, for cursors, replication, and persistence.
+    pub fn log(&self) -> &Journal<AttributedDelta> {
         &self.log
     }
 
@@ -251,13 +254,13 @@ impl GraphJournal {
         slots: &SlotStore<B, C>,
         key: &str,
     ) -> Result<Self, StoreError> {
-        Ok(Self::from_log(Codicil::load(slots, key).await?))
+        Ok(Self::from_log(Journal::load(slots, key).await?))
     }
 
-    /// Adopt a pre-envelope codicil of bare [`CapturedDelta`]s, attributing
+    /// Adopt a pre-envelope journal of bare [`CapturedDelta`]s, attributing
     /// every entry `pre-gate` (chartulary's migration convention): the one-way
     /// load-time migration for logs recorded before attribution existed.
-    pub fn migrate_bare_log(log: Codicil<CapturedDelta>) -> Self {
+    pub fn migrate_bare_log(log: Journal<CapturedDelta>) -> Self {
         let mut journal = GraphJournal::new();
         for delta in log.entries() {
             journal.record_as("pre-gate", delta.clone());
@@ -299,7 +302,7 @@ impl SourceTime for GraphJournal {
 /// ```
 ///
 /// The capture hook is one per-thread slot, so this replaces any previously
-/// installed hook. It is offered as the host's codicil-backed persistence path.
+/// installed hook. It is offered as the host's journal-backed persistence path.
 pub fn journal_capture_hook() -> (
     Arc<Mutex<GraphJournal>>,
     Arc<dyn Fn(&CapturedDelta) + Send + Sync + 'static>,
@@ -411,7 +414,7 @@ mod tests {
     /// A pre-envelope bare log migrates one-way with the `pre-gate` author.
     #[test]
     fn a_bare_log_migrates_as_pre_gate() {
-        let mut bare = Codicil::<CapturedDelta>::default();
+        let mut bare = Journal::<CapturedDelta>::default();
         bare.append(add(1, "https://a.test/"));
         bare.append(add(2, "https://b.test/"));
         let journal = GraphJournal::migrate_bare_log(bare);

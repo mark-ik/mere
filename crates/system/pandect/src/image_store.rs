@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Durable content-addressed store for node preview imagery (node image
 //! externalization plan) — favicons, previews, and last-render snapshots.
@@ -11,7 +14,7 @@
 //! collapse to one blob. The kernel holds only a small [`ImageRef`] (digest +
 //! dimensions); the pixels live here, out of the graph truth.
 //!
-//! Content-addressing is BLAKE3 to match eidetic's engram / manifest identity
+//! Content-addressing is BLAKE3 to match eidetic's codicil / manifest identity
 //! (so an image blob is iroh-sync-portable by the same hash). Bytes are stored
 //! raw (media-friendly, like `content_store` bodies). Deletion is
 //! caller-guarded: a blob is shared, so it is dropped only once no live node

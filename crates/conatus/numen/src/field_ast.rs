@@ -1,17 +1,19 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Portable field-expression AST — kernel truth.
 //!
 //! Two mutually-recursive enums describe the algebra: [`ScalarField`] for
 //! `f: R^2 -> R` and [`VectorField`] for `f: R^2 -> R^2`. This is the
 //! *definition* the kernel owns and persists; **the kernel does not evaluate
-//! it** — `quint` does (closed forms + finite differences, optionally Burn).
+//! it** — numen's evaluator does (closed forms + finite differences, optionally Burn).
 //!
-//! Ported from `quint::ast` (the field-system step-3 plan, 2026-05-31): the
-//! kernel becomes the owner of the portable definition, `quint` gains a
-//! `kernel` dependency and uses these types for evaluation. Two differences
-//! from the quint original: [`ScalarField::Sample`] / [`VectorField::Sample`]
-//! reference the kernel-stable [`FieldId`](super::field::FieldId) (UUID) rather
-//! than the original's registry-local `FieldId(u64)`; and there is no Rhai/Burn
-//! here.
+//! [`ScalarField::Sample`] / [`VectorField::Sample`] reference the
+//! kernel-stable [`FieldId`](super::field::FieldId) (UUID), so definitions are
+//! portable across registries and graph projections.
 //!
 //! Derives are serde only for now. rkyv archiving is handled at the
 //! `Persisted*` DTO layer (plan Phase 2), where the recursive-Box rkyv decision

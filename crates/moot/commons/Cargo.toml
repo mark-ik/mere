@@ -6,12 +6,11 @@
 name = "commons-spine"
 version = "0.0.1"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license.workspace = true
 publish = false
 
 [dependencies]
 chartulary = { path = "../../eidetic/chartulary" }
-codicil = { path = "../../eidetic/codicil" }
 muniment = { path = "../../eidetic/muniment", features = ["redb"] }
 personae = { path = "../../dramatis/personae" }
 proofs = { package = "mere-proofs", path = "../../system/proofs" }

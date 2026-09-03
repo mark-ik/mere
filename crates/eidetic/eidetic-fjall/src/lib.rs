@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Fjall LSM [`muniment::Backend`] — eidetic's production-default native store,
 //! and (since 2026-07-12) a backend any muniment consumer can use.
@@ -110,7 +113,7 @@ impl Backend for FjallStore {
     }
 
     /// Ordered range read, `[start, end)`. Fjall's LSM is key-ordered, so this
-    /// is a native range scan — the ordered read a codicil log needs to replay
+    /// is a native range scan — the ordered read a journal needs to replay
     /// a per-author range in `seq` order.
     async fn scan(&self, start: &str, end: &str) -> Result<Vec<String>, StoreError> {
         let mut keys = Vec::new();

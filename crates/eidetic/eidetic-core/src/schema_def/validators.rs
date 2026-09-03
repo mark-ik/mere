@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 use super::{SchemaDefinition, SchemaFormat, SchemaValidator};
 use crate::{Error, Result};
@@ -78,7 +81,7 @@ impl SchemaValidator for JsonSchemaValidator {
 ///    listed property must be present in the payload as a non-null value.
 ///
 /// Full SHACL / RDF vocabulary-checking still lands when a concrete
-/// schema.org-shaped payload pulls on it (e.g. clip-of-Article engrams);
+/// schema.org-shaped payload pulls on it (e.g. clip-of-Article codicils);
 /// this validator stays in the structural + nominal-type tier and pulls
 /// in no RDF dependency.
 pub struct JsonLdValidator;

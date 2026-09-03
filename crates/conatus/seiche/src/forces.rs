@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Built-in force forces for the orrery's force-directed layout.
 //!
 //! Three forces compose into a Fruchterman-Reingold-shaped layout:
@@ -67,7 +73,7 @@ impl Force for NodeExclusion {
 
         // Above the threshold, a host may stage this exact layout law through a
         // different evaluator. This remains a CPU-integrator seam: positions and
-        // forces cross it as slices, unlike quint's resident-buffer lane.
+        // forces cross it as slices, unlike Conatus's resident-buffer lane.
         if let Some(solver) = ctx.repulsion_solver {
             if nodes.len() >= ctx.gpu_repulsion_threshold {
                 let xs: Vec<f32> = nodes.iter().map(|(_, p)| p.x).collect();

@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The one audited conversion from an acceptance record into carrier facts.
 //!
 //! Notochord N1. Before this existed, every service that wanted to run the
@@ -23,6 +29,9 @@ fn carrier_of(transport: TransportKind) -> CarrierKind {
         // notochord has no Noise-specific vocabulary, and inventing one here
         // would claim knowledge that crate does not have.
         TransportKind::Noise => CarrierKind::Other,
+        // notochord has no WebRTC-specific vocabulary yet either, and
+        // inventing a variant would claim knowledge that crate does not have.
+        TransportKind::WebRtc => CarrierKind::Other,
     }
 }
 
@@ -170,6 +179,32 @@ mod tests {
         )
         .session_facts()
         .proof_binding();
+        assert_eq!(responder, initiator_link_binding(&alpn, [0x11; 16]));
+        assert_ne!(
+            responder,
+            initiator_link_binding(&alpn, [0x22; 16]),
+            "a different link is a different binding"
+        );
+    }
+
+    #[test]
+    fn webrtc_facts_keep_the_honest_none_and_the_bearer_detail() {
+        let facts = accepted(None, IngressContext::webrtc([0x11; 16])).session_facts();
+        assert_eq!(facts.transport, CarrierKind::Other);
+        assert_eq!(
+            facts.authenticated_initiator, None,
+            "the WebRTC carrier authenticates no initiator"
+        );
+        assert_eq!(facts.ingress.local_interface, None);
+        assert_eq!(facts.ingress.shared_link, Some([0x11; 16]));
+    }
+
+    #[test]
+    fn a_webrtc_binding_pins_the_link_and_names_no_peer() {
+        let alpn = Alpn::new("mere/murm/v1");
+        let responder = accepted(None, IngressContext::webrtc([0x11; 16]))
+            .session_facts()
+            .proof_binding();
         assert_eq!(responder, initiator_link_binding(&alpn, [0x11; 16]));
         assert_ne!(
             responder,

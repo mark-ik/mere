@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! P2panda group membership at the Moot authorization seam.
 //!
 //! Signed operations are retained by [`MootGroupStore`] and translated from
@@ -31,7 +37,7 @@ use super::delegation::MootScopeKeyEpoch;
 use super::service::{
     MootAuthorizationInputs, MootAuthorizationProvider, MootAuthorizationRequest,
 };
-use super::tessera::TesseraFacts;
+use super::standing::StandingFacts;
 
 /// A local identity wrapper required by p2panda-auth's generic group graph.
 ///
@@ -372,7 +378,7 @@ impl MootAuthorizationProvider for MootGroup {
         let capability_covers = access.is_some_and(|access| access.level >= AccessLevel::Write);
         MootAuthorizationInputs {
             capability_covers,
-            facts: TesseraFacts {
+            facts: StandingFacts {
                 is_member,
                 ..Default::default()
             },

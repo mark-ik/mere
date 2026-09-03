@@ -9,10 +9,10 @@ name = "knot"
 path = "src/main.rs"
 
 [dependencies]
-cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+cambium-genet-winit-host = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 knot-document = { path = "../../knot-document" }
-layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03", version = "=0.1.0" }
+layout-dom-api = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6", version = "=0.1.0" }
 
 [dev-dependencies]
-genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "138b6aca6e2795c6cad5162c0237f1882fddaa03" }
+genet-probe = { git = "https://github.com/merely-made/genet.git", rev = "da8762fd910d855d3bccec8af75d474d360e35b6" }
 tempfile = "3"

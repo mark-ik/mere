@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Bridge A — query similarity rendered as a 2D scalar field over canvas
 //! coordinates.
@@ -18,14 +21,12 @@
 //! tuning parameter (smaller = sharper peaks, larger = smoother field).
 //!
 //! Crucially this composes inside the existing field-algebra AST — no new
-//! AST variant is required. The quint evaluator handles it.
+//! AST variant is required. The numen evaluator handles it.
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use quint::ast::ScalarField;
-use quint::projection::FieldProjection;
-use quint::registry::FieldId;
+use numen::{FieldId, FieldProjection, ScalarField};
 
 use esp::embed::VectorIndex;
 use esp::embed::provider::SimilarityMetric;
@@ -109,8 +110,7 @@ mod tests {
     use super::*;
     use esp::embed::StubEmbeddingProvider;
     use esp::embed::provider::EmbeddingProvider;
-    use quint::eval::eval_scalar;
-    use quint::registry::FieldRegistry;
+    use numen::{FieldRegistry, eval_scalar};
 
     fn approx(a: f32, b: f32, eps: f32) -> bool {
         (a - b).abs() < eps

@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! A shared spatial runtime.
 //!
 //! Conatus owns the product-facing vocabulary for bodies, collision, spatial
@@ -15,6 +21,8 @@ mod body;
 mod clock;
 mod command;
 mod engine;
+#[cfg(feature = "resident")]
+pub mod resident;
 mod schedule;
 mod world;
 
@@ -25,11 +33,11 @@ pub use body::{
 };
 pub use clock::{ClockAdvance, ClockError, FixedClock};
 pub use command::{BodyCommand, CommandEffect, CommandId, CommandResult};
-pub use conatus_voxel::{
+pub use engine::{Engine, EngineConfig, EngineConfigError, EngineError, FrameUpdate};
+pub use nisus::{
     VoxelAddress, VoxelCellChange, VoxelCellEdit, VoxelChunk, VoxelChunkError, VoxelEdit,
     VoxelPatch, VoxelRegion, split_voxel_address,
 };
-pub use engine::{Engine, EngineConfig, EngineConfigError, EngineError, FrameUpdate};
 pub use schedule::{Phase, Resources, SystemContext, SystemError};
 pub use world::{
     BodyError, BodyWorld, Interaction, InteractionEvent, InteractionState, RayHit, StepUpdate,

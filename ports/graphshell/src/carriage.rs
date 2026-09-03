@@ -1,8 +1,14 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The epoch carriage lane: leased slots for wrapped private-epoch material.
 //!
 //! Implements the lane grammar (design_docs, 2026-08-18). Carriage rides a
 //! sibling topic beside a personal graph's own, so key delivery never enters
-//! the engram grammar; every fact a replica must check rides in the header
+//! the codicil grammar; every fact a replica must check rides in the header
 //! extension, so a peer can accept, refuse, and prune without decoding a body
 //! it is not expected to be able to open; and supersession is the protocol's
 //! own prune (`Admission::prune_before_current` plus payload erasure), so the

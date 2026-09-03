@@ -1,7 +1,13 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The reconciling-log drain, shared by every LogSync consumer.
 //!
 //! [`SyncedSpace`] is the deduplicated core the former near-identical copies
-//! under direct exchange, mesh, and tessera all share: the drain loop over a
+//! under direct exchange, Mesh, and Standing all share: the drain loop over a
 //! subscribed p2panda-net LogSync stream, the real
 //! (non-placebo) [`SyncStatus`] counters, the settle-based [`resync`](SyncedSpace::resync)
 //! checkpoint, and the drop-aborts-the-task lifetime.
@@ -9,9 +15,9 @@
 //! ## The seam
 //!
 //! The one thing that differed across the copies was how a received operation is
-//! turned into a stored fact: murm ingests through its cable engine, tessera
-//! verifies then does a synchronous redb insert, mesh verifies (plus an addressed
-//! -mesh guard) then does an asynchronous sqlite insert. That is the injected
+//! turned into a stored fact: Murm ingests through its cable engine, Standing
+//! verifies then does a synchronous redb insert, and Mesh verifies with an
+//! addressed-mesh guard before an asynchronous sqlite insert. That is the injected
 //! `accept` closure — `FnMut(Operation<E>) -> impl Future<Output = bool>` — which
 //! returns whether the operation counted (verified and was new). An async return
 //! covers both the sync inserts (a ready future) and the async ones.

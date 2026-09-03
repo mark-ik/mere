@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! G5d: Graphshell's projection carrier.
 //!
 //! The accept path that runs *before* a single `SessionOpen` byte is read. It
@@ -33,6 +39,10 @@
 //! it had already written, on either arm, whenever it returned promptly.
 //! Taking `&T` makes that unspellable here.
 //!
+//! The accept step is therefore the one part of this path that cannot move.
+//! [`admit_accepted_session`] carries everything after it, for a caller that
+//! already holds an accepted session and has no `&T` to borrow from.
+//!
 //! ## Why the action check is not a second admission
 //!
 //! The owner policy allows only named admission actions. Graphshell checks the
@@ -44,8 +54,8 @@ use notochord::{
     AdmittedSession, DenyReason, IoHandshakeError, LocalNetworkPolicy, NetworkId, ProfileRef,
     RevocationLedger, ServiceAccess, ServiceRule, TrustedRoot, admit_session,
 };
-use tokio::io::AsyncWriteExt;
-use transport::{Alpn, Transport, TransportError};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use transport::{AcceptedSession, Alpn, Transport, TransportError};
 
 use crate::admission::{
     CONNECT_ACTION, GRAPHSHELL_DOMAIN, PROJECTION_PROTOCOL, PROJECTION_SERVICE, serves_action,
@@ -136,6 +146,35 @@ pub async fn accept_projection_session<T: Transport>(
     active_sessions: u32,
 ) -> Result<Result<AdmittedSession<T::Stream>, ProjectionRefusal>, ProjectionAcceptError> {
     let accepted = transport.accept(projection_alpn()).await?;
+    admit_accepted_session(accepted, policy, ledger, now_ms, active_sessions).await
+}
+
+/// Admit and action-check a session this carrier did not accept itself.
+///
+/// [`accept_projection_session`] is [`admit_accepted_session`] with the
+/// accept step glued on the front, for a caller that dials `&T` and lets a
+/// [`Transport`] impl do the accepting. Not every carrier can do that: the
+/// coming browser WebRTC lane accepts its own stream off a signalling
+/// channel and has no bilateral `Transport` impl to hand a `&T` for — there
+/// is nothing to `.accept(alpn)` on. Rather than make it fabricate one, this
+/// function is the seam such a carrier calls directly, taking the
+/// [`AcceptedSession`] it already produced and running exactly the same
+/// admission and action check `accept_projection_session` runs after its own
+/// accept: N1's facts, `notochord::admit_session`, then
+/// [`crate::admission::serves_action`].
+///
+/// Same refusal semantics as `accept_projection_session`: a refusal is
+/// finished, never dropped, and a refused stream never reaches the caller.
+pub async fn admit_accepted_session<S>(
+    accepted: AcceptedSession<S>,
+    policy: &LocalNetworkPolicy,
+    ledger: &RevocationLedger,
+    now_ms: u64,
+    active_sessions: u32,
+) -> Result<Result<AdmittedSession<S>, ProjectionRefusal>, ProjectionAcceptError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     // N1's adapter, not a local copy: every fact below is read off the
     // acceptance record before any application byte is read.
     let (stream, facts) = accepted.into_session();
@@ -173,7 +212,9 @@ mod tests {
     };
     use tokio::io::AsyncReadExt;
     use transport::memory::MemoryTransport;
-    use transport::{P2pandaTransport, PeerID, initiator_binding};
+    use transport::{
+        IngressContext, P2pandaTransport, PeerID, initiator_binding, initiator_link_binding,
+    };
 
     const NETWORK: NetworkId = NetworkId([3; 32]);
     const ROOT_AUTHORITY: [u8; 32] = [7; 32];
@@ -352,6 +393,95 @@ mod tests {
             refusal,
             ProjectionRefusal::ActionNotServed("administer".to_string())
         );
+    }
+
+    /// C0's acceptance fixture: a listener-only carrier reaches admission.
+    ///
+    /// The WebRTC lane has no bilateral `Transport` to accept from, so it
+    /// builds its own [`AcceptedSession`] and enters at
+    /// [`admit_accepted_session`]. Two facts make it the honest shape rather
+    /// than a p2panda fixture wearing a different label: the carrier
+    /// authenticates nobody, so `peer` is `None`, and the subject is instead
+    /// bound to the link the two ends derived from the host challenge. That is
+    /// the same binding Reticulum uses, which is the point — WebRTC needs no
+    /// new proof grammar, only a link to put in the existing one.
+    ///
+    /// The link is derived through `webrtc-carrier` rather than pasted, so a
+    /// change to the transcript encoding fails here too.
+    #[tokio::test]
+    async fn a_webrtc_session_is_admitted_with_no_authenticated_peer() {
+        use webrtc_carrier::{DtlsFingerprint, FingerprintRole, InviteId, LinkChallenge};
+
+        let challenge = LinkChallenge::new(
+            PROJECTION_PROTOCOL,
+            "mere-graphshell",
+            InviteId::from_bytes([9; 16]),
+            [0x11; 32],
+            [0x22; 32],
+            DtlsFingerprint::new(FingerprintRole::Client, [0xAA; 32]),
+            DtlsFingerprint::new(FingerprintRole::Server, [0xBB; 32]),
+        )
+        .expect("link challenge");
+        let shared_link = challenge.shared_link();
+        assert_ne!(
+            shared_link, [0u8; 16],
+            "a derived link of all zeroes would make the binding vacuous"
+        );
+
+        let viewer = viewer();
+        let subject = viewer.master_public_key().to_bytes();
+        let delegations = vec![grant(subject, CONNECT_ACTION)];
+        let (client_half, server_half) = tokio::io::duplex(64 * 1024);
+
+        let client_task = tokio::spawn(async move {
+            let mut stream = client_half;
+            // No transport identity to bind, so the shared link carries the
+            // weight. `initiator_binding` would be a lie here: nothing
+            // authenticated this peer.
+            let binding = initiator_link_binding(&projection_alpn(), shared_link);
+            let hello = open_session(
+                &viewer,
+                NETWORK,
+                profile_ref(),
+                TrafficClass::Interactive,
+                [5; 32],
+                &binding,
+                delegations,
+            )
+            .expect("issue hello");
+            let _ = initiate_session(&mut stream, &hello, &policy().limits.clamped()).await;
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        });
+
+        let accepted = AcceptedSession::new(
+            server_half,
+            projection_alpn(),
+            // The carrier authenticated no initiator, and says so.
+            None,
+            IngressContext::webrtc(shared_link),
+        );
+        assert!(
+            !accepted.is_transport_authenticated(),
+            "the WebRTC carrier must never look authenticated"
+        );
+        let facts = accepted.session_facts();
+        assert_eq!(facts.authenticated_initiator, None);
+        assert_eq!(facts.ingress.shared_link, Some(shared_link));
+        assert_eq!(facts.ingress.local_interface, None);
+
+        let outcome = admit_accepted_session(
+            accepted,
+            &policy(),
+            &RevocationLedger::default(),
+            NOW_MS,
+            0,
+        )
+        .await
+        .expect("admission path");
+        client_task.abort();
+
+        let session = outcome.expect("the webrtc session must be admitted");
+        assert_eq!(session.principal.action.action, CONNECT_ACTION);
     }
 
     async fn p2panda_pair() -> (P2pandaTransport, P2pandaTransport, PeerID, PeerID) {

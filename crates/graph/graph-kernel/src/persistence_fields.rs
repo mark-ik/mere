@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Persistence DTOs for the field layer (`Field` + `Coupling`), field-system
 //! Phase 2.
@@ -13,7 +16,7 @@
 //! ([`FieldDefinition`](crate::graph::FieldDefinition), `Box`-nested) — rides as a
 //! **serde-JSON string** ([`PersistedField::definition_json`]) rather than via
 //! rkyv `omit_bounds`: the kernel AST is deliberately serde-only, the definition
-//! is loaded once and evaluated in memory by `quint` (no zero-copy benefit), and
+//! is loaded once and evaluated in memory by numen (no zero-copy benefit), and
 //! a blob keeps the archive flat and the round-trip robust. `serde_json` is
 //! already a base kernel dependency.
 

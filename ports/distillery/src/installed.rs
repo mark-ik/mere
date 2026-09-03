@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Installed-product authority: a persisted Personae choice plus private paths.
 //!
@@ -22,6 +25,22 @@ use serde::{Deserialize, Serialize};
 use transport::{P2pandaTransport, TransportError};
 
 use crate::{ResidentAuthority, ResidentError, ResidentSettings, ResidentStorage};
+
+/// Domain separator for the mesh this installed product joins when nobody
+/// named another one.
+///
+/// The mesh id is **derived, not configured**: a personal mesh belongs to the
+/// profile that speaks for this installation, so asking an owner to type a
+/// 64-hex identifier would only invite them to mistype one and silently join
+/// nothing. Deriving it under a product-owned salt gives the same profile the
+/// same mesh on every device it unlocks, and gives a different profile a
+/// different one, with no stored value to drift.
+///
+/// The salt is product-owned rather than borrowed from
+/// [`MESH_AUTHOR_SALT`]: reusing the author's salt would make the mesh id equal
+/// the author key, so the name of the room and the name of the speaker would be
+/// the same string.
+pub const DISTILLERY_MESH_SALT: &[u8] = b"distillery-personal-mesh";
 
 const DISTILLERY_DIR: &str = "distillery";
 const SETTINGS_FILENAME: &str = "settings.json";
@@ -253,6 +272,21 @@ impl InstalledAuthority {
         Ok(self.vault.derive_keypair(MESH_AUTHOR_SALT)?)
     }
 
+    /// The mesh this profile's personal ring uses, derived under
+    /// [`DISTILLERY_MESH_SALT`].
+    ///
+    /// This is the public key bytes of a derived keypair, used only as a
+    /// 32-byte name. Its private half is never used to sign anything: the mesh
+    /// author ([`mesh_author`](Self::mesh_author)) does the signing, under its
+    /// own salt.
+    pub fn personal_mesh_id(&self) -> Result<[u8; 32], InstalledError> {
+        Ok(self
+            .vault
+            .derive_keypair(DISTILLERY_MESH_SALT)?
+            .public_key()
+            .to_bytes())
+    }
+
     /// The evidence peers need to connect the mesh author to this profile's
     /// transport identity.
     pub fn mesh_author_attestation(&self) -> Result<DerivedKeyAttestation, InstalledError> {
@@ -419,6 +453,41 @@ mod tests {
             first_author,
             "the persisted profile, not an environment seed, owns the mesh author"
         );
+    }
+
+    #[test]
+    fn the_personal_mesh_is_derived_stably_and_is_not_the_author_or_the_transport() {
+        let directory = tempfile::tempdir().unwrap();
+        let vault_dir = directory.path().join("vault");
+        let profile = ProfileId("research".into());
+        provision_profile(&vault_dir, &profile);
+        InstalledAuthority::configure(directory.path(), profile).unwrap();
+
+        let first = InstalledAuthority::open_with(directory.path(), &vault_dir, unlock()).unwrap();
+        let mesh_id = first.personal_mesh_id().unwrap();
+        assert_ne!(
+            mesh_id,
+            first.mesh_author().unwrap().public_key().to_bytes(),
+            "the name of the room must not be the name of the speaker"
+        );
+        assert_ne!(mesh_id, first.transport_identity().public_key().to_bytes());
+        drop(first);
+
+        let reopened =
+            InstalledAuthority::open_with(directory.path(), &vault_dir, unlock()).unwrap();
+        assert_eq!(
+            reopened.personal_mesh_id().unwrap(),
+            mesh_id,
+            "a derived mesh id must not drift across opens: nothing stores it"
+        );
+
+        // A different profile is a different personal mesh, which is what makes
+        // the derivation safe to do without asking.
+        let other = ProfileId("burner".into());
+        provision_profile(&vault_dir, &other);
+        InstalledAuthority::configure(directory.path(), other).unwrap();
+        let burner = InstalledAuthority::open_with(directory.path(), &vault_dir, unlock()).unwrap();
+        assert_ne!(burner.personal_mesh_id().unwrap(), mesh_id);
     }
 
     #[tokio::test]

@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Scoped structural capabilities and the authority seam.
 //!
 //! A [`Grant`] is a structural capability: a [`Subject`] may act under a
@@ -75,7 +81,7 @@ impl Grant {
 /// Mirrors `gemot::MootAuthorizationProvider`. The gate depends on this trait,
 /// never on a concrete grant store, so authority can come from a local grant
 /// table now and a meadowcap-shaped structural-cap provider (over
-/// graph-cluster-derived namespaces, layered with tessera policy facts) later,
+/// graph-cluster-derived namespaces, layered with Standing policy facts) later,
 /// with no gate change.
 pub trait AuthorityProvider {
     /// Whether `subject` may act under `needed` at `mode`.

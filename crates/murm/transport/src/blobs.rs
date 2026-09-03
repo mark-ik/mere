@@ -1,9 +1,15 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Content-addressed blob store, backed by `iroh-blobs`.
 //!
 //! Phase 2C v0 per
 //! [`mere/design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`](../../../../../../design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md)
 //! §2.1 — `iroh-blobs` is a sibling iroh primitive that lives in
-//! `transport`. Consumers (murm Cable attachments, gemot engram
+//! `transport`. Consumers (murm Cable attachments, gemot codicil
 //! payloads, eidetic large artifacts) put bytes and get a stable BLAKE3
 //! [`BlobHash`]; future network transfer (one peer fetches a hash from
 //! another) lands with the first concrete consumer.

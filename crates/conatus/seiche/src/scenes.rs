@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! The declarative scene library: ready-made [`SceneSpec`]s the orrery can load behind the
 //! graph. Each is a plain `fn -> SceneSpec` (data, not engine code) in the spirit of porting
 //! the open-source 2D-physics demo galleries (matter.js / planck.js / box2d) to Mere's body

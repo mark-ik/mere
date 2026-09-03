@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! `Coupling` — how nodes respond to a field. A coupling is
 //! `field -> NodeSelector (a dynamic set) x response x strength`.
 //!
@@ -9,7 +15,7 @@
 //! `EdgePayload` sidecar on a node-to-node edge, and `EdgeFamily` (derived from
 //! node-edge sidecars) stays six.
 //!
-//! Ported from `quint::coupling`. The response vocabulary is a
+//! The response vocabulary is a
 //! recognized-core-plus-open-tail hybrid (plan Phase 4): the six force responses
 //! are the recognized core `seiche` integrates, and [`CouplingResponse::Open`]
 //! carries the open families (visual / navigational / selection / semantic /

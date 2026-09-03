@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Startup-unlocked personal Knot authority.
 //!
 //! This is the production seam between pandect's Personae wallet and
@@ -259,6 +265,7 @@ mod tests {
         let persona = PersonaId::new();
         let settings = DeviceSettings {
             startup_unlock_mode: personae::StartupUnlockMode::AutoOs,
+            ..Default::default()
         };
         save_device_settings(root.path(), &settings).unwrap();
         wallet_store::ensure_wallet_state(root.path(), persona, "Knot receipt").unwrap();

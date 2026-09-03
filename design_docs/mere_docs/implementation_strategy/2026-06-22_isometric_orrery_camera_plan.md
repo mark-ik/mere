@@ -19,7 +19,7 @@ gestures), `crates/platen/platen/src/scene_paint.rs` (the ground `Camera` + `Pus
 - [node_representation_arrangement_plan](2026-06-18_node_representation_arrangement_plan.md) — node
   cards / tiles / sprites are the **billboards** this plan keeps upright; the per-node size / face
   geometry (Decision 5) is what a billboard scales and what a ground shadow sits under.
-- [command_registry_configurable_menus_plan](2026-06-21_command_registry_configurable_menus_plan.md)
+- [command_registry_configurable_menus_plan](../../archive_docs/2026-09-02_retired_plans/2026-06-21_command_registry_configurable_menus_plan.md)
   — the projection mode is a registry command (`view.projection.set`), palette- and script-reachable.
 - [cartography_aether_layout_seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
   — the camera is a render/projection concern; gyre's world coordinates do not change.

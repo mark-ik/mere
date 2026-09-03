@@ -1,10 +1,16 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! muniment — a portable persistence store.
 //!
 //! A muniment room is where a household keeps its records: the deeds and
 //! documents preserved as evidence. This crate is that room for an app's durable
 //! state, and nothing more.
 //!
-//! Three pieces over one seam:
+//! Four pieces over one seam:
 //!
 //! - [`Backend`] is the host-supplied byte store. The host realizes it as the
 //!   filesystem on desktop, OPFS in the browser, or an embedded store (redb,
@@ -18,10 +24,11 @@
 //! - [`BlobStore`] holds **content-addressed immutable blobs**: `put` returns a
 //!   blake3 [`Hash`], `get` fetches by it. Identical content is stored once; a
 //!   new version is new bytes with a new hash, never a mutation.
+//! - [`Journal`] holds an **append-only replayable sequence** with stable cursors,
+//!   optional causal links, fork provenance, and slot-backed persistence.
 //!
-//! muniment holds bytes; it does not model what they mean. The append-only log
-//! that versions them is its sibling, codicil; the note-and-tag content model is
-//! a layer above both.
+//! muniment stores durable bytes and their journaled order. Domain meaning and
+//! content models remain layers above it.
 
 pub mod backend;
 pub mod blob;
@@ -29,6 +36,7 @@ pub mod codec;
 pub mod error;
 #[cfg(all(feature = "indexeddb", target_arch = "wasm32"))]
 pub mod indexeddb_backend;
+pub mod journal;
 #[cfg(feature = "redb")]
 pub mod redb_backend;
 pub mod slot;
@@ -39,6 +47,7 @@ pub use backend::{Backend, MemoryBackend, WriteOp};
 pub use blob::{BlobStore, Hash};
 pub use codec::Codec;
 pub use error::StoreError;
+pub use journal::{CausalError, Journal, LogId, Provenance, Seq};
 pub use slot::SlotStore;
 
 #[cfg(all(feature = "indexeddb", target_arch = "wasm32"))]

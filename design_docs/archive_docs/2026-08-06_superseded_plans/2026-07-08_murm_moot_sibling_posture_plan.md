@@ -11,7 +11,7 @@ the target standalone package boundary are retired.
 
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) (role spec; the charter this plan narrows and sharpens)
 - [`../research/2026-05-31_murm_p2p_landscape_brief.md`](../../mere_docs/research/2026-05-31_murm_p2p_landscape_brief.md) (landscape; p2panda adopt call)
-- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](../../mere_docs/implementation_strategy/2026-07-06_comms_gating_and_key_addressing_plan.md) (comms G-phases; G1-G4 hold on the one-state migration)
+- [`2026-07-06_comms_gating_and_key_addressing_plan.md`](../2026-09-02_retired_plans/2026-07-06_comms_gating_and_key_addressing_plan.md) (comms G-phases; G1-G4 hold on the one-state migration)
 - `repos/muniment` (the Backend seam this plan's store substrate rides)
 - [`2026-07-08_generic_graph_substrate_plan.md`](../../mere_docs/implementation_strategy/2026-07-08_generic_graph_substrate_plan.md) (chartulary precedent: fresh core proven standalone, mere re-bases last)
 

@@ -13,6 +13,16 @@ the remote projection host over Scenograph, specified in the
 Mere's internal chrome is simply its `shell` crate family and does not carry the
 Graphshell product name.
 
+**Vocabulary amendment (2026-08-31):** [`TERMINOLOGY.md`](TERMINOLOGY.md) is
+authoritative for the implemented migration. **Engram** became **Codicil**;
+the former generic `codicil::Codicil<T>` log became
+`muniment::Journal<T>`; **Tessera** became **Standing**; lower-case *flora* as
+a Moot's accumulated corpus is retired because **FLORA** means federated LoRA;
+the former memorial meaning of **Tulpa** became **Hagiograph**; and **Tulpa**
+now names Gemot's community-recognized collective artifact and identity,
+supplanting the proposed *egregore* role. Older rows below are retained as the
+dated decision trail, not current vocabulary.
+
 ---
 
 ## 1. Top-level naming

@@ -29,4 +29,4 @@ Dependencies: `mere-eidetic`, `ureq` 2.10 (`default-features = false`, feature
 
 ## License
 
-MIT OR Apache-2.0.
+MPL-2.0 (see LICENSE).

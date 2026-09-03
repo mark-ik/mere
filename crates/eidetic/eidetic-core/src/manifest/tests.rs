@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 use super::*;
 use crate::schema::{
     ManifestId, ModerationState, ProvenanceOrigin, ProvenanceRecord, SchemaRef, Timestamp,
@@ -5,7 +11,7 @@ use crate::schema::{
 };
 use std::collections::HashMap;
 
-/// Test schema engram id (just a fixed BLAKE3 hash; in real code a schema
+/// Test schema codicil id (just a fixed BLAKE3 hash; in real code a schema
 /// would be a separate manifest).
 fn test_schema_ref() -> SchemaRef {
     SchemaRef::from_id(ManifestId::of_blob(b"test-schema"))

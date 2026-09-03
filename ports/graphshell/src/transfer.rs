@@ -1,6 +1,12 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Portable graph-selection transfer between independent Graphshell stores.
 //!
-//! The graph selection is an immutable Eidetic engram. File bytes remain
+//! The graph selection is an immutable Eidetic codicil. File bytes remain
 //! separate Muniment blobs, addressed and verified by BLAKE3. Applying a
 //! package is explicit about identity: replicate preserves container ids;
 //! copy mints stable-per-transfer ids and records `CopiedFrom` provenance.
@@ -11,7 +17,7 @@ use std::sync::LazyLock;
 use chartulary::{AcceptAll, FacetId};
 use chirograph::Sha256NamedInformation;
 use eidetic::{
-    BlobSource, Engram, Hash, ManifestId, MereNativeFieldSpec, MereNativeSchemaBuilder,
+    BlobSource, Codicil, Hash, ManifestId, MereNativeFieldSpec, MereNativeSchemaBuilder,
     ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaDefinition, SchemaRef,
     TimeBounds, Timestamp, TrustEnvelope, TrustLevel, TypedPayload, save_schema, save_typed,
     validate_payload,
@@ -34,14 +40,14 @@ use crate::access::{
 };
 use crate::mere_host::MereHost;
 use crate::product::{
-    CONTENT_FACET, ExportRequest, ProductEngramV1, ProductError, SavedSceneV1, decode_engram,
+    CONTENT_FACET, ExportRequest, ProductCodicilV2, ProductError, SavedSceneV1, decode_codicil,
 };
 
 pub const TRANSFER_MANIFEST_SCHEMA: &str = "graphshell.transfer-manifest/v1";
 pub const TRANSFER_CONTENT_FACET: &str = "graphshell.transfer-content/v1";
 
-static PRODUCT_ENGRAM_SCHEMA_REF: LazyLock<SchemaRef> =
-    LazyLock::new(|| schema_ref(&product_engram_schema()));
+static PRODUCT_CODICIL_SCHEMA_REF: LazyLock<SchemaRef> =
+    LazyLock::new(|| schema_ref(&product_codicil_schema()));
 static TRANSFER_RECEIPT_SCHEMA_REF: LazyLock<SchemaRef> =
     LazyLock::new(|| schema_ref(&transfer_receipt_schema()));
 
@@ -50,8 +56,8 @@ fn schema_ref(definition: &SchemaDefinition) -> SchemaRef {
     SchemaRef::from_id(ManifestId::from_hash(Hash::of(&bytes)))
 }
 
-pub(crate) fn product_engram_schema() -> SchemaDefinition {
-    MereNativeSchemaBuilder::new("graphshell.GraphEngram/v1")
+pub(crate) fn product_codicil_schema() -> SchemaDefinition {
+    MereNativeSchemaBuilder::new("graphshell.GraphCodicil/v2")
         .description("A closed graph or scene selection with portable facets.")
         .field("schema", MereNativeFieldSpec::String, true)
         .field(
@@ -110,9 +116,9 @@ fn transfer_receipt_schema() -> SchemaDefinition {
         .build()
 }
 
-impl TypedPayload for ProductEngramV1 {
+impl TypedPayload for ProductCodicilV2 {
     fn schema_ref() -> SchemaRef {
-        *PRODUCT_ENGRAM_SCHEMA_REF
+        *PRODUCT_CODICIL_SCHEMA_REF
     }
 }
 
@@ -191,7 +197,7 @@ pub struct TransferManifestV1 {
     pub destination: TransferEndpointV1,
     pub route: TransferRouteV1,
     pub selection_schema: SchemaDefinition,
-    pub selection: Engram,
+    pub selection: Codicil,
     pub blobs: Vec<TransferBlobV1>,
     pub access_policy: AccessTransferPolicy,
     pub access_records: Vec<AccessRecord>,
@@ -324,8 +330,8 @@ pub async fn prepare_transfer<HB: Backend, AB: Backend, BB: Backend>(
         ));
     }
     request.selection.include_local_file_locations = false;
-    let selection_bytes = host.export_product_engram(request.selection)?;
-    let mut product = decode_engram(&selection_bytes)?;
+    let selection_bytes = host.export_product_codicil(request.selection)?;
+    let mut product = decode_codicil(&selection_bytes)?;
     let selected_ids = selected_ids(&product)?;
 
     for node_id in &selected_ids {
@@ -378,10 +384,10 @@ pub async fn prepare_transfer<HB: Backend, AB: Backend, BB: Backend>(
     };
 
     let selection_payload = product.serialize_to_bytes()?;
-    let definition = product_engram_schema();
+    let definition = product_codicil_schema();
     validate_payload(&definition, &selection_payload)?;
-    let selection = Engram::new(
-        ProductEngramV1::schema_ref(),
+    let selection = Codicil::new(
+        ProductCodicilV2::schema_ref(),
         selection_payload,
         request.privacy,
         ProvenanceRecord {
@@ -510,7 +516,7 @@ where
     }
     if existing != id_map.len() {
         let bytes = target_product.serialize_to_bytes()?;
-        host.import_product_engram(&bytes)?;
+        host.import_product_codicil(&bytes)?;
     }
 
     attach_transfer_content(host, manifest, &id_map)?;
@@ -688,7 +694,7 @@ async fn save_transfer_receipt<B: Backend>(
 
 pub(crate) fn verify_manifest(
     manifest: &TransferManifestV1,
-) -> Result<ProductEngramV1, TransferError> {
+) -> Result<ProductCodicilV2, TransferError> {
     if manifest.schema != TRANSFER_MANIFEST_SCHEMA {
         return Err(TransferError::InvalidManifest(format!(
             "expected {TRANSFER_MANIFEST_SCHEMA}, found {}",
@@ -697,15 +703,16 @@ pub(crate) fn verify_manifest(
     }
     manifest.selection.verify_integrity()?;
     let actual_schema_ref = schema_ref(&manifest.selection_schema);
-    if actual_schema_ref != manifest.selection.schema
-        || manifest.selection.schema != ProductEngramV1::schema_ref()
-    {
+    let schema_id = manifest.selection_schema.schema_id.as_str();
+    let supported_schema =
+        schema_id == "graphshell.GraphCodicil/v2" || schema_id == "graphshell.GraphEngram/v1";
+    if actual_schema_ref != manifest.selection.schema || !supported_schema {
         return Err(TransferError::InvalidManifest(
             "selection schema reference does not match its definition".to_string(),
         ));
     }
     validate_payload(&manifest.selection_schema, &manifest.selection.payload)?;
-    let product = decode_engram(&manifest.selection.payload)?;
+    let product = decode_codicil(&manifest.selection.payload)?;
     let selected = selected_ids(&product)?;
     if manifest.operation == TransferOperation::Replicate
         && manifest.source.persona != manifest.destination.persona
@@ -755,7 +762,7 @@ pub(crate) fn verify_manifest(
     Ok(product)
 }
 
-fn selected_ids(product: &ProductEngramV1) -> Result<HashSet<Uuid>, TransferError> {
+fn selected_ids(product: &ProductCodicilV2) -> Result<HashSet<Uuid>, TransferError> {
     product
         .graph
         .nodes
@@ -866,9 +873,9 @@ fn require_selected_content_blobs(
 }
 
 fn copied_product(
-    source: &ProductEngramV1,
+    source: &ProductCodicilV2,
     manifest: &TransferManifestV1,
-) -> Result<(ProductEngramV1, Vec<TransferredIdV1>), TransferError> {
+) -> Result<(ProductCodicilV2, Vec<TransferredIdV1>), TransferError> {
     let mut donor = Graph::from_snapshot(&source.graph);
     donor.overlay_facets(source.facets.clone());
     let mut copy = Graph::new();
@@ -925,7 +932,7 @@ fn copied_product(
     snapshot.timestamp_secs = source.graph.timestamp_secs;
 
     Ok((
-        ProductEngramV1 {
+        ProductCodicilV2 {
             schema: source.schema.clone(),
             scope: source.scope,
             exported_at_ms: source.exported_at_ms,

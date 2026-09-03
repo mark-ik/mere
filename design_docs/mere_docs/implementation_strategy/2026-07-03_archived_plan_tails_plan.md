@@ -1,6 +1,6 @@
 # Archived-plan tails — deferred items spun out of the archive passes
 
-**Date**: 2026-07-03, extended 2026-08-06.
+**Date**: 2026-07-03, extended 2026-08-06 and 2026-09-02.
 **Status**: backlog holder. Each item below was explicitly deferred by a plan that
 is otherwise complete and now lives under
 [`archive_docs/`](../../archive_docs/), in the checkpoint folder named by the
@@ -127,6 +127,169 @@ gloss_outline_lens plan), graphlet_wiring (cross-plan leftovers owned by the
 active relational_browse plan), tearout_composability (continuation is the
 active tearout_gestures plan).
 
+## 2026-09-02 archive pass (17 retired plans → `archive_docs/2026-09-02_retired_plans/`)
+
+Retired, not completed: each plan's subject was deleted — fifteen by the
+meerkat removal of 2026-07-18 (`c5f01064`) or genet's Stylo and `genet-layout`
+retirement of 2026-08-21 (`55c05d11759`) — or its status had read "in
+progress" for two months with no commits. Ruled by Mark 2026-09-02 on the
+active-tree audit's evidence (phase D of
+[the doc policy consolidation plan](./2026-08-24_doc_policy_consolidation_plan.md)).
+An evidence pass over turnstone, genet and mere found none of the work built
+under another name. Items belonging to genet are marked; they want a home in
+genet's `design_docs/`, not here.
+
+### From short_term_memory_substrate (plan-only since 2026-05-14)
+
+- **JSON-sidecar-over-fjall for short-term persistent state**, and the
+  **`durable` flag for throwaway forks** — two unimplemented rulings. Their gate
+  ("when branch operations land") never fired; the tear-out arc closed without
+  a `branch_store`.
+
+### From accesskit_screen_reader_verification (never run)
+
+- **Separate adapter installation from OS traversal** when VoiceOver cannot
+  enter the window tree (the macOS step). The checklist's purpose was met by
+  Turnstone `648bf19`, the headed OS screen-reader receipt; a new checklist
+  would target `ports/graphshell`.
+
+### From workbench_staging (no code, 2026-06-09)
+
+- **Where the latent staging relation lives** — gloss-owned graphlet store
+  versus a kernel edge family flagged latent — explicitly Mark's call,
+  unanswered; with it the chain-versus-bus default. The set primitive exists
+  unconsumed (`platen/src/workbench.rs:182 open_split`, `:189 open_stack`);
+  turnstone's workbench opens one node at a time.
+- **Check the 2026-06-27 toolbar-clipping issue** against
+  `turnstone:src/workbench_tiling.rs`; it may still reproduce.
+
+### From lane0_sidequests (five of seven open)
+
+- **Refreshed list** (evidence pass 2026-09-02): items 1 and 2 shipped; item 5,
+  the Trail affordance, is met by the palette entry at
+  `turnstone:src/panes/registry.rs:342-358`; **item 6, Barnes-Hut, is one
+  `add_force` line from live** — `BarnesHutRepulsion` is built and exported in
+  seiche, unwired at `crates/canvas/canvas/src/seiche_bridge.rs:58` (check
+  whether "tuning" is the real blocker); items 3 (relation-kind picker — every
+  `assert_selected_relation` caller passes `UserGrouped`), 4 (tessera score on
+  the chip — `Ledger::score` exists, no consumer) and 7 (Steward per-row
+  controls — the pane is a read-only downloads projection) are unbuilt with
+  their substrate present.
+- **Forme dead-submodule cleanup, never done**: `graphlet`, `lens`, `parity`,
+  `pressure`, `reconciliation` still exist at `crates/forme/forme/src/`. A
+  deletion; wants a yes.
+
+### From command_registry_configurable_menus (P1–P5 landed, deleted with meerkat)
+
+- **The registry-as-one-seam thesis and the S1–S3 searchable-menu design**,
+  with three corrections from the evidence pass: turnstone re-decided P2-rest
+  as flat palette rows, not a picker (`action.rs:554-566`); P4's configurable
+  menu is absent (the catalog is hardcoded, `palette.rs:1-6`); the thesis is
+  partly realized in turnstone's single `Action` catalog read by palette,
+  snapshot and automation alike.
+- **Orphaned persisted fields**: `PersonaSettings.menu_actions` and
+  `command_usage` at `crates/system/pandect/src/persona_settings_store.rs:39`
+  survive with a round-trip test and zero consumers in mere or turnstone.
+  Reconsume in turnstone or drop from the schema — a code ruling.
+
+### From object_card (P0 done, host deleted)
+
+- **The Widget / Preset / type-scoped-card model and P1–P4** — unimplemented
+  design. Widget 1's logic lives on in canvas (`SIZE_TIERS` at
+  `crates/canvas/canvas/src/lib.rs:182`, `node_size_tier`).
+
+### From layout_phase_split_probe (never built; genet)
+
+- **The parallel-cascade thesis has no mechanism left.** It rode Stylo's rayon
+  traversal (`genet:docs/2026-06-13_parallel_cascade_scope.md`, deferred), and
+  Stylo and `genet-layout` were retired in genet `55c05d11759`; buckram,
+  genet-livery and cambium carry no `rayon` and no timing. The root
+  `2026-06-21_substrate_parallelism_composition_brief.md` still presents the
+  thesis as live and needs a note. A measurement of the new stack is a new
+  genet plan.
+
+### From meerkat_render_perf (meerkat only)
+
+- **Three host-agnostic principles**: M2's dirty-gate rule, M3's settled-scene
+  per-key caching, M4's per-`(member, viewport)` scene set. M2 speaks directly
+  to the live turnstone perf item, the command-palette lag recorded in the
+  device resident consolidation plan on 2026-08-22.
+
+### From host_scroll_engine_adoption (never started; genet)
+
+- **P3's nested scroll-into-view gap** and **P4's "engine owns the scrollbar
+  thumb, host does not paint one"** — engine-side asks for genet's
+  `design_docs/`.
+
+### From tracing_reach_and_quality (T1, T1.5, T2-substrate landed; spine deleted)
+
+- **Lesson worth a workspace note**: a tracing layer must never panic, and
+  per-span extension writes must be idempotent.
+- **T3 in-tree engine and graph-kernel spans, T4 correlation, T5 registry
+  sampling plus error-chain capture** — re-scopable against turnstone and
+  djinn; the armillary and register-diagnostics halves survive (`spawn_named`
+  at `crates/armillary/src/actor.rs:128`).
+
+### From notification_subsystem (Phase 0 deleted; Phases 1–4 never built)
+
+- **The model**: the log is the Steward's, the toast is the chrome's, actions
+  ride the toast, continuous chips are not notifications; dedupe and
+  rate-limit before rollout. Turnstone has no notification concept (its
+  `AppEvent` stream is telemetry for the a11y and app arms).
+- **Dead code**: `ToastSpec` / `ToastSeverity` / `FrameViewModel.toasts` at
+  `crates/shell/chrome/src/frame_model.rs:404-416`, egui/iced-era, no producer,
+  no consumer. A code ruling.
+
+### From graph_object_roster_detail_cards (model migrated, views deleted)
+
+- The model lives on verbatim — `RosterTab`/`RosterSubject`/`GraphletSpec` in
+  `crates/domain/roster`, `EdgeCell`/`EdgeFamily` and `visible_relation_edges`
+  in canvas, the selectors in `crates/graph/graphlets`. Open: **sub-kind
+  selector editing**, the **P5 `GraphDefault < GraphViewOverride <
+  SelectionOverride` stack**, **true parallel edge instances**; the plan's
+  §Contradictions and §Pitfalls are durable design notes.
+
+### From kith_capability_sharing (gate cleared 2026-08-09, never started)
+
+- **Owed by name**: `crates/mesh/mesh/src/lease.rs:22-26` — "the kith plan,
+  which widens the ring beyond one owner, has to revisit it"; gemot is still
+  at the ring rule with capability gating a later milestone. **Re-scope onto
+  the shipped vocabulary** — `crates/capability` (`Cap::{Power,Scope,Facet}`),
+  gemot `typed_authorization.rs` (ruled 2026-07-24), personae delegation
+  certificates — keeping only the mesh-specific parts: claim validation in the
+  board fold, epoch revocation, the six done-conditions. Meadowcap-shaped
+  grants exist in `crates/servitor/src/grant.rs`; notochord may already
+  answer "was this chain valid at T".
+
+### From ui_polish (S1–S4 executed 2026-07-05, status never advanced)
+
+- **P5 canvas-text-scaling policy** — fixed labels versus zoom-scaled versus
+  hybrid, as a setting with an LOD floor — and **OQ-1**, whether Ctrl+zoom
+  reaches content. Turnstone-relevant.
+- **Finding 5's retained/fragment-keyed paint-list ask** belongs to genet.
+
+### From comms_gating_and_key_addressing (never built; successor differently shaped)
+
+- **Default-off comms as a product requirement** — belongs in the djinn family
+  resident services plan, since djinn owns network runtimes. Turnstone's
+  `src/place/` already delivers G1/G2's outcome by construction: every network
+  action is a user verb.
+- **G3–G6 untouched**: the refresh-ticket versus rotate-identity verb split;
+  the Windows/firewalld bind posture; the `mere/misfin/v1` ALPN; the
+  blueprint-over-protocol ruling and the LXMF finding (store-and-forward tier).
+
+### From signet_trust_plane (S0, S1 and the grant half landed elsewhere; premise reversed)
+
+- **OQ1** the trust-plane umbrella name; **OQ4** meadowcap versus Biscuit grant
+  format (with kith above); **S3** a first non-mere consumer, the one open
+  rung. OQ2 and OQ5 are answered in code (`personae::carry`,
+  `wallet_grant/epochs.rs`).
+
+### From irc_mod (moothold; design step only, 2026-05-05)
+
+- No open tail. Its shape remains the template for future T1 protocol mods
+  (Nostr, Matrix, ATproto).
+
 ## Progress
 
 - **2026-07-03** — created during the archive/reconcile pass; 11 completed plans
@@ -138,6 +301,12 @@ active tearout_gestures plan).
 - **2026-07-04** — second archive pass: 11 more completed plans moved to
   `archive_docs/2026-07-04_completed_plans/` (joining the concurrently-archived
   misfin promotion plan); their tails added in the 2026-07-04 section above.
+- **2026-09-02** — third archive pass, the first for *retired* rather than
+  completed plans: 17 moved to `archive_docs/2026-09-02_retired_plans/` on
+  Mark's ruling over the active-tree audit; tails in the 2026-09-02 section
+  above. Four of them are code rulings rather than doc tails: the orphaned
+  `PersonaSettings` fields, the forme submodules, `ToastSpec`, and the one-line
+  Barnes-Hut wire.
 
 ## From stickleback_replication_promotion (complete 2026-07-27, archived 2026-08-06)
 

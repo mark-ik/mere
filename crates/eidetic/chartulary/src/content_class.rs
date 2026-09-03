@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Content classes: node typing defined as data.
 //!
 //! A **content class** is the node-side analog of the edge
@@ -46,7 +52,7 @@ impl ClassId {
 
 /// A content class, defined as data: which facets a member must carry, and the
 /// schema reference for each (an opaque string; a host resolves it, e.g. to an
-/// eidetic schema-engram id).
+/// Eidetic schema-codicil id).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentClass {
     /// The class id.

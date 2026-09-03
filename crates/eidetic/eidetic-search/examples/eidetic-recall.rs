@@ -1,9 +1,12 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! eidetic-recall — the browsing-derivation rehearsal bin (plan slices E2-E4).
 //!
-//! Ingests real browser data into `BrowsingTrace` engrams in a fjall store,
+//! Ingests real browser data into `BrowsingTrace` codicils in a fjall store,
 //! mints the lexical trail index from them, and answers from the terminal:
 //! recall ("where did I read about X?"), the recent corridor, time windows,
 //! co-occurrence, and the fast-column reports. The proof surface for
@@ -27,7 +30,7 @@
 //! `embed-index` and `recall` load the sentence-embedding model from
 //! `--model-dir` (default `models/all-MiniLM-L6-v2`, the checkout the repo
 //! carries) on burn's CPU backend, or the wgpu GPU backend with
-//! `--backend wgpu`; the minted `VectorIndex` engram persists
+//! `--backend wgpu`; the minted `VectorIndex` codicil persists
 //! through eidetic's typed layer, and `recall` fuses the lexical and vector
 //! rankings by reciprocal rank (the E4 seam, both engines live).
 //!
@@ -86,7 +89,7 @@ use import::{
 const EMBED_BATCH: usize = 16;
 
 /// Events per stored trace segment when ingesting (large imports become a
-/// series of traces, not one giant engram).
+/// series of traces, not one giant codicil).
 const SEGMENT: usize = 512;
 
 fn page_of(seed: &ImportedPageSeed) -> PageRef {
@@ -225,7 +228,7 @@ fn load_provider(model_dir: &str, backend: &str) -> Result<Box<dyn EmbeddingProv
     Ok(provider)
 }
 
-/// The newest stored vector-index engram, if any.
+/// The newest stored vector-index codicil, if any.
 async fn load_vector_index(store: &mut FjallStore) -> Result<Option<VectorIndex<String>>, String> {
     let manifests = esp::embed::persistence::list_from_eidetic::<String>(store)
         .await
@@ -413,7 +416,7 @@ async fn run() -> Result<(), String> {
             .await
             .map_err(|e| format!("save vector index: {e}"))?;
             println!(
-                "embedded {} page(s) into a {}-dim vector index (engram {id})",
+                "embedded {} page(s) into a {}-dim vector index (codicil {id})",
                 pages.len(),
                 provider.dimensions()
             );

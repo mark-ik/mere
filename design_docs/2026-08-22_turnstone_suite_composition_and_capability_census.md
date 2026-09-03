@@ -89,6 +89,33 @@ work has separated:
 The old Graphshell receipts remain evidence for the resident and identity
 implementations. Their product ownership labels are superseded by this split.
 
+**Sharpened 2026-09-02 (Mark).** Graphshell is a *viewer and redirector*, not
+a surface that hosts content for interaction — with one exception, which is
+the point: the projection itself, of which Graphshell is the preeminent
+manipulator. Viewing is fully in scope: with Genet in the mix, Graphshell
+reads simple structured content through Workbench and Genet for free, and it
+would make no sense to exclude that. What it does not host is the browser
+proper — the engines and the taxonomy of a browser expressed through Mere,
+which are Turnstone's. It is fine to read your content in Graphshell. That is not nothing. Authenticated access to all the data of all
+the applications, used to customize projections to your own taste, is a
+**home-page graph of app graphs**; and that capability is meant to appear in
+every application that has its own app graph, not only in Graphshell. This is
+the family composition thesis's anti-shell test in its positive form: the
+manipulator is a platform capability whose receipt is a second host. One
+consequence it settles the same day: the Projection Editor, today a
+self-contained module in `ports/graphshell`, is **Scenograph** — the name the
+[boundary plan](mere_docs/implementation_strategy/2026-09-02_platform_boundary_and_repository_topology_plan.md)
+§1 and P2 free by dissolving the generic `scenograph` facade into Cambium and
+reserve "for the scene/projection editor product, built with Cambium rather
+than naming the scene runtime itself." Scenograph is a Mere product crate,
+Graphshell is its preeminent host, and it appears in every application with
+its own graph. The published `scenograph 0.0.3` is the facade; the name is
+re-pointed by a real publish of the editor, never by reservation alone. And
+Graphshell may compose Workbench for reading without becoming Turnstone, which remains the
+meerkat successor shell with the browser engines proper. Knot can use
+Workbench too (Mark, same day); Workbench is a component any of them takes,
+not a mark of which one is the shell.
+
 ### Djinn is currently a stale reservation
 
 `ports/djinn` currently describes itself as a possible public name for Knot.
@@ -377,6 +404,21 @@ Linux Foundation's VFX-format binding and will not free). The two-host
 receipt above stands as the founding gate, not a reason to defer founding
 the stub.
 
+**Re-ruled 2026-09-02 (Mark): Alembic goes inside Distillery as a core
+component crate.** The 2026-08-22 separation of the two *ports* is
+superseded; the distinction it drew survives as a component boundary inside
+Distillery — Distillery runs models, and its Alembic component runs work over
+them. What carries over unchanged: the `recall` feature as the embeddable
+memory half; the two-host receipt as the founding gate; and the package
+identity `mere-alembic` / `[lib] name = "alembic"`, which a move inside
+Distillery's tree does not need to change (package identity is not a reason to
+preserve the wrong boundary, per the boundary plan). Left open by the
+re-ruling: whether the authority half — Athanor, agent grants, runs,
+petitions, revocation — still lives with Djinn as the 08-22 text placed it, or
+follows the component into Distillery; and the mechanical shape of the move
+(`ports/alembic` into Distillery's tree, and the Distillery v0 plan gaining
+the component as a lane).
+
 ## 8. Capabilities that need exposure, not another port
 
 ### Surface contribution and handler choice
@@ -510,7 +552,7 @@ incumbent application.
    `fleece.workspace = true` to the stub, which nothing in it calls, and an
    unused dep on a versionless branch-git entry cannot be published at all.
    Ruled with Mark: drop the dep, since a reservation stub ships empty
-   `[dependencies]` as chatelaine and emblem do, and re-add it with a version
+   `[dependencies]` as chatelaine and insigne do, and re-add it with a version
    when alembic has distillation code that consumes an `Article`. The other
    three F5 consumers — crawl, eidetic-search, gazette — are untouched.)*
 

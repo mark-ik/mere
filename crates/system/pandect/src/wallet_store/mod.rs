@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Identity-level and persona-level wallet storage for the carry layer.
 //!
@@ -124,8 +127,9 @@ pub use paths::{
     remote_auth_wrapping_keys_path,
 };
 pub use secrets::{
-    identity_seed_locked_at_startup, load_identity_seed, relock_wallet_after_manual_unlock,
-    save_identity_seed, unlock_wallet_with_auto_os, wallet_local_secrets_locked,
+    identity_seed_locked_at_startup, load_identity_seed, load_identity_seed_read_only,
+    relock_wallet_after_manual_unlock, save_identity_seed, unlock_wallet_with_auto_os,
+    wallet_local_secrets_locked,
 };
 
 #[cfg(test)]

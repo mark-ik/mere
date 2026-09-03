@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Snapshot round-trip basics — graph, edges, edge types, semantic
 //! sub-kinds, favicon, thumbnail, UUID, duplicate-URL handling.
@@ -85,7 +88,7 @@ fn nested_graph_survives_snapshot_roundtrip() {
         &mut graph,
         apply::GraphDelta::SetNodeNested {
             key: bearer,
-            nested: Some(codicil::LogId::new("denizens/trail-keeper")),
+            nested: Some(muniment::LogId::new("denizens/trail-keeper")),
         },
     );
 

@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Layer 4 — browsing memory, the domain the crate was named for.
 //!
@@ -32,7 +35,7 @@ use crate::schema::{
 use crate::typed::{TypedPayload, list_typed, load_typed, save_typed};
 use crate::{Result, Store};
 
-/// Canonical bytes of the `BrowsingTrace` schema engram's payload
+/// Canonical bytes of the `BrowsingTrace` schema codicil's payload
 /// (mere-native format, like the model-manifest schema). Their BLAKE3 hash
 /// anchors [`BROWSING_TRACE_SCHEMA_REF`].
 const BROWSING_TRACE_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.BrowsingTrace/v1","body":{"version":1,"description":"A chronological segment of one owner's browsing traversals.","required":["owner","events","started_at_ms","ended_at_ms"],"fields":{"owner":{"type":"string"},"events":{"type":"array"},"started_at_ms":{"type":"integer"},"ended_at_ms":{"type":"integer"}}}}"#;
@@ -45,7 +48,7 @@ pub static BROWSING_TRACE_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
         )))
     });
 
-/// Idempotently seed the `BrowsingTrace` schema engram into a Store.
+/// Idempotently seed the `BrowsingTrace` schema codicil into a Store.
 /// Call once during init for any consumer that records or reads browsing
 /// memory (the [`crate::bootstrap`] pattern).
 pub async fn bootstrap_browsing_schema(store: &mut dyn Store) -> Result<()> {

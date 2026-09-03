@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! P2.1b verification: the 8-turn driver runs the DOM-shaped guest end to end
 //! against the `document-host` library backed by a live genet `ScriptedDom`
 //! (seeded `<body><p>Intro</p><p>Second</p></body>`), asserting the DOM mutates

@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Graph data structures for the spatial browser.
 //!
@@ -49,7 +52,7 @@ pub mod capture;
 /// Cross-graph node copy (tear-out fork): mints a node in this graph from a
 /// donor node in another graph, recording cross-graph derivation provenance.
 pub mod cross_graph;
-/// The edit spine: mere's captured-delta stream as a `codicil` log, replayed into
+/// The edit spine: mere's captured-delta stream as a muniment journal, replayed into
 /// the graph (the substrate's append-only-log primitive over mere's own edit
 /// vocabulary). See `graph/journal.rs`.
 pub mod journal;
@@ -121,8 +124,7 @@ pub use capture::{
 pub use journal::{AttributedDelta, GraphJournal, USER_AUTHOR, journal_capture_hook};
 pub use source_time::{SourceExtent, SourceTime};
 // The borne-graph identity type (`Node.nested`): part of the node's public
-// surface, re-exported so consumers name it without a direct codicil dep.
-pub use codicil::{LogId, Seq};
+// surface, re-exported so consumers name it without a direct muniment dep.
 pub use edge_data::{
     ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, REL_VOCAB,
     SemanticData, SemanticStatement, SemanticStatementSpec, StatementAssert, Traversal,
@@ -134,9 +136,10 @@ pub use edge_taxonomy::{
     NavigationTrigger, ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector,
     SemanticSubKind,
 };
+pub use muniment::{LogId, Seq};
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
-// layer beside the node/edge graph; quint reads them and evaluates.
+// layer beside the node/edge graph; numen reads them and evaluates.
 pub use numen::{
     COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgePath, EdgePathRule, Falloff, Field,
     FieldDefinition, FieldExtent, FieldId, FieldLifecycle, NodeSelector, ScalarField, VectorField,
@@ -287,7 +290,7 @@ pub struct Graph {
     /// Field-layer truth (field-system step 3, Phase 1): a parallel keyed store
     /// beside the node/edge petgraph. A coupling targets a *selector* over nodes,
     /// not a node→node edge, so fields/couplings cannot ride the petgraph; they
-    /// are content truth that `quint` reads and evaluates (derived).
+    /// are content truth that numen reads and evaluates (derived).
     pub(crate) fields: HashMap<FieldId, Field>,
     pub(crate) couplings: HashMap<CouplingId, Coupling>,
 

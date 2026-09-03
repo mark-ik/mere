@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! Field-layer mutators + queries on `Graph` (field-system step 3, Phase 1).
 //!
@@ -7,7 +10,7 @@
 //! the node/edge petgraph (see the struct fields on [`Graph`]). These mutators
 //! sit on the same single-write-path boundary as the node/edge mutators:
 //! trusted writers (reducer + persistence replay) call them; other paths route
-//! through reducer intents. `quint` reads this layer and evaluates it; nothing
+//! through reducer intents. numen reads this layer and evaluates it; nothing
 //! writes back here except an explicit author/pin action.
 
 use super::{Coupling, CouplingId, Field, FieldId, FieldLifecycle, Graph, NodeKey, NodeSelector};

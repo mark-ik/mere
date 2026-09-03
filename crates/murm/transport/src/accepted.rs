@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Honest acceptance context for inbound sessions.
 //!
 //! V4 of the 2026-07-24 low-power radio and managed-network plan
@@ -38,6 +44,10 @@ pub enum TransportKind {
     /// Noise over plain TCP: encrypted and mutually authenticated with no
     /// certificate machinery.
     Noise,
+    /// A browser-initiated WebRTC data channel. The carrier authenticates no
+    /// initiator; link identity instead comes from a host-signed
+    /// DTLS-fingerprint challenge, not from the transport itself.
+    WebRtc,
 }
 
 /// Opaque local identifier for the interface a session arrived on.
@@ -92,6 +102,17 @@ impl IngressContext {
             transport: TransportKind::Reticulum,
             interface: Some(interface),
             link: Some(link),
+        }
+    }
+
+    /// Context for a browser WebRTC data channel. WebRTC has no local
+    /// interface number, so that stays absent; the link identity comes from
+    /// the host-signed DTLS-fingerprint challenge shared by both ends.
+    pub fn webrtc(shared_link: [u8; 16]) -> Self {
+        Self {
+            transport: TransportKind::WebRtc,
+            interface: None,
+            link: Some(shared_link),
         }
     }
 }
@@ -185,5 +206,28 @@ mod tests {
         }
         assert_eq!(IngressContext::memory().transport, TransportKind::Memory);
         assert_eq!(IngressContext::p2panda().transport, TransportKind::P2panda);
+    }
+
+    #[test]
+    fn a_webrtc_session_reports_no_transport_authentication() {
+        let session = AcceptedSession::new(
+            (),
+            Alpn::new("mere/cable/v1"),
+            None,
+            IngressContext::webrtc([0x42; 16]),
+        );
+        assert!(
+            !session.is_transport_authenticated(),
+            "the WebRTC carrier authenticates no initiator"
+        );
+        assert_eq!(session.peer, None);
+    }
+
+    #[test]
+    fn webrtc_context_carries_the_link_and_no_interface() {
+        let ctx = IngressContext::webrtc([2u8; 16]);
+        assert_eq!(ctx.transport, TransportKind::WebRtc);
+        assert_eq!(ctx.interface, None);
+        assert_eq!(ctx.link, Some([2u8; 16]));
     }
 }

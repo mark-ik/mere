@@ -3,17 +3,28 @@
 **Date**: 2026-08-12  
 **Status**: D0 complete; D1 resident authority lifecycle complete. Its installed
 Personae/settings binding, configure/inspect binary, and read-only Cambium
-surface pass an exact-source focused Cargo gate; operational host composition,
-Turnstone registration, and the full workspace gate remain open. D2's
+surface pass an exact-source focused Cargo gate, and Turnstone admits the
+surface as the contribution seam's second provider; operational host
+composition is ruled, built, and receipted in §10 — the Djinn lane runs a
+real mesh job from stated policy on `SystemClock` and closes clean, and as of
+2026-09-02 reads physical memory on Windows, Linux and macOS alike, so its
+receipts are no longer Windows-gated — and
+the full workspace gate is closed green, leaving only the deferrals §10
+records. D2's
 configured browser embedding matrix, first exact decoder row, lease-bound
 remote MiniLM row, and native ModelSession/PEFT LoRA row complete. Cooperative
 cancellation, explicit browser device teardown, fresh-worker recovery, exact
 remote reclaim ordering, CubeCL allocator cleanup, and real adapter numerical
 parity are proven. Driver-level release is proven for the supported plain
 remote profile. The immutable TrainingCorpus and EvalReport artifact contract
-is ready for the first local trainer receipt. Browser-level physical GPU
-allocation release remains unobservable through current browser APIs rather
-than an actionable implementation gate.
+carries the first local trainer receipt, and the trainer resource that
+receipt decided now runs as a real mesh job: `esp.train.peft-lora/v1`
+trains from a stored corpus's training partition, publishes the adapter
+blobs, manifest, and evaluation report into the composed Eidetic store, and
+commits an integer-only receipt in which the adapter strictly beats the
+unchanged baseline. Browser-level physical GPU allocation release remains
+unobservable through current browser APIs rather than an actionable
+implementation gate.
 
 ## 1. Purpose
 
@@ -265,12 +276,29 @@ Mesh, and the host scheduler's authorities.
 
 ### Next forcing task
 
-Run one local, deterministic recall or ranking fixture that materializes a
-canonical `TrainingCorpus`, publishes an adapter manifest with that corpus as
-its provenance, then writes an `EvalReport` showing the adapter strictly beats
-the unchanged baseline on the same fixed cases. That receipt decides the first
-trainer resource input/output shape; no trainer framework is justified before
-it exists.
+Complete (2026-08-26): `crates/intel/esp/tests/trainer_forcing.rs` is the
+local, deterministic ranking fixture. The receipt decides the first trainer
+resource input/output shape:
+
+- **Inputs**: the base `ModelManifest` ref, its tokenizer blob ref, the
+  `TrainingCorpus` ref (only `training_source_engrams` may be read while
+  training), and explicit hyperparameters recorded in the manifest's
+  `training_method`. Nothing is defaulted or inferred from job facts.
+- **Outputs**: the adapter weight blob, the adapter config blob, the
+  `ModelAdapterManifest` whose `training_corpus_root` names the corpus, and
+  the `EvalReport` comparing baseline and adapter on the held-out partition
+  under one explicit metric.
+
+A trainer resource is a function from the input refs to the output refs, and
+the mesh job carrying it owns none of the artifact truth. That resource now
+exists as `esp.train.peft-lora/v1` (`ports/distillery/src/trainer.rs`, the
+`trainer` feature): the job's one input slot carries an explicit
+`TrainRequest`, its committed output is the integer-only `TrainReceipt`
+naming the published refs, and the artifacts land in the Eidetic store the
+embedder composed the resource over. Stronger models wait for a consumer;
+the Turnstone admission landed (Turnstone `9d3a7d8`), and operational
+host-policy composition plus the full workspace gate continue to track in
+§8.
 
 ### Progress
 
@@ -295,13 +323,799 @@ it exists.
   plus the provenance links already reserved by `ModelAdapterManifest`. No
   training, evaluation runtime, Mesh job, lease, checkpoint, or Distillery
   authority was added.
+- **2026-08-26, trainer forcing fixture**: The always-run ESP integration
+  receipt (`cargo test -p esp --features decoder-lora`, fixture
+  `trainer_forcing.rs`) stores the tiny synthetic llama triple through the
+  eidetic model corridor, saves twelve ranking cases as `OpaqueBlob` engrams,
+  and materializes a canonical disjoint `TrainingCorpus`. A deterministic
+  trainer — full-batch central finite differences with a backtracking line
+  search over rank-1 `v_proj` LoRA factors, now shared as
+  `esp::infer::decoder::train` — reads only the training partition back out
+  of the store and evaluates every loss through the real decoder forward
+  with the adapter loader's own delta composition. The published
+  adapter (PEFT-named safetensors, `adapter_config.json`, manifest with
+  `training_corpus_root` and explicit `training_method`) loads through the
+  real `PeftLoraAdapterLoader` alongside the unchanged baseline; on the six
+  held-out cases the expected-token rank moves from 7–8 to [3, 2, 2, 6, 2,
+  4], a 0/6-versus-4/6 `RankingAt{limit: 3}` receipt (training loss 3.4603 →
+  3.4581). The stored `EvalReport` round-trips, reports the strict
+  improvement, and passes `validate_for_adapter` against the stored manifest.
+  Verified from a clean `origin/main` worktree with an isolated target dir:
+  the fixture, the full esp `decoder-lora` suite, and package Clippy with
+  warnings denied.
 - **2026-08-26, read-only contributed surface**: The
   `distillery.installed.v1` descriptor and erased Cambium session consume the
   installed authority's profile/path projection and only resident facts the
   caller supplies from the real resident (`ResidentSettings` plus its latest
   `ResidentReceipt`). It opens no authority and has no mutable controls. This
-  is the second product half of the Knot contribution seam; a Turnstone
-  registration/admission receipt remains P0 work, along with generic AccessKit
-  projection and a full-shell build. The surface is included in the green
+  is the second product half of the Knot contribution seam; Turnstone
+  `9d3a7d8` now admits it through the shared registry with no
+  provider-specific renderer arm, generic AccessKit projection landed, and
+  the Turnstone full-shell binary builds from published sources. The surface is included in the green
   five-test exact-source Distillery library receipt; package Clippy also passes
   with warnings denied.
+- **2026-08-26, trainer resource**: The forcing receipt's shape now runs as a
+  real mesh job. The shared trainer moved into `esp::infer::decoder::train`
+  (the fixture consumes it and reproduces its receipt exactly), and
+  Distillery's new `trainer` feature registers `TrainerResource` at
+  `esp.train.peft-lora/v1` through the ordinary `ResourceRegistry` seam —
+  composed by its embedder over an Eidetic store and a host-selected device,
+  declared `VerificationClass::ProducerOnly` because no cross-device bit
+  receipt has been earned. The whole run executes on one blocking thread:
+  explicit-ref loads (base manifest, tokenizer cross-check, validated
+  corpus), training from the training partition only, evaluation of both
+  sessions through the real `PeftLoraAdapterLoader`, then publication, with
+  enforced equality between the manifest's content addresses and what the
+  store landed. The integration receipt posts one staged `TrainRequest`,
+  drives the host to `Step::Completed`, reads the committed integer-only
+  `TrainReceipt` from the board's output blob, and finds the adapter
+  manifest, blobs, and `EvalReport` in the composed store under exactly the
+  receipt's refs — baseline 0/6 versus adapter 4/6 at `RankingAt{3}`, the
+  fixture's numbers, via a mesh job. Verified from a clean `origin/main`
+  worktree: the receipt, both distillery feature sets' tests, the full esp
+  `decoder-lora` suite, and package Clippy with warnings denied.
+
+## 10. Operational host-policy composition (assessment)
+
+### What the gate actually is
+
+`InstalledAuthority::bind_resident` is the composition seam and it takes no
+defaults by design: the caller hands it a `MeshStore` with its retention
+policy, a `HostConfig`, and `ResidentSettings`. The runtime above it is
+finished — `ResidentAuthority::run_until` drives cadenced ticks, maintenance,
+receipts, and ordered shutdown, and three integration receipts exercise it.
+What is missing is not machinery. It is that nobody has ever supplied real
+values, and four of the values a product must supply have no real
+implementation anywhere in the workspace.
+
+Of `HostConfig`'s eight fields, `HostConfig::supervised` defaults three to
+something a product could ship — `ResourceRegistry::builtin()` as a floor to
+extend, `SystemClock`, and `LeasePolicy`'s 60s skew — and four to documented
+placeholders no product may ship:
+
+- `courier: NoCourier` — every job must already hold its own inputs.
+- `policy: DevicePolicy::permissive()` — lends everything, always, under any
+  condition; the only refusal it can express is `unsupervised()`, which
+  declines leased jobs entirely.
+- `conditions: ObservedConditions::spare()` — a fixed snapshot (idle, 100%
+  battery, on mains, 40°C, wired, 14:00) that observes nothing.
+- `facts: HostFacts::cpu(4096)` — a fixed 4 GiB, no-GPU claim regardless of
+  the machine, and the value `ResourceRequirements::satisfied_by` gates
+  every job against.
+
+`MeshRetentionPolicy` has no constructor, preset, or `Default` at all.
+
+### Findings
+
+**The device-sensing seam is unimplemented workspace-wide.** `ConditionSource`
+has exactly one implementation, `ObservedConditions`, a `Mutex`-backed manual
+stub whose module doc says a real host implements the trait "over whatever it
+can actually observe." Nothing in Mere reads battery, thermal, network class,
+or foreground activity from any operating system. `DevicePolicy` can express
+rich withholding rules — idle floors, battery floors unless on mains, thermal
+ceilings, network-class floors, bandwidth ceilings, quiet hours, concurrency
+caps, resource allow-lists, accepted checkpoint classes — and every one of
+them is inert without a source that senses. `conservative()` exists as a
+plausible preset (120s idle, 40% battery, 85°C, Wifi minimum, 22:00–08:00
+quiet hours, one job at a time); it is used by the remote probe binary and one
+test, and never by a product.
+
+**Delivery is proven but unadopted.** `TransportCourier::for_mesh` is
+constructed exactly once in the tree, in the mesh-host `blob_delivery`
+receipt that closed H1 with a disjoint-store two-host proof. No product path
+wires it; every `HostConfig` in the workspace keeps `NoCourier`. This matters
+only for a multi-device mesh: when the poster and the runner are the same
+process, inputs are always local and `NoCourier` is honest. A single-device
+operational resident therefore does not need the courier, and a multi-device
+one cannot work without it. Which of those the installed product is has never
+been decided.
+
+**Retention policy has no starting point.** Five call sites hand-build the
+identical literal: an arbitrary revision, `checkpoint_authority` set to the
+local mesh author's own key, `promised_floor: Forever`, `privacy_ceiling:
+UntilCheckpoint`, `terminal_job_payload: EraseTerminalAtCheckpoint`,
+`max_skew_ms: 0`. Nothing in the tree demonstrates a checkpoint authority
+distinct from the device running it, so the multi-device governance shape is
+unexercised as well as unwritten.
+
+**Nothing provisions a mesh identity.** `bind_resident` takes `mesh_id: [u8;
+32]` and every caller hardcodes a test constant. An installed product has no
+way to answer "which mesh is this?" — neither a derived personal mesh nor a
+join from an invitation exists.
+
+**The resident composition owner already exists, and it is not Distillery.**
+`ports/djinn` is the local-first desktop resident composition: it owns the
+selected Personae profile, the resident lifecycle, endpoint ownership, and an
+`OwnerSettings` record whose `Option<KnotResidentSettings>` means exactly
+"absent means this device host does not compose a resident Knot route" — the
+shape a Distillery block would take. But Djinn has never touched `mesh_host`;
+neither has Graphshell, Knot, or Signalman. Their personal-sync stack is
+Stickleback-based and unrelated. Adding Distillery to Djinn therefore
+introduces the mesh stack to the resident for the first time, and collides on
+two resident-wide singletons: Djinn's `ResidentBlobCustody` opens a collecting
+`BlobStore` and re-uses it "for every composed content lane," while
+Distillery's `ResidentStorage` opens its own; and `bind_resident` builds its
+own `P2pandaTransport` from the profile master key, the only production site
+in the workspace that builds one. D0's own finding — custody is not physical
+ownership, and mesh-scoped named tags let subsystems share one store — is the
+argument that sharing is the intended shape.
+
+**A device-scoped settings home already exists.** `pandect::device_settings_store`
+persists device-scoped, local-only settings under `<data-root>/device/`, with
+the doctrine device policy needs already stated: "Device policy must not
+follow a graph session or silently become persona truth." Distillery's own
+`InstalledSettings` is persona-scoped and `deny_unknown_fields`, which is the
+wrong scope for a device's lending policy.
+
+### The decisions, as ruled 2026-08-30
+
+- **O-1, the composition owner — Djinn lane now.** Djinn gains a Distillery
+  block in its `OwnerSettings`, absent by default. The mesh stack enters the
+  resident for the first time. Assemble corrected two parts of this: Djinn
+  owns no transport to share, so the lane keeps building its own, and
+  sharing the blob store costs more than expected, which reopens whether it
+  should be shared at all.
+- **O-2, device conditions — sensed where possible, stated where not, never
+  fabricated.** Djinn owns the `ConditionSource`, which is the right home for
+  a signal shared by rendering, inference, and embedding: it sits above all
+  three, so ESP's D1 concern about one consumer owning shared policy does not
+  apply. Sensing is in-stack — `netwatch` and `wmi` are already compiled into
+  the Distillery build through iroh, `windows` supplies `GetLastInputInfo`,
+  and `sysinfo` plus wgpu adapter enumeration supply real `HostFacts` — so
+  Windows needs no new dependency. Other platforms degrade to owner-stated
+  values rather than to the fixed snapshot `ObservedConditions::spare()`
+  reports today, which lends a device unconditionally by claiming facts it
+  never observed.
+- **O-3, mesh identity — a derived personal mesh.** The id derives from the
+  Personae profile under its own salt, the way the mesh author already does.
+  No invitation flow, and the identity is stable across reinstalls of the
+  same profile.
+- **O-4, reach — single-device first.** Poster and runner are the same
+  process, so `NoCourier` is truthful rather than a silent limitation,
+  checkpoint authority stays the local key, and no receipt claims a
+  multi-device governance shape that has never been exercised. Wiring
+  `TransportCourier::for_mesh` and answering the checkpoint-authority
+  question stay together, in a later slice.
+
+### What each decision leaves open
+
+The original options, for the record, were:
+
+- **O-1, the composition owner**: Distillery's own binary gains a `run` verb
+  over device-scoped settings; or Djinn adds a Distillery lane and supplies
+  the shared store and transport; or a library composition entry both can
+  use, with Distillery's binary as its first consumer.
+- **O-2, device conditions**: owner-stated static conditions recorded in
+  settings (honest, small, states rather than invents); or a real OS-sensing
+  `ConditionSource` (a cross-platform project of its own, and per the ESP
+  consolidation plan's D1 a decision shared by render, inference, and
+  embedding rather than Distillery's to make); or ship `unsupervised()` and
+  decline leased work.
+- **O-3, mesh identity**: a personal mesh derived from the profile; an
+  explicit owner-supplied id in settings; or real provisioning with
+  create/join.
+- **O-4, reach**: single-device (keep `NoCourier`) or multi-device (wire
+  `TransportCourier::for_mesh`, and face the checkpoint-authority question
+  that no receipt has exercised).
+
+### Assemble, before any of this is built
+
+The rulings name three things whose shape has to be verified in the live
+tree before implementation, not assumed: Djinn's actual injection points for
+a fourth resident lane and whether its blob custody hands out what
+`ResidentStorage` would need; whether `ResidentStorage` can adopt an injected
+store without loosening the cadence agreement `ResidentAuthority::new`
+enforces; and the concrete `wmi`/`netwatch` query surfaces for battery,
+thermal, and interface class at the versions already in the build. A gap
+found there returns here rather than being patched over in the implementation.
+
+### Assemble, run 2026-08-30
+
+The three verifications ran. Two returned clean with named change sites; the
+third invalidated part of O-1 and raised decisions that belong back with the
+ruling rather than in the implementation.
+
+**Storage adoption is feasible, and the cadence invariant must not be
+loosened.** `ResidentStorage` needs a constructor that adopts an existing
+`Arc<BlobStore>` and builds the same `TransportBlobSpace::for_mesh` over it,
+so mesh-scoped tags keep lanes disjoint inside one store. Shutdown is the
+hazard: `ResidentStorage::shutdown` calls `BlobStore::shutdown`, which syncs
+and closes the whole iroh-blobs store, and running that on a shared store
+would close it under Djinn's other lanes. An adopted storage must drop its
+space handle and stop there. The `blob_gc_every` agreement in
+`ResidentAuthority::new` stays exactly as written: the field is a fact about
+the store rather than a Distillery preference, so Djinn states its own
+`gc_interval_seconds` and the assertion catches a divergence, which is the
+same stated-truth-asserted-at-composition shape the surface contract's F-1
+ruling established. A fourth site nobody had named:
+`DistilleryInstalledSnapshotV1::from_installed` derives `blob_store_root`
+from `DistilleryPaths` rather than from the store in use, so under an
+adopted store the Turnstone pane would report a path the bytes do not live
+at. `ResidentAuthority::storage()` and `ResidentStorage::root()` already
+exist to correct it.
+
+**The mesh identity derives with no new primitive.** Personae exposes only
+`derive_keypair(salt)`, which is enough: derive under a product-owned salt
+and take the public key as the 32-byte mesh id, exactly as the mesh author
+already derives. No `derive_bytes` addition to the identity crate.
+
+**Djinn owns no transport.** It never constructs a `P2pandaTransport`, iroh
+endpoint, or router anywhere; the Knot lane hands a signing seed and relay
+URLs to `knot-editor`, which builds its own transport internally, and
+Distillery's `bind_resident` does the same from the profile master key. O-1
+as recorded said Djinn supplies the shared blob custody and a transport. It
+cannot supply a transport, and the Distillery lane keeps building its own.
+Djinn supplies identity, settings, and policy facts.
+
+**Sharing the blob store costs more than the assessment predicted.** Three
+findings, none visible before reading the lane:
+
+- Djinn's `ResidentBlobCustody::shutdown` unwraps the `Arc<BlobStore>` to
+  close it. A Distillery lane holding a clone makes Djinn's own shutdown
+  fail, so ownership-aware teardown is not a nicety; the shared path does
+  not work without it.
+- The two custody conventions do not reconcile. Djinn scopes bytes with
+  `BlobScope` and `BlobLease` under a `mere/blob-lease/v1` tag prefix and
+  gates reads through `BlobReadAuthorizer`; Distillery tags with a
+  hand-rolled `mere/mesh/blob/v1` prefix through `TransportBlobSpace` and
+  never touches the authorizer. They cannot collide, but mesh bytes in a
+  shared store would sit outside Djinn's read authorization entirely.
+- `DjinnResident` is not generic and `ResidentAuthority<B>` is, so the lane
+  forces either one concrete backend for the whole resident or a generic
+  parameter threaded through Djinn.
+
+**Djinn's run loop has no shutdown signal.** `ResidentAuthority::run_until`
+requires a future that resolves when it is time to stop; Djinn's loop ends
+today only when one of its three broker futures returns. Knot needs no such
+signal because its sync work runs in `KnotSyncHost`'s own background tasks
+and the loop only ticks a settings refresh. A Distillery lane is the first
+owning loop in that process and must be a fourth `select!` arm, so a
+cancellation signal has to be added to `run()` before it can stop cleanly on
+the way to `resident.shutdown()`.
+
+**Sensing is reachable, but not the way O-2 recorded it.** `netwatch`
+exposes only `is_up`, `name`, and `addrs` on an interface; it discards the
+adapter type its own `netdev` dependency carries, and its `is_expensive`
+field is hardcoded false on every platform, so it can answer neither network
+class nor metered. `wmi` is `!Send` and `!Sync` by construction, initializes
+COM per-thread, and `netwatch` itself routes every WMI call through
+`spawn_blocking` because COM can deadlock on a tokio worker thread.
+
+What actually covers the four signals is the `windows` crate, already in the
+build at 0.62.2, with features added to our own dependency on it, which is
+additive under feature unification and needs no version change:
+
+| Signal | Source | COM |
+|---|---|---|
+| Battery and mains | `GetSystemPowerStatus` | no |
+| Idle | `GetLastInputInfo` with `GetTickCount64` | no |
+| Network class | `GetAdaptersAddresses`, reading `IfType` | no |
+| Metered | WinRT `NetworkInformation` connection cost | yes |
+| Thermal | `MSAcpi_ThermalZoneTemperature` over `wmi` | yes |
+
+Thermal is the only signal that needs `wmi`, and it is the least dependable:
+the ACPI class is frequently absent, stale, or access-restricted on modern
+laptops, and no first-party Windows API replaces it.
+
+**Never fabricating needs a mechanism, because `DeviceConditions` cannot say
+unknown.** Every field is a plain value, `thermal_c: u16` and
+`battery_pct: u8` among them, so a sensor must supply a number even for a
+signal it cannot read. The distinction that survives is between a value
+nobody asserted and a value the owner did: `ObservedConditions::spare()`
+inventing 40 degrees and full battery is fabrication, while an owner-stated
+fallback is a claim someone made. The rule that makes O-2 checkable rather
+than aspirational is that a policy rule may be active only when its signal
+is sensed or explicitly stated, and composition refuses a policy whose
+active rules rest on neither. A device that cannot read thermals therefore
+disables the thermal ceiling rather than feeding an invented temperature
+into a live check.
+
+### The storage layers, and where artifacts live
+
+The first pass through Assemble asked only about physical job bytes and
+missed the layer that matters most for what Distillery produces. Three
+layers are in play, and they are not alternatives:
+
+- `transport::BlobStore` holds physical content-addressed bytes. Mesh job
+  inputs and outputs live here, custody-tagged and released by maintenance.
+- `muniment::Backend` (redb) holds operations and engrams. A running Djinn
+  already opens several distinct ones: one per personal graph, plus Knot's
+  sync store. Distillery's `MeshStore` is another. There is no single
+  canonical persona store today; it is per-lane.
+- Eidetic is not a store. It is the typed-payload and schema layer over any
+  muniment `Backend`, so engrams live in whichever store a caller hands it.
+
+`TrainerResource` takes an Eidetic store handle separately from the mesh
+blob space, and that is where everything the port produces lands: the
+corpus, the adapter manifest, the evaluation report, and the adapter
+weights as opaque blob engrams. Job bytes and artifacts have different
+lifetimes — one is collectable, the other is meant to be found later — so
+they are separate stores by construction, and the artifact store is the
+product decision.
+
+**Ruled 2026-08-30.** Artifacts live in a persona-scoped model library: a
+muniment store under the persona's data root, distinct from both the
+personal graph and any one mesh. Adapters outlive the mesh that trained
+them and stay findable across lanes, without coupling Distillery's writes
+to the personal-graph replica's lifecycle. A bridge that also publishes an
+adapter as a graph engram, so it travels the same privacy, provenance, and
+trust envelope as any other engram, remains available later and is not
+required now.
+
+**Job bytes stay Distillery's own.** Sharing Djinn's `transport::BlobStore`
+buys little for ephemeral mesh-tagged bytes and costs the `Arc` unwrap that
+breaks Djinn's shutdown plus the read-authorizer bypass. Djinn still owns
+identity, settings, lifecycle, and shutdown ordering.
+
+**The backend generic resolves concretely.** Both stores are `RedbBackend`
+— the mesh operation log at `mesh.redb`, the model library at its own file
+— so `DjinnResident` stays non-generic and no other lane is disturbed.
+
+**Thermal is out of the first sensor.** Battery, idle, and network class
+all come from the `windows` crate without COM; deferring thermal keeps COM
+out of the resident entirely, and by the composition rule above a device
+that does not sense thermals runs with the thermal ceiling disabled rather
+than with an invented temperature.
+
+### Action, landed 2026-09-01
+
+The composition runs. Three lanes, each gated before the next:
+
+- **Device lending settings** (pandect): `DeviceSettings` gained an optional
+  `mesh_lending` block — the lending rules plus `stated` condition fallbacks,
+  every field an owner statement with no `Default`, validated on load and
+  save, old files still loading. Pandect stays mesh-free: the block is plain
+  data and the consumer converts it.
+- **The sensor** (`djinn::conditions`): `DeviceConditionSensor` implements
+  `ConditionSource` over plain Win32 calls — `GetLastInputInfo`,
+  `GetSystemPowerStatus`, `GetAdaptersAddresses` — with no COM anywhere.
+  Every signal carries a `SignalProvenance` (sensed, stated, absent); absent
+  signals report the fail-closed value whose direction a test verifies
+  against each policy rule, and `validate_policy_coverage` refuses, at
+  composition time, a policy whose enabled rules rest on absent signals. A
+  positive-control assertion keeps the Win32 layer honest: on Windows at
+  least one of idle, battery, or network must come back sensed.
+- **The lane** (`djinn::resident_distillery`): the fourth resident lane,
+  absent by default in `OwnerSettings`. Its open adopts or refuses
+  Distillery's persisted profile against Djinn's resolved one, derives the
+  personal mesh id under `DISTILLERY_MESH_SALT`, refuses an enabled lane on
+  a device with no lending posture, converts the posture, validates
+  coverage, opens the redb mesh store under the owner's retention revision
+  with the derived mesh author as checkpoint authority, reads real memory
+  through `GlobalMemoryStatusEx` (refusing on a build that cannot; two more
+  readings were added on 2026-09-02, see below), and
+  binds through the ordinary `bind_resident` — `SystemClock`, `NoCourier`
+  (truthful for the single-device ruling), builtin registry, no
+  `permissive()` anywhere. Djinn's run loop gained the cancellation signal
+  `run_until` needed and drives the lane as a fourth `select!` arm.
+
+The receipt (`ports/djinn/tests/distillery_lane.rs`) starts the resident
+from explicit settings on `SystemClock`, posts `mesh.blake3/v1` as the
+lane's own derived author, observes `Claimed`, `Started`, `Completed`
+through the run loop's receipts, stops through the shutdown signal, and
+closes clean in the ordered teardown, asserting the installed policy equals
+the converted settings and is not `permissive()`. Companion receipts prove
+the three refusals: no lending posture, an enabled thermal rule with no
+stated temperature, and an absent lane composing no works at all.
+
+Two of the deferrals recorded here closed on 2026-09-01. `MeshLendingSettings`
+gained required `allowed_resources` and `accepted_checkpoints` fields — a
+written `[]` is the owner stating no restriction, while omission is refused
+— and the lane converts them through the real `ResourceId` grammar and
+`CheckpointClass` names, refusing by name; the receipt states
+`allowed_resources: ["mesh.blake3/v1"]` and asserts it reaches the installed
+host policy. And the trainer now runs in the resident behind djinn's
+`trainer` feature: `DistilleryLaneSettings.trainer` is a required
+`Option<TrainerLaneSettings>` whose `null` composes no trainer, whose
+`device` accepted only `cpu` (widened to `cpu` or `gpu` on 2026-09-02, see
+below), and whose presence on a build without the feature refuses `open`
+rather than composing a works that cannot do what its settings claim. Making it
+required exposed that `maintenance_every_ms`, documented as "`null` is a
+statement too", had never actually been required: serde supplies `None`
+for a missing `Option` unless a `deserialize_with` removes that default.
+Both nullable fields of the lane now name the same `required_option`
+deserializer, ruled consistent on 2026-09-01 while no on-disk `distillery`
+block exists outside test fixtures, so an omitted field fails the load
+rather than passing as "never". The persona model
+library is a `RedbBackend` at `<data-root>/models/<profile>/library.redb`
+(overridable), deliberately neither the personal-graph store nor under the
+mesh root, so adapters outlive any one mesh. The trainer receipt
+(`ports/djinn/tests/distillery_trainer.rs`) authors the synthetic base
+model and corpus into that library through the lane, posts
+`esp.train.peft-lora/v1` under a posture that permits exactly that
+resource, observes completion on `SystemClock`, reads the committed
+`TrainReceipt` from the board, and finds the adapter manifest and
+`EvalReport` in the library under the receipt's refs — baseline
+0/6 versus adapter 4/6, the forcing fixture's numbers,
+now through the desktop resident.
+
+Remaining deferrals, recorded rather than defaulted: thermal is stated-only,
+now on evidence rather than on convenience (see below). Bandwidth, the
+off-Windows `local_hour` and the CPU-only trainer were all closed on
+2026-09-02. The trainer now runs on this machine's discrete GPU behind
+djinn's `trainer-gpu` feature, and `HostFacts.gpu` follows the resource that
+was composed rather than the hardware present — which matters because of what
+sits underneath: cubecl's `select_from_adapter_list`, asked for
+`DiscreteGpu(0)` where no discrete adapter exists, **falls through to the
+unclassified `DeviceType::Other` list at the same index** and returns whatever
+is there, panicking only when that list is short too. `Device::wgpu` cannot
+fail, so nothing on the burn side ever reports the substitution. The answer is
+an esp probe that mirrors cubecl's selection and reports the adapter *before*
+a device is constructed, so the lane refuses rather than trains on hardware
+nobody named (see below).
+
+### The full workspace gate, closed 2026-09-01
+
+The gate every earlier receipt deferred to has been run and is green. It had
+never been reached before: earlier attempts spent their bounded runs in
+dependency resolution without arriving at `rustc`, so every Distillery
+receipt to date was an isolated exact-source harness.
+
+`cargo check --workspace --all-targets` now finishes clean from an empty
+target directory across all 101 members. Two breaks stood in the way, and
+neither is visible to a per-package build:
+
+- Distillery was the only crate restating Genet revisions by hand rather
+  than following the workspace — for `genet-host-api` and for the
+  `genet-scripted-dom` and `layout-dom-api` dev-dependencies. Four
+  alignment commits had dragged those lines along; the move to `eff0cb6d`
+  missed them, so Distillery compiled against one `genet-host-api` while
+  Cambium carried another, and its own `SurfaceDescriptor` would not
+  compare with itself. All three now follow the workspace, which is what
+  `knot-document` already does.
+- The `mesh_lending` field added to pandect's `DeviceSettings` reached
+  three struct literals in Knot that a `-p pandect` run never compiles.
+
+`cargo test --workspace --no-fail-fast` then ran 264 suites: **3664 passed,
+1 failed**. The single failure is
+`graphshell::native::personal_sync_host::tests::a_revocation_on_one_device_reaches_the_others`,
+a multi-device replication test that polls with sleeps; it failed once
+under a saturated machine and passes three times out of three in
+isolation. It is load-flaky rather than a regression, and it sits in a
+crate neither fix touches.
+
+Two environment facts are worth recording, because they cost more time than
+the code did. Running the full test build at cargo's default parallelism
+(16 jobs on this 16-core, 31 GB machine) crashes `rustc` with
+`STATUS_STACK_BUFFER_OVERRUN` while linking large debug binaries, and a
+crashed compile leaves truncated rlibs that Cargo then considers fresh, so
+later runs fail with unresolved externals that look like real link errors.
+Recovering required wiping the target directory rather than cleaning
+individual packages, since dependents keep referencing the old metadata
+hash. The passing run used `-j 4` and `CARGO_PROFILE_DEV_DEBUG=line-tables-only`
+by environment, changing no committed profile.
+
+### Two condition deferrals closed, and thermal recorded as evidence, 2026-09-02
+
+**Bandwidth is sensed.** `bandwidth_in_use_kbps` now comes from the adapter
+byte counters — `GetAdaptersAddresses` for the adapter walk, `GetIfEntry2`
+per adapter for `InOctets + OutOctets` — summed over exactly the adapters
+`network()` already counts as uplinks (operationally up, not loopback, not a
+tunnel, holding a gateway), because a rate summed over a different set than
+the class describes would be two answers about two machines. Still no COM.
+
+A rate needs two readings, so the sensor keeps the previous counter total and
+its timestamp under one lock, and computes `delta_octets * 8 / elapsed_ms`
+once at least 100 ms separate them; a total that went *down* (counter wrap,
+adapter reset) is a baseline that no longer applies rather than a negative
+rate, so that pass reports no new rate and re-baselines. A sensed rate beats
+the owner's stated number outright.
+
+The provenance rule is the part worth recording. `bandwidth` is `Sensed`
+whenever the counters were *readable* on that pass, including the very first
+reading in `DeviceConditionSensor::new`, where no interval exists yet and the
+value falls back to the stated number or to `ABSENT_BANDWIDTH_IN_USE_KBPS`.
+That is honest because of what the provenance is for:
+`validate_policy_coverage` runs at composition and asks whether this device
+can read its link counters at all, which readability answers, and the first
+reading never reaches a policy — the host takes conditions on its first
+supervisor tick, one `tick_every_ms` later, by which time a real interval
+exists. Unreadable counters still fall through to stated, then to `Absent`,
+and a bandwidth rule on such a device is still refused by name. Off Windows
+the counters are not read at all, so bandwidth stays stated-only there.
+
+Measured on this laptop while writing the tests: 8,347,331,657 cumulative
+octets across the up-and-gatewayed adapters, a 19,073-octet delta over 200 ms,
+which the sensor reported as 585 kbps, `Sensed`. The counters move.
+
+**The off-Windows local hour is real.** `sensed::local_hour` on
+`cfg(not(windows))` returned the *UTC* hour and the module docs carried it as
+a known approximation, which made `DevicePolicy::quiet_hours` untrustworthy
+anywhere but Windows. It is now `chrono::Local::now().hour()`, behind a
+`[target.'cfg(not(windows))'.dependencies]` entry on chrono 0.4.45 — already
+in the graph — with default features off and `clock` on. chrono rather than
+`time`: `time`'s local-offset lookup refuses in a multi-threaded process on
+Unix, and the resident is one. Windows keeps `GetLocalTime`.
+
+**Thermal stays an owner statement, and now says why.** The only COM-free
+route to a package temperature is the `Thermal Zone Information`
+performance-counter set through PDH, which does read without elevation. On
+the development laptop (2026-09-02) `\_TZ.TZ01` reported a constant 368.2 K
+(`High Precision` 3682) through idle, an 89% CPU load burst, and the
+cool-down after it, with `Throttle Reasons` 0 throughout: the ACPI zone on
+this hardware is a static value, not a sensor.
+`MSAcpi_ThermalZoneTemperature` over WMI is access-denied without elevation
+and needs a COM apartment besides. A live temperature exists only through
+vendor tools — `nvidia-smi` read the GPU at 75 °C — which are outside this
+stack. A reading the policy would believe as sensed has to move, so thermal
+remains a stated signal until hardware with a live ACPI zone is in hand. This
+is a finding, not a deferral: the module docs carry the same paragraph so the
+next reader does not re-run the experiment.
+
+Gates: `cargo fmt -p djinn` clean, `cargo clippy -p djinn --all-targets`
+adding no finding in `conditions.rs` (djinn's four pre-existing findings are
+in `personal_sync.rs` and `resident_knot.rs`), `cargo test -p djinn` 65 lib
+tests and 5 lane receipts passing. `cargo check -p djinn --target
+x86_64-unknown-linux-gnu` cannot run on this machine: the target's std is
+installed but `ring`'s build script needs an `x86_64-linux-gnu-gcc` that is
+not, so the changed non-Windows module was type-checked for that target in
+isolation instead, against the same chrono feature set. The real receipt
+came the same day from the Fedora ThinkPad (`thinkpad-l14-f`, Rust 1.97.1):
+`cargo check -p djinn` green natively, `local_hour` reading 04 EDT where the
+old path would have said 08, and the `conditions` and `resident_distillery`
+unit tests passing — after one Windows-shaped test was corrected. The
+thermal-limit composition test stated only a temperature and expected clean
+coverage, which holds on Windows because idle, battery and network are
+sensed there, and fails anywhere nothing is sensed. It now states every
+fallback the policy's other rules rest on, so the only question it asks is
+thermal on every platform. A green Windows build proved nothing about that
+test until a Linux box ran it.
+
+### The trainer on the discrete GPU, and the substitution it must not fall for, 2026-09-02
+
+Ruled by the owner the same day: a `trainer-gpu` feature and a `"gpu"` device
+word, composing `Device::wgpu(DiscreteGpu(0))`, with `HostFacts.gpu` true only
+when that resource registered and a receipt that runs the forcing fixture on
+the RTX 4060 and asserts the adapter was *acquired*, not fallen back from.
+The last clause is the whole design, and this is why.
+
+**The trap.** `Device::wgpu(kind)` is infallible: it names a device *kind*, and
+the adapter behind that kind is not resolved until the first kernel launches,
+inside cubecl. cubecl's `select_from_adapter_list` (cubecl-wgpu 0.11.0-pre.2,
+`runtime.rs`) partitions the enumerated adapters into two lists — those whose
+`wgpu::DeviceType` matches the requested class, and those reporting
+`DeviceType::Other` — and when the requested list is shorter than the index it
+**takes from the `Other` list at that index instead**, panicking only when
+that list is short too. Nothing reports the substitution. A resident that
+asked for a discrete GPU, got something else, and then advertised
+`HostFacts.gpu` to the ring would be lying in the one direction the mesh
+cannot check, and a receipt that only asserted "the job completed with
+`device: gpu`" would pass on exactly that machine. This laptop has two
+adapters — an NVIDIA GeForce RTX 4060 Laptop GPU (discrete) and an AMD Radeon
+780M (integrated) — so "a GPU ran it" is not the same claim as "the discrete
+GPU ran it".
+
+**The answer: ask before composing.** `esp::infer::decoder::gpu_probe`
+(behind `decoder-wgpu`) reports the adapter the wgpu runtime *would* bind, as
+plain data — `GpuAdapterFacts { name, backend, device_type,
+matched_requested_class }` over a `GpuDeviceType` of its own rather than
+`wgpu`'s. It mirrors cubecl exactly: the same `AutoGraphicsApi` backend
+(Vulkan off macOS), the same `enumerate_adapters` over that backend alone, the
+same device-type filter, the same index, and the same
+`CUBECL_WGPU_DEFAULT_DEVICE` rule — which is asymmetric and worth recording:
+cubecl consults that variable **only** for `DefaultDevice`/`BestAvailable`, and
+an explicit `DiscreteGpu(0)` ignores it. The probe copies that rather than
+improving on it, with one deliberate divergence: a value the variable carries
+that cubecl cannot parse is refused by name instead of logged and dropped.
+It creates an instance and enumerates; it never requests a device or a queue,
+so the probe binds nothing. The substitution case is *reported*, not refused —
+`matched_requested_class: false` — because whether an unclassified adapter is
+acceptable is the caller's policy. esp is where this lives because esp already
+owns the burn boundary; it uses the workspace's single `wgpu` 30.0.1, the same
+one cubecl-wgpu resolves to, which is what makes the answer an answer about
+the adapter cubecl would really bind rather than a parallel enumeration.
+
+Because it is a mirror, it can drift. That is why the receipt runs real work
+on the reported adapter rather than trusting the report.
+
+**The three layers, each refusing in its own vocabulary.**
+
+- `distillery::discrete_gpu_trainer_device()` (feature `trainer-gpu =
+  ["trainer", "esp/decoder-wgpu"]`) probes, refuses anything that is not
+  `Discrete` *and* matched out of the discrete class, and only then constructs
+  the device — returning the facts alongside it so nothing downstream has to
+  take the composition on faith.
+- `djinn`'s `TrainerLaneSettings::device` now accepts `"cpu"` and `"gpu"`
+  syntactically and nothing else. The check is deliberately syntactic: a
+  settings file is validated on whatever machine reads it, so refusing `"gpu"`
+  there would make the same file valid or invalid depending on what was
+  plugged in.
+- `resident_distillery::open` answers the two real questions. A `"gpu"` lane on
+  a build without `trainer-gpu` is refused by name, at the same point in the
+  flow as the existing trainer-without-feature refusal, naming the feature as
+  the way out. With the feature, it calls the helper, refuses composition on
+  its error naming what was found instead, logs the adapter and backend at
+  `info`, registers `TrainerResource` on the returned device, and exposes the
+  facts as `ResidentDistillery::trainer_adapter()`.
+
+**`host_facts` now takes the composed `gpu: bool`.** Its doc says the rule
+outright: the fact follows the composed resource, never hardware presence. A
+machine with an RTX in it and a CPU trainer on top still advertises `false`,
+because `HostFacts` is an offer of work this device will *run*. `mesh-host`'s
+`Host` gained a `facts()` accessor beside `policy()`, for the same reason
+`policy()` exists — a composition that claims it reached the supervisor has to
+be checkable there.
+
+**Measured on this machine.** The probe reports `NVIDIA GeForce RTX 4060
+Laptop GPU (vulkan, discrete adapter)`; `DiscreteGpu(99)` is a clean refusal
+naming the index, not a panic. The new receipt
+`ports/djinn/tests/distillery_trainer_gpu.rs` composes the lane with `device:
+"gpu"`, asserts the adapter facts are `Discrete` and matched, asserts
+`HostFacts.gpu == true` on the *installed* host, and drives the same synthetic
+llama fixture through the resident on `SystemClock` to
+Claimed → Started → Completed. (That receipt gained a second branch on
+2026-09-02, for machines with no discrete adapter — see below; what is
+described here is now its discrete branch.) **Baseline 0/6, adapter 4/6 at
+`RankingAt{3}`, 124.0 s.** The CPU receipt on the identical fixture the same day: baseline
+0/6, adapter 4/6, 16.6 s. Two things worth keeping. The tallies match here but
+the receipt asserts only *strict improvement* and prints what it measured —
+f32 reductions on a GPU need not reproduce ndarray's numbers bit for bit, and
+pinning the figures would make the receipt a test about floating-point luck.
+And the GPU run is **seven and a half times slower**, which is not a defect:
+the fixture is a two-layer, eight-hidden, 32-token model trained by 40
+finite-difference steps, so per-step launch and shader-compilation overhead
+dominates entirely. This receipt proves the lane is honest about its hardware.
+It says nothing about the GPU being the faster place to train, and a model
+large enough to answer that question is its own slice.
+
+Gates: `cargo fmt` clean on the four touched crates (the workspace-wide
+`--check` carries pre-existing diffs in `luggage`, `conatus` and
+`graphshell-client` that this work does not touch); `cargo clippy -p esp
+--features decoder-wgpu,decoder-lora --all-targets` adding no finding in esp's
+own source; `cargo clippy -p djinn --all-targets --features trainer-gpu`
+adding none beyond djinn's four pre-existing ones in `personal_sync.rs` and
+`resident_knot.rs`. Tests: esp `infer::decoder` 46 passed; `distillery
+--features trainer-gpu` 6 + 1 + 1 + 2 + 1 passed; `djinn` default 65 lib + 5
+lane; `--features trainer` 65 lib + 4 lane + 2 CPU-trainer (the second being
+the `cfg(not(feature = "trainer-gpu"))` refusal); `--features trainer-gpu` 65
+lib + 4 lane + 1 CPU-trainer + 1 GPU-trainer. The refusal receipt moved:
+`a_gpu_trainer_is_refused_by_name_before_anything_is_opened` was a settings
+assertion and is now
+`a_build_with_no_gpu_trainer_refuses_a_lane_that_states_one`, which opens a
+resident and reads the composition's refusal, because that is where the
+question moved.
+
+### The lane composes on three operating systems, 2026-09-02
+
+Ruled by the owner the same day. Every Distillery lane receipt carried
+`cfg(windows)` — not because anything in the lane was Windows-shaped, but
+because `total_memory_mib` returned `None` off Windows and `host_facts`
+rightly refuses to advertise a capacity it never measured. One unread number
+was gating three receipts, so the whole lane went unproven on the two
+platforms it was about to be run on. Read the number instead.
+
+**Three readings, one per platform.** `GlobalMemoryStatusEx` on Windows, as
+before. On Linux, the `MemTotal:` line of `/proc/meminfo`, in `std` alone: the
+value is kibibytes despite the kernel writing `kB`, integer-divided by 1024,
+and anything unexpected — no `/proc`, no such line, an unparseable value — is
+`None` rather than a guess. On macOS, `sysctlbyname("hw.memsize")` through
+`libc` 0.2 under a `[target.'cfg(target_os = "macos")'.dependencies]` entry,
+already in the workspace graph; bytes to MiB, saturating into `u32`, a
+non-zero return or a short reply is `None`. `libc` rather than spawning
+`sysctl(8)`, because a resident should not fork a process to learn its own
+memory size. Every other target still reports nothing and still refuses, in
+the same voice as before: a port that wants this lane supplies a real reading
+first.
+
+**The receipts follow the readings.** `distillery_lane.rs`'s whole-run receipt
+lost its `cfg(windows)`; `distillery_trainer.rs` went from `cfg(all(feature =
+"trainer", windows))` to `cfg(feature = "trainer")`, and
+`distillery_trainer_gpu.rs` likewise. Nothing else in those files was
+platform-shaped — the model library path is `Path::join` under a `tempfile`
+root, and the CPU training is `ndarray`.
+
+What makes them runnable off Windows, where *nothing* is sensed, is the
+fixture's stated posture, and the pairing is worth stating as an invariant
+because it is easy to break silently: `common::lending` enables exactly one
+rule, `min_idle_ms`, and states a fallback for it; battery, thermal, network
+and bandwidth are each switched off by the owner. `validate_policy_coverage`
+refuses an enabled rule resting on an absent signal, so a rule enabled in that
+fixture *without* a stated fallback would compose on Windows and refuse
+everywhere else. That is the same shape of bug the thermal-limit test hit on
+the ThinkPad on 2026-09-02, one paragraph up. The fixture needed no change —
+it was already correct — and its docs now carry the invariant so the next
+edit to it has to notice.
+
+**The GPU receipt now proves whichever answer the hardware supports.** It was
+written for a machine with a discrete adapter and would simply have failed to
+compose on one without. It now probes first —
+`distillery::probe_gpu_adapter(DiscreteGpu(0))`, the same question
+`discrete_gpu_trainer_device` asks inside the composition — prints what it
+found, and branches:
+
+- **A matched discrete adapter**: the previous body unchanged. Compose with
+  `device: "gpu"`, assert the adapter facts are `Discrete` and matched, assert
+  `HostFacts.gpu == true` on the installed host, train, assert strict held-out
+  improvement, print the tallies and the adapter.
+- **Anything else**: assert that opening the lane with `device: "gpu"` is
+  *refused*, that the refusal names the setting, the value, and either the
+  adapter found instead (by name) or the runtime's own account of finding
+  none, and that the refusal unwinds without a second failure. `refusal_from`
+  is the "nothing was composed" assertion — an `Ok` there is a live resident,
+  which it shuts down and then fails on.
+
+Both branches print which one ran, so a log reader knows what the machine
+proved. Neither is a skip, and the refusing branch is the more valuable of the
+two: it is the branch where cubecl would otherwise have handed the lane an
+adapter it did not ask for. This matters concretely for the two machines this
+is headed to — the Fedora ThinkPad has AMD Renoir integrated graphics on RADV
+and no discrete adapter, and wgpu classes Apple Silicon GPUs as
+`IntegratedGpu`, so `probe_gpu_adapter(DiscreteGpu(0))` refuses on both. On
+those machines the receipt's job is to prove the refusal, and a passing run
+there trains nothing on purpose.
+
+Gates, run on the Windows laptop: `cargo fmt -p djinn` clean; `cargo clippy -p
+djinn --all-targets --features trainer-gpu` adding nothing beyond djinn's four
+pre-existing findings in `personal_sync.rs` and `resident_knot.rs`. Tests:
+default **65 lib + 5 lane**; `--features trainer` **65 lib + 4 lane + 2
+CPU-trainer**; `--features trainer-gpu` **65 lib + 4 lane + 1 CPU-trainer + 1
+GPU-trainer**, the GPU receipt taking the discrete branch on the RTX 4060
+(`NVIDIA GeForce RTX 4060 Laptop GPU (vulkan, discrete adapter)`, baseline 0/6
+vs adapter 4/6, 68.8 s).
+
+The refusing branch was proved by positive control rather than left to the
+remote runs: with `discrete_gpu_trainer_device` and the receipt's probe
+temporarily pointed at `DiscreteGpu(99)`, the lane refused with
+
+> `distillery.trainer.device is "gpu", and this build carries the GPU trainer,
+> but this machine cannot honour it: no discrete GPU this trainer could run
+> on: backend: no DiscreteGpu adapter at index 99 on the vulkan backend: 1 of
+> that class and 0 unclassified adapter(s) are present`
+
+and every assertion in that branch held. Both edits were reverted. This is the
+lesson from the thermal test restated: an untaken branch is not a proven one,
+and a machine that cannot reach it naturally can still be made to.
+
+Cross-target checking was again unavailable end-to-end: `cargo check -p djinn
+--target x86_64-unknown-linux-gnu` still dies in `ring`'s build script for want
+of an `x86_64-linux-gnu-gcc`. The two new arms were therefore type-checked in
+isolation, in a scratch crate carrying only them, against their real targets —
+`x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`, both installed here, the
+latter resolving `libc` 0.2.189 without a C toolchain. `cargo check` and `cargo
+clippy` are clean for both. That proves the arms parse and type-check; it
+proves nothing about the numbers they return.
+
+**Native results, 2026-09-02.** Fedora ThinkPad `thinkpad-l14-f` (x86_64,
+AMD Renoir, RADV, Rust 1.97.1): `MemTotal` 15,707,136 kB read from
+`/proc/meminfo`; 62 library tests, the 5 lane receipts, and the 2 CPU-trainer
+receipts green, the trainer receipt at baseline 0/6 vs adapter 4/6 in 16.4 s;
+the GPU receipt took the refusing branch on the vulkan backend ("no
+DiscreteGpu adapter at index 0 ... 0 of that class and 0 unclassified
+adapter(s) are present"), the lane refused `device: "gpu"` by name, and nothing
+composed. Apple Silicon iMac `Mayolas-iMac` (M4, macOS 26.5.1, Rust 1.97.1):
+`hw.memsize` 17,179,869,184 read through `sysctlbyname`; the same 62 + 5 + 2
+green, the trainer receipt at 0/6 vs 4/6 in 5.9 s; the GPU receipt took the
+refusing branch on the metal backend with the same account, since wgpu classes
+Apple GPUs as integrated. The forcing fixture therefore reaches the same
+tallies on three operating systems and two CPU architectures; that is an
+observation, not a cross-device bit claim, which the trainer still does not
+make.
+
+### Done conditions
+
+An installed Distillery starts a resident on this machine from stated policy,
+runs a real job to completion through cadenced ticks on `SystemClock`, emits
+its receipts, and shuts down clean — with every policy fact traceable to an
+explicit owner choice rather than a placeholder, and no `permissive()`,
+`NoCourier`-by-omission, or fixed-snapshot condition surviving into the
+product path.

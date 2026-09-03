@@ -1,5 +1,8 @@
-// Copyright 2026 Mark AB (markik)
-// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
 
 //! D1 receipt: one resident lifecycle owns persistent mesh and blob storage.
 
@@ -9,13 +12,13 @@ use std::time::Duration;
 use distillery::{
     ResidentAuthority, ResidentReceipt, ResidentSettings, ResidentStorage, RetentionSettings,
 };
-use personae::{IdentityProvider, InMemoryProvider};
 use mesh::spec::{DeterminismClass, JobSpec};
 use mesh::{
     AvailabilityPolicy, ErasurePolicy, KeepBound, LeasePolicy, MESH_AUTHOR_SALT, MeshEvent,
     MeshRetentionPolicy, MeshStore, PayloadRule, PolicyRevision, ResourceId, SyncedMesh,
 };
 use mesh_host::{HostConfig, MeshHost, Step};
+use personae::{IdentityProvider, InMemoryProvider};
 use transport::{BlobHash, BlobStore, P2pandaTransport};
 
 const MESH: [u8; 32] = [0xd2; 32];

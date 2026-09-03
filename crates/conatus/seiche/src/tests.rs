@@ -1,3 +1,9 @@
+// Copyright 2026 Mark Alan Boykin
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Unit tests for the simulation + built-in forces. Split out of `lib.rs` to
 //! keep both files under the workspace's per-file size ceiling.
 //!
@@ -148,10 +154,10 @@ fn settle_timing_naive_vs_gpu_solver() {
 
     const TICKS: usize = 20;
     let solver: RepulsionSolver = Arc::new(|xs: &[f32], ys: &[f32], request: RepulsionRequest| {
-        quint::forces::node_exclusion_wgpu_roundtrip(
+        node_exclusion_wgpu_roundtrip(
             xs,
             ys,
-            quint::forces::NodeExclusionParams {
+            NodeExclusionParams {
                 strength: request.strength,
                 cutoff: request.cutoff,
                 min_distance: request.min_distance,

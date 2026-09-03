@@ -1,0 +1,32 @@
+# The H3 boot receipt, driven by the page itself.
+#
+# One verb per rendered frame. `settle 1` after an `act` lets the frame and
+# its DOM mirror catch up before an assertion reads them. `capture` composes
+# the current frame and reads it back; `wait` holds until it has landed.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+assert snap session == local
+assert snap detail-open == false
+assert dom #gs-active-session Local Mere
+assert attr #gs-session-local aria-pressed true
+capture h3_local
+wait
+act session-remote
+settle 1
+assert snap session == remote
+assert attr #gs-session-remote aria-pressed true
+assert dom #gs-active-session Remote projection
+capture h3_remote
+wait
+act session-local
+settle 1
+key enter
+settle 1
+assert snap detail-open == true
+assert attr #gs-detail-surface aria-hidden false
+key escape
+settle 1
+assert snap detail-open == false
+assert event command open-detail
+assert event command close-detail
+log h3 boot receipt complete
