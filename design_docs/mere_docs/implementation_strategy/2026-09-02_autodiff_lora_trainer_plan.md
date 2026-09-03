@@ -1,7 +1,8 @@
 # Autodiff LoRA trainer plan
 
 **Status (2026-09-02):** in progress. Assessment complete; Mark ruled D1–D3
-on 2026-09-02, each on the recommended option; Phase 1 is under way. Follow-on to the
+on 2026-09-02, each on the recommended option; Phase 1 landed 2026-09-03,
+Phase 2 is under way. Follow-on to the
 [distillery v0 plan](2026-08-12_distillery_v0_plan.md) (§9 trainer forcing,
 and the 2026-09-02 discrete-GPU trainer entry) and the
 [FLORA, Tulpa, and Standing plan](../../moothold_docs/implementation_strategy/2026-08-31_flora_tulpa_standing_plan.md).
@@ -44,10 +45,17 @@ handoff ruled.
   `BurnAdapterTrainer<B: AutodiffBackend>` becomes a device-carried trainer
   with the same signature family as `train_peft_lora`; nothing in ESP grows a
   backend type parameter.
-- **`Param::from_tensor` marks every float tensor `require_grad`.** The
-  decoder's `from_loaded` builds every module that way, so a naive autodiff
-  forward would accumulate gradients into all base weights. The training
-  model must detach the base weights and track only the LoRA factors.
+- **`Param::from_tensor` panics on a composed weight; it does not merely
+  over-track.** (Corrected 2026-09-03 in Phase 1.) It calls `require_grad()`,
+  and burn's autodiff refuses that on any non-leaf ("Can't convert a non leaf
+  tensor into a tracked tensor"); `base + A^T B^T` is exactly such a tensor,
+  so `DecoderModel::from_loaded` could not build a training model at all, and
+  the decoder's fields are private. The fix lives in the decoder's three
+  weight-adoption helpers (`attention::adopt_param`, `Param::initialized`
+  without the re-mark), which is inference-inert: nothing in ESP optimizes a
+  `DecoderModel`, and `require_grad` was a no-op on every inference device.
+  The base weights are additionally detached in the trainer so the claim is
+  stated rather than inherited.
 - **No workspace crate uses autodiff yet.** `require_grad`, `backward`,
   `Autodiff<`, and `GradientsParams` appear nowhere under `crates/`. This is
   the first use; the `burn` dependency in esp is
@@ -84,6 +92,31 @@ handoff ruled.
   (distillery v0 plan, 2026-09-02), with per-step launch overhead dominating
   the GPU figure. Autodiff replaces 2N forwards per step with one forward and
   one backward.
+
+- **`Device::autodiff` is also a method, and it panics when applied twice.**
+  `burn::tensor::Device::autodiff(self)` wraps; `Device::is_autodiff()` is
+  the guard. The trainer accepts either an inner or an already-wrapped
+  device. Phase 3 composes it over the probed discrete device.
+- **burn 0.22 ships its own LoRA reparameterization**
+  (`burn_core::module::param::lora::LoraAdapter`). Not used: the plan keeps
+  the loader's `add_delta` as the one composition, and
+  `Param::with_reparameterization` is `pub(crate)` upstream. It is the
+  candidate if a later slice wants the composition to live in the module
+  tree instead of being rebuilt per step.
+- **`AdamConfig::init()` returns a `ModuleOptimizer` whose `step` re-marks
+  each updated tensor as a fresh tracked leaf**, so the returned factor
+  module feeds straight back into the next forward. The decoder is rebuilt
+  around the factors every step (rope tables included); cheap on the fixture,
+  and the thing to measure before a real-size run.
+- **The held-out ranking tally is a coarse, non-monotone proxy on the
+  fixture.** Swept at learning rate 0.2 the v1 tally reads 3, 3, 2, 6, 3, 3,
+  4 of 6 at 8/12/16/20/24/30/36 steps. A rank-1 delta on a near-uniform
+  eight-hidden model reorders the logit row in jumps. Every count beats the
+  baseline's 0/6, which is what the receipt certifies; v0-versus-v1
+  comparisons rest on loss per second and step count, not the tally.
+- **CPU and GPU v1 runs agreed to six decimals** on both loss endpoints of
+  the eight-step fixture. The strict-improvement-only posture of the GPU
+  receipt stands as the contract regardless.
 
 ## Decisions
 
@@ -188,6 +221,22 @@ green on the landed `main`; and the FLoRA artifact contract has not changed
 a byte.
 
 ## Progress
+
+- **2026-09-03:** Phase 1 landed in `crates/intel/esp`: `decoder-autodiff`
+  feature; `infer::decoder::train_autodiff` with `AutodiffLoraSettings`,
+  `train_peft_lora_autodiff`, and the `esp-trainer-v1` /
+  `peft-esp-trainer-v1` stamps; the LoRA factors as a burn `Module` under
+  `burn-optim` Adam; v0's serializer and config writer generalized to several
+  modules and shared by both trainers, with a byte-identity test against the
+  verbatim v0 writers. Gradient check against v0's own `Objective::loss`:
+  tolerance `1e-4 + 0.005·|fd|` at `h = 0.01`, observed max error 7.8e-7 over
+  24 parameters. Receipts: v0 `decoder-lora` suite unchanged (125 tests, the
+  forcing receipt reproducing its loss, ranks, and 4/6 tally); v1 suite green
+  on `Device::ndarray()` and on the discrete GPU; strict package Clippy with
+  `decoder-autodiff,decoder-wgpu` over all targets clean; fmt clean. Timings
+  on the fixture, debug build: v0 40 steps ≈ 10–15 s CPU; v1 12 steps 0.17 s
+  CPU, 8 steps 0.63 s warm on the GPU (3.8 s cold). The v1 forcing receipt
+  reads 3/6 held-out at 12 steps against a 0/6 baseline.
 
 - **2026-09-02:** assessment complete; findings above verified against the
   code. Mark ruled D1 (tagged `TrainerSettings` enum on the one trainer

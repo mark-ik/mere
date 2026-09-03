@@ -4,25 +4,22 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The trainer forcing fixture (distillery v0 plan §9).
+//! The v1 trainer forcing receipt (autodiff LoRA trainer plan, Phase 1).
 //!
-//! One local, deterministic ranking receipt that materializes a canonical
-//! `TrainingCorpus`, derives real PEFT LoRA adapter weights from the corpus's
-//! training partition alone, publishes the adapter manifest with that corpus
-//! as its provenance, and writes an `EvalReport` in which the adapter strictly
-//! beats the unchanged baseline on the same fixed held-out cases.
+//! The v0 receipt (`trainer_forcing.rs`) with one substitution: the
+//! finite-difference trainer becomes the autodiff trainer. Everything else —
+//! the corpus, the synthetic base model, the eidetic model corridor, the
+//! adapter manifest, the `PeftLoraAdapterLoader`, the `EvalReport` and its
+//! provenance check — is the same code on the same fixture, which is what
+//! makes the two receipts comparable.
 //!
-//! The receipt fixes the first trainer resource input/output shape: inputs
-//! are the base-model manifest, the tokenizer blob, and the corpus's training
-//! partition plus explicit hyperparameters; outputs are the adapter
-//! weight/config blobs, the adapter manifest, and the evaluation report. The
-//! training itself is `esp::infer::decoder::train` — the one shared trainer
-//! implementation — and both evaluated sessions are built by the real
-//! `PeftLoraAdapterLoader` from bytes resolved back out of the store. ESP
-//! owns the tensor execution, Eidetic owns the artifacts; no Mesh job, lease,
-//! checkpoint, or Distillery authority is involved.
+//! What the receipt has to show beyond v0's: the held-out strict improvement
+//! at `RankingAt { limit: 3 }` reached in **fewer steps than v0's 40**, and
+//! the adapter tally reproducing from a fresh session. The step count is the
+//! measurement — a real gradient should not need forty line-searched
+//! descents to move a rank-1 delta.
 
-#![cfg(feature = "decoder-lora")]
+#![cfg(feature = "decoder-autodiff")]
 
 use burn::tensor::Device;
 use eidetic::models::{EvalMetric, EvalReport, OpaqueBlob};
@@ -32,8 +29,9 @@ use eidetic::{
     PrivacyClass, ProvenanceRecord, Timestamp, TrustEnvelope,
 };
 use esp::infer::decoder::{
-    LoraTrainerSettings, PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader,
-    TRAINED_ADAPTER_FORMAT_VERSION, expected_token_rank, ranking_tally, train_peft_lora,
+    AutodiffLoraSettings, PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader,
+    TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TRAINED_PEFT_VERSION_AUTODIFF, expected_token_rank,
+    ranking_tally, train_peft_lora_autodiff,
 };
 use esp::infer::{AdapterArtifact, AdapterLoader, AdapterSelection, ModelSession};
 use muniment::MemoryBackend;
@@ -44,24 +42,38 @@ use common::{
     load_cases, tokenizer_json,
 };
 
-const ADAPTER_NAME: &str = "trainer-forcing-fixture";
+const ADAPTER_NAME: &str = "trainer-forcing-autodiff-fixture";
 
-fn trainer_settings() -> LoraTrainerSettings {
-    LoraTrainerSettings {
+/// v0's step budget, the number this receipt has to come in under.
+const V0_STEPS: u32 = 40;
+
+/// Twelve Adam steps at a modest learning rate.
+///
+/// Not tuned to a maximum. On this fixture the held-out tally is a coarse,
+/// non-monotone function of the step count — swept at this learning rate it
+/// reads 3, 3, 2, 6, 3, 3, 4 out of 6 at 8, 12, 16, 20, 24, 30 and 36 steps —
+/// because a rank-1 delta on a near-uniform eight-hidden model reorders the
+/// top of the logit row in jumps. Every one of those counts beats the
+/// baseline's 0/6, so the receipt asserts the strict improvement and nothing
+/// finer; picking the count that happened to read 6/6 would be reading noise
+/// as a result. Twelve is chosen for sitting well inside that stable region
+/// and well under v0's forty.
+fn trainer_settings() -> AutodiffLoraSettings {
+    AutodiffLoraSettings {
         rank: 1,
         alpha: 8.0,
-        target_module: "v_proj".into(),
-        steps: 40,
-        initial_step_length: 1.0,
-        minimum_step_length: 1.0e-4,
-        epsilon: 0.02,
+        target_modules: vec!["v_proj".into()],
+        steps: 12,
+        learning_rate: 0.2,
+        beta1: 0.9,
+        beta2: 0.999,
+        epsilon: 1.0e-8,
+        weight_decay: 0.0,
     }
 }
 
-// ── The receipt ─────────────────────────────────────────────────────────────
-
 #[test]
-fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
+fn autodiff_adapter_beats_baseline_on_held_out_ranking_in_fewer_steps() {
     let device = Device::ndarray();
     let mut store = MemoryBackend::default();
     let provenance = || ProvenanceRecord::self_imported(ADAPTER_NAME);
@@ -93,7 +105,7 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
     .expect("base model present");
     let tokenizer_ref = resolved.manifest.tokenizer_blob;
 
-    // 2. Canonical corpus: disjoint, strictly ordered source partitions.
+    // 2. The same canonical corpus the v0 receipt trains on.
     let corpus = fixture_corpus(&mut store, ADAPTER_NAME);
     let corpus_ref = pollster::block_on(save_typed(
         &mut store,
@@ -106,11 +118,15 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
     ))
     .expect("save corpus");
 
-    // 3. The shared deterministic trainer over the training partition only.
+    // 3. The autodiff trainer over the training partition only.
     let settings = trainer_settings();
+    assert!(
+        settings.steps < V0_STEPS,
+        "the v1 receipt must cost fewer steps than v0's {V0_STEPS}"
+    );
     let train_cases = load_cases(&mut store, &corpus.training_source_codicils);
     let started = std::time::Instant::now();
-    let trained = train_peft_lora(
+    let trained = train_peft_lora_autodiff(
         &resolved.components.config_bytes,
         &resolved.components.tokenizer_bytes,
         &resolved.components.weight_bytes,
@@ -128,8 +144,7 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
         trained.trained_loss
     );
 
-    // 4. Publish the adapter: the trained blobs and the manifest whose
-    //    provenance names the corpus.
+    // 4. Publish the adapter under the v1 version strings.
     let save_blob = |store: &mut MemoryBackend, bytes: &[u8]| {
         pollster::block_on(save_typed(
             store,
@@ -150,7 +165,7 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
         adapter_blob,
         adapter_config_blob,
         adapter_format: "peft-lora".into(),
-        adapter_format_version: TRAINED_ADAPTER_FORMAT_VERSION.into(),
+        adapter_format_version: TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF.into(),
         runtime_compat: AdapterRuntimeCompat {
             minimum_capabilities: vec!["peft-lora".into()],
             known_loaders: vec![PEFT_LORA_NDARRAY_LOADER.into()],
@@ -158,13 +173,13 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
         },
         rank: settings.rank,
         alpha: settings.alpha,
-        target_modules: vec![settings.target_module.clone()],
+        target_modules: settings.target_modules.clone(),
         tokenizer_ref,
         prompt_template_hash: Hash::of(PROMPT_TEMPLATE),
         quantization_assumption: None,
         training_corpus_root: Some(corpus_ref),
         training_method: serde_json::json!({
-            "trainer": "esp-trainer-v0",
+            "trainer": TRAINED_PEFT_VERSION_AUTODIFF,
             "objective": "next-token cross-entropy",
             "settings": serde_json::to_value(&settings).unwrap(),
             "inputs": {
@@ -245,7 +260,6 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
     let adapted_session = adapted();
 
     let eval_cases = load_cases(&mut store, &corpus.evaluation_source_codicils);
-    let expected_id = EXPECTED_ID;
     for (label, session) in [
         ("baseline", &baseline_session),
         ("adapter", &adapted_session),
@@ -254,14 +268,13 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
             .iter()
             .map(|case| {
                 let logits = session.provider().next_token_logits(&case.prompt).unwrap();
-                expected_token_rank(&logits, expected_id)
+                expected_token_rank(&logits, EXPECTED_ID)
             })
             .collect();
         println!("{label} held-out expected-token ranks: {ranks:?}");
     }
-    // Ranking cutoff 3: the rank-1 value-projection adapter tilts the tiny
-    // model's near-uniform logits decisively into the top 3 (baseline ranks
-    // sit at 7-8) without demanding a fragile single-case top-1 margin.
+    // The v0 receipt's cutoff, unchanged: the two receipts are only
+    // comparable if they are scored the same way.
     let limit = 3u32;
     let baseline = ranking_tally(
         baseline_session.provider(),
@@ -338,7 +351,7 @@ fn adapter_trained_from_corpus_beats_baseline_on_held_out_ranking() {
         .expect("receipt provenance links match the adapter manifest");
 
     println!(
-        "trainer forcing receipt: loss {:.4} -> {:.4} in {} steps ({elapsed:?}), \
+        "autodiff trainer forcing receipt: loss {:.4} -> {:.4} in {} steps ({elapsed:?}), \
          baseline {}/{} vs adapter {}/{} at ranking@{limit}",
         trained.initial_loss,
         trained.trained_loss,
