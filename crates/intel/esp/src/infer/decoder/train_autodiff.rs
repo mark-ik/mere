@@ -54,12 +54,13 @@ use super::config::DecoderConfig;
 use super::loader::load_decoder_tensors_from_bytes;
 use super::lora::{add_delta, dimensions};
 use super::model::{DecoderModel, LoadedDecoder};
+use super::sample::SplitMix64;
 use super::train::{
     TrainedLoraAdapter, TrainingCase, adapter_config_json_for, det_init, expected_id,
     serialize_adapter_modules,
 };
 use super::train_autodiff_settings::{
-    AutodiffLoraSettings, SequenceCase, TRAINED_PEFT_VERSION_AUTODIFF,
+    AutodiffLoraSettings, SequenceCase, SequenceTrainingSettings, TRAINED_PEFT_VERSION_AUTODIFF,
 };
 use crate::infer::provider::InferError;
 
@@ -409,6 +410,210 @@ fn sequence_batch_loss(model: &DecoderModel, batch: &SequenceBatch) -> Tensor<1>
         .div_scalar(batch.supervised)
 }
 
+// ── Mini-batching (Phase 2) ─────────────────────────────────────────────
+
+/// One [`SequenceCase`], tokenized once and — if it would not otherwise
+/// fit — left-truncated to [`SequenceTrainingSettings::max_sequence_tokens`].
+/// Encoding every case exactly once up front, rather than per mini-batch,
+/// means a corpus this size is tokenized once regardless of how many Adam
+/// steps draw from it.
+#[derive(Debug)]
+struct EncodedSequenceCase {
+    /// Prompt tokens (post-truncation) then response tokens then EOS, the
+    /// same order [`tokenize_sequences`] builds.
+    ids: Vec<i32>,
+    /// Tokens kept from the (possibly truncated) prompt.
+    prompt_len: usize,
+    response_len: usize,
+}
+
+/// Tokenize every case once under the mini-batch trainer's truncation rule:
+/// a case whose prompt, response, and trailing EOS together exceed
+/// `max_sequence_tokens` has its prompt cut from the left, keeping the
+/// prompt's tail and the whole response intact; a case whose response plus
+/// EOS alone already exceeds `max_sequence_tokens` cannot be represented at
+/// any prompt length and is refused by name instead of silently truncating
+/// the span the objective supervises.
+///
+/// Returns the pad id (same rule as [`tokenize_sequences`]) alongside the
+/// encoded cases, since [`pad_batch`] needs it for every mini-batch drawn
+/// from the result.
+fn encode_sequences_for_training(
+    tokenizer: &Tokenizer,
+    config: &DecoderConfig,
+    cases: &[SequenceCase],
+    max_sequence_tokens: usize,
+) -> Result<(u32, Vec<EncodedSequenceCase>), InferError> {
+    let eos_id = *config.eos_token_id.first().ok_or_else(|| {
+        InferError::InvalidConfig(
+            "the sequence trainer needs config.json to name at least one eos_token_id".into(),
+        )
+    })?;
+    let pad_id = tokenizer
+        .get_padding()
+        .map(|padding| padding.pad_id)
+        .unwrap_or(eos_id);
+
+    let mut encoded = Vec::with_capacity(cases.len());
+    for (index, case) in cases.iter().enumerate() {
+        let prompt = tokenizer
+            .encode(case.prompt.as_str(), true)
+            .map_err(|error| InferError::InvalidRequest(format!("tokenize prompt: {error}")))?;
+        if prompt.get_ids().is_empty() {
+            return Err(InferError::InvalidRequest("empty training prompt".into()));
+        }
+        let response = tokenizer
+            .encode(case.response.as_str(), false)
+            .map_err(|error| InferError::InvalidRequest(format!("tokenize response: {error}")))?;
+        let response_ids = response.get_ids();
+        // +1 for the trailing EOS, exactly `tokenize_sequences`'s supervised
+        // range: the response is never the part that gives way to the
+        // budget, so this is checked before any truncation happens.
+        let response_span = response_ids.len() + 1;
+        if response_span > max_sequence_tokens {
+            return Err(InferError::InvalidRequest(format!(
+                "training case {index} ({:?}): response plus EOS is {response_span} tokens, \
+                 which exceeds max_sequence_tokens {max_sequence_tokens}; the response is what \
+                 the trainer supervises and cannot be truncated to fit",
+                case.response
+            )));
+        }
+        let prompt_budget = max_sequence_tokens - response_span;
+        let mut prompt_ids: Vec<i32> = prompt.get_ids().iter().map(|&id| id as i32).collect();
+        if prompt_ids.len() > prompt_budget {
+            // Drop from the left: keep the prompt's tail, not its head.
+            let drop = prompt_ids.len() - prompt_budget;
+            prompt_ids.drain(0..drop);
+        }
+        let prompt_len = prompt_ids.len();
+        let mut ids = prompt_ids;
+        ids.extend(response_ids.iter().map(|&id| id as i32));
+        ids.push(eos_id as i32);
+        encoded.push(EncodedSequenceCase {
+            ids,
+            prompt_len,
+            response_len: response_ids.len(),
+        });
+    }
+    Ok((pad_id, encoded))
+}
+
+/// Build one right-padded [`SequenceBatch`] from a subset of
+/// [`EncodedSequenceCase`]s named by `indices` — the per-mini-batch tail of
+/// [`tokenize_sequences`], generalized to select rows rather than assume
+/// "all of them".
+fn pad_batch(
+    encoded: &[EncodedSequenceCase],
+    indices: &[usize],
+    pad_id: u32,
+    device: &Device,
+) -> SequenceBatch {
+    let seq = indices
+        .iter()
+        .map(|&i| encoded[i].ids.len())
+        .max()
+        .unwrap_or(1);
+    let batch = indices.len();
+    let mut padded_ids = vec![pad_id as i32; batch * seq];
+    let mut mask = vec![0.0f32; batch * (seq - 1)];
+    let mut supervised = 0.0f32;
+    for (row, &index) in indices.iter().enumerate() {
+        let case = &encoded[index];
+        padded_ids[row * seq..row * seq + case.ids.len()].copy_from_slice(&case.ids);
+        // Same accounting as `tokenize_sequences`, `saturating_sub` guarding
+        // the one edge truncation can reach that the untruncated tokenizer
+        // never could: a prompt cut all the way to nothing, where the first
+        // response token has no preceding position to be predicted from
+        // and supervision starts one token later than usual.
+        let start = case.prompt_len.saturating_sub(1);
+        let end = case.prompt_len + case.response_len;
+        for target in start..end {
+            mask[row * (seq - 1) + target] = 1.0;
+            supervised += 1.0;
+        }
+    }
+    SequenceBatch {
+        ids: Tensor::from_data(TensorData::new(padded_ids, [batch, seq]), device),
+        mask: Tensor::from_data(TensorData::new(mask, [batch, seq - 1]), device),
+        supervised,
+        batch,
+        seq,
+    }
+}
+
+/// A deterministic without-replacement mini-batch schedule over `0..len`:
+/// draw `batch_size` indices at a time from a shuffled order, and reshuffle
+/// — from the same running RNG stream, never reseeded — whenever a draw
+/// would run past the end of the current epoch. The whole schedule (batch
+/// composition, epoch boundaries, everything) is therefore a pure function
+/// of the seed it was built from.
+struct MiniBatchSchedule {
+    order: Vec<usize>,
+    cursor: usize,
+    rng: SplitMix64,
+    batch_size: usize,
+}
+
+impl MiniBatchSchedule {
+    fn new(len: usize, settings: &SequenceTrainingSettings) -> Self {
+        let mut schedule = Self {
+            order: Vec::new(),
+            cursor: 0,
+            rng: SplitMix64::new(settings.seed),
+            batch_size: settings.batch_size as usize,
+        };
+        schedule.reshuffle(len);
+        schedule
+    }
+
+    /// Fisher-Yates over `0..len`, continuing the schedule's own RNG stream
+    /// rather than starting a fresh one — the source of "reshuffled every
+    /// epoch" rather than "the same order every epoch".
+    fn reshuffle(&mut self, len: usize) {
+        let mut order: Vec<usize> = (0..len).collect();
+        for i in (1..order.len()).rev() {
+            let j = (self.rng.next_u64() as usize) % (i + 1);
+            order.swap(i, j);
+        }
+        self.order = order;
+        self.cursor = 0;
+    }
+
+    /// The next mini-batch's indices: `batch_size` of them, or fewer at the
+    /// tail of an epoch that does not divide evenly, or the whole corpus at
+    /// once (reshuffled every call) when `batch_size >= len`.
+    fn next_indices(&mut self, len: usize) -> Vec<usize> {
+        if self.cursor >= self.order.len() {
+            self.reshuffle(len);
+        }
+        let end = (self.cursor + self.batch_size).min(self.order.len());
+        let batch = self.order[self.cursor..end].to_vec();
+        self.cursor = end;
+        batch
+    }
+}
+
+/// Per-step mutable state for the sequence trainer's mini-batches: the
+/// once-tokenized (and, where needed, left-truncated) corpus, the epoch
+/// scheduler drawing this step's rows from it, and the device the resulting
+/// tensors land on. [`run_adam_loop`] threads this through as `&mut T`,
+/// calling [`Self::next_batch`] once per step (and once more for the final
+/// recompute) — the mini-batch equivalent of the single-token trainer's
+/// static [`Batch`].
+struct SequenceBatchState {
+    encoded: Vec<EncodedSequenceCase>,
+    schedule: MiniBatchSchedule,
+    pad_id: u32,
+    device: Device,
+}
+
+impl SequenceBatchState {
+    fn next_batch(&mut self) -> SequenceBatch {
+        let indices = self.schedule.next_indices(self.encoded.len());
+        pad_batch(&self.encoded, &indices, self.pad_id, &self.device)
+    }
+}
+
 /// The Adam loop shared by every objective this module trains: rebuild the
 /// composed model each step, evaluate `loss_fn`, backward, step. Returns the
 /// trained factors, the loss before the first step, and the loss after the
@@ -416,17 +621,19 @@ fn sequence_batch_loss(model: &DecoderModel, batch: &SequenceBatch) -> Tensor<1>
 /// over from the last gradient step, so it is the loss of the model the
 /// caller actually gets.
 ///
-/// Full-batch: `batch` is built once by the caller and reused every step.
-/// Mini-batching — resampling or reshuffling `batch` between steps — is a
-/// change to the call site, not to this function, once a real corpus is
-/// large enough to want it.
+/// `state` is threaded through as `&mut T` and `loss_fn` as `FnMut` — not
+/// `&T` / `Fn` — so a call site can rotate what one step trains on: the
+/// single-token trainer's `Batch` uses this trivially (nothing to mutate,
+/// one batch reused every call, exactly Phase 1's behaviour); the sequence
+/// trainer's mini-batch scheduler is a real use of it, drawing a fresh batch
+/// from `state` on every call including the final recompute.
 fn run_adam_loop<T>(
     config: &DecoderConfig,
     base: &LoadedDecoder,
     settings: &AutodiffLoraSettings,
     train_device: &Device,
-    batch: &T,
-    loss_fn: impl Fn(&DecoderModel, &T) -> Tensor<1>,
+    state: &mut T,
+    mut loss_fn: impl FnMut(&DecoderModel, &mut T) -> Tensor<1>,
 ) -> Result<(LoraFactorSet, f64, f64), InferError> {
     let mut factors = LoraFactorSet::init(config, settings, train_device)?;
     let mut adam = AdamConfig::new()
@@ -444,7 +651,7 @@ fn run_adam_loop<T>(
     let mut initial_loss = 0.0f64;
     for step in 0..settings.steps {
         let model = compose_model(config, base, &factors, settings, train_device);
-        let loss = loss_fn(&model, batch);
+        let loss = loss_fn(&model, state);
         if step == 0 {
             initial_loss = scalar(&loss);
             if !initial_loss.is_finite() {
@@ -465,7 +672,7 @@ fn run_adam_loop<T>(
 
     let trained_loss = scalar(&loss_fn(
         &compose_model(config, base, &factors, settings, train_device),
-        batch,
+        state,
     ));
     Ok((factors, initial_loss, trained_loss))
 }
@@ -513,15 +720,21 @@ pub fn train_peft_lora_autodiff(
     } else {
         device.clone().autodiff()
     };
-    let batch = tokenize(&tokenizer, cases, &train_device)?;
+    let mut batch = tokenize(&tokenizer, cases, &train_device)?;
     let base = detach_base(load_decoder_tensors_from_bytes(
         &config,
         base_weights,
         &train_device,
     )?);
 
-    let (factors, initial_loss, trained_loss) =
-        run_adam_loop(&config, &base, settings, &train_device, &batch, batch_loss)?;
+    let (factors, initial_loss, trained_loss) = run_adam_loop(
+        &config,
+        &base,
+        settings,
+        &train_device,
+        &mut batch,
+        |model, batch| batch_loss(model, batch),
+    )?;
 
     let params = factors.to_flat_params();
     Ok(TrainedLoraAdapter {
@@ -557,6 +770,12 @@ pub fn train_peft_lora_autodiff(
 /// `device` is the ordinary inner device, exactly as in
 /// `train_peft_lora_autodiff`; the same autodiff-wrapping and cross-device
 /// floating-point posture apply unchanged.
+///
+/// `mini_batch` governs how the corpus is drawn from between steps —
+/// [`SequenceTrainingSettings`]'s own doc comment has the batching and
+/// truncation rules — and is validated before `settings` touches a single
+/// byte of the model, same as `settings` itself.
+#[allow(clippy::too_many_arguments)]
 pub fn train_peft_lora_autodiff_sequences(
     config_bytes: &[u8],
     tokenizer_bytes: &[u8],
@@ -564,9 +783,11 @@ pub fn train_peft_lora_autodiff_sequences(
     model_id: &str,
     cases: &[SequenceCase],
     settings: &AutodiffLoraSettings,
+    mini_batch: &SequenceTrainingSettings,
     device: &Device,
 ) -> Result<TrainedLoraAdapter, InferError> {
     settings.validate()?;
+    mini_batch.validate()?;
     if cases.is_empty() {
         return Err(InferError::InvalidRequest(
             "trainer received no training cases".into(),
@@ -584,7 +805,18 @@ pub fn train_peft_lora_autodiff_sequences(
     } else {
         device.clone().autodiff()
     };
-    let batch = tokenize_sequences(&tokenizer, &config, cases, &train_device)?;
+    let (pad_id, encoded) = encode_sequences_for_training(
+        &tokenizer,
+        &config,
+        cases,
+        mini_batch.max_sequence_tokens as usize,
+    )?;
+    let mut state = SequenceBatchState {
+        schedule: MiniBatchSchedule::new(encoded.len(), mini_batch),
+        encoded,
+        pad_id,
+        device: train_device.clone(),
+    };
     let base = detach_base(load_decoder_tensors_from_bytes(
         &config,
         base_weights,
@@ -596,8 +828,8 @@ pub fn train_peft_lora_autodiff_sequences(
         &base,
         settings,
         &train_device,
-        &batch,
-        sequence_batch_loss,
+        &mut state,
+        |model, state| sequence_batch_loss(model, &state.next_batch()),
     )?;
 
     let params = factors.to_flat_params();
@@ -620,6 +852,18 @@ pub fn train_peft_lora_autodiff_sequences(
     })
 }
 
+/// Row-chunk size for [`sequence_loss`]'s held-out evaluation.
+///
+/// The objective materializes `[batch, seq, vocab]` logits in `f32`; at
+/// SmolLM2's 49,152-token vocabulary and this trainer's default 256-token
+/// `max_sequence_tokens`, one row of that block alone is
+/// `256 * 49_152 * 4` bytes ≈ 50 MB. A held-out or blind split is measured
+/// as a single call with however many cases it has, so an unchunked eval
+/// batch would spend device memory on the split's size rather than on
+/// anything the caller chose; eight rows keeps one chunk under half a
+/// gigabyte at that width regardless of how large the split is.
+const SEQUENCE_LOSS_CHUNK_ROWS: usize = 8;
+
 /// Held-out token-mean response-span cross-entropy for an already-loaded
 /// model — base or adapted — on its own device, computed with exactly
 /// [`sequence_batch_loss`], the objective [`train_peft_lora_autodiff_sequences`]
@@ -631,6 +875,15 @@ pub fn train_peft_lora_autodiff_sequences(
 /// [`super::provider::DecoderProvider::model`] on either session, adapted or
 /// not, since `PeftLoraAdapterLoader` composes the delta into the same model
 /// type it would build with no adapters at all.
+///
+/// Measured in chunks of [`SEQUENCE_LOSS_CHUNK_ROWS`] and combined
+/// token-weighted, which is exactly the single-batch value: causal masking
+/// means a chunk's real positions read out identically whether or not other
+/// cases share its batch (the padded-batch-equals-unpadded-mean test on
+/// [`sequence_batch_loss`] is what pins that claim down), so the grand sum
+/// of masked log-probabilities is the same total distributed over however
+/// many chunks it is computed in, and only the chunk boundary — not the
+/// answer — moves when the split's size does.
 pub fn sequence_loss(
     model: &DecoderModel,
     tokenizer_bytes: &[u8],
@@ -644,8 +897,15 @@ pub fn sequence_loss(
     let tokenizer = Tokenizer::from_bytes(tokenizer_bytes)
         .map_err(|error| InferError::InvalidConfig(format!("tokenizer.json parse: {error}")))?;
     let device = model.device();
-    let batch = tokenize_sequences(&tokenizer, model.config(), cases, &device)?;
-    Ok(scalar(&sequence_batch_loss(model, &batch)))
+    let mut weighted_sum = 0.0f64;
+    let mut total_supervised = 0.0f64;
+    for chunk in cases.chunks(SEQUENCE_LOSS_CHUNK_ROWS) {
+        let batch = tokenize_sequences(&tokenizer, model.config(), chunk, &device)?;
+        let supervised = f64::from(batch.supervised);
+        weighted_sum += scalar(&sequence_batch_loss(model, &batch)) * supervised;
+        total_supervised += supervised;
+    }
+    Ok(weighted_sum / total_supervised)
 }
 
 #[cfg(test)]
@@ -666,6 +926,19 @@ mod tests {
             beta2: 0.999,
             epsilon: 1.0e-8,
             weight_decay: 0.0,
+        }
+    }
+
+    /// A mini-batch schedule that reproduces Phase 1's full-batch behaviour:
+    /// `batch_size >= corpus_size` means every step's mini-batch is the
+    /// whole corpus (reshuffled row order only), and `max_sequence_tokens`
+    /// is generous enough that nothing on these tiny fixtures ever
+    /// truncates.
+    fn mini_batch_settings(corpus_size: u32) -> SequenceTrainingSettings {
+        SequenceTrainingSettings {
+            batch_size: corpus_size,
+            seed: 42,
+            max_sequence_tokens: 32,
         }
     }
 
@@ -906,6 +1179,26 @@ mod tests {
         safetensors::serialize(views, &None).unwrap()
     }
 
+    /// `seq_config`'s fields, as the JSON bytes the trainer's public entry
+    /// points parse — the same construction `one_token_response_equals_...`
+    /// inlines once; factored out for the mini-batch tests that need it too.
+    fn seq_config_json_bytes(config: &DecoderConfig) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "vocab_size": config.vocab_size,
+            "hidden_size": config.hidden_size,
+            "intermediate_size": config.intermediate_size,
+            "num_hidden_layers": config.num_hidden_layers,
+            "num_attention_heads": config.num_attention_heads,
+            "num_key_value_heads": config.num_key_value_heads,
+            "max_position_embeddings": config.max_position_embeddings,
+            "rms_norm_eps": config.rms_norm_eps,
+            "rope_theta": config.rope_theta,
+            "tie_word_embeddings": config.tie_word_embeddings,
+            "eos_token_id": config.eos_token_id,
+        }))
+        .unwrap()
+    }
+
     /// Done condition: the padded-batch loss equals the token-weighted mean
     /// of the unpadded per-case losses.
     ///
@@ -1056,6 +1349,7 @@ mod tests {
             "fixture/seq",
             &cases_seq,
             &settings,
+            &mini_batch_settings(cases_seq.len() as u32),
             &device,
         )
         .expect("sequence trainer trains");
@@ -1184,6 +1478,155 @@ mod tests {
         println!(
             "sequence gradient check: {} parameters, max error {worst:e}",
             params.len()
+        );
+    }
+
+    // ── Mini-batching (Phase 2) ─────────────────────────────────────────
+
+    /// Two runs with the same seed draw the exact same sequence of
+    /// mini-batches and therefore train to identical adapter bytes; a
+    /// different seed draws a different sequence — a real difference in
+    /// which cases are grouped together per step, not floating-point noise
+    /// — and therefore trains to different bytes. Checked on the actual
+    /// trained artifact, not on the schedule in isolation, since that is
+    /// what a reproducible receipt actually needs.
+    #[test]
+    fn mini_batch_training_is_deterministic_by_seed_and_varies_across_seeds() {
+        let config = seq_config();
+        let config_bytes = seq_config_json_bytes(&config);
+        let base_bytes = tiny_base_weights_bytes(&config);
+        let tokenizer_bytes = tiny_tokenizer_json().into_bytes();
+        let device = Device::ndarray();
+        let settings = settings();
+
+        let cases: Vec<SequenceCase> = [
+            ("t1 t2", "t3"),
+            ("t4 t5", "t6"),
+            ("t7 t8", "t9"),
+            ("t10 t11", "t12"),
+            ("t13 t14", "t15"),
+            ("t16 t17", "t18"),
+        ]
+        .into_iter()
+        .map(|(prompt, response)| SequenceCase {
+            prompt: prompt.into(),
+            response: response.into(),
+        })
+        .collect();
+
+        let train = |seed: u64| {
+            let mini_batch = SequenceTrainingSettings {
+                batch_size: 2,
+                seed,
+                max_sequence_tokens: 32,
+            };
+            train_peft_lora_autodiff_sequences(
+                &config_bytes,
+                &tokenizer_bytes,
+                &base_bytes,
+                "fixture/seq-minibatch",
+                &cases,
+                &settings,
+                &mini_batch,
+                &device,
+            )
+            .expect("mini-batch training runs")
+        };
+
+        let a = train(7);
+        let b = train(7);
+        assert_eq!(
+            a.adapter_safetensors, b.adapter_safetensors,
+            "same seed must draw the same mini-batch sequence and train to the same bytes"
+        );
+
+        let c = train(8);
+        assert_ne!(
+            a.adapter_safetensors, c.adapter_safetensors,
+            "a different seed must draw a different mini-batch sequence"
+        );
+    }
+
+    /// The truncation half of [`SequenceTrainingSettings::max_sequence_tokens`]:
+    /// a case too long for the budget drops prompt tokens from the left,
+    /// keeping the prompt's tail and the whole response untouched.
+    #[test]
+    fn left_truncation_keeps_the_prompt_tail_and_the_whole_response() {
+        let config = seq_config();
+        let tokenizer = Tokenizer::from_bytes(tiny_tokenizer_json().as_bytes()).unwrap();
+        let cases = vec![SequenceCase {
+            prompt: "t1 t2 t3 t4 t5".into(),
+            response: "t6 t7".into(),
+        }];
+        // response + EOS = 3 tokens, leaving a 3-token prompt budget out of
+        // 6; the 5-token prompt must lose its first two tokens, not its
+        // last two.
+        let (pad_id, encoded) = encode_sequences_for_training(&tokenizer, &config, &cases, 6)
+            .expect("fits after truncation");
+        assert_eq!(encoded.len(), 1);
+        let case = &encoded[0];
+        assert_eq!(
+            case.ids,
+            vec![3, 4, 5, 6, 7, 0],
+            "must keep the prompt's tail (t3 t4 t5), the whole response (t6 t7), then EOS"
+        );
+        assert_eq!(case.prompt_len, 3);
+        assert_eq!(case.response_len, 2);
+        assert_eq!(
+            pad_id, 0,
+            "no padding configured on this tokenizer, so pad_id falls back to eos_id"
+        );
+    }
+
+    /// The refusal half: a response (plus EOS) that alone exceeds the
+    /// budget cannot be represented at any prompt length, so it is refused
+    /// by name rather than truncated — truncating the response would be
+    /// truncating the only thing the trainer supervises.
+    #[test]
+    fn response_plus_eos_too_long_for_the_budget_is_refused_by_name() {
+        let config = seq_config();
+        let tokenizer = Tokenizer::from_bytes(tiny_tokenizer_json().as_bytes()).unwrap();
+        let cases = vec![SequenceCase {
+            prompt: "t1 t2".into(),
+            response: "t6 t7 t8 t9 t10 t11 t12 t13".into(), // 8 tokens + EOS = 9
+        }];
+        let error = encode_sequences_for_training(&tokenizer, &config, &cases, 8)
+            .expect_err("response plus EOS (9 tokens) exceeds the 8-token budget");
+        let message = error.to_string();
+        assert!(message.contains("case 0"), "{message}");
+        assert!(message.contains("response"), "{message}");
+        assert!(message.contains('9'), "{message}");
+    }
+
+    /// Deliverable 2's done condition: [`sequence_loss`]'s chunked
+    /// evaluation, token-weighted across chunks, equals the value a single
+    /// unchunked batch over the same cases would produce.
+    #[test]
+    fn sequence_loss_chunks_are_token_weighted_and_equal_the_single_batch_value() {
+        let config = seq_config();
+        let device = Device::ndarray();
+        let tokenizer_bytes = tiny_tokenizer_json().into_bytes();
+        let tokenizer = Tokenizer::from_bytes(&tokenizer_bytes).unwrap();
+        let model =
+            DecoderModel::from_loaded(config.clone(), det_loaded(&config, &device), &device);
+
+        // Ten cases: more than `SEQUENCE_LOSS_CHUNK_ROWS`, so `sequence_loss`
+        // measures them in two chunks (8 then 2) rather than one batch.
+        let cases: Vec<SequenceCase> = (0..10)
+            .map(|i| SequenceCase {
+                prompt: format!("t{} t{}", 1 + i % 5, 2 + i % 5),
+                response: format!("t{}", 10 + i % 5),
+            })
+            .collect();
+
+        let chunked = sequence_loss(&model, &tokenizer_bytes, &cases).expect("chunked eval");
+
+        let single_batch = tokenize_sequences(&tokenizer, &config, &cases, &device).unwrap();
+        let unchunked = scalar(&sequence_batch_loss(&model, &single_batch));
+
+        assert!(
+            (chunked - unchunked).abs() < 1.0e-4,
+            "chunked sequence_loss {chunked} should equal the single-batch value {unchunked}"
         );
     }
 }

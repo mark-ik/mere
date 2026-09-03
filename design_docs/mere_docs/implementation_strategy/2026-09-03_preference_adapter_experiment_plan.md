@@ -95,6 +95,40 @@ A negative answer is a valid outcome and is written up the same way.
   in mini-batches and measures held-out loss in chunks rather than one
   full-batch step. Phase 1 left the Adam loop full-batch with the resampling
   point named; Phase 2 adds the loop.
+- **Memory, not a binding limit, sets the GPU batch.** (Phase 2,
+  2026-09-03.) Batch 8 and batch 4 failed with `wgpu error: Out of Memory`
+  at the first step; batch 2 trained with a 6.6 GB peak on the 8 GB card.
+  cubecl's Vulkan backend already lifts `max_storage_buffer_binding_size`,
+  so this is real footprint: f32 weights (540 MB) rebuilt into a fresh model
+  every step, autodiff activations across thirty layers, and `[batch, seq,
+  49152]` f32 logits with their log-softmax and gather intermediates. The
+  levers, in order: stop rebuilding the decoder per step (burn's
+  `LoraAdapter`, once attachable), chunk the logits, bf16 weights.
+- **Real corpora carry cases the trainer refuses.** 48 of Mark's prompts and
+  115 design-doc paragraphs exceed 256 tokens as a response alone; the
+  trainer refuses those by name, so the harness filters them first and
+  reports the count. Left-truncation of the prompt handles the rest.
+- **The `reply` template makes the base model write a user turn**, which
+  SmolLM2-Instruct does as generic questions ("What is the difference
+  between the two?"). The adapted model writes short, lowercase,
+  first-person, decisive replies. That is the register of Mark's prompts,
+  and it makes the blind question "which reads more like you" easy in a way
+  that says little about quality; the second question, "which reads more
+  like your rules", and the held-out loss carry the weight.
+- **The prompt adapter partly collapses and leaks.** Four of sixty blind
+  continuations are one sentence ("i'm not sure if i should be here or
+  not, but i'm going to be…"), two more are "oh, i see. i'll do it.", and
+  on six unrelated prompts the adapted model answers a recipe request with
+  "I'm glad you like it!" and shortens every answer. A 45k-token corpus of
+  mostly imperative one-liners at rank 8 teaches register faster than
+  content, and the register goes everywhere. This is the desire path
+  forming and the cost of it in one result.
+- **The workspace-voice adapter moved the mechanical rules without being
+  trained on them**: parenthetical asides 0.85 → 0.18 per continuation on
+  the blind set and 1.0 → 0.17 on unrelated prompts, headers 0.05 → 0,
+  dashes 0.15 → 0.05, every one of sixty continuations distinct. The
+  workspace's edited prose carries fewer of those markers than base SmolLM2
+  output, and the adapter learned that regularity as a side effect.
 - **The receipt schema has one metric.** `EvalMetric::RankingAt` is the only
   variant; held-out loss and rule adherence do not fit it. The experiment
   records its results as a dated testing doc with a JSON sidecar, the way the
@@ -204,3 +238,20 @@ has been run.
   and on the discrete GPU; the adapter loads through the unchanged loader.
   esp 129 lib tests plus receipts green with `decoder-autodiff,decoder-wgpu`,
   the `decoder-lora` suite unchanged, strict Clippy and fmt clean.
+- **2026-09-03:** Phase 2 landed and ran. esp gained `SequenceTrainingSettings`
+  (batch size, seed, max sequence tokens; one step is one mini-batch drawn
+  without replacement per seeded epoch; a prompt truncates from the left, a
+  response that alone exceeds the cap is refused by name), a chunked
+  `sequence_loss` equal to the single-batch value, and the env-gated
+  harness `tests/preference_adapter_real.rs` (split, two templates, held-out
+  and unrelated loss, greedy generations, mechanical rule checks, GPU memory
+  sampling, `results.json`, `blind_sheet.md`, `blind_key.json`). Runs on
+  SmolLM2-135M-Instruct, rank 8 on q/v, 300 steps, batch 2, learning rate
+  2e-4, seed 7, release build: **Mark's prompts** (1,360 trained cases,
+  45,224 supervised tokens) held-out loss 4.458 → 4.176, 73 s on the GPU,
+  peak 6,597 MiB; **workspace voice** at the same token budget (374 cases,
+  45,152 tokens) held-out 4.558 → 4.269, 76 s, peak 6,533 MiB. CPU: about
+  5.3 s per step at batch 2. The sixty-pair blind sheets are with Mark for
+  Phase 3. esp 134 lib tests plus receipts green with
+  `decoder-autodiff,decoder-wgpu`, `decoder-lora` suite green, strict Clippy
+  and fmt clean.

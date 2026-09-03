@@ -34,8 +34,8 @@ use burn::tensor::Device;
 use eidetic::{AdapterRuntimeCompat, Hash, ManifestId, ModelAdapterManifest};
 use esp::infer::decoder::{
     AutodiffLoraSettings, PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader, SequenceCase,
-    TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TrainedLoraAdapter, sequence_loss,
-    train_peft_lora_autodiff_sequences,
+    SequenceTrainingSettings, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TrainedLoraAdapter,
+    sequence_loss, train_peft_lora_autodiff_sequences,
 };
 use esp::infer::{AdapterArtifact, AdapterLoader, AdapterSelection, ModelSession};
 
@@ -100,6 +100,18 @@ fn held_out_cases() -> Vec<SequenceCase> {
     EVAL_PREFIXES.iter().map(|p| sequence_case(p)).collect()
 }
 
+/// `batch_size` covers the whole six-case training corpus, so every step
+/// still sees a full-batch mini-batch (Phase 1's behaviour, up to row
+/// order) — this receipt's point is the objective and the artifact
+/// dataflow, not the batching Phase 2 adds on top of it.
+fn mini_batch() -> SequenceTrainingSettings {
+    SequenceTrainingSettings {
+        batch_size: TRAIN_PREFIXES.len() as u32,
+        seed: 11,
+        max_sequence_tokens: 32,
+    }
+}
+
 fn train(settings: &AutodiffLoraSettings, device: &Device) -> TrainedLoraAdapter {
     train_peft_lora_autodiff_sequences(
         SEQ_CONFIG_JSON.as_bytes(),
@@ -108,6 +120,7 @@ fn train(settings: &AutodiffLoraSettings, device: &Device) -> TrainedLoraAdapter
         MODEL_ID,
         &train_cases(),
         settings,
+        &mini_batch(),
         device,
     )
     .expect("train sequence adapter")

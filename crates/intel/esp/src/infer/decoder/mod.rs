@@ -75,8 +75,8 @@ pub use train_autodiff::{
 };
 #[cfg(feature = "decoder-lora")]
 pub use train_autodiff_settings::{
-    AutodiffLoraSettings, SequenceCase, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
-    TRAINED_PEFT_VERSION_AUTODIFF,
+    AutodiffLoraSettings, SequenceCase, SequenceTrainingSettings,
+    TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TRAINED_PEFT_VERSION_AUTODIFF,
 };
 
 /// The device vocabulary hosts select from, re-exported so a composition

@@ -61,6 +61,63 @@ pub struct SequenceCase {
     pub response: String,
 }
 
+/// Mini-batch scheduling for
+/// [`super::train_autodiff::train_peft_lora_autodiff_sequences`]: how many
+/// cases each Adam step sees, the seed the per-epoch shuffle is drawn from,
+/// and the token budget one case may occupy before its prompt is truncated.
+///
+/// Deliberately separate from [`AutodiffLoraSettings`]: that struct's
+/// literals are shared across esp, distillery, and djinn call sites that
+/// have no notion of a corpus to draw mini-batches from, and folding this
+/// in would move every one of them for a concern only the sequence trainer
+/// has.
+///
+/// **Batching.** One Adam step consumes one mini-batch of `batch_size`
+/// cases, drawn without replacement from a shuffle of the whole corpus; the
+/// shuffle is reseeded once, from `seed`, and then reshuffled (not
+/// re-seeded) whenever a mini-batch would run past the end of the current
+/// epoch, so the entire schedule — batch composition, epoch boundaries,
+/// everything — is a pure function of `seed`. `batch_size >= cases.len()`
+/// reproduces one full-batch step per Adam step, reshuffled every step,
+/// which is Phase 1's behaviour up to row order (and, at tight tolerance,
+/// its numbers).
+///
+/// **Truncation.** A case whose prompt, response, and trailing EOS together
+/// exceed `max_sequence_tokens` has its prompt cut from the left, keeping
+/// the prompt's tail and the whole response — the response is what the
+/// objective supervises, so it is never the part that gives way. A case
+/// whose response plus EOS alone already exceeds `max_sequence_tokens`
+/// cannot be represented at any prompt length and is refused by name at
+/// tokenization instead.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SequenceTrainingSettings {
+    /// Cases per Adam step.
+    pub batch_size: u32,
+    /// Seed for the deterministic per-epoch shuffle.
+    pub seed: u64,
+    /// Tokens one case (prompt + response + EOS) may occupy before its
+    /// prompt is truncated from the left.
+    pub max_sequence_tokens: u32,
+}
+
+impl SequenceTrainingSettings {
+    /// Reject the two ways this struct could make a run ambiguous or
+    /// unrunnable, before any tokenization happens.
+    pub fn validate(&self) -> Result<(), InferError> {
+        if self.batch_size == 0 {
+            return Err(InferError::InvalidConfig(
+                "sequence trainer batch_size must be > 0".into(),
+            ));
+        }
+        if self.max_sequence_tokens < 8 {
+            return Err(InferError::InvalidConfig(
+                "sequence trainer max_sequence_tokens must be >= 8".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Explicit hyperparameters for the v1 autodiff LoRA trainer.
 ///
 /// There is deliberately no `Default`, v0's rule: every value is part of the
@@ -234,6 +291,43 @@ mod tests {
         settings()
             .validate()
             .expect("the baseline settings are valid");
+    }
+
+    fn mini_batch_settings() -> SequenceTrainingSettings {
+        SequenceTrainingSettings {
+            batch_size: 4,
+            seed: 7,
+            max_sequence_tokens: 64,
+        }
+    }
+
+    #[test]
+    fn sequence_training_settings_reject_ambiguous_hyperparameters() {
+        for (mutate, needle) in [
+            (
+                Box::new(|s: &mut SequenceTrainingSettings| s.batch_size = 0)
+                    as Box<dyn Fn(&mut _)>,
+                "batch_size",
+            ),
+            (
+                Box::new(|s: &mut SequenceTrainingSettings| s.max_sequence_tokens = 7),
+                "max_sequence_tokens",
+            ),
+        ] {
+            let mut broken = mini_batch_settings();
+            mutate(&mut broken);
+            let error = broken.validate().unwrap_err().to_string();
+            assert!(error.contains(needle), "{error} should mention {needle}");
+        }
+        mini_batch_settings()
+            .validate()
+            .expect("the baseline mini-batch settings are valid");
+        SequenceTrainingSettings {
+            max_sequence_tokens: 8,
+            ..mini_batch_settings()
+        }
+        .validate()
+        .expect("max_sequence_tokens == 8 is the accepted boundary");
     }
 
     /// The version strings are a contract, not an implementation detail: the
