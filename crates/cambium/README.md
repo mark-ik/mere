@@ -18,12 +18,14 @@ remain for source compatibility during consumer migration.
 Every crate is MPL-2.0 (see the repository `LICENSE`); Meristem, a Xilem
 derivative, keeps the Xilem Authors' Apache-2.0 notice in each derived file.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the ownership rule and
-[docs/upstream-xilem.md](docs/upstream-xilem.md) for provenance. Licenses are
-recorded in the repository [LICENSES.md](../../LICENSES.md), and the claimed
-package names in [docs/namespace-claims.md](docs/namespace-claims.md).
+See [the architecture doc](../../design_docs/cambium_docs/technical_architecture/2026-09-03_cambium_architecture.md)
+for the ownership rule and
+[the Xilem provenance ledger](../../design_docs/cambium_docs/technical_architecture/upstream-xilem.md)
+for provenance. Licenses are recorded in the repository
+[LICENSES.md](../../LICENSES.md), and the claimed package names in
+[the namespace-claims doc](../../design_docs/cambium_docs/technical_architecture/namespace-claims.md).
 Standalone and sibling-checkout development are described in
-[docs/local-genet-development.md](docs/local-genet-development.md).
+[the local Genet development doc](../../design_docs/cambium_docs/testing/local-genet-development.md).
 
 ## Component acceptance surface
 
@@ -36,7 +38,8 @@ cargo run -p cambium --example component_catalog --all-features
 ```
 
 The same assertions run in CI as an example test. See
-[docs/component-catalog.md](docs/component-catalog.md) for the coverage rule.
+[the component-catalog doc](../../design_docs/cambium_docs/technical_architecture/component-catalog.md)
+for the coverage rule.
 
 ## License
 

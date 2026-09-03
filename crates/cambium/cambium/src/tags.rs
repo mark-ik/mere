@@ -92,7 +92,7 @@ where
 /// later, a Path-B external texture. A leaf: it has no Genet-painted children (the
 /// widget *is* its content). This mirrors [`external_texture`]: the view carries only
 /// the stable `key` + a box, and the host registers the payload under that key out of
-/// band. See `docs/history/2026-07-07_chisel_widget_leaf_design.md`.
+/// band. See `design_docs/cambium_docs/implementation_strategy/2026-07-07_chisel_widget_leaf_design.md`.
 pub fn custom_leaf<State, Action>(key: u64, width: u32, height: u32) -> El<(), State, Action>
 where
     State: 'static,

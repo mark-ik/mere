@@ -3273,7 +3273,7 @@ mod capture {
     //
     // The native twin of dom.rs's `__stop` / `__canceled`. These mirror the JS
     // dispatcher's behaviour so the two paths satisfy one contract
-    // (docs/history/2026-06-01_event_model_convergence_plan.md). The JS-side equivalents
+    // (design_docs/cambium_docs/implementation_strategy/2026-06-01_event_model_convergence_plan.md). The JS-side equivalents
     // live in `script-runtime-api`'s `dom_node_events_work` (run on Boa + Nova);
     // the assertions here are the native column of the same scenario table.
 

@@ -1,5 +1,6 @@
 # Meristem is Cambium's fork-derived reactive diff and message core. Its source
-# began as Linebender's Apache-2.0 `xilem_core`; see docs/upstream-xilem.md for
+# began as Linebender's Apache-2.0 `xilem_core`; see
+# design_docs/cambium_docs/technical_architecture/upstream-xilem.md for
 # the pinned bases and the local semantic patch ledger.
 [package]
 name = "meristem"

@@ -38,7 +38,7 @@
   `meristem` 0.1.1, `sprigging` 0.2.1, and `cambium-nematic` 0.3.1 were
   current at that reconciliation; `cambium-winit` 0.2.0 remains yanked.
   Authority:
-  `docs/genet-compatibility.md`.
+  `design_docs/cambium_docs/technical_architecture/genet-compatibility.md`.
 
 ## 0.3.0 - 2026-07-22
 

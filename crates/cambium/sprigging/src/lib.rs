@@ -10,7 +10,7 @@
 //! meter, waveform, graph canvas) live as one first-class Genet element,
 //! plugging into Genet's four existing passes rather than standing up a second
 //! UI engine. Design and rationale:
-//! `docs/history/2026-07-07_chisel_widget_leaf_design.md`.
+//! `design_docs/cambium_docs/implementation_strategy/2026-07-07_chisel_widget_leaf_design.md`.
 //!
 //! This is the Path-A scaffold: a leaf paints by pushing common `PaintCmd`s
 //! (portable, tile-cached) which Genet splices into its paint list at the

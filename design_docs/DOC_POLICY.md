@@ -139,6 +139,8 @@ mere/design_docs/
 ├── YYYY-MM-DD_<keyword>_brief.md  ← cross-cutting briefs
 ├── mere_docs/                     ← product-level concerns
 ├── armillary_docs/                ← the armillary crate
+├── cambium_docs/                  ← the Cambium desktop-host/scene family
+│                                     (Meristem, Cambium, Sprigging, Workbench)
 ├── dramatis_docs/                 ← identity and contacts (personae, gaz)
 ├── eidetic_docs/                  ← the memory stack (Eidetic codicils,
 │                                     muniment journals, chartulary + RDF)
@@ -148,6 +150,8 @@ mere/design_docs/
 ├── scenograph_docs/               ← the scene contract
 └── archive_docs/                  ← superseded checkpoints
 ```
+
+**`cambium_docs/` founded 2026-09-03, ruled by Mark**, the day Cambium itself landed in this repository (platform boundary plan, P2). It collects two things that had scattered: the two live plans (`workbench_component_plan`, `host_ui_zoom_plan`) that moved with the code into `mere_docs/` as a two-document lodger, and `crates/cambium/docs/`, which was the member-crate scatter §4 forbids — the same defect the 2026-08-24 collapse fixed for the other nine `crates/*/design_docs/` directories.
 
 Every root above corresponds to code that lives in this repository. That is an
 invariant now, not a coincidence — see below.

@@ -10,7 +10,7 @@
 //! The view half (`cambium::placed` / `arrangement`) turns these into
 //! absolutely-positioned elements; this module is engine-free math so hosts
 //! that place without the view layer (a card compositor) reuse it.
-//! See `docs/history/2026-07-08_chisel_widget_catalog.md`.
+//! See `design_docs/cambium_docs/implementation_strategy/2026-07-08_chisel_widget_catalog.md`.
 
 /// Where an arranged child sits, in the container's local px. The child sizes
 /// itself (its own CSS); the arrangement owns position and stacking only.

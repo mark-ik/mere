@@ -17,8 +17,8 @@
 //
 // This is the native twin of `dom.rs`'s `__stop` / `__stopImmediate` /
 // `__canceled` on the JS `Event`. See
-// `docs/history/2026-06-01_event_model_convergence_plan.md` — both dispatchers satisfy
-// one propagation/cancellation contract.
+// `design_docs/cambium_docs/implementation_strategy/2026-06-01_event_model_convergence_plan.md`
+// — both dispatchers satisfy one propagation/cancellation contract.
 
 use std::cell::Cell;
 use std::rc::Rc;

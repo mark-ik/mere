@@ -1,8 +1,10 @@
 # Host UI zoom
 
 **Home:** this plan and its subject moved from genet to mere on 2026-09-03 with
-the Cambium family (platform boundary plan, P2). Paths in it that read
-`components/cambium/...` are genet's, before the move; the code is at
+the Cambium family (platform boundary plan, P2), landing in
+`mere_docs/implementation_strategy/`; it moved again the same day into the new
+`cambium_docs/` area root Mark ruled for the Cambium family. Paths in it that
+read `components/cambium/...` are genet's, before the move; the code is at
 `crates/cambium/...` here.
 
 **Status:** in progress (2026-09-03); Z0 through Z4 landed in genet, Z5 landed in isometry with its design figure open (see Progress); nothing committed. Founded when isometry's host migration exposed a panel laid out for
@@ -10,7 +12,7 @@ the Cambium family (platform boundary plan, P2). Paths in it that read
 
 **Related:** `genet/docs/2026-08-09_cambium_desktop_host_g1_receipt.md` (the host
 this plan extends); mere's configuration ownership plan
-([2026-08-06_configuration_ownership_settings_projection_plan.md](2026-08-06_configuration_ownership_settings_projection_plan.md),
+([2026-08-06_configuration_ownership_settings_projection_plan.md](../../mere_docs/implementation_strategy/2026-08-06_configuration_ownership_settings_projection_plan.md),
 which already names a `ui_zoom` application setting that turnstone persists
 and no host applies);
 `isometry/design_docs/2026-09-02_genet_host_migration_plan.md` (the

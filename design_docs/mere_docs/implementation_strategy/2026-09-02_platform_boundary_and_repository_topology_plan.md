@@ -1718,7 +1718,14 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   `DOC_README.md`. Both are dated implementation plans about application
   composition, which is what `mere_docs/` holds; **open for Mark:** whether the
   Cambium family should instead have an area root of its own, which the policy
-  would allow and two documents do not obviously earn. The zoom plan's link to
+  would allow and two documents do not obviously earn. **Ruled 2026-09-03,
+  later the same day:** yes — `crates/cambium/docs/` was independently found to
+  be exactly the member-crate scatter §4 forbids, so the question was no longer
+  "do two documents earn a root" but "does an already-scattered third source
+  join them under one." Both plans and every `crates/cambium/docs/` file moved
+  by `git mv` into the new `design_docs/cambium_docs/` (`implementation_strategy/`,
+  `technical_architecture/`, `testing/`); see `DOC_README.md`'s
+  `cambium_docs/` section and `DOC_POLICY.md`'s area-root list. The zoom plan's link to
   `docs/2026-08-09_cambium_desktop_host_g1_receipt.md`, which stays in genet
   because `genet-livery` still cites it, became the cross-repo path citation
   `genet/docs/...`; its `mere/design_docs/...` citation of the configuration

@@ -1,7 +1,9 @@
 # Workbench Component Plan
 
 **Home:** this plan and its subject moved from genet to mere on 2026-09-03
-(platform boundary plan, P2). Workbench is at `crates/cambium/workbench`;
+(platform boundary plan, P2), landing in `mere_docs/implementation_strategy/`;
+it moved again the same day into the new `cambium_docs/` area root Mark ruled
+for the Cambium family. Workbench is at `crates/cambium/workbench`;
 `components/workbench` below is genet's path before the move. The ruling below
 calls Workbench "Genet's reusable workspace-organization component"; that was
 true when it was written, and the boundary plan reclassed it as application

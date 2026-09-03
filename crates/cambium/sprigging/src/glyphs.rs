@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! First catalog leaves (tier-2 Path-A glyphs from the widget catalog,
-//! `docs/history/2026-07-08_chisel_widget_catalog.md`): [`GraphCanvas`], [`Meter`],
+//! `design_docs/cambium_docs/implementation_strategy/2026-07-08_chisel_widget_catalog.md`): [`GraphCanvas`], [`Meter`],
 //! [`Knob`]. Pure geometry: data in, `PaintCmd`s out. Labels/values belong in
 //! DOM siblings, interaction in the view layer over the leaf.
 

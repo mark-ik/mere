@@ -2457,10 +2457,15 @@ fn receipt_html(width: CatalogWidth) -> String {
 }
 
 fn write_receipts() -> std::io::Result<()> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("cambium crate lives under the Cambium component root");
-    let directory = root.join("docs").join("receipts");
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("cambium crate lives three levels under the repository root");
+    let directory = repo_root
+        .join("design_docs")
+        .join("cambium_docs")
+        .join("testing")
+        .join("receipts");
     std::fs::create_dir_all(&directory)?;
     for width in [CatalogWidth::Narrow, CatalogWidth::Regular] {
         std::fs::write(
@@ -2500,11 +2505,11 @@ mod tests {
     fn committed_receipts_match_the_live_catalog() {
         assert_eq!(
             super::receipt_html(super::CatalogWidth::Narrow),
-            include_str!("../../docs/receipts/component_catalog_narrow.html")
+            include_str!("../../../../design_docs/cambium_docs/testing/receipts/component_catalog_narrow.html")
         );
         assert_eq!(
             super::receipt_html(super::CatalogWidth::Regular),
-            include_str!("../../docs/receipts/component_catalog_regular.html")
+            include_str!("../../../../design_docs/cambium_docs/testing/receipts/component_catalog_regular.html")
         );
     }
 }
