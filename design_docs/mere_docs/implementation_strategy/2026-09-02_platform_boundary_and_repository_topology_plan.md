@@ -1454,3 +1454,151 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   that was dirty all day committed its work at 14:56 (two commits, unpushed);
   genet's tree is clean, and those two commits ride to origin with the
   removal.
+
+- 2026-09-03: **Cambium, Workbench and `mere-surface-api` left genet** (genet
+  `ce79fd44a4d`, parent `5b509d25507`). The second half of the consumers-first
+  order: three paths removed from genet's workspace, 176 tracked files, 52,360
+  deleted lines. Eleven packages in one commit.
+
+  | path | packages | genet dependents at removal |
+  |---|---|---|
+  | `components/cambium` | `cambium`, `cambium-rootstock`, `cambium-winit`, `cambium-winit-a11y`, `cambium-genet-winit-host`, `cambium-genet-web-host`, `cambium-nematic`, `meristem`, `sprigging` | none outside the cluster |
+  | `components/workbench` | `workbench` | `cambium`, `mere-surface-api` only |
+  | `components/mere-surface-api` | `mere-surface-api` | `cambium` only |
+
+  Every claim was checked with `cargo tree -i <crate> --workspace --prefix
+  none` before anything was removed, and `--target all` for the four whose
+  edges are target-gated (`cambium-rootstock`, `cambium-winit`,
+  `cambium-winit-a11y`, `cambium-genet-web-host`; the web host resolves to
+  nothing on the host target). Every reverse dependency of all eleven was
+  itself one of the eleven, so the cluster was a true leaf and invariant 1
+  holds at this commit by construction. Nothing was wrong in either direction
+  this time.
+
+  **History came out in seconds, and the Pelt entry's three options were not
+  needed.** `git subtree split` was not attempted: the Pelt entry already
+  measured why it cannot work here. The path-limited export it named as the
+  exact alternative was used instead — `git fast-export --signed-tags=strip
+  --tag-of-filtered-object=drop main -- <path>`, the path prefix rewritten in
+  the stream by a filter that touches only `M <mode> <dataref> <path>` and
+  `D <path>` command lines (copying `data` blocks verbatim by declared length,
+  so no line inside a blob can be mistaken for a command), then
+  `git fast-import` into a bare repository:
+
+  | genet path | landing prefix | bare repo | commits | elapsed |
+  |---|---|---|---|---|
+  | `components/cambium` | `crates/cambium` | `cambium-history.git` | 91 | 1 s |
+  | `components/workbench` | `crates/cambium/workbench` | `workbench-history.git` | 1 | 2 s |
+  | `components/mere-surface-api` | `crates/system/surface-api` | `surface-api-history.git` | 1 | 1 s |
+
+  Each was verified by tree identity, not by inspection: `git --git-dir=<bare>
+  rev-parse refs/heads/main:<landing prefix>` equals `git rev-parse
+  main:<genet path>` in genet, for all three — `593ffeb82f1`, `ae9ab404f5f`,
+  `e5aef208675`. The commit counts match `git log --oneline -- <path>` in
+  genet exactly (91/1/1), and the filter reported 752/2/4 path lines rewritten
+  with **zero** unmatched path lines, so nothing was silently left behind.
+  The July `cambium-history-probe` branch (which the probe took 275 s to
+  produce 738 commits for) is superseded and was not used. The three bare
+  repos are the artifact for the mere side.
+
+  A throwaway worktree was meant to pin the export, per the Pelt procedure,
+  but `git worktree add --detach` on genet did not finish inside ten minutes —
+  the tree is large and the worktree's only job is pinning. It was removed and
+  the exports were pinned instead by exporting from `main` while asserting
+  `main` still equals `5b509d25507` before and after each run, which is the
+  same guarantee for none of the cost. Note for anyone repeating this:
+  `git fast-export <raw-sha>` emits the sha *as the ref name*, and
+  `fast-import` then produces a repository with no usable ref — pass a ref
+  name, not a sha.
+
+  **Docs travelled with their code.** `2026-08-31_workbench_component_plan.md`
+  and `2026-09-03_host_ui_zoom_plan.md` were removed from genet's
+  `design_docs/` and copied verbatim (md5-checked) to
+  `<scratch>/cambium-docs/` for mere; `DOC_README.md` keeps a one-line note
+  under its "cambium" heading saying where they went, and its now-empty
+  "workspace composition" heading was dropped with the Workbench entry.
+  Cambium's own `components/cambium/docs/` travelled inside the exported tree.
+  `docs/2026-08-09_cambium_desktop_host_g1_receipt.md` **stays in genet** —
+  `genet-livery`'s `src/lib.rs` and `tests/deep_nesting.rs` still cite it —
+  but the moving zoom plan cites it too, so a copy is in the scratch folder
+  and mere's copy of that plan will need its link repointed at genet.
+
+  **Genet after the removal.** The cone witness loses `mere-surface-api` from
+  its host-api leaf table. Its ortet positive control kept the exact-name half
+  over `document-canvas` -> `inker`; the prefix half, which the Pelt entry had
+  just rebuilt onto `cambium-genet-winit-host`, has no member left to carry it,
+  so it is asserted directly on the predicate: `is_ortet_forbidden` must
+  forbid `cambium-anything`, `mere-anything` and `pelt-anything` and must
+  admit `genet-livery`. That is weaker than a cone walk — it proves the rule,
+  not the walk — so it is paired with the live `document-canvas` control
+  rather than replacing it, and the code says so. Every name stays in
+  `ORTET_FORBIDDEN`: it is a set of names the cone may not reach, not a set of
+  members, so it fails loudly if any of them ever returns from mere.
+
+  Receipts, all in genet: `cargo check --workspace` green; `cargo check -p
+  ortet` green; `cargo test -p ortet` 10 passed; `cargo run -p ortet -- --url
+  ports/ortet/examples/article.html --frames 3` renders to digest
+  `0x6377ba8a6bf4dbc9`, unchanged, so the engine's output is untouched by the
+  removal; `cargo check -p netfetcher --no-default-features` green;
+  `check_dependency_cones.py` passes with ortet's cone still 592 packages,
+  none forbidden, and `fleece` named separately as before.
+
+  Two receipt deltas worth recording rather than hiding:
+
+  1. `cargo check --workspace` gained exactly **one** warning, and the
+     per-crate `generated N warnings` set is byte-identical to the baseline.
+     The new line is `patch vello v0.10.0 ... was not used in the crate
+     graph`: `vello` was reached only through `cambium-rootstock`, so the
+     patch is now dead. It was **left in place** — its own comment in
+     `Cargo.toml` sets its retirement condition ("retires by deletion when a
+     wgpu-30 vello (0.11) ships"), which has not been met, and genet already
+     carries two other unused-patch entries on the same footing. Deleting it
+     is a resolution decision, not a consequence of this move.
+  2. `relicense_headers.py --audit` went **845 -> 713** owned sources, exactly
+     the 132 owned sources in the three directories (126 carrying Exhibit A
+     plus meristem's 6 that did not). "Without Exhibit A" went **7 -> 1**, not
+     `0 -> 0`: the audit was already failing before this commit. Six of the
+     seven were meristem's and left with it. The seventh,
+     `components/genet-livery/src/paint.rs`, arrived in the Cambium lane's own
+     `86019eacccc` ("Scale the interface: UI zoom for the Cambium desktop
+     host"), is in a crate that **stays** in genet, and was not touched here.
+     It is a one-file `--apply` for whoever owns that lane. (The Pelt entry
+     recorded 6 "all in other lanes"; those six were the meristem files, and
+     the seventh appeared afterwards.)
+
+  Files changed outside the three directories: genet's root `Cargo.toml`
+  (eleven workspace members, two `[workspace.dependencies]` entries, and a
+  departure note beside Pelt's), `support/ci/check_dependency_cones.py`,
+  `README.md` (the component list and the LICENSES paragraph),
+  `LICENSES.md` (`meristem` was the only row in the derivatives table; that
+  table is explicitly *not* the tool's skip list, so the ledger path count is
+  unmoved at 18 and the audit numbers above are comparable),
+  `design_docs/DOC_README.md`, and `examples/genet_web_smoke/Cargo.toml`.
+  `Cargo.lock` is gitignored in genet, so there is no stale lock to sweep.
+
+  Prose naming `cambium` in `components/genet-clipboard/Cargo.toml`,
+  `components/genet-probe/Cargo.toml`, `components/livery/properties.toml`
+  (`consumer = "cambium"` — still true, just cross-repo now) and in genet's
+  `docs/` was left alone: it is history or a still-accurate statement, not a
+  path. `support/name-claims/{cambium,frisket,meristem,sprigging}` are name
+  reservations, not workspace members, and are untouched.
+
+  **Two open items for Mark.**
+
+  1. `examples/genet_web_smoke` is deliberately *not* a workspace member, so
+     `cargo check --workspace` never covered it, and it path-depended on
+     `../../components/cambium/cambium`. It was repointed at
+     `../../../mere/crates/cambium/cambium` — the ruled landing path — which
+     is correct the moment mere lands the export and dangling until then. If
+     the landing path changes, this is the one manifest that must follow.
+  2. Four receipt harnesses in `scripts/` — `wayland-frame-receipt.ps1`,
+     `windows-maximized-receipt.ps1`, `windows-snap-receipt.ps1`,
+     `x11-shadow-receipt.ps1` — drive `cargo run -p cambium-genet-winit-host`
+     against scenario files that left with the crate. They cannot work in
+     genet any more. They were **not** removed: deleting four files outside
+     the named moving set is a call to make deliberately, not a side effect.
+     They belong with the host in mere, and copies are in the scratch folder
+     for whoever lands it.
+
+  Not done here: nothing landed in mere, and nothing was pushed. The commit
+  sits on genet's `main` as the single unpushed commit.
