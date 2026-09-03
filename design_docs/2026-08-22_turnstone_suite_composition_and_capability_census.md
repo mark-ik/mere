@@ -89,6 +89,21 @@ work has separated:
 The old Graphshell receipts remain evidence for the resident and identity
 implementations. Their product ownership labels are superseded by this split.
 
+**Sharpened 2026-09-02 (Mark).** Graphshell is a *viewer and redirector*, not
+a surface that hosts content for interaction — with one exception, which is
+the point: the projection itself, of which Graphshell is the preeminent
+manipulator. That is not nothing. Authenticated access to all the data of all
+the applications, used to customize projections to your own taste, is a
+**home-page graph of app graphs**; and that capability is meant to appear in
+every application that has its own app graph, not only in Graphshell. This is
+the family composition thesis's anti-shell test in its positive form: the
+manipulator is a platform capability whose receipt is a second host. Two
+consequences it leaves unruled: the Projection Editor, today a self-contained
+module in `ports/graphshell`, is by this reading a Mere component with
+Graphshell as one host, and its crate home wants deciding; and Graphshell does
+*not* compose Workbench panes the way Turnstone does — Turnstone is the
+meerkat successor shell, Graphshell is the lens.
+
 ### Djinn is currently a stale reservation
 
 `ports/djinn` currently describes itself as a possible public name for Knot.
@@ -376,6 +391,21 @@ above: Distillery runs models, Alembic runs work. The package is
 Linux Foundation's VFX-format binding and will not free). The two-host
 receipt above stands as the founding gate, not a reason to defer founding
 the stub.
+
+**Re-ruled 2026-09-02 (Mark): Alembic goes inside Distillery as a core
+component crate.** The 2026-08-22 separation of the two *ports* is
+superseded; the distinction it drew survives as a component boundary inside
+Distillery — Distillery runs models, and its Alembic component runs work over
+them. What carries over unchanged: the `recall` feature as the embeddable
+memory half; the two-host receipt as the founding gate; and the package
+identity `mere-alembic` / `[lib] name = "alembic"`, which a move inside
+Distillery's tree does not need to change (package identity is not a reason to
+preserve the wrong boundary, per the boundary plan). Left open by the
+re-ruling: whether the authority half — Athanor, agent grants, runs,
+petitions, revocation — still lives with Djinn as the 08-22 text placed it, or
+follows the component into Distillery; and the mechanical shape of the move
+(`ports/alembic` into Distillery's tree, and the Distillery v0 plan gaining
+the component as a lane).
 
 ## 8. Capabilities that need exposure, not another port
 
