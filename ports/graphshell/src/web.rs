@@ -1976,6 +1976,11 @@ async fn run(root_element: Element) -> Result<(), String> {
     graph_canvas.fit_to_content();
     graph_canvas.select_by_url(FIXTURE_WEB_ADDRESS);
     let primary_member = graph_canvas.focused_member();
+    let initial_face = graph_canvas
+        .graph()
+        .get_node_by_url(FIXTURE_WEB_ADDRESS)
+        .map(|(key, _)| graph_canvas.node_face(key).as_code().to_string())
+        .unwrap_or_else(|| "derived".to_string());
     let node_count = app.host.graph().node_count();
     let product_status = if capture_summary.active {
         format!(
@@ -2042,7 +2047,7 @@ async fn run(root_element: Element) -> Result<(), String> {
         handler_id: "graphshell.inspect".to_string(),
         relation_family: RelationFamilyFilter::All,
         filter_count: node_count,
-        face: "favicon".to_string(),
+        face: initial_face,
         last_export: String::new(),
         export_bytes: 0,
         imported_nodes: 0,

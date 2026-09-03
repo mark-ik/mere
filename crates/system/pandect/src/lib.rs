@@ -76,7 +76,7 @@ pub mod shared_root;
 // graph.json. The durable home the bespoke per-node sidecars (browser/denizen/
 // arrangement) converge onto. Wraps chartulary's FacetStore.
 pub mod facet_store;
-// Mere-side adapter from eidetic SchemaDefinition engrams to chartulary's
+// Mere-side adapter from eidetic SchemaDefinition codicils to chartulary's
 // synchronous FacetValidator seam.
 pub mod schema_facets;
 // The arrangement.* facet namespace: cartography's per-node data (position
@@ -91,17 +91,17 @@ pub mod atomic_file;
 // (keyed by the session's root_graph_id) — scene-scoped, not per-node.
 pub mod engine_profile_store;
 pub mod scene_facets;
-// Freeze/thaw a live graph into an immutable, content-addressed graph engram over
+// Freeze/thaw a live graph into an immutable, content-addressed graph codicil over
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
 // filesystem). Save redacts private fields by default; open thaws read-only.
-pub mod engram_seal;
-pub mod graph_engram;
+pub mod codicil_seal;
+pub mod graph_codicil;
 // Producer-owned, content-addressed recipes for reopening a source at a
 // cursor with existing durable curation. Source resolution stays at the host.
 pub mod live_view;
-// Snapshot-level merge for engram compose (Alembic tail B7): union two graph
-// snapshots by URL identity, retaining per-member provenance. Pure; the engram
-// compose op (`graph_engram::compose_graph_engrams`) layers on top.
+// Snapshot-level merge for codicil compose (Alembic tail B7): union two graph
+// snapshots by URL identity, retaining per-member provenance. Pure; the codicil
+// compose op (`graph_codicil::compose_graph_codicils`) layers on top.
 pub mod snapshot_merge;
 // The three memory levels' read-model (Alembic slice C): classify a node as
 // short-term vs long-term (a tag/pin promotes), and compute which short-term nodes
@@ -111,7 +111,7 @@ pub mod memory_levels;
 pub mod notochord_policy_store;
 // Athanor's forgetting pass (Alembic slice D): propose which short-term cached
 // content to evict (pure, R0) and apply it by dropping content blobs (never graph
-// truth or engrams). The pass logic; the armillary actor that schedules it layers on top.
+// truth or codicils). The pass logic; the armillary actor that schedules it layers on top.
 pub mod athanor;
 // The frame.json pane-layout store moved OUT with the pane model at
 // meerkat's deletion (2026-07-18): it lives in turnstone's `frisket::store`
@@ -161,6 +161,7 @@ pub use arrangement_facets::{
     write_arrangement_sprites,
 };
 pub use atomic_file::write_bytes_with_backup;
+pub use codicil_seal::WalletEpochSealer;
 pub use denizen_facets::{
     DENIZEN_BINDING, DenizenBinding, DenizenKind, is_denizen, read_denizen_binding,
     read_denizen_bindings, remove_denizen_binding, write_denizen_binding,
@@ -174,7 +175,6 @@ pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
 };
-pub use engram_seal::WalletEpochSealer;
 pub use facet_store::{
     AcceptAll, ExpiringFacet, FacetError, FacetId, FacetValidator, NODE_FACETS_FILE,
     NodeFacetStore, NodeFacets, copy_node_facets, load_node_facets, node_facets_path,
@@ -188,7 +188,7 @@ pub use live_view::{
     open_live_view_record, save_live_view_record, save_live_view_record_sealed,
 };
 pub use manifest::{
-    EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
+    CodicilId, EngineProfileBinding, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
     SessionPolicy, SessionPolicyOverride, WorkerKind,
 };
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
@@ -206,7 +206,7 @@ pub use scene_facets::{
     write_scene_facets,
 };
 pub use schema_facets::{
-    ContentClassEngram, SchemaFacetValidator, content_class_schema_definition,
+    ContentClassCodicil, SchemaFacetValidator, content_class_schema_definition,
     content_class_schema_ref, load_content_class, save_content_class,
 };
 #[cfg(not(target_arch = "wasm32"))]

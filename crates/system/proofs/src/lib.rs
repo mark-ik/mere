@@ -74,7 +74,8 @@ pub enum CommitmentDomain {
     MootMods,
     MootStakeholders,
     MootMembers,
-    TesseraReceipts,
+    #[serde(alias = "TesseraReceipts")]
+    StandingReceipts,
     StorageChunks,
     StorageCheckpoints,
     MeshJobResults,

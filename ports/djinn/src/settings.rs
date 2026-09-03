@@ -150,7 +150,11 @@ pub struct DistilleryLaneSettings {
     /// How often the non-blocking mesh supervisor gets a turn.
     pub tick_every_ms: u64,
     /// How often an advanced frontier is checkpointed. `null` is a statement
-    /// too: it leaves maintenance an explicit owner command.
+    /// too: it leaves maintenance an explicit owner command. Omitting the
+    /// field is refused, for the same reason [`trainer`](Self::trainer)
+    /// refuses it: an owner who never said when their frontier is
+    /// checkpointed has not said "never".
+    #[serde(deserialize_with = "required_option")]
     pub maintenance_every_ms: Option<u64>,
     /// How often the physical store looks for content with no custody tag.
     pub blob_gc_every_ms: u64,
@@ -178,11 +182,9 @@ pub struct DistilleryLaneSettings {
     ///
     /// `null` is a statement, exactly as
     /// [`maintenance_every_ms`](Self::maintenance_every_ms) is: *this lane
-    /// composes no trainer*. Omitting the field entirely is refused by the
-    /// same `deny_unknown_fields`/required-field behaviour every other field
-    /// here relies on, because "I forgot to say" and "I said no" must not
-    /// look alike when the answer decides whether a device advertises that it
-    /// can train.
+    /// composes no trainer*. Omitting the field entirely is refused, because
+    /// "I forgot to say" and "I said no" must not look alike when the answer
+    /// decides whether a device advertises that it can train.
     #[serde(deserialize_with = "required_option")]
     pub trainer: Option<TrainerLaneSettings>,
 }
@@ -235,9 +237,11 @@ impl DistilleryLaneSettings {
 /// field typed `Option<T>` normally cannot tell "the owner wrote null" from
 /// "the owner never wrote it". Naming a `deserialize_with` removes that
 /// implicit default — serde will not call a custom function for a field that
-/// is not there — which is exactly the distinction
-/// [`DistilleryLaneSettings::trainer`] needs: whether this device offers the
-/// ring a trainer is not a question a typo may answer.
+/// is not there — which is exactly the distinction every nullable field of
+/// [`DistilleryLaneSettings`] needs: whether this device offers the ring a
+/// trainer, or when it checkpoints its frontier, is not a question a typo may
+/// answer. Both nullable fields there name this function, so the two cannot
+/// drift apart again.
 fn required_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -258,7 +262,13 @@ where
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct TrainerLaneSettings {
-    /// What the trainer runs on. Today `"cpu"` is the only honest answer.
+    /// What the trainer runs on: `"cpu"` or `"gpu"`.
+    ///
+    /// `"gpu"` means *this machine's discrete GPU*, and it is answerable only
+    /// by a build carrying djinn's `trainer-gpu` feature. Saying it on a build
+    /// without that feature refuses composition by name; saying it on a
+    /// machine whose wgpu runtime would not bind a real discrete adapter
+    /// refuses too, naming what was found instead.
     pub device: String,
     /// Override the model library's location. `null` means the derived
     /// persona-scoped path under the data root, which is what it should
@@ -267,21 +277,29 @@ pub struct TrainerLaneSettings {
 }
 
 impl TrainerLaneSettings {
-    /// Refuse a trainer this composition could not honestly run.
+    /// Refuse a device word this lane has no meaning for.
     ///
-    /// The device vocabulary is closed and, for now, one word wide. A GPU
-    /// trainer is not composable while [`mesh::HostFacts::gpu`] is `false` on
-    /// this lane — the works would advertise a capability nothing behind it
-    /// can answer — so `"gpu"` is refused *by name* rather than quietly
-    /// falling back to the CPU the owner did not ask for.
+    /// The vocabulary is closed and two words wide, and this check is
+    /// deliberately *syntactic*. A settings file is validated on whatever
+    /// machine happens to read it, so refusing `"gpu"` here would make the
+    /// same file valid or invalid depending on what was plugged in. The two
+    /// real questions — does this build carry the `trainer-gpu` feature, and
+    /// would the wgpu runtime actually bind a discrete adapter on this machine
+    /// — are answered at composition by
+    /// [`crate::resident_distillery`], which refuses by name in both
+    /// directions rather than falling back to the CPU nobody asked for.
+    ///
+    /// Anything outside the two words is still refused right here, naming what
+    /// it refused, because a typo must never become a device.
     pub fn validate(&self) -> Result<(), String> {
         match self.device.trim() {
-            "cpu" => Ok(()),
+            "cpu" | "gpu" => Ok(()),
             other => Err(format!(
-                "distillery.trainer.device must be \"cpu\" (got {other:?}): this lane reports \
-                 HostFacts.gpu as false because nothing in it can run a GPU job, so a \
-                 GPU trainer would advertise work the device would then fail. Say \
-                 \"cpu\", or set distillery.trainer to null."
+                "distillery.trainer.device must be \"cpu\" or \"gpu\" (got {other:?}): the \
+                 device vocabulary is closed, and a word this lane has no meaning for \
+                 cannot be honoured by guessing at it. Whether \"gpu\" is answerable is a \
+                 question this build and this machine answer at composition. Say \"cpu\" \
+                 or \"gpu\", or set distillery.trainer to null."
             )),
         }
     }
@@ -1236,33 +1254,35 @@ mod tests {
     }
 
     #[test]
-    fn a_lane_that_never_mentions_a_trainer_is_refused_rather_than_assumed_off() {
+    fn a_lane_that_never_mentions_a_nullable_field_is_refused_rather_than_assumed_off() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("silent.json");
-        let mut json = serde_json::to_value(OwnerSettings {
-            distillery: Some(distillery_lane()),
-            ..OwnerSettings::default()
-        })
-        .unwrap();
-        assert!(
-            json["distillery"]
-                .as_object_mut()
-                .unwrap()
-                .remove("trainer")
-                .is_some(),
-            "`trainer` is serialised, so removing it models an owner who never wrote it"
-        );
-        std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
-        assert!(
-            OwnerSettings::load(&path).is_err(),
-            "forgetting to say and saying no must not look alike: an omitted \
-             `trainer` must fail loudly rather than default to off"
-        );
+        for field in ["trainer", "maintenance_every_ms"] {
+            let path = directory.path().join(format!("silent-{field}.json"));
+            let mut json = serde_json::to_value(OwnerSettings {
+                distillery: Some(distillery_lane()),
+                ..OwnerSettings::default()
+            })
+            .unwrap();
+            assert!(
+                json["distillery"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove(field)
+                    .is_some(),
+                "`{field}` is serialised, so removing it models an owner who never wrote it"
+            );
+            std::fs::write(&path, serde_json::to_string(&json).unwrap()).unwrap();
+            assert!(
+                OwnerSettings::load(&path).is_err(),
+                "forgetting to say and saying no must not look alike: an omitted \
+                 `{field}` must fail loudly rather than default to off"
+            );
+        }
     }
 
     #[test]
-    fn a_trainer_device_this_lane_cannot_honour_is_refused_by_name() {
-        for device in ["gpu", "wgpu", "cuda", ""] {
+    fn a_trainer_device_outside_the_closed_vocabulary_is_refused_by_name() {
+        for device in ["wgpu", "cuda", "GPU", ""] {
             let mut lane = distillery_lane();
             lane.trainer = Some(TrainerLaneSettings {
                 device: device.into(),
@@ -1270,15 +1290,32 @@ mod tests {
             });
             let refusal = lane
                 .validate()
-                .expect_err("only \"cpu\" is composable while HostFacts.gpu is false");
+                .expect_err("the device vocabulary is exactly \"cpu\" and \"gpu\"");
             assert!(refusal.contains("distillery.trainer.device"), "{refusal}");
             assert!(
                 refusal.contains(&format!("{device:?}")),
                 "the refusal must name the value it refused: {refusal}"
             );
             assert!(
-                refusal.contains("HostFacts.gpu"),
+                refusal.contains("closed"),
                 "the refusal must say why, not just that: {refusal}"
+            );
+        }
+
+        // Both real words pass *here*, and that is the whole point of the
+        // split: whether this build and this machine can honour `"gpu"` is a
+        // composition question, and answering it in a settings validator would
+        // make the same file valid on one desktop and invalid on the next.
+        for device in ["cpu", "gpu", "  gpu  "] {
+            let mut lane = distillery_lane();
+            lane.trainer = Some(TrainerLaneSettings {
+                device: device.into(),
+                library_root: None,
+            });
+            assert_eq!(
+                lane.validate(),
+                Ok(()),
+                "{device:?} is inside the closed vocabulary"
             );
         }
 

@@ -26,8 +26,8 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use codicil::LogId;
 use muniment::Hash as ContentHash;
+use muniment::LogId;
 
 use crate::taxonomy::RelationClass;
 

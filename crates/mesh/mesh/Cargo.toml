@@ -13,9 +13,9 @@ path = "src/lib.rs"
 
 [dependencies]
 # The operation/signing substrate the job ops ride (the same signed
-# Operation<Ext> wire as tessera and murm posts; mirrors gemot's pin).
+# Operation<Ext> wire as Standing and Murm posts; mirrors Gemot's pin).
 p2panda-core = "0.7.0"
-# Persona-derived signing keys (the same identity flow tessera's wire uses).
+# Persona-derived signing keys (the same identity flow Standing's wire uses).
 identity = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"

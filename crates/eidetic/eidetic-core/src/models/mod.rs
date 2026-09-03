@@ -18,18 +18,18 @@ pub use adapter::{AdapterRuntimeCompat, MODEL_ADAPTER_MANIFEST_SCHEMA_REF, Model
 pub use library::{ModelComponents, ModelLibrary, ResolvedModel};
 use serde::{Deserialize, Serialize};
 pub use training::{
-    EVAL_REPORT_SCHEMA_REF, EvalMetric, EvalReport, EvalTally, TRAINING_CORPUS_SCHEMA_REF,
-    TrainingCorpus,
+    EVAL_REPORT_SCHEMA_REF, EvalMetric, EvalReport, EvalTally, LEGACY_TRAINING_CORPUS_SCHEMA_REF,
+    TRAINING_CORPUS_SCHEMA_REF, TrainingCorpus, load_training_corpus,
 };
 
 use crate::schema::ManifestId;
 use crate::schema::{Hash, SchemaRef};
 use crate::typed::TypedPayload;
 
-/// Canonical bytes of the `ModelManifest` schema engram payload.
+/// Canonical bytes of the `ModelManifest` schema codicil payload.
 const MODEL_MANIFEST_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.ModelManifest/v1","body":{"version":1,"description":"Manifest for a machine-learning model.","required":["model_id","architecture","weight_blob","tokenizer_blob"],"fields":{"model_id":{"type":"string"},"architecture":{"type":"string"},"license":{"type":"string"},"config":{"type":"object"},"weight_blob":{"type":"string"},"tokenizer_blob":{"type":"string"}}}}"#;
 
-/// The well-known schema reference for `ModelManifest` engrams.
+/// The well-known schema reference for `ModelManifest` codicils.
 pub static MODEL_MANIFEST_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
     std::sync::LazyLock::new(|| {
         SchemaRef::from_id(ManifestId::from_hash(Hash::of(
@@ -37,7 +37,7 @@ pub static MODEL_MANIFEST_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
         )))
     });
 
-/// Canonical bytes of the `OpaqueBlob` schema engram payload.
+/// Canonical bytes of the `OpaqueBlob` schema codicil payload.
 const OPAQUE_BLOB_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.OpaqueBlob/v1","body":{"version":1,"description":"An uninterpreted byte buffer.","required":["bytes"],"fields":{"bytes":{"type":"string"}}}}"#;
 
 /// The well-known schema reference for opaque blobs.
@@ -66,7 +66,7 @@ impl TypedPayload for ModelManifest {
     }
 }
 
-/// Simple wrapper for a byte buffer stored as an engram.
+/// Simple wrapper for a byte buffer stored as an codicil.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpaqueBlob(pub Vec<u8>);
 

@@ -15,8 +15,8 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use codicil::LogId;
 use muniment::Hash as ContentHash;
+use muniment::LogId;
 use serde::{Deserialize, Serialize};
 
 use crate::caps::{

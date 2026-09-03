@@ -45,6 +45,9 @@
 #![warn(missing_docs)]
 
 mod authority;
+
+#[cfg(feature = "flora")]
+pub mod flora;
 mod installed;
 #[cfg(feature = "remote")]
 mod remote;
@@ -73,6 +76,8 @@ pub use surface::{
     DistilleryResidentSnapshotV1, distillery_installed_descriptor, distillery_installed_surface,
     distillery_installed_view,
 };
+#[cfg(feature = "trainer-gpu")]
+pub use trainer::discrete_gpu_trainer_device;
 #[cfg(feature = "trainer")]
 pub use trainer::{
     TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt, TrainRequest, TrainerResource,
@@ -84,12 +89,24 @@ pub use trainer::{
 ///
 /// These are not conveniences: [`TrainerResource::new`] takes a
 /// [`TrainerDevice`], and [`TrainRequest`] carries a
-/// [`LoraTrainerSettings`] and is fed by [`TrainingCase`] engrams, so a host
+/// [`LoraTrainerSettings`] and is fed by [`TrainingCase`] codicils, so a host
 /// that cannot name them cannot compose the resource or post a job to it.
 /// Re-exporting them here keeps the seam where it already is: distillery
 /// drives esp, and its consumers drive distillery.
 #[cfg(feature = "trainer")]
 pub use esp::infer::decoder::{DecoderDevice as TrainerDevice, LoraTrainerSettings, TrainingCase};
+
+/// The GPU half of that vocabulary, under `trainer-gpu`.
+///
+/// [`discrete_gpu_trainer_device`] returns [`GpuAdapterFacts`], and a host that
+/// wants to log them, assert on them, or carry them into its own facts has to
+/// be able to name the type and its [`GpuDeviceType`]. [`TrainerGpuKind`] is
+/// there for a host that means to probe some other class itself rather than
+/// take the discrete-GPU shorthand.
+#[cfg(feature = "trainer-gpu")]
+pub use esp::infer::decoder::{
+    DecoderGpuKind as TrainerGpuKind, GpuAdapterFacts, GpuDeviceType, probe_gpu_adapter,
+};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

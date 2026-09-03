@@ -4,14 +4,14 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The `SearchIndexSpec` engram — the index's hand-off contract.
+//! The `SearchIndexSpec` codicil — the index's hand-off contract.
 //!
 //! Names what a `TrailIndex` is made of: the logical field set (and its
 //! version), the tokenizer, and the **tantivy format version** the segments
 //! were written with. tantivy does not promise cross-release index
 //! compatibility, so the format travels beside the data and a reader
 //! rejects-or-re-mints on mismatch (re-minting is cheap in principle: the
-//! trace corpus is itself engrams).
+//! trace corpus is itself codicils).
 //!
 //! Locally the spec rides a JSON sidecar in the index directory
 //! ([`SPEC_SIDECAR`]) so `open` can refuse before tantivy touches segments;
@@ -46,7 +46,7 @@ pub const FIELDS_V3: u32 = 3;
 /// The spec sidecar's file name inside an index directory.
 pub const SPEC_SIDECAR: &str = "mere-search-spec.json";
 
-/// Canonical bytes of the `SearchIndexSpec` schema engram's payload.
+/// Canonical bytes of the `SearchIndexSpec` schema codicil's payload.
 const SEARCH_INDEX_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"eidetic.SearchIndexSpec/v1","body":{"version":1,"description":"Contract for a lexical trail index: field set, tokenizer, and tantivy format version.","required":["tantivy_version","fields_version","tokenizer"],"fields":{"tantivy_version":{"type":"string"},"fields_version":{"type":"integer"},"tokenizer":{"type":"string"}}}}"#;
 
 /// The well-known schema reference for [`SearchIndexSpec`] payloads.
@@ -55,7 +55,7 @@ pub static SEARCH_INDEX_SCHEMA_REF: std::sync::LazyLock<SchemaRef> =
         SchemaRef::from_id(ManifestId::from_hash(Hash::of(SEARCH_INDEX_SCHEMA_PAYLOAD)))
     });
 
-/// Idempotently seed the `SearchIndexSpec` schema engram into a Store.
+/// Idempotently seed the `SearchIndexSpec` schema codicil into a Store.
 pub async fn bootstrap_search_schema(store: &mut dyn Store) -> eidetic::Result<()> {
     let id = SEARCH_INDEX_SCHEMA_REF.0;
     if eidetic::manifest::load_manifest(store, id).await?.is_some() {

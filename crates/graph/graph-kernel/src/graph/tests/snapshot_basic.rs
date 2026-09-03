@@ -88,7 +88,7 @@ fn nested_graph_survives_snapshot_roundtrip() {
         &mut graph,
         apply::GraphDelta::SetNodeNested {
             key: bearer,
-            nested: Some(codicil::LogId::new("denizens/trail-keeper")),
+            nested: Some(muniment::LogId::new("denizens/trail-keeper")),
         },
     );
 

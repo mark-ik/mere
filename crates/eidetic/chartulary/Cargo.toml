@@ -3,10 +3,10 @@ name = "chartulary"
 # 0.2.0: `EdgeId` becomes `(writer, counter)`. Breaking, and deliberately taken
 # before any shared container carries data; 0.1.x journals still load, since a
 # bare counter reads back as `WriterId::LOCAL`.
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 license.workspace = true
-description = "The generic content-addressed container graph (aka chart). Graph<N, E> on petgraph with capability traits (Identified, Addressed, ContentBearing, Labeled, Classified, Predicated) and default Container/Relation payloads. The substrate that binds muniment's blobs and codicil's log into an app-agnostic graph. Carries the lineage layer (`chartulary::stemma`): owner-scoped descent of content through branching visits."
+description = "The generic content-addressed container graph (aka chart). Graph<N, E> on petgraph with capability traits, default Container/Relation payloads, RDF projection (`chartulary::rdf`), and the lineage layer (`chartulary::stemma`). The substrate binds muniment's blobs and journals into an app-agnostic graph."
 repository = "https://github.com/merely-made/mere"
 keywords = ["graph", "content-addressed", "knowledge-graph", "petgraph"]
 categories = ["data-structures"]
@@ -21,8 +21,7 @@ serde_json = "1"
 # For the content reference in ContentBearing (the blake3 Hash). default-features
 # off so chartulary does not pull muniment's JSON/postcard codecs, only its Hash.
 muniment = { path = "../muniment", version = "0.1.0", default-features = false }
-# The edit spine (G1): graph edits are a codicil log, persisted through muniment.
-codicil = { path = "../codicil", version = "0.1.0" }
+# The edit spine (G1): graph edits are a muniment journal.
 # The lineage layer (`chartulary::stemma`, folded in 2026-07-12): rkyv for the
 # zero-copy snapshot, slotmap for the visit arena.
 rkyv = { version = "0.8", features = ["std"] }
@@ -30,3 +29,4 @@ slotmap = { version = "1.0", features = ["serde"] }
 
 [dev-dependencies]
 pollster = "0.4"
+muniment = { path = "../muniment", version = "0.1.2", features = ["json"] }

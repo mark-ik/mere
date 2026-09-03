@@ -79,8 +79,8 @@ impl BrowserHost {
             "apply-face" => self.apply_face(),
             "save-scene" => self.save_scene(),
             "reopen-scene" => self.reopen_scene(),
-            "export-engram" => self.export_engram(),
-            "open-engram" => self.open_engram(),
+            "export-codicil" | "export-engram" => self.export_codicil(),
+            "open-codicil" | "open-engram" => self.open_codicil(),
             _ => return false,
         };
         self.product_status = match result {
@@ -461,7 +461,7 @@ impl BrowserHost {
         Ok("Saved scene reopened".to_string())
     }
 
-    fn export_engram(&mut self) -> Result<String, String> {
+    fn export_codicil(&mut self) -> Result<String, String> {
         let focused = self.focused_member()?;
         let scope = TransferScope::from_code(&select_value("transfer-scope")?)
             .ok_or("unknown transfer scope")?;
@@ -478,7 +478,7 @@ impl BrowserHost {
         let bytes = self
             .app
             .host
-            .export_product_engram(ExportRequest {
+            .export_product_codicil(ExportRequest {
                 focused,
                 selected: self.canvas.selected_members(),
                 scope,
@@ -489,7 +489,7 @@ impl BrowserHost {
             .map_err(|error| error.to_string())?;
         self.last_export = String::from_utf8(bytes).map_err(|error| error.to_string())?;
         self.export_bytes = self.last_export.len();
-        set_textarea_value("engram-data", &self.last_export)?;
+        set_textarea_value("codicil-data", &self.last_export)?;
         Ok(format!(
             "Exported {} bytes · {}",
             self.export_bytes,
@@ -497,12 +497,12 @@ impl BrowserHost {
         ))
     }
 
-    fn open_engram(&mut self) -> Result<String, String> {
-        let data = textarea_value("engram-data")?;
+    fn open_codicil(&mut self) -> Result<String, String> {
+        let data = textarea_value("codicil-data")?;
         let (receipt, scene) = self
             .app
             .host
-            .replace_with_product_engram(data.as_bytes())
+            .replace_with_product_codicil(data.as_bytes())
             .map_err(|error| error.to_string())?;
         self.imported_nodes = receipt.nodes;
         let selected = scene
@@ -516,7 +516,7 @@ impl BrowserHost {
         }
         self.detail_open = false;
         Ok(format!(
-            "Opened engram · {} objects, {} relations, {} facets",
+            "Opened codicil · {} objects, {} relations, {} facets",
             receipt.nodes, receipt.relations, receipt.facets
         ))
     }

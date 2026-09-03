@@ -13,14 +13,14 @@
 //!
 //! Three rules shape it:
 //!
-//! 1. **Sense what Windows will tell us without COM.** Idle time, power, and
-//!    link class come from plain Win32 calls — `GetLastInputInfo`,
-//!    `GetSystemPowerStatus`, `GetAdaptersAddresses`. No WMI, no WinRT, no COM
-//!    apartment, because a desktop resident should not pay for one to read a
-//!    battery.
-//! 2. **Take the owner's word for the rest.** Package temperature and
-//!    in-use bandwidth need instrumentation this lane does not have, so they
-//!    arrive as [`StatedConditions`] — values the device's owner wrote down.
+//! 1. **Sense what Windows will tell us without COM.** Idle time, power, link
+//!    class, and in-use bandwidth come from plain Win32 calls —
+//!    `GetLastInputInfo`, `GetSystemPowerStatus`, `GetAdaptersAddresses`,
+//!    `GetIfEntry2`. No WMI, no WinRT, no COM apartment, because a desktop
+//!    resident should not pay for one to read a battery.
+//! 2. **Take the owner's word for the rest.** Package temperature is the one
+//!    signal no route reaches honestly (see below), so it arrives as a
+//!    [`StatedConditions`] value the device's owner wrote down.
 //! 3. **Never invent the difference.** Every signal carries a
 //!    [`SignalProvenance`], and a signal that is neither sensed nor stated is
 //!    [`Absent`](SignalProvenance::Absent) — reported as the value that makes
@@ -32,16 +32,26 @@
 //! fabricate" would be an aspiration; with it, a device physically cannot be
 //! configured to decide on a number nobody measured.
 //!
-//! ## Known approximation: `local_hour` off Windows
+//! `local_hour` has no provenance field because both paths sense it: Windows
+//! from `GetLocalTime`, everywhere else from chrono's local clock.
 //!
-//! `local_hour` has no provenance field because on Windows it is always
-//! sensed, from `GetLocalTime`. The `cfg(not(windows))` path has no
-//! dependency-free route to a *local* hour in `std`, so it reports the **UTC**
-//! hour. That path exists to keep this module compiling and testable
-//! cross-platform; a real non-Windows port must supply a genuine local clock
-//! before [`DevicePolicy::quiet_hours`] can be trusted there.
+//! ## Why thermal is an owner statement, on evidence
+//!
+//! The only COM-free route to a package temperature is the `Thermal Zone
+//! Information` performance-counter set through PDH, which does read without
+//! elevation. Measured on the development laptop (2026-09-02), `\_TZ.TZ01`
+//! reported a constant 368.2 K (`High Precision` 3682) through idle, an 89%
+//! CPU load burst, and the cool-down after it, with `Throttle Reasons` 0
+//! throughout: the ACPI zone on this hardware is a static value, not a sensor.
+//! `MSAcpi_ThermalZoneTemperature` over WMI is access-denied without elevation
+//! and needs a COM apartment besides. A live temperature exists only through
+//! vendor tools — `nvidia-smi` read the GPU at 75 °C — which are outside this
+//! stack. A reading the policy would believe as sensed has to *move*, so
+//! thermal stays an owner statement until hardware with a live ACPI zone is in
+//! hand.
 
 use std::sync::Mutex;
+use std::time::Instant;
 
 use mesh::{DeviceConditions, DevicePolicy, NetworkClass};
 use mesh_host::ConditionSource;
@@ -158,7 +168,34 @@ pub const ABSENT_BANDWIDTH_IN_USE_KBPS: u32 = u32::MAX;
 pub struct DeviceConditionSensor {
     stated: StatedConditions,
     last: Mutex<ConditionCoverage>,
+    bandwidth: Mutex<BandwidthState>,
 }
+
+/// One reading of the cumulative octet counters, and when it was taken.
+#[derive(Clone, Copy, Debug)]
+struct BandwidthSample {
+    at: Instant,
+    total_octets: u64,
+}
+
+/// What a bandwidth *rate* needs that a single pass cannot give it: the
+/// previous counter reading, and the last rate actually computed from a pair
+/// of them.
+///
+/// Both live under one lock rather than two, so a pass can never read a sample
+/// from one moment against a rate from another.
+#[derive(Clone, Copy, Debug, Default)]
+struct BandwidthState {
+    previous: Option<BandwidthSample>,
+    rate_kbps: Option<u32>,
+}
+
+/// The shortest interval a bandwidth rate is computed over.
+///
+/// Below this, the division is dominated by the timer's own resolution and by
+/// whatever happened to be in flight, so the pass keeps its previous sample and
+/// waits for a real interval rather than reporting noise.
+const MIN_BANDWIDTH_INTERVAL_MS: u128 = 100;
 
 impl DeviceConditionSensor {
     /// Build a sensor over the owner's stated fallbacks and take a first
@@ -167,6 +204,7 @@ impl DeviceConditionSensor {
         let sensor = Self {
             stated,
             last: Mutex::new(ConditionCoverage::all_absent()),
+            bandwidth: Mutex::new(BandwidthState::default()),
         };
         let _ = sensor.sense();
         sensor
@@ -215,6 +253,26 @@ impl DeviceConditionSensor {
     /// of sensed and stated, so a stated value can only ever downgrade, and a
     /// sensed link never upgrades what the owner said. A sensed `Offline` still
     /// beats a stated `Wifi`, because an unplugged cable is a real observation.
+    ///
+    /// ## Bandwidth: readable on the first pass, a rate on the second
+    ///
+    /// In-use bandwidth is a *rate*, and a rate needs two counter readings.
+    /// The first pass — the one [`new`](Self::new) takes — has only one, so it
+    /// reports `Sensed` with no rate to show for it: the value falls back to
+    /// the owner's stated number, or to
+    /// [`ABSENT_BANDWIDTH_IN_USE_KBPS`] when there is none.
+    ///
+    /// Calling that `Sensed` is deliberate. The provenance answers the
+    /// question [`validate_policy_coverage`] asks at composition time — *can
+    /// this device read its link counters at all* — and the counters were read.
+    /// The first reading is never the one a policy decides on: the host takes
+    /// conditions on its first supervisor tick, one `tick_every_ms` after
+    /// composition, by which time a real interval exists. If the counters are
+    /// *not* readable the pass falls back to stated, then to `Absent`, exactly
+    /// as before, and a bandwidth rule on such a device is refused.
+    ///
+    /// A sensed rate beats a stated one outright — it is a measurement of the
+    /// link the owner was describing.
     pub fn sense(&self) -> (DeviceConditions, ConditionCoverage) {
         let stated = self.stated;
 
@@ -245,21 +303,15 @@ impl DeviceConditionSensor {
         };
 
         let (thermal_c, thermal) = match stated.thermal_c {
-            // Not sensed in v1: package temperature needs WMI/COM, which this
-            // lane deliberately does not open. Deferred, not forgotten.
+            // Not sensed: no COM-free route reports a temperature that moves on
+            // this hardware. The measurements are in the module docs.
             Some(c) => (c, SignalProvenance::Stated),
             None => (ABSENT_THERMAL_C, SignalProvenance::Absent),
         };
 
         let (network, network_provenance) = merge_network(sensed::network(), stated.network);
 
-        let (bandwidth_in_use_kbps, bandwidth) = match stated.bandwidth_in_use_kbps {
-            // Not sensed in v1: a real number means sampling interface counters
-            // over an interval, which is a job for a background sampler rather
-            // than a per-tick reading.
-            Some(kbps) => (kbps, SignalProvenance::Stated),
-            None => (ABSENT_BANDWIDTH_IN_USE_KBPS, SignalProvenance::Absent),
-        };
+        let (bandwidth_in_use_kbps, bandwidth) = self.bandwidth_reading();
 
         let coverage = ConditionCoverage {
             idle,
@@ -284,6 +336,72 @@ impl DeviceConditionSensor {
         *self.last.lock().expect("condition coverage lock") = coverage;
         (conditions, coverage)
     }
+
+    /// One pass of the two-sample bandwidth rate. See
+    /// [`sense`](Self::sense) for why a readable counter is `Sensed` even
+    /// before a rate exists.
+    fn bandwidth_reading(&self) -> (u32, SignalProvenance) {
+        let Some(total_octets) = sensed::link_octets() else {
+            return match self.stated.bandwidth_in_use_kbps {
+                Some(kbps) => (kbps, SignalProvenance::Stated),
+                None => (ABSENT_BANDWIDTH_IN_USE_KBPS, SignalProvenance::Absent),
+            };
+        };
+
+        let at = Instant::now();
+        let mut state = self.bandwidth.lock().expect("bandwidth sample lock");
+
+        let mut rate_now = None;
+        let rebaseline = match state.previous {
+            None => true,
+            Some(previous) => {
+                let elapsed_ms = at.saturating_duration_since(previous.at).as_millis();
+                if elapsed_ms < MIN_BANDWIDTH_INTERVAL_MS {
+                    // Keep the older sample so the interval can accumulate:
+                    // replacing it on every fast tick would mean a sensor
+                    // ticking faster than the floor never computes a rate.
+                    false
+                } else {
+                    // `checked_sub` is the counter-wrap and adapter-reset guard.
+                    // A total that went *down* is not a negative rate, it is a
+                    // baseline that no longer applies, so this pass reports no
+                    // new rate and the sample below becomes the new baseline.
+                    rate_now = total_octets
+                        .checked_sub(previous.total_octets)
+                        .map(|delta| kbps_over(delta, elapsed_ms));
+                    true
+                }
+            }
+        };
+        if rebaseline {
+            state.previous = Some(BandwidthSample { at, total_octets });
+        }
+        if rate_now.is_some() {
+            state.rate_kbps = rate_now;
+        }
+
+        // A measured rate first, then the last measured one, then the owner's
+        // statement, then fail-closed. The provenance is `Sensed` throughout:
+        // the counters answered, which is the coverage question.
+        let value = rate_now
+            .or(state.rate_kbps)
+            .or(self.stated.bandwidth_in_use_kbps)
+            .unwrap_or(ABSENT_BANDWIDTH_IN_USE_KBPS);
+        (value, SignalProvenance::Sensed)
+    }
+}
+
+/// Octets over an interval as kilobits per second.
+///
+/// One bit per millisecond is one kilobit per second, so the conversion is
+/// `octets * 8 / elapsed_ms` with no further scaling. The arithmetic is done in
+/// `u128` because the numerator is a byte count times eight, and saturates
+/// upward on the way back to `u32` — the withholding direction, which is where
+/// an implausible delta (a fresh adapter's whole lifetime total arriving in one
+/// pass) belongs.
+fn kbps_over(delta_octets: u64, elapsed_ms: u128) -> u32 {
+    let bits = u128::from(delta_octets).saturating_mul(8);
+    u32::try_from(bits / elapsed_ms.max(1)).unwrap_or(u32::MAX)
 }
 
 impl ConditionSource for DeviceConditionSensor {
@@ -389,9 +507,9 @@ mod sensed {
     use windows::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, NO_ERROR};
     use windows::Win32::NetworkManagement::IpHelper::{
         GAA_FLAG_INCLUDE_GATEWAYS, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_DNS_SERVER,
-        GAA_FLAG_SKIP_FRIENDLY_NAME, GAA_FLAG_SKIP_MULTICAST, GetAdaptersAddresses,
+        GAA_FLAG_SKIP_FRIENDLY_NAME, GAA_FLAG_SKIP_MULTICAST, GetAdaptersAddresses, GetIfEntry2,
         IF_TYPE_ETHERNET_CSMACD, IF_TYPE_IEEE80211, IF_TYPE_SOFTWARE_LOOPBACK, IF_TYPE_TUNNEL,
-        IP_ADAPTER_ADDRESSES_LH,
+        IP_ADAPTER_ADDRESSES_LH, MIB_IF_ROW2,
     };
     use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
     use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
@@ -446,6 +564,15 @@ mod sensed {
     /// not tell us how to rank (cellular, PPP). `None` falls back to the
     /// owner's stated value rather than claiming `Offline`.
     pub(super) fn network() -> Option<NetworkClass> {
+        let buffer = adapter_buffer()?;
+        // SAFETY: `adapter_buffer` returns only a buffer the call filled, so it
+        // holds a well-formed adapter chain, and `buffer` outlives the walk.
+        unsafe { classify(buffer.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>()) }
+    }
+
+    /// The adapter chain from `GetAdaptersAddresses`, in the buffer that backs
+    /// it — the caller walks it from `as_ptr()`. `None` when the call failed.
+    fn adapter_buffer() -> Option<Vec<u64>> {
         // AF_UNSPEC: both address families, so an IPv6-only link still counts.
         const AF_UNSPEC: u32 = 0;
         // 15 KB is the starting size Microsoft's own sample uses.
@@ -482,18 +609,28 @@ mod sensed {
             if rc != NO_ERROR.0 {
                 return None;
             }
-            // SAFETY: the call succeeded, so `buffer` holds a well-formed
-            // adapter chain, and `buffer` outlives the walk.
-            return unsafe { classify(buffer.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>()) };
+            return Some(buffer);
         }
         None
     }
 
-    /// Walk the adapter chain and pick the best usable link.
+    /// Whether one adapter counts as an uplink for both readings taken here.
     ///
     /// "Usable" is: operationally up, not loopback, not a tunnel, and holding
     /// at least one gateway — a link with no gateway routes nowhere, which is
     /// how a bridged virtual adapter would otherwise pass for a wired uplink.
+    /// The link class and the byte counters share this predicate on purpose: a
+    /// rate summed over a different set of adapters than the one the class
+    /// describes would be two answers about two machines.
+    fn is_usable_uplink(entry: &IP_ADAPTER_ADDRESSES_LH) -> bool {
+        entry.OperStatus == IfOperStatusUp
+            && entry.IfType != IF_TYPE_SOFTWARE_LOOPBACK
+            && entry.IfType != IF_TYPE_TUNNEL
+            && !entry.FirstGatewayAddress.is_null()
+    }
+
+    /// Walk the adapter chain and pick the best usable link.
+    /// "Usable" is [`is_usable_uplink`].
     ///
     /// # Safety
     ///
@@ -509,11 +646,7 @@ mod sensed {
             let entry = unsafe { &*adapter };
             adapter = entry.Next.cast_const();
 
-            if entry.OperStatus != IfOperStatusUp
-                || entry.IfType == IF_TYPE_SOFTWARE_LOOPBACK
-                || entry.IfType == IF_TYPE_TUNNEL
-                || entry.FirstGatewayAddress.is_null()
-            {
+            if !is_usable_uplink(entry) {
                 continue;
             }
             let class = match entry.IfType {
@@ -536,6 +669,59 @@ mod sensed {
         }
     }
 
+    /// Total octets in and out, since boot, over every usable uplink — or
+    /// `None` when the counters cannot be read.
+    ///
+    /// This is a *total*, not a rate; the caller turns two of them into one.
+    ///
+    /// Zero usable uplinks is `Some(0)`, not `None`, for the same reason
+    /// [`classify`] answers `Some(Offline)` there: a machine with no link
+    /// carries no traffic, and that is an observation rather than a gap. An
+    /// adapter that *is* usable but whose counters `GetIfEntry2` refuses makes
+    /// the whole reading `None`, because a partial sum understates the rate,
+    /// and understating in-use bandwidth is the lending direction.
+    pub(super) fn link_octets() -> Option<u64> {
+        let buffer = adapter_buffer()?;
+        // SAFETY: `adapter_buffer` returns only a buffer the call filled, so it
+        // holds a well-formed adapter chain, and `buffer` outlives the walk.
+        unsafe { sum_octets(buffer.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>()) }
+    }
+
+    /// Walk the adapter chain and add up the byte counters of the usable links.
+    ///
+    /// # Safety
+    ///
+    /// `head` must be null or the start of a valid `GetAdaptersAddresses`
+    /// chain whose backing buffer outlives this call.
+    unsafe fn sum_octets(head: *const IP_ADAPTER_ADDRESSES_LH) -> Option<u64> {
+        let mut total: u64 = 0;
+        let mut adapter = head;
+        while !adapter.is_null() {
+            // SAFETY: the caller promises a valid chain; `Next` is either null
+            // or the next element of it.
+            let entry = unsafe { &*adapter };
+            adapter = entry.Next.cast_const();
+
+            if !is_usable_uplink(entry) {
+                continue;
+            }
+            // `GetIfEntry2` is keyed on whichever identifier the caller fills
+            // in; the LUID is the stable one across adapter re-enumeration,
+            // and `GetAdaptersAddresses` already handed it to us.
+            let mut row = MIB_IF_ROW2 {
+                InterfaceLuid: entry.Luid,
+                ..Default::default()
+            };
+            if unsafe { GetIfEntry2(&mut row) } != NO_ERROR {
+                return None;
+            }
+            total = total
+                .saturating_add(row.InOctets)
+                .saturating_add(row.OutOctets);
+        }
+        Some(total)
+    }
+
     /// The local wall-clock hour, `0..24`.
     pub(super) fn local_hour() -> u8 {
         let now = unsafe { GetLocalTime() };
@@ -545,12 +731,11 @@ mod sensed {
 
 #[cfg(not(windows))]
 mod sensed {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
+    use chrono::{Local, Timelike};
     use mesh::NetworkClass;
 
-    /// Nothing is sensed off Windows; the owner's stated value is the whole
-    /// story. See the module docs.
+    /// Device state is not sensed off Windows; the owner's stated value is the
+    /// whole story. The clock is the exception — see [`local_hour`].
     pub(super) fn idle_ms() -> Option<u64> {
         None
     }
@@ -563,14 +748,16 @@ mod sensed {
         None
     }
 
-    /// The **UTC** hour, not the local one — `std` has no timezone and this
-    /// crate has no date-time dependency. Documented as a known approximation
-    /// in the module docs; a real non-Windows port must replace it.
+    pub(super) fn link_octets() -> Option<u64> {
+        None
+    }
+
+    /// The local wall-clock hour, `0..24`, from chrono's local clock.
+    ///
+    /// chrono rather than `time`: `time`'s local-offset lookup refuses in a
+    /// multi-threaded process on Unix, and the resident is one.
     pub(super) fn local_hour() -> u8 {
-        let secs = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |since| since.as_secs());
-        ((secs / 3_600) % 24) as u8
+        (Local::now().hour() % 24) as u8
     }
 }
 
@@ -736,17 +923,12 @@ mod tests {
 
     #[test]
     fn unsensed_signals_hold_their_fail_closed_values() {
-        // Thermal and bandwidth are never sensed in v1, so this half is
-        // deterministic on every platform.
+        // Thermal is never sensed on any platform, so this is deterministic
+        // everywhere. Bandwidth is sensed on Windows and has its own tests.
         let sensor = DeviceConditionSensor::new(StatedConditions::default());
         let (conditions, coverage) = sensor.sense();
         assert_eq!(coverage.thermal, SignalProvenance::Absent);
         assert_eq!(conditions.thermal_c, ABSENT_THERMAL_C);
-        assert_eq!(coverage.bandwidth, SignalProvenance::Absent);
-        assert_eq!(
-            conditions.bandwidth_in_use_kbps,
-            ABSENT_BANDWIDTH_IN_USE_KBPS
-        );
 
         // An absent signal must make its rule fire, not sleep.
         let mut thermal_limited = DevicePolicy::permissive();
@@ -755,9 +937,45 @@ mod tests {
             thermal_limited.withholding(&conditions).is_some(),
             "an absent thermal reading must withhold, not lend"
         );
-        let mut bandwidth_limited = DevicePolicy::permissive();
-        bandwidth_limited.max_bandwidth_in_use_kbps = 1_000;
-        assert!(bandwidth_limited.withholding(&conditions).is_some());
+    }
+
+    #[test]
+    fn the_absent_bandwidth_value_withholds_rather_than_lends() {
+        // The fail-closed direction, stated as a property of the constant
+        // rather than of a platform: wherever a bandwidth signal comes back
+        // absent, the value it carries must make an enabled bandwidth rule
+        // fire.
+        let mut policy = DevicePolicy::permissive();
+        policy.max_bandwidth_in_use_kbps = 1_000;
+        assert!(
+            policy
+                .withholding(&DeviceConditions {
+                    bandwidth_in_use_kbps: ABSENT_BANDWIDTH_IN_USE_KBPS,
+                    ..DeviceConditions::spare()
+                })
+                .is_some(),
+            "an absent bandwidth reading must read as a link entirely spoken for"
+        );
+    }
+
+    #[test]
+    fn a_bandwidth_rule_on_an_absent_bandwidth_signal_is_refused_by_name() {
+        let mut policy = DevicePolicy::permissive();
+        policy.max_bandwidth_in_use_kbps = 5_000;
+        let refusal = validate_policy_coverage(&policy, &ConditionCoverage::all_absent())
+            .expect_err("a bandwidth ceiling on a device that reads no counters is not a policy");
+        assert!(refusal.contains("bandwidth"), "{refusal}");
+        assert!(refusal.contains("max_bandwidth_in_use_kbps"), "{refusal}");
+    }
+
+    #[test]
+    fn a_bandwidth_rate_is_octets_times_eight_over_milliseconds() {
+        // 1 kbit/s is 1 bit/ms, so 125 octets over 1000 ms is 1 kbps.
+        assert_eq!(kbps_over(125, 1_000), 1);
+        assert_eq!(kbps_over(125_000, 1_000), 1_000);
+        assert_eq!(kbps_over(0, 1_000), 0);
+        // An implausible delta saturates upward — the withholding direction.
+        assert_eq!(kbps_over(u64::MAX, 100), u32::MAX);
     }
 
     #[cfg(not(windows))]
@@ -846,7 +1064,6 @@ mod tests {
 
         // Nothing may be reported as sensed that this build cannot sense.
         assert_eq!(coverage.thermal, SignalProvenance::Absent);
-        assert_eq!(coverage.bandwidth, SignalProvenance::Absent);
         // And a signal reported as sensed must not be holding a fail-closed
         // placeholder it never measured.
         if coverage.battery == SignalProvenance::Sensed && !conditions.on_mains {
@@ -866,6 +1083,68 @@ mod tests {
         assert!(
             [coverage.idle, coverage.battery, coverage.network].contains(&SignalProvenance::Sensed),
             "nothing was sensed on Windows, so the Win32 layer is not working: {coverage:?}"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bandwidth_is_sensed_from_the_very_first_reading() {
+        // `validate_policy_coverage` runs against this coverage, before the
+        // host has ticked once. What it asks is whether the counters can be
+        // read at all, and `new` has already read them.
+        let sensor = DeviceConditionSensor::new(StatedConditions::default());
+        assert_eq!(
+            sensor.coverage().bandwidth,
+            SignalProvenance::Sensed,
+            "GetIfEntry2 over the adapter walk did not answer on Windows"
+        );
+        let mut metered = DevicePolicy::permissive();
+        metered.max_bandwidth_in_use_kbps = 10_000;
+        assert_eq!(
+            validate_policy_coverage(&metered, &sensor.coverage()),
+            Ok(()),
+            "a device that reads its link counters may carry a bandwidth rule"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_second_bandwidth_reading_over_a_real_interval_is_a_rate() {
+        // A rate needs two samples an interval apart. The sleep is longer than
+        // `MIN_BANDWIDTH_INTERVAL_MS` so the second pass must produce one.
+        // Zero is a legitimate rate on an idle link; the fail-closed sentinel
+        // is not, and neither is a stated value, of which there are none here.
+        let sensor = DeviceConditionSensor::new(StatedConditions::default());
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let (conditions, coverage) = sensor.sense();
+
+        assert_eq!(coverage.bandwidth, SignalProvenance::Sensed);
+        assert_ne!(
+            conditions.bandwidth_in_use_kbps, ABSENT_BANDWIDTH_IN_USE_KBPS,
+            "the second pass had a real interval and still reported the absent value"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_sensed_bandwidth_rate_replaces_the_owners_stated_one() {
+        // Sensed beats stated: a measurement of the link outranks a number
+        // written down about it. The stated number is one no link on this
+        // machine can produce over 150 ms — 4.3 Tbit/s, one below the absent
+        // sentinel — so a second reading that differs from it is a measurement
+        // and not the fallback.
+        const UNREACHABLE_KBPS: u32 = u32::MAX - 1;
+        let sensor = DeviceConditionSensor::new(StatedConditions {
+            bandwidth_in_use_kbps: Some(UNREACHABLE_KBPS),
+            ..StatedConditions::default()
+        });
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        let (conditions, coverage) = sensor.sense();
+
+        assert_eq!(coverage.bandwidth, SignalProvenance::Sensed);
+        assert_ne!(
+            conditions.bandwidth_in_use_kbps, UNREACHABLE_KBPS,
+            "a measured rate must displace the stated one"
         );
     }
 

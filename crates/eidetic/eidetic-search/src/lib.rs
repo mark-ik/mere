@@ -7,7 +7,7 @@
 //! eidetic-search — lexical recall over your own trail (Phase 9, producer half).
 //!
 //! The [`TrailIndex`] is a tantivy index minted **from** `BrowsingTrace`
-//! engrams: derived state, never the source of truth. The trace corpus in
+//! codicils: derived state, never the source of truth. The trace corpus in
 //! the eidetic store is the authority; the index can always be re-minted
 //! from it ([`TrailIndex::rebuild`]), which is exactly what happens when the
 //! on-disk index's format no longer matches the linked tantivy
@@ -30,10 +30,10 @@
 //!   other) by reciprocal-rank fusion. This crate deliberately does not
 //!   depend on an embedding engine; the caller brings both rankings.
 //!
-//! The `SearchIndexSpec` engram ([`spec`]) is the hand-off contract: it
+//! The `SearchIndexSpec` codicil ([`spec`]) is the hand-off contract: it
 //! names the field set, tokenizer, and tantivy format version. Locally it
 //! also rides a sidecar file in the index directory so `open` can check
-//! compatibility before tantivy touches the segments; as an engram it is
+//! compatibility before tantivy touches the segments; as an codicil it is
 //! what a moot's consume half (deferred) would verify before merging.
 
 pub mod fusion;

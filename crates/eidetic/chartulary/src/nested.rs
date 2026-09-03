@@ -20,7 +20,7 @@
 //! live ones, `keys("archive/nested/")` the archived ones, and a failed
 //! archive leaves the bearing node in place.
 
-use codicil::LogId;
+use muniment::LogId;
 use muniment::{Backend, Codec, SlotStore, StoreError, WriteOp};
 
 use crate::caps::{GraphBearing, Identified};

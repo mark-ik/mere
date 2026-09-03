@@ -1,0 +1,13 @@
+[package]
+name = "hagiograph"
+version = "0.0.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Name reservation. Hagiograph is the legend and memorial layer: what memory makes of history through legends, memorials, epithets, and retelling. Distinct from event journals, immutable codicils, and descent."
+readme = "README.md"
+keywords = ["memory", "legend", "memorial", "history", "provenance"]
+categories = ["data-structures"]
+exclude = ["design_docs/"]
+
+[dependencies]

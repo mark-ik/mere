@@ -1,10 +1,11 @@
 # Derived Faces Plan
 
 **Date:** 2026-08-28
-**Status:** **D1 published as `pictograph` 0.1.0 and D2 landed as unpublished
-0.2.0 on 2026-09-01**; D3 (canvas arm) remains open. Was gated on emblem's encoder
-(`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed and
-shipped as emblem 0.2.0 on 2026-08-29.
+**Status:** **D1 published as `pictograph` 0.1.0, D2 landed as unpublished
+0.2.0 on 2026-09-01, and D3 landed on 2026-09-02.** Editing remains deferred.
+The original gate was emblem's encoder
+(`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed
+and shipped as emblem 0.2.0 on 2026-08-29.
 **Scope:** procedural node faces for content that has no favicon: derive a
 compact vector face from the node's content address, deterministic across
 peers, themed at render time by the seed palette, with level-of-detail
@@ -13,15 +14,15 @@ sketched in §7 so v1's decisions do not foreclose it.
 
 ## 1. The gap
 
-Canvas's `Face` defaults to `Favicon`
+Before D3, Canvas's `Face` defaulted to `Favicon`
 (`crates/canvas/canvas/src/types.rs:127`): a standard tile wears the fetched
 favicon, with the bare state color until one arrives. Every node that is not a
 webpage — files, contacts, moots, personae, radio peers, documents — has no
-favicon source and stays bare forever. The face override machinery
+favicon source and stayed bare forever. The face override machinery
 (`set_node_face` / `clear_node_face`, default-plus-override with
 clear-to-revert, exercised in `src/tests/node_face.rs`) already has exactly
-the semantics a derived face needs; what is missing is the arm and the thing
-it shows.
+the semantics a derived face needs. The D3 gap was the arm and the thing it
+showed.
 
 ## 2. The model: derive by default, store only the exception
 
@@ -70,11 +71,15 @@ a keepsake.
   what rule-driven faces are. It joins the `-graph` vein beside `chirograph`.
   Verified free on both API and sparse index; near-name `pictogram` is taken
   by a compile-time SVG icon resolver (same vertical), flagged and judged
-  survivable. Depends on emblem (git/path dep) and the kurbo-shaped middle;
-  emits palette indices in tinct's slot vocabulary.
+  survivable. Depends on registry emblem 0.2.0 and emits palette indices in
+  tinct's slot vocabulary.
 - **The sink bridge** (emblem `Sink` → vello scene, via netrender's vello) is
   a small module inside `pictograph` in v1; it moves out only when a second
   consumer forces the wall (module-first doctrine).
+- **Canvas keeps its own portable sink** because its public frame boundary is
+  `netrender::Scene`, not a raw vello scene. It lowers emblem's generated flat
+  fills into `PaintCmd::DrawPath`; netrender applies non-zero winding. The D2
+  bridge remains the exact adapter for direct vello consumers.
 - **Canvas grows the `Derived` face arm**; rule-driven variation (by node
   kind, state, degree) is parameters into the same generator, upstream of it.
 
@@ -127,9 +132,10 @@ Done when:
 - `clear_node_face` and `set_node_face` behave identically to today for the
   existing arms (no regression in the override contract).
 
-**Open with Mark before D3 lands:** whether `Derived` becomes the *default*
-for favicon-less nodes or an opt-in override — default-behavior change versus
-conservative rollout. Both defensible; not decided here.
+**Decision, Mark, 2026-09-02:** `Derived` is the content-sensitive default for
+favicon-less nodes. An explicit `Favicon`, `Derived`, `Sprite`, or `Bare`
+override wins. Clearing the override re-evaluates the node: it returns to
+`Favicon` when a favicon source exists and `Derived` otherwise.
 
 ## 7. Deferred: editing (recorded so v1 does not foreclose it)
 
@@ -194,6 +200,10 @@ conservative rollout. Both defensible; not decided here.
 - 2026-09-01: D2 added the feature-gated vello bridge as unpublished
   `pictograph` 0.2.0. The feature suite passes 21 unit tests plus two live
   headless pixel tests through netrender's wgpu-30 vello package.
+- 2026-09-02: Mark chose derived-by-default for favicon-less nodes. D3 added
+  the `Face::Derived` arm, address/version byte cache, live seed-derived
+  palette, portable Canvas sink, web representation option, and headed
+  default/detail receipts.
 
 ### D1 receipt (2026-08-29)
 
@@ -288,5 +298,51 @@ Done-conditions met:
   `vello` feature; all-target Clippy and rustdoc pass with warnings denied. The
   extracted `.crate` repeats all 23 tests using registry dependencies only.
 
-0.2.0 is not published. D3 is still gated on the derived-by-default versus
-opt-in decision recorded above.
+0.2.0 is not published. Canvas uses the portable sink described above; D2
+remains available to consumers whose boundary is the exact vello scene type.
+
+### D3 receipt (2026-09-02)
+
+Mere commit `be007322687505a43d8004e5f50816cffd79c8c3` adds
+`Face::Derived` and makes it the effective default only while a node lacks a
+favicon source. Explicit overrides still round-trip as string codes in the
+cartography sidecar. `clear_node_face` removes the override and re-evaluates
+the current content-sensitive default; clearing a sprite does the same when
+the active override was `Sprite`.
+
+The byte cache is keyed by `(pictograph::DERIVATION_VERSION, canonical
+address)`. `DerivedFacePalette` is separate live Canvas state built from
+`tincture::Seeds`; a palette swap re-decodes the cached bytes rather than
+re-deriving or storing a second face. The Canvas-private emblem sink maps move,
+line, quadratic, cubic, close, and flat fill operations into portable
+paint-list paths. Its host height is the face's actual raster height, so zoom
+selects the LOD arm embedded in the IconVG file.
+
+Done-conditions met:
+- **default and override contract**: the `node_face` family proves source-less
+  `Derived`, sourced `Favicon`, all four explicit arms, clear-to-re-evaluate,
+  sprite clearing, and cartography round-trips;
+- **live theming**: one cached byte vector renders red, then blue after a live
+  palette replacement while the cache remains byte-identical;
+- **portable rendering**: generated paths enter the ordinary
+  `netrender::Scene` as `SceneShape`s, while favicon images keep their prior
+  image path;
+- **gates**: all 184 `mere-canvas` library tests pass; all-target Clippy exits
+  successfully with only the existing workspace warnings; the standalone
+  Graphshell wasm target checks successfully against the committed pins;
+- **headed receipt**: the page-side genet-probe scenario reports `RESULT ok`
+  over 16 steps and 24 rendered frames, with `product.face = "derived"`, zero
+  scenario errors, and two 1280×720 captures. The first records the default
+  1.0× LOD; three zoom commands reach 1.521× and expose the detailed 5×5
+  address motifs. Artifacts live under
+  `Code/testing/mere/scenarios/graphshell-web/d3_derived_faces_detail_be007322/`
+  (`scenario.done`, `result.json`, `d3_default.png`, `d3_detail.png`).
+  The exact script is committed at
+  `ports/graphshell/web/scenarios/d3_derived_faces_detail.scn`.
+
+The headed composition used the committed page-scenario lane at `dc9dd8ca`
+plus the D3 commit in a disposable worktree. That lane calls Genet text APIs
+newer than its committed `eff0cb6d` manifest pin, so the receipt supplied the
+clean Genet `fcb6c8fb` packages through a disposable Cargo patch while keeping
+netrender at Mere's pinned `6f1a4fe7`. The production D3 commit and shared
+checkout contain none of that compatibility patch.

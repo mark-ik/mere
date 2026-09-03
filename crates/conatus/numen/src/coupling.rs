@@ -15,7 +15,7 @@
 //! `EdgePayload` sidecar on a node-to-node edge, and `EdgeFamily` (derived from
 //! node-edge sidecars) stays six.
 //!
-//! Ported from `quint::coupling`. The response vocabulary is a
+//! The response vocabulary is a
 //! recognized-core-plus-open-tail hybrid (plan Phase 4): the six force responses
 //! are the recognized core `seiche` integrates, and [`CouplingResponse::Open`]
 //! carries the open families (visual / navigational / selection / semantic /

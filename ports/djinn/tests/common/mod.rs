@@ -6,12 +6,17 @@
 
 //! Fixtures shared by the Distillery lane receipts.
 //!
-//! Two integration tests open the same resident from the same kind of owner
+//! Three integration tests open the same resident from the same kind of owner
 //! statement — `distillery_lane.rs` proves the lane runs a job at all,
 //! `distillery_trainer.rs` proves the trainer it composes produces real
-//! artifacts — and a second copy of the vault, profile, device-settings and
-//! lending-posture setup would be a place for the two receipts to silently
-//! disagree about what "the same device" means.
+//! artifacts, and `distillery_trainer_gpu.rs` proves the same composition on
+//! this machine's discrete GPU — and a second copy of the vault, profile,
+//! device-settings and lending-posture setup would be a place for the receipts
+//! to silently disagree about what "the same device" means.
+//!
+//! The GPU receipt sharing this fixture is load-bearing rather than tidy: its
+//! tallies are only interpretable against the CPU receipt's because both runs
+//! train on byte-identical weights and the same held-out partition.
 //!
 //! The trainer half (behind the `trainer` feature) additionally carries the
 //! tiny synthetic llama fixture. That is one more copy of the fixture that
@@ -89,6 +94,14 @@ pub fn open_vault(root: &Path) -> (PathBuf, IdentityVault<Box<dyn personae::Iden
 /// are coverable anywhere. A machine actively driving a test run is rarely
 /// idle, so `stated.idle_ms` is what a run actually leans on — the owner's
 /// word standing in for a reading that would otherwise withhold forever.
+///
+/// Taken together that is what lets these receipts run off Windows, where
+/// nothing is sensed at all: `validate_policy_coverage` refuses an enabled
+/// rule resting on an absent signal, one rule is enabled, and that one rule
+/// has a stated value. The invariant to keep is that pairing — enabling a rule
+/// here without stating a fallback for it would compose on Windows and refuse
+/// everywhere else, which is precisely the shape of bug a Windows-only receipt
+/// used to hide.
 ///
 /// `allowed_resources` and `accepted_checkpoints` are stated narrowly rather
 /// than left `[]`: `["mesh.blake3/v1"]` is the one job the lane receipt
@@ -297,7 +310,7 @@ pub fn base_weights() -> Vec<u8> {
     safetensors::serialize(views, &None).unwrap()
 }
 
-/// Save one partition's training cases as opaque engrams, in the sorted order
+/// Save one partition's training cases as opaque codicils, in the sorted order
 /// a corpus partition carries.
 #[cfg(feature = "trainer")]
 pub async fn save_cases(
@@ -325,7 +338,7 @@ pub async fn save_cases(
                 Timestamp(0),
             )
             .await
-            .expect("save case engram"),
+            .expect("save case codicil"),
         );
     }
     ids.sort_by_key(ToString::to_string);

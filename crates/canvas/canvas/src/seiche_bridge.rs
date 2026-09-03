@@ -17,7 +17,7 @@ use std::collections::HashSet;
 
 use euclid::default::Point2D;
 use kernel::graph::{Graph, NodeKey};
-use quint::FieldRegistry;
+use numen::FieldRegistry;
 use seiche::{Boundary, CouplingForce, EdgeSpring, NodeExclusion, Simulation};
 
 /// The relation-cell edges that feed the layout **springs**, respecting this instance's

@@ -8,7 +8,7 @@
 //!
 //! [`chartulary::FacetValidator`] is synchronous while schema resolution from
 //! an eidetic store is asynchronous. The host therefore resolves schema
-//! engrams once, registers the parsed [`eidetic::SchemaDefinition`]s here, and
+//! codicils once, registers the parsed [`eidetic::SchemaDefinition`]s here, and
 //! uses this immutable in-memory adapter on every write. Unknown facet ids
 //! remain forward-compatible and pass through unchanged.
 
@@ -50,12 +50,12 @@ impl SchemaFacetValidator {
         self.schemas.get(facet)
     }
 
-    /// Iterate the definitions a host should persist as schema engrams.
+    /// Iterate the definitions a host should persist as schema codicils.
     pub fn definitions(&self) -> impl Iterator<Item = (&FacetId, &SchemaDefinition)> {
         self.schemas.iter()
     }
 
-    /// Persist every registered facet schema as an eidetic schema engram.
+    /// Persist every registered facet schema as an Eidetic schema codicil.
     ///
     /// Returns the content-addressed manifest id for each facet. Repeating the
     /// call is idempotent because schema identity is its serialized content.
@@ -101,9 +101,9 @@ impl FacetValidator for SchemaFacetValidator {
     }
 }
 
-/// Schema for a content-class definition engram.
+/// Schema for a content-class definition codicil.
 ///
-/// A class is ordinary data and points at the schema engrams for its required
+/// A class is ordinary data and points at the schema codicils for its required
 /// facets. This schema makes the class document itself an eidetic typed
 /// payload, so built-ins and pack-defined classes use the same persistence
 /// path.
@@ -126,15 +126,15 @@ pub fn content_class_schema_ref() -> SchemaRef {
 /// Eidetic typed binding for chartulary's data-defined content class.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ContentClassEngram(pub ContentClass);
+pub struct ContentClassCodicil(pub ContentClass);
 
-impl TypedPayload for ContentClassEngram {
+impl TypedPayload for ContentClassCodicil {
     fn schema_ref() -> SchemaRef {
         content_class_schema_ref()
     }
 }
 
-/// Persist one content-class definition and its schema engram.
+/// Persist one content-class definition and its schema codicil.
 #[allow(clippy::too_many_arguments)]
 pub async fn save_content_class(
     store: &mut dyn Store,
@@ -158,7 +158,7 @@ pub async fn save_content_class(
     debug_assert_eq!(SchemaRef::from_id(schema_id), content_class_schema_ref());
     save_typed(
         store,
-        &ContentClassEngram(class.clone()),
+        &ContentClassCodicil(class.clone()),
         Vec::<BlobSource>::new(),
         privacy,
         provenance,
@@ -174,9 +174,9 @@ pub async fn load_content_class(
     fetcher: &mut dyn BlobFetcher,
     id: ManifestId,
 ) -> eidetic::Result<Option<ContentClass>> {
-    Ok(load_typed::<ContentClassEngram>(store, fetcher, id)
+    Ok(load_typed::<ContentClassCodicil>(store, fetcher, id)
         .await?
-        .map(|engram| engram.0))
+        .map(|codicil| codicil.0))
 }
 
 #[cfg(test)]
@@ -239,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn registered_schemas_and_content_classes_round_trip_as_engrams() {
+    fn registered_schemas_and_content_classes_round_trip_as_codicils() {
         pollster::block_on(async {
             let mut store = MemoryBackend::new();
             let validator = validator();

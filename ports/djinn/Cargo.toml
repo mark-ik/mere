@@ -18,6 +18,13 @@ personal-sync = []
 # settings name a trainer this build does not carry is refused loudly rather
 # than composed diminished.
 trainer = ["distillery/trainer"]
+# The same trainer, composed on this machine's discrete GPU. Additive over
+# `trainer`, and honest about the difference: a lane that says `device: "gpu"`
+# on a build without this feature refuses `open` by name rather than quietly
+# training on the CPU, and `HostFacts.gpu` follows the composed resource
+# rather than the hardware — a device with an RTX in it still advertises no
+# GPU unless a GPU resource was actually registered.
+trainer-gpu = ["trainer", "distillery/trainer-gpu"]
 
 [dependencies]
 blake3.workspace = true
@@ -67,6 +74,21 @@ windows = { version = "0.62", features = [
   "Win32_System_SystemInformation",
   "Win32_UI_Input_KeyboardAndMouse",
 ] }
+
+# The local clock for `src/conditions.rs` off Windows, where `GetLocalTime` is
+# not available and `std` carries no timezone. chrono rather than `time`:
+# `time`'s local-offset lookup refuses in a multi-threaded process on Unix, and
+# the resident is one. Default features off — "clock" is the whole reason.
+[target.'cfg(not(windows))'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# `sysctlbyname("hw.memsize")` for `HostFacts::memory_mib`
+# (`src/resident_distillery.rs`). macOS has no `/proc/meminfo`, and the sysctl
+# is the kernel's own answer; libc rather than spawning `sysctl(8)`, because a
+# resident should not fork a process to learn its own memory size. 0.2 is
+# already in this workspace's graph.
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
 
 [[bin]]
 name = "djinn"

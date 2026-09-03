@@ -186,6 +186,17 @@ impl<B: Backend + Clone + Send + Sync + 'static> MeshHost<B> {
         &self.config.policy
     }
 
+    /// What this device advertises about itself, as the composer installed it.
+    ///
+    /// Exposed for the same reason [`policy`](Self::policy) is: a composition
+    /// that claims it reached the supervisor is making a claim somebody has to
+    /// be able to check. `HostFacts` decides which jobs this device will admit
+    /// at all, so a receipt that asserts on the composed facts is asserting on
+    /// the offer the ring actually sees.
+    pub fn facts(&self) -> &HostFacts {
+        &self.config.facts
+    }
+
     /// Replace the owner's settings. The new policy governs the very next tick:
     /// it changes what this device will *offer* immediately, and — because the
     /// same settings decide whether running work must stop — can reclaim a job

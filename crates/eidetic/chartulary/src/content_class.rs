@@ -52,7 +52,7 @@ impl ClassId {
 
 /// A content class, defined as data: which facets a member must carry, and the
 /// schema reference for each (an opaque string; a host resolves it, e.g. to an
-/// eidetic schema-engram id).
+/// Eidetic schema-codicil id).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentClass {
     /// The class id.

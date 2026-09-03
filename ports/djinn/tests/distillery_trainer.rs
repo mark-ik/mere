@@ -29,14 +29,25 @@
 //! 3. **The gate is honest in both directions.** This file only compiles with
 //!    the `trainer` feature; `distillery_lane.rs` carries the matching
 //!    `cfg(not(feature = "trainer"))` refusal, so neither feature set is
-//!    without a live assertion about the gate.
+//!    without a live assertion about the gate. The same pattern one word in:
+//!    the refusal below runs under `cfg(not(feature = "trainer-gpu"))`, and
+//!    `distillery_trainer_gpu.rs` is its composing half.
 //!
-//! Windows-only for the same reason the lane receipt is: the lane reads
-//! `HostFacts::memory_mib` from the operating system and refuses to advertise
-//! a capacity it never measured, and only the Windows half of this crate can
-//! measure one today.
+//! The run itself stays on the CPU under both feature sets. `device: "cpu"` is
+//! not incidental here — it is what makes this receipt a statement about the
+//! composed *path* rather than about whatever hardware the machine has, and it
+//! is what lets the GPU receipt's tallies be compared against something.
+//!
+//! It runs wherever the lane composes, for the same reason the lane receipt
+//! does: the one fact `HostFacts` will not invent is physical memory, and this
+//! crate reads that on Windows, Linux and macOS. The device conditions it
+//! leans on off Windows are the fixture's stated fallbacks — see
+//! `common::lending`, whose docs carry the pairing that keeps them honest.
+//! Nothing else here is platform-shaped: the model library path is derived
+//! with `Path::join` under a `tempfile` root, and the training is `ndarray` on
+//! the CPU.
 
-#![cfg(all(feature = "trainer", windows))]
+#![cfg(feature = "trainer")]
 
 mod common;
 
@@ -163,8 +174,8 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
             .expect("load model manifest")
             .expect("model manifest present");
         let corpus = TrainingCorpus {
-            training_source_engrams: save_cases(&mut *store, &TRAIN_PREFIXES).await,
-            evaluation_source_engrams: save_cases(&mut *store, &EVAL_PREFIXES).await,
+            training_source_codicils: save_cases(&mut *store, &TRAIN_PREFIXES).await,
+            evaluation_source_codicils: save_cases(&mut *store, &EVAL_PREFIXES).await,
         };
         let corpus_ref = save_typed(
             &mut *store,
@@ -380,26 +391,65 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         .expect("clean ordered resident shutdown");
 }
 
-/// A GPU trainer is not composable while this lane reports `HostFacts.gpu` as
-/// false, and the refusal names the value rather than falling back to the CPU
-/// the owner did not ask for.
-#[test]
-fn a_gpu_trainer_is_refused_by_name_before_anything_is_opened() {
+/// The GPU gate's refusing half: this build carries the trainer but not the
+/// GPU trainer, so a lane that says `device: "gpu"` is refused by name rather
+/// than trained on the CPU.
+///
+/// The failure this exists against is the one that would look like success. A
+/// composition that fell back to `ndarray` would produce this file's other
+/// receipt exactly — real adapter, real tallies, real artifacts — while the
+/// owner read their own settings file as proof the device trains on its GPU.
+/// The refusal is checked to name the feature, because "not supported" without
+/// the way out is a wall.
+///
+/// It is raised before any host fact is read, so it needs no GPU, and it
+/// disappears under `trainer-gpu`, where `distillery_trainer_gpu.rs` asserts
+/// the composing half. Neither feature set is left without a live assertion
+/// about this gate.
+#[cfg(not(feature = "trainer-gpu"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_build_with_no_gpu_trainer_refuses_a_lane_that_states_one() {
+    let directory = tempfile::tempdir().expect("temporary resident root");
+    let data_root = directory.path().join("data");
+    let (vault_dir, identity) = open_vault(directory.path());
+    // A perfectly good lending posture: the refusal under test must be about
+    // the missing GPU trainer, not about anything else being wrong.
+    write_device_settings(&data_root, Some(lending()));
+
     let mut asks_for_a_gpu = lane();
     asks_for_a_gpu.trainer = Some(TrainerLaneSettings {
         device: "gpu".into(),
         library_root: None,
     });
-    let refusal = asks_for_a_gpu
-        .validate()
-        .expect_err("a GPU trainer is not composable on a device that reports no GPU");
+    // The settings themselves are valid — `"gpu"` is inside the closed
+    // vocabulary — and only this *build* cannot honour them. That split is
+    // deliberate: the same settings file is valid on the machine that can run
+    // it, and a validator that refused here would make the file's meaning
+    // depend on what happened to be plugged in.
+    assert_eq!(asks_for_a_gpu.validate(), Ok(()));
+
+    let refusal = common::refusal_from(
+        DjinnResident::open(
+            &identity,
+            &data_root,
+            &profile(),
+            owner(Some(asks_for_a_gpu)),
+            &vault_dir,
+            unlock(),
+        )
+        .await,
+        "a build with no GPU trainer must refuse a lane that states one rather than \
+         composing a CPU trainer the owner did not ask for",
+    )
+    .await;
+
     assert!(refusal.contains("distillery.trainer.device"), "{refusal}");
     assert!(
         refusal.contains("\"gpu\""),
         "the refusal must name the value it refused: {refusal}"
     );
     assert!(
-        refusal.contains("HostFacts.gpu"),
-        "the refusal must say why, not just that: {refusal}"
+        refusal.contains("`trainer-gpu` feature"),
+        "the refusal must name the way out: {refusal}"
     );
 }
