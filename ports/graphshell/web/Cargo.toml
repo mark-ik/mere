@@ -32,8 +32,8 @@ mere = { path = "../../../crates/mere", default-features = false, features = ["g
 # the duplicate showed up; muniment owns the backend family, so it owns this.
 muniment = { path = "../../../crates/eidetic/muniment", features = ["indexeddb"] }
 graphshell-client = { path = "../../../crates/graphshell/graphshell-client" }
-sceno = { path = "../../../crates/scenograph/sceno" }
-scenotime = { path = "../../../crates/scenograph/scenotime" }
+sceno = { path = "../../../crates/cambium/scenes/sceno" }
+scenotime = { path = "../../../crates/cambium/scenes/scenotime" }
 serde = { version = "1", features = ["derive"] }
 cambium = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }
 genet-render = { git = "https://github.com/merely-made/genet.git", rev = "b78e2b92251ce48ba424fe885a0754f7f7321b7a" }

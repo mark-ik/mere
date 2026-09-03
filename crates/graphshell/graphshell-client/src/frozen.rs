@@ -608,7 +608,7 @@ mod tests {
     /// The P5 fixture, solved: a real scene rather than a hand-built stand-in.
     fn coastal() -> Scene {
         let score: Score = serde_json::from_str(include_str!(
-            "../../../scenograph/scenomise/fixtures/coastal_map.json"
+            "../../../cambium/scenes/scenomise/fixtures/coastal_map.json"
         ))
         .expect("the coastal map fixture parses");
         scenomise::solve(&score)

@@ -13,7 +13,10 @@ The four questions this note left open are answered below under
 [Scenograph 0.0.3 release plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-24_scenograph_0_0_3_release_plan.md).
 
 The family moved on 2026-07-23: the standalone `scenograph` repo was absorbed
-into mere at `crates/scenograph`, so the proof sequence and findings now live
+into mere at `crates/scenograph`, and on 2026-09-03 the three crates moved
+again to `crates/cambium/scenes/` under the Cambium umbrella, with the generic
+`scenograph` facade dissolved (platform boundary plan, P2). The proof sequence
+and findings live
 in this repo beside it,
 [projection_proofs_plan](../../../design_docs/mere_docs/implementation_strategy/2026-07-21_projection_proofs_plan.md);
 the direction record is the

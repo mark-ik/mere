@@ -238,13 +238,13 @@ impl SolverRegistry {
 /// Realize a score, resolving [`sceno::Arrangement::Custom`] through `registry`.
 ///
 /// The eleven named families never touch the registry; they are solved by
-/// `scenomise` exactly as [`scenomise::solve`] would. Only a custom arrangement
+/// `scenomise` exactly as [`crate::solve`] would. Only a custom arrangement
 /// consults it, and a failure there is returned rather than absorbed: a score
 /// naming a solver nobody registered has not been laid out, and saying so is the
 /// difference between a diagnosable error and a canvas of items at the origin.
 pub fn solve(score: &sceno::Score, registry: &SolverRegistry) -> Result<sceno::Scene, SolveError> {
     let sceno::Arrangement::Custom { id, config } = &score.arrangement else {
-        return Ok(scenomise::solve(score));
+        return Ok(crate::solve(score));
     };
 
     let solver = registry
@@ -269,7 +269,7 @@ pub fn solve(score: &sceno::Score, registry: &SolverRegistry) -> Result<sceno::S
     }
 
     let mut failure = None;
-    let scene = scenomise::solve_with(score, |items| match solver.place(config, items) {
+    let scene = crate::solve_with(score, |items| match solver.place(config, items) {
         Ok(positions) if positions.len() == items.len() => Some(positions),
         Ok(positions) => {
             failure = Some(SolveError::CountMismatch {

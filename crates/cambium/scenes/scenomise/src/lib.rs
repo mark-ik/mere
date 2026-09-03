@@ -18,6 +18,14 @@
 //! pass with no state carried between calls. Live force physics is `seiche`'s
 //! domain and has no solver here.
 //!
+//! [`registry`] holds the solver catalog behind [`sceno::Arrangement::Custom`],
+//! which arrived here when the `scenograph` facade dissolved: a registry needs
+//! the score contract and the solver contract at once, and this crate already
+//! owns both. Its types are re-exported at the root exactly as the facade
+//! exported them. Its `solve` is not: that name is already this crate's
+//! closed-form solve over the named families, so the registry's stays
+//! addressed as [`registry::solve`].
+//!
 //! Product adapters choose sources, translate native facts to a score, and
 //! realize the resulting scene. Where an arrangement needs something only the
 //! source knows — a ring index from a graph walk, coordinates from a
@@ -26,7 +34,11 @@
 
 mod families;
 mod relax;
+pub mod registry;
 mod solve;
 
+pub use registry::{
+    ArrangementId, Disclosure, RegisterError, SolveError, Solver, SolverCapability, SolverRegistry,
+};
 pub use relax::{Relaxation, relax, relax_holding};
 pub use solve::{pinned_instances, solve, solve_with};

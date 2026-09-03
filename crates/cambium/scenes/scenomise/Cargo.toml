@@ -1,19 +1,17 @@
 [package]
-name = "scenograph"
+name = "scenomise"
 version = "0.0.4"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Facade for the scenograph projection-engine family: re-exports sceno (core), scenomise (choreography), and scenotime (runtime)."
+description = "Choreography for the scenograph projection engine: placement algorithms that realize persisted scores into arranged scenes."
 readme = "../README.md"
-keywords = ["projection", "scene", "graph", "visualization"]
-categories = ["visualization", "gui"]
+keywords = ["layout", "projection", "scene", "graph"]
+categories = ["visualization", "algorithms"]
 
 [dependencies]
 sceno = { version = "0.0.4", path = "../sceno" }
-scenomise = { version = "0.0.4", path = "../scenomise" }
-scenotime = { version = "0.0.4", path = "../scenotime" }
 # The registry's capability records serialize, and a custom arrangement's
 # config is the opaque `serde_json::Value` the score already carries.
 serde = { version = "1.0.219", features = ["derive"] }

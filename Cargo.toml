@@ -83,10 +83,14 @@ members = [
     "crates/conatus/nisus",
     "crates/conatus/modulus",
     "crates/conatus/conatus",
-    "crates/scenograph/sceno",
-    "crates/scenograph/scenomise",
-    "crates/scenograph/scenotime",
-    "crates/scenograph/scenograph",
+    # The scene family sits under the Cambium umbrella (platform boundary plan
+    # §1, P2): one family per crates/<family>/ directory, with the widget lane
+    # and the scene lane sharing a home and keeping their state models apart.
+    # The generic `scenograph` facade crate is gone; its solver registry moved
+    # into `scenomise`, and the published name is held for the scene editor.
+    "crates/cambium/scenes/sceno",
+    "crates/cambium/scenes/scenomise",
+    "crates/cambium/scenes/scenotime",
     "crates/chirograph",
     "crates/titulus",
     "crates/graphshell/graphshell-client",
@@ -151,7 +155,7 @@ version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/merely-made/mere"
-# The scenograph crates inherit this; it matches what their own workspace
+# The scene crates inherit this; it matches what their own workspace
 # declared before the 2026-07-23 absorption.
 authors = ["Mark AB (markik)"]
 
@@ -195,9 +199,9 @@ armillary = { version = "0.1.1", path = "crates/armillary" }
 # footprints, spaces, measurements) — git sibling consumed one-way, local
 # checkout via the gitignored `.cargo/config.toml` patch. cartography emits
 # sceno scenes (the P2 consumption slice; projection_proofs_plan).
-sceno = { version = "0.0.4", path = "crates/scenograph/sceno" }
-scenomise = { version = "0.0.4", path = "crates/scenograph/scenomise" }
-scenotime = { version = "0.0.4", path = "crates/scenograph/scenotime" }
+sceno = { version = "0.0.4", path = "crates/cambium/scenes/sceno" }
+scenomise = { version = "0.0.4", path = "crates/cambium/scenes/scenomise" }
+scenotime = { version = "0.0.4", path = "crates/cambium/scenes/scenotime" }
 # The remaining families absorbed 2026-07-23. Consumers keep using
 # `<dep>.workspace = true`, so only this block knows where each one lives.
 personae = { version = "0.2.1", path = "crates/dramatis/personae" }
