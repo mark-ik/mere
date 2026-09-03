@@ -1,8 +1,8 @@
 # Autodiff LoRA trainer plan
 
 **Status (2026-09-02):** in progress. Assessment complete; Mark ruled D1–D3
-on 2026-09-02, each on the recommended option; Phases 1 and 2 landed
-2026-09-03; Phase 3 is under way. Follow-on to the
+on 2026-09-02, each on the recommended option; Phases 1 through 3 landed
+2026-09-03; Phase 4 (receipts and docs) is under way. Follow-on to the
 [distillery v0 plan](2026-08-12_distillery_v0_plan.md) (§9 trainer forcing,
 and the 2026-09-02 discrete-GPU trainer entry) and the
 [FLORA, Tulpa, and Standing plan](../../moothold_docs/implementation_strategy/2026-08-31_flora_tulpa_standing_plan.md).
@@ -129,11 +129,14 @@ handoff ruled.
 - **A v0/v1 mix in a FLoRA round is refused twice**: first on
   `adapter_format_version`, and if the manifests are forced to agree, again
   on the config bytes' `peft_version`. The round receipt proves both.
-- **The implementation id under-described the build after D1.**
-  `esp.train.peft-lora.finite-difference-1/v1` answered both arms. Mark ruled
-  2026-09-03 to rename it to a method-neutral id (Phase 3), accepting the
-  wire-visible change; the string appears nowhere outside Distillery's own
-  constant.
+- **The implementation id under-described the build after D1.** The id it
+  carried named the finite-difference arm while answering both. Mark ruled
+  2026-09-03 to rename it to a method-neutral id, accepting the wire-visible
+  change; it landed in Phase 3 as `esp.train.peft-lora.esp-trainer/v2` — `/v2`
+  because `TrainRequest.settings` changed shape, so a v1-era poster's bytes no
+  longer parse. The resource id `esp.train.peft-lora/v1` is unchanged: what is
+  asked for did not change, only what answers. The old string appeared nowhere
+  outside Distillery's own constant and this document.
 
 ## Decisions
 
@@ -266,6 +269,26 @@ a byte.
   refused by name. Distillery suite 22 tests green with
   `flora,trainer-autodiff,trainer-gpu`, v0-only trainer build green, strict
   package Clippy clean, fmt clean.
+- **2026-09-03:** Phase 3 landed. The v1 settings type and version
+  constants moved out from behind esp's `decoder-autodiff` (they ride with
+  the loader under `decoder-lora`), so Distillery's request arm is typed in
+  every build and `adapter_shape()` is total; the implementation id is
+  `esp.train.peft-lora.esp-trainer/v2` per Mark's ruling. Djinn gained
+  `trainer-autodiff`; its CPU and discrete-GPU receipts run both arms in
+  sequence on one lane and assert the published manifest's
+  `adapter_format_version` and `training_method.trainer` per arm, and a
+  `trainer`-only build refuses a v1 request by name at admission with the
+  board's committed count unchanged. The lane configuration names only the
+  device; the arm arrives inside the posted request, and nothing in
+  `settings.rs` or `resident_distillery.rs` changed. Through the composed
+  lane on this machine (debug): v0 40 steps 12.4 s CPU / 76.8 s GPU, v1 12
+  Adam steps 0.4 s CPU / 4.5 s GPU (RTX 4060 Laptop, vulkan), every arm 0/6
+  → strict improvement at RankingAt{3}. Gates: esp 137, Distillery 22, Djinn
+  CPU 2+2, lane 4, GPU 1; strict Clippy clean on esp and Distillery and on
+  Djinn's test targets once its four pre-existing library lints are allowed;
+  fmt clean. One finding on the way: removing the feature-varying alias
+  exposed that Distillery's `trainer-gpu` re-exports have exactly one
+  consumer, Djinn's GPU build, and only that build proves they exist.
 
 - **2026-09-02:** assessment complete; findings above verified against the
   code. Mark ruled D1 (tagged `TrainerSettings` enum on the one trainer

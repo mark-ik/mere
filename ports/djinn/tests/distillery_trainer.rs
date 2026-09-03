@@ -33,6 +33,13 @@
 //!    the refusal below runs under `cfg(not(feature = "trainer-gpu"))`, and
 //!    `distillery_trainer_gpu.rs` is its composing half.
 //!
+//! 4. **Both arms, or the refusal.** A build carrying `trainer-autodiff` runs
+//!    the v1 request on the same lane, right after the v0 one, and its
+//!    published manifest is checked for the v1 stamp and trainer name. A build
+//!    without it posts the identical request and is checked to *release* it
+//!    and commit nothing — refused loudly rather than composed diminished,
+//!    the same posture the GPU gate takes about the device.
+//!
 //! The run itself stays on the CPU under both feature sets. `device: "cpu"` is
 //! not incidental here — it is what makes this receipt a statement about the
 //! composed *path* rather than about whatever hardware the machine has, and it
@@ -56,25 +63,19 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use common::{
-    CONFIG_JSON, EVAL_PREFIXES, MODEL_ID, TRAIN_PREFIXES, base_weights, lane, lending, now_ms,
-    open_vault, owner, profile, save_cases, tokenizer_json, unlock, write_device_settings,
+    EVAL_PREFIXES, PostedJob, author_fixture, autodiff_settings, finite_difference_settings, lane,
+    lending, now_ms, open_vault, owner, profile, run_trainer_job, unlock, write_device_settings,
 };
 use distillery::{
-    LoraTrainerSettings, ResidentReceipt, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt,
-    TrainRequest,
+    TRAINER_AUTODIFF, TRAINER_FINITE_DIFFERENCE, TRAINER_RESOURCE, TrainReceipt, TrainRequest,
 };
 use djinn::resident::DjinnResident;
 use djinn::settings::TrainerLaneSettings;
-use eidetic::models::{EvalMetric, EvalReport, OpaqueBlob, TrainingCorpus};
-use eidetic::typed::{load_typed, save_typed};
-use eidetic::{
-    ModelAdapterManifest, ModelLibrary, NoFetcher, PrivacyClass, ProvenanceRecord, Timestamp,
-    TrustEnvelope,
-};
-use mesh::spec::{DeterminismClass, JobSpec};
-use mesh::{BlobSource as _, ResourceId};
+use eidetic::models::{EvalMetric, EvalReport, OpaqueBlob};
+use eidetic::typed::load_typed;
+use eidetic::{ModelAdapterManifest, NoFetcher};
+use mesh::ResourceId;
 use mesh_host::Step;
-use tokio::sync::Notify;
 
 /// Training on the CPU under a `line-tables-only` debug profile takes tens of
 /// seconds. This bound is a *failure* bound — the run is stopped by the
@@ -82,6 +83,14 @@ use tokio::sync::Notify;
 /// two endings — so it is set well past any honest run rather than tuned close.
 const FAILURE_BOUND: Duration = Duration::from_secs(300);
 
+/// Both arms the build carries, through one composed lane, in sequence.
+///
+/// Sequence rather than two tests, and one resident rather than two: a resident
+/// owns a redb file, a transport and a mesh author, and two of those racing in
+/// one process is not a thing this receipt claims. Running the arms one after
+/// the other on the same lane also makes the comparison sharper — the library,
+/// the posture and the fixture are literally the same objects, so what differs
+/// between the two published adapters is the trainer and nothing else.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_library() {
     let directory = tempfile::tempdir().expect("temporary resident root");
@@ -147,217 +156,135 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         .model_library()
         .expect("a lane that stated a trainer composed a model library");
 
-    // 2. Author the base model triple and the corpus into that library —
-    //    through the resident's own handle, because redb is single-writer and
-    //    the trainer is about to write into the same file.
+    // 2. Author the base model triple and the corpus into that library.
     let (base_model_ref, tokenizer_ref, corpus_ref) = {
         let mut store = library.lock().await;
-        let base_model_ref = ModelLibrary::save_model_with_components(
-            &mut *store,
-            MODEL_ID,
-            "llama",
-            "MIT",
-            serde_json::from_str(CONFIG_JSON).unwrap(),
-            &base_weights(),
-            tokenizer_json().as_bytes(),
-            Vec::new(),
-            Vec::new(),
-            PrivacyClass::LocalOnly,
-            ProvenanceRecord::self_imported("djinn-trainer-receipt"),
-            TrustEnvelope::self_asserted(),
-            Timestamp(0),
-        )
-        .await
-        .expect("save the base model into the persona's library");
-        let manifest = ModelLibrary::load_model(&mut *store, base_model_ref)
-            .await
-            .expect("load model manifest")
-            .expect("model manifest present");
-        let corpus = TrainingCorpus {
-            training_source_codicils: save_cases(&mut *store, &TRAIN_PREFIXES).await,
-            evaluation_source_codicils: save_cases(&mut *store, &EVAL_PREFIXES).await,
-        };
-        let corpus_ref = save_typed(
-            &mut *store,
-            &corpus,
-            vec![],
-            PrivacyClass::LocalOnly,
-            ProvenanceRecord::self_imported("djinn-trainer-receipt"),
-            TrustEnvelope::self_asserted(),
-            Timestamp(1),
-        )
-        .await
-        .expect("save the corpus");
-        (base_model_ref, manifest.tokenizer_blob, corpus_ref)
+        author_fixture(&mut store, "djinn-trainer-receipt").await
     };
 
-    // 3. Stage the request and post the job as this device. Every ref and
-    //    hyperparameter is explicit; nothing is inferred from job facts.
-    let request = TrainRequest {
+    let request = |adapter_name: &str, settings: distillery::TrainerSettings| TrainRequest {
         base_model_ref,
         tokenizer_ref,
         corpus_ref,
-        adapter_name: "djinn-trainer-receipt".into(),
+        adapter_name: adapter_name.into(),
         prompt_template: "{{ prompt }}".into(),
         metric: EvalMetric::RankingAt { limit: 3 },
-        settings: LoraTrainerSettings {
-            rank: 1,
-            alpha: 8.0,
-            target_module: "v_proj".into(),
-            steps: 40,
-            initial_step_length: 1.0,
-            minimum_step_length: 1.0e-4,
-            epsilon: 0.02,
-        },
+        settings,
         created_at: now_ms(),
     };
-    let request_blob = works
-        .space()
-        .put(&serde_json::to_vec(&request).unwrap())
-        .await
-        .expect("stage the training request");
-    works
-        .post_job(
-            JobSpec::simple(
-                ResourceId::parse(TRAINER_RESOURCE).unwrap(),
-                TRAINER_REQUEST_INPUT,
-                request_blob,
-                "receipt",
-                64 * 1024,
-                // The trainer declares `VerificationClass::ProducerOnly`, so
-                // asking for anything stricter than `Observed` would be asking
-                // for a claim nobody can make.
-                DeterminismClass::Observed,
-            ),
-            1,
-            now_ms(),
-        )
-        .await
-        .expect("post the trainer job as this device");
-
-    // 4. Drive the resident until the job commits.
-    let stop = Arc::new(Notify::new());
-    let signal = Arc::clone(&stop);
     let mut observed: Vec<Step> = Vec::new();
-    let mut completed = false;
-    let started = std::time::Instant::now();
-    works
-        .run_until(
-            async move {
-                tokio::select! {
-                    _ = signal.notified() => {}
-                    _ = tokio::time::sleep(FAILURE_BOUND) => {}
-                }
-            },
-            |receipt| {
-                if let ResidentReceipt::Tick { steps } = &receipt {
-                    for step in steps {
-                        if !matches!(step, Step::Idle) {
-                            observed.push(step.clone());
-                        }
-                    }
-                    if steps
-                        .iter()
-                        .any(|step| matches!(step, Step::Completed { .. }))
-                    {
-                        completed = true;
-                        stop.notify_one();
-                    }
-                }
-            },
-        )
-        .await
-        .expect("the works ran to the stop request");
-    let elapsed = started.elapsed();
 
-    println!("observed step sequence: {observed:?}");
-    assert!(
-        completed,
-        "the composed trainer never completed the job in {FAILURE_BOUND:?}; \
-         steps were {observed:?}"
-    );
+    // 3. The v0 arm, end to end through the composed path.
+    let v0 = run_trainer_job(
+        &mut works,
+        &request("djinn-trainer-receipt", finite_difference_settings()),
+        1,
+        FAILURE_BOUND,
+        &mut observed,
+    )
+    .await;
+    let PostedJob::Committed { receipt, elapsed } = v0 else {
+        panic!("the v0 arm must commit on every build that carries the trainer at all");
+    };
     assert!(
         observed
             .iter()
             .any(|step| matches!(step, Step::Claimed { .. })),
         "a completion with no claim would mean the board was not really driven: {observed:?}"
     );
-
-    // 5. The committed output is the compact receipt.
-    let board = works
-        .authority()
-        .host()
-        .synced()
-        .board()
-        .await
-        .expect("fold the board");
-    let output = board
-        .jobs()
-        .find_map(|job| match &job.state {
-            mesh::JobState::Committed { output, .. } => Some((**output).clone()),
-            _ => None,
-        })
-        .expect("the trainer job committed an output");
-    let receipt_bytes = works
-        .space()
-        .fetch(&output.blob)
-        .await
-        .expect("fetch the committed receipt")
-        .expect("committed receipt bytes present");
-    let receipt: TrainReceipt = serde_json::from_slice(&receipt_bytes).expect("receipt JSON");
-    assert!(
-        receipt.adapter.passed > receipt.baseline.passed,
-        "the receipt must show a strict held-out improvement: {receipt:?}"
-    );
-    assert_eq!(
+    let published = assert_published_adapter(
+        &library,
+        &receipt,
+        corpus_ref,
+        "peft-esp-trainer-v0",
+        TRAINER_FINITE_DIFFERENCE,
+    )
+    .await;
+    assert_eq!(published, vec!["v_proj".to_string()]);
+    println!(
+        "djinn trainer receipt ({TRAINER_FINITE_DIFFERENCE}): baseline {}/{} vs adapter {}/{} \
+         at RankingAt{{3}}, trained in {:.1}s",
+        receipt.baseline.passed,
         receipt.baseline.total,
-        EVAL_PREFIXES.len() as u64,
-        "the tally must be over the held-out partition, whole"
+        receipt.adapter.passed,
+        receipt.adapter.total,
+        elapsed.as_secs_f64(),
     );
 
-    // 6. The artifacts are in the persona's library, under the receipt's refs.
+    // 4. The v1 arm, on a build that carries it — or its refusal, on a build
+    //    that does not. Both halves post the *same* request; only the build
+    //    differs, which is what makes the pair a statement about the gate.
+    #[cfg(feature = "trainer-autodiff")]
     {
-        let mut store = library.lock().await;
-        let manifest = load_typed::<ModelAdapterManifest>(
-            &mut *store,
-            &mut NoFetcher,
-            receipt.adapter_manifest_ref,
+        let posted = run_trainer_job(
+            &mut works,
+            &request("djinn-trainer-receipt-autodiff", autodiff_settings()),
+            2,
+            FAILURE_BOUND,
+            &mut observed,
         )
-        .await
-        .expect("load the adapter manifest")
-        .expect("adapter manifest present");
-        assert_eq!(
-            manifest.training_corpus_root,
-            Some(corpus_ref),
-            "the published adapter must name the corpus it was actually trained on"
+        .await;
+        let PostedJob::Committed { receipt, elapsed } = posted else {
+            panic!("a build carrying `trainer-autodiff` must run the autodiff arm, not release it");
+        };
+        let published = assert_published_adapter(
+            &library,
+            &receipt,
+            corpus_ref,
+            distillery::TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
+            TRAINER_AUTODIFF,
+        )
+        .await;
+        assert_eq!(published, vec!["v_proj".to_string()]);
+        println!(
+            "djinn trainer receipt ({TRAINER_AUTODIFF}): baseline {}/{} vs adapter {}/{} \
+             at RankingAt{{3}}, trained in {:.1}s",
+            receipt.baseline.passed,
+            receipt.baseline.total,
+            receipt.adapter.passed,
+            receipt.adapter.total,
+            elapsed.as_secs_f64(),
         );
-        assert_eq!(manifest.adapter_blob, receipt.adapter_blob);
-        assert_eq!(manifest.adapter_config_blob, receipt.adapter_config_blob);
-        for blob in [receipt.adapter_blob, receipt.adapter_config_blob] {
-            assert!(
-                load_typed::<OpaqueBlob>(&mut *store, &mut NoFetcher, blob)
-                    .await
-                    .expect("load the adapter blob")
-                    .is_some(),
-                "adapter blob {blob} must be stored"
-            );
-        }
-        let report = load_typed::<EvalReport>(&mut *store, &mut NoFetcher, receipt.eval_report_ref)
-            .await
-            .expect("load the evaluation report")
-            .expect("evaluation report present");
-        assert_eq!(report.baseline, receipt.baseline);
-        assert_eq!(report.adapter, receipt.adapter);
+    }
+    #[cfg(not(feature = "trainer-autodiff"))]
+    {
+        let asked = request("djinn-trainer-receipt-autodiff", autodiff_settings());
+        // The refusal's wording, asserted where it is produced. The mesh board
+        // carries Posted / Claimed / Done / Committed and lease release
+        // reasons — no failure text — so this is the only place the message
+        // exists, and it is the same string the resource returned to the run
+        // the lane just released.
+        let refusal = asked
+            .settings
+            .availability()
+            .expect_err("a build without `trainer-autodiff` must refuse the autodiff arm");
         assert!(
-            report.adapter_beats_baseline().expect("comparable report"),
-            "the stored report must show the strict improvement"
+            refusal.contains("trainer-autodiff"),
+            "the refusal must name the feature that is missing: {refusal}"
         );
-        report
-            .validate_for_adapter(receipt.adapter_manifest_ref, &manifest)
-            .expect("report provenance links match the adapter manifest");
+        assert!(
+            refusal.contains(TRAINER_AUTODIFF),
+            "the refusal must name the arm it refuses: {refusal}"
+        );
+
+        // And the behaviour, through the lane: released, never committed.
+        let before = committed_jobs(&works).await;
+        let posted = run_trainer_job(&mut works, &asked, 2, FAILURE_BOUND, &mut observed).await;
+        assert!(
+            matches!(posted, PostedJob::Released),
+            "a build without `trainer-autodiff` must release the job rather than \
+             committing an adapter trained with the arm nobody asked for"
+        );
+        assert_eq!(
+            committed_jobs(&works).await,
+            before,
+            "a refused run must publish nothing: quietly training the v0 arm and stamping \
+             it v0 would look exactly like success to an owner who asked for v1"
+        );
+        println!("djinn trainer receipt: the lane refused {TRAINER_AUTODIFF} — {refusal}");
     }
 
-    // 7. And the library is a real file, at the derived persona-scoped path.
+    // 5. And the library is a real file, at the derived persona-scoped path.
     //    Written out longhand rather than by calling the derivation, so this
     //    asserts the location rather than agreeing with it.
     let derived = data_root.join("models").join("works").join("library.redb");
@@ -373,22 +300,100 @@ async fn the_composed_trainer_trains_a_real_adapter_into_the_personas_model_libr
         works.mesh_root().display()
     );
 
-    println!(
-        "djinn trainer receipt: baseline {}/{} vs adapter {}/{} at RankingAt{{3}}, \
-         trained in {:.1}s into {}",
-        receipt.baseline.passed,
-        receipt.baseline.total,
-        receipt.adapter.passed,
-        receipt.adapter.total,
-        elapsed.as_secs_f64(),
-        derived.display(),
-    );
-
     resident.restore_distillery(Some(works));
     resident
         .shutdown()
         .await
         .expect("clean ordered resident shutdown");
+}
+
+/// Everything a published adapter owes its receipt, checked in the persona's
+/// own library. Returns the manifest's target modules so the caller can assert
+/// on the arm's own shape.
+async fn assert_published_adapter(
+    library: &Arc<tokio::sync::Mutex<muniment::RedbBackend>>,
+    receipt: &TrainReceipt,
+    corpus_ref: eidetic::ManifestId,
+    adapter_format_version: &str,
+    trainer: &str,
+) -> Vec<String> {
+    assert!(
+        receipt.adapter.passed > receipt.baseline.passed,
+        "the receipt must show a strict held-out improvement: {receipt:?}"
+    );
+    assert_eq!(
+        receipt.baseline.total,
+        EVAL_PREFIXES.len() as u64,
+        "the tally must be over the held-out partition, whole"
+    );
+
+    let mut store = library.lock().await;
+    let manifest = load_typed::<ModelAdapterManifest>(
+        &mut *store,
+        &mut NoFetcher,
+        receipt.adapter_manifest_ref,
+    )
+    .await
+    .expect("load the adapter manifest")
+    .expect("adapter manifest present");
+    assert_eq!(
+        manifest.training_corpus_root,
+        Some(corpus_ref),
+        "the published adapter must name the corpus it was actually trained on"
+    );
+    assert_eq!(manifest.adapter_blob, receipt.adapter_blob);
+    assert_eq!(manifest.adapter_config_blob, receipt.adapter_config_blob);
+    // The two strings the arm is answerable for. The format version is what
+    // esp's loader checks the adapter's own `peft_version` against, and the
+    // trainer name is what a FLoRA round and a reproduction attempt read.
+    assert_eq!(
+        manifest.adapter_format_version, adapter_format_version,
+        "the published adapter must carry the arm's own version stamp"
+    );
+    assert_eq!(
+        manifest.training_method["trainer"],
+        serde_json::json!(trainer),
+        "the receipt must record which trainer actually ran"
+    );
+    for blob in [receipt.adapter_blob, receipt.adapter_config_blob] {
+        assert!(
+            load_typed::<OpaqueBlob>(&mut *store, &mut NoFetcher, blob)
+                .await
+                .expect("load the adapter blob")
+                .is_some(),
+            "adapter blob {blob} must be stored"
+        );
+    }
+    let report = load_typed::<EvalReport>(&mut *store, &mut NoFetcher, receipt.eval_report_ref)
+        .await
+        .expect("load the evaluation report")
+        .expect("evaluation report present");
+    assert_eq!(report.baseline, receipt.baseline);
+    assert_eq!(report.adapter, receipt.adapter);
+    assert!(
+        report.adapter_beats_baseline().expect("comparable report"),
+        "the stored report must show the strict improvement"
+    );
+    report
+        .validate_for_adapter(receipt.adapter_manifest_ref, &manifest)
+        .expect("report provenance links match the adapter manifest");
+    manifest.target_modules
+}
+
+/// How many jobs on this lane's board have committed an output. Used only to
+/// prove that a refused run added none.
+#[cfg(not(feature = "trainer-autodiff"))]
+async fn committed_jobs(works: &djinn::resident_distillery::ResidentDistillery) -> usize {
+    works
+        .authority()
+        .host()
+        .synced()
+        .board()
+        .await
+        .expect("fold the board")
+        .jobs()
+        .filter(|job| matches!(job.state, mesh::JobState::Committed { .. }))
+        .count()
 }
 
 /// The GPU gate's refusing half: this build carries the trainer but not the

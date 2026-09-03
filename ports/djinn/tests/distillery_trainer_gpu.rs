@@ -41,7 +41,11 @@
 //! 3. **Real training happened on it.** The same synthetic llama fixture, the
 //!    same held-out partition, the same trainer job — driven through the
 //!    resident on `SystemClock` to `Step::Completed`, and the committed
-//!    `TrainReceipt` read back out of the blob space.
+//!    `TrainReceipt` read back out of the blob space. Both trainer arms this
+//!    build carries, in sequence on the one composed adapter: the lane hands
+//!    the resource the *inner* wgpu device it probed, and the autodiff trainer
+//!    wraps that with `Device::autodiff` itself, so the arm changes nothing
+//!    about the composition and everything about what runs on it.
 //!
 //! The tally assertion is deliberately *strict improvement* and nothing
 //! sharper. The CPU receipt's 6/6-against-4/6 numbers are ndarray's; f32
@@ -77,26 +81,21 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use common::{
-    CONFIG_JSON, EVAL_PREFIXES, MODEL_ID, TRAIN_PREFIXES, base_weights, lane, lending, now_ms,
-    open_vault, owner, profile, refusal_from, save_cases, tokenizer_json, unlock,
+    EVAL_PREFIXES, PostedJob, author_fixture, autodiff_settings, finite_difference_settings, lane,
+    lending, now_ms, open_vault, owner, profile, refusal_from, run_trainer_job, unlock,
     write_device_settings,
 };
 use distillery::{
-    GpuDeviceType, LoraTrainerSettings, ResidentReceipt, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE,
-    TrainReceipt, TrainRequest, TrainerGpuKind, probe_gpu_adapter,
+    GpuDeviceType, TRAINER_AUTODIFF, TRAINER_FINITE_DIFFERENCE, TRAINER_RESOURCE, TrainReceipt,
+    TrainRequest, TrainerGpuKind, probe_gpu_adapter,
 };
 use djinn::resident::DjinnResident;
 use djinn::settings::TrainerLaneSettings;
-use eidetic::models::{EvalMetric, EvalReport, OpaqueBlob, TrainingCorpus};
-use eidetic::typed::{load_typed, save_typed};
-use eidetic::{
-    ModelAdapterManifest, ModelLibrary, NoFetcher, PrivacyClass, ProvenanceRecord, Timestamp,
-    TrustEnvelope,
-};
-use mesh::spec::{DeterminismClass, JobSpec};
-use mesh::{BlobSource as _, ResourceId};
+use eidetic::models::{EvalMetric, EvalReport, OpaqueBlob};
+use eidetic::typed::load_typed;
+use eidetic::{ModelAdapterManifest, NoFetcher};
+use mesh::ResourceId;
 use mesh_host::Step;
-use tokio::sync::Notify;
 
 /// A failure bound, not an expectation. The run is stopped by the observer
 /// seeing `Step::Completed`; this only decides how long a *stuck* run is given
@@ -264,126 +263,35 @@ async fn the_gpu_lane_trains_on_a_discrete_adapter_or_refuses_to_compose_at_all(
     //    device and not about the data.
     let (base_model_ref, tokenizer_ref, corpus_ref) = {
         let mut store = library.lock().await;
-        let base_model_ref = ModelLibrary::save_model_with_components(
-            &mut *store,
-            MODEL_ID,
-            "llama",
-            "MIT",
-            serde_json::from_str(CONFIG_JSON).unwrap(),
-            &base_weights(),
-            tokenizer_json().as_bytes(),
-            Vec::new(),
-            Vec::new(),
-            PrivacyClass::LocalOnly,
-            ProvenanceRecord::self_imported("djinn-gpu-trainer-receipt"),
-            TrustEnvelope::self_asserted(),
-            Timestamp(0),
-        )
-        .await
-        .expect("save the base model into the persona's library");
-        let manifest = ModelLibrary::load_model(&mut *store, base_model_ref)
-            .await
-            .expect("load model manifest")
-            .expect("model manifest present");
-        let corpus = TrainingCorpus {
-            training_source_codicils: save_cases(&mut *store, &TRAIN_PREFIXES).await,
-            evaluation_source_codicils: save_cases(&mut *store, &EVAL_PREFIXES).await,
-        };
-        let corpus_ref = save_typed(
-            &mut *store,
-            &corpus,
-            vec![],
-            PrivacyClass::LocalOnly,
-            ProvenanceRecord::self_imported("djinn-gpu-trainer-receipt"),
-            TrustEnvelope::self_asserted(),
-            Timestamp(1),
-        )
-        .await
-        .expect("save the corpus");
-        (base_model_ref, manifest.tokenizer_blob, corpus_ref)
+        author_fixture(&mut store, "djinn-gpu-trainer-receipt").await
     };
 
-    // 4. Stage the request and post the job as this device. The same
-    //    hyperparameters the CPU receipt uses, for the same reason.
-    let request = TrainRequest {
+    let request = |adapter_name: &str, settings: distillery::TrainerSettings| TrainRequest {
         base_model_ref,
         tokenizer_ref,
         corpus_ref,
-        adapter_name: "djinn-gpu-trainer-receipt".into(),
+        adapter_name: adapter_name.into(),
         prompt_template: "{{ prompt }}".into(),
         metric: EvalMetric::RankingAt { limit: 3 },
-        settings: LoraTrainerSettings {
-            rank: 1,
-            alpha: 8.0,
-            target_module: "v_proj".into(),
-            steps: 40,
-            initial_step_length: 1.0,
-            minimum_step_length: 1.0e-4,
-            epsilon: 0.02,
-        },
+        settings,
         created_at: now_ms(),
     };
-    let request_blob = works
-        .space()
-        .put(&serde_json::to_vec(&request).unwrap())
-        .await
-        .expect("stage the training request");
-    works
-        .post_job(
-            JobSpec::simple(
-                ResourceId::parse(TRAINER_RESOURCE).unwrap(),
-                TRAINER_REQUEST_INPUT,
-                request_blob,
-                "receipt",
-                64 * 1024,
-                DeterminismClass::Observed,
-            ),
-            1,
-            now_ms(),
-        )
-        .await
-        .expect("post the trainer job as this device");
-
-    // 5. Drive the resident until the job commits.
-    let stop = Arc::new(Notify::new());
-    let signal = Arc::clone(&stop);
     let mut observed: Vec<Step> = Vec::new();
-    let mut completed = false;
-    let started = std::time::Instant::now();
-    works
-        .run_until(
-            async move {
-                tokio::select! {
-                    _ = signal.notified() => {}
-                    _ = tokio::time::sleep(FAILURE_BOUND) => {}
-                }
-            },
-            |receipt| {
-                if let ResidentReceipt::Tick { steps } = &receipt {
-                    for step in steps {
-                        if !matches!(step, Step::Idle) {
-                            observed.push(step.clone());
-                        }
-                    }
-                    if steps
-                        .iter()
-                        .any(|step| matches!(step, Step::Completed { .. }))
-                    {
-                        completed = true;
-                        stop.notify_one();
-                    }
-                }
-            },
-        )
-        .await
-        .expect("the works ran to the stop request");
-    let elapsed = started.elapsed();
 
+    // 4. The v0 arm on the discrete adapter. The same hyperparameters the CPU
+    //    receipt uses, for the same reason.
+    let posted = run_trainer_job(
+        &mut works,
+        &request("djinn-gpu-trainer-receipt", finite_difference_settings()),
+        1,
+        FAILURE_BOUND,
+        &mut observed,
+    )
+    .await;
+    let PostedJob::Committed { receipt, elapsed } = posted else {
+        panic!("the v0 arm must commit on the discrete adapter: steps were {observed:?}");
+    };
     println!("observed step sequence: {observed:?}");
-    assert!(
-        completed,
-        "the GPU trainer never completed the job in {FAILURE_BOUND:?}; steps were {observed:?}"
-    );
     assert!(
         observed
             .iter()
@@ -396,30 +304,103 @@ async fn the_gpu_lane_trains_on_a_discrete_adapter_or_refuses_to_compose_at_all(
             .any(|step| matches!(step, Step::Started { .. })),
         "the job must have been started on this device, not merely reported done: {observed:?}"
     );
+    assert_published_adapter(
+        &library,
+        &receipt,
+        corpus_ref,
+        "peft-esp-trainer-v0",
+        TRAINER_FINITE_DIFFERENCE,
+    )
+    .await;
+    println!(
+        "djinn GPU trainer receipt ({TRAINER_FINITE_DIFFERENCE}): baseline {}/{} vs adapter \
+         {}/{} at RankingAt{{3}}, trained in {:.1}s on {} ({}, {} adapter)",
+        receipt.baseline.passed,
+        receipt.baseline.total,
+        receipt.adapter.passed,
+        receipt.adapter.total,
+        elapsed.as_secs_f64(),
+        adapter.name,
+        adapter.backend,
+        adapter.device_type,
+    );
 
-    // 6. The committed output is the compact receipt, and it reports what it
-    //    measured.
-    let board = works
-        .authority()
-        .host()
-        .synced()
-        .board()
+    // 5. The autodiff arm on the same adapter.
+    //
+    //    Djinn hands the resource the *inner* wgpu device that
+    //    `discrete_gpu_trainer_device` probed and composed — the trainer wraps
+    //    it with `Device::autodiff` itself, and burn panics on a device that
+    //    is already autodiff, so wrapping here would turn the one lane that
+    //    knows which adapter it is on into the one lane that cannot run v1.
+    //    Nothing about the composition changes for the arm; only the request
+    //    does.
+    #[cfg(feature = "trainer-autodiff")]
+    {
+        let posted = run_trainer_job(
+            &mut works,
+            &request("djinn-gpu-trainer-receipt-autodiff", autodiff_settings()),
+            2,
+            FAILURE_BOUND,
+            &mut observed,
+        )
+        .await;
+        let PostedJob::Committed { receipt, elapsed } = posted else {
+            panic!(
+                "a build carrying `trainer-autodiff` must run the autodiff arm on the \
+                 discrete adapter, not release it: steps were {observed:?}"
+            );
+        };
+        assert_published_adapter(
+            &library,
+            &receipt,
+            corpus_ref,
+            distillery::TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
+            TRAINER_AUTODIFF,
+        )
+        .await;
+        println!(
+            "djinn GPU trainer receipt ({TRAINER_AUTODIFF}): baseline {}/{} vs adapter {}/{} \
+             at RankingAt{{3}}, trained in {:.1}s on {} ({}, {} adapter)",
+            receipt.baseline.passed,
+            receipt.baseline.total,
+            receipt.adapter.passed,
+            receipt.adapter.total,
+            elapsed.as_secs_f64(),
+            adapter.name,
+            adapter.backend,
+            adapter.device_type,
+        );
+    }
+
+    // 6. And the library is a real file, at the derived persona-scoped path.
+    let derived = data_root.join("models").join("works").join("library.redb");
+    assert!(
+        derived.is_file(),
+        "the model library must exist at {}",
+        derived.display()
+    );
+
+    resident.restore_distillery(Some(works));
+    resident
+        .shutdown()
         .await
-        .expect("fold the board");
-    let output = board
-        .jobs()
-        .find_map(|job| match &job.state {
-            mesh::JobState::Committed { output, .. } => Some((**output).clone()),
-            _ => None,
-        })
-        .expect("the trainer job committed an output");
-    let receipt_bytes = works
-        .space()
-        .fetch(&output.blob)
-        .await
-        .expect("fetch the committed receipt")
-        .expect("committed receipt bytes present");
-    let receipt: TrainReceipt = serde_json::from_slice(&receipt_bytes).expect("receipt JSON");
+        .expect("clean ordered resident shutdown");
+}
+
+/// Everything a published adapter owes its receipt, checked in the persona's
+/// own library.
+///
+/// The tally assertion is *strict improvement* and nothing sharper, on both
+/// arms. The CPU receipt's figures are ndarray's; f32 reductions on a GPU need
+/// not reproduce them bit for bit, and pinning the exact numbers would make
+/// this a test about floating-point luck rather than about the trainer.
+async fn assert_published_adapter(
+    library: &Arc<tokio::sync::Mutex<muniment::RedbBackend>>,
+    receipt: &TrainReceipt,
+    corpus_ref: eidetic::ManifestId,
+    adapter_format_version: &str,
+    trainer: &str,
+) {
     assert_eq!(
         receipt.baseline.total,
         EVAL_PREFIXES.len() as u64,
@@ -431,69 +412,47 @@ async fn the_gpu_lane_trains_on_a_discrete_adapter_or_refuses_to_compose_at_all(
         "the receipt must show a strict held-out improvement on the GPU: {receipt:?}"
     );
 
-    // 7. The artifacts are in the persona's library, under the receipt's refs.
-    {
-        let mut store = library.lock().await;
-        let manifest = load_typed::<ModelAdapterManifest>(
-            &mut *store,
-            &mut NoFetcher,
-            receipt.adapter_manifest_ref,
-        )
-        .await
-        .expect("load the adapter manifest")
-        .expect("adapter manifest present");
-        assert_eq!(
-            manifest.training_corpus_root,
-            Some(corpus_ref),
-            "the published adapter must name the corpus it was actually trained on"
+    let mut store = library.lock().await;
+    let manifest = load_typed::<ModelAdapterManifest>(
+        &mut *store,
+        &mut NoFetcher,
+        receipt.adapter_manifest_ref,
+    )
+    .await
+    .expect("load the adapter manifest")
+    .expect("adapter manifest present");
+    assert_eq!(
+        manifest.training_corpus_root,
+        Some(corpus_ref),
+        "the published adapter must name the corpus it was actually trained on"
+    );
+    assert_eq!(manifest.adapter_blob, receipt.adapter_blob);
+    assert_eq!(manifest.adapter_config_blob, receipt.adapter_config_blob);
+    assert_eq!(
+        manifest.adapter_format_version, adapter_format_version,
+        "the published adapter must carry the arm's own version stamp"
+    );
+    assert_eq!(
+        manifest.training_method["trainer"],
+        serde_json::json!(trainer),
+        "the receipt must record which trainer actually ran"
+    );
+    for blob in [receipt.adapter_blob, receipt.adapter_config_blob] {
+        assert!(
+            load_typed::<OpaqueBlob>(&mut *store, &mut NoFetcher, blob)
+                .await
+                .expect("load the adapter blob")
+                .is_some(),
+            "adapter blob {blob} must be stored"
         );
-        assert_eq!(manifest.adapter_blob, receipt.adapter_blob);
-        assert_eq!(manifest.adapter_config_blob, receipt.adapter_config_blob);
-        for blob in [receipt.adapter_blob, receipt.adapter_config_blob] {
-            assert!(
-                load_typed::<OpaqueBlob>(&mut *store, &mut NoFetcher, blob)
-                    .await
-                    .expect("load the adapter blob")
-                    .is_some(),
-                "adapter blob {blob} must be stored"
-            );
-        }
-        let report = load_typed::<EvalReport>(&mut *store, &mut NoFetcher, receipt.eval_report_ref)
-            .await
-            .expect("load the evaluation report")
-            .expect("evaluation report present");
-        assert_eq!(report.baseline, receipt.baseline);
-        assert_eq!(report.adapter, receipt.adapter);
-        report
-            .validate_for_adapter(receipt.adapter_manifest_ref, &manifest)
-            .expect("report provenance links match the adapter manifest");
     }
-
-    // 8. And the library is a real file, at the derived persona-scoped path.
-    let derived = data_root.join("models").join("works").join("library.redb");
-    assert!(
-        derived.is_file(),
-        "the model library must exist at {}",
-        derived.display()
-    );
-
-    println!(
-        "djinn GPU trainer receipt: baseline {}/{} vs adapter {}/{} at RankingAt{{3}}, \
-         trained in {:.1}s on {} ({}, {} adapter) into {}",
-        receipt.baseline.passed,
-        receipt.baseline.total,
-        receipt.adapter.passed,
-        receipt.adapter.total,
-        elapsed.as_secs_f64(),
-        adapter.name,
-        adapter.backend,
-        adapter.device_type,
-        derived.display(),
-    );
-
-    resident.restore_distillery(Some(works));
-    resident
-        .shutdown()
+    let report = load_typed::<EvalReport>(&mut *store, &mut NoFetcher, receipt.eval_report_ref)
         .await
-        .expect("clean ordered resident shutdown");
+        .expect("load the evaluation report")
+        .expect("evaluation report present");
+    assert_eq!(report.baseline, receipt.baseline);
+    assert_eq!(report.adapter, receipt.adapter);
+    report
+        .validate_for_adapter(receipt.adapter_manifest_ref, &manifest)
+        .expect("report provenance links match the adapter manifest");
 }

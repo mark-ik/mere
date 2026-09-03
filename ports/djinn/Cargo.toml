@@ -25,6 +25,14 @@ trainer = ["distillery/trainer"]
 # rather than the hardware — a device with an RTX in it still advertises no
 # GPU unless a GPU resource was actually registered.
 trainer-gpu = ["trainer", "distillery/trainer-gpu"]
+# The autodiff trainer arm (esp-trainer-v1-autodiff), composed into the same
+# lane and the same resource. Additive over `trainer` and orthogonal to
+# `trainer-gpu`: the arm a job asks for lives in its request, the device lives
+# in the lane's settings, and a build may carry either, both, or neither. A
+# request naming an arm this build does not carry is refused by name at
+# admission and never quietly trained with the other one, which is the same
+# posture `trainer-gpu` takes about the device.
+trainer-autodiff = ["trainer", "distillery/trainer-autodiff"]
 
 [dependencies]
 blake3.workspace = true

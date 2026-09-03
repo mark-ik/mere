@@ -666,7 +666,7 @@ fn the_two_arms_are_told_apart_by_their_tags() {
     assert_eq!(v0.trainer(), TRAINER_FINITE_DIFFERENCE);
     assert_eq!(v0.adapter_format_version(), "peft-esp-trainer-v0");
     v0.availability().expect("every build runs the v0 arm");
-    let shape = v0.adapter_shape().expect("the v0 arm knows its shape");
+    let shape = v0.adapter_shape();
     assert_eq!(shape.rank, 1);
     assert_eq!(shape.target_modules, vec!["v_proj".to_string()]);
 
@@ -698,8 +698,10 @@ fn an_autodiff_request_is_refused_by_name_without_the_feature() {
         error.contains(TRAINER_AUTODIFF),
         "{error} must name the arm it refuses"
     );
-    assert!(
-        request.settings.adapter_shape().is_none(),
-        "a build that cannot run the arm must not claim to know its rank"
-    );
+    // Refusing to *run* the arm is not refusing to understand it: the
+    // settings are fully typed here, so this build can still size, check and
+    // forward a v1 adapter it merely received.
+    let shape = request.settings.adapter_shape();
+    assert_eq!(shape.rank, 1);
+    assert_eq!(shape.target_modules, vec!["v_proj".to_string()]);
 }

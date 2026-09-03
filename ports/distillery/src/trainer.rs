@@ -34,15 +34,15 @@ use eidetic::{
     AdapterRuntimeCompat, Hash, ManifestId, ModelAdapterManifest, ModelLibrary, NoFetcher,
     PrivacyClass, ProvenanceRecord, Store, Timestamp, TrustEnvelope,
 };
+#[cfg(feature = "trainer-autodiff")]
+use esp::infer::decoder::train_peft_lora_autodiff;
 use esp::infer::decoder::{
-    DecoderDevice, LoraTrainerSettings, PEFT_LORA_NDARRAY_LOADER, PeftLoraAdapterLoader,
-    TRAINED_ADAPTER_FORMAT_VERSION, TrainedLoraAdapter, TrainingCase, ranking_tally,
-    train_peft_lora,
+    AutodiffLoraSettings, DecoderDevice, LoraTrainerSettings, PEFT_LORA_NDARRAY_LOADER,
+    PeftLoraAdapterLoader, TRAINED_ADAPTER_FORMAT_VERSION, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
+    TrainedLoraAdapter, TrainingCase, ranking_tally, train_peft_lora,
 };
 #[cfg(feature = "trainer-gpu")]
 use esp::infer::decoder::{DecoderGpuKind as TrainerGpuKind, GpuAdapterFacts, GpuDeviceType};
-#[cfg(feature = "trainer-autodiff")]
-use esp::infer::decoder::{TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, train_peft_lora_autodiff};
 use esp::infer::{AdapterArtifact, AdapterLoader, AdapterSelection, ModelSession};
 use mesh::namespace::BoxFuture;
 use mesh::{
@@ -56,12 +56,21 @@ use tokio::sync::Mutex;
 pub const TRAINER_RESOURCE: &str = "esp.train.peft-lora/v1";
 /// The build answering it.
 ///
-/// One implementation id for both trainer arms, deliberately. A job asks for
-/// *the* trainer resource and names the method inside its request; which arm
-/// ran is a fact of the published receipt, not of admission. The id keeps the
-/// string it was first admitted under, so a lane written against it does not
-/// have to be re-admitted to gain the autodiff arm.
-const TRAINER_IMPLEMENTATION: &str = "esp.train.peft-lora.finite-difference-1/v1";
+/// Method-neutral, and that is the whole point of the name. One
+/// implementation id serves both trainer arms: a job asks for *the* trainer
+/// resource and names the method inside its request, so which arm ran is a
+/// fact of the published receipt rather than of admission. The id it replaced
+/// (`…finite-difference-1/v1`) named one arm and therefore under-described
+/// every build that carried two.
+///
+/// `/v2` because the request shape changed. `TrainRequest.settings` went from
+/// a bare `LoraTrainerSettings` to the tagged [`TrainerSettings`], so a poster
+/// written against v1 emits bytes this build will not parse. Bumping the
+/// implementation version is how that is said out loud in the mesh's
+/// `<resource>.<impl>/v<n>` convention; the resource id
+/// [`TRAINER_RESOURCE`] is unchanged, because what is being asked for did not
+/// change — only what answers.
+const TRAINER_IMPLEMENTATION: &str = "esp.train.peft-lora.esp-trainer/v2";
 /// The single input slot carrying the JSON [`TrainRequest`].
 pub const TRAINER_REQUEST_INPUT: &str = "request";
 
@@ -76,21 +85,6 @@ pub const TRAINER_FINITE_DIFFERENCE: &str = "esp-trainer-v0";
 /// together and neither is derivable from the other, so both are written down.
 pub const TRAINER_AUTODIFF: &str = "esp-trainer-v1-autodiff";
 
-/// The autodiff arm's settings payload.
-///
-/// With `trainer-autodiff` this is esp's own `AutodiffLoraSettings`. Without
-/// it the arm still exists and still deserializes — a request must be read as
-/// what it is, and a v1 request silently misread as v0 would publish an
-/// adapter under the wrong trainer version — but the settings are held as
-/// verbatim JSON, because a build with no autodiff trainer has nothing to
-/// give them meaning and will refuse the job by name.
-#[cfg(feature = "trainer-autodiff")]
-pub type AutodiffSettings = esp::infer::decoder::AutodiffLoraSettings;
-/// The autodiff arm's settings on a build without `trainer-autodiff`: read
-/// verbatim, not understood. See the feature-enabled alias.
-#[cfg(not(feature = "trainer-autodiff"))]
-pub type AutodiffSettings = serde_json::Value;
-
 /// Which trainer a request asks for, and its hyperparameters.
 ///
 /// Externally tagged, with the tags equal to the `training_method.trainer`
@@ -103,6 +97,13 @@ pub type AutodiffSettings = serde_json::Value;
 ///
 /// There is no `Default`: both arms carry hyperparameters that are part of the
 /// trainer's identity, which is esp's rule and does not soften here.
+///
+/// The enum has the same shape in every build. Both arms' settings types ride
+/// with esp's loader, not with its trainers, so a build without
+/// `trainer-autodiff` still reads a v1 request as a fully typed v1 request and
+/// refuses it by name — see [`availability`](Self::availability). A public
+/// type whose payload changed with a feature would be a trap for consumers,
+/// whose own request types would silently change shape underneath them.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TrainerSettings {
     /// The v0 central-difference trainer.
@@ -110,7 +111,7 @@ pub enum TrainerSettings {
     FiniteDifference(LoraTrainerSettings),
     /// The v1 autodiff trainer, runnable behind `trainer-autodiff`.
     #[serde(rename = "esp-trainer-v1-autodiff")]
-    Autodiff(AutodiffSettings),
+    Autodiff(AutodiffLoraSettings),
 }
 
 /// What an arm's settings oblige the published adapter manifest to declare.
@@ -131,6 +132,11 @@ pub struct AdapterShape {
 }
 
 /// The refusal a build without `trainer-autodiff` gives an autodiff request.
+///
+/// Compiled only into the builds that can give it. On a build that carries the
+/// arm there is nothing to refuse, and a refusal string kept alive there would
+/// be a message with no caller.
+#[cfg(not(feature = "trainer-autodiff"))]
 fn autodiff_unavailable() -> String {
     format!(
         "this build cannot run the {TRAINER_AUTODIFF} arm: distillery was compiled without \
@@ -155,12 +161,7 @@ impl TrainerSettings {
     pub fn adapter_format_version(&self) -> &'static str {
         match self {
             Self::FiniteDifference(_) => TRAINED_ADAPTER_FORMAT_VERSION,
-            #[cfg(feature = "trainer-autodiff")]
             Self::Autodiff(_) => TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF,
-            // Nameable even where it cannot be run, so a receipt reader and a
-            // refusal message agree on one string per arm in every build.
-            #[cfg(not(feature = "trainer-autodiff"))]
-            Self::Autodiff(_) => "peft-esp-trainer-v1",
         }
     }
 
@@ -182,24 +183,21 @@ impl TrainerSettings {
 
     /// The factor shape the published manifest must declare.
     ///
-    /// `None` exactly when [`availability`](Self::availability) refuses: the
-    /// settings are opaque JSON there, and a build that cannot run the arm has
-    /// no business claiming to know its rank.
-    pub fn adapter_shape(&self) -> Option<AdapterShape> {
+    /// Total in every build: both arms carry typed settings whether or not
+    /// this build can run them, so a host can size and check a v1 adapter it
+    /// merely received.
+    pub fn adapter_shape(&self) -> AdapterShape {
         match self {
-            Self::FiniteDifference(settings) => Some(AdapterShape {
+            Self::FiniteDifference(settings) => AdapterShape {
                 rank: settings.rank,
                 alpha: settings.alpha,
                 target_modules: vec![settings.target_module.clone()],
-            }),
-            #[cfg(feature = "trainer-autodiff")]
-            Self::Autodiff(settings) => Some(AdapterShape {
+            },
+            Self::Autodiff(settings) => AdapterShape {
                 rank: settings.rank,
                 alpha: settings.alpha,
                 target_modules: settings.target_modules.clone(),
-            }),
-            #[cfg(not(feature = "trainer-autodiff"))]
-            Self::Autodiff(_) => None,
+            },
         }
     }
 
@@ -431,10 +429,7 @@ fn run_train_job<B: Store>(
     // addresses the store must land on when the bytes are saved below, and
     // its rank/alpha/target_modules are what the loader will check the
     // adapter's own config against, so they come from the arm that ran.
-    let shape = request
-        .settings
-        .adapter_shape()
-        .ok_or_else(|| backend(autodiff_unavailable()))?;
+    let shape = request.settings.adapter_shape();
     let manifest = ModelAdapterManifest {
         name: request.adapter_name.clone(),
         base_model_ref: request.base_model_ref,

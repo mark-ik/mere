@@ -344,3 +344,247 @@ pub async fn save_cases(
     ids.sort_by_key(ToString::to_string);
     ids
 }
+
+// ── Running one trainer job through an opened lane ──────────────────────────
+
+/// The trainer settings the v0 arm's receipts post.
+///
+/// v0's forty line-searched central-difference steps and v1's twelve Adam
+/// steps are the counts their own forcing receipts settled on. Matching them
+/// to each other would be matching the wrong thing: what a lane receipt owes
+/// is a strict held-out improvement from each arm through the composed path,
+/// not a like-for-like step budget.
+#[cfg(feature = "trainer")]
+pub fn finite_difference_settings() -> distillery::TrainerSettings {
+    distillery::TrainerSettings::FiniteDifference(distillery::LoraTrainerSettings {
+        rank: 1,
+        alpha: 8.0,
+        target_module: "v_proj".into(),
+        steps: 40,
+        initial_step_length: 1.0,
+        minimum_step_length: 1.0e-4,
+        epsilon: 0.02,
+    })
+}
+
+/// The autodiff arm's settings, in the shape a lane operator would write them.
+///
+/// Available on every `trainer` build, not only under `trainer-autodiff`: the
+/// refusal receipt has to be able to *post* this request in order to prove it
+/// is refused, and esp keeps the v1 vocabulary with its loader rather than
+/// with its trainer for exactly that reason.
+#[cfg(feature = "trainer")]
+pub fn autodiff_settings() -> distillery::TrainerSettings {
+    distillery::TrainerSettings::Autodiff(distillery::AutodiffLoraSettings {
+        rank: 1,
+        alpha: 8.0,
+        target_modules: vec!["v_proj".into()],
+        steps: 12,
+        learning_rate: 0.2,
+        beta1: 0.9,
+        beta2: 0.999,
+        epsilon: 1.0e-8,
+        weight_decay: 0.0,
+    })
+}
+
+/// How a posted trainer job ended, as the lane could see it.
+#[cfg(feature = "trainer")]
+pub enum PostedJob {
+    /// The job committed; this is the receipt it committed, and how long the
+    /// run took wall-clock.
+    Committed {
+        receipt: distillery::TrainReceipt,
+        elapsed: std::time::Duration,
+    },
+    /// The job was released back to the board instead of committing. The
+    /// board's vocabulary is Posted / Claimed / Done / Committed plus lease
+    /// release reasons, so a refused run is visible as this and never as text
+    /// — a receipt that wants the refusal's wording asserts it at its source.
+    Released,
+}
+
+/// Author the base model triple and the corpus into a lane's model library.
+///
+/// Written through the resident's own handle because redb is single-writer and
+/// the trainer is about to write into the same file.
+#[cfg(feature = "trainer")]
+pub async fn author_fixture(
+    store: &mut muniment::RedbBackend,
+    provenance: &str,
+) -> (
+    eidetic::ManifestId,
+    eidetic::ManifestId,
+    eidetic::ManifestId,
+) {
+    use eidetic::models::TrainingCorpus;
+    use eidetic::typed::save_typed;
+    use eidetic::{ModelLibrary, PrivacyClass, ProvenanceRecord, Timestamp, TrustEnvelope};
+
+    let base_model_ref = ModelLibrary::save_model_with_components(
+        store,
+        MODEL_ID,
+        "llama",
+        "MIT",
+        serde_json::from_str(CONFIG_JSON).unwrap(),
+        &base_weights(),
+        tokenizer_json().as_bytes(),
+        Vec::new(),
+        Vec::new(),
+        PrivacyClass::LocalOnly,
+        ProvenanceRecord::self_imported(provenance),
+        TrustEnvelope::self_asserted(),
+        Timestamp(0),
+    )
+    .await
+    .expect("save the base model into the persona's library");
+    let manifest = ModelLibrary::load_model(store, base_model_ref)
+        .await
+        .expect("load model manifest")
+        .expect("model manifest present");
+    let corpus = TrainingCorpus {
+        training_source_codicils: save_cases(store, &TRAIN_PREFIXES).await,
+        evaluation_source_codicils: save_cases(store, &EVAL_PREFIXES).await,
+    };
+    let corpus_ref = save_typed(
+        store,
+        &corpus,
+        vec![],
+        PrivacyClass::LocalOnly,
+        ProvenanceRecord::self_imported(provenance),
+        TrustEnvelope::self_asserted(),
+        Timestamp(1),
+    )
+    .await
+    .expect("save the corpus");
+    (base_model_ref, manifest.tokenizer_blob, corpus_ref)
+}
+
+/// Post one trainer job onto an opened lane and drive the resident until it
+/// either commits or is released.
+///
+/// The committed output is found by the request blob its own spec names, not
+/// by taking whatever committed last: a receipt that runs two arms in sequence
+/// leaves two committed jobs on one board, and picking the wrong one would
+/// make both assertions pass for the wrong reason.
+#[cfg(feature = "trainer")]
+pub async fn run_trainer_job(
+    works: &mut djinn::resident_distillery::ResidentDistillery,
+    request: &distillery::TrainRequest,
+    nonce: u64,
+    failure_bound: std::time::Duration,
+    observed: &mut Vec<mesh_host::Step>,
+) -> PostedJob {
+    use std::sync::Arc;
+
+    use distillery::{ResidentReceipt, TRAINER_REQUEST_INPUT, TRAINER_RESOURCE};
+    use mesh::spec::{DeterminismClass, JobSpec};
+    use mesh::{BlobSource as _, ResourceId};
+    use mesh_host::Step;
+    use tokio::sync::Notify;
+
+    let request_blob = works
+        .space()
+        .put(&serde_json::to_vec(request).unwrap())
+        .await
+        .expect("stage the training request");
+    // Kept so the committed output can be found by the request that caused it.
+    let posted_blob = request_blob.clone();
+    works
+        .post_job(
+            JobSpec::simple(
+                ResourceId::parse(TRAINER_RESOURCE).unwrap(),
+                TRAINER_REQUEST_INPUT,
+                request_blob,
+                "receipt",
+                64 * 1024,
+                // The trainer declares `VerificationClass::ProducerOnly`, so
+                // asking for anything stricter than `Observed` would be asking
+                // for a claim nobody can make.
+                DeterminismClass::Observed,
+            ),
+            nonce,
+            now_ms(),
+        )
+        .await
+        .expect("post the trainer job as this device");
+
+    // Stop on the first terminal answer in either direction. A refused job is
+    // released back to the board and this device is free to claim it again, so
+    // waiting out the failure bound would spin on a question already answered.
+    let stop = Arc::new(Notify::new());
+    let signal = Arc::clone(&stop);
+    let mut settled: Option<bool> = None;
+    let started = std::time::Instant::now();
+    works
+        .run_until(
+            async move {
+                tokio::select! {
+                    _ = signal.notified() => {}
+                    _ = tokio::time::sleep(failure_bound) => {}
+                }
+            },
+            |receipt| {
+                if let ResidentReceipt::Tick { steps } = &receipt {
+                    for step in steps {
+                        if !matches!(step, Step::Idle) {
+                            observed.push(step.clone());
+                        }
+                        match step {
+                            Step::Completed { .. } => {
+                                settled = Some(true);
+                                stop.notify_one();
+                            }
+                            Step::Released { .. } => {
+                                settled = Some(false);
+                                stop.notify_one();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            },
+        )
+        .await
+        .expect("the works ran to the stop request");
+    let elapsed = started.elapsed();
+
+    match settled {
+        None => panic!(
+            "the trainer job neither committed nor was released in {failure_bound:?}; \
+             steps were {observed:?}"
+        ),
+        Some(false) => PostedJob::Released,
+        Some(true) => {
+            let board = works
+                .authority()
+                .host()
+                .synced()
+                .board()
+                .await
+                .expect("fold the board");
+            let output = board
+                .jobs()
+                .find(|job| {
+                    job.spec.as_ref().is_some_and(|spec| {
+                        spec.inputs.iter().any(|input| input.blob == posted_blob)
+                    })
+                })
+                .and_then(|job| match &job.state {
+                    mesh::JobState::Committed { output, .. } => Some((**output).clone()),
+                    _ => None,
+                })
+                .expect("this request's trainer job committed an output");
+            let bytes = works
+                .space()
+                .fetch(&output.blob)
+                .await
+                .expect("fetch the committed receipt")
+                .expect("committed receipt bytes present");
+            PostedJob::Committed {
+                receipt: serde_json::from_slice(&bytes).expect("receipt JSON"),
+                elapsed,
+            }
+        }
+    }
+}

@@ -80,9 +80,8 @@ pub use surface::{
 pub use trainer::discrete_gpu_trainer_device;
 #[cfg(feature = "trainer")]
 pub use trainer::{
-    AdapterShape, AutodiffSettings, TRAINER_AUTODIFF, TRAINER_FINITE_DIFFERENCE,
-    TRAINER_REQUEST_INPUT, TRAINER_RESOURCE, TrainReceipt, TrainRequest, TrainerResource,
-    TrainerSettings,
+    AdapterShape, TRAINER_AUTODIFF, TRAINER_FINITE_DIFFERENCE, TRAINER_REQUEST_INPUT,
+    TRAINER_RESOURCE, TrainReceipt, TrainRequest, TrainerResource, TrainerSettings,
 };
 
 /// The trainer's own vocabulary, re-exported so a composition layer can wire
@@ -98,15 +97,17 @@ pub use trainer::{
 #[cfg(feature = "trainer")]
 pub use esp::infer::decoder::{DecoderDevice as TrainerDevice, LoraTrainerSettings, TrainingCase};
 
-/// The autodiff arm's half of that vocabulary, under `trainer-autodiff`.
+/// The v1 arm's half of that vocabulary — under `trainer`, not
+/// `trainer-autodiff`.
 ///
-/// [`TrainerSettings::Autodiff`] carries an [`AutodiffLoraSettings`], so a
-/// host that means to post a v1 job has to be able to name it. The two
-/// version constants are what a caller stamps on a manifest it builds itself
-/// and what a receipt reader compares against — the FLoRA stacker refuses a
-/// round that mixes them with v0's, which is only checkable by a consumer that
-/// can name both.
-#[cfg(feature = "trainer-autodiff")]
+/// [`TrainerSettings::Autodiff`] carries an [`AutodiffLoraSettings`] in every
+/// build, so a host that means to post a v1 job, or merely to read one it
+/// received, has to be able to name it. The two version constants are what a
+/// caller stamps on a manifest it builds itself and what a receipt reader
+/// compares against — the FLoRA stacker refuses a round that mixes them with
+/// v0's, which is only checkable by a consumer that can name both. None of
+/// that needs a trainer, so none of it is behind one.
+#[cfg(feature = "trainer")]
 pub use esp::infer::decoder::{
     AutodiffLoraSettings, TRAINED_ADAPTER_FORMAT_VERSION_AUTODIFF, TRAINED_PEFT_VERSION_AUTODIFF,
 };
