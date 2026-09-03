@@ -1110,3 +1110,203 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   moves (ortet plan O4). Name ruled by Mark 2026-09-03; the crates.io claim
   waits on a publishable dependency set, since the host crates it sits on are
   `publish = false`.
+
+- 2026-09-03: **Pelt and its companions left genet** (genet
+  `75d3900f82e`, parent `8c1e324ed4d`). The first half of the consumers-first
+  order in the P2 assessment above: four paths removed from genet's workspace,
+  129 tracked files, 35,446 deleted lines.
+
+  | path | packages | genet dependents at removal |
+  |---|---|---|
+  | `ports/pelt` | `pelt`, `pelt-core`, `pelt-desktop` | none outside Pelt itself |
+  | `ports/tabard` | `tabard` | **none at all** |
+  | `components/inker/knot-editor-host` | `knot-editor-host` | none |
+  | `components/mere-document-lanes` | `mere-document-lanes` | `pelt`, `pelt-desktop` only |
+
+  Each claim was checked with `cargo tree -i <crate> --workspace` before
+  anything was removed, and one expectation was wrong in the safe direction:
+  **`tabard` is not a `pelt-desktop` dependency.** No manifest in genet named
+  it; it is a reservation crate with no dependent anywhere, so it left as a
+  leaf rather than with Pelt. `mere-surface-api` stayed, as planned:
+  `cambium`, `cambium-genet-winit-host` and `knot-editor-host` all reached it,
+  and after the removal `cambium` still does.
+
+  **History did not come out on a branch, and the Cambium precedent does not
+  transfer.** All four `git subtree split -P <path> -b split/<name>` runs were
+  started first, given more than the fifteen-minute budget, and produced
+  nothing; they were stopped and no `split/*` ref exists. The reason is
+  specific and checkable: `components/cambium` carries a `git subtree add`
+  join commit (`6e37c2c41e7`, "Add 'components/cambium/' from commit
+  a2a25b78f74"), and `find_existing_splits` uses that join to bound the walk,
+  which is why the probe reported 738 commits in 275 s. These four paths were
+  never subtree-added — `git log --grep=git-subtree-dir` over genet returns
+  exactly three commits, for `components/netfetcher`, `components/cambium` and
+  the 2013-era `src/components/script/style/` — so git-subtree walks the whole
+  58,242-commit history in shell, twice (once to count `revmax`, once to
+  process). Measured rate on this machine, from the split cache's `notree`
+  entries: about 250 commits a minute, roughly 3.9 hours per path, with all
+  four together no faster. `ports/pelt` reached 6,331 of 58,242 in 25 minutes.
+
+  So the receiving side has three options, and this is **Mark's call**:
+
+  1. **Copy plus pointer**, the fallback the move already names. Cheapest, and
+     the history stays legible in genet at `8c1e324ed4d`.
+  2. **Run the splits offline**, four hours a path, unattended. Nothing is
+     wrong with them; they are only slow.
+  3. **`git filter-repo --subdirectory-filter` in a throwaway clone**, then
+     fetch the four branches back. Exact, preserves the DAG, authors, dates
+     and messages, and takes minutes rather than hours — but `git-filter-repo`
+     is not installed on this machine (not in Git for Windows), so it is a new
+     tool on Mark's box.
+
+  Whichever is chosen, **`8c1e324ed4d` is the revision to split or copy from**;
+  every removed file is intact there.
+
+  **Genet after the removal.** `default-members = ["ports/ortet"]`, and
+  `assert_ports_depend_inward` asserts ortet's single manifest at
+  `ports/ortet/Cargo.toml` where it asserted Pelt's two (ortet plan O4). The
+  cone witness's positive control had to be rebuilt: `pelt-desktop`'s cone
+  exercised an exact forbidden name (`inker`) and the `cambium`/`mere-`
+  prefixes in one walk, and no remaining member reaches both — `cargo tree -p
+  cambium` and `cargo tree -p cambium-genet-winit-host` reach `inker` zero
+  times, checked. It is now two controls: `document-canvas` must report
+  `inker`, `cambium-genet-winit-host` must report `cambium`.
+
+  Receipts, all in genet: `cargo check --workspace` green, 0 errors and 24
+  warnings across eight crates, every one pre-existing and none touched; root
+  `cargo build` (default member ortet) green; `cargo check -p ortet` green;
+  `cargo test -p ortet` 10 passed; `cargo check -p netfetcher
+  --no-default-features` green; `python support/ci/check_dependency_cones.py`
+  passes, ortet's cone still 592 packages with none forbidden and `fleece`
+  named separately as before. `relicense_headers.py --audit` went 887 -> 843
+  owned sources, exactly the 44 sources in the four directories, with "without
+  Exhibit A" unmoved at 6, all in other lanes.
+
+  Files changed outside the four directories: genet's root `Cargo.toml` (six
+  workspace entries and the `default-members` line), `support/ci/check_depen`
+  `dency_cones.py`, `README.md` (the default member and its run examples),
+  `ports/ortet/README.md`, `components/netfetcher/README.md`,
+  `components/genet-documents/README.md` and
+  `design_docs/2026-09-03_ortet_founding_plan.md`. Prose in
+  `components/cambium/cambium/src/{frisket,field,tests}.rs` and in genet's
+  `docs/` still names `pelt-desktop` and `ports/pelt`; that is history and
+  another lane's tree, and it was left alone.
+
+  Not done here: nothing landed in mere. P3's other half — Cambium and
+  Workbench, with no genet consumer left — is still ahead, and the crates now
+  need a home in mere before their consumers can be repointed.
+
+- 2026-09-03: **the four crates landed in mere** (merge commits
+  `39904694`, `e4263609`, `dfd9276f`, `a57e9f62`; wiring `cb3fd887`). The
+  receiving half of the consumers-first order. History came in by
+  `git fetch <bare> HEAD:import-<name>` plus
+  `git merge --allow-unrelated-histories`, from four bare repositories exported
+  path-limited from genet `8c1e324ed4d`, so option 3 of the three the removal
+  offered — an exact DAG in minutes rather than four hours a path — is what was
+  taken. Each landed tree hashes identically to its bare tip
+  (`git rev-parse HEAD:<path>` against the bare repo's), and nothing outside
+  the four paths moved in any merge: 129 files, exactly genet's count.
+
+  | path | packages | commits | tree |
+  |---|---|---|---|
+  | `ports/pelt` | `pelt`, `pelt-core`, `pelt-desktop` | 113 | `f76f8a4edee` |
+  | `ports/tabard` | `tabard` | 6 | `7dcb8836bbd` |
+  | `ports/knot/editor-host` | `knot-editor-host` | 10 | `5b5dd8298f5` |
+  | `crates/system/document-lanes` | `mere-document-lanes` | 2 | `156319ea3ae` |
+
+  `ports/knot/editor-host` is nested inside the member `ports/knot`, which
+  needed no `exclude` change: cargo auto-excludes a subdirectory carrying its
+  own `Cargo.toml` from the parent package, and `exclude` names only
+  `ports/knot/desktop`, a different path.
+
+  **One revision, and the pins that had to be invented.** Every genet.git pin
+  in the tree moved from `388d89c3a64` to `b78e2b92251`, genet's head after the
+  removal. Of the 39 existing lines one, `knot-editor-host`, became a workspace
+  path instead; fifteen new ones joined, leaving **53 across five manifests at
+  one revision**, witnessed by grep and by two `cargo metadata` runs.
+  Pelt's manifests reached genet by relative path
+  (`../../../components/...`); those became git pins declared once in the root
+  `[workspace.dependencies]`, as mere already does for the rest of the family,
+  so a future repoint stays a one-file edit. `knot-editor-host` and
+  `mere-document-lanes` went the other way, from git pins to workspace paths.
+  The unpatched resolve reports **39 genet-derived packages at
+  `b78e2b92251` and nowhere else**, with `cambium 0.3.3` coming from
+  `genet.git?rev=b78e2b92251` rather than a path — the proof that the
+  machine-local patch table was not loading — and no duplicate package name
+  anywhere in the genet family in either resolve.
+
+  **The patch table gained more than it lost.** `knot-editor-host` left it,
+  because patching a git source at a path that is also a workspace member is a
+  hard lockfile collision; none of the four may ever appear there. Seventeen
+  entries were added, and three of them (`workbench`, `scrying-engine`,
+  `genet-probe`) were already named by mere's root manifest and simply missing
+  — the same missing-entry trap the file's own notes record twice, caught here
+  because `genet-probe` resolved once from git and once from a path in the same
+  graph. The committed `.cargo/config.toml.example` carries all of it.
+
+  **Two findings the landing exposed, both latent before it.**
+
+  1. `ports/knot` uses `nematic::HtmlFragmentEngine` while mere's workspace pin
+     is `default-features = false`. That compiled only because
+     `knot-editor-host` resolved from genet.git and pulled nematic's defaults
+     in through *genet's* workspace table. As a member it cannot, so
+     `ports/knot` now names `features = ["html-fragment"]` where it uses it.
+  2. Two `pelt-desktop` tests failed on a missing image, and the `article`
+     receipt would have rendered a different frame. Pelt's fixtures reference
+     `resources/servo_64.png` and `resources/servo_1024.png` by
+     **repository-root-relative** URL, four, five and six `..` segments up, so
+     they sit outside the four exported paths and did not travel. Both are
+     carried here byte-identical from genet as `resources/`, with a README.
+     They are not relocated under `ports/pelt/` because those authored URL
+     strings are exactly what `static_viewer.rs` asserts on — the tests
+     exercise relative resolution at each depth, so moving the files would mean
+     rewriting the strings under test. **Open for Mark:** whether a top-level
+     `resources/` of two Servo-derived fixture PNGs is the right shape for
+     mere, or whether the fixtures and their assertions should be rewritten.
+
+  **Receipts.** `relicense_headers.py --audit` went 1111 -> 1155 owned
+  sources, exactly the 44 the removal took out of genet, with "without
+  Exhibit A" and "Exhibit B hits" at 0 before and after.
+  `cargo check --workspace` **patched** (the ordinary loop) green, 0 errors,
+  192 warnings across twelve crates; the nine crates and 182 warnings of the
+  2026-09-03 repoint are unchanged, and every new warning is in a crate that
+  landed today (`mere-document-lanes` 7, `pelt-desktop` 1) or in `nematic`,
+  whose html-fragment module now compiles (2). No warning was fixed.
+  `cargo check --workspace` **unpatched at true head** — run from a
+  directory outside the tree so the machine-local patch table does not load,
+  witnessed by thirty-five genet crates checked from
+  `genet.git?rev=b78e2b92251` and none from the sibling path — is green in
+  41.6 s with 0 errors and 190 warnings across eleven crates: the twelve above
+  minus `nematic`, whose warnings cargo does not surface when it arrives as a
+  git dependency rather than a patched path.
+  `cargo check -p pelt --no-default-features --features livery` green;
+  `cargo check -p pelt-desktop --features livery` green;
+  `cargo check -p knot-editor-host` green; `cargo check -p mere-document-lanes`
+  green. `cargo test -p pelt-core` **6 passed**, `cargo test -p pelt-desktop
+  --features livery` **64 passed** — genet's numbers exactly, once the fixture
+  images were carried; before them it was 62 passed and 2 failed.
+  `scripts/check_port_boundaries.py` passes.
+
+  **The headed article receipt**, this step's done-condition, runs from mere:
+  `cargo run -p pelt --no-default-features --features livery -j 1 --
+  --product-receipt article --artifact <png>` reports
+  `assertion=jump-link press/release moved the retained viewport` and
+  `digest=b1d6a62acf85b553`, identical across two runs. The frame is non-blank
+  by construction — `capture_composition` refuses a blank frame rather than
+  writing one — and by inspection: a 960x640 PNG with the Ahem-set route text,
+  the separate-border table, and **both** servo icons, the CSS background and
+  the `<img>`, which are the two resources the missing-asset finding was about.
+  The digest is not genet's 2026-08-25 `973595d7fbd90151`; genet's own head has
+  moved since, most recently `86019eacccc`, which scales the Cambium desktop
+  host's UI zoom, so a moved digest is expected and the receipt is the current
+  one.
+
+  **Still open.** `ports/graphshell/web` and `ports/knot/desktop` had their ten
+  and three pins repointed and remain unproven for the same two pre-existing
+  reasons the 2026-09-03 repoint recorded; nothing here changed either. The
+  Circuit recipe's `workspace_graph.json` fixture is now one generation behind
+  the member list; its test reads the committed snapshot rather than live
+  `cargo metadata`, so nothing fails, and regenerating it belongs to the lane
+  that owns it. P3's other half — Cambium and Workbench, with no genet consumer
+  left — is next, and Pelt's genet pins become workspace paths in that same
+  motion.
