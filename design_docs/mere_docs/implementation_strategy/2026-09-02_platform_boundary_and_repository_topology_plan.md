@@ -1296,10 +1296,15 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   writing one — and by inspection: a 960x640 PNG with the Ahem-set route text,
   the separate-border table, and **both** servo icons, the CSS background and
   the `<img>`, which are the two resources the missing-asset finding was about.
-  The digest is not genet's 2026-08-25 `973595d7fbd90151`; genet's own head has
-  moved since, most recently `86019eacccc`, which scales the Cambium desktop
-  host's UI zoom, so a moved digest is expected and the receipt is the current
-  one.
+  **The same receipt was then run from genet's last commit that still had Pelt
+  (`8c1e324ed4d`, in a throwaway worktree) and reports the same digest,
+  `b1d6a62acf85b553`, with a byte-identical 50,836-byte PNG.** So the move
+  changed nothing a user would see: Pelt renders the article receipt from
+  mere exactly as it did from genet. That cross-repository comparison, rather
+  than the digest alone, is what the P2 done-condition asks for. It also
+  supersedes the reading in the landing report that the digest had moved from
+  genet's 2026-08-25 `973595d7fbd90151`; that older figure belongs to an
+  earlier fixture state, not to the repository move.
 
   **Still open.** `ports/graphshell/web` and `ports/knot/desktop` had their ten
   and three pins repointed and remain unproven for the same two pre-existing
