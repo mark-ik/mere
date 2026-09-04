@@ -1,7 +1,7 @@
 # Physics Catalog Plan
 
 **Date:** 2026-09-02
-**Status:** in progress (P1 landed 2026-09-02; P1b, P2 on both hosts and P3 the remote board 2026-09-03; P4 next).
+**Status:** in progress (P1 landed 2026-09-02; P1b, P2 on both hosts and P3 the remote board 2026-09-03; the runtime extraction 2026-09-04; P4 next).
 **Scope:** A catalog of *distinct physics layout laws* — dynamical systems
 over the graph's bodies that produce different layouts because they are
 different physics — as a lever beside the arrangement catalog, plus the
@@ -475,6 +475,14 @@ donor's ten preset names return as the first ten profiles. Open: where the
 native picker sits (the product panel, or the scene settings page the
 physics-scenes plan founded).
 
+Ruled 2026-09-04: the physics backend is a **public stack type in seiche**
+(`seiche::runtime::Physics`), not a canvas internal and not a new crate,
+with the actor half behind a default feature; and the remote board moved
+onto it in the same pass. What this does *not* yet do: nothing calls
+`PhysicsBoard::offload`, so a native board still ticks inline until a host
+asks for the thread; and an offloaded board reads zero energy, because the
+actor's snapshots do not carry it.
+
 Taken in P1, for Mark to confirm or overturn: the kind sources v1 offers
 are **by site** (URL host), **by cluster** (the Louvain partition) and
 **by degree** (isolated / leaf / connected / hub), default *site* — not
@@ -557,3 +565,21 @@ inference carried.
   host's remote board on it, `physics_remote_board.scn` green over the
   WebRTC fixture (Charge separates the appended card, Orbit keeps
   moving). P4 (drag and add) next.
+- 2026-09-04: the physics **backend became a stack type**, on Mark's
+  ruling. `mere-canvas`'s private `physics` module moved to
+  `seiche::runtime` whole: `Physics` (inline / actor), `PhysicsCommand`,
+  `PhysicsUpdate` and `TICK_DT` are seiche's public runtime now, with
+  armillary an optional dep behind a default `actor` feature, so a
+  consumer that wants only the integrator (a wasm build, a batch layout
+  job) takes the inline backend and no threading runtime. The canvas
+  consumes it unchanged. `PhysicsBoard` holds a `Physics` and a
+  `LayoutView` instead of a bare `Simulation`, so a board ticks inline on
+  wasm and can `offload` onto an actor thread on native; the settle budget
+  it kept by hand is the backend's now. One new primitive closed the read
+  gap the switch exposed: `Physics::refresh`, which folds the current
+  layout into a view **without stepping**, so a host that syncs bodies and
+  draws in the same frame sees them at their slots rather than one tick
+  late. seiche 77/77 with the actor test moved across and green in both
+  feature configurations; canvas 194/194 (the clock flake passed this
+  run); `physics_remote_board` re-run against the WebRTC fixture,
+  `RESULT ok`, 37 steps, 852 frames, three captures.

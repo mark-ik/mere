@@ -26,6 +26,11 @@ petgraph = "0.8"
 numen = { path = "../numen", version = "0.2" }
 euclid = "0.22"
 tracing = "0.1"
+# The off-thread half of the `runtime` module: the actor harness a host offloads
+# the simulation onto. Optional (feature `actor`, on by default) so a consumer
+# that only wants the integrator — a wasm build, a batch layout job — takes the
+# inline backend and no threading runtime at all.
+armillary = { path = "../../armillary", version = "0.1.1", optional = true }
 burn = { version = "0.22.0-pre.2", default-features = false, features = ["std"], optional = true }
 burn-wgpu = { version = "0.22.0-pre.2", default-features = false, features = ["std", "autotune"], optional = true }
 
@@ -37,7 +42,10 @@ getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
 # are the whole interface a host drives.
 
 [features]
-default = []
+default = ["actor"]
+# `runtime::Physics::Actor`: the simulation on an armillary actor thread, with
+# the inline backend always available. Off leaves `Physics` inline-only.
+actor = ["dep:armillary"]
 # Tensor laws are opt-in. The default integrator stays Burn-free.
 tensor-burn = ["dep:burn", "burn/ndarray", "dep:getrandom"]
 tensor-burn-wgpu = ["tensor-burn", "burn/wgpu", "burn/extension", "dep:burn-wgpu", "dep:getrandom"]

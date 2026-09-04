@@ -62,6 +62,12 @@ use rapier2d::prelude::*;
 /// own keys (from any graph, or minted directly); seiche never inspects them.
 pub type NodeKey = petgraph::stable_graph::NodeIndex;
 
+/// Where a [`Simulation`] ticks: the inline / actor backend a host drives
+/// instead of owning a frame loop and a settle budget of its own. (Lifted out
+/// of `mere-canvas` 2026-09-04.)
+pub mod runtime;
+pub use runtime::{Physics, PhysicsCommand, PhysicsUpdate, TICK_DT};
+
 /// Built-in force forces for the force-directed orrery layout.
 pub mod forces;
 pub use forces::{Boundary, EdgeSpring, NodeExclusion};

@@ -168,8 +168,9 @@ mod ambient;
 mod community_lane;
 pub use ambient::{AmbientSim, GameOfLife, NBody, ParticleLife, SandFall, Tincture};
 
-mod physics;
-use physics::Physics;
+/// The physics backend now lives in seiche (`seiche::runtime`), so the canvas,
+/// the remote board and any other host share one inline/actor implementation.
+use seiche::Physics;
 
 /// The physics catalog over a scene's items that are not a graph: the
 /// remote board's physics. (Physics catalog — P3.)
@@ -195,8 +196,9 @@ const SIZE_RESETTLE_TICKS: u32 = 90;
 /// an un-sized node reads as the second notch; the ends span dense-small to big-hub, inside
 /// the `set_node_size` 16..160 clamp. (Node-rep — size tiers.)
 pub const SIZE_TIERS: [f32; 5] = [24.0, 36.0, 56.0, 84.0, 120.0];
-/// Per-tick timestep handed to the seiche simulation.
-const TICK_DT: f32 = 1.0 / 60.0;
+/// Per-tick timestep handed to the seiche simulation: seiche's own constant,
+/// re-exported so `crate::TICK_DT` keeps resolving canvas-wide.
+pub use seiche::TICK_DT;
 /// Minimum structural-Jaccard similarity for a pair to enter the affinity force. Prunes the
 /// long tail of weakly-similar pairs so the force list stays lean and only meaningful clusters
 /// pull. (Graph signals — P4.)

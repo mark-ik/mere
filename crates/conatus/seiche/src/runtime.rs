@@ -4,42 +4,54 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The physics backend: where the seiche [`Simulation`] actually ticks.
+//! The runtime: where a [`Simulation`] actually ticks.
 //!
-//! Two shapes behind one [`Physics`] interface (the dual-backend decision, P6):
+//! A [`Simulation`] integrates when someone calls [`Simulation::tick`]; *who*
+//! calls it, and on which thread, is a separate decision every host faces.
+//! This module is that decision, made once: two shapes behind one [`Physics`]
+//! interface, so a host drives physics without owning a frame loop, a thread,
+//! or a settle budget of its own. (Lifted out of `mere-canvas` 2026-09-04, so
+//! the canvas, the remote board, and any other consumer share one backend.)
 //!
-//! - [`Physics::Inline`] — the simulation ticks **in the frame loop**, on the UI
-//!   thread. Deterministic (no thread race), so it is what the canvas's tests
-//!   drive; it is also the path for the no-threads `wasm32` browser/PWA profile,
-//!   where [`armillary`] cannot spawn an OS thread.
-//! - [`Physics::Actor`] — the simulation runs on an [`armillary`] **actor
-//!   thread** (always-offload). A heavy settle (`pipeline.step` over hundreds of
-//!   bodies) never blocks compositing or input; the actor emits a
-//!   [`LayoutSnapshot`] per step and the host folds it into its [`LayoutView`].
+//! - [`Physics::Inline`] — the simulation ticks **in the frame loop**, on the
+//!   caller's thread. Deterministic (no thread race), so it is what tests
+//!   drive; it is also the path for the no-threads `wasm32` browser/PWA
+//!   profile, where an OS thread cannot be spawned.
+//! - `Physics::Actor` — the simulation runs on an [`armillary`] **actor
+//!   thread** (always-offload), behind the default `actor` feature. A heavy
+//!   settle (`pipeline.step` over hundreds of bodies) never blocks compositing
+//!   or input; the actor emits a [`LayoutSnapshot`] per step and the host folds
+//!   it into its [`LayoutView`].
 //!
 //! Native builds construct [`Physics::Inline`] and immediately
-//! [`offload`](Physics::offload) onto an actor (so native always offloads); the
-//! host supplies the [`Wake`] that pokes its event loop when a snapshot lands.
-//! Either way the canvas reads only its [`LayoutView`] — the backend just feeds
-//! authoritative positions into it.
+//! `offload` onto an actor (so native always offloads); the host supplies the
+//! wake that pokes its event loop when a snapshot lands. Either way the host
+//! reads only its [`LayoutView`] — the backend just feeds authoritative
+//! positions into it.
 
+#[cfg(feature = "actor")]
 use std::sync::mpsc::{Receiver, TryRecvError};
+#[cfg(feature = "actor")]
 use std::time::Duration;
 
+#[cfg(feature = "actor")]
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use euclid::default::Point2D;
-use kernel::graph::NodeKey;
-use seiche::{
+
+use crate::{
     AffinitySpring, Basin, CouplingForce, FluidParams, Force, LayoutSnapshot, LayoutView,
-    NodeCollider, NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
+    NodeCollider, NodeKey, NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
 };
 
-use super::TICK_DT;
+/// Per-tick timestep handed to the simulation: one 60fps frame. The whole
+/// stack integrates at this step, inline or on the actor, so a settle budget
+/// in ticks reads directly as seconds.
+pub const TICK_DT: f32 = 1.0 / 60.0;
 
 /// A command the host sends to the physics actor. Mirrors the mutating surface
 /// of [`Simulation`] plus the settle/drag drivers; all payloads are `Send`
 /// (positions and node keys), so the graph itself never crosses the boundary.
-pub(crate) enum PhysicsCommand {
+pub enum PhysicsCommand {
     /// Reconcile the body set to exactly these `(node, position)` pairs (position
     /// used only for newly-spawned bodies). See [`Simulation::sync_nodes`].
     SyncNodes(Vec<(NodeKey, Point2D<f32>)>),
@@ -64,7 +76,7 @@ pub(crate) enum PhysicsCommand {
     /// Install (or clear) the pairwise affinity force — the rebuild a fresh affinity signal
     /// triggers ("cluster by affinity"). Position-preserving. (Graph signals — P4.)
     SetAffinityForce(Option<AffinitySpring>),
-    SetAnchorForce(Option<seiche::AnchorSpring>),
+    SetAnchorForce(Option<crate::AnchorSpring>),
     /// Replace the law's force set wholesale — the physics law and its overlays
     /// (the catalog's `laws × overlays`), leaving the coupling / affinity / anchor
     /// slots alone. Position-preserving: no body moves until the next tick.
@@ -109,14 +121,14 @@ pub(crate) enum PhysicsCommand {
 
 /// One layout the actor produced: the positions plus whether it is still
 /// settling (so the host knows to keep requesting frames).
-pub(crate) struct PhysicsUpdate {
+pub struct PhysicsUpdate {
     pub snapshot: LayoutSnapshot,
     pub settling: bool,
 }
 
 /// The in-thread backend: the simulation plus the settle/drag state the frame
 /// loop steps it with.
-pub(crate) struct InlinePhysics {
+pub struct InlinePhysics {
     sim: Simulation,
     ticks_remaining: u32,
     dragging: bool,
@@ -125,16 +137,18 @@ pub(crate) struct InlinePhysics {
 
 /// The off-thread backend: the actor handle, its update channel, and the last
 /// settling flag the host saw.
-pub(crate) struct ActorPhysics {
+#[cfg(feature = "actor")]
+pub struct ActorPhysics {
     handle: ActorHandle<PhysicsCommand>,
     updates: Receiver<PhysicsUpdate>,
     settling: bool,
 }
 
-/// The physics backend the [`Canvas`](crate::Canvas) talks to. Inline by
-/// default (tests + wasm); [`offload`](Physics::offload) swaps in the actor.
-pub(crate) enum Physics {
+/// The physics backend a host talks to. Inline by default (tests +
+/// wasm); `offload` swaps in the actor thread (feature `actor`).
+pub enum Physics {
     Inline(InlinePhysics),
+    #[cfg(feature = "actor")]
     Actor(ActorPhysics),
 }
 
@@ -153,6 +167,7 @@ impl Physics {
     /// A no-op if already offloaded. `wake` pokes the host's event loop when a
     /// snapshot is ready. The actor inherits the current settle budget so an
     /// in-flight first settle continues uninterrupted across the move.
+    #[cfg(feature = "actor")]
     pub fn offload(&mut self, wake: Wake) {
         let Physics::Inline(inline) = self else {
             return;
@@ -176,6 +191,7 @@ impl Physics {
     pub fn sync_nodes(&mut self, nodes: Vec<(NodeKey, Point2D<f32>)>) {
         match self {
             Physics::Inline(p) => p.sim.sync_nodes(nodes),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SyncNodes(nodes));
             }
@@ -186,6 +202,7 @@ impl Physics {
     pub fn sync_edges(&mut self, edges: Vec<(NodeKey, NodeKey)>) {
         match self {
             Physics::Inline(p) => p.sim.sync_edges(edges),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SyncEdges(edges));
             }
@@ -196,6 +213,7 @@ impl Physics {
     pub fn seed(&mut self, positions: Vec<(NodeKey, Point2D<f32>)>) {
         match self {
             Physics::Inline(p) => p.sim.seed_positions(positions),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Seed(positions));
             }
@@ -209,6 +227,7 @@ impl Physics {
     pub fn set_coupling_forces(&mut self, forces: Vec<CouplingForce>) {
         match self {
             Physics::Inline(p) => p.sim.set_coupling_forces(forces),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetCouplingForces(forces));
             }
@@ -221,6 +240,7 @@ impl Physics {
     pub fn set_affinity_force(&mut self, force: Option<AffinitySpring>) {
         match self {
             Physics::Inline(p) => p.sim.set_affinity_force(force),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetAffinityForce(force));
             }
@@ -230,9 +250,10 @@ impl Physics {
     /// Install (or clear, with `None`) per-node **anchor** springs toward an
     /// arrangement's slots — the layout as a participant in the sim rather than
     /// an override of it. Position-preserving. (Arrangement as attractor.)
-    pub fn set_anchor_force(&mut self, force: Option<seiche::AnchorSpring>) {
+    pub fn set_anchor_force(&mut self, force: Option<crate::AnchorSpring>) {
         match self {
             Physics::Inline(p) => p.sim.set_anchor_force(force),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetAnchorForce(force));
             }
@@ -245,6 +266,7 @@ impl Physics {
     pub fn set_forces(&mut self, forces: Vec<Box<dyn Force>>) {
         match self {
             Physics::Inline(p) => p.sim.set_forces(forces),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetForces(forces));
             }
@@ -257,34 +279,35 @@ impl Physics {
     pub fn kinetic_energy(&self) -> f32 {
         match self {
             Physics::Inline(p) => p.sim.kinetic_energy(),
+            #[cfg(feature = "actor")]
             Physics::Actor(_) => 0.0,
         }
     }
 
     /// The number of forces in the law slot (inline backend only). Test introspection.
-    #[cfg(test)]
-    pub(crate) fn force_count(&self) -> usize {
+    pub fn force_count(&self) -> usize {
         match self {
             Physics::Inline(p) => p.sim.force_count(),
+            #[cfg(feature = "actor")]
             Physics::Actor(_) => 0,
         }
     }
 
     /// The number of anchored nodes (inline backend only). Test introspection.
-    #[cfg(test)]
-    pub(crate) fn anchor_count(&self) -> usize {
+    pub fn anchor_count(&self) -> usize {
         match self {
             Physics::Inline(p) => p.sim.anchor_count(),
+            #[cfg(feature = "actor")]
             Physics::Actor(_) => 0,
         }
     }
 
     /// The number of affinity pairs in the installed affinity force (inline backend only — the
     /// actor owns its sim on another thread). Test introspection for the P4 wiring. (Graph signals.)
-    #[cfg(test)]
-    pub(crate) fn affinity_pair_count(&self) -> usize {
+    pub fn affinity_pair_count(&self) -> usize {
         match self {
             Physics::Inline(p) => p.sim.affinity_pair_count(),
+            #[cfg(feature = "actor")]
             Physics::Actor(_) => 0,
         }
     }
@@ -294,6 +317,7 @@ impl Physics {
     pub fn set_linear_damping(&mut self, damping: f32) {
         match self {
             Physics::Inline(p) => p.sim.set_linear_damping(damping),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetLinearDamping(damping));
             }
@@ -306,6 +330,7 @@ impl Physics {
     pub fn set_node_colliders(&mut self, colliders: Vec<(NodeKey, NodeCollider)>) {
         match self {
             Physics::Inline(p) => p.sim.set_node_colliders(colliders),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle
                     .command(PhysicsCommand::SetNodeColliders(colliders));
@@ -318,6 +343,7 @@ impl Physics {
     pub fn set_node_materials(&mut self, materials: Vec<(NodeKey, NodeMaterial)>) {
         match self {
             Physics::Inline(p) => p.sim.set_node_materials(materials),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle
                     .command(PhysicsCommand::SetNodeMaterials(materials));
@@ -338,6 +364,7 @@ impl Physics {
             Physics::Inline(p) => {
                 p.sim.add_scene_body(collider, position, velocity);
             }
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle
                     .command(PhysicsCommand::AddSceneBody(collider, position, velocity));
@@ -349,6 +376,7 @@ impl Physics {
     pub fn set_nodes_tangible(&mut self, tangible: bool) {
         match self {
             Physics::Inline(p) => p.sim.set_nodes_tangible(tangible),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetNodesTangible(tangible));
             }
@@ -359,6 +387,7 @@ impl Physics {
     pub fn load_scene(&mut self, spec: SceneSpec) {
         match self {
             Physics::Inline(p) => p.sim.load_scene(&spec),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::LoadScene(spec));
             }
@@ -369,6 +398,7 @@ impl Physics {
     pub fn clear_scene(&mut self) {
         match self {
             Physics::Inline(p) => p.sim.clear_scene(),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::ClearScene);
             }
@@ -387,6 +417,7 @@ impl Physics {
     ) {
         match self {
             Physics::Inline(p) => p.sim.load_fluid(params, basin, origin, cols, rows, spacing),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::LoadFluid {
                     params,
@@ -404,6 +435,7 @@ impl Physics {
     pub fn clear_fluid(&mut self) {
         match self {
             Physics::Inline(p) => p.sim.clear_fluid(),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::ClearFluid);
             }
@@ -414,6 +446,7 @@ impl Physics {
     pub fn set_scene_field(&mut self, field: Option<SceneField>) {
         match self {
             Physics::Inline(p) => p.sim.set_scene_field(field),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetSceneField(field));
             }
@@ -424,6 +457,7 @@ impl Physics {
     pub fn add_emitter(&mut self, spec: SceneEmitter) {
         match self {
             Physics::Inline(p) => p.sim.add_emitter(spec),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::AddEmitter(spec));
             }
@@ -434,6 +468,7 @@ impl Physics {
     pub fn clear_emitters(&mut self) {
         match self {
             Physics::Inline(p) => p.sim.clear_emitters(),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::ClearEmitters);
             }
@@ -444,6 +479,7 @@ impl Physics {
     pub fn pin(&mut self, node: NodeKey, position: Point2D<f32>) {
         match self {
             Physics::Inline(p) => p.sim.pin(node, position),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Pin(node, position));
             }
@@ -454,6 +490,7 @@ impl Physics {
     pub fn unpin(&mut self, node: NodeKey) {
         match self {
             Physics::Inline(p) => p.sim.unpin(node),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Unpin(node));
             }
@@ -464,6 +501,7 @@ impl Physics {
     pub fn settle(&mut self, ticks: u32) {
         match self {
             Physics::Inline(p) => p.ticks_remaining = p.ticks_remaining.max(ticks),
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Settle(ticks));
                 p.settling = true;
@@ -475,6 +513,7 @@ impl Physics {
     pub fn halt(&mut self) {
         match self {
             Physics::Inline(p) => p.ticks_remaining = 0,
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Halt);
                 p.settling = false;
@@ -487,6 +526,7 @@ impl Physics {
     pub fn set_dragging(&mut self, dragging: bool) {
         match self {
             Physics::Inline(p) => p.dragging = dragging,
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetDragging(dragging));
             }
@@ -499,7 +539,34 @@ impl Physics {
             Physics::Inline(p) => {
                 p.ticks_remaining > 0 || p.dragging || p.sim.wants_continuous_tick()
             }
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => p.settling,
+        }
+    }
+
+    /// Fold the layout into `view` **without stepping**: the positions exactly
+    /// as they stand. A host that has just synced bodies and wants to read or
+    /// draw them before the next frame calls this;
+    /// [`advance_frame`](Self::advance_frame) is the per-frame call that also
+    /// integrates. Offloaded, this only drains whatever the actor has already
+    /// emitted — a body synced this instant appears once the actor reports it.
+    pub fn refresh(&mut self, view: &mut LayoutView) {
+        match self {
+            Physics::Inline(p) => {
+                p.generation = p.generation.wrapping_add(1);
+                view.apply_snapshot(&p.sim.snapshot(p.generation));
+            }
+            #[cfg(feature = "actor")]
+            Physics::Actor(p) => {
+                let mut latest = None;
+                while let Ok(update) = p.updates.try_recv() {
+                    latest = Some(update);
+                }
+                if let Some(update) = latest {
+                    view.apply_snapshot(&update.snapshot);
+                    p.settling = update.settling;
+                }
+            }
         }
     }
 
@@ -522,6 +589,7 @@ impl Physics {
                 view.apply_snapshot(&p.sim.snapshot(p.generation));
                 p.ticks_remaining > 0 || p.dragging || p.sim.wants_continuous_tick()
             }
+            #[cfg(feature = "actor")]
             Physics::Actor(p) => {
                 let mut latest = None;
                 loop {
@@ -540,6 +608,7 @@ impl Physics {
     }
 }
 
+#[cfg(feature = "actor")]
 /// The actor thread body: own the simulation, apply commands, and tick at ~60Hz
 /// while there is work, emitting a snapshot per step. Parks on `recv` when idle
 /// (no busy-spin), and ends when the command channel closes (the handle drops).
@@ -604,6 +673,7 @@ fn run(
     }
 }
 
+#[cfg(feature = "actor")]
 /// Fold one command into the actor's simulation + settle/drag state.
 fn apply(
     sim: &mut Simulation,
@@ -648,35 +718,23 @@ fn apply(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "actor"))]
 mod tests {
     use std::sync::Arc;
 
     use euclid::default::Point2D;
-    use kernel::graph::Graph;
 
     use super::*;
-    use kernel::graph::fixtures::GraphFixtures;
 
     /// The actor processes a sync + settle and emits layout snapshots, then ends
     /// cleanly when the handle drops. (The physics math itself is seiche's concern;
     /// this is a protocol smoke test of the run loop.)
     #[test]
     fn actor_syncs_settles_and_emits_snapshots() {
-        let mut graph = Graph::new();
-        let a = graph.add_node_with_id(
-            uuid::Uuid::from_u128(1),
-            "mere://a".into(),
-            Default::default(),
-        );
-        let b = graph.add_node_with_id(
-            uuid::Uuid::from_u128(2),
-            "mere://b".into(),
-            Default::default(),
-        );
+        let (a, b) = (NodeKey::new(0), NodeKey::new(1));
 
         let mut sim = Simulation::new();
-        sim.add_force(seiche::NodeExclusion::default());
+        sim.add_force(crate::NodeExclusion::default());
         let wake: Wake = Arc::new(|| {});
         let (handle, updates) = spawn(wake, move |commands, out| run(sim, 0, false, commands, out));
 

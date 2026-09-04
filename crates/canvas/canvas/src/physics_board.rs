@@ -18,18 +18,23 @@
 //! only their slots move), ticks it each frame, and reads positions back
 //! for drawing. The score itself is never written: the board is the
 //! viewer's physics over the endpoint's truth. (Physics catalog — P3.)
+//!
+//! The simulation runs behind [`seiche::Physics`], the stack's inline/actor
+//! backend, so a board ticks in the frame loop on wasm and can be
+//! [`offload`](PhysicsBoard::offload)ed onto an actor thread on native — the
+//! same choice the canvas makes. (2026-09-04.)
 
 use std::collections::HashMap;
 
 use euclid::default::Point2D;
 use kernel::graph::NodeKey;
-use seiche::{AnchorSpring, DEFAULT_ANCHOR_STIFFNESS, Simulation};
+use seiche::{AnchorSpring, DEFAULT_ANCHOR_STIFFNESS, LayoutView, Physics, Simulation};
 
+use crate::SETTLE_TICKS;
 use crate::physics_catalog::{
     LawInputs, LawSources, PhysicsDepthSource, PhysicsKindSource, PhysicsLaw, PhysicsMassSource,
     PhysicsOverlay,
 };
-use crate::{SETTLE_TICKS, TICK_DT};
 
 /// The board's anchor pull toward the score's slots. Gentle by design — a
 /// twenty-fourth of the canvas's [`DEFAULT_ANCHOR_STIFFNESS`] — so the
@@ -71,13 +76,16 @@ pub struct BoardItem {
 
 /// The catalog's physics over a scene's items. See the module docs.
 pub struct PhysicsBoard {
-    sim: Simulation,
+    physics: Physics,
+    /// The read model the backend writes positions into — the board's own copy
+    /// of what the canvas calls its view. Inline or offloaded, this is what
+    /// `position` reads, so the host never touches the simulation.
+    view: LayoutView,
     keys: HashMap<String, NodeKey>,
     next_key: usize,
     items: Vec<BoardItem>,
     choice: PhysicsChoice,
     pull: f32,
-    settle: u32,
 }
 
 impl Default for PhysicsBoard {
@@ -89,14 +97,24 @@ impl Default for PhysicsBoard {
 impl PhysicsBoard {
     pub fn new() -> Self {
         Self {
-            sim: Simulation::new(),
+            physics: Physics::inline(Simulation::new(), 0),
+            view: LayoutView::new(),
             keys: HashMap::new(),
             next_key: 0,
             items: Vec::new(),
             choice: PhysicsChoice::default(),
             pull: DEFAULT_BOARD_PULL,
-            settle: 0,
         }
+    }
+
+    /// Move the board's simulation onto an actor thread (native hosts; a no-op
+    /// once offloaded). `wake` pokes the host's event loop when a layout lands.
+    /// Energy reads zero offloaded — the actor's snapshots do not carry it.
+    /// (Unconditional: the canvas takes seiche's default features, so the
+    /// actor backend is always present here, as it is for the canvas's own
+    /// `offload_physics`.)
+    pub fn offload(&mut self, wake: armillary::Wake) {
+        self.physics.offload(wake);
     }
 
     /// The live choice.
@@ -114,7 +132,7 @@ impl PhysicsBoard {
     pub fn set_pull(&mut self, pull: f32) {
         self.pull = pull.max(0.0);
         self.sync_anchors();
-        self.settle = self.settle.max(SETTLE_TICKS);
+        self.settle_for_choice();
     }
 
     /// Switch the law, overlays and sources; the force set is replaced
@@ -150,46 +168,47 @@ impl PhysicsBoard {
         self.keys.retain(|id, _| live.contains_key(id.as_str()));
         // Every body, at its slot; `sync_nodes` leaves an existing body where
         // the simulation put it and spawns the new ones where told.
-        self.sim.sync_nodes(items.iter().map(|item| {
-            (
-                live[item.id.as_str()],
-                Point2D::new(item.slot.0, item.slot.1),
-            )
-        }));
-        self.sim.sync_edges(Vec::<(NodeKey, NodeKey)>::new());
+        self.physics.sync_nodes(
+            items
+                .iter()
+                .map(|item| {
+                    (
+                        live[item.id.as_str()],
+                        Point2D::new(item.slot.0, item.slot.1),
+                    )
+                })
+                .collect(),
+        );
+        self.physics.sync_edges(Vec::new());
         self.items = items;
         self.sync_anchors();
         self.rebuild_forces();
-        if fresh > 0 {
-            self.settle = self.settle.max(SETTLE_TICKS);
-        }
         self.settle_for_choice();
+        // Fold the new body set into the view now, so a host that syncs and
+        // draws in the same frame sees the fresh item at its slot rather than
+        // one tick late.
+        self.physics.refresh(&mut self.view);
         fresh
     }
 
-    /// Advance one frame if there is work (a settle, or a law that never
-    /// rests). Returns whether the board is still moving.
+    /// Advance one frame, folding the freshest layout into the board's view.
+    /// Returns whether the board is still moving. The backend owns the settle
+    /// budget, so a law that never rests simply holds a budget that never runs
+    /// out (see [`settle_for_choice`](Self::settle_for_choice)).
     pub fn tick(&mut self) -> bool {
-        let living =
-            self.choice.law.never_rests() || self.choice.overlays.iter().any(|o| o.never_rests());
-        if self.settle > 0 || living {
-            self.sim.tick(TICK_DT);
-            if self.settle > 0 && self.settle != u32::MAX {
-                self.settle -= 1;
-            }
-        }
-        self.settle > 0 || living
+        self.physics.advance_frame(&mut self.view)
     }
 
     /// Where the item is now, in the score's units.
     pub fn position(&self, id: &str) -> Option<(f32, f32)> {
         let key = self.keys.get(id)?;
-        self.sim.position_of(*key).map(|p| (p.x, p.y))
+        self.view.position_of(*key).map(|p| (p.x, p.y))
     }
 
-    /// The bodies' kinetic energy.
+    /// The bodies' kinetic energy (inline backend only — an offloaded board
+    /// reads zero, because the actor's snapshots do not carry it).
     pub fn energy(&self) -> f32 {
-        self.sim.kinetic_energy()
+        self.physics.kinetic_energy()
     }
 
     /// The distance between two items, in the score's units.
@@ -216,7 +235,7 @@ impl PhysicsBoard {
             )
             .with_stiffness(self.pull)
         });
-        self.sim.set_anchor_force(anchors);
+        self.physics.set_anchor_force(anchors);
     }
 
     fn rebuild_forces(&mut self) {
@@ -234,17 +253,17 @@ impl PhysicsBoard {
             focus: None,
         };
         let forces = inputs.forces(self.choice.law, &self.choice.overlays, sources);
-        self.sim.set_forces(forces);
+        self.physics.set_forces(forces);
     }
 
+    /// Ask the backend for a settle: the normal burst, or — under a law or
+    /// overlay that never rests — a budget that never runs out, which is how
+    /// a perpetual law keeps its cards moving.
     fn settle_for_choice(&mut self) {
         let living =
             self.choice.law.never_rests() || self.choice.overlays.iter().any(|o| o.never_rests());
-        self.settle = if living {
-            u32::MAX
-        } else {
-            self.settle.max(SETTLE_TICKS)
-        };
+        self.physics
+            .settle(if living { u32::MAX } else { SETTLE_TICKS });
     }
 }
 
