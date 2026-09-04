@@ -399,6 +399,28 @@ workspace is engine/lower-library shaped, Pelt and Tabard run from Mere, Knot's
 standalone and embedded surfaces share one document model, and moved docs are
 indexed only in their owning repository.
 
+**Status (2026-09-03): four of five clauses met; one is not this phase's and
+stays open.** The content moved in three motions — Pelt and its companions,
+then Cambium and Workbench, then the engine-management layer — with genet's
+removals at `75d3900f82e`, `ce79fd44a4d` and `6d8daca939b` and mere's landings
+at `cb3fd887`, `91bf62c9` and `13b64e30`. **One source identity:** every moved
+crate is a mere workspace member resolving from a path, and the unpatched
+resolve reports 23 genet-derived packages at exactly one revision and no
+duplicate package name in the family. **Genet's remaining workspace is
+engine-shaped:** its members are the Servo-derived platform crates, the lower
+libraries, WPT, and one raw host, ortet. **Pelt and Tabard run from Mere:** the
+Pelt article receipt renders `digest=b1d6a62acf85b553` from mere, byte-identical
+to genet's last commit that had Pelt. **Moved docs are indexed only here:**
+`inker_docs/`, `nematic_docs/` and `verso_docs/` are in mere's `DOC_README.md`
+and genet's carries a note saying where they went. **Not met, and not this
+step's:** Knot's standalone and embedded surfaces do not yet share one document
+model. That clause is the knot-editor extraction plan's E-series work, listed in
+this plan's own prerequisites table; nothing in these three motions advanced or
+blocked it, and it stays open against P3.
+
+Fleece did not move: §9.1's census reclassed it independent, so P3's list names
+one crate it does not own.
+
 ### P4. Repoint and prove consumers
 
 - Repoint the live consumer census, 25 manifests across 13 repositories at
@@ -1842,3 +1864,446 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   `ports/graphshell/web`'s local patch table points at was moved to
   `a93189b1d7c` for the web receipt; that is a detached checkout of an existing
   worktree and changed nothing in genet.
+
+- 2026-09-03: **the engine-management layer left genet** (genet
+  `6d8daca939b`, parent `ee8a3089055`). P3's genet half: nine paths removed
+  from genet's workspace, 125 tracked files, 30,320 deleted lines. Ten
+  packages in one commit, and three documentation area roots with them.
+
+  | path | packages | genet dependents at removal |
+  |---|---|---|
+  | `components/inker` | `inker` | `document-canvas`, `nematic`, and the three engine adapters only |
+  | `components/inker/document-canvas` | `document-canvas` | none |
+  | `components/inker/engines/{scrying,graft,weld}-engine` | `scrying-engine`, `graft-engine`, `weld-engine` | none |
+  | `components/verso-tile` | `verso-tile` | **none at all** |
+  | `components/nematic` | `nematic` | none |
+  | `components/illume` | `illume` | **none at all** |
+  | `components/errand` | `errand` | `nematic` only |
+  | `components/tinct` | `tinct` | **none at all** |
+  | `design_docs/{inker,nematic,verso}_docs` | — | — |
+
+  Every claim was checked with `cargo tree -i <crate> --workspace --prefix
+  none --target all` before anything was removed, and then again against every
+  manifest in the tree, because `cargo tree` hides an optional dependency
+  whose feature is off and §9.2 predicted three of exactly that shape
+  (`genet-documents` -> `document-canvas`, `errand`, `nematic`, all optional).
+  **Those three edges are already gone**: P1's authority split took them out
+  when `genet-documents` was cut back to the Livery and Scripted lanes, and
+  the only mention of any of the ten outside the moving directories in any
+  manifest is a prose word in `document-session-api`'s `description`. So the
+  set was a true leaf and invariant 1 holds at this commit by construction.
+  Nothing was wrong in either direction. `genet-render`'s §2 edge into inker
+  is likewise already satisfied by P1: it reaches the accessibility
+  projection and inspect report types through
+  `components/shared/document-session-api`, which stays.
+
+  **History came out the way Cambium's did**, and in the same seconds rather
+  than hours: `git fast-export --signed-tags=strip
+  --tag-of-filtered-object=drop main -- <path>`, the prefix rewritten in the
+  stream by a filter that touches only `M <mode> <dataref> <path>` and
+  `D <path>` command lines and copies `data` blocks verbatim by declared
+  length, then `git fast-import` into a bare repository. `git subtree split`
+  was not attempted; the Pelt entry already measured why it cannot work here.
+  A throwaway worktree was again not used — the exports were pinned by
+  exporting from `main` while asserting `main == origin/main == ee8a3089055`
+  before and after every run, and a ref name was passed rather than a sha, per
+  the Cambium entry's note.
+
+  | genet path | landing prefix | bare repo | commits | path lines | elapsed |
+  |---|---|---|---|---|---|
+  | `components/inker` | `crates/inker/{inker,document-canvas,engines}` | `inker-history.git` | 52 | 356 | 0 s |
+  | `components/verso-tile` | `crates/inker/verso-tile` | `verso-tile-history.git` | 7 | 35 | 0 s |
+  | `components/nematic` | `crates/nematic/nematic` | `nematic-history.git` | 22 | 127 | 0 s |
+  | `components/illume` | `crates/nematic/illume` | `illume-history.git` | 7 | 34 | 0 s |
+  | `components/errand` | `crates/system/errand` | `errand-history.git` | 23 | 192 | 0 s |
+  | `components/tinct` | `crates/cambium/tinct` | `tinct-history.git` | 11 | 24 | 0 s |
+  | `design_docs/inker_docs` | (identical) | `inker-docs-history.git` | 2 | 2 | 0 s |
+  | `design_docs/nematic_docs` | (identical) | `nematic-docs-history.git` | 4 | 13 | 0 s |
+  | `design_docs/verso_docs` | (identical) | `verso-docs-history.git` | 2 | 4 | 1 s |
+
+  Every commit count matches `git log --oneline -- <path>` in genet exactly,
+  and the filter reported **zero** unmatched path lines on all nine runs, so
+  nothing was silently left behind. Verification is by tree identity against
+  the parent commit, not by inspection:
+  `document-canvas` `a45d1ea3d03`, `engines` `b1955c52229`,
+  `verso-tile` `b1a62c58fc2`, `nematic` `e07ecc5a5cb`, `illume`
+  `94d298f7134`, `errand` `c812b108193`, `tinct` `49430d85e80`,
+  `inker_docs` `8b0c6d2c239`, `nematic_docs` `bad24a5107d`,
+  `verso_docs` `0c49cfebf78`.
+
+  **The inker export is one export with an ordered rewrite**, because the
+  crate's own files and two nested member trees share a prefix:
+  `components/inker/document-canvas/` -> `crates/inker/document-canvas/`,
+  then `components/inker/engines/` -> `crates/inker/engines/`, then everything
+  else under `components/inker/` -> `crates/inker/inker/`. The two nested
+  trees are verified by the tree hashes above. `crates/inker/inker` cannot be
+  compared that way — genet's `components/inker` tree *contains* the two
+  nested trees and the landed one does not — so it is verified at blob level
+  instead: genet's 18 `components/inker` entries outside the two subtrees
+  match the landed 18 exactly, mode and blob sha, and the bare tip carries 44
+  files, genet's count for the whole directory.
+
+  **One wart in the inker history, recorded rather than repaired.**
+  `components/inker/knot-editor-host` left with Pelt earlier the same day, so
+  it is deleted at the export head but present in 32 historical path lines,
+  and the ordered rewrite's catch-all rule lands those under
+  `crates/inker/inker/knot-editor-host/`. The tip tree is unaffected — zero
+  such paths in it — and mere already holds that crate's own exported history
+  at `ports/knot/editor-host`, so this is duplicated ancestry in intermediate
+  commits, not a wrong landing. **Open for Mark:** whether to leave it or
+  re-export inker with a fourth rule that drops those lines.
+
+  **Genet after the removal.** The cone witness keeps every forbidden name in
+  every table — `ORTET_FORBIDDEN`'s seven and `assert_host_api_cone`'s
+  `genet-render`/`genet-documents` rows both name crates that have now all
+  left — because they are names an edge may never carry again, not a list of
+  members. Both subjects of the host-api table still resolve, so no
+  adjustment was needed there. What did have to change is the ortet cone's
+  **live positive control, which retires with P3**: it was `pelt-desktop`
+  until Pelt left, `cambium-genet-winit-host` for the prefix half until the
+  Cambium family left, and `document-canvas` -> `inker` for the exact half
+  until now. No member remains whose cone reaches any forbidden name, and one
+  cannot be invented without reintroducing what the boundary removed. The
+  direct predicate assertions stay and are widened to every name in
+  `ORTET_FORBIDDEN` rather than the prefixes alone, the `genet-livery`
+  negative stays, and the code says in as many words that this proves the
+  rule and not the walk. The walk itself is still exercised every run by the
+  ortet cone's own must-reach assertion on `genet-documents` and `netrender`.
+
+  **Receipts, all in genet.** `cargo check --workspace` green in 52.9 s, 0
+  errors, **22 warnings across seven crates**, against a baseline of 24 across
+  eight taken on the parent commit in the same working copy. The delta is
+  **-2 and nothing else**: `nematic`'s two warnings left with `nematic`, and
+  the per-crate set for the other seven is identical line for line. No warning
+  was fixed and none is new. The three `patch ... was not used in the crate
+  graph` lines are unchanged at three (`paint_list_api`, `netrender_text`,
+  `vello`), so this removal made no patch dead and revived none.
+  `cargo check -p ortet` green; `cargo test -p ortet` **10 passed**;
+  `cargo run -p ortet -- --url ports/ortet/examples/article.html --frames 3
+  --artifact <png>` reports `digest 0x6377ba8a6bf4dbc9` — unchanged from the
+  Cambium removal — identical across two runs with byte-identical 87,137-byte
+  PNGs, so the engine's output is untouched. `cargo check -p netfetcher
+  --no-default-features` green (its `profile package spec num-bigint-dig ...
+  did not match any packages` line is pre-existing and was confirmed on the
+  parent commit). `cargo check -p genet-documents --features livery` green;
+  `cargo check -p genet-wpt` green. `check_dependency_cones.py` passes.
+
+  **The ortet cone went 592 -> 591 packages, and the one that left is `qoi`.**
+  Traced rather than assumed: `scrying-engine` depended on `scrying`
+  (wgpu-scry), which takes `image` with **default** features; `default` pulls
+  `default-formats`, which includes `qoi`. Every other consumer of `image` in
+  genet — `arboard` via `genet-clipboard`, and `genet-livery` — names explicit
+  format features, so with `scrying-engine` gone nothing enables `image/qoi`
+  and it drops out of the whole workspace graph, not just ortet's cone. No
+  forbidden name is involved, and `fleece` is still named separately on every
+  run as before.
+
+  `relicense_headers.py --repo . --audit` went **708 -> 611 owned sources**,
+  exactly the 97 `.rs` files among the 125 removed (the other 28 are 14
+  markdown, 10 manifests, and the four `LICENSE-MIT`/`LICENSE-APACHE` files
+  that `tinct` and `verso-tile` carry as dual-licensed crates). **"Without
+  Exhibit A" is 0 before and 0 after**, and Exhibit B hits 0 both ways — the
+  one-file failure the Cambium removal left open in
+  `components/genet-livery/src/paint.rs` was closed by its own lane before
+  this commit. Ledger paths unmoved at 18.
+
+  **`LICENSES.md` needed no change.** No row in the Retained licenses table
+  names a moved path, so the mere side has no row to add on that account.
+  The only mentions of the moved crates in the file are in the retained
+  2026-08-27 relicensing precedent, which states in its own words that it is
+  kept "because it is the precedent the sweep was decided on, not because
+  genet still carries the files" — crate names and published versions, not
+  paths, so it stays as written. `README.md` needed no change either: it
+  names none of the ten. **Note for the mere side:** `tinct` 0.1.2 and
+  `verso-tile` 0.1.0 arrive with their own `LICENSE-MIT` and `LICENSE-APACHE`
+  files and `MIT OR Apache-2.0` manifests, so mere's manifest license census
+  gains two dual-licensed crates.
+
+  Files changed outside the nine removed directories, five in all: genet's
+  root `Cargo.toml` (ten member entries with their comment blocks, eight
+  `[workspace.dependencies]` entries, and a departure note beside Pelt's and
+  Cambium's); `support/ci/check_dependency_cones.py`;
+  `design_docs/DOC_README.md` (the three area sections replaced by one
+  four-line note, and the required-reading order's "the area root you are
+  working in" corrected, since there is no longer one);
+  `design_docs/DOC_POLICY.md` (the local addendum's area-root tree drops the
+  three roots and gains `archive_docs/`, with the same note); and
+  `design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`,
+  whose three relative links into `nematic_docs/` would otherwise dangle and
+  are now cross-repo path citations at `mere/design_docs/nematic_docs/...`.
+  `Cargo.lock` is gitignored in genet, so there is no stale lock to sweep.
+
+  Prose left alone deliberately: the `nematic.*` engine-id constants in
+  `components/shared/document-session-api/src/engine_ids.rs` (an id namespace,
+  not a path, and still the vocabulary inker's routing policy is written in);
+  doc comments in `genet-documents` and `document-session-api` that name inker
+  as the crate whose contract half they are; the archived export plan's table
+  row citing `components/inker/src/document/render/export.rs` as a historical
+  location; and genet's `docs/`, which this change did not touch. `.github`,
+  `scripts` and `support` name none of the ten anywhere.
+
+  **Three things for Mark.**
+
+  1. **The smolweb protocol workspace dependencies are now unconsumed.**
+     `nex-protocol`, `spartan-protocol`, `guppy-protocol`, `gopher-protocol`,
+     `gemini-protocol`, `scroll-protocol` and `finger-protocol` were errand's
+     wire layer and no member names them now. They are **left declared**, with
+     a comment saying why: they are outside the named moving set, and deleting
+     workspace dependency entries is a resolution decision of its own, the
+     same footing on which the Cambium removal left four receipt harnesses in
+     place. Cargo does not warn about an unused `[workspace.dependencies]`
+     entry, so nothing fails either way. They belong with errand in mere.
+  2. **Six of the ten package names are not in `ORTET_FORBIDDEN`.**
+     `scrying-engine`, `graft-engine`, `weld-engine`, `illume`, `tinct` and
+     `verso-tile` were never on that list, because it came from the ortet
+     founding plan's set. They are Mere crates now, so the witness would not
+     catch them coming back. Adding six names is a one-line change; it was
+     not made here because widening a forbidden table is a policy call, not a
+     consequence of this move.
+  3. **The inker history's `knot-editor-host` residue**, item recorded above.
+
+  Not done here: nothing landed in mere, and nothing was pushed. The commit
+  sits on genet's `main` as the single unpushed commit. The nine bare
+  repositories are the artifact for the mere side, under the scratch folder
+  as `inker-history.git`, `verso-tile-history.git`, `nematic-history.git`,
+  `illume-history.git`, `errand-history.git`, `tinct-history.git`,
+  `inker-docs-history.git`, `nematic-docs-history.git` and
+  `verso-docs-history.git`; `ee8a3089055` is the revision they were exported
+  from and every removed file is intact there.
+
+- 2026-09-03: **the engine-management layer landed in mere** (merge commits
+  `75199c1c`, `3e13a02a`, `2e7bfe04`, `4b3fae66`, `390dd649`, `ebb37f55`,
+  `5165170f`, `12609e3c`, `1c64dcb7`; wiring `13b64e30`; licenses and docs
+  `0712c210`). The receiving half of P3's last motion, against genet
+  `115d348dedd`.
+
+  History came in the way Pelt's and Cambium's did: `git fetch <bare>
+  main:import-<name>` then `git merge --allow-unrelated-histories`, from nine
+  bare repositories the removal exported path-limited with their prefixes
+  already rewritten. Each landed tree hashes identically to its bare tip and to
+  genet's at the parent of the removal, so these are the same objects rather
+  than a copy that looks alike:
+
+  | path | packages | commits | tree |
+  |---|---|---|---|
+  | `crates/inker/inker` | `inker` | 52 (one export) | `b842e6fb84a` |
+  | `crates/inker/document-canvas` | `document-canvas` | (same export) | `a45d1ea3d03` |
+  | `crates/inker/engines` | `scrying-engine`, `graft-engine`, `weld-engine` | (same export) | `b1955c52229` |
+  | `crates/inker/verso-tile` | `verso-tile` | 7 | `b1a62c58fc2` |
+  | `crates/nematic/nematic` | `nematic` | 22 | `e07ecc5a5cb` |
+  | `crates/nematic/illume` | `illume` | 7 | `94d298f7134` |
+  | `crates/system/errand` | `errand` | 23 | `c812b108193` |
+  | `crates/cambium/tinct` | `tinct` | 11 | `49430d85e80` |
+  | `design_docs/inker_docs` | — | 2 | `8b0c6d2c239` |
+  | `design_docs/nematic_docs` | — | 4 | `bad24a5107d` |
+  | `design_docs/verso_docs` | — | 2 | `0c49cfebf78` |
+
+  `git diff --name-only <before> HEAD` after each merge listed **nothing**
+  outside that merge's prefix, and each count is exactly the bare repository's
+  file count: 44, 9, 26, 10, 23, 6, 1, 4, 2. The eleven landed paths hold
+  **125** tracked files, genet's count. The import branches were deleted.
+
+  **The inker history's `knot-editor-host` residue is left as recorded.** The
+  crate left with Pelt earlier the same day, so the ordered rewrite's catch-all
+  rule put 32 historical path lines under `crates/inker/inker/knot-editor-host/`.
+  The tip tree carries **zero** such paths, checked before the merge and after;
+  seven intermediate commits do. Mere already holds that crate's own exported
+  history at `ports/knot/editor-host`, so this is duplicated ancestry in
+  intermediate commits, not a wrong landing, and re-exporting inker with a
+  fourth rule to drop those lines remains **open for Mark**.
+
+  **One revision, and nine pins that became paths.** Every genet.git pin in the
+  repository moved from `a93189b1d7c` to `115d348dedd`: **47 lines across four
+  manifests at one revision**, zero occurrences of the old one, witnessed by
+  grep and by the unpatched resolve below. Fifty-six lines went in and 47 came
+  out because nine of them became workspace paths (`inker`, `document-canvas`,
+  `nematic`, `illume`, `errand`, `verso-tile`, and the three engine adapters);
+  `tinct` was the tenth and was a crates.io pin rather than a git one. Ten
+  members join, so **126 workspace packages** where there were 116.
+
+  **`tinct` and `tincture` are one package under two keys**, and both had to
+  move together: mere pins `tinct = "=0.1.2"` for Tabard and the same package
+  as `tincture` for `mere-canvas` and `register-theme`, and the alias exists so
+  every `use tincture::` stays unchanged. Both are now the member path. Leaving
+  either on crates.io would have put two incompatible `Tinct` types in one
+  graph — the duplicate-crate form of the missing-entry trap this file's notes
+  already record twice.
+
+  **Errand's wire layer came with it.** The seven smolweb protocol crates
+  (`nex-`, `spartan-`, `guppy-`, `gopher-` and `finger-protocol` at `=0.1.1`,
+  `gemini-protocol` at `=0.1.7`, `scroll-protocol` at `=0.1.0`, finger with
+  `default-features = false, features = ["client"]`) were errand's
+  `[workspace.dependencies]` in genet and are mere's now. Genet's removal entry
+  left them declared there as a resolution decision of its own; genet then made
+  that decision two commits later, in `3af40493b0f`, and dropped them. That
+  commit and `115d348dedd` — which widened `ORTET_FORBIDDEN` with the six names
+  the removal entry's item 2 flagged — close items 1 and 2 of that entry's
+  three, after it was written. Item 3, the inker residue, is the one that
+  stands.
+
+  **What actually needed inlining was one field, not three.** The removal's
+  hand-off expected `publish`, `rust-version` and `description` to have been
+  inherited from genet's workspace and to need inlining. None was: cargo's
+  `[workspace.package]` inheritance is opt-in per field, and **zero** of the ten
+  manifests wrote `publish.workspace`, `rust-version.workspace` or
+  `description.workspace` — checked against genet at `ee8a3089055`, and
+  confirmed after the move by `cargo metadata`, which reports the same `publish`
+  and a null `rust-version` for all ten as genet did. The three engine adapters
+  did inherit `version`, genet's `0.2.0`, and that is inline now because mere's
+  workspace version is `0.0.1`. What they also inherited was `repository`,
+  genet's `https://github.com/servo/servo`; that now inherits mere's, and the
+  seven crates that spelled out `https://github.com/merely-made/genet` with a
+  comment explaining that genet's workspace pointed at servo inherit it too.
+  Same correction the Cambium landing made for `authors`.
+
+  Two landed manifests reached genet by relative path inside genet's tree —
+  `verso-tile`'s `genet-scripted-dom` and `layout-dom-api` (both behind
+  `genet-donor`) and `nematic`'s `genet-static-dom` (behind `html-fragment`).
+  Those became the root table's git pins, as mere already does for the rest of
+  the family, so a future repoint stays a one-file edit.
+
+  **The patch tables lost ten names.** `inker`, `nematic`, `illume`, `errand`,
+  `document-canvas`, `verso-tile` and `scrying-engine` left the genet table and
+  `tinct` left the crates-io table, in `.cargo/config.toml.example`, the
+  gitignored live twin, and `ports/graphshell/web`'s live table — identically,
+  checked by diffing the two root tables name for name (they differ only by a
+  `radio-hand` entry the live file already carried) and by confirming the web
+  table still names every genet package the root names, 23 each.
+  `graft-engine` and `weld-engine` were never in any of them. Their genet path
+  targets no longer exist either.
+
+  **Receipts.**
+
+  `cargo check --workspace` **patched** green, 0 errors, **192 warnings across
+  twelve crates** — byte for byte the same per-crate set as the Pelt and Cambium
+  landings. The ten landed crates generate warnings only in `nematic` (2), which
+  was already in that twelve because the Cambium landing's patched run compiled
+  it from the genet working copy. So the warning delta from this landing is
+  **0**. Six `patch ... was not used` lines, the count the Cambium landing left;
+  removing eight live patch entries cannot add an unused one.
+
+  `cargo check --workspace` **unpatched** — run from a directory outside the
+  tree so the machine-local patch table does not load — green, 0 errors, **192
+  warnings across twelve crates**. That is a change from the Cambium landing's
+  unpatched 190 across eleven, and the reason is the landing itself: `nematic`
+  was the crate whose warnings cargo did not surface when it arrived as a git
+  dependency, and it is this repository's own source now, so patched and
+  unpatched finally agree. The witness that the patch table was off is that
+  **23 genet-derived packages resolve from `genet.git?rev=115d348dedd` and
+  nowhere else** — one revision, checked over the whole resolve — with **zero**
+  lines naming the sibling genet path, and all ten landed crates plus `cambium`
+  resolving from this repository. 30 genet-derived packages before, 23 after:
+  seven are this repository's own now. No duplicate package name anywhere in
+  the genet or mere family in either resolve.
+
+  `cargo test` on the seven crates that have tests: `inker` **95 passed**,
+  `document-canvas` **52**, `errand` **35 passed, 1 ignored** plus a doctest,
+  `illume` **32**, `tinct` **14** plus a doctest, `verso-tile` **12**, and
+  `nematic` **169 passed as mere consumes it** (`--no-default-features`, which
+  is what the workspace pin declares). With nematic's own `html-fragment`
+  default on, **167 pass and 1 fails**, and the failure is pre-existing in
+  genet rather than a consequence of the move — see below.
+
+  `cargo check -p scrying-engine -p graft-engine -p weld-engine` green, all
+  three, on this host. Nothing had to be skipped: `scrying-engine` builds its
+  WebView2 producer on Windows through `scrying`, and `graft-engine` and
+  `weld-engine` deliberately carry **no** `grafting` or `cef` dependency — each
+  defines a host seam instead, precisely so an engine consumer never resolves
+  the Servo tree or the CEF distribution — so neither has a platform gate to
+  fail. A Linux or macOS host would exercise `scrying`'s WebKitGTK and
+  WKWebView paths instead; that is untested here and is P4's target matrix, not
+  this step's.
+
+  `cargo test -p cambium --example component_catalog`:
+  `catalog_is_the_component_acceptance_surface` passes;
+  `committed_receipts_match_the_live_catalog` **fails, for a line-ending reason
+  that predates this landing and is not about tinct**. Measured rather than
+  guessed: the committed receipt blob is **835 LF and 0 CRLF**; on this machine
+  `core.autocrlf = true` checks it out as **835 CRLF and 0 LF**; and the live
+  render is a mix, because it emits its own newlines as LF and splices in
+  `component_catalog.css`, which the same setting checks out with **824 CRLF**.
+  Normalising line endings makes blob and working copy identical. So the
+  generator's output can never equal its own checked-out capture here, whatever
+  tinct resolves from, and neither the CSS nor the receipts are files this
+  landing touched. **Open for the lane that owns the receipts:** an `eol=lf`
+  `.gitattributes` rule for the three files, or normalising in the comparison.
+
+  `cargo run -p pelt --no-default-features --features livery -j 1 --
+  --product-receipt article`, run unpatched from outside the tree, reports
+  `assertion=jump-link press/release moved the retained viewport` and
+  `digest=b1d6a62acf85b553` with a **50,836-byte** PNG — the same digest and the
+  same byte count as the Pelt landing, the fixture relocation, the Cambium
+  landing, and genet's `8c1e324ed4d`. Four repository motions, one
+  pixel-identical frame.
+
+  `cargo check --target wasm32-unknown-unknown` from `ports/graphshell/web`
+  green in 21.96 s, after moving the shared `worktrees/genet-head` checkout from
+  `a93189b1d7c` to `115d348dedd` by detached checkout — the revision every
+  genet.git pin here names. That is a checkout of an existing worktree and
+  changed nothing in genet. `cargo check -p knot-editor-host` green.
+  `scripts/check_port_boundaries.py` passes.
+
+  `relicense_headers.py --repo . --audit` went **1291 -> 1388 owned sources**,
+  exactly the 97 `.rs` files among the 125 the removal took out of genet, and
+  exactly the rise the removal predicted. **"Without Exhibit A" is 0 before and
+  0 after**, and Exhibit B hits 0 both ways, so genet's sweep had already
+  covered every header and none was written here. The manifest census gains no
+  `MIT OR Apache-2.0` row: all ten landed manifests are already `MPL-2.0`, and
+  the five in that column are the pre-existing burn/cubecl patch trees. What is
+  true, and is what `LICENSES.md` now records, is that seven of the ten have a
+  published version whose grant predates the sweep, and that `tinct` and
+  `verso-tile` carry `LICENSE-MIT` and `LICENSE-APACHE` files for it.
+  **The sweep plan needs that item**: those grants come up for review at each
+  crate's next functional bump, and nothing here decided them.
+
+  **The products consuming the mere source**, from `cargo tree -i` over the ten
+  with `--target all`: `pelt` with `pelt-core` and `pelt-desktop` (the reference
+  browser), `graphshell` (the graph portal), `knot-editor` with `knot-document`
+  and `knot-editor-host` (the document editor), `tabard` (theme authoring),
+  `distillery` (the model works), `djinn`, and `mere` itself. Six unlike
+  products, the same census the Cambium landing reported.
+
+  **Docs.** The three area roots landed at the same names with their history,
+  and are indexed only here: `DOC_README.md` gains a section each, adapted from
+  genet's entries at the parent of its removal, and `DOC_POLICY.md`'s local
+  addendum lists them again with a note that the round trip is the
+  docs-follow-code invariant working in both directions. Seven documents came
+  back where eight left; genet archived the knot evaluation/export plan on
+  2026-09-02 and it stays in genet's `archive_docs/`, cited by path. Links were
+  repaired both ways: inside the roots, source links into genet's `components/`
+  now point at `crates/` here, and the two naming documents genet keeps became
+  path citations; outside them, **25 citations across sixteen files** still
+  named the three roots at `genet/design_docs/...` and would have dangled, so
+  they are local again. Prose naming `components/` inside the documents is
+  history — including a genet component, `smolweb-views`, that never came here
+  — and was left alone.
+
+  **Two findings, both pre-existing and neither repaired here.**
+
+  1. **`nematic`'s `lowers_reader_structure_and_links` is stale by one inker
+     change.** It asserts `doc.outgoing_links() == ["/source"]` on a fragment
+     that also carries an `<img>`; the live answer includes the image URL. The
+     cause is dated: the HTML fragment engine landed **2026-07-27**
+     (`4ee2dcb1`), and inker's `collect_block_link_urls` began walking image
+     spans on **2026-08-21** (`1f3fc462`, "Add host-driven smolweb inline
+     images"), in the same repository, without the assertion following. It is
+     not the revision bump — `genet-static-dom` is unchanged between
+     `a93189b1d7c` and `115d348dedd` — and it is not the move: the landed tree
+     is byte-identical to genet's. It surfaced because `cargo test -p nematic`
+     had never run against the html-fragment feature; genet's gates were
+     `cargo check --workspace` and ortet's tests. **Open for Mark:** whether
+     inker over-collects or the expectation is stale. Mere's own consumption is
+     unaffected, and `ports/knot`, which does name `html-fragment`, compiles
+     and tests green.
+  2. **The catalog receipt's line endings**, recorded above.
+
+  **Still open, and not this step's.** Nothing was pushed; these twelve commits
+  sit on mere's `main`. The nine repositories that pin the Cambium family and
+  the engine-management layer from genet.git repoint to mere.git in P4, after
+  the receiving head is public and green. The Circuit recipe's
+  `workspace_graph.json` fixture is now three generations behind the member
+  list; its test reads the committed snapshot rather than live `cargo
+  metadata`, so nothing fails, and regenerating it still belongs to the lane
+  that owns it. Knot's standalone and embedded surfaces still do not share one
+  document model; that clause of P3's done-condition is the knot-editor
+  extraction plan's work and stays open.
