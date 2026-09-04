@@ -218,6 +218,15 @@ on it. Do not create a second, subtly different raw-handle vocabulary in Mere.
   the crates.io package. The registry-backed wider receipt passed 99 Inker
   tests, 24 adapter tests, and six Pelt tests with
   `cargo test -p inker -p scrying-engine -p weld-engine -p graft-engine -p pelt-core -j 1 --locked`.
+- 2026-09-04: Direct Weld binding was assessed against Welding 0.14.1 and
+  Turnstone's live factory. It must start in wgpu-weld: the public producer
+  trait has separate navigation/message/result queues, and only Windows exposes
+  a native-frame take path. Mere cannot reconstruct native callback order or
+  honest Metal/Vulkan frame custody above that boundary. `WeldProducerFactory`
+  remains the right host seam for CEF subprocess bootstrap, runtime lifetime,
+  profile policy, and host import caches. After Weld exposes ordered events and
+  cross-platform owned native frames, a version-pinned opt-in adapter can own
+  the mechanical translation without absorbing those host policies.
 - Pelt's Windows consumer now recovers Scry's owned native-frame payload and
   imports it with Scry's host-device importer and the same shared fence
   synchronizer given to WebView2. The mixed headed receipt passed at 1280x800
