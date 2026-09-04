@@ -10,7 +10,8 @@ true when it was written, and the boundary plan reclassed it as application
 composition, which is Mere's. Nothing about what it owns changed.
 
 **Date**: 2026-08-31
-**Status (2026-09-02)**: W1 through W4 are implemented and landed through
+**Status (2026-09-04)**: W5 opened — Turnstone's panes become tiles, ruled by
+Mark; S1/S2 are stack work here, S3 is Turnstone's. W1 through W4 are implemented and landed through
 coordinated Genet, Mere, and product branches. W4 has captured native Pelt
 acceptance and cancellation receipts, a headed Graphshell browser
 save/mutate/reload receipt, and a durable Woodshed open-lane consumer with full
@@ -155,6 +156,114 @@ Validation:
 
 Done when the compatibility re-export is unused and the same component has two
 heterogeneous headed consumers.
+
+
+### W5. Panes as tiles: the compositing host
+
+**Ruled by Mark 2026-09-04.** Turnstone's window panes become Workbench tiles:
+a tab bar on every tiled pane (a one-tab stack *is* the sub-title bar), a
+close × on each tab, panes stacked by dragging one onto another, and the
+whole layout saved and restored. The ruling reverses Turnstone's A4 decision
+of 2026-08-11 (`turnstone/design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md`,
+"The `TileTree` decision"), which kept a Turnstone-private topology because
+the shared contract "cannot own mixed GPU/document/Cambium surface routing,
+persistence, or stable pane identity." Mark's reading of that sentence is the
+thesis of this phase: those three are the stack's to own, and the list is a
+list of what the stack is missing. It also fires the revisit trigger the
+frisket direction note left standing
+(`genet/docs/2026-07-24_frisket_pane_component_direction.md`, follow-on §2:
+"Revisit only if turnstone ever wants tabs"). Turnstone wants tabs.
+
+**What the stack has, read 2026-09-04.** `workbench::TileTree` is N-ary
+splits over leaf tab-stacks with a reducer (`Activated`, `Closed`,
+`Dragged` to a stack, an edge, or outside, `DividerMoved`) and one host
+effect (`TearOut`). A `Tile` is a stable `TileId(u64)`, a title, and a
+`ContentSource`, whose `Open { kind, id }` tail already carries a
+non-document lane verbatim. Collapse prunes empty stacks and single-child
+splits, and leaves a one-tab stack a stack. `cambium::frisket` renders that
+tree as a DOM frame — splits, dividers, a tab bar per stack with a close ×
+per tab, one content hole per stack — and lends its hit-test walk
+(`divider_target`, `tab_target`, `close_target`, `stack_target`,
+`tab_drop_index`) to hosts that lay out and hit-test themselves. Pelt
+composites documents into the holes. `cambium::tab_strip` is the strip the
+Workbench pane already wears per cell; it has no close affordance.
+
+**What Turnstone has that the stack lacks.** `SpaceBlueprint`: a float layer
+(relative rect, pixel constraints, z-order, pinned, visible, dock targets,
+transactional tear-out from a float — A5, receipt-proven), a normalization
+policy, a `Grid` node (never constructed outside the model and its tests),
+and serde on all of it. And the thing it lacks itself: at rest the compositor
+still walks the older binary `PaneNode` tree from `frame.json`; the blueprint
+is promoted from it on the first float and never saved.
+
+**What Turnstone must keep.** It composites one surface per pane — a live
+WebView, a GPU canvas, a Cambium view — and never renders a pane frame. That
+was the correct reason not to adopt frisket's *view* in July, and it is
+unchanged. What it adopts is the *tree* and the *strip*: the tab bar of each
+stack becomes one more composited surface, drawn with `tab_strip`, and the
+content rect below it is the pane's surface as today.
+
+Phases, each with its done-condition. S1 and S2 are stack work in this
+repository; S3 is Turnstone's, and consumes them by git pin.
+
+**S1. `workbench` carries persistence and floats.**
+- A `serde` feature deriving `Serialize`/`Deserialize` on `TileTree`,
+  `TileBranch`, `TabStack`, `Tile`, `TabAccent`, `ContentSource`, `TilePath`
+  and the float types below. The crate stays free of a storage choice: it
+  serializes, the host decides where.
+- A float layer beside the tiled tree — `Workspace { tiled: TileTree,
+  floating: Vec<FloatingTile> }` or the equivalent — ported from
+  Turnstone's A5 semantics: `FloatingTile { tile, rect: RelativeRect,
+  constraints, z, pinned, visible }`, events to float a tile, dock it (to a
+  stack, beside a tile, or the tiled root), raise it, and tear it out from a
+  float; each tile at exactly one station. `TearOut` stays the one host
+  effect.
+- `Grid` is not ported: nothing in Turnstone constructs one. Recorded here
+  so its absence is a decision.
+*Done when* a `Workspace` round-trips through serde with fractions, active
+tabs, floats and z-order intact; the A5 station walk (tile → float → nested
+split → tear-out → return → dock) passes as a `workbench` unit test with one
+`TileId` throughout; and Graphshell, Pelt and Woodshed build unchanged.
+
+**S2. Cambium's strip closes, and marks the active stack.**
+- `tab_strip` gains an optional close affordance per tab, emitting a typed
+  close the caller maps, with the ARIA name "Close <title>", and stopping
+  propagation so a close never also activates — frisket's existing contract,
+  moved to the strip so frisket's tab bar, the Workbench pane's cells, and
+  Turnstone's pane bars are one widget.
+- The strip can mark its stack active (the `aria-current` / class the
+  compositor sets on the focused pane's bar), closing the "nothing marks
+  which pane is active" gap Turnstone's plan names.
+- frisket's `render_stack` re-expressed on the strip, so there is one tab
+  bar in the crate.
+*Done when* frisket's 7 tests and the Workbench pane's strip tests pass on
+the shared strip, a close-× press reports a close and not an activation, and
+Pelt's tile surface is unchanged in behaviour.
+
+**S3. Turnstone's panes ride the tree.** (Owned by
+`turnstone/design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md`,
+A4 as revised 2026-09-04; summarized here so the two halves read as one.)
+- `PaneId` ↔ `TileId` one-to-one; `PaneContent`, graph binding and `PaneSpec`
+  stay Turnstone's, keyed by `PaneId` beside the tree, never in it — the
+  content-payload rule the frisket note set.
+- `pane.rs` walks the `Workspace` instead of `PaneNode`, reserving a
+  tab-bar rect per stack; the surface plan gains a strip surface per stack;
+  press on a tab activates, press on × closes *that* pane, drag a tab to
+  stack, split beside, or tear out — the gesture code the Workbench pane's
+  tiles already have, generalized.
+- The saved layout is the serialized `Workspace` (primary and lens spaces),
+  replacing `frame.json`; the old binary tree is read once and migrated,
+  because it is real user data, then not written again. `SpaceBlueprint`,
+  `legacy_bridge.rs`, the binary `PaneNode` and its store retire.
+*Done when* `a5_floating_pane.scn` and `physics_native.scn` pass unchanged
+in intent, a new stack receipt opens two panes, stacks one onto the other,
+switches tabs, closes one from its ×, restarts, and finds the stack where it
+was, and the observation and accessibility projections describe stacks.
+
+**Sequencing and the pin.** Turnstone consumes mere by git revision and the
+family is git-first, so S3 cannot start against unpushed S1/S2: pushing mere
+and bumping Turnstone's pin are Mark's steps between S2 and S3. The
+`physics catalog` P4 native drag half waits on the same bump.
 
 ## Progress
 
