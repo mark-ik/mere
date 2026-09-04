@@ -105,6 +105,17 @@ fn json_feed_extracts_title_lang_and_entries() {
 }
 
 #[test]
+fn json_feed_retains_item_ids_as_guids() {
+    let feed = parse_json(JSON_FEED_SAMPLE).expect("parse JSON feed");
+    let guids: Vec<&str> = feed
+        .entries
+        .iter()
+        .filter_map(|entry| entry.guid.as_deref())
+        .collect();
+    assert_eq!(guids, vec!["1", "2"]);
+}
+
+#[test]
 fn json_feed_emits_header_with_subtitle() {
     let doc = render(JSON_FEED_SAMPLE);
     let header = doc

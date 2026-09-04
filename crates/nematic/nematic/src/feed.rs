@@ -138,7 +138,8 @@ fn parse_json(body: &str) -> Result<Feed, EngineError> {
     };
 
     for item in feed.items {
-        let title = trimmed_some(item.title).or_else(|| trimmed_some(item.id));
+        let guid = trimmed_some(item.id);
+        let title = trimmed_some(item.title).or_else(|| guid.clone());
         let link = trimmed_some(item.url).or_else(|| trimmed_some(item.external_url));
         let date = trimmed_some(item.date_published).or_else(|| trimmed_some(item.date_modified));
 
@@ -158,10 +159,12 @@ fn parse_json(body: &str) -> Result<Feed, EngineError> {
 
         if title.is_some() || link.is_some() || summary.is_some() {
             out.entries.push(FeedEntry {
+                guid,
                 title,
                 link,
                 date,
                 summary,
+                ..FeedEntry::default()
             });
         }
     }
