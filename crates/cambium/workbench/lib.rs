@@ -21,11 +21,19 @@
 
 /// A host-assigned identity for a tile, stable across the renders of one running
 /// surface. Opaque to the contract (the host mints + interprets it).
+mod float;
+pub use float::{
+    FloatDockTarget, FloatEvent, FloatSizeConstraints, FloatingTile, RelativeRect, Workspace,
+    WorkspaceEvent,
+};
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TileId(pub u64);
 
 /// How a split lays its children out.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SplitAxis {
     /// Children side by side, divided by vertical dividers (a row).
     Row,
@@ -36,6 +44,7 @@ pub enum SplitAxis {
 /// The arrangement the surface renders: either a split of children, or a leaf
 /// tab-stack. The host holds the authoritative value and rebuilds it as events apply.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TileTree {
     /// A row/column of child subtrees, each taking a fraction of the axis.
     Split {
@@ -50,6 +59,7 @@ pub enum TileTree {
 /// shares across a split's children are maintained by the host (conventionally summing
 /// to 1.0); the surface renders them and a [`TileEvent::DividerMoved`] updates them.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TileBranch {
     pub fraction: f32,
     pub tree: TileTree,
@@ -58,6 +68,7 @@ pub struct TileBranch {
 /// A leaf stack of tabbed tiles. `active` indexes the shown tab (the host keeps it in
 /// range as tabs are added / closed).
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TabStack {
     pub tabs: Vec<Tile>,
     pub active: usize,
@@ -66,6 +77,7 @@ pub struct TabStack {
 /// One tile: a titled handle onto a content source. The tile is the *tab* (the handle);
 /// its content is rendered into the tile's body by the host-resolved lane.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tile {
     pub id: TileId,
     pub title: String,
@@ -82,6 +94,7 @@ pub struct Tile {
 /// the meaning (mere: the node's activation/selection color); the contract just carries
 /// the two colors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TabAccent {
     pub background: [u8; 3],
     pub foreground: [u8; 3],
@@ -101,6 +114,7 @@ pub struct TabAccent {
 /// [`ContentSource::Open`] lets such a host name its own lane without this
 /// contract learning what is in it.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContentSource {
     /// A genet document. Standalone pelt carries the document URL here; mere carries
     /// an (opaque) handle to a content-root subtree it renders into the tile.
@@ -132,22 +146,26 @@ pub enum ContentSource {
 /// An opaque reference to a document the host resolves. Standalone pelt stores the
 /// document URL; the contract does not interpret it.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DocumentRef(pub String);
 
 /// An opaque key for an externally-composited texture the host supplies.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TextureKey(pub u64);
 
 /// An opaque, namespaced reference to a settings page (e.g. `"pelt/appearance"`,
 /// `"moot:<id>/permissions"`) that the settings-lane provider for that namespace
 /// resolves to a rendered, permission-gated page.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SettingsRef(pub String);
 
 /// A path from the tree root to a split node: the child index taken at each split on
 /// the way down. The empty path is the root. Used to address the split a divider belongs
 /// to (and the destination stack of a drag).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TilePath(pub Vec<usize>);
 
 /// A gesture the surface emits for the host to apply to its authoritative tree. The
@@ -184,6 +202,7 @@ pub enum DropTarget {
 
 /// Which edge of a tile a drag landed on (the side the dropped tile takes).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Edge {
     Left,
     Right,
@@ -292,6 +311,56 @@ impl TileBranch {
 }
 
 impl TileTree {
+    /// A tree with no tiles: one empty stack. What a workspace holds once its
+    /// last tile floats or closes.
+    pub fn empty() -> Self {
+        TileTree::Stack(TabStack {
+            tabs: Vec::new(),
+            active: 0,
+        })
+    }
+
+    /// Whether the tree holds no tile at all.
+    pub fn is_empty(&self) -> bool {
+        self.tiles().is_empty()
+    }
+
+    /// Remove a tile and collapse what its leaving empties, returning it so a
+    /// caller can place it elsewhere (a float, another workspace).
+    pub fn take_tile(&mut self, id: TileId) -> Option<Tile> {
+        let tile = self.remove_tile(id)?;
+        self.collapse();
+        Some(tile)
+    }
+
+    /// Split `tile` out beside `target` on `edge`, half and half.
+    pub fn split_beside(&mut self, target: TileId, edge: Edge, tile: Tile) -> bool {
+        if self.find(target).is_none() || self.find(tile.id).is_some() {
+            return false;
+        }
+        self.split_at_tile(target, edge, tile)
+    }
+
+    /// Add `tile` to `target`'s stack right after it, as the active tab.
+    pub fn insert_tab_after(&mut self, target: TileId, tile: Tile) -> bool {
+        if self.find(tile.id).is_some() {
+            return false;
+        }
+        match self {
+            TileTree::Stack(stack) => match stack.tabs.iter().position(|t| t.id == target) {
+                Some(i) => {
+                    stack.tabs.insert(i + 1, tile);
+                    stack.active = i + 1;
+                    true
+                }
+                None => false,
+            },
+            TileTree::Split { children, .. } => children
+                .iter_mut()
+                .any(|b| b.tree.insert_tab_after(target, tile.clone())),
+        }
+    }
+
     /// A tree of a single tile (a one-tab stack) — the surface's initial state.
     pub fn single(tile: Tile) -> Self {
         TileTree::Stack(TabStack {
@@ -324,7 +393,7 @@ impl TileTree {
                 for branch in children {
                     branch.tree.collect_tiles(out);
                 }
-            },
+            }
             TileTree::Stack(stack) => out.extend(stack.tabs.iter()),
         }
     }
@@ -342,7 +411,7 @@ impl TileTree {
             TileTree::Stack(stack) => stack.tabs.iter_mut().find(|t| t.id == id),
             TileTree::Split { children, .. } => {
                 children.iter_mut().find_map(|b| b.tree.tile_mut(id))
-            },
+            }
         }
     }
 
@@ -379,7 +448,7 @@ impl TileTree {
                     self.collapse();
                 }
                 removed
-            },
+            }
             TileEvent::DividerMoved { split, fractions } => self.set_fractions(split, fractions),
             TileEvent::Dragged { tile, to } => self.drag(*tile, to),
         }
@@ -392,7 +461,7 @@ impl TileTree {
                 Some(i) if stack.active != i => {
                     stack.active = i;
                     true
-                },
+                }
                 _ => false,
             },
             TileTree::Split { children, .. } => children.iter_mut().any(|b| b.tree.activate(id)),
@@ -411,10 +480,10 @@ impl TileTree {
                     stack.active = stack.tabs.len().saturating_sub(1);
                 }
                 Some(tile)
-            },
+            }
             TileTree::Split { children, .. } => {
                 children.iter_mut().find_map(|b| b.tree.remove_tile(id))
-            },
+            }
         }
     }
 
@@ -473,7 +542,7 @@ impl TileTree {
                     }
                 }
                 changed
-            },
+            }
             _ => false,
         }
     }
@@ -485,7 +554,7 @@ impl TileTree {
         let target_ok = match to {
             DropTarget::Stack { stack, .. } => {
                 matches!(self.node_at(stack), Some(TileTree::Stack(_)))
-            },
+            }
             DropTarget::Edge { tile, .. } => self.find(*tile).is_some(),
             DropTarget::Outside => false,
         };
@@ -502,10 +571,10 @@ impl TileTree {
                     s.tabs.insert(i, tile);
                     s.active = i;
                 }
-            },
+            }
             DropTarget::Edge { tile: target, edge } => {
                 self.split_at_tile(*target, *edge, tile);
-            },
+            }
             DropTarget::Outside => return false,
         }
         self.collapse();
@@ -535,7 +604,7 @@ impl TileTree {
                     vec![TileBranch::new(0.5, first), TileBranch::new(0.5, second)],
                 );
                 true
-            },
+            }
             TileTree::Stack(_) => false,
             TileTree::Split { children, .. } => children
                 .iter_mut()
@@ -813,7 +882,7 @@ mod tests {
                 // Right edge → target (1) first, dragged (2) second.
                 assert_eq!(children[0].tree.tiles()[0].id.0, 1);
                 assert_eq!(children[1].tree.tiles()[0].id.0, 2);
-            },
+            }
             _ => panic!("expected a split"),
         }
     }

@@ -246,6 +246,24 @@ tabs, floats and z-order intact; the A5 station walk (tile → float → nested
 split → tear-out → return → dock) passes as a `workbench` unit test with one
 `TileId` throughout; and Graphshell, Pelt and Woodshed build unchanged.
 
+*Landed 2026-09-04.* `workbench::float` — `RelativeRect`,
+`FloatSizeConstraints`, `FloatingTile` (owning its `Tile` while it floats,
+with `resolve` for the host's pixel rect), `FloatDockTarget`, `FloatEvent`,
+`WorkspaceEvent`, and `Workspace { tiled, floating }` with `apply`, the
+station rule (`contains`, refused duplicates), `take_floating` /
+`take_tile` / `insert_floating` for a move between windows, and z
+normalization. `TileTree` gained `empty`, `is_empty`, `take_tile`,
+`split_beside` and `insert_tab_after`. The `serde` feature derives on every
+state type, `Edge` included, and the crate still picks no storage. Deviations
+from Turnstone's blueprint, deliberate: float events are their own enum
+wrapped in `WorkspaceEvent` rather than new `TileEvent` variants, so no
+consumer's exhaustive match breaks; the floating tile *owns* its `Tile`
+(Turnstone kept a spec list beside the tree); and a tile arriving from
+another workspace is inserted whole with its rect and pin rather than
+re-created. 20 tests with the feature, 19 without, clippy clean; cambium,
+graphshell, pelt-core and pelt-desktop build unchanged. Woodshed consumes
+by pin and is unaffected until it moves.
+
 **S2. Cambium: the strip closes, the frame takes a slot, and a
 `workspace` composition wires them.**
 - `tab_strip` gains an optional close affordance per tab, emitting a typed
