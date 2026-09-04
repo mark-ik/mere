@@ -2307,3 +2307,35 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   that owns it. Knot's standalone and embedded surfaces still do not share one
   document model; that clause of P3's done-condition is the knot-editor
   extraction plan's work and stays open.
+
+- 2026-09-03: **P3 assessment: Knot's reconciliation.** The facts, all
+  measured today. Standalone `knot-editor` (repository, 525k lines with its
+  vendored tree, 25 editor sources) and mere's `ports/knot` are byte-identical
+  in the editor crate and one file apart in `knot-document`; both last moved
+  on 2026-09-01 with the same commit subject. mere also holds `ports/knot/desktop`
+  (one file apart from the standalone `apps/desktop`) and, since Pelt's
+  landing, `ports/knot/editor-host` (the Cambium host, 420 lines). The
+  extraction plan in knot-editor (`design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`)
+  rules the shape: Knot owns document, vault, evidence, sync and publishing;
+  `knot-desktop` is the standalone process; mere and Turnstone may carry
+  integration code only. Its gates are E1, Turnstone and Djinn consuming an
+  immutable knot-editor revision, and E2, removing `ports/knot` and
+  `ports/knot-document` from mere; its stop rule forbids deleting mere's copies
+  before both consumers compile against a pushed revision. **The two PRs that
+  carried E1 and E2 are stale.** turnstone #4 is CONFLICTING against its main;
+  mere #5 is 337 commits behind, and a `git merge-tree` against today's main
+  conflicts in `Cargo.toml`, `ports/knot/Cargo.toml`, `ports/knot/desktop/Cargo.toml`
+  and both `knot-document` files, because today's moves rewrote exactly those
+  manifests. They cannot be merged as they stand. There is a second reason
+  they cannot: knot-editor pins `inker`, `nematic`, `illume`, `knot-editor-host`
+  and `genet-scripted-dom` from `genet.git` at `eff0cb6`, and after P3 four
+  of those live in mere. So the order is fixed by the stop rule: (1) P4
+  repoints knot-editor to one genet revision and one mere revision, with the
+  moved crates from mere; (2) E1 is redone as fresh commits, Turnstone and
+  Djinn pinning that knot-editor revision; (3) E2 is redone on today's main,
+  removing `ports/knot` and `ports/knot-document` and, per the ruled shape,
+  `ports/knot/desktop` too (the standalone process belongs to the standalone
+  repository, which already carries it as `apps/desktop`); `ports/knot/editor-host`
+  is integration code and stays in mere unless Mark rules it Knot's. The two
+  open PRs are then closed with a note pointing at the fresh commits, which is
+  Mark's action on GitHub. Nothing in this step touches code until (1) lands.
