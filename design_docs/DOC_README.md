@@ -426,6 +426,18 @@ it, at the same name and with its history (platform boundary plan, P3). It
 describes `crates/inker/`: `inker`, `document-canvas`, the scrying/graft/weld
 engine adapters.
 
+### inker_docs/research/
+
+- [web_surface_contract_assessment](inker_docs/research/2026-09-03_web_surface_contract_assessment.md)
+  (**assessment 2026-09-03; extraction recommended after repair, not before**:
+  separates Graft's native-resource custody, a neutral one-surface protocol,
+  and Inker's host orchestration; keeps the current triplet publication
+  unblocked while requiring correlated async commands, one real ordered event
+  queue, instance-truthful capabilities, explicit frame-transport outcomes,
+  and the owned Graft boundary before a public contract is extracted. It gates
+  the stronger claim that Scry, Weld, and Graft already form one interchangeable
+  browser platform.)
+
 ### inker_docs/implementation_strategy/
 
 - [engine_picker_and_pluggability_plan](inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md)
