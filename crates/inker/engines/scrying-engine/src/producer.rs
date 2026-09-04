@@ -14,14 +14,14 @@
 
 use inker::{
     Cookie, CursorShape, FocusReason, KeyboardEvent, MouseEvent, NativeSurfaceHost, PointerEvent,
-    SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings, WebSurface,
+    SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings, WebRequestId, WebSurface,
     WebSurfaceCapabilities, WebSurfaceEvent,
 };
 use scrying::WebSurfaceProducer;
 
 use crate::translation::{
     map_capabilities, map_cookie, map_cursor_shape, map_error, map_focus_reason, map_frame,
-    map_keyboard, map_mouse, map_pointer, map_settings, map_web_event, wrap_web_message,
+    map_keyboard, map_mouse, map_pointer, map_settings, map_web_surface_event,
 };
 
 const INITIAL_EMPTY_POLL_STALL_THRESHOLD: u32 = 600;
@@ -134,14 +134,7 @@ impl SurfaceProducer for ScryingProducer {
 
 impl WebSurface for ScryingProducer {
     fn capabilities(&self) -> WebSurfaceCapabilities {
-        let mut capabilities = map_capabilities(self.inner.capabilities());
-        capabilities.script.result = inker::WebFeatureStatus::unsupported(
-            "scrying-engine has not yet projected script results onto Inker's asynchronous event stream",
-        );
-        capabilities.cookie.read = inker::WebFeatureStatus::unsupported(
-            "scrying-engine has not yet projected cookie reads onto Inker's asynchronous event stream",
-        );
-        capabilities
+        map_capabilities(self.inner.capabilities())
     }
 
     fn navigate_to_url(&mut self, url: &str) -> Result<(), SurfaceError> {
@@ -182,13 +175,25 @@ impl WebSurface for ScryingProducer {
             .map_err(map_error)
     }
 
-    fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
-        if let Some(event) = self.inner.poll_navigation_event().and_then(map_web_event) {
-            return Some(event);
-        }
+    fn request_cookies_for_url(&mut self, id: WebRequestId, url: &str) -> Result<(), SurfaceError> {
         self.inner
-            .poll_web_message()
-            .map(wrap_web_message)
-            .map(WebSurfaceEvent::WebMessage)
+            .request_cookies_for_url(scrying::WebRequestId::new(id.get()), url)
+            .map_err(map_error)
+    }
+
+    fn request_script_result(
+        &mut self,
+        id: WebRequestId,
+        script: &str,
+    ) -> Result<(), SurfaceError> {
+        self.inner
+            .request_script_result(scrying::WebRequestId::new(id.get()), script)
+            .map_err(map_error)
+    }
+
+    fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
+        self.inner
+            .poll_web_surface_event()
+            .map(map_web_surface_event)
     }
 }

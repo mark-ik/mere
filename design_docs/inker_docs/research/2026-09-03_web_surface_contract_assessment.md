@@ -208,15 +208,24 @@ on it. Do not create a second, subtly different raw-handle vocabulary in Mere.
   Graft, Scry, and Weld adapter traits. Pelt's only caller was a WebView
   readiness probe; its fixture now posts `pelt.surface.ready` through the
   page-to-host message channel and Pelt drains that from the ordered event
-  stream. `scrying-engine` still downgrades correlated script-result and cookie
-  reads until Scry's platform callbacks can settle those requests natively.
+  stream.
+- 2026-09-04: `scrying` 0.7.1 added one native ordered event stream for
+  navigation, page messages, script completions, and cookie completions on
+  WebView2, WKWebView, and WPE. `scrying-engine` now forwards caller ids without
+  reminting them, consumes only that queue, maps completion payloads back into
+  Inker, and reports backend-specific cookie-read limits instead of a hopeful
+  shared default. The registry-backed adapter suite passed all 18 tests against
+  the crates.io package. The registry-backed wider receipt passed 99 Inker
+  tests, 24 adapter tests, and six Pelt tests with
+  `cargo test -p inker -p scrying-engine -p weld-engine -p graft-engine -p pelt-core -j 1 --locked`.
 - Pelt's Windows consumer now recovers Scry's owned native-frame payload and
   imports it with Scry's host-device importer and the same shared fence
   synchronizer given to WebView2. The mixed headed receipt passed at 1280x800
   and 960x640 with three owned imports, three fence waits, host composition,
   and the page-message readiness event (artifact digest `85d1b0ba8a86778f`).
 - Focused tests pass for Inker, Graft/Scry/Weld adapters, and Pelt core. Direct
-  Weld callback binding, Scry callback migration, and extraction remain open.
+  Weld callback binding, Graft's wgpu-free frame/sync factor, extraction, and a
+  combined demo with real Graft and Weld factories remain open.
 
 ## Open decisions
 
