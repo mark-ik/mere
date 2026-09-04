@@ -24,7 +24,7 @@ thiserror = "1"
 
 [dev-dependencies]
 # The example's store is a muniment backend (2026-07-12).
-muniment = { path = "../muniment", version = "0.1.0" }
+muniment = { path = "../../eidetic/muniment", version = "0.1.0" }
 pollster = "0.4"
 tempfile = "3"
 # The eidetic-recall example (the browsing-derivation rehearsal bin, moved

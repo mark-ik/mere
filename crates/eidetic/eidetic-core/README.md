@@ -54,7 +54,9 @@ stores return ready futures.
 - `mere-eidetic-https-fetcher`, `mere-eidetic-iroh-fetcher`: `BlobFetcher`
   implementations for non-local `BlobSource` variants.
 - `mere-eidetic-search`: a tantivy `TrailIndex` minted from `BrowsingTrace`
-  codicils.
+  codicils. Lives at `crates/intel/eidetic-search`, not in the eidetic
+  directory: the index is a Mere product concern reaching `esp` and `import`,
+  and the eidetic directory is the portable core.
 
 ## License
 
