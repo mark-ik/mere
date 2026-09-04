@@ -107,6 +107,10 @@ impl EngineDocument {
     /// order. Walks both inline `Link` spans inside structural blocks and
     /// the URL fields of semantic blocks (`FeedHeader.source_url`,
     /// `FeedEntry.article_url` / `source_url`).
+    ///
+    /// Links only: a link is somewhere the reader can navigate. Image
+    /// sources are subresources of *this* document, not destinations, and
+    /// are collected separately — see `collect_block_link_urls`.
     pub fn outgoing_links(&self) -> Vec<&str> {
         let mut links = Vec::new();
         for block in &self.blocks {
@@ -407,8 +411,19 @@ fn collect_block_link_urls<'a>(block: &'a Block, out: &mut Vec<&'a str>) {
                 }
             }
         },
-        Block::Image { url, .. } => out.push(url.as_str()),
+        // `Block::Image` is deliberately NOT a link. An image `url` is a
+        // subresource this document wants fetched and painted in place, not
+        // a destination the reader can navigate to, and the sole production
+        // consumer of `outgoing_links` is `DocumentSession::inspect` ->
+        // `ContentReport.links`, whose contract reads "outgoing `<a href>`
+        // targets". Image prefetching has its own channel:
+        // `DocumentSession::subresources` / `provide_subresource`, whose
+        // smolweb implementation walks `Block::Image` itself and never calls
+        // `outgoing_links`. Image sources were briefly collected here (genet
+        // 1f3fc462, "Add host-driven smolweb inline images") as a side effect
+        // of adding that channel; nothing consumed the mixed set.
         Block::CodeBlock { .. }
+        | Block::Image { .. }
         | Block::Preformatted { .. }
         | Block::Rule
         | Block::MetadataRow { .. }
@@ -494,5 +509,27 @@ mod tests {
                 "https://feed.test/",
             ]
         );
+    }
+
+    #[test]
+    fn outgoing_links_skips_image_sources() {
+        // Links are destinations; an image source is a subresource of this
+        // document, fetched through `DocumentSession::subresources`. The
+        // anchor beside the image is the only outgoing link here.
+        let document = doc(vec![
+            Block::Image {
+                url: "https://img.test/diagram.png".into(),
+                alt: "diagram".into(),
+            },
+            Block::Paragraph {
+                spans: vec![InlineSpan::Link {
+                    url: "https://dest.test/".into(),
+                    spans: vec![InlineSpan::Text("go".into())],
+                    title: None,
+                    predicate: None,
+                }],
+            },
+        ]);
+        assert_eq!(document.outgoing_links(), vec!["https://dest.test/"]);
     }
 }
