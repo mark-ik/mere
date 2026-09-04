@@ -212,6 +212,23 @@ impl Canvas {
         self.camera.offset.1 += anchor.1 - landed.1;
     }
 
+    /// Where `node` sits in screen px — the space pointer input arrives in.
+    /// `None` when the node has no position. The inverse of
+    /// [`screen_to_world`](Self::screen_to_world).
+    pub fn screen_position_of(&self, node: NodeKey) -> Option<(f32, f32)> {
+        let world = self.view.position_of(node)?;
+        Some(
+            self.camera
+                .to_screen(kernel::geometry::PortablePoint::new(world.x, world.y)),
+        )
+    }
+
+    /// Where the single focused node sits in screen px, if exactly one is
+    /// focused. What a host reports so a receipt can aim at it.
+    pub fn focused_screen_position(&self) -> Option<(f32, f32)> {
+        self.screen_position_of(self.focused_key()?)
+    }
+
     /// Map a screen-px point back to world space through the camera projector
     /// (the inverse of `Camera::to_screen`; at the default camera this is
     /// `world = (screen - offset) / zoom`).

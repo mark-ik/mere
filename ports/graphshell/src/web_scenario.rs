@@ -209,6 +209,16 @@ pub(super) fn publish_capture(name: &str, width: u32, height: u32, rgba: &[u8]) 
     Ok(())
 }
 
+/// Parse exactly `count` whitespace-separated numbers from a verb's arguments.
+fn numbers(rest: &str, count: usize) -> Result<Vec<f32>, String> {
+    let parsed: Vec<f32> = rest.split_whitespace().filter_map(|t| t.parse().ok()).collect();
+    if parsed.len() == count {
+        Ok(parsed)
+    } else {
+        Err(format!("wanted {count} numbers, got '{rest}'"))
+    }
+}
+
 /// The host as the shared driver sees it.
 struct Probe<'a> {
     host: &'a mut BrowserHost,
@@ -219,6 +229,14 @@ impl Probe<'_> {
     /// [`DomAction`].
     fn pointer(&mut self, kind: &'static str, x: f32, y: f32) {
         self.host.deferred_dom.push(DomAction::Pointer { kind, x, y });
+    }
+
+    /// Where the single focused node is, in the pointer's screen space.
+    fn focused_point(&self) -> Result<(f32, f32), String> {
+        self.host
+            .canvas
+            .focused_screen_position()
+            .ok_or_else(|| "wants exactly one focused node".to_string())
     }
 
     fn app_verb(&mut self, line: &str) -> Result<(), String> {
@@ -255,6 +273,38 @@ impl Probe<'_> {
                     css: css.to_string(),
                     text: text.to_string(),
                 });
+                Ok(())
+            }
+            // The drag gesture in three steps: the queued pointer events need a
+            // frame between them to take, so a receipt steps them itself.
+            // (Physics catalog — P4.)
+            "press-focused" => {
+                let (x, y) = self.focused_point()?;
+                self.press(x, y);
+                Ok(())
+            }
+            "move-by" => {
+                let d = numbers(rest, 2)?;
+                let (x, y) = self.focused_point()?;
+                self.moved(x + d[0], y + d[1]);
+                Ok(())
+            }
+            "release-at" => {
+                let (x, y) = self.focused_point()?;
+                self.release(x, y);
+                self.host.drag_drop = Some((x, y));
+                Ok(())
+            }
+            // `add-node <x> <y> <url>`: the empty-space add gesture, at a point
+            // the receipt picks. (Physics catalog — P4.)
+            "add-node" => {
+                let (coords, url) = rest.rsplit_once(char::is_whitespace).unwrap_or((rest, ""));
+                let n = numbers(coords, 2)?;
+                if url.trim().is_empty() {
+                    return Err("add-node wants '<x> <y> <url>'".to_string());
+                }
+                self.host.canvas.add_node_at((n[0], n[1]), url.trim());
+                self.host.chrome_dirty = true;
                 Ok(())
             }
             "select" => {

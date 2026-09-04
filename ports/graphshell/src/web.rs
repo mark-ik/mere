@@ -294,6 +294,8 @@ struct BrowserHost {
     layout_stats_stale: bool,
     layout_moved: bool,
     layout_stats: mere::canvas::LayoutStats,
+    /// Screen px where the last `drag-focused` released, for `data-drag-return`.
+    drag_drop: Option<(f32, f32)>,
     remote_session: Option<ProjectionSession>,
     remote_status: String,
     remote_joining: bool,
@@ -2054,6 +2056,7 @@ async fn run(root_element: Element) -> Result<(), String> {
         layout_stats_stale: true,
         layout_moved: false,
         layout_stats: mere::canvas::LayoutStats::default(),
+        drag_drop: None,
         remote_session: Some(remote_session),
         remote_status: "fixture".to_string(),
         remote_joining: false,

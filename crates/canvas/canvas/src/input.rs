@@ -337,6 +337,12 @@ impl Canvas {
         true
     }
 
+    /// Whether a node drag is in progress — what a press took hold of.
+    pub fn dragging_node(&self) -> Option<uuid::Uuid> {
+        let key = self.drag?.node;
+        self.graph.get_node(key).map(|node| node.id)
+    }
+
     /// Screen-space twin of [`nudge_focused`](Self::nudge_focused). Keyboard
     /// hosts normally want a stable visual increment even while zoomed; this
     /// converts their pixel step into the canvas's world coordinates.

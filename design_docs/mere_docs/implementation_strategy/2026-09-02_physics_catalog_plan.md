@@ -325,6 +325,17 @@ place-near-parent contracts (`layout_behaviors_and_physics_spec.md` §2)
 adopted as the add behaviour. *Done when* the rows are green on the web
 and the native host shows the same by hand.
 
+*Web half landed 2026-09-04.* Both donor contracts were already in the
+canvas — `mint_node_at` seeds, reconciles and reheats; `mint_node_as`
+seeds a new node beside its origin — so P4 was instrumentation and proof,
+not new physics. The canvas gained two reads a pointer-driving host had
+no way to ask for: `screen_position_of` / `focused_screen_position` (the
+inverse of the crate-private `screen_to_world`) and `dragging_node`. The
+web host gained the three-step gesture verbs (`press-focused`, `move-by`,
+`release-at`), an `add-node <x> <y> <url>` verb, and three snapshot
+fields (`data-dragging`, `data-drag-return`, `data-canvas-nodes`).
+`physics_drag` and `physics_add` are green over all eleven laws.
+
 ## 4. Findings
 
 - 2026-09-02: `BarnesHutRepulsion` has been one `add_force` from live since
@@ -599,3 +610,19 @@ inference carried.
   `RESULT ok`; seiche 77/77 in both feature configurations, canvas
   194/194. Not done: wiring `PhysicsBoard::offload` — no native host shows
   the remote board yet, so there is nothing to call it.
+- 2026-09-04 (P4 web): a composite `drag` verb does not work. The queued
+  pointer events dispatch back to back in one JS turn and the canvas never
+  moves the body, so the gesture is three verbs a receipt steps a frame
+  apart. Found by a diagnostic scenario, which is also how the two
+  thresholds below were measured rather than guessed.
+- 2026-09-04 (P4 web): `data-node-count` reports the app host's authority
+  graph, which a canvas-level add does not touch; the physics acts on the
+  canvas's own graph, so the receipt reads the new `data-canvas-nodes`.
+- 2026-09-04 (P4 web): the laws do not share one post-drag signature.
+  Springs, Charge, Stress and Energy reclaim the node (`drag-return >= 40`
+  after five seconds); the restless five keep energy; Anneal is a search
+  that cools, so it owes displacement rather than a steady energy; Still
+  holds the drop point within five pixels. A moving law also carries the
+  node within the release frame itself, so the "released where it was
+  dropped" check needs sixty pixels of tolerance there against twenty for
+  a resting law.

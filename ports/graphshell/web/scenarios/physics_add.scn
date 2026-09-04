@@ -1,0 +1,156 @@
+# Physics receipt (P4): adding a node under every law. Each block adds one
+# node at a point on the canvas and lets the law answer. The donor's two
+# contracts are what is being checked: a structural change reheats the
+# layout (the new body is not left frozen where it landed), and the graph
+# never ends up with bodies on top of each other. Under Still the reheat is
+# a no-op by construction — the law holds everything, including the newcomer.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+assert snap canvas-nodes == 11
+
+# --- Springs ---
+log add Springs
+select #gs-physics-select spring.rapier
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == spring.rapier
+add-node 300 260 mere://p4/add/springs
+settle 1
+assert snap canvas-nodes == 12
+settle 300
+assert snap layout-overlaps == 0
+assert snap physics-energy <= 500
+capture physics_add_springs
+wait
+
+# --- Charge ---
+log add Charge
+select #gs-physics-select charge.barnes-hut
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == charge.barnes-hut
+add-node 320 272 mere://p4/add/charge
+settle 1
+assert snap canvas-nodes == 13
+settle 300
+assert snap layout-overlaps == 0
+
+# --- Stress ---
+log add Stress
+select #gs-physics-select stress.kamada-kawai
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == stress.kamada-kawai
+add-node 340 284 mere://p4/add/stress
+settle 1
+assert snap canvas-nodes == 14
+settle 300
+assert snap layout-overlaps == 0
+
+# --- Energy ---
+log add Energy
+select #gs-physics-select energy.linlog
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == energy.linlog
+add-node 360 296 mere://p4/add/energy
+settle 1
+assert snap canvas-nodes == 15
+settle 300
+assert snap layout-overlaps == 0
+
+# --- Orbit ---
+log add Orbit
+select #gs-physics-select orbit.gravity
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == orbit.gravity
+add-node 380 308 mere://p4/add/orbit
+settle 1
+assert snap canvas-nodes == 16
+settle 120
+assert snap physics-energy >= 1
+
+# --- Kinds ---
+log add Kinds
+select #gs-physics-select kinds.particle-life
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == kinds.particle-life
+add-node 400 320 mere://p4/add/kinds
+settle 1
+assert snap canvas-nodes == 17
+settle 120
+assert snap physics-energy >= 1
+
+# --- Flock ---
+log add Flock
+select #gs-physics-select flock.boids
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == flock.boids
+add-node 420 332 mere://p4/add/flock
+settle 1
+assert snap canvas-nodes == 18
+settle 120
+assert snap physics-energy >= 1
+
+# --- Sync ---
+log add Sync
+select #gs-physics-select sync.kuramoto
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == sync.kuramoto
+add-node 440 344 mere://p4/add/sync
+settle 1
+assert snap canvas-nodes == 19
+settle 120
+assert snap physics-energy >= 1
+
+# --- Flow ---
+log add Flow
+select #gs-physics-select flow.magnetic
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == flow.magnetic
+add-node 460 356 mere://p4/add/flow
+settle 1
+assert snap canvas-nodes == 20
+settle 120
+assert snap physics-energy >= 1
+
+# --- Anneal ---
+log add Anneal
+select #gs-physics-select anneal.davidson-harel
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == anneal.davidson-harel
+add-node 480 368 mere://p4/add/anneal
+settle 1
+assert snap canvas-nodes == 21
+settle 300
+assert snap layout-overlaps == 0
+assert snap physics-energy <= 5
+
+# --- Still ---
+log add Still
+select #gs-physics-select still.default
+dom click [data-command="apply-physics"]
+settle 120
+assert snap physics-law == still.default
+add-node 500 380 mere://p4/add/still
+settle 1
+assert snap canvas-nodes == 22
+settle 120
+assert snap physics-energy <= 1
+assert snap layout-overlaps == 0
+capture physics_add_still
+wait
+log physics add receipt complete

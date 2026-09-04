@@ -731,6 +731,43 @@ pub(super) fn update_product_semantics(
         ("data-layout-stretch", format!("{:.2}", stats.stretch)),
         ("data-product-status", host.product_status.clone()),
         (
+            "data-dragging",
+            host.canvas
+                .dragging_node()
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
+        ),
+        (
+            "data-drag-return",
+            match (host.drag_drop, host.canvas.focused_screen_position()) {
+                (Some((dx, dy)), Some((x, y))) => {
+                    format!("{:.0}", ((x - dx).powi(2) + (y - dy).powi(2)).sqrt())
+                }
+                _ => String::new(),
+            },
+        ),
+        (
+            "data-focused-x",
+            host.canvas
+                .focused_screen_position()
+                .map(|(x, _)| format!("{x:.0}"))
+                .unwrap_or_default(),
+        ),
+        (
+            "data-focused-y",
+            host.canvas
+                .focused_screen_position()
+                .map(|(_, y)| format!("{y:.0}"))
+                .unwrap_or_default(),
+        ),
+        (
+            // The canvas's own graph — what the physics moves. `node-count`
+            // below is the app host's authority graph, which a canvas-level
+            // add does not touch.
+            "data-canvas-nodes",
+            host.canvas.graph().node_count().to_string(),
+        ),
+        (
             "data-node-count",
             host.app.host.graph().node_count().to_string(),
         ),

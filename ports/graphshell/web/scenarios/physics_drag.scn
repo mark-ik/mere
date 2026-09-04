@@ -1,0 +1,253 @@
+# Physics receipt (P4): drag under every law. The node the boot selects is
+# pressed, moved 220px right, and released; `drag-return` is how far the law
+# has since carried it off the drop point. A law that rests reclaims the node
+# (the springs pull it home); a restless law keeps moving instead; Still holds
+# it exactly where it was let go.
+assert title GRAPHSHELL H3 READY
+assert snap ready == true
+dom click [data-command="toggle-physics"]
+settle 1
+assert snap physics-paused == false
+select #gs-arrangement-select free
+dom click [data-command="apply-arrangement"]
+settle 1
+assert snap layout == free
+
+# --- Springs ---
+log drag Springs
+select #gs-physics-select spring.rapier
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == spring.rapier
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+assert snap drag-return <= 20
+settle 300
+assert snap drag-return >= 40
+assert snap layout-overlaps == 0
+capture physics_drag_springs_reclaimed
+wait
+
+# --- Charge ---
+log drag Charge
+select #gs-physics-select charge.barnes-hut
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == charge.barnes-hut
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+assert snap drag-return <= 20
+settle 300
+assert snap drag-return >= 40
+assert snap layout-overlaps == 0
+
+# --- Stress ---
+log drag Stress
+select #gs-physics-select stress.kamada-kawai
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == stress.kamada-kawai
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+assert snap drag-return <= 20
+settle 300
+assert snap drag-return >= 40
+assert snap layout-overlaps == 0
+
+# --- Energy ---
+log drag Energy
+select #gs-physics-select energy.linlog
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == energy.linlog
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+assert snap drag-return <= 20
+settle 300
+assert snap drag-return >= 40
+assert snap layout-overlaps == 0
+
+# --- Orbit ---
+log drag Orbit
+select #gs-physics-select orbit.gravity
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == orbit.gravity
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+# A moving law carries the node within the release frame itself.
+assert snap drag-return <= 60
+settle 120
+assert snap physics-energy >= 1
+
+# --- Kinds ---
+log drag Kinds
+select #gs-physics-select kinds.particle-life
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == kinds.particle-life
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+# A moving law carries the node within the release frame itself.
+assert snap drag-return <= 60
+settle 120
+assert snap physics-energy >= 1
+
+# --- Flock ---
+log drag Flock
+select #gs-physics-select flock.boids
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == flock.boids
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+# A moving law carries the node within the release frame itself.
+assert snap drag-return <= 60
+settle 120
+assert snap physics-energy >= 1
+
+# --- Sync ---
+log drag Sync
+select #gs-physics-select sync.kuramoto
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == sync.kuramoto
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+# A moving law carries the node within the release frame itself.
+assert snap drag-return <= 60
+settle 120
+assert snap physics-energy >= 1
+
+# --- Flow ---
+log drag Flow
+select #gs-physics-select flow.magnetic
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == flow.magnetic
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+# A moving law carries the node within the release frame itself.
+assert snap drag-return <= 60
+settle 120
+assert snap physics-energy >= 1
+
+# --- Anneal ---
+log drag Anneal
+select #gs-physics-select anneal.davidson-harel
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == anneal.davidson-harel
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+# A moving law carries the node within the release frame itself.
+assert snap drag-return <= 60
+# Anneal is a search that cools: it does not hold a steady energy, so what it
+# owes is displacement — the node is not where the drag left it.
+settle 300
+assert snap drag-return >= 40
+assert snap layout-overlaps == 0
+
+# --- Still ---
+log drag Still
+select #gs-physics-select still.default
+dom click [data-command="apply-physics"]
+settle 120
+act select-web
+settle 1
+assert snap physics-law == still.default
+press-focused
+settle 1
+# The press took hold of a node (a member id, so it carries a dash).
+assert snap dragging ~ -
+move-by 220 0
+settle 1
+release-at
+settle 1
+assert snap drag-return <= 20
+settle 300
+assert snap drag-return <= 5
+assert snap physics-energy <= 1
+capture physics_drag_still_held
+wait
+log physics drag receipt complete
