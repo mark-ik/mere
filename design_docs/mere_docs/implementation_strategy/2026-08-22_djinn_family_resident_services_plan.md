@@ -2,6 +2,7 @@
 
 **Status:** planned, gated on the `djinn 0.0.2` release
 **Date:** 2026-08-22
+**Amended:** 2026-09-04, notification ownership name corrected
 
 **Related:**
 
@@ -24,7 +25,7 @@ The resident composes domain crates rather than absorbing their semantics:
 | Process lifetime, scheduling, installed-app inventory, local projections | Djinn |
 | Update policy grammar, signed feeds, verified staging, platform apply | Luggage |
 | Distillation, cleanup, and facet proposals | Athanor |
-| Notification records and delivery rules | Redshank |
+| Notification records and delivery rules | Notification domain (`notifications` is the working package name) |
 | Authenticated streams and DNS-SD mechanics | Murm |
 | Local caller identity and durable secret authority | Personae and Castellan |
 | Firmware compatibility and flashing | Linkboy |
@@ -362,12 +363,18 @@ reviews or applies them under its existing policy.
 
 ## 9. Phase F: notifications, agent door, and DNS-SD
 
-### F1. Redshank notifications
+### F1. Notification delivery
 
 Update availability, consent requests, staged updates, and failures provide
-Redshank's first concrete resident consumer. Redshank owns notification
-records, deduplication, acknowledgement, expiry, and delivery rules. Djinn owns
-its lifetime and local projection. Hosts choose presentation.
+the first concrete resident consumer. A product-neutral notification domain
+owns `NoticeRecord`, `DeliveryRule`, deduplication, acknowledgement, expiry, and
+delivery semantics. `notifications` is a working package name, not a public
+product identity. Djinn owns the service lifetime and local projection. Hosts
+choose presentation.
+
+The earlier Redshank assignment is retired. Redshank is the listening and
+timed-annotation product incubated in Woodshed; it has no ownership role in
+Djinn's resident notification service.
 
 ### F2. Authenticated agent door
 
