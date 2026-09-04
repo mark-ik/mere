@@ -2590,3 +2590,91 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   turnstone, retinue's and hocket's Cambium surfaces, paredros' scene); the
   source-identity audit reports no duplicate origins. P4 is met with the
   woodshed exception and the branch-tracking pair noted.
+
+- 2026-09-04: **P5 assessment: extractions and consolidations against the §4
+  bar.** Facts measured today; each item ends in a recommendation for Mark,
+  since P5 is rulings, not moves.
+
+  **Conatus** (`conatus` 4.5k lines, `seiche` 10.3k, `numen` 3.0k,
+  `modulus` 0.8k, `nisus` 0.6k; all five published). External consumers
+  after P4, all on one mere identity: isometry (conatus), mesocosm (conatus,
+  modulus, nisus), paredros (modulus), retinue and mer3ly (seiche). The
+  bar's first clause fails: `seiche` depends on `armillary`, mere's
+  actor-kernel runtime (a three-line edge), so the family does not build
+  without Mere. The
+  third clause has no pressure behind it: every consumer is a Merely
+  repository pinning `mere.git` by revision, and a separate repository
+  would add a host to the pin lattice for no independent release or
+  governance. **Recommendation: stays in mere without ceremony.** Trigger
+  to reopen: seiche's armillary edge cut, plus a consumer outside the
+  family.
+
+  **Eidetic core** (`chartulary` 6.0k, `eidetic-core` as `mere-eidetic`
+  6.9k, `muniment` 2.7k, `eidetic-search` 1.0k, three adapters under 300
+  each, `hagiograph` 26). The boundary is already proven by consumers:
+  chartulary and muniment are pinned from seven repositories (cleromancy,
+  hocket, isometry, knot-editor, retinue, turnstone, woodshed). The bar's
+  first clause is not met: `mere-eidetic` reaches mere's `identity`, and
+  `eidetic-search` reaches `esp` and `import`, and both sit inside the
+  family directory beside the portable crates, so the Mere-specific half is
+  not "visibly outside the core". **Recommendation: no repository; one
+  mere-internal reshuffle** that moves `eidetic-search` (a tantivy index
+  over browsing traces, a Mere product concern) out of `crates/eidetic/`
+  and records `mere-eidetic`'s identity edge as the line the core stops
+  at. After that the family's portable half (chartulary, muniment,
+  hagiograph, the fjall/https/iroh adapters) is visibly separable, and the
+  extraction question waits for release pressure that does not exist today.
+
+  **Knot duplicate:** resolved by E1 and E2 on 2026-09-03/04; nothing open.
+
+  **Sonance placeholder:** `merely-made/sonance` is already an archive
+  pointer (seven files; its README names `mora::sonance` as the canonical
+  implementation, commit "retire sonance repository"), but the GitHub
+  repository is not archived. **Recommendation: archive it on GitHub** (a
+  P6 mutation, Mark's), leaving the pointer README as the durable redirect
+  §4 asks for.
+
+  **Anise mirror:** `merely-made/anise` is not a fork in GitHub's sense and
+  carries no change of ours: its head `71e973a` is exactly upstream's `0.10.6` release tag in
+  `nyx-space/anise` (upstream has since moved to `61b4291`). Its only
+  consumer is turquet's optional `verify` feature, which pins the mirror by
+  revision and `version = "=0.10.6"`; crates.io carries `anise 0.10.6`.
+  **Recommendation: retire the mirror.** turquet takes `anise = "=0.10.6"`
+  from crates.io (its manifest already names that version), which removes
+  the only reason the mirror exists; the mirror is then archived with a
+  README saying it was an unmodified pin of upstream at `71e973a`. If Mark
+  wants the supply-chain hedge a mirror gives, the alternative is to keep
+  it with exactly that README and nothing else.
+
+  **Shared wgpu release automation:** the three repositories share no
+  workflow today. wgpu-scry and wgpu-weld both carry `hardware-headed`,
+  `msrv` and `wgpu-matrix` workflows that differ by 258, 137 and 74 lines;
+  wgpu-graft carries a different set (`sync-main-release`,
+  `registry-only-triplet`, `sync-servo-line`, `hardware-interop`). The
+  organization's `.github` repository holds no workflow templates or
+  reusable workflows. **Recommendation:** found reusable `workflow_call`
+  workflows in `merely-made/.github` for the wgpu matrix and MSRV checks,
+  parameterized by crate and feature set, and have the two near-identical
+  repositories call them first; graft joins when its release sync fits the
+  same shape. This is outward work in a public organization repository and
+  starts on Mark's word; §4's merge question stays closed until coordinated
+  upgrades dominate.
+
+  **netfetcher, carried from the 2026-09-03 ruling:** identity yes, a
+  portable WHATWG Fetch engine; consumers turnstone, mere's document lanes,
+  genet-documents and ortet, all Merely; no independent release pressure.
+  **Recommendation: stays a genet crate**; the Transport seam is what a
+  radio consumer needs and it needs no repository.
+
+  **Mer3ly:** the relation manifest records repositories, not crates, and
+  three facts are now stale or missing: no entry for `knot-editor`; the
+  Genet showcase attributes Pelt to genet; sonance and anise dispositions
+  once ruled. Updating it publishes to the company site and is P6, Mark's.
+
+  **Done-condition:** every separate repository has a stated independent
+  surface (genet, mere, knot-editor, netrender, the wgpu trio, and the
+  product, radio, protocol and numerical repositories keep theirs; sonance
+  and anise are the two folded placeholders, with a durable redirect in
+  place for sonance and one proposed for anise); the two candidate
+  extractions fail the bar and remain mere crates. P5 is met on the
+  rulings above once Mark takes them.
