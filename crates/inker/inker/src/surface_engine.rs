@@ -14,8 +14,7 @@
 //! (document registry for `nematic.*` / `genet.web`; surface registry for
 //! `scrying.web`).
 
-use std::collections::HashMap;
-use std::fmt;
+use std::{any::Any, collections::HashMap, fmt};
 
 use serde::{Deserialize, Serialize};
 
@@ -232,7 +231,6 @@ pub struct SurfaceSpawnRequest {
 
 /// Platform-specific texture handle emitted by [`SurfaceProducer::acquire_frame`].
 #[non_exhaustive]
-#[derive(Debug)]
 pub enum NativeTextureHandle {
     /// Windows: D3D12 shared texture HANDLE cast to u64.
     ///
@@ -252,6 +250,77 @@ pub enum NativeTextureHandle {
     IoSurface(u64),
     /// Linux: DMA-BUF fd (negative means absent/invalid).
     DmaBuf(i64),
+    /// An owned native frame whose concrete import boundary belongs to the
+    /// selected engine and host binding.
+    ///
+    /// This keeps RAII custody intact across Inker's type-erased boundary.
+    /// Use it when import may consume descriptors or platform retains. The
+    /// host consumes the payload through [`Self::into_owned_payload`] and
+    /// downcasts it to the engine's documented payload type before importing.
+    OwnedPayload(Box<dyn OwnedSurfaceFrame>),
+}
+
+impl fmt::Debug for NativeTextureHandle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::D3d12Shared { handle, ownership } => f
+                .debug_struct("D3d12Shared")
+                .field("handle", handle)
+                .field("ownership", ownership)
+                .finish(),
+            Self::IoSurface(handle) => f.debug_tuple("IoSurface").field(handle).finish(),
+            Self::DmaBuf(fd) => f.debug_tuple("DmaBuf").field(fd).finish(),
+            Self::OwnedPayload(payload) => f.debug_tuple("OwnedPayload").field(payload).finish(),
+        }
+    }
+}
+
+impl NativeTextureHandle {
+    /// Consume an opaque owned frame payload.
+    ///
+    /// The caller must select the payload type from the surface engine it
+    /// instantiated. A mismatch returns the still-owned payload so it can be
+    /// dropped safely or handed to the correct importer.
+    pub fn into_owned_payload<T: Any>(self) -> Result<T, Self> {
+        let Self::OwnedPayload(payload) = self else {
+            return Err(self);
+        };
+        match payload.into_any().downcast::<T>() {
+            Ok(payload) => Ok(*payload),
+            Err(payload) => Err(Self::OwnedPayload(Box::new(OwnedAnySurfaceFrame(payload)))),
+        }
+    }
+}
+
+/// An owned native-frame payload crossing Inker's wgpu-free surface boundary.
+///
+/// The payload is deliberately consumed rather than borrowed: importing an
+/// external texture can consume descriptors or platform retains. Concrete
+/// engine crates expose their payload type and importer pairing.
+pub trait OwnedSurfaceFrame: fmt::Debug + 'static {
+    /// Stable producer-owned vocabulary for diagnostics before downcasting.
+    fn payload_kind(&self) -> &'static str;
+
+    /// Move this payload to its concrete importer without losing custody.
+    fn into_any(self: Box<Self>) -> Box<dyn Any>;
+}
+
+struct OwnedAnySurfaceFrame(Box<dyn Any>);
+
+impl fmt::Debug for OwnedAnySurfaceFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("OwnedAnySurfaceFrame(..)")
+    }
+}
+
+impl OwnedSurfaceFrame for OwnedAnySurfaceFrame {
+    fn payload_kind(&self) -> &'static str {
+        "unknown"
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn Any> {
+        self.0
+    }
 }
 
 /// Who closes a native handle carried in a [`SurfaceFrame`].
@@ -1105,6 +1174,38 @@ mod tests {
     use super::*;
     use crate::routing::{SurfaceContract, SurfaceContractMode, SurfaceTargetId};
     use crate::{PageCaptureImageArtifact, PageCaptureScope, PageCaptureViewportFacts};
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct TestOwnedFrame(u32);
+
+    impl OwnedSurfaceFrame for TestOwnedFrame {
+        fn payload_kind(&self) -> &'static str {
+            "test.owned-frame"
+        }
+
+        fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+            self
+        }
+    }
+
+    #[test]
+    fn owned_payload_is_consumed_without_raw_handle_extraction() {
+        let payload = NativeTextureHandle::OwnedPayload(Box::new(TestOwnedFrame(7)));
+        assert_eq!(
+            payload.into_owned_payload::<TestOwnedFrame>().unwrap(),
+            TestOwnedFrame(7)
+        );
+    }
+
+    #[test]
+    fn owned_payload_type_mismatch_preserves_custody() {
+        let payload = NativeTextureHandle::OwnedPayload(Box::new(TestOwnedFrame(7)));
+        let payload = payload.into_owned_payload::<String>().unwrap_err();
+        assert_eq!(
+            payload.into_owned_payload::<TestOwnedFrame>().unwrap(),
+            TestOwnedFrame(7)
+        );
+    }
 
     struct StubProducer;
 

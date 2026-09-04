@@ -26,7 +26,7 @@ inker.workspace = true
 # now Scry's default: an imported texture has to come from the same wgpu major
 # as the host device, and an implicit default can silently add a second stack
 # when either side advances.
-scrying = { git = "https://github.com/merely-made/wgpu-scry.git", rev = "5a8688476091cc4c7cb8d7bd3802249cdef96766", default-features = false, features = [
+scrying = { git = "https://github.com/merely-made/wgpu-scry.git", rev = "e90c02776cb519526ea921c312c81a251f955f82", default-features = false, features = [
     "wgpu-30",
 ] }
 dpi.workspace = true

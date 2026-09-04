@@ -101,6 +101,7 @@ mod tests {
                 ),
                 supported_frames: vec![NativeFrameKind::Dx12SharedTexture],
                 reason: "test stub",
+                features: WebSurfaceCapabilities::probe(None).features,
             }
         }
         fn acquire_frame(&mut self) -> Result<WebSurfaceFrame, WebSurfaceError> {

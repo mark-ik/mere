@@ -19,9 +19,10 @@
 use inker::{
     Cookie as InkerCookie, CookieAttributeCapabilities, CookieCapabilities,
     CursorShape as InkerCursorShape, DocumentCapabilities, DragDropCapabilities,
-    FocusReason as InkerFocusReason, FrameHandleOwnership, KeyboardEvent as InkerKeyboardEvent,
+    FocusReason as InkerFocusReason, KeyboardEvent as InkerKeyboardEvent,
     KeyboardModifiers as InkerKeyboardModifiers, MouseButton as InkerMouseButton,
     MouseEvent as InkerMouseEvent, MouseEventKind as InkerMouseEventKind, NativeTextureHandle,
+    OwnedSurfaceFrame,
     NavigationEvent as InkerNavEvent, PointerButtons, PointerEvent as InkerPointerEvent,
     PointerInputCapabilities, PointerPhase as InkerPointerPhase, PointerType as InkerPointerType,
     SameSite as InkerSameSite, ScriptCapabilities, SurfaceError, SurfaceFrame, SurfaceSettings,
@@ -57,9 +58,74 @@ pub fn map_error(err: WebSurfaceError) -> SurfaceError {
 
 // ── Frames ────────────────────────────────────────────────────────────
 
-/// Map scrying's frame enum to inker's. Only native-texture variants produce
-/// a `Some(SurfaceFrame)`; CPU snapshots and overlay-only frames return
-/// `None` (the host has no inker-shaped path for them in v1).
+/// An owned Scry native frame held intact until its selected host importer
+/// consumes it. Use [`into_scrying_native_frame`] to recover the frame from an
+/// Inker [`SurfaceFrame`] before calling Scry's `TextureImporter`.
+pub struct ScryingNativeFramePayload {
+    frame: ScryingNativeFrame,
+}
+
+impl std::fmt::Debug for ScryingNativeFramePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScryingNativeFramePayload")
+            .field("kind", &self.frame.kind())
+            .finish()
+    }
+}
+
+impl ScryingNativeFramePayload {
+    fn new(frame: ScryingNativeFrame) -> Self {
+        Self { frame }
+    }
+
+    /// Consume this payload, preserving Scry/Graft descriptor and retain
+    /// custody for its native importer.
+    pub fn into_native_frame(self) -> ScryingNativeFrame {
+        self.frame
+    }
+}
+
+impl OwnedSurfaceFrame for ScryingNativeFramePayload {
+    fn payload_kind(&self) -> &'static str {
+        "scrying.native-frame"
+    }
+
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+/// Recover Scry's owned native frame from a surface frame.
+///
+/// A mismatched payload leaves the complete `SurfaceFrame` intact for the
+/// caller, including any other engine's ownership obligation.
+pub fn into_scrying_native_frame(
+    frame: SurfaceFrame,
+) -> Result<ScryingNativeFrame, SurfaceFrame> {
+    let SurfaceFrame {
+        texture,
+        sync,
+        width,
+        height,
+        format,
+        resource_epoch,
+    } = frame;
+    match texture.into_owned_payload::<ScryingNativeFramePayload>() {
+        Ok(payload) => Ok(payload.into_native_frame()),
+        Err(texture) => Err(SurfaceFrame {
+            texture,
+            sync,
+            width,
+            height,
+            format,
+            resource_epoch,
+        }),
+    }
+}
+
+/// Map Scry's frame enum to Inker's. Native frames retain their complete owned
+/// payload; CPU snapshots and overlays remain unsupported by Inker's v1 frame
+/// transport and return `None`.
 pub fn map_frame(frame: WebSurfaceFrame, fence_handle: Option<u64>) -> Option<SurfaceFrame> {
     match frame {
         WebSurfaceFrame::Native(native) => map_native_frame(native, fence_handle),
@@ -73,61 +139,46 @@ pub fn map_frame(frame: WebSurfaceFrame, fence_handle: Option<u64>) -> Option<Su
 }
 
 fn map_native_frame(frame: ScryingNativeFrame, fence_handle: Option<u64>) -> Option<SurfaceFrame> {
-    match frame {
+    let (width, height, format, resource_epoch, sync) = match &frame {
         ScryingNativeFrame::Dx12SharedTexture(tex) => {
-            #[cfg(target_os = "windows")]
-            let handle = tex.handle as u64;
-            #[cfg(not(target_os = "windows"))]
-            let handle = 0_u64;
             let sync = match (tex.producer_sync, tex.fence_value, fence_handle) {
                 (SyncMechanism::ExplicitFence, value, Some(handle)) if value > 0 => {
                     SurfaceSyncHandle::D3d12Fence { handle, value }
                 },
                 _ => SurfaceSyncHandle::None,
             };
-            Some(SurfaceFrame {
-                texture: NativeTextureHandle::D3d12Shared {
-                    handle,
-                    // WebView2CompositionFrame transfers the one NT handle
-                    // emitted for each resource epoch to its consumer. Later
-                    // frames reuse the imported resource and carry handle 0.
-                    ownership: FrameHandleOwnership::Transferred,
-                },
-                sync,
-                width: tex.size.width,
-                height: tex.size.height,
-                format: map_texture_format(tex.format),
-                resource_epoch: tex.generation,
-            })
+            (tex.size.width, tex.size.height, tex.format, tex.generation, sync)
         },
         ScryingNativeFrame::MetalTextureRef(tex) => {
-            #[cfg(target_os = "macos")]
-            let handle = tex.raw_metal_texture as u64;
-            #[cfg(not(target_os = "macos"))]
-            let handle = 0_u64;
-            Some(SurfaceFrame {
-                texture: NativeTextureHandle::IoSurface(handle),
-                sync: SurfaceSyncHandle::None,
-                width: tex.size.width,
-                height: tex.size.height,
-                format: map_texture_format(tex.format),
-                resource_epoch: tex.generation,
-            })
+            (
+                tex.size.width,
+                tex.size.height,
+                tex.format,
+                tex.generation,
+                SurfaceSyncHandle::None,
+            )
         },
         ScryingNativeFrame::DmaBufImage(img) => {
-            let primary_fd = img.planes.first().map(|p| p.fd as i64).unwrap_or(-1);
-            Some(SurfaceFrame {
-                texture: NativeTextureHandle::DmaBuf(primary_fd),
-                sync: SurfaceSyncHandle::None,
-                width: img.size.width,
-                height: img.size.height,
-                format: map_texture_format(img.format),
-                resource_epoch: img.generation,
-            })
+            (
+                img.size.width,
+                img.size.height,
+                img.format,
+                img.generation,
+                SurfaceSyncHandle::None,
+            )
         },
-        // `NativeFrame` is `#[non_exhaustive]`; future variants drop until mapped.
-        _ => None,
-    }
+        // `NativeFrame` is `#[non_exhaustive]`; unknown future frames need an
+        // explicit metadata mapping before Inker can describe them.
+        _ => return None,
+    };
+    Some(SurfaceFrame {
+        texture: NativeTextureHandle::OwnedPayload(Box::new(ScryingNativeFramePayload::new(frame))),
+        sync,
+        width,
+        height,
+        format: map_texture_format(format),
+        resource_epoch,
+    })
 }
 
 fn map_texture_format(format: wgpu::TextureFormat) -> SurfaceTextureFormat {
@@ -417,6 +468,9 @@ pub fn map_capabilities(caps: ScryingCapabilities) -> InkerWebSurfaceCapabilitie
 fn capability_status(status: ScryingCapabilityStatus) -> WebFeatureStatus {
     match status {
         ScryingCapabilityStatus::Supported => WebFeatureStatus::Supported,
+        ScryingCapabilityStatus::Partial(detail) => WebFeatureStatus::Partial {
+            detail: detail.into(),
+        },
         ScryingCapabilityStatus::Unsupported(reason) => WebFeatureStatus::Unsupported {
             reason: format!("{reason:?}"),
         },
@@ -609,8 +663,6 @@ pub fn wrap_web_message(payload: String) -> WebMessage {
 mod tests {
     use super::*;
     use inker::{CapabilityStatus, PhysicalPosition, PointerButtons};
-    #[cfg(target_os = "windows")]
-    use scrying::native_frame::{Dx12SharedTexture, NativeFrame};
 
     fn touch_pointer(pointer_id: i32, phase: InkerPointerPhase) -> InkerPointerEvent {
         InkerPointerEvent {
@@ -632,38 +684,6 @@ mod tests {
             azimuth_angle: None,
             modifiers: InkerKeyboardModifiers::default(),
         }
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn dx12_epoch_handle_is_transferred_and_reuse_may_omit_it() {
-        let frame = |handle| {
-            WebSurfaceFrame::Native(NativeFrame::Dx12SharedTexture(Dx12SharedTexture {
-                size: dpi::PhysicalSize::new(320, 200),
-                format: wgpu::TextureFormat::Bgra8Unorm,
-                generation: 7,
-                producer_sync: SyncMechanism::ExplicitFence,
-                fence_value: 11,
-                handle,
-            }))
-        };
-        let first = map_frame(frame(0x1234_usize as *mut _), Some(0x5678)).unwrap();
-        let reused = map_frame(frame(std::ptr::null_mut()), Some(0x5678)).unwrap();
-        assert!(matches!(
-            first.texture,
-            NativeTextureHandle::D3d12Shared {
-                handle: 0x1234,
-                ownership: FrameHandleOwnership::Transferred,
-            }
-        ));
-        assert!(matches!(
-            reused.texture,
-            NativeTextureHandle::D3d12Shared {
-                handle: 0,
-                ownership: FrameHandleOwnership::Transferred,
-            }
-        ));
-        assert_eq!(first.resource_epoch, reused.resource_epoch);
     }
 
     #[test]
@@ -781,6 +801,7 @@ mod tests {
             ),
             supported_frames: Vec::new(),
             reason: "test stub",
+            features: ScryingCapabilities::probe(None).features,
         })
         .document;
         assert!(matches!(
