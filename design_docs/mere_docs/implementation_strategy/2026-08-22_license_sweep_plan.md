@@ -224,6 +224,14 @@ P2.
 - genet root README (done in P2), mere README (P1);
 - the posture brief's §5 table marked per phase as each lands;
 - this plan archived under `archive_docs/` when P1-P6 are done.
+- **Added 2026-09-03, from the platform boundary moves:** seven published
+  crates arrived in mere from genet under their own published grant (inker,
+  document-canvas, nematic, errand, illume, tinct, verso-tile; `tinct` and
+  `verso-tile` still carry `LICENSE-MIT`/`LICENSE-APACHE`). Their manifests
+  already read MPL-2.0 from genet's sweep; the published versions keep the
+  old grant permanently and the new one ships at each crate's next functional
+  bump (the brief's no-republish rule). mere's `LICENSES.md` records them.
+  Open: whether the two notice-file pairs are removed at that bump.
 
   **2026-09-03, superseding ruling.** Mark ruled the promoted-library clause
   retired outright rather than reworded to the fork/vendor criterion this
