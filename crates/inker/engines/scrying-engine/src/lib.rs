@@ -34,6 +34,7 @@ pub mod translation;
 
 pub use engine::{ProducerFactory, SCRYING_WEB_ENGINE_ID, ScryingTileEngine};
 pub use producer::ScryingProducer;
-/// Re-export the exact Scrying revision and wgpu feature row this adapter uses,
+pub use translation::{ScryingNativeFramePayload, into_scrying_native_frame};
+/// Re-export the exact Scrying release and wgpu feature row this adapter uses,
 /// so host factories cannot accidentally construct a producer from another row.
 pub use scrying;

@@ -98,7 +98,7 @@ pub use surface_engine::{
     EngineProfileBinding, FocusReason, FrameHandleOwnership, HttpAuthenticationAnswer,
     HttpAuthenticationChallenge, HttpCredentials, HttpProtectionSpace, KeyboardEvent,
     KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind, NativeSurfaceHost,
-    NativeTextureHandle, NavigationEvent, PermissionAnswer, PermissionDescriptor,
+    NativeTextureHandle, NavigationEvent, OwnedSurfaceFrame, PermissionAnswer, PermissionDescriptor,
     PermissionRequest, PermissionState, PhysicalPosition, PointerButtons, PointerEvent,
     PointerInputCapabilities, PointerPhase, PointerType, SameSite, ScriptCapabilities,
     SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame, SurfaceProducer,
