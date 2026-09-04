@@ -667,6 +667,7 @@ impl Simulation {
                 .as_ref()
                 .map(|f| f.params().particle_radius)
                 .unwrap_or(0.0),
+            energy: self.kinetic_energy(),
             generation,
         }
     }

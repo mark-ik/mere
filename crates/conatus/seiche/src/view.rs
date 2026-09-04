@@ -73,6 +73,10 @@ pub struct LayoutSnapshot {
     /// off-thread; `fluid_radius` is the uniform paint radius. Empty when no fluid is loaded. (P4c.)
     pub fluid: Vec<Point2D<f32>>,
     pub fluid_radius: f32,
+    /// The node bodies' kinetic energy at this layout, so an offloaded host
+    /// reads the same figure an inline one does. (Physics catalog — the
+    /// receipts' energy floor; 2026-09-04.)
+    pub energy: f32,
     /// The generation this layout was produced at (monotonic on the actor).
     pub generation: u64,
 }

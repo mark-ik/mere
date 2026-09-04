@@ -480,8 +480,7 @@ Ruled 2026-09-04: the physics backend is a **public stack type in seiche**
 with the actor half behind a default feature; and the remote board moved
 onto it in the same pass. What this does *not* yet do: nothing calls
 `PhysicsBoard::offload`, so a native board still ticks inline until a host
-asks for the thread; and an offloaded board reads zero energy, because the
-actor's snapshots do not carry it.
+asks for the thread. (The energy gap closed the same day, below.)
 
 Taken in P1, for Mark to confirm or overturn: the kind sources v1 offers
 are **by site** (URL host), **by cluster** (the Louvain partition) and
@@ -583,3 +582,20 @@ inference carried.
   feature configurations; canvas 194/194 (the clock flake passed this
   run); `physics_remote_board` re-run against the WebRTC fixture,
   `RESULT ok`, 37 steps, 852 frames, three captures.
+- 2026-09-04, the three optimizations Mark asked for after the extraction:
+  (1) `LayoutSnapshot` carries the bodies' kinetic energy, the actor keeps
+  the last folded figure, and `Physics::kinetic_energy` answers the same
+  question on both backends — the receipts' energy floor works offloaded
+  now. (2) The web semantics mirror recomputed `layout_stats` — a pairwise
+  pass over every node — every frame; it now recomputes only while the
+  canvas reports motion, on the frame after it stops (the final tick moves
+  bodies and reports rest in the same call), and on any chrome change.
+  (3) The standalone `graphshell-web` manifest optimizes the dynamics
+  crates alone in dev builds (rapier2d, parry2d, nalgebra, simba, seiche
+  at opt-level 3), so settle frames run at speed without slowing an
+  incremental host build; the override reaches the wasm build only
+  because that manifest is its own workspace. One rebuild of 7m44s, then
+  Springs, Orbit, Stress, Still, Profiles and the remote board all
+  `RESULT ok`; seiche 77/77 in both feature configurations, canvas
+  194/194. Not done: wiring `PhysicsBoard::offload` — no native host shows
+  the remote board yet, so there is nothing to call it.

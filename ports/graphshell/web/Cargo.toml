@@ -111,6 +111,23 @@ web-sys = { version = "0.3", features = [
 # to the same rev so no crates.io copy can enter the graph beside the git one.
 # ipc-channel is Genet's in-process backend; vello is the maintained wgpu-30
 # renderer fork. These are remote revision/tag patches, never local paths.
+# The receipts settle physics for hundreds of frames, and the dynamics stack
+# at the dev profile's opt-level 0 was the slow part of every run. Optimize
+# just those crates in dev builds — never the crates edited here, so an
+# incremental host build stays fast. This manifest is its own workspace, so
+# the override reaches the wasm build alone. (Physics catalog — the P2 profile
+# item, 2026-09-04.)
+[profile.dev.package.rapier2d]
+opt-level = 3
+[profile.dev.package.parry2d]
+opt-level = 3
+[profile.dev.package.nalgebra]
+opt-level = 3
+[profile.dev.package.simba]
+opt-level = 3
+[profile.dev.package.seiche]
+opt-level = 3
+
 [patch.crates-io]
 parley = { git = "https://github.com/merely-made/genet.git", rev = "115d348deddc344d949754e63beaece47cf49f34" }
 taffy = { package = "genet-taffy", version = "=0.14.0", git = "https://github.com/merely-made/genet.git", rev = "115d348deddc344d949754e63beaece47cf49f34" }

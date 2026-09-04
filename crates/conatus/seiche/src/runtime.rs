@@ -142,6 +142,8 @@ pub struct ActorPhysics {
     handle: ActorHandle<PhysicsCommand>,
     updates: Receiver<PhysicsUpdate>,
     settling: bool,
+    /// The kinetic energy the last folded snapshot carried.
+    energy: f32,
 }
 
 /// The physics backend a host talks to. Inline by default (tests +
@@ -184,6 +186,7 @@ impl Physics {
             handle,
             updates,
             settling: initial_settle > 0,
+            energy: 0.0,
         });
     }
 
@@ -273,14 +276,14 @@ impl Physics {
         }
     }
 
-    /// The node bodies' kinetic energy — inline backend only; the actor's
-    /// snapshots do not carry it yet, so it reads zero offloaded. (Physics
-    /// catalog — the receipts' energy floor.)
+    /// The node bodies' kinetic energy: read live inline, and from the last
+    /// folded snapshot offloaded, so both backends answer the same question.
+    /// (Physics catalog — the receipts' energy floor.)
     pub fn kinetic_energy(&self) -> f32 {
         match self {
             Physics::Inline(p) => p.sim.kinetic_energy(),
             #[cfg(feature = "actor")]
-            Physics::Actor(_) => 0.0,
+            Physics::Actor(p) => p.energy,
         }
     }
 
@@ -565,6 +568,7 @@ impl Physics {
                 if let Some(update) = latest {
                     view.apply_snapshot(&update.snapshot);
                     p.settling = update.settling;
+                    p.energy = update.snapshot.energy;
                 }
             }
         }

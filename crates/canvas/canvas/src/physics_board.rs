@@ -109,7 +109,6 @@ impl PhysicsBoard {
 
     /// Move the board's simulation onto an actor thread (native hosts; a no-op
     /// once offloaded). `wake` pokes the host's event loop when a layout lands.
-    /// Energy reads zero offloaded — the actor's snapshots do not carry it.
     /// (Unconditional: the canvas takes seiche's default features, so the
     /// actor backend is always present here, as it is for the canvas's own
     /// `offload_physics`.)
@@ -205,8 +204,8 @@ impl PhysicsBoard {
         self.view.position_of(*key).map(|p| (p.x, p.y))
     }
 
-    /// The bodies' kinetic energy (inline backend only — an offloaded board
-    /// reads zero, because the actor's snapshots do not carry it).
+    /// The bodies' kinetic energy: live inline, the last snapshot's figure
+    /// offloaded.
     pub fn energy(&self) -> f32 {
         self.physics.kinetic_energy()
     }

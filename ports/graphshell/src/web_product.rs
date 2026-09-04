@@ -686,7 +686,11 @@ pub(super) fn update_product_semantics(
         element.set_text_content(Some(&host.product_status));
     }
     ensure_physics_controls(host)?;
-    let stats = host.canvas.layout_stats();
+    if host.layout_stats_stale {
+        host.layout_stats = host.canvas.layout_stats();
+        host.layout_stats_stale = false;
+    }
+    let stats = host.layout_stats;
     let body = root()?;
     for (name, value) in [
         (

@@ -390,7 +390,8 @@ impl PhysicsDepthSource {
 /// on: the laws' signatures. (Physics catalog — P2.)
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LayoutStats {
-    /// The node bodies' kinetic energy (inline backend; zero offloaded).
+    /// The node bodies' kinetic energy (live inline; the last snapshot's
+    /// figure offloaded).
     pub energy: f32,
     /// Root-mean-square distance of the nodes from their centroid.
     pub spread: f32,

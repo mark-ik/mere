@@ -289,6 +289,17 @@ struct BrowserHost {
     /// Synced whenever the acknowledged revision moves. (Physics catalog — P3.)
     remote_board: PhysicsBoard,
     remote_board_revision: Option<u64>,
+    /// Whether the semantics mirror must recompute the layout statistics — a
+    /// pairwise pass over every node — before it publishes them. Set while
+    /// the local canvas reports motion, on the frame after it stops (the
+    /// final tick moves bodies and reports rest in the same call), and on
+    /// any chrome change; cleared when the mirror recomputes. Every frame
+    /// paid for it before.
+    layout_stats_stale: bool,
+    /// The canvas's motion answer from the previous local frame.
+    layout_moved: bool,
+    /// The last layout statistics the mirror published.
+    layout_stats: mere::canvas::LayoutStats,
     remote_session: Option<ProjectionSession>,
     remote_status: String,
     remote_joining: bool,
@@ -506,6 +517,9 @@ impl BrowserHost {
         self.resize_if_needed();
         self.advance_arrangement_transition(host_ms);
         if self.chrome_dirty {
+            // A chrome change follows every host command (a law, a profile, an
+            // arrangement), which may move bodies without a settle.
+            self.layout_stats_stale = true;
             self.chrome_scene = build_chrome_scene(
                 self.chrome_model(),
                 self.width,
@@ -515,7 +529,12 @@ impl BrowserHost {
             self.chrome_dirty = false;
         }
         let content = match self.active {
-            ActiveSession::Local => self.canvas.frame(self.width, self.height).0,
+            ActiveSession::Local => {
+                let (scene, moving) = self.canvas.frame(self.width, self.height);
+                self.layout_stats_stale |= moving || self.layout_moved;
+                self.layout_moved = moving;
+                scene
+            }
             ActiveSession::Remote => {
                 // The board's physics runs only while the board is shown: sync
                 // to the acknowledged scene, tick, then draw from the bodies.
@@ -2039,6 +2058,9 @@ async fn run(root_element: Element) -> Result<(), String> {
         remote: RemoteLink::Fixture(remote),
         remote_board: PhysicsBoard::new(),
         remote_board_revision: None,
+        layout_stats_stale: true,
+        layout_moved: false,
+        layout_stats: mere::canvas::LayoutStats::default(),
         remote_session: Some(remote_session),
         remote_status: "fixture".to_string(),
         remote_joining: false,
