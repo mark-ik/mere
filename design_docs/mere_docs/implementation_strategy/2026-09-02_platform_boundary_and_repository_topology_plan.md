@@ -227,7 +227,7 @@ requests require a separate explicit instruction from Mark.
 
 This is protected evidence, not disposable CI residue.
 
-The `mark-ik/hybrid-scene-append` branch at `c73ba2c3` adds
+The original `mark-ik/hybrid-scene-append` branch at `c73ba2c3` adds
 `Scene::append_scene(other, Option<(u16, u16)>)` to `vello_hybrid`. The 569-line
 prototype covers same-viewport composition and tile-granular translation. Its
 tests compare the complete retained recording byte for byte, including paints,
@@ -240,9 +240,13 @@ sentinel strips need special handling, canonical node batching matters,
 by-reference append needs a cloneable/shared encoded paint representation, and
 translated filter layers remain deliberately rejected.
 
-The branch proves feasibility. It does not yet justify a shipping dependency:
-Netrender has no current `vello_hybrid` consumer, and its fragment-retention
-seam can permit backends to retain different native forms.
+Mark activated the consumer experiment on 2026-09-03. The refreshed
+`mark-ik/all-vellos` branch at
+`ca3f40ea182216883cd543c7b9deae991268917c` composes the append prototype with
+the wgpu-30 upgrade on current upstream. Netrender pins that immutable revision
+behind opt-in `vello-cpu`, `vello-hybrid`, and `vello-all` features. Classic
+remains the shipping path; CPU and Hybrid share one sparse lowerer from the
+same authoritative Netrender `Scene`.
 
 ### Vello gates
 
@@ -280,16 +284,26 @@ questions are concise enough for upstream review.
 **Done when:** upstream has a stable link to the evidence and records a
 direction. This phase is dormant until Mark authorizes the external action.
 
-#### V3. Admit a consumer only on proof
+#### V3. Admit consumers incrementally on proof
 
-- Build Netrender's backend/fragment-retention seam independently of a standing
-  fork.
-- Add `vello_hybrid` only when a headed WebGL2 or downlevel target needs it.
-- Compare the existing rasterizer-independent corpus and fragment invalidation
-  behavior across both backends.
+- Keep the Vello choice at the Netrender backend boundary. Cambium and product
+  consumers continue to emit one Netrender `Scene`.
+- Admit CPU and Hybrid operations through an explicit capability table and
+  typed refusals; never silently drop an unsupported scene operation.
+- Prove CPU pixels, Hybrid rendering on Netrender's shared wgpu device, and
+  Hybrid native scene append before connecting product selection.
+- Then wire images, text, registered fragments, and the rasterizer-independent
+  corpus. Measure fragment invalidation separately for each backend.
 
-**Done when:** the second backend serves a named target, preserves the corpus,
-and has measured fragment-level invalidation and composition receipts.
+**Done when:** all three are selectable for a named target, preserve the
+admitted corpus, and carry measured fragment-level invalidation and
+composition receipts appropriate to their native form.
+
+**In progress 2026-09-03:** the three-backend vocabulary, immutable dependency
+pin, shared CPU/Hybrid lowerer, typed refusals, CPU pixel receipt, Hybrid append
+receipt, and Hybrid GPU readback on Netrender's shared wgpu device exist.
+Product selection, images, text, filters, registered-fragment wiring, and
+corpus parity remain open.
 
 #### V4. Retire or maintain deliberately
 
@@ -889,6 +903,18 @@ when `repository` fields update; git-revision pins repoint; git-branch pins
   nine commits) remain open and touch none of the four mixed crates.
 - V0 of the Vello gates was already met by the Netrender note.
 
+### 2026-09-03 — all-three Vello experiment activated
+
+- Mark selected Classic, Hybrid, and CPU as three realizations of one
+  Netrender scene contract, rather than replacement architectures.
+- The refreshed fork branch combines current upstream, wgpu 30, and the Hybrid
+  retained-append prototype. Netrender consumes it only behind opt-in features
+  at an immutable revision.
+- The first adapter slice deliberately covers geometry, gradients, and layers,
+  with CPU pixel and Hybrid GPU readback receipts. Images, text, filters, and
+  fragments return typed admission errors until their resource and retention
+  contracts are wired.
+
 ### 2026-09-03 — P2 assessment: the Cambium move cannot go first
 
 Written before any file moves, from the P0 census and the tree as it stands
@@ -976,6 +1002,18 @@ the receiving head is public and green, and mere's own five consumers of
 matter of picking the hour; the Workbench W4 receipts are on genet main.
 
 ## Progress
+
+### 2026-09-03 — Vello experiment
+
+- Refreshed and pushed `mark-ik/all-vellos` at immutable commit
+  `ca3f40ea182216883cd543c7b9deae991268917c`, combining current upstream,
+  wgpu 30, and Hybrid retained append.
+- Added Netrender's opt-in all-three vocabulary and its shared CPU/Hybrid
+  geometry, gradient, and layer lowerer. Focused CPU pixel, common-subset,
+  explicit-refusal, and Hybrid append tests pass.
+- Classic remains the shipping path. Resources, fragment registry wiring,
+  corpus parity, and product selection are the remaining V3 gates. Upstream
+  contact remains unstarted.
 
 ### 2026-09-02
 
