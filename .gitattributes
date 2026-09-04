@@ -53,3 +53,8 @@ assets/** binary
 # bytes stable across Windows and Unix checkouts.
 ports/graphshell/docs/receipts/*.html text eol=lf
 ports/distillery/tests/fixtures/** text eol=lf
+
+# The Cambium component-catalog receipt test compares the live render against these
+# captures byte for byte; autocrlf must not rewrite them on checkout (2026-09-03).
+design_docs/cambium_docs/testing/receipts/*.html text eol=lf
+crates/cambium/cambium/examples/component_catalog.css text eol=lf
