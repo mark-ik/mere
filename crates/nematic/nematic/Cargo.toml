@@ -8,8 +8,10 @@ authors = ["Mark AB (markik)"]
 # Not workspace: this crate is ours, not Servo-derived, so it keeps the founding
 # license rather than inheriting genet's MPL-2.0.
 license = "MPL-2.0"
-# Not workspace: genet's workspace repository still points at upstream servo.
-repository = "https://github.com/merely-made/genet"
+# Landed in mere 2026-09-03 (platform boundary plan, P3). Inherited now:
+# mere's workspace repository is this crate's home, where genet's pointed
+# at upstream servo, which is why these lines were spelled out before.
+repository.workspace = true
 description = "Portable smolweb rendering engine — Gemini, Gopher, Markdown, feeds, and the knot note format, lowered to the inker document model."
 documentation = "https://docs.rs/nematic"
 readme = "README.md"
@@ -27,7 +29,9 @@ html-fragment = ["dep:genet-static-dom"]
 
 [dependencies]
 inker = { workspace = true }
-genet-static-dom = { version = "0.1.0", path = "../genet-static-dom", optional = true }
+# A relative path into genet's `components/` before this crate landed in mere
+# on 2026-09-03; now the root workspace's genet.git pin, like the rest.
+genet-static-dom = { workspace = true, optional = true }
 # Smolweb parsers: the portable per-format ASTs the engines below lower into
 # `DocumentBlock`. The parse layer (gemtext/gopher/nex/feed) lives in errand
 # (transport + parse, one smolweb crate — a workspace sibling since the

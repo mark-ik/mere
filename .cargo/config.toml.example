@@ -44,6 +44,13 @@
 # (genet table) and cambium, sprigging (crates-io table). The four crates the
 # same plan landed on 2026-09-03 under P3 — pelt, tabard, knot-editor-host and
 # mere-document-lanes — are under the same prohibition.
+# 2026-09-03 (the same plan, P3): the engine-management layer landed too, so
+# ten more names are GONE from these tables under the identical rule and may
+# never return — inker, document-canvas, nematic, illume, errand, verso-tile,
+# scrying-engine, graft-engine, weld-engine (genet table) and tinct (crates-io
+# table; `tincture` is that same package under mere's alias, so it is covered
+# by the one name). Their genet path targets no longer exist either: the ten
+# left genet at 115d348dedd.
 
 [patch."https://github.com/merely-made/genet.git"]
 "engine-observables-api" = { path = "../genet/components/shared/engine-observables-api" }
@@ -58,14 +65,7 @@ fleece = { path = "../genet/components/fleece" }
 # cargo fails with "failed to find <pkg> in path source" — the missing-entry
 # trap, not a network problem.
 "genet-render-host" = { path = "../genet/components/genet-render-host" }
-"verso-tile" = { path = "../genet/components/verso-tile" }
-# The inker family, adopted into genet 2026-07-10. The family patches
-# together or not at all: knot-editor-host was the one member left off, so
-# it kept resolving off the branch tip and drifted the lock the moment genet
-# published 0.1.1, while its siblings tracked the working copy.
-inker = { path = "../genet/components/inker" }
-nematic = { path = "../genet/components/nematic" }
-# knot-editor-host is NOT here any more: it landed in mere 2026-09-03 as the
+# The inker family is NOT here any more, and neither is knot-editor-host: it landed in mere 2026-09-03 as the
 # workspace member ports/knot/editor-host. Patching a git source at a path that
 # is also a workspace member is a hard lockfile collision, so the four crates
 # the platform boundary plan landed that day — pelt, tabard, knot-editor-host
@@ -76,7 +76,8 @@ nematic = { path = "../genet/components/nematic" }
 # that redirects a git source must carry EVERY package a manifest names from
 # it, or the local loop resolves half the family from the git checkout and the
 # other half from the working copy. workbench and scrying-engine were already
-# named by mere's root manifest and were missing for the same reason.
+# named by mere's root manifest and were missing for the same reason. (Both
+# have since become members and left this table.)
 "genet-documents" = { path = "../genet/components/genet-documents" }
 "genet-document-resources" = { path = "../genet/components/genet-document-resources" }
 "genet-render" = { path = "../genet/components/genet-render" }
@@ -91,15 +92,8 @@ nematic = { path = "../genet/components/nematic" }
 "servo-paint" = { path = "../genet/components/paint" }
 "servo-webgl-wgpu" = { path = "../genet/components/webgl-wgpu" }
 livery = { path = "../genet/components/livery" }
-"scrying-engine" = { path = "../genet/components/inker/engines/scrying-engine" }
 # Named for the same missing-entry reason as genet-render-host.
 "genet-probe" = { path = "../genet/components/genet-probe" }
-# Moved here from [patch.crates-io] 2026-08-24: mere git-deps illume from
-# genet.git, so the crates-io entry never bound and cargo reported it as an
-# unused patch while the build silently used the git checkout.
-illume = { path = "../genet/components/illume" }
-"document-canvas" = { path = "../genet/components/inker/document-canvas" }
-errand = { path = "../genet/components/errand" }
 # Adopted into genet 2026-07-23 (repo consolidation).
 netfetcher = { path = "../genet/components/netfetcher" }
 
@@ -124,7 +118,6 @@ p2panda-store = { path = "../../crates/p2panda/p2panda-store" }
 p2panda-stream = { path = "../../crates/p2panda/p2panda-stream" }
 p2panda-sync = { path = "../../crates/p2panda/p2panda-sync" }
 layout-dom-api = { path = "../genet/components/shared/layout-dom" }
-tinct = { path = "../genet/components/tinct" }
 
 # Every entry below is live: signalman consumes this whole family from the
 # neighbouring Retinue checkout. They read as unused in any ordinary workspace

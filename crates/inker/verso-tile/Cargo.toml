@@ -6,7 +6,10 @@ authors = ["Mark AB (markik)"]
 # Not workspace: this crate is ours, not Servo-derived, so it keeps the founding
 # license rather than inheriting genet's MPL-2.0.
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+# Landed in mere 2026-09-03 (platform boundary plan, P3). Inherited now:
+# mere's workspace repository is this crate's home, where genet's pointed
+# at upstream servo, which is why these lines were spelled out before.
+repository.workspace = true
 publish = true
 description = "The engine-flip tile: re-present the same page through a different engine with the user's place and session carried across. Portable view-state + donor/back/receiver contracts (api), the one-hop degrade-never-block orchestrator (flip), the black-box system-WebView receiver (scry), and, behind the genet-donor feature, the glass-box genet donor. Consolidated 2026-07-09 from the mere workspace's verso / verso-api / verso-scry / verso-genet per the inker-genet adoption plan; the flip is the dynamic counterpart of inker's per-address multiplexer."
 readme = "README.md"
@@ -26,8 +29,9 @@ default = []
 genet-donor = ["dep:genet-scripted-dom", "dep:layout-dom-api"]
 
 [dependencies]
-# Version reqs so the crate can publish: locally the paths satisfy them; on
-# the registry the name-claim stubs do (the genet-donor feature needs the
-# real components — the genet git dep — until the view/DOM stack publishes).
-genet-scripted-dom = { version = ">=0.0.1", path = "../genet-scripted-dom", optional = true }
-layout-dom-api = { version = ">=0.0.1", path = "../shared/layout-dom", optional = true }
+# In genet these were relative paths into `components/`. Landing in mere on
+# 2026-09-03 (platform boundary plan, P3) they become the root workspace's
+# genet.git pins, declared once there like the rest of the family, so a genet
+# repoint stays a one-file edit. The version reqs live on those declarations.
+genet-scripted-dom = { workspace = true, optional = true }
+layout-dom-api = { workspace = true, optional = true }

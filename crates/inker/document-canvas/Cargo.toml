@@ -6,8 +6,10 @@ authors = ["Mark AB (markik)"]
 # Not workspace: this crate is ours, not Servo-derived, so it keeps the founding
 # license rather than inheriting genet's MPL-2.0.
 license = "MPL-2.0"
-# Not workspace: genet's workspace repository still points at upstream servo.
-repository = "https://github.com/merely-made/genet"
+# Landed in mere 2026-09-03 (platform boundary plan, P3). Inherited now:
+# mere's workspace repository is this crate's home, where genet's pointed
+# at upstream servo, which is why these lines were spelled out before.
+repository.workspace = true
 description = "Document-view canvas — parley-driven layout for inker::EngineDocument; emits portable render packets parallel to graph-canvas."
 documentation = "https://docs.rs/document-canvas"
 readme = "README.md"

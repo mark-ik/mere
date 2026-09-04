@@ -1,6 +1,9 @@
 [package]
 name = "graft-engine"
-version.workspace = true
+# Genet's workspace version, inlined when this crate landed in mere on
+# 2026-09-03: mere's workspace version is 0.0.1 and the move is not a
+# version decision. Unpublished either way.
+version = "0.2.0"
 edition.workspace = true
 authors = ["Mark AB (markik)"]
 # Not workspace: this crate is ours, not Servo-derived, so it keeps the founding

@@ -3,7 +3,10 @@ name = "illume"
 version = "0.0.2"
 edition = "2024"
 license = "MPL-2.0"
-repository = "https://github.com/merely-made/genet"
+# Landed in mere 2026-09-03 (platform boundary plan, P3). Inherited now:
+# mere's workspace repository is this crate's home, where genet's pointed
+# at upstream servo, which is why these lines were spelled out before.
+repository.workspace = true
 description = "Portable, pure-Rust, wasm-safe text lexer and syntax highlighter: djot structure plus a pluggable inner-language injection registry over a logos pack, and a prose-entity pass (URLs, mentions, tags). Host- and toolkit-agnostic; emits (range, kind) spans, no UI dependency."
 documentation = "https://docs.rs/illume"
 keywords = ["djot", "lexer", "syntax-highlighting", "logos"]
