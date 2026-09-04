@@ -288,9 +288,10 @@ away from the first (positions and a capture pair) and under Orbit the
 cards keep moving.
 
 *Landed 2026-09-03.* The remote board never touched the canvas: it was
-drawn each frame straight from the score, and the canvas offers no
-incremental add, no slot update without a re-seed, and no bare physics
-step, so a second canvas would have fought its own seams. The seam is a
+drawn each frame straight from the score, and the canvas grows only
+through its own graph (`visit`, `add_node_at`), offers no slot update
+without a re-seed, and no bare physics step, so a second canvas would
+have fought its own seams. The seam is a
 new stack piece instead: `mere::canvas::PhysicsBoard` — a seiche
 simulation with one body per scene item (keyed by **instance**, because
 the fixture's appended cards all share one source id), the score's
@@ -523,9 +524,12 @@ inference carried.
   every listed body and records the anchor slots — there is no way to move
   a slot without teleporting the body — and `reconcile_derived`,
   `settle_physics` and `SETTLE_TICKS` are crate-private, so a host cannot
-  add one node to a live canvas without `set_graph`'s full reset. The
-  board is its own stack piece for those reasons; the canvas keeps its
-  shape.
+  add an item that is not a graph node, nor ask for a settle. (Corrected
+  2026-09-03: a graph node *is* added incrementally, through `visit` /
+  `add_node_at` → `mint_node_at`: reconcile, seed, settle, with existing
+  bodies left where the simulation put them. The earlier wording "no
+  incremental add" overstated it.) The board is its own stack piece for
+  those reasons; the canvas keeps its shape.
 - 2026-09-03 (P3): the machine's disk filled to zero bytes mid-session
   (a burst from another build; it released to 711 GB free on its own).
   A plan write in flight was truncated to an empty file and restored from
