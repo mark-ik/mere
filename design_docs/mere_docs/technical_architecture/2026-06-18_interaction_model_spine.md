@@ -45,7 +45,7 @@ In scope now (the model is stated over these):
 Deferred to the later **Genet / WPT track** (not this spine): full-web HTML via genet (the
 flat-scene lane), scrying / compat WebView (the 549-LOC Windows-only self-rendering tile), the WPT
 conformance grind, page-supplied CSS fidelity. Full-web rides the
-compatibility-view charter (`genet/design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`);
+compatibility-view charter (`design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`);
 this spine treats genet / scrying only as the embedded-frame compositing case.
 
 ## The pipeline, stage by stage

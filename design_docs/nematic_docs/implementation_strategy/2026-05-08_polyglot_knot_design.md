@@ -4,7 +4,7 @@
 > of what is now nematic; the path is kept as written because this document is
 > retained as rationale and format spec, not as a map of the tree.
 **Date**: 2026-05-08
-**Status**: Implemented 2026-05-08 / 2026-05-09. Doc retained as the design rationale + format spec; consult [`../../../components/nematic/src/knot/expand.rs`](../../../components/nematic/src/knot/expand.rs) and [`../../../components/inker/src/document/render.rs`](../../../components/inker/src/document/render.rs) for the live behavior, `../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md` (`mere/design_docs/mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`) §2.4 for follow-ups.
+**Status**: Implemented 2026-05-08 / 2026-05-09. Doc retained as the design rationale + format spec; consult [`../../../crates/nematic/nematic/src/knot/expand.rs`](../../../crates/nematic/nematic/src/knot/expand.rs) and [`../../../crates/inker/inker/src/document/render.rs`](../../../crates/inker/inker/src/document/render.rs) for the live behavior, `../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md` (`mere/design_docs/mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`) §2.4 for follow-ups.
 **Scope**: Extend the [`nematic.knot`](https://crates.io/crates/nematic) note format from "frontmatter + markdown body" to a polyglot composition where every other `nematic.*` protocol's blocks can embed inside a knot, fenced-code-block-style, and round-trip back to the source protocol's native syntax.
 
 **Related**:
@@ -27,7 +27,7 @@ Two things follow from that:
 1. A clip taken from a protocol-rendered tile must preserve that protocol's representation in the knot, not flatten it to plain markdown. Gopher menu items stay gopher items. Gemtext links stay gemtext links. Feed entries stay feed entries.
 2. A knot is an *aggregate* — it can mix markdown prose authored by the user with protocol blocks clipped from any number of sources. The knot is the only Mere-defined format; the protocol blocks inside it stay spec-faithful per the protocol-faithfulness rule established during the engine-layer slice (now captured in `../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md` (`mere/design_docs/mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`) §3).
 
-The existing v1 knot engine already uses [`Block`](../../../components/inker/src/document.rs)'s semantic variants (`FeedEntry`, `MetadataRow`, etc.) for the *output* of parsing. What's missing is a way for those variants — or raw gemtext / gopher / nex content — to *appear in the knot's body* and round-trip cleanly.
+The existing v1 knot engine already uses [`Block`](../../../crates/inker/inker/src/document.rs)'s semantic variants (`FeedEntry`, `MetadataRow`, etc.) for the *output* of parsing. What's missing is a way for those variants — or raw gemtext / gopher / nex content — to *appear in the knot's body* and round-trip cleanly.
 
 ---
 

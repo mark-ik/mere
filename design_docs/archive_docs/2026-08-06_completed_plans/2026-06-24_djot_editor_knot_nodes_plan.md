@@ -38,7 +38,7 @@ intentional:
 | Product composition and authoring UX | [Knot authoring consumer plan](../../mere_docs/implementation_strategy/2026-07-27_knot_authoring_consumer_plan.md): Graphshell protocol with a Turnstone/Cambium pane | Open. The live Knot endpoint discloses a read-only directory and rejects intents. The dedicated plan owns the authorized editable resource, Save intent, retained session, pane, and receipts. |
 | Semantic web clipping and `ClippedFrom` provenance | Mere `crates/import::web_clip`; Turnstone Inspector/content lane | The host-neutral producer survived. The Meerkat command did not. A current Inspector selection-to-Knot write path is open. |
 | Outline and folds in the product | Genet readout plus a consumer-pulled Cambium tree/outline; Turnstone Gloss/Inspector | Outline data exists; a Knot authoring consumer and interactive tree are open. This is shared component work, not a Knot parser fork. |
-| Query, agent, diagram, and Wasm blocks | polyglot block resolver plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`) | Separate resolver work. It is not unfinished Phase 3 editor work. |
+| Query, agent, diagram, and Wasm blocks | polyglot block resolver plan (`design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`) | Separate resolver work. It is not unfinished Phase 3 editor work. |
 | Transclusion, evaluation, sanitized HTML, consent, and derived-result caching | Knot evaluation and export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`) | Reconciled there. Pure transforms live in Genet; effect policy and cache live in Knot; the product host presents intents and consent. |
 | Shared documents | Knot sync plus Commons | Personal and communal convergence landed. Public addressing, discovery, and publishing UX remain separate product work, not restoration of `knot://` node storage. |
 
@@ -796,8 +796,8 @@ Open:
 
 This plan extends, and does not re-scope, the following owners:
 
-- 2026-05-08 polyglot knot design (`genet/design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`)
-  and 2026-06-13 polyglot block resolver plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`):
+- 2026-05-08 polyglot knot design (`design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`)
+  and 2026-06-13 polyglot block resolver plan (`design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`):
   the block vocabulary and the descriptor-as-`CodeBlock` decision.
 - 2026-06-12 knot evaluation and export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`):
   the eval and include passes, the HTML fragment fidelity tier (K4), and richer
@@ -1151,7 +1151,7 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   the views into a `ScriptedDom` via a `GenetAppRunner`, lays out, lowers to a
   `netrender::Scene` through the chrome's `scene_from_session` path; a test renders
   `mere://welcome` end to end; mere `3d7c7ea`). The
-  native smolweb rendering plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md`)
+  native smolweb rendering plan (`design_docs/nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md`)
   (2026-06-27) frames this mapper as its **Phase D**, the document family: djot/knot,
   markdown, and reader-mode HTML all ride this one mapper (so it is not note-specific —
   its doc + eventual name should read "document-family"). The **smolweb family**

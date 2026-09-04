@@ -18,7 +18,7 @@ netrender's external-texture pass. This is the integration plan's S6 and the
 archived flip plan's P4 — the one flip phase that never shipped.
 **Related**: [integration plan](2026-06-02_modular_integration_plan.md) S6
 (this doc is its detailed elaboration);
-verso charter (`genet/design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`)
+verso charter (`design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`)
 (sequencing step 1: this plan lands first, no verso needed; the flip carriers
 come later);
 the archived Masonry-era

@@ -39,12 +39,12 @@ render regimes would recover none of it, because the data is already gone.
 
 | Protocol | Spec distinction | Where it is lost |
 | --- | --- | --- |
-| RSS/Atom | `<summary>` (abstract) vs `<content>` (full body) | merged into one `summary` ([feed.rs:212](../../../components/errand/src/parse/feed.rs)); the article body is dropped |
-| Atom | `published` vs `updated`; RSS `pubDate` | merged into one `date` ([feed.rs:207](../../../components/errand/src/parse/feed.rs)) |
+| RSS/Atom | `<summary>` (abstract) vs `<content>` (full body) | merged into one `summary` ([feed.rs:212](../../../crates/system/errand/src/parse/feed.rs)); the article body is dropped |
+| Atom | `published` vs `updated`; RSS `pubDate` | merged into one `date` ([feed.rs:207](../../../crates/system/errand/src/parse/feed.rs)) |
 | RSS/Atom | `<enclosure>` (podcast audio/media) | no field on `FeedEntry`; podcasts lose their payload |
 | RSS/Atom | `<guid>` / `<id>` (stable entry identity) | dropped; read-state and dedup fall back to link+title |
-| Atom | multiple `<link rel="alternate\|self\|enclosure">` | first-wins, `rel` ignored ([feed.rs:174](../../../components/errand/src/parse/feed.rs)) |
-| Gopher | item-type family (RFC 1436 + gopher+) | `g`/`I`→Image, `9`→Binary, but `4`/`5`/`6`/`d`/`;`→Other; `8` (telnet)→Other while `T` (tn3270)→Telnet, an inversion ([gopher.rs:112-119](../../../components/errand/src/parse/gopher.rs)). The fetch/handling hint the type char exists to carry is flattened |
+| Atom | multiple `<link rel="alternate\|self\|enclosure">` | first-wins, `rel` ignored ([feed.rs:174](../../../crates/system/errand/src/parse/feed.rs)) |
+| Gopher | item-type family (RFC 1436 + gopher+) | `g`/`I`→Image, `9`→Binary, but `4`/`5`/`6`/`d`/`;`→Other; `8` (telnet)→Other while `T` (tn3270)→Telnet, an inversion ([gopher.rs:112-119](../../../crates/system/errand/src/parse/gopher.rs)). The fetch/handling hint the type char exists to carry is flattened |
 | Gopher | type `7` = search server (append a query with a TAB) | rendered as a plain link; the query-input step is gone |
 | Spartan | `=:` prompt-upload line (its defining feature) | becomes body text; `GemLine` has no prompt variant |
 | **all** | **trust posture** (gemini TOFU / spartan-unauthenticated / misfin-signed) | carried by neither the ASTs nor the native views |
@@ -105,7 +105,7 @@ its philosophy and implemented it as (A) for the leverage.
 Recover the parse-layer losses. Each AST change pairs with the nematic lowering that
 consumes it on the capture/`Block` side, so the two lanes stay in step.
 
-**Feed** ([errand/src/parse/feed.rs](../../../components/errand/src/parse/feed.rs)) —
+**Feed** ([errand/src/parse/feed.rs](../../../crates/system/errand/src/parse/feed.rs)) —
 illustrative signatures:
 
 ```rust
@@ -144,14 +144,14 @@ the new fields feed the article reader, the podcast affordance, and read-state.
   via the HTML/document lane, with `content` as the offline body). Decide before the
   article reader is built; the field itself is lane-neutral and can land first.
 
-**Gopher** ([errand/src/parse/gopher.rs](../../../components/errand/src/parse/gopher.rs)):
+**Gopher** ([errand/src/parse/gopher.rs](../../../crates/system/errand/src/parse/gopher.rs)):
 add `raw_type: char` to `GopherItem` so the exact item type always survives even when
 `kind` is coarse; fix the `8`/`T` inversion; add `Cso` (type 2, interactive query);
 keep the coarse `kind` for the marker but let handling read `raw_type`. Type-7 search
 stays `Search` here; the input affordance is Workstream 3.
 
 **Gemtext / spartan**
-([errand/src/parse/gemtext.rs](../../../components/errand/src/parse/gemtext.rs)): add
+([errand/src/parse/gemtext.rs](../../../crates/system/errand/src/parse/gemtext.rs)): add
 `GemLine::Prompt { url, label }` and classify `=:` (benign for pure gemtext, which
 never carries it). Spartan then renders it as an upload affordance instead of body
 text.

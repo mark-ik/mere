@@ -241,7 +241,7 @@ an ad-hoc list: the format *is* the editing + export path.
   projection model (graph is root; gloss is a projection).
 - [node representation / arrangement plan](2026-06-18_node_representation_arrangement_plan.md) —
   node color / form rides into the outline rows (representation orthogonal).
-- nematic knot (djot design (`genet/design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`),
+- nematic knot (djot design (`design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`),
   evaluation/export (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`))
   — the djot engine that renders + (P4) edits the outline.
 

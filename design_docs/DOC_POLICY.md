@@ -144,10 +144,16 @@ mere/design_docs/
 ├── dramatis_docs/                 ← identity and contacts (personae, gaz)
 ├── eidetic_docs/                  ← the memory stack (Eidetic codicils,
 │                                     muniment journals, chartulary + RDF)
+├── inker_docs/                    ← the engine controller (inker,
+│                                     document-canvas, the engine adapters)
 ├── intel_docs/                    ← embedding and inference (esp)
 ├── moothold_docs/                 ← community / federation
 ├── murm_docs/                     ← bilateral comms
+├── nematic_docs/                  ← the smolweb engine and knot composition
+│                                     (nematic, illume, errand)
 ├── scenograph_docs/               ← the scene contract
+├── verso_docs/                    ← rendering surfaces and the engine flip
+│                                     (verso-tile)
 └── archive_docs/                  ← superseded checkpoints
 ```
 
@@ -156,14 +162,23 @@ mere/design_docs/
 Every root above corresponds to code that lives in this repository. That is an
 invariant now, not a coincidence — see below.
 
-**Three roots left on 2026-08-24.** `inker_docs/`, `nematic_docs/` and
-`verso_docs/` described `components/{inker,nematic,verso-tile}`, which have
-lived in genet since the adoption; the docs had been orphaned here ever since.
-All eight documents now live in `genet/design_docs/` and are indexed by
-`genet/design_docs/DOC_README.md`. Two further documents — the smolweb home
-decision and the carrier-independence analysis — went to
-`smolweb/design_docs/` in the same pass, being spec-level rather than
-implementation-level.
+**Three roots left on 2026-08-24 and came back on 2026-09-03.**
+`inker_docs/`, `nematic_docs/` and `verso_docs/` described
+`components/{inker,nematic,verso-tile}`, which had lived in genet since the
+adoption; the docs were orphaned here and went to `genet/design_docs/` with
+their subject. On 2026-09-03 the engine-management layer itself moved to this
+repository under the platform boundary plan's P3, so the three roots travelled
+back with it, at the same names and with their history — seven documents, one
+fewer than the eight that left, because genet archived the Knot
+evaluation/export plan on 2026-09-02 and it stays in genet's `archive_docs/`.
+They are indexed only here now; genet's index carries a four-line note saying
+where they went. Two further documents — the smolweb home decision and the
+carrier-independence analysis — went to `smolweb/design_docs/` in the
+2026-08-24 pass, being spec-level rather than implementation-level, and did not
+travel back.
+
+That round trip is the invariant above working, not failing: an area root
+follows its subject, in both directions, in the same session as the code.
 
 **The rule this leaves behind:** when code moves out of this repository, its
 docs move with it in the same session. An area root describing code that lives

@@ -252,7 +252,7 @@ Concrete registrations under v0 of the contract. *Status* column reflects 2026-0
 | `nematic.gemtext`   | InScenePaint*       | `DocumentTile(EngineDocument{gemtext})`              | None                         | shipped; same path                                        |
 | `nematic.gopher`    | InScenePaint*       | `DocumentTile(EngineDocument{gopher})`               | None                         | shipped; same path                                        |
 | `nematic.feed`      | InScenePaint*       | `DocumentTile(EngineDocument{feed})`                 | None                         | shipped; same path                                        |
-| `nematic.knot`      | InScenePaint*       | `Knot(EngramHandle)`, `DocumentTile(.knot)`          | None                         | per polyglot-knot design (`genet/design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`) |
+| `nematic.knot`      | InScenePaint*       | `Knot(EngramHandle)`, `DocumentTile(.knot)`          | None                         | per polyglot-knot design (`design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`) |
 | `nematic.{others}`  | InScenePaint*       | `DocumentTile(EngineDocument{<protocol>})`           | None                         | shipped (text/file/finger/scroll/misfin/nex/guppy)        |
 | `cartography.graph` | InScenePaint        | `GraphView(GraphId, ViewIntent)`                     | None                         | per [cartography brief](2026-05-10_cartography_layer_brief.md), strategies in flight |
 | `mere-domain.panel` | InScenePaint        | `Panel(PanelKind, ViewIntent)`                       | None                         | needs reactive runtime — biggest new piece                |

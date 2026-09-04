@@ -300,7 +300,7 @@ session-runtime re-export nothing downstream used. Outcome:
   the platen README/lib docs, forme, uxtree, eidetic-core, and inker docs.
 - **The name survives with a designated charter**: verso = the engine-flip /
   compatibility-view seam, minted at the first genet→scrying flip — see
-  `verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md` (`genet/design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`).
+  `verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md` (`design_docs/verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`).
   The `verso-tile` crates.io reservation is unaffected.
 
 Verified green: lib tests for inker, nematic (157), scrying-engine (11),

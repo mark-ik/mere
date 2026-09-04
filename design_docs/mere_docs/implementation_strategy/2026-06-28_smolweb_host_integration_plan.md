@@ -19,7 +19,7 @@ stays for cards/orrery; the genet lane is the focused tile. This is one new rung
 meerkat's content render ladder, not a new subsystem.
 
 **Builds on**: the native smolweb rendering effort
-(../../nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md`))
+(../../nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md (`design_docs/nematic_docs/implementation_strategy/2026-06-27_native_smolweb_rendering_plan.md`))
 — errand transport+parse, `smolweb-views` (gemtext/gopher/feed views + per-site/app
 theming), and `pelt_desktop::SmolwebDocument` (parse → view → `ScriptedDom` →
 genet-layout → `Scene`, with scroll + chrome-browser link nav). Extends the render
@@ -112,7 +112,7 @@ later).
   design), gemini (TOFU), and misfin (signed sender) tile currently render with the
   same neutral chrome. Producing trust at the errand transport, carrying it on
   `SmolwebDocument`, and surfacing it as tile chrome is Workstream 2 of the
-  smolweb fidelity plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-07-01_smolweb_fidelity_plan.md`);
+  smolweb fidelity plan (`design_docs/nematic_docs/implementation_strategy/2026-07-01_smolweb_fidelity_plan.md`);
   it lands against this plan's P3/P4.
 
 ## Progress

@@ -29,7 +29,7 @@ Related: [interaction_model_spine](../../mere_docs/technical_architecture/2026-0
 (this is the *render* + *represent* stages of the pipeline, document side),
 [retained_text_tiled_render_plan](../../mere_docs/implementation_strategy/2026-06-15_retained_text_tiled_render_plan.md)
 (consumes the same `DocumentRenderPacket` this restyles; restyle-vs-relayout
-question, §6), engine_picker_and_pluggability_plan (`genet/design_docs/inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md`)
+question, §6), engine_picker_and_pluggability_plan (`design_docs/inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md`)
 (sibling inker plan; per-engine profile pattern this borrows),
 [apparatus_pane_and_theme_switcher_plan](../../mere_docs/implementation_strategy/2026-06-08_apparatus_pane_and_theme_switcher_plan.md)
 + `register-theme` (the theme token source for §4),
@@ -202,7 +202,7 @@ config, given a UI.
 Open: one global sheet vs a per-engine override map (a Gemtext sheet distinct
 from a markdown sheet). Recommend a base sheet plus an optional per-engine
 override keyed by `engine_id`, mirroring the engine-profile pattern in
-engine_picker_and_pluggability_plan (`genet/design_docs/inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md`).
+engine_picker_and_pluggability_plan (`design_docs/inker_docs/implementation_strategy/2026-06-15_engine_picker_and_pluggability_plan.md`).
 First pass: base sheet only. Track the full space (per-engine, per-persona,
 per-moot) in this plan even while the first cut is narrow.
 

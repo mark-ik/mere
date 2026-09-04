@@ -91,14 +91,14 @@ and markdown does not: gemtext has no inline cascade, markdown does, and the map
 already speaks inline.
 
 **Prerequisite — `Block::Table`**: the block enum
-([components/inker/src/document.rs](../../../components/inker/src/document.rs)) has no
+([crates/inker/inker/src/document.rs](../../../crates/inker/inker/src/document.rs)) has no
 table variant (Heading/Paragraph/CodeBlock/Quote/List/Image/Preformatted/Rule/
 Feed\*/MetadataRow/Badge/Link/breaks). Both djot and markdown have tables, and both
 ride the same mapper, so `Block::Table` is a shared prerequisite of the
 whole document family, not a sub-step of either consumer. Adding the variant
 touches the mapper, the round-trip exporters
-([render.rs](../../../components/inker/src/document/render.rs) /
-[render/export.rs](../../../components/inker/src/document/render/export.rs)), and every
+([render.rs](../../../crates/inker/inker/src/document/render.rs) /
+[render/export.rs](../../../crates/inker/inker/src/document/render/export.rs)), and every
 exhaustive match on `Block`, so it lands as its own change **before** either
 the djot note tile or the markdown tile renders. Owned by the djot plan;
 sequenced ahead of its mapper here as the Table prerequisite.
@@ -218,7 +218,7 @@ all-or-nothing.
 ## Findings (2026-06-27, verified against code)
 
 - **nematic cannot spin out as-is.** `nematic/Cargo.toml` has `inker.workspace = true`; every engine file imports `inker::{Engine, Block, EngineRegistry, routing}`. Cone: `nematic → inker → kernel (graph-kernel) → forme, node-lineage, petgraph, rkyv, accesskit`. Spinning it out would invert the one-way rule (mere consumes genet, not the reverse).
-- **`Block` is not a smolweb model.** inker has two dispatch paths ([surface_engine.rs](../../../components/inker/src/surface_engine.rs) comment): document registry for `nematic.*` *and* `genet.web`; surface registry for `scrying.web`. Static HTML maps into `Block` too. It is mere's universal semantic-document model, the knot/reader/card substrate.
+- **`Block` is not a smolweb model.** inker has two dispatch paths ([surface_engine.rs](../../../crates/inker/inker/src/surface_engine.rs) comment): document registry for `nematic.*` *and* `genet.web`; surface registry for `scrying.web`. Static HTML maps into `Block` too. It is mere's universal semantic-document model, the knot/reader/card substrate.
 - **`Block` is the live render model today.** `platen/document_scene.rs` paints blocks; `meerkat/card`, `gloss`, `forme/uxtree` consume them. `inker/src/document/render.rs` + `render/export.rs` round-trip blocks back to markdown / gemtext / gophermap / knot (capture path).
 - **errand is already the shared transport** (sibling repo, crates.io-shaped, deps `url`/`tokio`/`rustls`/`ring`). Consumed by `meerkat`, `murm/misfin`. Genet has zero references to it.
 - **pelt's fetch seam exists and is documented for this.** `pelt-core::ResourceFetcher` (`fn fetch(&url) -> Option<Vec<u8>>`); `LocalFetcher` dispatches by scheme (data / http(s) via netfetcher / file). errand slots in as a smolweb-scheme branch.
@@ -257,5 +257,5 @@ Built so each phase stands alone and the early ones are genet-local and small.
 - djot editor + knot nodes plan (`mere/design_docs/archive_docs/2026-08-06_completed_plans/2026-06-24_djot_editor_knot_nodes_plan.md`) — owns the document-family block→view mapper (Phase D); its 2026-06-27 reframe set the direct-to-genet-views render path this plan shares.
 - illume text lexer plan (`mere/design_docs/mere_docs/implementation_strategy/2026-06-26_illume_text_lexer_plan.md`) — the portable-core + tinct + genet-renderer + host-bridge pattern this mirrors; the entity pass reused inside gemtext prose.
 - [polyglot knot design](2026-05-08_polyglot_knot_design.md) — the knot format the capture path lowers into; `knot/expand.rs` shares the smolweb parse functions.
-- [knot evaluation + export plan](../../archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md) — the `to_gemtext` / gophermap exporters on the capture/round-trip side of `Block`.
+- knot evaluation + export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`) — the `to_gemtext` / gophermap exporters on the capture/round-trip side of `Block`.
 - errand (sibling repo `mark-ik/errand`) — the shared smolweb transport Phase A wires into pelt.

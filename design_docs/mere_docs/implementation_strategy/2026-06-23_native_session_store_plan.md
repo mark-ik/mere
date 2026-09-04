@@ -7,7 +7,7 @@ the JS-cookie persistence trigger, durable `localStorage` host backing, flip-bac
 SESSION import, live multi-persona jar selection, and web-privacy refinements
 (`Partitioned` / top-level-site storage keys).
 **Origin**: surfaced building the verso genet→scrying flip
-(flipcarrier plan (`genet/design_docs/verso_docs/implementation_strategy/2026-06-23_genet_scrying_flipcarrier_plan.md`)).
+(flipcarrier plan (`design_docs/verso_docs/implementation_strategy/2026-06-23_genet_scrying_flipcarrier_plan.md`)).
 Carrying a login across a flip forced the question: *what is Mere's own session
 state, where does it live, and how much of its shape is standardized?*
 

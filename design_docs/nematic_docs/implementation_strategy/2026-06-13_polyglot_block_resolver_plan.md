@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-13
 **Status**: Planned. Extends the
-[knot evaluation + export plan](../../archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md)
+knot evaluation + export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`)
 (K1 transclude, K2 eval, K5 export, all landed) with the forward
 architecture: a single registry that resolves *any* fenced block by its tag,
 and the new resolver kinds that registry makes pluggable.
@@ -185,7 +185,7 @@ gated); policy-as-script (stays data, forever, per the 2026-06-10 decision).
 
 ## Carried open question
 
-From the [knot evaluation + export plan](../../archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md),
+From the knot evaluation + export plan (`genet/design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`),
 archived 2026-09-02: whether the source-marker badge on spliced blocks
 defaults on (visible provenance) or off (clean reading). A setting either
 way; the archived plan leaned visible-until-trusted. No such setting exists

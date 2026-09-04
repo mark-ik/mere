@@ -14,7 +14,7 @@ post-migration historical record (the 2026-06-09 crate-rename banner below still
 
 - [`2026-05-05_protocol_architecture_plan.md`](2026-05-05_protocol_architecture_plan.md) — protocol architecture
 - [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md) — event-DAG substrate pivot
-- `../../nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md` (`genet/design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`) — polyglot knot design
+- `../../nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md` (`design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`) — polyglot knot design
 - [`../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md`](../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md) — eidetic layered stack
 - Archived: [`../../archive_docs/2026-05-09_engine_layer_complete/2026-05-06_graphshell_migration_plan.md`](../../archive_docs/2026-05-09_engine_layer_complete/2026-05-06_graphshell_migration_plan.md) — full historical migration plan + progress log
 

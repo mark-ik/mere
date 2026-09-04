@@ -57,6 +57,42 @@ next functional bump, per the sweep plan's invariant 8.
 `## Retained licenses` table above. Adding a path here documents a disposition;
 it does not exempt the path from receiving a header.
 
+## Published grants that arrived with a crate
+
+A published version keeps the grant it shipped with, permanently; MPL-2.0
+reaches it at its next functional bump, per the sweep plan's invariant 8. That
+rule already governs `crates/system/luggage` above. It governs the
+engine-management layer too, which arrived from genet on 2026-09-03 under the
+[platform boundary plan](design_docs/mere_docs/implementation_strategy/2026-09-02_platform_boundary_and_repository_topology_plan.md)'s
+P3, after genet's own 2026-08-27 ruling had already put every source in these
+crates under Exhibit A and every manifest on `MPL-2.0`.
+
+| Crate | Path | Published version's grant | In-tree notice files |
+|---|---|---|---|
+| `inker` | `crates/inker/inker` | 0.1.1, MIT OR Apache-2.0 | — |
+| `document-canvas` | `crates/inker/document-canvas` | 0.1.0 | — |
+| `verso-tile` | `crates/inker/verso-tile` | 0.1.0, MIT OR Apache-2.0 | `LICENSE-MIT`, `LICENSE-APACHE` |
+| `nematic` | `crates/nematic/nematic` | 0.1.1 | — |
+| `illume` | `crates/nematic/illume` | 0.0.2 | — |
+| `errand` | `crates/system/errand` | 0.3.4, MIT OR Apache-2.0 | — |
+| `tinct` | `crates/cambium/tinct` | 0.1.2, MIT OR Apache-2.0 | `LICENSE-MIT`, `LICENSE-APACHE` |
+
+Each arrived from genet 2026-09-03 under its own published grant; relicensing
+is the sweep plan's call at the next bump. Nothing here was relicensed on the
+move, and the four `LICENSE-MIT` / `LICENSE-APACHE` files that `verso-tile` and
+`tinct` carry are **not** to be deleted: they are the notice text for versions
+already on crates.io. This is the same disposition genet's own ledger records,
+which names `sprigging` 0.2.1, `illume` 0.0.2, `errand` 0.3.4, `tinct` 0.1.2
+and `inker` 0.1.1 explicitly and keeps the ruling as the precedent the sweep was
+decided on.
+
+The three engine adapters — `scrying-engine`, `graft-engine` and `weld-engine`
+— are `publish = false` and have no published version, so nothing is held open
+for them.
+
+This section, like the one above it, is **not** the skip list. Every source in
+these crates carries Exhibit A already; the audit reports 0 without it.
+
 ## Exceptions under the fork/vendor criterion
 
 **None.** The brief's §4 test — a crate stays MIT OR Apache-2.0 only when a
@@ -65,7 +101,9 @@ admits nothing in this repository. `illume`, `buckram`, `errand` and `tinct`
 were each proposed and declined on 2026-08-22.
 
 If one is ever granted, its manifest says `MIT OR Apache-2.0` explicitly with a
-comment naming the brief, and it is listed here.
+comment naming the brief, and it is listed here. `illume`, `errand` and `tinct`
+now live in this repository; the decline stands, and what they do carry is the
+published-grant disposition in the section above, which is a different thing.
 
 ## How to add a file from elsewhere
 

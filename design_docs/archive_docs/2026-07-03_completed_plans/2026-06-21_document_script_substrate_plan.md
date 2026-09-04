@@ -25,7 +25,7 @@ isolation" seam this fills), [protocol_architecture_plan](2026-05-05_protocol_ar
 (the deferred Extism/Wasmtime/Boa scripting-host probe this supersedes),
 [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
 (the no-JIT browser policy + the PWA-vs-open-web lane fork this inherits),
-polyglot_block_resolver_plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`)
+polyglot_block_resolver_plan (`design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`)
 (the native-only wasm-block kind that wants this contract). Genet side:
 `script-engine-api/lib.rs`, `script-runtime-api/fetch.rs`,
 `docs/2026-05-20_genet_script_engine_plan.md`, `docs/2026-05-25_js_execution_strategy.md`.
@@ -513,7 +513,7 @@ grows.
 ### 10.8 Split P0 itself
 
 - **Name the first consumer.** The concrete one is the polyglot wasm-block
-  (polyglot_block_resolver_plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`)
+  (polyglot_block_resolver_plan (`design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`)
   P3): "text in, blocks out, no ambient capability." That is far narrower than
   `document-core`'s document-session world. Start P0 from the text-to-blocks shape
   and grow toward document-session, rather than building the rich profile first.
@@ -1031,7 +1031,7 @@ DOM model is the decision.
   [protocol_architecture_plan](2026-05-05_protocol_architecture_plan.md) (Extism
   gesture), [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
   (no-JIT policy + lane fork), [capability_gate_catalogue_brief](../research/2026-05-14_capability_gate_catalogue_brief.md)
-  (profile granting), polyglot_block_resolver_plan (`genet/design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`)
+  (profile granting), polyglot_block_resolver_plan (`design_docs/nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md`)
   (native-only wasm-block kind).
 - external (verified 2026-06-20): `WebAssembly/component-model` design/mvp/Concurrency.md
   + design/high-level/Choices.md + Goals.md; `WebAssembly/WASI` docs/Proposals.md
