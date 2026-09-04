@@ -196,12 +196,33 @@ and serde on all of it. And the thing it lacks itself: at rest the compositor
 still walks the older binary `PaneNode` tree from `frame.json`; the blueprint
 is promoted from it on the first float and never saved.
 
-**What Turnstone must keep.** It composites one surface per pane — a live
-WebView, a GPU canvas, a Cambium view — and never renders a pane frame. That
-was the correct reason not to adopt frisket's *view* in July, and it is
-unchanged. What it adopts is the *tree* and the *strip*: the tab bar of each
-stack becomes one more composited surface, drawn with `tab_strip`, and the
-content rect below it is the pane's surface as today.
+**The renderer, ruled by Mark 2026-09-04: one.** The first draft of this
+phase kept Turnstone compositing one surface per pane and added a strip
+surface per stack. Mark rejected that for the host's own content: a Roster
+is not mail arriving at the house, and treating it as a hole beside a
+WebView keeps two renderers in the family. So Turnstone renders **one frame
+per window**, and content crosses into it by one of three membranes,
+chosen per tile from its `ContentSource`:
+
+- **In-house Cambium content** (Roster, Inspector, Arrange, a nested
+  workspace) is a *child view* in the frame's tree — same layout pass,
+  scene, focus system and accessibility tree. The primitive is
+  `cambium::Component` (a state-owning boundary: parent props in, local
+  state retained, a typed event out, the child tree erased), with
+  `PortableKeyed` carrying a pane's element and view state across a move
+  between stacks, splits and windows, and `GenetMultiRunner` giving one
+  state N windows. This retires Turnstone's per-pane retained-runner maps
+  (A1) in favour of pane-keyed state under one runner.
+- **Contributed Cambium content** (a port's pane, e.g. Distillery's
+  read-only surface) keeps its own state and comes through the erased
+  retained-surface trait `cambium::surface` froze on 2026-08-26,
+  composited by rect.
+- **A foreign renderer** (a document engine's page, the graph's GPU canvas,
+  a WebView) is frisket's *hole*: the frame leaves a rect and the host
+  composites. This is what the hole was always for, and nothing else.
+
+Nested tiling falls out: a nested workspace is an in-house pane whose view
+is another frame, one recursion rather than a special case.
 
 Phases, each with its done-condition. S1 and S2 are stack work in this
 repository; S3 is Turnstone's, and consumes them by git pin.
@@ -225,20 +246,35 @@ tabs, floats and z-order intact; the A5 station walk (tile → float → nested
 split → tear-out → return → dock) passes as a `workbench` unit test with one
 `TileId` throughout; and Graphshell, Pelt and Woodshed build unchanged.
 
-**S2. Cambium's strip closes, and marks the active stack.**
+**S2. Cambium: the strip closes, the frame takes a slot, and a
+`workspace` composition wires them.**
 - `tab_strip` gains an optional close affordance per tab, emitting a typed
   close the caller maps, with the ARIA name "Close <title>", and stopping
   propagation so a close never also activates — frisket's existing contract,
   moved to the strip so frisket's tab bar, the Workbench pane's cells, and
-  Turnstone's pane bars are one widget.
-- The strip can mark its stack active (the `aria-current` / class the
-  compositor sets on the focused pane's bar), closing the "nothing marks
-  which pane is active" gap Turnstone's plan names.
-- frisket's `render_stack` re-expressed on the strip, so there is one tab
-  bar in the crate.
-*Done when* frisket's 7 tests and the Workbench pane's strip tests pass on
-the shared strip, a close-× press reports a close and not an activation, and
-Pelt's tile surface is unchanged in behaviour.
+  every pane bar are one widget. The strip can mark its stack active,
+  closing the "nothing marks which pane is active" gap Turnstone's plan
+  names. frisket's `render_stack` is re-expressed on it.
+- frisket gains a **slot resolver**: `frisket_with(tree, on_event, fill)`
+  where `fill(&Tile) -> Slot` answers `View(child)`, `Surface(retained)` or
+  `Hole`. A `View` is inlined as the stack's content child; a `Surface` and
+  a `Hole` keep today's placeholder marked with the tile so the host reads
+  the rect back. `frisket(tree, on_event)` stays as the all-holes form Pelt
+  uses today.
+- A new **`cambium::workspace`** composition, beside `command_surface` and
+  `graph_canvas`: a `Workspace` from `workbench` plus a registry from
+  content kind to slot, pane-keyed state behind `Component` boundaries,
+  `PortableKeyed` identity, focus, the float layer's furniture, and the list
+  of holes and surfaces the host composites this frame. A module, not a
+  crate, per the frisket direction note's ruling that modularity, packaging
+  and publishing are three decisions; Cambium is the home every host
+  already depends on.
+*Done when* frisket's tests and the Workbench pane's strip tests pass on the
+shared strip; a close-× press reports a close and not an activation; Pelt's
+tile surface is unchanged through the all-holes form; and a `workspace`
+acceptance test stacks an in-house component beside a hole, moves the
+component to another stack and then to a second projection, and finds its
+local state intact each time.
 
 **S3. Turnstone's panes ride the tree.** (Owned by
 `turnstone/design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md`,
@@ -246,11 +282,15 @@ A4 as revised 2026-09-04; summarized here so the two halves read as one.)
 - `PaneId` ↔ `TileId` one-to-one; `PaneContent`, graph binding and `PaneSpec`
   stay Turnstone's, keyed by `PaneId` beside the tree, never in it — the
   content-payload rule the frisket note set.
-- `pane.rs` walks the `Workspace` instead of `PaneNode`, reserving a
-  tab-bar rect per stack; the surface plan gains a strip surface per stack;
-  press on a tab activates, press on × closes *that* pane, drag a tab to
-  stack, split beside, or tear out — the gesture code the Workbench pane's
-  tiles already have, generalized.
+- Each window renders **one `cambium::workspace` frame**. Turnstone's
+  registry maps each pane kind to a membrane: its own Cambium panes become
+  `Component`s in the frame; contributed panes go through the retained-
+  surface trait; the graph canvas and WebViews are holes the shell
+  composites at the rects the frame reports. `pane.rs`'s binary walk, the
+  per-pane runner maps in `shell/renderers.rs`, and `cambium_pane.rs`'s
+  one-view-per-surface seam retire into that frame. Press on a tab
+  activates, press on × closes *that* pane, drag a tab to stack, split
+  beside, or tear out.
 - The saved layout is the serialized `Workspace` (primary and lens spaces),
   replacing `frame.json`; the old binary tree is read once and migrated,
   because it is real user data, then not written again. `SpaceBlueprint`,
@@ -258,7 +298,8 @@ A4 as revised 2026-09-04; summarized here so the two halves read as one.)
 *Done when* `a5_floating_pane.scn` and `physics_native.scn` pass unchanged
 in intent, a new stack receipt opens two panes, stacks one onto the other,
 switches tabs, closes one from its ×, restarts, and finds the stack where it
-was, and the observation and accessibility projections describe stacks.
+was; the accessibility tree is the frame's own rather than a stitched one;
+and the graph pane's frame time is not worse than today's.
 
 **Sequencing and the pin.** Turnstone consumes mere by git revision and the
 family is git-first, so S3 cannot start against unpushed S1/S2: pushing mere
