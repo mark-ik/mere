@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-28
 **Status:** **D1 published as `pictograph` 0.1.0, D2 landed as unpublished
-0.2.0 on 2026-09-01, and D3 landed on 2026-09-02.** Editing remains deferred.
+0.2.0 on 2026-09-01, D3 landed on 2026-09-02, and D4 default-scale
+legibility landed on 2026-09-03.** Editing remains deferred.
 The original gate was emblem's encoder
 (`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed
 and shipped as emblem 0.2.0 on 2026-08-29.
@@ -136,6 +137,28 @@ Done when:
 favicon-less nodes. An explicit `Favicon`, `Derived`, `Sprite`, or `Bare`
 override wins. Clearing the override re-evaluates the node: it returns to
 `Favicon` when a favicon source exists and `Derived` otherwise.
+
+### D4. Default-scale legibility
+
+The first D3 headed receipt exposed a real product failure in the small LOD
+arm: reducing the detailed cells to their bounding rectangle made unrelated
+addresses read as the same coloured block at Canvas's normal 25.92px face
+height. D4 replaces that rectangle with a 3x3 majority reduction of the 5x5
+figure. Each coarse cell is 20 graphic units, or 8.1 physical pixels at the
+normal face height, so the mark remains bold while retaining address-specific
+geometry.
+
+Done when:
+- the fixed 68-address corpus is decoded and rasterized at `Host.height =
+  25.92` with one monochrome palette, so colour cannot disguise geometric
+  collisions;
+- the old arm's measured 7 masks / largest multiplicity 57 improves to at
+  least 30 masks / largest multiplicity at most 8, with the bound enforced by
+  a test that reads the actual decoded low-detail arm;
+- the grammar change deliberately bumps `DERIVATION_VERSION` and replaces the
+  digest-pinned fixtures;
+- the standalone Graphshell wasm package builds from committed pins and the
+  headed default/detail scenario passes against the new bytes.
 
 ## 7. Deferred: editing (recorded so v1 does not foreclose it)
 
@@ -346,3 +369,39 @@ newer than its committed `eff0cb6d` manifest pin, so the receipt supplied the
 clean Genet `fcb6c8fb` packages through a disposable Cargo patch while keeping
 netrender at Mere's pinned `6f1a4fe7`. The production D3 commit and shared
 checkout contain none of that compatibility patch.
+
+The 2026-09-03 platform-boundary landing subsequently moved the remaining
+Genet family to the exact `115d348deddc344d949754e63beaece47cf49f34`
+revision across the root and standalone Graphshell manifests. D4's clean
+standalone build uses that committed pin directly; the D3 compatibility patch
+is historical and remains absent.
+
+### D4 receipt (2026-09-03)
+
+Mere commit `81c86f29` changes only pictograph's low-detail grammar and its
+documentation. `DERIVATION_VERSION` deliberately moves from 2 to 3, so peers
+cannot silently disagree about either arm; the four digest-pinned fixtures now
+record v3 lengths, digests, and filled-cell counts. The 68-address byte corpus
+spans 34--275 bytes, below the existing 512-byte cap.
+
+The fixed corpus at Canvas's ordinary 25.92px face height now yields 30
+monochrome decoded and raster masks, with largest multiplicity 8. The D3
+bounding-box arm yielded 7 masks, with 57 of 68 addresses sharing one shape.
+The committed test reconstructs the decoded 3x3 geometry after IconVG's LOD
+selection and enforces the new 30 / 8 bounds; a separate headless vello receipt
+renders the same corpus with an all-black palette and Area antialiasing.
+
+Done-conditions met:
+- **generator gates:** all 15 pictograph library tests pass; strict library
+  Clippy and formatting pass;
+- **consumer gate:** standalone `graphshell-web` builds for
+  `wasm32-unknown-unknown` from the committed Genet `115d348d` and netrender
+  `6f1a4fe7` pins, without a Cargo patch;
+- **raster receipt:**
+  `Code/testing/mere/derived-faces/d4_81c86f29/` contains the 768x864,
+  68-face monochrome contact sheet and its per-address JSON summary;
+- **headed receipt:** the existing 16-step scenario reports `RESULT ok`, 24
+  frames, two captures, `product.face = "derived"`, and zero scenario errors.
+  At 1.0x the visible faces retain bars, rings, crosses, corners, and forks;
+  the 1.521x capture still selects the detailed 5x5 arm. Artifacts live under
+  `Code/testing/mere/scenarios/graphshell-web/d4_small_lod_81c86f29/`.
