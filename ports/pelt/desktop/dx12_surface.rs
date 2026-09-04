@@ -8,15 +8,23 @@
 
 use std::collections::HashMap;
 use std::ffi::c_void;
+use std::rc::Rc;
+use std::sync::Arc;
 
 use inker::{
     FrameHandleOwnership, NativeTextureHandle, SurfaceFrame, SurfaceSyncHandle,
     SurfaceTextureFormat,
 };
-use windows::Win32::Foundation::{CloseHandle, GENERIC_ALL, HANDLE};
+use scrying_engine::into_scrying_native_frame;
+use scrying_engine::scrying::native_frame::InteropSynchronizer;
+use scrying_engine::scrying::{
+    Dx12FenceSynchronizer, HostWgpuContext, ImportOptions, NativeFrame, SyncMechanism,
+    TextureImporter, WgpuTextureImporter,
+};
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Graphics::Direct3D12::{
-    D3D12_FENCE_FLAG_SHARED, D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-    D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS, ID3D12Fence, ID3D12Resource,
+    D3D12_RESOURCE_DIMENSION_TEXTURE2D, D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS,
+    ID3D12Fence, ID3D12Resource,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_B8G8R8A8_UNORM_SRGB,
@@ -26,10 +34,16 @@ use workbench::TileId;
 
 pub(crate) struct Dx12SurfaceCache {
     textures: HashMap<TileId, ImportedSurface>,
+    scrying_importer: Option<Rc<ScryingDx12Importer>>,
     frames: u32,
     imports: u32,
     waits: u32,
     compositions: u32,
+}
+
+struct ScryingDx12Importer {
+    importer: WgpuTextureImporter,
+    synchronizer: Arc<Dx12FenceSynchronizer>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -38,53 +52,6 @@ pub(crate) struct Dx12SurfaceStats {
     pub(crate) imports: u32,
     pub(crate) waits: u32,
     pub(crate) compositions: u32,
-}
-
-pub(crate) struct Dx12SharedFence {
-    _fence: ID3D12Fence,
-    shared_handle: HANDLE,
-}
-
-// The COM fence is free-threaded and the HANDLE is an opaque process value.
-unsafe impl Send for Dx12SharedFence {}
-unsafe impl Sync for Dx12SharedFence {}
-
-impl Dx12SharedFence {
-    pub(crate) fn new(device: &wgpu::Device) -> Result<Self, String> {
-        // SAFETY: the HAL guard is used only to create a shared fence on this
-        // host-owned D3D12 device.
-        unsafe {
-            let hal_device = device
-                .as_hal::<wgpu::wgc::api::Dx12>()
-                .ok_or_else(|| "Pelt cannot create a fence on a non-D3D12 device".to_owned())?;
-            let d3d_device = hal_device.raw_device();
-            let fence = d3d_device
-                .CreateFence::<ID3D12Fence>(0, D3D12_FENCE_FLAG_SHARED)
-                .map_err(|error| format!("CreateFence failed: {error}"))?;
-            let shared_handle = d3d_device
-                .CreateSharedHandle(&fence, None, GENERIC_ALL.0, None)
-                .map_err(|error| format!("CreateSharedHandle(fence) failed: {error}"))?;
-            Ok(Self {
-                _fence: fence,
-                shared_handle,
-            })
-        }
-    }
-
-    pub(crate) fn raw_handle(&self) -> u64 {
-        self.shared_handle.0 as usize as u64
-    }
-}
-
-impl Drop for Dx12SharedFence {
-    fn drop(&mut self) {
-        if !self.shared_handle.is_invalid() {
-            // SAFETY: this object owns the handle returned by CreateSharedHandle.
-            unsafe {
-                let _ = CloseHandle(self.shared_handle);
-            }
-        }
-    }
 }
 
 struct ImportedSurface {
@@ -143,11 +110,29 @@ impl Dx12SurfaceCache {
     pub(crate) fn new() -> Self {
         Self {
             textures: HashMap::new(),
+            scrying_importer: None,
             frames: 0,
             imports: 0,
             waits: 0,
             compositions: 0,
         }
+    }
+
+    pub(crate) fn install_scrying_importer(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        synchronizer: Arc<Dx12FenceSynchronizer>,
+    ) {
+        let host = HostWgpuContext::new(device.clone(), queue.clone());
+        let importer = WgpuTextureImporter::with_synchronizer(
+            host,
+            Box::new(synchronizer.clone()),
+        );
+        self.scrying_importer = Some(Rc::new(ScryingDx12Importer {
+            importer,
+            synchronizer,
+        }));
     }
 
     pub(crate) fn accept_frame(
@@ -156,6 +141,9 @@ impl Dx12SurfaceCache {
         frame: SurfaceFrame,
         device: &wgpu::Device,
     ) -> Result<(), String> {
+        if matches!(&frame.texture, NativeTextureHandle::OwnedPayload(_)) {
+            return self.accept_scrying_frame(tile, frame);
+        }
         let SurfaceFrame {
             texture,
             sync,
@@ -229,6 +217,108 @@ impl Dx12SurfaceCache {
         Ok(())
     }
 
+    fn accept_scrying_frame(&mut self, tile: TileId, frame: SurfaceFrame) -> Result<(), String> {
+        self.frames = self.frames.saturating_add(1);
+        let expected = (
+            frame.width,
+            frame.height,
+            map_format(&frame.format)?.0,
+            frame.resource_epoch,
+        );
+        let native = into_scrying_native_frame(frame).map_err(|frame| {
+            format!(
+                "Pelt's Windows importer received an unknown owned payload: {:?}",
+                frame.texture
+            )
+        })?;
+        let queued_wait = matches!(
+            &native,
+            NativeFrame::Dx12SharedTexture(frame)
+                if frame.producer_sync == SyncMechanism::ExplicitFence && frame.fence_value > 0
+        );
+        let importer = self
+            .scrying_importer
+            .as_ref()
+            .ok_or("Pelt received a Scry frame before installing its owned-frame importer")?;
+        let native_metadata = match &native {
+            NativeFrame::Dx12SharedTexture(frame) => (
+                frame.size.width,
+                frame.size.height,
+                frame.format,
+                frame.generation,
+            ),
+            other => {
+                return Err(format!(
+                    "Pelt's Windows importer cannot open Scry's {:?} frame",
+                    other.kind()
+                ));
+            },
+        };
+        if native_metadata != expected {
+            return Err(format!(
+                "Scry owned-frame envelope disagrees with its payload: expected {expected:?}, got {native_metadata:?}"
+            ));
+        }
+        if let Some(cached) = self.textures.get(&tile)
+            && cached.epoch == native_metadata.3
+        {
+            if (cached.width, cached.height, cached.format)
+                != (native_metadata.0, native_metadata.1, native_metadata.2)
+            {
+                return Err(format!(
+                    "tile {} reused Scry resource epoch {} with changed texture metadata",
+                    tile.0, cached.epoch
+                ));
+            }
+            importer
+                .synchronizer
+                .producer_complete(&native, native.producer_sync())
+                .map_err(|error| format!("Scry owned-frame wait failed: {error}"))?;
+            if queued_wait {
+                self.waits = self.waits.saturating_add(1);
+            }
+            return Ok(());
+        }
+        let imported = importer
+            .importer
+            .import_frame(native, &ImportOptions::default())
+            .map_err(|error| format!("Scry owned-frame import failed: {error}"))?;
+        let actual = (
+            imported.size.width,
+            imported.size.height,
+            imported.format,
+            imported.generation,
+        );
+        if actual != expected {
+            return Err(format!(
+                "Scry owned-frame envelope changed across import: expected {expected:?}, got {actual:?}"
+            ));
+        }
+        let view = imported.texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Pelt imported Scry D3D12 surface view"),
+            format: Some(imported.format),
+            ..Default::default()
+        });
+        self.textures.insert(
+            tile,
+            ImportedSurface {
+                epoch: imported.generation,
+                width: imported.size.width,
+                height: imported.size.height,
+                format: imported.format,
+                texture: imported.texture,
+                view,
+                fence: None,
+                pending_wait: None,
+            },
+        );
+        self.imports = self.imports.saturating_add(1);
+        if queued_wait {
+            self.waits = self.waits.saturating_add(1);
+        }
+        Ok(())
+    }
+
     pub(crate) fn stage_wait(&mut self, tile: TileId, queue: &wgpu::Queue) -> Result<(), String> {
         let Some(surface) = self.textures.get_mut(&tile) else {
             return Ok(());
@@ -277,6 +367,7 @@ impl Dx12SurfaceCache {
         textures.insert(tile, surface);
         Some(Self {
             textures,
+            scrying_importer: self.scrying_importer.clone(),
             frames: 0,
             imports: 0,
             waits: 0,

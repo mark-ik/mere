@@ -458,12 +458,12 @@ fn shared_registries_route_documents_surfaces_overrides_and_visible_fallbacks() 
     assert!(cached_frame.surfaces[0].frame.as_ref().unwrap().is_none());
     assert_eq!(surfaces.lock().unwrap().frames, 1);
     assert!(workspace.pump());
-    assert_eq!(workspace.execute_surface_script(TileId(1), "1"), Ok(None));
+    assert_eq!(workspace.poll_surface_web_event(TileId(1)), Ok(None));
     assert!(
         workspace
-            .execute_surface_script(TileId(3), "1")
+            .poll_surface_web_event(TileId(3))
             .unwrap_err()
-            .contains("no web scripting plane")
+            .contains("no web event plane")
     );
 
     assert!(

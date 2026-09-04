@@ -18,5 +18,8 @@
     tick += 1;
     document.querySelector('#tick').textContent = tick;
     document.querySelector('#pulse').style.transform = `translateX(${tick % 2 ? 24 : 0}px)`;
+    if (tick === 1) requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.chrome?.webview?.postMessage('pelt.surface.ready');
+    }));
   }, 80);
 </script>

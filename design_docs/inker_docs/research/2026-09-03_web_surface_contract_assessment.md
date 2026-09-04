@@ -204,14 +204,19 @@ on it. Do not create a second, subtly different raw-handle vocabulary in Mere.
   correlated `ScriptCompleted` / `CookiesCompleted` variants on the single
   `WebSurfaceEvent` queue. A focused ordering test proves completions remain
   behind an earlier navigation event and retain the caller's ids.
-- The old blocking script/cookie methods remain explicitly transitional while
-  Pelt's Scry readiness probe and Scry's platform traits are migrated to native
-  async callbacks. They are excluded from the future extracted contract.
-  `scrying-engine` now downgrades those two capability answers on its Inker
-  projection rather than claiming the new async contract is wired.
+- 2026-09-04: The blocking script/cookie methods are gone from Inker and its
+  Graft, Scry, and Weld adapter traits. Pelt's only caller was a WebView
+  readiness probe; its fixture now posts `pelt.surface.ready` through the
+  page-to-host message channel and Pelt drains that from the ordered event
+  stream. `scrying-engine` still downgrades correlated script-result and cookie
+  reads until Scry's platform callbacks can settle those requests natively.
+- Pelt's Windows consumer now recovers Scry's owned native-frame payload and
+  imports it with Scry's host-device importer and the same shared fence
+  synchronizer given to WebView2. The mixed headed receipt passed at 1280x800
+  and 960x640 with three owned imports, three fence waits, host composition,
+  and the page-message readiness event (artifact digest `85d1b0ba8a86778f`).
 - Focused tests pass for Inker, Graft/Scry/Weld adapters, and Pelt core. Direct
-  Weld callback binding, Scry callback migration, removal of the compatibility
-  methods, and extraction remain open.
+  Weld callback binding, Scry callback migration, and extraction remain open.
 
 ## Open decisions
 

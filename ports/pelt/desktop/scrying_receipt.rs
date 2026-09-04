@@ -15,10 +15,11 @@ use inker::{
     SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, WebSurface,
     WebSurfaceCapabilities, WebSurfaceEvent,
 };
-use scrying_engine::scrying::{PlatformWebSurfaceConfig, PlatformWebSurfaceProducer};
+use scrying_engine::scrying::{
+    Dx12FenceSynchronizer, HostWgpuContext, PlatformWebSurfaceConfig,
+    PlatformWebSurfaceProducer,
+};
 use scrying_engine::{ScryingProducer, translation::map_error};
-
-use crate::dx12_surface::Dx12SharedFence;
 
 #[derive(Clone)]
 pub(crate) struct ScryingReceiptHost {
@@ -28,7 +29,7 @@ pub(crate) struct ScryingReceiptHost {
 #[derive(Clone)]
 struct ScryingHostState {
     hwnd: usize,
-    fence: Arc<Dx12SharedFence>,
+    fence: Arc<Dx12FenceSynchronizer>,
 }
 
 impl ScryingReceiptHost {
@@ -38,14 +39,26 @@ impl ScryingReceiptHost {
         }
     }
 
-    pub(crate) fn install(&self, hwnd: usize, device: &wgpu::Device) -> Result<(), String> {
-        let fence = Arc::new(Dx12SharedFence::new(device)?);
+    pub(crate) fn install(
+        &self,
+        hwnd: usize,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Arc<Dx12FenceSynchronizer>, String> {
+        let context = HostWgpuContext::new(device.clone(), queue.clone());
+        let fence = Arc::new(
+            Dx12FenceSynchronizer::new(&context)
+                .map_err(|error| format!("Pelt could not create Scry's shared fence: {error}"))?,
+        );
         *self
             .state
             .lock()
             .map_err(|_| "Pelt Scrying host-state lock was poisoned".to_owned())? =
-            Some(ScryingHostState { hwnd, fence });
-        Ok(())
+            Some(ScryingHostState {
+                hwnd,
+                fence: fence.clone(),
+            });
+        Ok(fence)
     }
 
     fn current(&self) -> Result<ScryingHostState, SurfaceError> {
@@ -115,7 +128,7 @@ impl PeltScryingProducer {
             .non_persistent()
             .with_offset(self.offset.0 as f32, self.offset.1 as f32)
             .with_diagnostic_backdrop((24, 32, 48))
-            .with_fence_shared_handle(host.fence.raw_handle() as usize as *mut c_void);
+            .with_dx12_fence_synchronizer(host.fence.clone());
             // SAFETY: WorkspaceApp retains the live top-level window for longer
             // than every routed producer and installs its HWND into this host.
             let producer =
@@ -135,7 +148,7 @@ impl PeltScryingProducer {
             }
             self.inner = Some(ScryingProducer::new(
                 Box::new(producer),
-                Some(host.fence.raw_handle()),
+                Some(host.fence.shared_handle().0 as usize as u64),
             ));
         }
         Ok(self.inner.as_mut().expect("producer initialized above"))
@@ -239,10 +252,6 @@ impl WebSurface for PeltScryingProducer {
 
     fn set_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
         self.ensure()?.set_cookie(cookie)
-    }
-
-    fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError> {
-        self.ensure()?.execute_script_with_result(script)
     }
 
     fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {

@@ -16,7 +16,7 @@ use inker::{
     KeyboardEvent, KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind, NativeSurfaceHost,
     PhysicalPosition, SessionButtonState, SessionInput, SessionKey, SessionNavigationCommand,
     SessionPointerButton, SessionRegistry, SessionScrollKey, SessionSpawnRequest,
-    SurfaceEngineRegistry, SurfaceFrame, SurfaceProducer, SurfaceSpawnRequest,
+    SurfaceEngineRegistry, SurfaceFrame, SurfaceProducer, SurfaceSpawnRequest, WebSurfaceEvent,
 };
 use workbench::{
     ContentSource, Tile, TileEvent, TileId, TileTree, Workbench, WorkbenchEffect, WorkbenchOutcome,
@@ -586,24 +586,21 @@ impl<F: 'static> PeltWorkspace<F> {
         }
     }
 
-    /// Evaluate a script through one routed surface's optional web control
-    /// plane. Document tiles return `Ok(None)` so hosts can probe a mixed
-    /// workspace without duplicating route-state checks.
-    pub fn execute_surface_script(
+    /// Drain the next ordered web event from one routed surface. Document
+    /// tiles return `Ok(None)` so hosts can probe a mixed workspace without
+    /// duplicating route-state checks.
+    pub fn poll_surface_web_event(
         &mut self,
         tile: TileId,
-        script: &str,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<WebSurfaceEvent>, String> {
         let Some(surface) = self.surfaces.get_mut(&tile) else {
             return Ok(None);
         };
         let web = surface
             .producer
             .as_web_surface()
-            .ok_or_else(|| format!("tile {} surface has no web scripting plane", tile.0))?;
-        web.execute_script_with_result(script)
-            .map(Some)
-            .map_err(|error| format!("tile {} surface script failed: {error}", tile.0))
+            .ok_or_else(|| format!("tile {} surface has no web event plane", tile.0))?;
+        Ok(web.poll_web_event())
     }
 
     /// Replace or clear the user engine choice for one live tile. The selected

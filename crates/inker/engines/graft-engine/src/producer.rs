@@ -141,12 +141,6 @@ pub trait GraftSurface {
         ))
     }
 
-    fn get_cookies_for_url(&mut self, _url: &str) -> Result<Vec<Cookie>, SurfaceError> {
-        Err(SurfaceError::Unsupported(
-            "graft-engine blocking cookie reads are not wired yet".into(),
-        ))
-    }
-
     fn delete_cookie(&mut self, _cookie: &Cookie) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "graft-engine cookie delete is not wired yet".into(),
@@ -160,12 +154,6 @@ pub trait GraftSurface {
     ) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "graft-engine script result control is not wired yet".into(),
-        ))
-    }
-
-    fn execute_script_with_result(&mut self, _script: &str) -> Result<String, SurfaceError> {
-        Err(SurfaceError::Unsupported(
-            "graft-engine blocking script results are not wired yet".into(),
         ))
     }
 
@@ -294,10 +282,6 @@ impl WebSurface for GraftProducer {
         self.inner.request_cookies_for_url(id, url)
     }
 
-    fn get_cookies_for_url(&mut self, url: &str) -> Result<Vec<Cookie>, SurfaceError> {
-        self.inner.get_cookies_for_url(url)
-    }
-
     fn delete_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
         self.inner.delete_cookie(cookie)
     }
@@ -308,10 +292,6 @@ impl WebSurface for GraftProducer {
         script: &str,
     ) -> Result<(), SurfaceError> {
         self.inner.request_script_result(id, script)
-    }
-
-    fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError> {
-        self.inner.execute_script_with_result(script)
     }
 
     fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {

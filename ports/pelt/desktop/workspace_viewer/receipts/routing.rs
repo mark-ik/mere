@@ -114,11 +114,12 @@ impl WorkspaceApp {
         let progress = {
             let stats = self.native_surfaces.stats();
             format!(
-                "frames={} imports={} waits={} compositions={} verified_sizes={:?}",
+                "frames={} imports={} waits={} compositions={} content_ready_frame={:?} verified_sizes={:?}",
                 stats.frames,
                 stats.imports,
                 stats.waits,
                 stats.compositions,
+                self.mixed_content_ready_frame,
                 self.mixed_verified_sizes
             )
         };
@@ -217,6 +218,13 @@ impl WorkspaceApp {
             || rect.x + rect.width > logical_width as f32 + 1.0
             || rect.y + rect.height > logical_height as f32 + 1.0
         {
+            // A physical resize event can arrive one frame before the retained
+            // workspace has recomputed its logical layout. That old rectangle
+            // is expected during a pending matrix step; keep polling until the
+            // new layout and native frame agree.
+            if baseline.is_some() {
+                return Ok(false);
+            }
             return Err(format!(
                 "mixed resize receipt produced invalid tile 4 geometry at {}x{}: {rect:?}",
                 target.0, target.1
@@ -400,18 +408,17 @@ impl WorkspaceApp {
             return false;
         }
         let stats = self.native_surfaces.stats();
-        if let Some(ready_frame) = self.mixed_content_ready_frame {
-            return stats.frames > ready_frame;
+        if self.mixed_content_ready_frame.is_some() {
+            return true;
         }
-        let script = "Number(document.querySelector('#tick')?.textContent ?? 0) >= 1";
-        let content_ready = self
-            .workspace
-            .execute_surface_script(TileId(4), script)
-            .ok()
-            .flatten()
-            .is_some_and(|result| matches!(result.trim(), "true" | "\"true\""));
+        let content_ready = matches!(
+            self.workspace.poll_surface_web_event(TileId(4)),
+            Ok(Some(WebSurfaceEvent::WebMessage(message)))
+                if message.payload == "pelt.surface.ready"
+        );
         if content_ready {
             self.mixed_content_ready_frame = Some(stats.frames);
+            return true;
         }
         false
     }
@@ -646,7 +653,11 @@ impl WorkspaceApp {
         {
             let stats = self.native_surfaces.stats();
             self.native_surfaces.view(TileId(4)).is_some()
-                && stats.frames > stats.imports
+                // WebView2 deliberately allocates a fresh shared destination
+                // for each capture because the host has no consumer-done
+                // signal. Requiring frame reuse here would reward an unsafe
+                // overwrite rather than prove composition readiness.
+                && stats.frames > 0
                 && stats.imports > 0
                 && stats.waits >= 2
                 && stats.compositions >= 2

@@ -1108,14 +1108,6 @@ pub trait WebSurface: SurfaceProducer {
             "cookie reads are not wired for this web surface".into(),
         ))
     }
-    /// Transitional blocking compatibility for hosts not yet migrated to
-    /// [`Self::request_cookies_for_url`]. Do not call this from a render loop.
-    /// This method is excluded from the future extracted neutral contract.
-    fn get_cookies_for_url(&mut self, _url: &str) -> Result<Vec<Cookie>, SurfaceError> {
-        Err(SurfaceError::Unsupported(
-            "blocking cookie reads are not wired for this web surface".into(),
-        ))
-    }
     fn delete_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
         let _ = cookie;
         Err(SurfaceError::Unsupported(
@@ -1151,14 +1143,6 @@ pub trait WebSurface: SurfaceProducer {
     ) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "script results are not wired for this web surface".into(),
-        ))
-    }
-    /// Transitional blocking compatibility for hosts not yet migrated to
-    /// [`Self::request_script_result`]. Do not call this from a render loop.
-    /// This method is excluded from the future extracted neutral contract.
-    fn execute_script_with_result(&mut self, _script: &str) -> Result<String, SurfaceError> {
-        Err(SurfaceError::Unsupported(
-            "blocking script results are not wired for this web surface".into(),
         ))
     }
     /// Return the next event in producer order.
@@ -1392,9 +1376,6 @@ mod tests {
                 result: Ok("42".into()),
             });
             Ok(())
-        }
-        fn execute_script_with_result(&mut self, _: &str) -> Result<String, SurfaceError> {
-            Ok("42".into())
         }
         fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
             self.events.pop_front()

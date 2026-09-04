@@ -12,8 +12,6 @@
 //! `navigate_to_string` begin a load and return once the platform producer has
 //! accepted the request.
 
-use std::time::Duration;
-
 use inker::{
     Cookie, CursorShape, FocusReason, KeyboardEvent, MouseEvent, NativeSurfaceHost, PointerEvent,
     SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings, WebSurface,
@@ -26,7 +24,6 @@ use crate::translation::{
     map_keyboard, map_mouse, map_pointer, map_settings, map_web_event, wrap_web_message,
 };
 
-const SCRIPT_TIMEOUT: Duration = Duration::from_secs(3);
 const INITIAL_EMPTY_POLL_STALL_THRESHOLD: u32 = 600;
 const MAX_EMPTY_POLL_STALL_THRESHOLD: u32 = 4_800;
 
@@ -182,12 +179,6 @@ impl WebSurface for ScryingProducer {
     fn set_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
         self.inner
             .set_cookie(&map_cookie(cookie))
-            .map_err(map_error)
-    }
-
-    fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError> {
-        self.inner
-            .execute_script_with_result(script, SCRIPT_TIMEOUT)
             .map_err(map_error)
     }
 

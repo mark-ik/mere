@@ -29,7 +29,7 @@ use inker::{
     SessionScrollKey, SessionSpawnRequest, SurfaceEngineRegistry, SurfaceFrame,
 };
 #[cfg(target_os = "windows")]
-use inker::{FrameHandleOwnership, NativeTextureHandle};
+use inker::{FrameHandleOwnership, NativeTextureHandle, WebSurfaceEvent};
 use mere_surface_api::settings::{SettingValue, SettingsProvider};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions, Scene};
@@ -4788,10 +4788,17 @@ impl ApplicationHandler for WorkspaceApp {
                             return;
                         },
                     };
-                    if let Err(error) = scrying_host.install(hwnd, host.device()) {
-                        self.receipt_error = Some(error);
-                        event_loop.exit();
-                        return;
+                    match scrying_host.install(hwnd, host.device(), host.queue()) {
+                        Ok(synchronizer) => self.native_surfaces.install_scrying_importer(
+                            host.device(),
+                            host.queue(),
+                            synchronizer,
+                        ),
+                        Err(error) => {
+                            self.receipt_error = Some(error);
+                            event_loop.exit();
+                            return;
+                        },
                     }
                 }
                 self.host = Some(host);
