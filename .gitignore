@@ -95,3 +95,8 @@ mere-sessions/
 # Local host receipts can contain machine addresses, key fingerprints, and
 # endpoint reachability details. Keep the raw resident-host rehearsal local.
 ports/graphshell/docs/2026-07-28_h4f_resident_device_host_receipt.md
+
+# The Circuit recipe's workspace graph is derived from `cargo metadata` by
+# `ports/distillery/tests/walk_fixtures.rs`, not authored. A committed copy
+# fell a generation behind every time a member was added (2026-09-03).
+ports/distillery/tests/fixtures/circuit/

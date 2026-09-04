@@ -15,10 +15,11 @@
 //!   definition of W2 has something to be pointed at twice. Both are folded
 //!   from an authored `MeshEvent` history, never from a live mesh, so the
 //!   fixture a reader diffs is the fixture the fold produces.
-//! - **Circuit's second dataset.** Mere's own workspace dependency graph,
-//!   written by `scripts/workspace_graph_fixture.py`. The test reads the
-//!   committed file and never `cargo metadata`, so what W3 renders is what is
-//!   under review here.
+//! - **Circuit's second dataset.** Mere's own workspace dependency graph.
+//!   This one is *derived*, not authored: the test runs `cargo metadata`
+//!   itself, writes the graph under `CARGO_TARGET_TMPDIR`, and reads it back.
+//!   A committed snapshot of the member list falls a generation behind every
+//!   time a crate is added, so there is no committed snapshot any more.
 //! - **The bare scenario.** `distillery.installed.v1` composed against a
 //!   scripted DOM and driven by its own runner, with one exact resident
 //!   receipt observed. This is the skeleton the headed genet-probe receipts of
@@ -364,6 +365,117 @@ fn compare_or_author(path: &Path, document: &str) {
     }
 }
 
+// ── Circuit's derived dataset: the workspace graph ───────────────────────────
+
+/// Where the generated workspace graph lands. `CARGO_TARGET_TMPDIR` is a
+/// per-test-target directory under `target/`, so the derived document never
+/// goes back into `tests/fixtures/` and is never a thing to commit.
+fn generated_workspace_graph_path() -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR")).join("circuit/workspace_graph.json")
+}
+
+/// The cargo that is running this test, so a toolchain override is honoured.
+fn cargo_binary() -> String {
+    std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned())
+}
+
+/// Run a tool in the port directory and hand back its stdout, or say plainly
+/// what failed. Nothing here falls back to a cached answer: if the workspace
+/// cannot be read, the test that reads the graph has to fail, not pass with an
+/// empty one.
+fn tool_output(program: &str, args: &[&str]) -> String {
+    let output = std::process::Command::new(program)
+        .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .unwrap_or_else(|error| panic!("`{program} {}` did not run: {error}", args.join(" ")));
+    assert!(
+        output.status.success(),
+        "`{program} {}` failed ({}): {}",
+        args.join(" "),
+        output.status,
+        String::from_utf8_lossy(&output.stderr).trim()
+    );
+    String::from_utf8(output.stdout)
+        .unwrap_or_else(|error| panic!("`{program}` printed non-UTF-8: {error}"))
+}
+
+/// Derive the Circuit graph from `cargo metadata` and write it out.
+///
+/// Only workspace members appear. Edges are the normal and build dependencies
+/// between members; dev-dependencies are deliberately excluded, because a
+/// dev-dependency may legitimately point back at a crate that depends on it
+/// and the graph is asserted to be acyclic.
+///
+/// Keys are sorted and the document ends in a newline, so two runs against one
+/// commit produce byte-identical files.
+fn generate_workspace_graph() -> PathBuf {
+    let metadata: serde_json::Value =
+        serde_json::from_str(&tool_output(&cargo_binary(), &[
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+        ]))
+        .expect("cargo metadata parses");
+    let packages = metadata["packages"]
+        .as_array()
+        .expect("cargo metadata names its packages");
+    assert!(
+        !packages.is_empty(),
+        "cargo metadata returned no workspace members"
+    );
+
+    let members: std::collections::BTreeSet<String> = packages
+        .iter()
+        .map(|package| package["name"].as_str().expect("package name").to_owned())
+        .collect();
+    let mut edges: std::collections::BTreeSet<(String, String)> =
+        std::collections::BTreeSet::new();
+    for package in packages {
+        let source = package["name"].as_str().expect("package name");
+        for dependency in package["dependencies"]
+            .as_array()
+            .expect("package dependencies")
+        {
+            // `kind` is null for a normal dependency, "build" for a
+            // build-script one, "dev" for a test-only one.
+            match dependency["kind"].as_str() {
+                None | Some("build") => {}
+                Some(_) => continue,
+            }
+            let target = dependency["name"].as_str().expect("dependency name");
+            if members.contains(target) {
+                edges.insert((source.to_owned(), target.to_owned()));
+            }
+        }
+    }
+
+    // The commit the graph was read from, so a reader can tell two generations
+    // apart. A dirty tree still names its HEAD; that is honest enough here.
+    let generated_from = tool_output("git", &["rev-parse", "--short", "HEAD"])
+        .trim()
+        .to_owned();
+    assert!(
+        !generated_from.is_empty(),
+        "git named no HEAD for the workspace graph"
+    );
+
+    let graph = serde_json::json!({
+        "generated_from": generated_from,
+        "packages": members.iter().collect::<Vec<_>>(),
+        "edges": edges
+            .iter()
+            .map(|(from, to)| vec![from, to])
+            .collect::<Vec<_>>(),
+    });
+
+    let path = generated_workspace_graph_path();
+    fs::create_dir_all(path.parent().expect("graph parent")).expect("graph directory");
+    fs::write(&path, document(&graph)).expect("write generated workspace graph");
+    path
+}
+
 fn document<T: Serialize>(value: &T) -> String {
     let mut text = serde_json::to_string_pretty(value).expect("fixture serializes");
     text.push('\n');
@@ -447,8 +559,8 @@ fn chronicle_fixtures_are_deterministic_and_round_trip() {
 
 /// Circuit's second dataset, per the walk plan's §3.2: the workspace graph is
 /// Circuit's own founding dataset, and it must read as a DAG over the packages
-/// it names. Regenerated by `scripts/workspace_graph_fixture.py`; this test
-/// reads the committed file, never a live `cargo metadata`.
+/// it names. The test derives the graph from `cargo metadata` itself and then
+/// reads what it wrote, so the dataset cannot fall behind the member list.
 #[test]
 fn workspace_graph_fixture_is_a_dag_over_named_packages() {
     #[derive(Deserialize)]
@@ -458,15 +570,29 @@ fn workspace_graph_fixture_is_a_dag_over_named_packages() {
         edges: Vec<(String, String)>,
     }
 
-    let path = fixtures().join("circuit/workspace_graph.json");
+    let path = generate_workspace_graph();
     let graph: WorkspaceGraph =
-        serde_json::from_str(&read_fixture(&path).expect("committed workspace graph"))
+        serde_json::from_str(&read_fixture(&path).expect("generated workspace graph"))
             .expect("workspace graph parses");
     assert!(
         !graph.generated_from.is_empty(),
         "the graph names the commit it was read from"
     );
     assert!(graph.packages.len() > 1, "a workspace of one is not a graph");
+
+    // A stale or empty graph is caught here rather than by the DAG walk, which
+    // is happy to succeed over nothing. These four are load-bearing members of
+    // the boundary work the Circuit recipe renders.
+    for member in ["pelt", "knot-editor-host", "tabard", "mere-document-lanes"] {
+        assert!(
+            graph.packages.iter().any(|name| name == member),
+            "the generated graph does not name `{member}`, so it is stale or empty"
+        );
+    }
+    assert!(
+        !graph.edges.is_empty(),
+        "a workspace graph with no edges between members is not a graph"
+    );
     assert!(
         graph.packages.windows(2).all(|pair| pair[0] < pair[1]),
         "packages are sorted and distinct, so two generations diff cleanly"

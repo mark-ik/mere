@@ -2377,3 +2377,39 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   repository, each its own commit and push, in the order above; it starts on
   Mark's word, because every one of these repositories is outside the two the
   plan named and several carry live lanes.
+
+- 2026-09-03: **The Circuit workspace graph is generated, not committed.**
+  Mark's ruling closes the staleness clause carried in the notes above. The
+  snapshot at `ports/distillery/tests/fixtures/circuit/workspace_graph.json`
+  fell a generation behind the member list every time a crate was added — it
+  did so twice on 2026-09-03 alone, and by the end sat three generations back
+  at `f75db463` while HEAD was `b57d2021`, naming 106 packages against the
+  workspace's actual 126. A snapshot of a thing the build already knows is a
+  second source of truth that no test can defend, so it is gone.
+
+  The generator's logic was a plain projection of `cargo metadata --no-deps`
+  (member names; normal and build edges between members, dev edges dropped so
+  the graph stays acyclic; short HEAD as `generated_from`), so it moved into
+  the test in Rust rather than staying a script the test shells out to.
+  `workspace_graph_fixture_is_a_dag_over_named_packages` in
+  `ports/distillery/tests/walk_fixtures.rs` now runs `cargo metadata` itself
+  through the `CARGO` the test was launched with, writes the graph under
+  `CARGO_TARGET_TMPDIR` (`target/tmp/circuit/workspace_graph.json`), and reads
+  back what it wrote. `scripts/workspace_graph_fixture.py` is deleted; the
+  fixture is `git rm`ed and `ports/distillery/tests/fixtures/circuit/` is
+  gitignored. The `text eol=lf` attribute on `ports/distillery/tests/fixtures/**`
+  stays: the two Chronicle boards under it are still authored and committed.
+
+  A derived dataset can fail by being empty as easily as by being stale, and
+  the DAG walk is happy to succeed over nothing, so the test now asserts the
+  generated graph names `pelt`, `knot-editor-host`, `tabard` and
+  `mere-document-lanes` and carries at least one edge. (The ruling said
+  `document-lanes`; the workspace member is `mere-document-lanes`, and that is
+  what is asserted.) Receipts: `cargo test -p distillery` green twice in a row,
+  the generated file byte-identical across the two runs
+  (`570f277aa204b6159bc9c8e943090e926a893d22bd498dc50f76beeb3183d5a2`,
+  `generated_from` `b57d2021`, 126 packages, 309 edges). Two positive controls
+  prove the test is not vacuous: with the cargo binary unreachable it fails
+  with "`…metadata…` did not run: program not found" rather than passing, and a
+  member name that is not in the workspace fails with "the generated graph does
+  not name `…`, so it is stale or empty". Nothing pushed.
