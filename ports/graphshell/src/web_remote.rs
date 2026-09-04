@@ -131,6 +131,48 @@ impl BrowserHost {
     }
 
     /// The acknowledged remote revision, if mounted.
+    /// Mirror the local canvas's physics choice onto the remote board, and
+    /// reconcile the board's bodies to the acknowledged scene whenever its
+    /// revision moves: a new card spawns at its slot and enters with a settle
+    /// burst, the others keep their simulated positions, every slot is
+    /// re-anchored. The score is read, never written. (Physics catalog — P3.)
+    pub(crate) fn sync_remote_board(&mut self) {
+        self.remote_board
+            .set_choice(mere::canvas::PhysicsChoice {
+                law: self.canvas.physics_law(),
+                overlays: self.canvas.physics_overlays().to_vec(),
+                kind: self.canvas.physics_kind_source(),
+                mass: self.canvas.physics_mass_source(),
+                depth: self.canvas.physics_depth_source(),
+            });
+        let revision = self.remote_revision();
+        if revision == self.remote_board_revision && !self.remote_board.is_empty() {
+            return;
+        }
+        let Some(mounted) = self.remote_mounted() else {
+            return;
+        };
+        let items: Vec<mere::canvas::BoardItem> = mounted
+            .scene
+            .active_items_in_order()
+            .into_iter()
+            .map(|(instance, item)| mere::canvas::BoardItem {
+                id: instance.0.to_string(),
+                slot: (item.transform.translate.x, item.transform.translate.y),
+                site: mounted
+                    .scene
+                    .tables
+                    .sources
+                    .get(item.source.0 as usize)
+                    .and_then(|source| source.as_ref())
+                    .map(|source| source.adapter.clone())
+                    .unwrap_or_default(),
+            })
+            .collect();
+        self.remote_board.sync(items);
+        self.remote_board_revision = revision;
+    }
+
     pub(crate) fn remote_revision(&self) -> Option<u64> {
         let session = self.remote_session.as_ref()?;
         self.remote_client()?
@@ -485,6 +527,21 @@ pub(super) fn update_remote_semantics(host: &BrowserHost, document: &Document) -
             .unwrap_or_default(),
     )?;
     set("data-remote-resume", &host.remote_last_resume)?;
+    // The board's physics, for the P3 receipt: the law it runs, its energy,
+    // and the distance between the first two cards in the score's units.
+    set("data-remote-physics-law", host.canvas.physics_law().id())?;
+    set(
+        "data-remote-energy",
+        &format!("{:.1}", host.remote_board.energy()),
+    )?;
+    set(
+        "data-remote-gap",
+        &host
+            .remote_board
+            .gap("0", "1")
+            .map(|gap| format!("{gap:.0}"))
+            .unwrap_or_default(),
+    )?;
     set(
         "data-remote-cards",
         &host

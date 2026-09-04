@@ -1,0 +1,46 @@
+# Physics on the remote board (P3): the live fixture's board is mounted over
+# WebRTC (`?signal=`); its items become bodies on the host's physics board,
+# the score's positions their anchor slots, the local canvas's law mirrored.
+# The score is never written back.
+wait
+assert snap remote-link == webrtc
+assert snap remote-state == open
+assert snap remote-revision == 1
+assert snap remote-cards == 1
+# Pick Charge through the panel (the board mirrors the canvas's choice).
+select #gs-physics-select charge.barnes-hut
+dom click [data-command="apply-physics"]
+settle 1
+act session-remote
+settle 1
+assert snap session == remote
+assert snap remote-physics-law == charge.barnes-hut
+# Append a card: it enters at its slot, 140 units from the first, with a
+# settle burst; under Charge the pair pushes apart against the anchor pull.
+act invoke-action
+settle 1
+dom click [data-intent="mere.graphshell/live-fixture/append"]
+wait
+assert snap action-status ~ Accepted
+assert snap remote-revision == 2
+assert snap remote-cards == 2
+settle 2
+capture physics_remote_appended
+wait
+settle 360
+assert snap remote-gap >= 170
+capture physics_remote_charge_settled
+wait
+# Orbit: the cards keep moving — energy above a floor two seconds in and
+# five seconds later.
+select #gs-physics-select orbit.gravity
+dom click [data-command="apply-physics"]
+settle 1
+assert snap remote-physics-law == orbit.gravity
+settle 120
+assert snap remote-energy >= 1
+settle 300
+assert snap remote-energy >= 1
+capture physics_remote_orbit
+wait
+log physics remote board receipt complete

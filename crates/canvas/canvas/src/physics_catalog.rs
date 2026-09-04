@@ -659,25 +659,46 @@ impl TopologyView {
 /// visible spring edges, and (on demand) degree, the site grouping, the
 /// Louvain partition and the petgraph view.
 pub(crate) struct LawInputs<'a> {
-    graph: &'a Graph,
     nodes: Vec<NodeKey>,
     edges: Vec<(NodeKey, NodeKey)>,
+    /// Each node's site (the URL host for a graph node; whatever grouping a
+    /// board's host names), the Kinds law's and the group overlay's default.
+    sites: HashMap<NodeKey, String>,
     clusters: Option<&'a signals::ClusterSet>,
 }
 
 impl<'a> LawInputs<'a> {
     pub(crate) fn new(
-        graph: &'a Graph,
+        graph: &Graph,
         hidden_edges: &HashSet<crate::EdgeCell>,
         clusters: Option<&'a signals::ClusterSet>,
     ) -> Self {
-        let mut nodes: Vec<NodeKey> = graph.nodes().map(|(key, _)| key).collect();
+        let sites = graph
+            .nodes()
+            .map(|(key, node)| (key, url_host(node.url())))
+            .collect();
+        let mut inputs = Self::from_parts(
+            graph.nodes().map(|(key, _)| key).collect(),
+            visible_relation_edges(graph, hidden_edges),
+            sites,
+        );
+        inputs.clusters = clusters;
+        inputs
+    }
+
+    /// Graph-free inputs: a node list, an edge list, and a site per node —
+    /// what a [`PhysicsBoard`](crate::PhysicsBoard) has for a scene's items.
+    pub(crate) fn from_parts(
+        mut nodes: Vec<NodeKey>,
+        edges: Vec<(NodeKey, NodeKey)>,
+        sites: HashMap<NodeKey, String>,
+    ) -> Self {
         nodes.sort_by_key(|key| key.index());
         Self {
-            graph,
             nodes,
-            edges: visible_relation_edges(graph, hidden_edges),
-            clusters,
+            edges,
+            sites,
+            clusters: None,
         }
     }
 
@@ -694,19 +715,15 @@ impl<'a> LawInputs<'a> {
         degree
     }
 
-    /// Every node's group by URL host, as a dense id in first-seen order.
+    /// Every node's group by site, as a dense id in first-seen order.
     fn site_groups(&self) -> Vec<(NodeKey, u32)> {
         let mut ids: HashMap<String, u32> = HashMap::new();
         self.nodes
             .iter()
             .map(|&key| {
-                let host = self
-                    .graph
-                    .get_node(key)
-                    .map(|node| url_host(node.url()))
-                    .unwrap_or_default();
+                let site = self.sites.get(&key).cloned().unwrap_or_default();
                 let next = ids.len() as u32;
-                (key, *ids.entry(host).or_insert(next))
+                (key, *ids.entry(site).or_insert(next))
             })
             .collect()
     }
