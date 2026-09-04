@@ -17,21 +17,21 @@
 use std::sync::RwLock;
 use std::time::Duration;
 
+use chirograph::IntentResult;
 use graphshell::carrier::projection_policy;
 use graphshell::lifecycle::SessionAuthority;
-use graphshell::resume::ResumeFixtureEndpoint;
-use graphshell::session_loop::serve_admitted_session;
 use graphshell::live_endpoint::{self, LiveEndpoint};
 use graphshell::native::endpoint_catalog::{ResidentEndpointCatalog, ResidentEndpointRoute};
 use graphshell::native::projection_host::ResidentProjectionHost;
+use graphshell::resume::ResumeFixtureEndpoint;
+use graphshell::session_loop::serve_admitted_session;
 use graphshell::webrtc_door::{InviteTerms, issue_invite};
 use graphshell::webrtc_session::{HostedInvite, peer_join, serve_webrtc_join};
 use graphshell_client::{Advance, Outcome, SessionDriver};
 use graphshell_endpoint::ResumableProjectionSource;
-use chirograph::IntentResult;
 use notochord::{NetworkId, ProfileRef, RevocationLedger, TrustedRoot};
-use sceno::InstanceId;
 use personae::{IdentityProvider, InMemoryProvider};
+use sceno::InstanceId;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use webrtc_carrier::ReleaseRefV1;
 use webrtc_carrier::native::{CarrierConfig, loopback_pair, stream_over_frames};
@@ -325,8 +325,8 @@ async fn the_admitted_intent_moves_the_revision_and_the_refused_one_does_not() {
                 Ok(LiveEndpoint::new())
             })
             .expect("the route registers");
-        let route = ResidentEndpointRoute::new("live", Duration::from_millis(50))
-            .expect("a valid route");
+        let route =
+            ResidentEndpointRoute::new("live", Duration::from_millis(50)).expect("a valid route");
         let mut host = ResidentProjectionHost::new(policy.clone(), route, catalog);
 
         let host_side = async {

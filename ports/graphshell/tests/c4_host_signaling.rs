@@ -253,11 +253,15 @@ async fn the_fixture_binary_serves_a_projection_over_its_own_signaling() {
         let (_fixture, fragment) = start_fixture(PORT_SERVES).await;
 
         assert_eq!(
-            http(PORT_SERVES, "GET", "/health", "").await.expect("health answers"),
+            http(PORT_SERVES, "GET", "/health", "")
+                .await
+                .expect("health answers"),
             "ok"
         );
         assert_eq!(
-            http(PORT_SERVES, "GET", "/invite", "").await.expect("invite answers"),
+            http(PORT_SERVES, "GET", "/invite", "")
+                .await
+                .expect("invite answers"),
             fragment,
             "the fragment served over HTTP is the one the fixture printed"
         );

@@ -240,14 +240,8 @@ pub async fn host_join<P: IdentityProvider, F: JoinFrames>(
     // the "write the refusal, then close" rule.
     let hello = recv_binary(frames, "a Notochord hello").await?;
     let shared_link = challenge.shared_link();
-    let (reply, outcome) = admit_webrtc_session(
-        policy,
-        ledger,
-        &hello,
-        shared_link,
-        now_ms,
-        active_sessions,
-    );
+    let (reply, outcome) =
+        admit_webrtc_session(policy, ledger, &hello, shared_link, now_ms, active_sessions);
     frames.send(&reply).await.map_err(JoinError::Channel)?;
     let principal = outcome.map_err(JoinError::Denied)?;
 
@@ -255,7 +249,9 @@ pub async fn host_join<P: IdentityProvider, F: JoinFrames>(
     // so this frame decoded once already, and a failure here is a bug rather
     // than a hostile frame.
     let claims = SessionHello::decode(&hello, &policy.limits.clamped())
-        .map_err(|error| JoinError::Malformed(format!("accepted hello did not re-decode: {error}")))?
+        .map_err(|error| {
+            JoinError::Malformed(format!("accepted hello did not re-decode: {error}"))
+        })?
         .claims();
 
     Ok(JoinConclusion {
@@ -398,15 +394,15 @@ mod tests {
 
     use super::*;
     use crate::carrier::projection_policy;
-    use crate::webrtc_door::RedemptionRefusal;
-    use notochord::{NetworkId, ProfileRef};
     use crate::lifecycle::SessionAuthority;
     use crate::resume::ResumeFixtureEndpoint;
     use crate::session_loop::serve_admitted_session;
+    use crate::webrtc_door::RedemptionRefusal;
     use crate::webrtc_door::{InviteTerms, issue_invite};
     use graphshell_client::{Advance, Outcome, SessionDriver};
     use graphshell_endpoint::ResumableProjectionSource;
     use notochord::TrustedRoot;
+    use notochord::{NetworkId, ProfileRef};
     use personae::InMemoryProvider;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::sync::mpsc;
@@ -596,8 +592,10 @@ mod tests {
 
         // A new link: new frames, new fingerprints, same delegation.
         let (mut host_frames, mut peer_frames) = frame_pair();
-        let client_fp = DtlsFingerprint::new(FingerprintRole::Client, [0xcc; DTLS_FINGERPRINT_BYTES]);
-        let server_fp = DtlsFingerprint::new(FingerprintRole::Server, [0xdd; DTLS_FINGERPRINT_BYTES]);
+        let client_fp =
+            DtlsFingerprint::new(FingerprintRole::Client, [0xcc; DTLS_FINGERPRINT_BYTES]);
+        let server_fp =
+            DtlsFingerprint::new(FingerprintRole::Server, [0xdd; DTLS_FINGERPRINT_BYTES]);
 
         let host_side = host_join(
             &mut host_frames,
@@ -703,7 +701,10 @@ mod tests {
         );
         let (host_end, peer_end) = tokio::join!(host_side, peer_side);
         assert!(
-            matches!(host_end, Err(JoinError::Redemption(RedemptionRefusal::Exhausted))),
+            matches!(
+                host_end,
+                Err(JoinError::Redemption(RedemptionRefusal::Exhausted))
+            ),
             "the host records the exhaustion: {host_end:?}"
         );
         let refused = peer_end.expect_err("the peer is refused");
@@ -768,7 +769,10 @@ mod tests {
         );
         // The peer hung up without redeeming, so the host ends on the closed
         // channel — and critically, the use count is intact.
-        assert!(matches!(host_end, Err(JoinError::Channel(_))), "{host_end:?}");
+        assert!(
+            matches!(host_end, Err(JoinError::Channel(_))),
+            "{host_end:?}"
+        );
         assert_eq!(
             hosted.redemption.remaining_uses(),
             1,

@@ -54,7 +54,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use graphshell::carrier::projection_policy;
-use graphshell::live_endpoint::{ADMITTED_INTENT, LiveEndpoint, REFUSED_INTENT, SharedLiveEndpoint};
+use graphshell::live_endpoint::{
+    ADMITTED_INTENT, LiveEndpoint, REFUSED_INTENT, SharedLiveEndpoint,
+};
 use graphshell::native::endpoint_catalog::{ResidentEndpointCatalog, ResidentEndpointRoute};
 use graphshell::native::projection_host::ResidentProjectionHost;
 use graphshell::webrtc_door::{InviteTerms, issue_invite};
@@ -99,10 +101,7 @@ impl Args {
         };
         let mut argv = std::env::args().skip(1);
         while let Some(flag) = argv.next() {
-            let mut value = || {
-                argv.next()
-                    .ok_or_else(|| format!("{flag} needs a value"))
-            };
+            let mut value = || argv.next().ok_or_else(|| format!("{flag} needs a value"));
             match flag.as_str() {
                 "--signal-port" => {
                     args.signal_port = value()?.parse().map_err(|_| "bad --signal-port")?
@@ -201,7 +200,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     let route = ResidentEndpointRoute::new("live", Duration::from_millis(250))?;
     let host = Arc::new(Mutex::new(ResidentProjectionHost::new(
-        policy.clone(), route, catalog,
+        policy.clone(),
+        route,
+        catalog,
     )));
 
     let signal_addr = SocketAddr::new(IpAddr::from([127, 0, 0, 1]), args.signal_port);
@@ -209,10 +210,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("graphshell C4a WebRTC host");
     println!("  host key      {}", hex(&host_key));
-    println!("  offer         POST http://{signal_addr}/offer   (text/plain: offer SDP in, answer SDP out)");
+    println!(
+        "  offer         POST http://{signal_addr}/offer   (text/plain: offer SDP in, answer SDP out)"
+    );
     println!("  invite        GET  http://{signal_addr}/invite  (the fragment below, as text)");
     println!("  health        GET  http://{signal_addr}/health");
-    println!("  nudge         POST http://{signal_addr}/nudge   (append a card natively; answers the new revision)");
+    println!(
+        "  nudge         POST http://{signal_addr}/nudge   (append a card natively; answers the new revision)"
+    );
     println!("  carrier bind  {}:{}", args.bind, args.udp_port);
     if args.advertise.is_empty() {
         println!(
@@ -255,7 +260,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let id = session;
         tokio::spawn(async move {
             if let Err(error) = serve_request(
-                stream, id, hosted, host, ledger, provider, policy, fragment, bind, advertise, board,
+                stream, id, hosted, host, ledger, provider, policy, fragment, bind, advertise,
+                board,
             )
             .await
             {
@@ -320,7 +326,10 @@ async fn serve_request(
         ("GET", "/invite") => respond(&mut write, "200 OK", &fragment).await,
         ("POST", "/nudge") => {
             let revision = board.with(|endpoint| endpoint.append());
-            println!("[nudge] the host appended a card natively; board at revision {}", revision.0);
+            println!(
+                "[nudge] the host appended a card natively; board at revision {}",
+                revision.0
+            );
             respond(&mut write, "200 OK", &revision.0.to_string()).await
         }
         ("POST", "/offer") => {
@@ -367,7 +376,14 @@ async fn serve_request(
             });
             Ok(())
         }
-        _ => respond(&mut write, "404 Not Found", "try POST /offer, GET /invite, GET /health").await,
+        _ => {
+            respond(
+                &mut write,
+                "404 Not Found",
+                "try POST /offer, GET /invite, GET /health",
+            )
+            .await
+        }
     }
 }
 
@@ -392,8 +408,14 @@ async fn admit_and_serve(
         carrier.local_addr()
     );
     if let Some(prints) = carrier.fingerprints() {
-        println!("[session {id}] dtls client {}", prints.client().to_sdp_hex());
-        println!("[session {id}] dtls server {}", prints.server().to_sdp_hex());
+        println!(
+            "[session {id}] dtls client {}",
+            prints.client().to_sdp_hex()
+        );
+        println!(
+            "[session {id}] dtls server {}",
+            prints.server().to_sdp_hex()
+        );
     }
 
     let live = host.lock().await.live_sessions();

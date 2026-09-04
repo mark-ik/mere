@@ -36,9 +36,7 @@ use std::future::poll_fn;
 use std::rc::Rc;
 use std::task::{Poll, Waker};
 
-use webrtc_carrier::{
-    BrowserInitiator, DtlsFingerprint, FingerprintRole, MAX_FRAME_PAYLOAD_BYTES,
-};
+use webrtc_carrier::{BrowserInitiator, DtlsFingerprint, FingerprintRole, MAX_FRAME_PAYLOAD_BYTES};
 
 // What a page needs to name to drive a join, re-exported so the page
 // depends on this module alone.
@@ -269,7 +267,9 @@ impl BrowserJoin {
         limits: &HandshakeLimits,
     ) -> Result<BrowserSession, JoinError> {
         let own_fingerprint = self.own_fingerprint.ok_or_else(|| {
-            JoinError::Malformed("complete_rejoin() before create_offer(): no local fingerprint".into())
+            JoinError::Malformed(
+                "complete_rejoin() before create_offer(): no local fingerprint".into(),
+            )
         })?;
         let host_fingerprint = fingerprint_in(answer_sdp, FingerprintRole::Server)?;
         self.initiator

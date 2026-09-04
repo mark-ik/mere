@@ -422,7 +422,10 @@ impl SharedLiveEndpoint {
 
     /// Run `f` on the board.
     pub fn with<R>(&self, f: impl FnOnce(&mut LiveEndpoint) -> R) -> R {
-        let mut guard = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut guard = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         f(&mut guard)
     }
 }
@@ -485,7 +488,11 @@ mod tests {
 
     use super::*;
 
-    fn invocation(session: &ProjectionSession, revision: Revision, intent: &str) -> IntentInvocation {
+    fn invocation(
+        session: &ProjectionSession,
+        revision: Revision,
+        intent: &str,
+    ) -> IntentInvocation {
         IntentInvocation {
             session: session.clone(),
             target: InstanceId(0),
@@ -560,7 +567,11 @@ mod tests {
         let mut endpoint = LiveEndpoint::new();
         let session = endpoint.session().clone();
         endpoint
-            .invoke(invocation(&session, endpoint.current_revision(), ADMITTED_INTENT))
+            .invoke(invocation(
+                &session,
+                endpoint.current_revision(),
+                ADMITTED_INTENT,
+            ))
             .expect("the session matches");
         let current = endpoint.current_revision();
 
@@ -575,7 +586,11 @@ mod tests {
                 current_revision: current,
             }
         );
-        assert_eq!(endpoint.current_revision(), current, "a stale intent changes nothing");
+        assert_eq!(
+            endpoint.current_revision(),
+            current,
+            "a stale intent changes nothing"
+        );
     }
 
     /// Each accepted intent leaves a diff a resuming peer can be caught up
@@ -587,7 +602,11 @@ mod tests {
         let start = endpoint.current_revision();
         for _ in 0..3 {
             endpoint
-                .invoke(invocation(&session, endpoint.current_revision(), ADMITTED_INTENT))
+                .invoke(invocation(
+                    &session,
+                    endpoint.current_revision(),
+                    ADMITTED_INTENT,
+                ))
                 .expect("the session matches");
         }
 
@@ -632,7 +651,11 @@ mod tests {
         assert!(endpoint.poll_notice().expect("no error").is_none());
 
         endpoint
-            .invoke(invocation(&session, endpoint.current_revision(), REFUSED_INTENT))
+            .invoke(invocation(
+                &session,
+                endpoint.current_revision(),
+                REFUSED_INTENT,
+            ))
             .expect("the session matches");
         assert!(
             endpoint.poll_notice().expect("no error").is_none(),
@@ -640,7 +663,11 @@ mod tests {
         );
 
         endpoint
-            .invoke(invocation(&session, endpoint.current_revision(), ADMITTED_INTENT))
+            .invoke(invocation(
+                &session,
+                endpoint.current_revision(),
+                ADMITTED_INTENT,
+            ))
             .expect("the session matches");
         let notice = endpoint.poll_notice().expect("no error").expect("one bell");
         assert_eq!(notice.revision, endpoint.current_revision());

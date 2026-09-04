@@ -469,15 +469,10 @@ mod tests {
         assert_eq!(facts.ingress.shared_link, Some(shared_link));
         assert_eq!(facts.ingress.local_interface, None);
 
-        let outcome = admit_accepted_session(
-            accepted,
-            &policy(),
-            &RevocationLedger::default(),
-            NOW_MS,
-            0,
-        )
-        .await
-        .expect("admission path");
+        let outcome =
+            admit_accepted_session(accepted, &policy(), &RevocationLedger::default(), NOW_MS, 0)
+                .await
+                .expect("admission path");
         client_task.abort();
 
         let session = outcome.expect("the webrtc session must be admitted");

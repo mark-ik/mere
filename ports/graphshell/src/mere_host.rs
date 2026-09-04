@@ -714,7 +714,12 @@ mod tests {
 
     /// The rung a served item carries, looked up by the node's address.
     fn served_rung(snapshot: &ProjectionSnapshot, graph: &Graph, address: &str) -> Representation {
-        let id = graph.get_node_by_url(address).expect("fixture node").1.id.to_string();
+        let id = graph
+            .get_node_by_url(address)
+            .expect("fixture node")
+            .1
+            .id
+            .to_string();
         snapshot
             .scene
             .active_items_in_order()
@@ -740,7 +745,11 @@ mod tests {
             MereHost::fixture(MemoryBackend::new(), selected_persona(), fixture_handlers())
                 .expect("fixture");
         let oldest = host.graph().get_node_by_url(FIXTURE_WEB_ADDRESS).unwrap().0;
-        let newest = host.graph().get_node_by_url(FIXTURE_RECEIPT_ADDRESS).unwrap().0;
+        let newest = host
+            .graph()
+            .get_node_by_url(FIXTURE_RECEIPT_ADDRESS)
+            .unwrap()
+            .0;
         assert!(
             host.graph().node_last_visited(oldest) < host.graph().node_last_visited(newest),
             "the fixture must spread visit times or the ladder has nothing to select on"
@@ -776,6 +785,10 @@ mod tests {
             assert_eq!(scored.representation, item.representation, "{}", source.id);
             compared += 1;
         }
-        assert_eq!(compared, score.items.len(), "the score names exactly the served items");
+        assert_eq!(
+            compared,
+            score.items.len(),
+            "the score names exactly the served items"
+        );
     }
 }

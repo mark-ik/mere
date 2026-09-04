@@ -52,7 +52,6 @@ pub trait JoinFrames {
     async fn send(&mut self, payload: &[u8]) -> Result<(), String>;
 }
 
-
 /// What the joining end sends, one JSON value per frame.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
@@ -328,7 +327,10 @@ pub(crate) async fn recv_json<T: for<'de> Deserialize<'de>, F: JoinFrames>(
         .map_err(|error| JoinError::Malformed(format!("undecodable join message: {error}")))
 }
 
-pub(crate) async fn recv_binary<F: JoinFrames>(frames: &mut F, expected: &str) -> Result<Vec<u8>, JoinError> {
+pub(crate) async fn recv_binary<F: JoinFrames>(
+    frames: &mut F,
+    expected: &str,
+) -> Result<Vec<u8>, JoinError> {
     match frames.recv().await.map_err(JoinError::Channel)? {
         Some(payload) => Ok(payload),
         None => Err(JoinError::Channel(format!(
@@ -337,7 +339,10 @@ pub(crate) async fn recv_binary<F: JoinFrames>(frames: &mut F, expected: &str) -
     }
 }
 
-pub(crate) async fn send_json<T: Serialize, F: JoinFrames>(frames: &mut F, message: &T) -> Result<(), JoinError> {
+pub(crate) async fn send_json<T: Serialize, F: JoinFrames>(
+    frames: &mut F,
+    message: &T,
+) -> Result<(), JoinError> {
     let payload = serde_json::to_vec(message)
         .map_err(|error| JoinError::Malformed(format!("unencodable join message: {error}")))?;
     frames.send(&payload).await.map_err(JoinError::Channel)
@@ -346,7 +351,6 @@ pub(crate) async fn send_json<T: Serialize, F: JoinFrames>(frames: &mut F, messa
 pub(crate) fn unexpected_message(expected: &str, actual: &impl std::fmt::Debug) -> JoinError {
     JoinError::Malformed(format!("expected {expected}, received {actual:?}"))
 }
-
 
 /// Bytes in, complete lines out, with the partial tail carried across calls.
 ///
@@ -408,7 +412,10 @@ mod assembler_tests {
         lines.push(b"{\"id\":1,\"bo");
         assert_eq!(lines.next_line(), None, "half a line is not a line");
         lines.push(b"dy\":null}\n");
-        assert_eq!(lines.next_line().as_deref(), Some("{\"id\":1,\"body\":null}"));
+        assert_eq!(
+            lines.next_line().as_deref(),
+            Some("{\"id\":1,\"body\":null}")
+        );
         assert_eq!(lines.next_line(), None);
     }
 

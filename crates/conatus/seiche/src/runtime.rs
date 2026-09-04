@@ -547,12 +547,9 @@ impl Physics {
         }
     }
 
-    /// Fold the layout into `view` **without stepping**: the positions exactly
-    /// as they stand. A host that has just synced bodies and wants to read or
-    /// draw them before the next frame calls this;
-    /// [`advance_frame`](Self::advance_frame) is the per-frame call that also
-    /// integrates. Offloaded, this only drains whatever the actor has already
-    /// emitted — a body synced this instant appears once the actor reports it.
+    /// Fold the layout into `view` **without stepping** — for a host that
+    /// synced bodies and must read or draw them before the next frame.
+    /// Offloaded, this drains only what the actor has already emitted.
     pub fn refresh(&mut self, view: &mut LayoutView) {
         match self {
             Physics::Inline(p) => {

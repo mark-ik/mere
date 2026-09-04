@@ -64,9 +64,13 @@
 //! those bytes is `webrtc_carrier::native` on this side and
 //! `webrtc_carrier::browser` on the other, and neither is named here.
 
-use notochord::{HandshakeError, NetworkId, ProfileRef, RequestedAction, SessionHello, TrafficClass};
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-use notochord::{AdmittedPrincipal, DenyReason, LocalNetworkPolicy, RevocationLedger, SessionFacts};
+use notochord::{
+    AdmittedPrincipal, DenyReason, LocalNetworkPolicy, RevocationLedger, SessionFacts,
+};
+use notochord::{
+    HandshakeError, NetworkId, ProfileRef, RequestedAction, SessionHello, TrafficClass,
+};
 use personae::delegation::{
     CapabilityScope, DelegationCertificate, DelegationError, DelegationParent,
     SignedDelegationCertificate,

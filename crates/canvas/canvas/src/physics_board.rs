@@ -77,9 +77,7 @@ pub struct BoardItem {
 /// The catalog's physics over a scene's items. See the module docs.
 pub struct PhysicsBoard {
     physics: Physics,
-    /// The read model the backend writes positions into — the board's own copy
-    /// of what the canvas calls its view. Inline or offloaded, this is what
-    /// `position` reads, so the host never touches the simulation.
+    /// What the backend writes positions into, and `position` reads.
     view: LayoutView,
     keys: HashMap<String, NodeKey>,
     next_key: usize,
@@ -107,11 +105,8 @@ impl PhysicsBoard {
         }
     }
 
-    /// Move the board's simulation onto an actor thread (native hosts; a no-op
-    /// once offloaded). `wake` pokes the host's event loop when a layout lands.
-    /// (Unconditional: the canvas takes seiche's default features, so the
-    /// actor backend is always present here, as it is for the canvas's own
-    /// `offload_physics`.)
+    /// Move the board's simulation onto an actor thread (native hosts; a
+    /// no-op once offloaded). `wake` pokes the host's event loop.
     pub fn offload(&mut self, wake: armillary::Wake) {
         self.physics.offload(wake);
     }
@@ -183,9 +178,7 @@ impl PhysicsBoard {
         self.sync_anchors();
         self.rebuild_forces();
         self.settle_for_choice();
-        // Fold the new body set into the view now, so a host that syncs and
-        // draws in the same frame sees the fresh item at its slot rather than
-        // one tick late.
+        // So a host that syncs and draws in one frame sees the fresh item.
         self.physics.refresh(&mut self.view);
         fresh
     }
