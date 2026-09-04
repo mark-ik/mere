@@ -2678,3 +2678,58 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   place for sonance and one proposed for anise); the two candidate
   extractions fail the bar and remain mere crates. P5 is met on the
   rulings above once Mark takes them.
+
+- 2026-09-04: **P5 landed on Mark's rulings** ("1-6: sure", with notes).
+  Conatus stays in mere; Mark's note recorded: seiche could be split out of
+  the family and stay in mere, and the family could leave mere, and neither
+  is worth doing now. Eidetic: the reshuffle landed (`cfe7d2d8`,
+  `mere-eidetic-search` to `crates/intel/eidetic-search` beside `esp`, its
+  only in-workspace consumer; the eidetic README now states the portable
+  core and its one Mere edge, `mere-eidetic`'s identity types behind
+  `pack-signing`), and the review Mark asked for is
+  `design_docs/eidetic_docs/research/2026-09-04_eidetic_review_brief.md`
+  (`5cdb3ff1`): tantivy costs 117 packages against 19 without it and keeps
+  the crate off the wasm lane; turnstone re-mints the whole index on every
+  query and never opens one from disk, so most of the crate's surface has
+  no consumer and page text never enters the index; recommendation, an
+  in-tree BM25 behind the unchanged `Hit`/`fuse` seam, with the criteria
+  that would keep tantivy stated; one visited page is materialized five
+  times with dedup at read time; `chartulary::rdf` duplicates
+  `mere-linked-data`; five unsurfaced features and eight questions, the
+  first being that the corpus size the judgement turns on is unmeasured.
+  Sonance archived on GitHub (its code is `mora::sonance`; deletion of the
+  repository and the local checkout are Mark's). Anise mirror archived with
+  a description saying it was an unmodified pin of upstream's 0.10.6 tag;
+  turquet takes anise from crates.io (`ce1a9ab`, verify feature checks).
+  Mer3ly (`4ee5e1e`): knot-editor entered as a repository with four
+  relations and a migration record, nine evidence lines corrected for
+  Cambium's home, showcases corrected (the Pelt captures stay on Genet's
+  card as Genet-era, since the schema ties an image to the repository that
+  holds it and mere has no Pelt capture; ortet named in prose), sonance and
+  anise rendered archived through the refreshed metadata; `authority
+  validate` 19 repositories, 29 relations, 29 migration records. Shared
+  wgpu automation: measured first over the last 40 runs per repository, and
+  the premise was off: the hosted lanes were already green (scry and weld
+  matrix 10/10), and the pointless red was the hardware lanes cancelling
+  themselves on the next push (scry's headed lane: 2 useful badges in 9
+  runs) and graft's fan-in job, which ran on Ubuntu under a Windows name.
+  Landed: `merely-made/.github` gained `wgpu-check.yml` and
+  `wgpu-msrv.yml` as `workflow_call` workflows (`c994b3f`), toolchain read
+  from the caller's `rust-toolchain.toml`; weld (`b55d8cc`) and scry
+  (`392ff05`, which gained a `rust-toolchain.toml` at 1.97.1) call them,
+  with MSRV on tags and dispatch only and hardware lanes weekly plus
+  dispatch, non-gating; graft (`d391a4c`) moves MSRV to the shared gate,
+  names the failing lane in its fan-in, and unhooks its hardware lane; its
+  release sync workflows are untouched. Every check that existed is still
+  reachable. All pushed, org repository first. Machine-local patch tables
+  in mer3ly and woodshed repointed to the moved paths (gitignored).
+  **For Mark:** branch-protection required-check names change (shared jobs
+  appear as `gate / <os> / <wgpu>`), the hardware jobs must leave the
+  required set, and graft's fan-in name is his to rename; scry's clippy and
+  fmt are off to keep today's green and are a two-line flip after a
+  cleanup; two live bugs the table surfaced are out of scope here, weld's
+  `fd_is_closed` assertion in `vulkan_dmabuf.rs:475` and graft's `E0507`
+  against bevy 0.19 in `demo-servo-bevy`. **Done-condition met:** every
+  separate repository has a stated surface, both folded placeholders are
+  archived with a durable pointer, and both candidate extractions remain
+  mere crates.
