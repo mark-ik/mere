@@ -1,9 +1,10 @@
 # Derived Faces Plan
 
 **Date:** 2026-08-28
-**Status:** **D1 published as `pictograph` 0.1.0, D2 landed as unpublished
-0.2.0 on 2026-09-01, D3 landed on 2026-09-02, and D4 default-scale
-legibility landed on 2026-09-03.** Editing remains deferred.
+**Status:** **D1 published as `pictograph` 0.1.0; 0.2.0 publishes D2's bridge
+and D4's derivation grammar on 2026-09-04.** D3 landed as a Mere integration
+on 2026-09-02 and D4 default-scale legibility landed on 2026-09-03. Editing
+remains deferred.
 The original gate was emblem's encoder
 (`repos/emblem/design_docs/2026-08-28_encoder_plan.md`), whose E1–E4 all landed
 and shipped as emblem 0.2.0 on 2026-08-29.
@@ -227,6 +228,12 @@ Done when:
   the `Face::Derived` arm, address/version byte cache, live seed-derived
   palette, portable Canvas sink, web representation option, and headed
   default/detail receipts.
+- 2026-09-04: `pictograph` 0.2.0 published on crates.io by `mark-ik` (created
+  `2026-09-04T04:13:52.253259Z`, checksum
+  `ecde38fa0711d49d6a1d25ad2fb526b370e7ad56d0ebed255147dae6c477b831`),
+  unyanked. Its registry tarball carries the D4 derivation-v3 source; the
+  downloaded immutable tarball passes `cargo test --all-features --locked -j 1`
+  with 22 unit tests, two headless-vello pixel tests, and zero doc tests.
 
 ### D1 receipt (2026-08-29)
 
@@ -288,7 +295,7 @@ primary colours must occur across the corpus.
 
 ### D2 receipt (2026-09-01)
 
-Unpublished `pictograph` 0.2.0 adds an optional `vello` feature. `VelloSink`
+`pictograph` 0.2.0 adds an optional `vello` feature. `VelloSink`
 maps emblem's move, line, quadratic, cubic, close, and fill calls into a kurbo
 `BezPath` and the exact `netrender-vello` `Scene` type. Every fill explicitly
 uses non-zero winding. `decode` returns a `Graphic` carrying both the clipped
@@ -321,8 +328,10 @@ Done-conditions met:
   `vello` feature; all-target Clippy and rustdoc pass with warnings denied. The
   extracted `.crate` repeats all 23 tests using registry dependencies only.
 
-0.2.0 is not published. Canvas uses the portable sink described above; D2
-remains available to consumers whose boundary is the exact vello scene type.
+Published 2026-09-04. The registry tarball's `src/vello.rs` and README match
+current main; `src/lib.rs` differs only by the later test-comment clarification
+in `db85375e`. Canvas uses the portable sink described above; D2 remains
+available to consumers whose boundary is the exact vello scene type.
 
 ### D3 receipt (2026-09-02)
 
