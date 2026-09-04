@@ -394,6 +394,8 @@ renders the same corpus with an all-black palette and Area antialiasing.
 Done-conditions met:
 - **generator gates:** all 15 pictograph library tests pass; strict library
   Clippy and formatting pass;
+- **Canvas gate:** all 195 `mere-canvas` library tests pass, including the
+  derived-face decode, LOD, cache, palette-swap, default, and override cases;
 - **consumer gate:** standalone `graphshell-web` builds for
   `wasm32-unknown-unknown` from the committed Genet `115d348d` and netrender
   `6f1a4fe7` pins, without a Cargo patch;
