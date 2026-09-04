@@ -171,9 +171,13 @@ pub use ambient::{AmbientSim, GameOfLife, NBody, ParticleLife, SandFall, Tinctur
 mod physics;
 use physics::Physics;
 
+/// The physics catalog over a scene's items that are not a graph: the
+/// remote board's physics. (Physics catalog — P3.)
+pub mod physics_board;
 /// The physics catalog: the laws a graph can move under, the overlays composed
 /// onto them, and the named profiles. (Physics catalog — P1.)
 pub mod physics_catalog;
+pub use physics_board::{BoardItem, PhysicsBoard, PhysicsChoice};
 pub use physics_catalog::{
     CANVAS_PHYSICS_DEPTH_SOURCES, CANVAS_PHYSICS_KIND_SOURCES, CANVAS_PHYSICS_LAWS,
     CANVAS_PHYSICS_MASS_SOURCES, CANVAS_PHYSICS_OVERLAYS, CANVAS_PHYSICS_PROFILES, LayoutStats,

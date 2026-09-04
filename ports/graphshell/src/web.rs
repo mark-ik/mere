@@ -35,7 +35,7 @@ use graphshell::browser_storage::{StoragePersistence, decide, status_line};
 use graphshell::client::{ActionDraft, ActionDraftSemantics, ActionDraftTarget};
 use graphshell::endpoint::{IntentSink, ProjectionSource};
 use graphshell::protocol::{IntentResult, ProjectionSession};
-use mere::canvas::{Canvas, PointerButton, project_canvas_strategy};
+use mere::canvas::{Canvas, PhysicsBoard, PointerButton, project_canvas_strategy};
 use mere::kernel::geometry::PortablePoint;
 use mere::kernel::graph::NodeKey;
 use genet_render::TextSystem;
@@ -284,6 +284,11 @@ struct BrowserHost {
     app: GraphshellApp<IndexedDbBackend>,
     /// Where the remote projection lives (`web_remote`).
     remote: RemoteLink,
+    /// The remote board's physics: the mounted scene's items as bodies, the
+    /// score's positions as anchor slots, the local canvas's law mirrored.
+    /// Synced whenever the acknowledged revision moves. (Physics catalog — P3.)
+    remote_board: PhysicsBoard,
+    remote_board_revision: Option<u64>,
     remote_session: Option<ProjectionSession>,
     remote_status: String,
     remote_joining: bool,
@@ -511,7 +516,13 @@ impl BrowserHost {
         }
         let content = match self.active {
             ActiveSession::Local => self.canvas.frame(self.width, self.height).0,
-            ActiveSession::Remote => self.remote_scene(),
+            ActiveSession::Remote => {
+                // The board's physics runs only while the board is shown: sync
+                // to the acknowledged scene, tick, then draw from the bodies.
+                self.sync_remote_board();
+                self.remote_board.tick();
+                self.remote_scene()
+            }
         };
         if let Some(name) = self.capture_request.take() {
             // The same two scenes this frame presents, composed into an owned
@@ -606,8 +617,14 @@ impl BrowserHost {
             }
         }
         for (instance, item) in mounted.scene.active_items_in_order() {
-            let center_x = origin_x + item.transform.translate.x * scale;
-            let center_y = origin_y + item.transform.translate.y * scale;
+            // Where the physics put the card, falling back to the score's
+            // own position for an item the board has not seen yet.
+            let (x, y) = self
+                .remote_board
+                .position(&instance.0.to_string())
+                .unwrap_or((item.transform.translate.x, item.transform.translate.y));
+            let center_x = origin_x + x * scale;
+            let center_y = origin_y + y * scale;
             let (card_w, card_h) = match item.footprint {
                 sceno::Footprint::Rect { size } => (size.w * scale, size.h * scale),
                 _ => (120.0, 80.0),
@@ -2020,6 +2037,8 @@ async fn run(root_element: Element) -> Result<(), String> {
     let state = Rc::new(RefCell::new(BrowserHost {
         app,
         remote: RemoteLink::Fixture(remote),
+        remote_board: PhysicsBoard::new(),
+        remote_board_revision: None,
         remote_session: Some(remote_session),
         remote_status: "fixture".to_string(),
         remote_joining: false,

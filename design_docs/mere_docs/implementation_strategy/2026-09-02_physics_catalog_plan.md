@@ -1,7 +1,7 @@
 # Physics Catalog Plan
 
 **Date:** 2026-09-02
-**Status:** in progress (P1 landed 2026-09-02; P1b the petgraph sources and P2 on both hosts 2026-09-03; P3 next).
+**Status:** in progress (P1 landed 2026-09-02; P1b, P2 on both hosts and P3 the remote board 2026-09-03; P4 next).
 **Scope:** A catalog of *distinct physics layout laws* — dynamical systems
 over the graph's bodies that produce different layouts because they are
 different physics — as a lever beside the arrangement catalog, plus the
@@ -287,6 +287,35 @@ Host interaction policy; the endpoint's score is never written back.
 away from the first (positions and a capture pair) and under Orbit the
 cards keep moving.
 
+*Landed 2026-09-03.* The remote board never touched the canvas: it was
+drawn each frame straight from the score, and the canvas offers no
+incremental add, no slot update without a re-seed, and no bare physics
+step, so a second canvas would have fought its own seams. The seam is a
+new stack piece instead: `mere::canvas::PhysicsBoard` — a seiche
+simulation with one body per scene item (keyed by **instance**, because
+the fixture's appended cards all share one source id), the score's
+positions as anchor slots (`AnchorSpring` at `DEFAULT_BOARD_PULL`, a
+twenty-fourth of the canvas's stiffness, so the score is a seed and a
+soft attractor and the law is what shows; seiche's `Boundary` at 0.08 is
+weaker still, so the default Springs picture stays the score's), and the
+law, overlays and sources built through the same attribute builders
+(`LawInputs::from_parts`, now graph-free: nodes, edges, a site per node).
+`sync` reconciles bodies to the acknowledged scene — a new item spawns at
+its slot with a settle burst, the others keep their simulated positions,
+every slot re-anchors — `tick` runs while settling or under a living law,
+`position` / `energy` / `gap` read back. The web host holds one board,
+mirrors its canvas's physics choice onto it every frame, syncs it when
+the acknowledged revision moves, ticks it while the remote session is
+shown, and draws each card at the board's position (the score's when the
+board has not seen it). The snapshot exposes `remote-physics-law`,
+`remote-energy`, `remote-gap`. The score is read, never written.
+Receipt `physics_remote_board.scn` (over the WebRTC fixture): Charge
+after the append ends the pair 210 units apart against 140-unit slots
+(`remote-gap >= 170`), Orbit holds `remote-energy >= 1` at two and seven
+seconds; `RESULT ok`, 37 steps, 828 frames, three captures. Two board
+unit tests (slots held, a new item joins without re-seeding, a departed
+one drops; Charge separates overlapping slots, Orbit never rests).
+
 **P4 — drag and add.** The web pointer path reaches `pointer_down/up`;
 verify drag pins and re-settles under each law, and adding a node fans it
 out and settles (or joins the motion under the restless laws); one receipt
@@ -485,6 +514,24 @@ inference carried.
   explosion); `Hold` joins the laws. seiche 76/76, canvas 193/193. Receipt:
   `Code/testing/mere/physics_p2_receipt.md`. Native half open on the
   picker decision.
+- 2026-09-03 (P3): the web host draws the remote board from the score
+  each frame with no canvas in the path (`web.rs` `remote_scene`), and the
+  fixture's append replaces the whole mounted scene; the WebRTC path
+  diffs the sceno scene. Every appended fixture card shares the source id
+  `card:0`, so a board must key by instance, not source.
+- 2026-09-03 (P3): the canvas's `apply_strategy_positions` both re-seeds
+  every listed body and records the anchor slots — there is no way to move
+  a slot without teleporting the body — and `reconcile_derived`,
+  `settle_physics` and `SETTLE_TICKS` are crate-private, so a host cannot
+  add one node to a live canvas without `set_graph`'s full reset. The
+  board is its own stack piece for those reasons; the canvas keeps its
+  shape.
+- 2026-09-03 (P3): the machine's disk filled to zero bytes mid-session
+  (a burst from another build; it released to 711 GB free on its own).
+  A plan write in flight was truncated to an empty file and restored from
+  git; nothing else was lost. Two cargo git checkouts this thread's pin
+  attempts fetched (genet `b78e2b9`, mere `8bb15d7`) sit unused in the
+  cache, about a gigabyte each, re-fetchable.
 - 2026-09-03: Mark ruled the native half: turnstone, pin bumped, an
   **Arrange pane** (arrangement + physics + overlays + sources + profile on
   the settings-row controls), and every physics choice as a palette row.
@@ -502,3 +549,7 @@ inference carried.
   captures, turnstone 30/30 in the targeted tests. Native receipt notes in
   `Code/testing/mere/physics_p2_receipt.md`. P2 is complete on both hosts;
   P3 next.
+- 2026-09-03: P3 landed — `PhysicsBoard` in the canvas crate, the web
+  host's remote board on it, `physics_remote_board.scn` green over the
+  WebRTC fixture (Charge separates the appended card, Orbit keeps
+  moving). P4 (drag and add) next.
