@@ -2339,3 +2339,41 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   is integration code and stays in mere unless Mark rules it Knot's. The two
   open PRs are then closed with a note pointing at the fresh commits, which is
   Mark's action on GitHub. Nothing in this step touches code until (1) lands.
+
+- 2026-09-03: **P4 assessment: repoint and prove consumers.** Census taken
+  after P3 landed, over every manifest outside mere and genet that pins
+  `genet.git` or `mere.git` (heads at genet `115d348ded`, mere `9e6a74c2e6`):
+
+  | repo | manifests | genet rev pinned | mere rev pinned | crates it still pins from genet that now live in mere |
+  |---|---|---|---|---|
+  | cleromancy | 2 | `bad78dda19` | `e8d04dd445` | cambium, cambium-genet-winit-host |
+  | hocket | 1 | none (patch table) | none | cambium, cambium-genet-winit-host, sprigging, tinct, workbench |
+  | isometry | 3 | `86019eaccc` | `1443420b27` | cambium, cambium-genet-winit-host, cambium-winit, sprigging |
+  | knot-editor | 5 | `eff0cb6df4` | `1e59c0b7c9` | cambium, cambium-genet-winit-host, illume, inker, knot-editor-host, nematic |
+  | mer3ly | 1 | none | `057cb99240` | none |
+  | mesocosm | 1 | none | `33f9b6b655` | cambium, sprigging, workbench (by mere-relative wording; verify) |
+  | paredros | 1 | none | `33f9b6b655` | none |
+  | retinue | 2 | `5ec8274ed2` | `1443420b27` | cambium, cambium-genet-winit-host, sprigging |
+  | turnstone | 1 | `eff0cb6df4` | `ca47d6ef63` | cambium, cambium-winit, errand, inker, knot-editor-host, sprigging, weld-engine, workbench |
+  | woodshed | 4 | `da8762fd91` | none | cambium, cambium-genet-web-host, cambium-genet-winit-host, cambium-rootstock, sprigging, tinct |
+
+  Every one of these still resolves today, because a git pin names a
+  revision and the old revisions still carry the crates; nothing is broken by
+  the moves until a consumer advances. What P4 changes is the source of the
+  moved crates: `genet.git` at the old rev becomes `mere.git` at a rev after
+  `9e6a74c2e6`, and every other genet pin moves to `115d348ded` or later, so
+  each consumer resolves one genet and one mere. The order is by dependency:
+  knot-editor first, since turnstone and djinn consume it and its own E1/E2
+  gates wait on it (see the Knot assessment above); then turnstone; then the
+  Cambium consumers that pin no Knot (isometry, retinue, woodshed, hocket,
+  cleromancy, mesocosm); mer3ly and paredros need only their mere rev checked.
+  Two hazards carried over from §9: turnstone's four `genet_host_api::tile`
+  call sites break on any repoint past `abcea38b962` and need the Workbench
+  seam, and knot-editor's repository-local cargo checkout of genet must be
+  invalidated. Proofs per the plan: each consumer's own gate green, the
+  representative headed proofs (Turnstone's browser path, Knot standalone and
+  embedded, one Retinue/Cambium surface, the Mesocosm/Paredros scene path),
+  and a source-identity audit over the family. This is one bounded change per
+  repository, each its own commit and push, in the order above; it starts on
+  Mark's word, because every one of these repositories is outside the two the
+  plan named and several carry live lanes.
