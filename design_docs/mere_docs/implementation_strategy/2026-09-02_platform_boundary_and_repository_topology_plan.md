@@ -2532,3 +2532,61 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   Nothing pushed. Turnstone is green against `fcd004b6` at its own pushed
   `e68e2764e4d`, which is what the extraction plan's stop rule required before
   any of this could be deleted; Djinn is Mere's own consumer and cut over here.
+
+- 2026-09-04: **P4 landed for every consumer this lane could reach.** Family
+  revisions: genet `115d348ded`, mere `d82afa17e2`, knot-editor
+  `fcd004b655`. Per repository, all pushed: knot-editor `3c2d30d` then
+  `fcd004b` (six crates now from mere, `mere-surface-api` for the surface
+  types, 112 tests matching its E0 receipt); turnstone `1643b12` then
+  `e68e276` (eight crates from mere, both Knot crates from knot-editor.git,
+  `genet-documents` split with the http(s) fallback injected through
+  `LocalFetcher::with_fallback(RemoteFetcher::shared())`, the four tile call
+  sites already on Workbench; 414 pass with one pre-existing failure proven
+  on the parent; the two Knot suites 5/5 and 5/5; browser_keep, rung4_content
+  and gemini-browse headed receipts ok) which is E1; retinue `eaa9bb9`
+  (one manifest, `taffy` renamed to `genet-taffy` and `parley` restated, the
+  Cambium surface smoke 12 tests green, firmware check green); hocket
+  `076bfa2` (every family pin was `branch = "main"`, now revisions; the
+  handoff_circle headed receipt ok; the machine-local table rewritten from a
+  vanished Codex worktree); cleromancy `7fddf07` by this lane and then
+  `8a91f77` by Mark's other session, which put its fifteen mere pins on
+  `branch = "main"` because Cargo keys a git source by URL plus reference
+  and isometry, its consumer, tracks main; mesocosm `310513c` (pins, swept
+  in by the same session) and `3c39dc4` (the `resident_ground` example
+  un-duplicated: the `conatus/resident` fault was a parse error left by two
+  header passes, not a missing feature); paredros `b5f2d41` (one `modulus`
+  line; the headed S0 room probe renders 64 ticks to a stable hash);
+  mer3ly `d52d7f9` (fourteen pins, locks re-resolved from outside the tree,
+  `authority validate` clean). mere itself took E2 as `d666e160`: the Knot
+  copies removed, djinn consuming knot-editor.git, `knot-editor-host` at
+  `crates/inker/knot-editor-host`, and a `[patch."mere.git"]` table so
+  Knot's pin of mere resolves to the workspace; turnstone #4 and mere #5
+  closed with pointers to the fresh commits.
+
+  **Source-identity audit** (`cargo metadata` per workspace, machine-local
+  tables off): knot-editor (both workspaces), turnstone, retinue's app,
+  hocket, cleromancy (root and `core/`), isometry, mesocosm, paredros,
+  mer3ly's repo-graph and mere each resolve one reference per host with no
+  package from two sources. **Two exceptions, both deliberate and outside
+  this lane:** isometry (`ce6e69f`, unpushed at audit time) and cleromancy
+  track mere by `branch = "main"` rather than an immutable revision, on the
+  reasoning in `8a91f77`; the done-condition's "immutable revisions" is met
+  by every other consumer and waived for that pair by Mark's session.
+  **Not done:** woodshed, whose session was mid-repoint all evening with
+  genet pinned at `da8762fd`, a pre-P1 revision that still contains Cambium;
+  its next advance meets P1 through P3 at once, and `cargo metadata` there
+  fails today on a half-edited `workbench` entry.
+
+  **Open, recorded for their owners:** Knot pins a pre-E2 mere and should
+  follow the next family bump; mer3ly's relation manifest does not know the
+  knot-editor repository exists and its Genet showcase still attributes Pelt
+  to genet (P6, product copy, Mark's); two `paredros-sortie` tests are red on
+  main independently of the pins; paredros carries a dead `vello` patch;
+  cleromancy takes `ipc-channel` and `gpu-allocator` from crates.io where
+  genet vendors both; hocket has two stale worktree registrations.
+  **Done-conditions:** supported consumers resolve a single genet and mere
+  source, met for all but woodshed; representative headed proofs pass
+  (turnstone's browser path, Knot standalone and embedded through djinn and
+  turnstone, retinue's and hocket's Cambium surfaces, paredros' scene); the
+  source-identity audit reports no duplicate origins. P4 is met with the
+  woodshed exception and the branch-tracking pair noted.
