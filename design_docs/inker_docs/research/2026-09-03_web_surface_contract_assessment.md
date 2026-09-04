@@ -1,6 +1,7 @@
 # Web Surface Contract Assessment
 
-**Status (2026-09-03):** assessment; separate from the triplet release gate.
+**Status (2026-09-04):** assessment complete; migration started separately
+from the triplet release gate.
 
 ## Verdict
 
@@ -195,6 +196,22 @@ on it. Do not create a second, subtly different raw-handle vocabulary in Mere.
   without depending on Mere.
 - The DX12, Metal, and Vulkan release consumer still imports browser frames
   through Graft after the extraction.
+
+## Migration progress
+
+- 2026-09-04: Inker added caller-minted `WebRequestId` values,
+  `request_script_result` / `request_cookies_for_url` acceptance methods, and
+  correlated `ScriptCompleted` / `CookiesCompleted` variants on the single
+  `WebSurfaceEvent` queue. A focused ordering test proves completions remain
+  behind an earlier navigation event and retain the caller's ids.
+- The old blocking script/cookie methods remain explicitly transitional while
+  Pelt's Scry readiness probe and Scry's platform traits are migrated to native
+  async callbacks. They are excluded from the future extracted contract.
+  `scrying-engine` now downgrades those two capability answers on its Inker
+  projection rather than claiming the new async contract is wired.
+- Focused tests pass for Inker, Graft/Scry/Weld adapters, and Pelt core. Direct
+  Weld callback binding, Scry callback migration, removal of the compatibility
+  methods, and extraction remain open.
 
 ## Open decisions
 

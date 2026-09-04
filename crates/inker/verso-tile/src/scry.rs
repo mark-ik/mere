@@ -43,7 +43,7 @@ pub trait ScrySurface {
     /// Begin a (non-blocking) navigation to `url`.
     fn navigate(&mut self, url: &str) -> Result<(), String>;
     /// Run `js` in the loaded document. The result is ignored by the restore, but the
-    /// signature mirrors the producer's `execute_script_with_result` so the host need
+    /// signature mirrors the producer's result-bearing script request so the host need
     /// not invent a void variant.
     fn run_script(&mut self, js: &str) -> Result<String, String>;
 }

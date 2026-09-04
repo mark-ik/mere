@@ -65,7 +65,7 @@ impl SurfaceProducer for ScryingProducer {
                 self.empty_polls = 0;
                 self.stall_threshold = INITIAL_EMPTY_POLL_STALL_THRESHOLD;
                 Ok(map_frame(frame, self.fence_handle))
-            },
+            }
             None => {
                 self.empty_polls = self.empty_polls.saturating_add(1);
                 if self.empty_polls >= self.stall_threshold {
@@ -79,7 +79,7 @@ impl SurfaceProducer for ScryingProducer {
                         .min(MAX_EMPTY_POLL_STALL_THRESHOLD);
                 }
                 Ok(None)
-            },
+            }
         }
     }
 
@@ -137,7 +137,14 @@ impl SurfaceProducer for ScryingProducer {
 
 impl WebSurface for ScryingProducer {
     fn capabilities(&self) -> WebSurfaceCapabilities {
-        map_capabilities(self.inner.capabilities())
+        let mut capabilities = map_capabilities(self.inner.capabilities());
+        capabilities.script.result = inker::WebFeatureStatus::unsupported(
+            "scrying-engine has not yet projected script results onto Inker's asynchronous event stream",
+        );
+        capabilities.cookie.read = inker::WebFeatureStatus::unsupported(
+            "scrying-engine has not yet projected cookie reads onto Inker's asynchronous event stream",
+        );
+        capabilities
     }
 
     fn navigate_to_url(&mut self, url: &str) -> Result<(), SurfaceError> {

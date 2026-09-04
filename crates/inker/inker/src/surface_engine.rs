@@ -47,6 +47,24 @@ impl UserAgentRequestId {
     }
 }
 
+/// Correlates one accepted result-bearing web command with exactly one later
+/// completion on the surface's ordered event stream.
+///
+/// The caller mints this id. It is scoped to one [`WebSurface`]; a host driving
+/// several surfaces must retain the surface identity beside it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct WebRequestId(u64);
+
+impl WebRequestId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 /// A Permissions API descriptor in engine-neutral web-platform terms.
 ///
 /// Chromium-only values are not allowed to become shared enum variants. A
@@ -180,7 +198,7 @@ impl fmt::Display for SurfaceError {
             Self::Unsupported(reason) => write!(f, "unsupported: {reason}"),
             Self::HostMigrationIndeterminate(reason) => {
                 write!(f, "host migration indeterminate: {reason}")
-            },
+            }
         }
     }
 }
@@ -839,6 +857,16 @@ pub enum WebSurfaceEvent {
         id: PageCaptureRequestId,
         result: Result<PageCaptureOutput, SurfaceError>,
     },
+    /// Completion of an accepted cookie-read command.
+    CookiesCompleted {
+        id: WebRequestId,
+        result: Result<Vec<Cookie>, SurfaceError>,
+    },
+    /// Completion of an accepted result-bearing script command.
+    ScriptCompleted {
+        id: WebRequestId,
+        result: Result<String, SurfaceError>,
+    },
     ConsoleMessage {
         level: String,
         text: String,
@@ -1069,10 +1097,23 @@ pub trait WebSurface: SurfaceProducer {
 
     // ── Session/script/events ────────────────────────────────────────────────
     fn set_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError>;
-    fn get_cookies_for_url(&mut self, url: &str) -> Result<Vec<Cookie>, SurfaceError> {
-        let _ = url;
+    /// Start a URL-scoped cookie read. Accepted work settles exactly once as a
+    /// [`WebSurfaceEvent::CookiesCompleted`] event carrying `id`.
+    fn request_cookies_for_url(
+        &mut self,
+        _id: WebRequestId,
+        _url: &str,
+    ) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "cookie reads are not wired for this web surface".into(),
+        ))
+    }
+    /// Transitional blocking compatibility for hosts not yet migrated to
+    /// [`Self::request_cookies_for_url`]. Do not call this from a render loop.
+    /// This method is excluded from the future extracted neutral contract.
+    fn get_cookies_for_url(&mut self, _url: &str) -> Result<Vec<Cookie>, SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "blocking cookie reads are not wired for this web surface".into(),
         ))
     }
     fn delete_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
@@ -1101,12 +1142,31 @@ pub trait WebSurface: SurfaceProducer {
             "authentication answers are not wired for this web surface".into(),
         ))
     }
-    fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError>;
+    /// Start result-bearing script execution. Accepted work settles exactly
+    /// once as a [`WebSurfaceEvent::ScriptCompleted`] event carrying `id`.
+    fn request_script_result(
+        &mut self,
+        _id: WebRequestId,
+        _script: &str,
+    ) -> Result<(), SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "script results are not wired for this web surface".into(),
+        ))
+    }
+    /// Transitional blocking compatibility for hosts not yet migrated to
+    /// [`Self::request_script_result`]. Do not call this from a render loop.
+    /// This method is excluded from the future extracted neutral contract.
+    fn execute_script_with_result(&mut self, _script: &str) -> Result<String, SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "blocking script results are not wired for this web surface".into(),
+        ))
+    }
     /// Return the next event in producer order.
     ///
     /// An implementation must not inspect and discard events of another kind
     /// while answering this call. Asynchronous commands will add correlation
-    /// ids to this stream as their shared contracts are introduced.
+    /// ids to this stream. An accepted result-bearing command must settle once;
+    /// synchronous acceptance failure emits no completion.
     fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
         None
     }
@@ -1315,8 +1375,26 @@ mod tests {
         fn set_cookie(&mut self, _: &Cookie) -> Result<(), SurfaceError> {
             Ok(())
         }
+        fn request_cookies_for_url(
+            &mut self,
+            id: WebRequestId,
+            _: &str,
+        ) -> Result<(), SurfaceError> {
+            self.events.push_back(WebSurfaceEvent::CookiesCompleted {
+                id,
+                result: Ok(Vec::new()),
+            });
+            Ok(())
+        }
+        fn request_script_result(&mut self, id: WebRequestId, _: &str) -> Result<(), SurfaceError> {
+            self.events.push_back(WebSurfaceEvent::ScriptCompleted {
+                id,
+                result: Ok("42".into()),
+            });
+            Ok(())
+        }
         fn execute_script_with_result(&mut self, _: &str) -> Result<String, SurfaceError> {
-            Ok(String::new())
+            Ok("42".into())
         }
         fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
             self.events.pop_front()
@@ -1406,6 +1484,36 @@ mod tests {
             observed.push(event);
         }
         assert_eq!(observed, expected);
+    }
+
+    #[test]
+    fn accepted_commands_complete_after_earlier_events_with_the_callers_ids() {
+        let earlier = WebSurfaceEvent::Navigation(NavigationEvent::Committed {
+            url: "https://example.com/ready".into(),
+        });
+        let script_id = WebRequestId::new(11);
+        let cookie_id = WebRequestId::new(12);
+        let mut surface = EventQueueSurface {
+            events: VecDeque::from([earlier.clone()]),
+        };
+
+        surface.request_script_result(script_id, "6 * 7").unwrap();
+        surface
+            .request_cookies_for_url(cookie_id, "https://example.com")
+            .unwrap();
+
+        assert_eq!(surface.poll_web_event(), Some(earlier));
+        assert!(matches!(
+            surface.poll_web_event(),
+            Some(WebSurfaceEvent::ScriptCompleted { id, result: Ok(value) })
+                if id == script_id && value == "42"
+        ));
+        assert!(matches!(
+            surface.poll_web_event(),
+            Some(WebSurfaceEvent::CookiesCompleted { id, result: Ok(cookies) })
+                if id == cookie_id && cookies.is_empty()
+        ));
+        assert_eq!(surface.poll_web_event(), None);
     }
 
     #[test]

@@ -12,8 +12,8 @@ use inker::{
     Cookie, CursorShape, DocumentCapabilities, DragEvent, DragOperationSet, FocusReason,
     KeyboardEvent, MouseEvent, NativeTextureHandle, NavigationEvent, PhysicalPosition,
     PointerEvent, SurfaceError, SurfaceFrame, SurfaceProducer, SurfaceSettings, SurfaceSyncHandle,
-    SurfaceTextureFormat, WebFeatureStatus, WebFrameTransportMode, WebMessage, WebSurface,
-    WebSurfaceCapabilities, WebSurfaceEvent,
+    SurfaceTextureFormat, WebFeatureStatus, WebFrameTransportMode, WebMessage, WebRequestId,
+    WebSurface, WebSurfaceCapabilities, WebSurfaceEvent,
 };
 
 /// A frame produced by a [`GraftSurface`]: the shared GPU texture handle the host
@@ -131,9 +131,19 @@ pub trait GraftSurface {
         ))
     }
 
-    fn get_cookies_for_url(&mut self, _url: &str) -> Result<Vec<Cookie>, SurfaceError> {
+    fn request_cookies_for_url(
+        &mut self,
+        _id: WebRequestId,
+        _url: &str,
+    ) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "graft-engine cookie reads are not wired yet".into(),
+        ))
+    }
+
+    fn get_cookies_for_url(&mut self, _url: &str) -> Result<Vec<Cookie>, SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "graft-engine blocking cookie reads are not wired yet".into(),
         ))
     }
 
@@ -143,9 +153,19 @@ pub trait GraftSurface {
         ))
     }
 
-    fn execute_script_with_result(&mut self, _script: &str) -> Result<String, SurfaceError> {
+    fn request_script_result(
+        &mut self,
+        _id: WebRequestId,
+        _script: &str,
+    ) -> Result<(), SurfaceError> {
         Err(SurfaceError::Unsupported(
             "graft-engine script result control is not wired yet".into(),
+        ))
+    }
+
+    fn execute_script_with_result(&mut self, _script: &str) -> Result<String, SurfaceError> {
+        Err(SurfaceError::Unsupported(
+            "graft-engine blocking script results are not wired yet".into(),
         ))
     }
 
@@ -270,12 +290,24 @@ impl WebSurface for GraftProducer {
         self.inner.set_cookie(cookie)
     }
 
+    fn request_cookies_for_url(&mut self, id: WebRequestId, url: &str) -> Result<(), SurfaceError> {
+        self.inner.request_cookies_for_url(id, url)
+    }
+
     fn get_cookies_for_url(&mut self, url: &str) -> Result<Vec<Cookie>, SurfaceError> {
         self.inner.get_cookies_for_url(url)
     }
 
     fn delete_cookie(&mut self, cookie: &Cookie) -> Result<(), SurfaceError> {
         self.inner.delete_cookie(cookie)
+    }
+
+    fn request_script_result(
+        &mut self,
+        id: WebRequestId,
+        script: &str,
+    ) -> Result<(), SurfaceError> {
+        self.inner.request_script_result(id, script)
     }
 
     fn execute_script_with_result(&mut self, script: &str) -> Result<String, SurfaceError> {

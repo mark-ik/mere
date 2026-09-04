@@ -104,7 +104,7 @@ pub use surface_engine::{
     SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame, SurfaceProducer,
     SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, SurfaceTextureFormat,
     UserAgentRequestId, WebFrameTransportMode, WebMessage, WebSurface, WebSurfaceCapabilities,
-    WebSurfaceEvent,
+    WebRequestId, WebSurfaceEvent,
 };
 
 /// Crate version.
