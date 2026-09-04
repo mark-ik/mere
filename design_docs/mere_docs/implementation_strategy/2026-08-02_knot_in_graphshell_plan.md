@@ -1,5 +1,10 @@
 # Knot in Graphshell Plan
 
+> **Repository note (2026-09-04):** Knot Editor is an independent repository,
+> consumed by Djinn and Turnstone from one immutable revision; its sources left
+> Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
+> so the `ports/knot` paths below name the layout each receipt landed against.
+
 **Date:** 2026-08-02
 **Status:** K0-K3 complete. K1 chose Option A (Mark): shared documents are
 projected, personal documents replicate, and T4's done condition is replaced

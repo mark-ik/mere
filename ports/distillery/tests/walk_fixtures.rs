@@ -589,6 +589,20 @@ fn workspace_graph_fixture_is_a_dag_over_named_packages() {
             "the generated graph does not name `{member}`, so it is stale or empty"
         );
     }
+    // The other direction, and the reason the pair is worth asserting together:
+    // Knot's product sources left this repository on 2026-09-04 (knot-editor
+    // `design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`, E2).
+    // They are consumed from one immutable revision, so they are dependencies
+    // and never workspace members. `knot-editor-host` above is the integration
+    // crate that stayed; naming both keeps the graph honest about which side of
+    // the boundary each one sits on.
+    for departed in ["knot-editor", "knot-document"] {
+        assert!(
+            graph.packages.iter().all(|name| name != departed),
+            "the generated graph names `{departed}` as a workspace member, but \
+             Knot's sources are consumed from the knot-editor repository"
+        );
+    }
     assert!(
         !graph.edges.is_empty(),
         "a workspace graph with no edges between members is not a graph"

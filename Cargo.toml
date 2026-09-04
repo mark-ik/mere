@@ -99,8 +99,6 @@ members = [
     "crates/graphshell/graphshell-local",
     "crates/graphshell/graphshell-network",
     "ports/graphshell",
-    "ports/knot",
-    "ports/knot-document",
     "ports/djinn",
     "ports/castellan",
     "ports/distillery",
@@ -112,19 +110,20 @@ members = [
     # strategy/2026-09-02_platform_boundary_and_repository_topology_plan.md,
     # the consumers-first half of P3) ───
     # Pelt is the reference-browser port and Tabard the theme-authoring port;
-    # both keep their `ports/` shape. The Knot editor host sits beside Knot's
-    # own port rather than under a component family, because it is Knot's.
-    # The document lanes are a content lane, not a widget, so they land in
-    # `crates/system/` beside `fetch`. Package names are unchanged.
-    # `ports/knot/editor-host` is nested inside the member `ports/knot`; that
-    # is fine because cargo auto-excludes a subdirectory carrying its own
-    # Cargo.toml from the parent package, and the `exclude` entry below names
-    # only `ports/knot/desktop`, a different path.
+    # both keep their `ports/` shape. The document lanes are a content lane,
+    # not a widget, so they land in `crates/system/` beside `fetch`. Package
+    # names are unchanged.
+    # The Knot editor host moved to `crates/inker/knot-editor-host` on
+    # 2026-09-04, when Knot's own sources left this repository (knot-editor
+    # `design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`, E2).
+    # It is inker-family integration code, not Knot product source, so it
+    # stays here; `ports/knot/` does not survive as a directory holding only
+    # it.
     "ports/pelt",
     "ports/pelt/core",
     "ports/pelt/desktop",
     "ports/tabard",
-    "ports/knot/editor-host",
+    "crates/inker/knot-editor-host",
     "crates/system/document-lanes",
     # ─── Landed 2026-09-03 from genet (the same plan, P2) ───
     # The Cambium family: the retained widget lane. It keeps its own crate
@@ -171,20 +170,14 @@ members = [
 exclude = [
     "crates/probes",
     # The unpublished browser host carries Git-only Genet presentation deps.
-    # Keep it outside release resolution. NOTE: both entries below sit inside a
-    # directory that is itself an explicit member (`ports/graphshell`,
-    # `ports/knot`), so cargo never applies the exclusion and these two lines
-    # are documentation, not mechanism. What actually keeps each one out is the
-    # empty `[workspace]` table in its own manifest, which is also what makes it
-    # buildable by `--manifest-path`; and standing alone, each has to restate
-    # every `[patch]` entry below that its graph needs.
+    # Keep it outside release resolution. NOTE: the entry below sits inside a
+    # directory that is itself an explicit member (`ports/graphshell`), so
+    # cargo never applies the exclusion and the line is documentation, not
+    # mechanism. What actually keeps it out is the empty `[workspace]` table in
+    # its own manifest, which is also what makes it buildable by
+    # `--manifest-path`; and standing alone, it has to restate every `[patch]`
+    # entry below that its graph needs.
     "ports/graphshell/web",
-    # The desktop wrapper carries Git-only Genet presentation deps. Keep it out
-    # of ordinary Mere resolution so it does not pull winit. Same nesting
-    # caveat as above: `ports/knot/desktop`'s own `[workspace]` table is the
-    # mechanism. Until 2026-09-03 it had none, so this entry's earlier claim
-    # that it "remains buildable by manifest path" was false.
-    "ports/knot/desktop",
     # A private cross-product port: it consumes the neighboring Retinue
     # checkout during the integration phase, so it must not make the Mere
     # workspace's ordinary build acquire a sibling checkout.
@@ -266,8 +259,14 @@ graphshell-local = { path = "crates/graphshell/graphshell-local" }
 graphshell-endpoint = { version = "0.0.2", path = "crates/graphshell/graphshell-endpoint" }
 graphshell-stdio = { version = "0.0.2", path = "crates/graphshell/graphshell-stdio" }
 graphshell-network = { version = "0.0.1", path = "crates/graphshell/graphshell-network" }
-knot-editor = { version = "0.0.3", path = "ports/knot" }
-knot-document = { version = "0.0.1", path = "ports/knot-document" }
+# Knot is an independent document product that Mere embeds rather than owns
+# (knot-editor `design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`).
+# Its sources left this repository on 2026-09-04 under that plan's E2; Djinn and
+# Turnstone consume one immutable revision. The `[patch]` table at the bottom of
+# this file makes this checkout the implementation source for the Mere contracts
+# Knot names, so those types keep one Cargo source identity.
+knot-editor = { version = "0.0.3", git = "https://github.com/merely-made/knot-editor.git", rev = "fcd004b655b595038eba0a7e49f209b8477edadf" }
+knot-document = { version = "0.0.1", git = "https://github.com/merely-made/knot-editor.git", rev = "fcd004b655b595038eba0a7e49f209b8477edadf" }
 # The credential-keeper port (dramatis plan D4). No longer a reservation:
 # C1/C2 landed the OTP core, sealed OTP items, the release gate, and the
 # `keeper` identity surface graphshell re-exports.
@@ -324,8 +323,9 @@ register-theme = { path = "crates/system/registry/register-theme" }
 # at a path that is also a workspace member is a hard lockfile collision.
 inker = { version = "0.1.1", path = "crates/inker/inker" }
 document-canvas = { version = "0.1.0", path = "crates/inker/document-canvas" }
-# `default-features = false` belongs on this declaration: ports/knot and
-# ports/knot/editor-host opt back into `html-fragment` explicitly.
+# `default-features = false` belongs on this declaration:
+# `crates/inker/knot-editor-host` opts back into `html-fragment` explicitly, and
+# so does the external knot-editor.
 nematic = { version = "0.1.1", path = "crates/nematic/nematic", default-features = false }
 fleece = { version = "0.4.0", git = "https://github.com/merely-made/genet.git", rev = "115d348deddc344d949754e63beaece47cf49f34" }
 # Landed here from genet 2026-09-03 (platform boundary plan, P3): a workspace
@@ -333,7 +333,7 @@ fleece = { version = "0.4.0", git = "https://github.com/merely-made/genet.git", 
 # genet patch table — patching a git source at a path that is also a workspace
 # member is a hard lockfile collision. `default-features = false` is kept
 # because knot-document opts back into `preview` explicitly.
-knot-editor-host = { version = "0.1.1", path = "ports/knot/editor-host", default-features = false }
+knot-editor-host = { version = "0.1.1", path = "crates/inker/knot-editor-host", default-features = false }
 illume = { version = "0.0.2", path = "crates/nematic/illume" }
 # ─── Landed from genet 2026-09-03 (platform boundary plan, P2) ──────────────
 # Workspace members, so path deps. None of the eleven may appear in
@@ -597,6 +597,45 @@ unsafe_code = "warn"
 
 [workspace.lints.clippy]
 all = "warn"
+
+# ─── Knot's Mere contracts resolve from this checkout ───────────────────────
+# knot-editor pins a released Mere revision so it builds standalone. Embedded
+# here it must not bring a second copy of Mere's own crates: two sources for one
+# package is a type mismatch, not a resolution failure. Every package knot-editor
+# and knot-document name from `mere.git` is redirected to its workspace member,
+# so the shared contracts keep one Cargo source identity. Add an entry whenever
+# Knot names a new Mere package; a name missing here resolves from git and is a
+# duplicate.
+[patch."https://github.com/merely-made/mere.git"]
+cambium = { path = "crates/cambium/cambium" }
+cambium-genet-winit-host = { path = "crates/cambium/cambium-genet-winit-host" }
+chartulary = { path = "crates/eidetic/chartulary" }
+chirograph = { path = "crates/chirograph" }
+mere-eidetic = { path = "crates/eidetic/eidetic-core" }
+esp = { path = "crates/intel/esp" }
+mere-fetch = { path = "crates/system/fetch" }
+gemot = { path = "crates/moot/gemot" }
+graphshell = { path = "ports/graphshell" }
+graphshell-endpoint = { path = "crates/graphshell/graphshell-endpoint" }
+graphshell-local = { path = "crates/graphshell/graphshell-local" }
+graphshell-stdio = { path = "crates/graphshell/graphshell-stdio" }
+illume = { path = "crates/nematic/illume" }
+inker = { path = "crates/inker/inker" }
+knot-editor-host = { path = "crates/inker/knot-editor-host" }
+mere-proofs = { path = "crates/system/proofs" }
+mere-surface-api = { path = "crates/system/surface-api" }
+mere-transport = { path = "crates/murm/transport" }
+mora-cmudict = { path = "crates/intel/mora-cmudict" }
+muniment = { path = "crates/eidetic/muniment" }
+nematic = { path = "crates/nematic/nematic" }
+notochord = { path = "crates/system/notochord" }
+pandect = { path = "crates/system/pandect" }
+personae = { path = "crates/dramatis/personae" }
+sceno = { path = "crates/cambium/scenes/sceno" }
+scenotime = { path = "crates/cambium/scenes/scenotime" }
+script-rhai = { path = "crates/script/rhai" }
+servitor = { path = "crates/servitor" }
+stickleback = { path = "crates/stickleback" }
 
 # ─── Cross-repo render-stack alignment (Mere → Genet) ───────────────────────
 # Livery/Buckram consume Genet's Taffy fork directly. The retired Stylo layout

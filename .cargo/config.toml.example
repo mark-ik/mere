@@ -66,7 +66,7 @@ fleece = { path = "../genet/components/fleece" }
 # trap, not a network problem.
 "genet-render-host" = { path = "../genet/components/genet-render-host" }
 # The inker family is NOT here any more, and neither is knot-editor-host: it landed in mere 2026-09-03 as the
-# workspace member ports/knot/editor-host. Patching a git source at a path that
+# workspace member crates/inker/knot-editor-host. Patching a git source at a path that
 # is also a workspace member is a hard lockfile collision, so the four crates
 # the platform boundary plan landed that day — pelt, tabard, knot-editor-host
 # and mere-document-lanes — must never appear in this table.

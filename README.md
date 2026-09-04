@@ -36,9 +36,14 @@ wiring the remaining unconsumed crates into hosts.
 
 Mere is consumed as a git dependency by
 [Turnstone](https://github.com/merely-made/turnstone) (the browser app) and
-other sibling repos. Runnable consumers live under `ports/`: graphshell (the
-reference graph host and web presenter), knot (files-in-place authoring),
-castellan (credential keeper), and distillery (model works).
+other sibling repos. Runnable consumers in this repository live under `ports/`:
+graphshell (the reference graph host and web presenter), djinn (the local
+desktop resident), castellan (credential keeper), and distillery (model works).
+[Knot Editor](https://github.com/merely-made/knot-editor) is an independent
+repository, not a Mere port: it owns files-in-place authoring, document and
+vault authority, evidence, sync and publishing, and Djinn and Turnstone consume
+it from one immutable revision through the generic Mere and Genet contracts. See
+`knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`.
 
 ```sh
 cargo build

@@ -121,7 +121,10 @@ Step "genet components (layout/render/render-host/winit-host/scripted-dom)" $gen
 Step "genet pelt (default member)" $genet @("check", "-p", "pelt")
 Step "mere graphshell (resident host, full sync cone)" $mere @(
     "check", "-p", "graphshell", "--features", "personal-sync")
-Step "mere knot" $mere @("check", "-p", "knot")
+# No Knot step: Knot left this repository on 2026-09-04 (knot-editor
+# design_docs/2026-09-01_knot_editor_repository_extraction_plan.md, E2) and is
+# consumed from one immutable revision. The workspace gate below covers Djinn,
+# which embeds it; Knot own gates run in its own repository.
 # The whole-workspace gate (green since 2026-08-12). `--all-targets` on purpose:
 # the lib-only form is what hid a broken bin until that commit found it.
 #
@@ -151,7 +154,6 @@ if ($Tests) {
     # sessions.rs, policy_projection.rs), so receipt drift fails here.
     Step "tests: graphshell (incl. receipt drift)" $mere @(
         "test", "-p", "graphshell", "--features", "web", "--lib")
-    Step "tests: knot" $mere @("test", "-p", "knot", "--lib")
     Step "tests: genet-render" $genet @("test", "-p", "genet-render")
 }
 

@@ -44,7 +44,7 @@ chirograph.workspace = true
 # resident, and `trainer` pulls it deliberately and by the owner's request.
 distillery.workspace = true
 graphshell = { version = "0.0.2", path = "../graphshell", features = ["personal-sync"] }
-knot-editor = { version = "0.0.3", path = "../knot" }
+knot-editor.workspace = true
 mere-resident.workspace = true
 # The policy vocabulary the device sensor fills in (`DeviceConditions`), and
 # the `ConditionSource` seam it plugs into. `mere-mesh` refuses to touch the

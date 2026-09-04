@@ -1,5 +1,10 @@
 # Knot Shared Surface and Port Contribution Plan
 
+> **Repository note (2026-09-04):** Knot Editor is an independent repository,
+> consumed by Djinn and Turnstone from one immutable revision; its sources left
+> Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
+> so the `ports/knot` paths below name the layout each receipt landed against.
+
 **Date:** 2026-08-24
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
 package published; K0, the reusable Knot surface, desktop wrapper, and semantic

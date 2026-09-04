@@ -440,9 +440,10 @@ preference and a per-resource override.
 
 ### Knot application surface
 
-Knot's editor, status, publishing, shared-reader, and evidence work is spread
-between `ports/knot` and Turnstone. The planned shared Knot UI plus a real
-`knot-editor` host exposes the capability without creating another port.
+Knot's editor, status, publishing, shared-reader, and evidence work is owned by
+the independent [`knot-editor`](https://github.com/merely-made/knot-editor)
+repository and embedded into Turnstone. The shared Knot UI plus its concrete
+host exposes the capability without giving Turnstone product authority.
 
 ### Djinn health and service management
 

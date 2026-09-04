@@ -1,8 +1,14 @@
 # Knot: product floor and the next three cuts
 
+> **Repository note (2026-09-04):** Knot Editor is an independent repository,
+> consumed by Djinn and Turnstone from one immutable revision; its sources left
+> Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
+> so the `ports/knot` paths below name the layout each receipt landed against.
+
 Status: position revised and cuts implemented 2026-08-20.
 
-Knot is a standalone-capable Mere port. Turnstone can host it, but Turnstone is
+Knot is a standalone product and an embeddable Mere port; since 2026-09-01 its
+source is its own repository. Turnstone can host it, but Turnstone is
 not what makes it a product. The useful floor is already ambitious enough:
 
 > a Djot editor on a graph substrate with local-first, git-like peer

@@ -2,7 +2,8 @@
 
 Djinn is Mere's local desktop resident. It composes the owner-held parts of a
 personal device: Personae authority, the SSH agent, Graphshell's local browser
-and application brokers, personal sync, Knot's source/sync/evidence custody,
+and application brokers, personal sync,
+[Knot's](https://github.com/merely-made/knot-editor) source/sync/evidence custody,
 per-profile Castellan custody, and the shared physical blob store.
 
 Graphshell remains the local session and admission protocol. Knot remains the
@@ -22,10 +23,10 @@ pairing records, and content-store migrations, not an additional resident.
 ## Publishing
 
 `0.0.2` is the source version of this workspace resident, not a crates.io
-release. `cargo package` correctly refuses it because its Graphshell and Knot
-Editor composition still uses workspace-only dependencies. A public Djinn
-release needs an installable package boundary and a staged release of the Mere
-dependencies it exposes.
+release. Knot Editor is pinned from its own public repository; the Graphshell
+composition still uses workspace-only dependencies, so `cargo package` correctly
+refuses it. A public Djinn release needs an installable package boundary and a
+staged release of the Mere dependencies it exposes.
 
 ## Security boundary
 

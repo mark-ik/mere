@@ -9,7 +9,7 @@ this plan holds pointers, not their work.
 **Code**: `genet/components/genet-host-api/tile.rs` (the `SettingsRef` lane,
 tile.rs:144), `genet/components/config` (opts/prefs),
 `mere/crates/system/session-runtime/src/{application_settings_store.rs,device_settings_store.rs,settings_store.rs}` +
-`persona_settings_store.rs`, `mere/ports/knot/src/settings.rs`,
+`persona_settings_store.rs`, `knot-editor/crates/knot-editor/src/settings.rs`,
 `mere/ports/graphshell/src/native/owner_settings.rs`,
 `turnstone/src/{apparatus_pane.rs,settings_provider.rs,settings_pane.rs}`,
 `woodshed/crates/woodshed-core/src/{settings.rs,storage.rs}`,
@@ -147,7 +147,8 @@ demands one.
 so Pandect now owns the narrow `write_bytes_with_backup` replacement mechanism.
 Notochord and Distillery use it; their paths, schemas, and validation remain
 product-owned. Knot's local remove-then-rename write must migrate to this
-mechanism once the WebRTC lane releases `ports/knot/src/settings.rs`; this
+mechanism once the WebRTC lane releases
+`knot-editor/crates/knot-editor/src/settings.rs`; this
 slice deliberately leaves that file and manifest untouched. Three focused
 Pandect tests prove replacement cleanup, interrupted-backup recovery, and
 restoration after a failed final rename.

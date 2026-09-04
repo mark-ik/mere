@@ -413,8 +413,9 @@ workspace is engine/lower-library shaped, Pelt and Tabard run from Mere, Knot's
 standalone and embedded surfaces share one document model, and moved docs are
 indexed only in their owning repository.
 
-**Status (2026-09-03): four of five clauses met; one is not this phase's and
-stays open.** The content moved in three motions — Pelt and its companions,
+**Status (2026-09-04): all five clauses met.** Four landed on 2026-09-03; the
+fifth, Knot's reconciliation, landed the next day with the extraction plan's
+E2 and is recorded at the end of this paragraph. The content moved in three motions — Pelt and its companions,
 then Cambium and Workbench, then the engine-management layer — with genet's
 removals at `75d3900f82e`, `ce79fd44a4d` and `6d8daca939b` and mere's landings
 at `cb3fd887`, `91bf62c9` and `13b64e30`. **One source identity:** every moved
@@ -426,11 +427,16 @@ libraries, WPT, and one raw host, ortet. **Pelt and Tabard run from Mere:** the
 Pelt article receipt renders `digest=b1d6a62acf85b553` from mere, byte-identical
 to genet's last commit that had Pelt. **Moved docs are indexed only here:**
 `inker_docs/`, `nematic_docs/` and `verso_docs/` are in mere's `DOC_README.md`
-and genet's carries a note saying where they went. **Not met, and not this
-step's:** Knot's standalone and embedded surfaces do not yet share one document
-model. That clause is the knot-editor extraction plan's E-series work, listed in
-this plan's own prerequisites table; nothing in these three motions advanced or
-blocked it, and it stays open against P3.
+and genet's carries a note saying where they went. **Knot's standalone and
+embedded surfaces share one document model, 2026-09-04:** that clause was the
+knot-editor extraction plan's E-series work, listed in this plan's own
+prerequisites table, and its E2 closed it. `knot-editor` and `knot-document`
+are no longer mere members; the standalone process is the knot-editor
+repository's `apps/desktop`, and Djinn, Turnstone and that process all resolve
+the same `knot-document` from knot-editor
+`fcd004b655b595038eba0a7e49f209b8477edadf`, so no graph in the family carries
+two of it. `knot-editor-host` stayed, as inker-family integration code, and
+moved to `crates/inker/knot-editor-host`.
 
 Fleece did not move: §9.1's census reclassed it independent, so P3's list names
 one crate it does not own.
@@ -2451,3 +2457,78 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   with "`…metadata…` did not run: program not found" rather than passing, and a
   member name that is not in the workspace fails with "the generated graph does
   not name `…`, so it is stale or empty". Nothing pushed.
+
+- 2026-09-04: **E2 landed — Knot's sources left this repository** (knot-editor
+  `design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`). This is
+  P3's Knot clause, the one the 2026-09-03 status left open, and it closes it.
+  `ports/knot` (the `knot-editor` crate, its docs, examples and tests) and
+  `ports/knot-document` are gone; `ports/knot/desktop` went with them because
+  the standalone process belongs to the standalone repository, which carries it
+  as `apps/desktop` — verified by diff before removal: same two files, the
+  knot-editor copy being the one under its CI, with mere's differing only in the
+  standalone-workspace scaffolding that dies with it and in three cosmetic test
+  and type-annotation details. `ports/knot/editor-host` was **moved**, not
+  removed, to `crates/inker/knot-editor-host`: it is inker-family integration
+  code rather than Knot product source, and `ports/knot/` should not survive as
+  a directory holding only it. 39 owned sources deleted, 5 files moved with
+  `git mv`.
+
+  **What replaced them.** `knot-editor` 0.0.3 and `knot-document` 0.0.1 are
+  `git = "https://github.com/merely-made/knot-editor.git"` at
+  `fcd004b655b595038eba0a7e49f209b8477edadf`, the revision that pins mere
+  `d82afa17` and genet `115d348d`. Djinn takes `knot-editor` through the
+  workspace table. The `exclude` entry for `ports/knot/desktop` and the nesting
+  caveat that named two paths are gone.
+
+  **The patch table this needed, and the one it did not.** Knot pins ~30 Mere
+  packages from `mere.git` at `d82afa17` so it builds standalone. Embedded here
+  those must not arrive a second time — two sources for one package is a type
+  mismatch, not a resolution failure — so the root manifest gains
+  `[patch."https://github.com/merely-made/mere.git"]` redirecting every one of
+  them to its workspace member. No Knot entry was added to, or needed removing
+  from, `.cargo/config.toml`, its committed twin, or graphshell web's pair:
+  those tables carry only comments about `knot-editor-host`, whose path they now
+  spell correctly. Genet needed nothing: Knot and mere already pin the same
+  `115d348d`.
+
+  **Receipts.** `cargo metadata` **unpatched**, run from outside the tree so the
+  machine-local patch table does not load: two packages from
+  `knot-editor.git?rev=fcd004b6` and no others, no package named `knot-editor`
+  or `knot-document` from a path, no workspace member by either name, zero
+  packages from `mere.git`, and 23 genet-derived packages at exactly one
+  revision. `cargo check --workspace` is green both ways with an identical
+  warning set — 192 warnings across the same 12 crates, 0 errors, patched and
+  unpatched — so that delta is zero and every warning is pre-existing. Neither
+  departed crate is in the list and neither can be now: a git dependency's lints
+  are capped. HEAD's own count was not re-measured, so the only warning delta
+  claimed here is patched against unpatched. `cargo test -p
+  djinn`: 65 lib tests and 5 distillery-lane tests pass, including
+  `resident_knot::tests::route_reopens_over_joined_sync_and_live_pairing_updates_all_authority`,
+  the live-pairing/joined-sync/route-reopen test the extraction plan names, now
+  running against the external package. `cargo check -p knot-editor-host` green
+  at the new path. `cargo check --target wasm32-unknown-unknown` from
+  `ports/graphshell/web` green. `scripts/check_port_boundaries.py` passes.
+  `python scripts/relicense_headers.py --repo . --audit`: 1349 owned of 1703
+  tracked, without Exhibit A 0, Exhibit B 0 — down exactly 39 from 1388 of 1742,
+  which is every deleted `.rs` file, all 39 of which carried Exhibit A at HEAD.
+  `cargo test -p distillery`: 13 pass, and the generated workspace graph is 124
+  packages and 280 edges against 126 and 309, the two departed members and the
+  29 edges into them. `walk_fixtures.rs` gained the other half of its member
+  assertion: the graph must still name `knot-editor-host` and must **not** name
+  `knot-editor` or `knot-document`, so a re-added member fails rather than
+  passing quietly.
+
+  **Wording.** `README.md` and `design_docs/DOC_README.md` now say Knot Editor is
+  an independent repository consumed by Djinn and Turnstone rather than a port
+  under `ports/`, citing the extraction plan by path. `ports/djinn/README.md`,
+  the Turnstone suite census's Knot section, and the configuration-ownership
+  plan's live code list name the new source. Seven Knot plans and briefs kept
+  their text and gained a repository note saying the `ports/knot` paths in them
+  are the layout their receipts landed against; the lane brief's opening
+  sentence, which asserted a live ruling rather than a receipt, was corrected.
+  `scripts/cross-repo-smoke.ps1` lost its two `-p knot` steps, which had been
+  dead since before this change — the package was `knot-editor`, never `knot`.
+
+  Nothing pushed. Turnstone is green against `fcd004b6` at its own pushed
+  `e68e2764e4d`, which is what the extraction plan's stop rule required before
+  any of this could be deleted; Djinn is Mere's own consumer and cut over here.
