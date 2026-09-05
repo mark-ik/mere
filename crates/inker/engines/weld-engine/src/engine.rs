@@ -74,8 +74,8 @@ mod tests {
     use super::*;
     use inker::{
         CapabilityStatus, CursorShape, DocumentCapabilities, DragEvent, DragOperationSet,
-        EngineProfileBinding, FocusReason, KeyboardEvent, MouseEvent, NavigationEvent,
-        PhysicalPosition, PointerEvent, SurfaceEngineRegistry, SurfaceSettings, WebMessage,
+        EngineProfileBinding, FocusReason, KeyboardEvent, MouseEvent, PhysicalPosition,
+        PointerEvent, SurfaceEngineRegistry, SurfaceSettings, WebSurfaceEvent,
         routing::{EngineRouteDecision, SurfaceContract, SurfaceContractMode, SurfaceTargetId},
     };
 
@@ -137,13 +137,10 @@ mod tests {
         fn focus(&mut self, _: FocusReason) -> Result<(), SurfaceError> {
             Ok(())
         }
-        fn poll_navigation_event(&mut self) -> Option<NavigationEvent> {
-            None
-        }
         fn poll_cursor_shape(&mut self) -> Option<CursorShape> {
             None
         }
-        fn poll_web_message(&mut self) -> Option<WebMessage> {
+        fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
             None
         }
         fn web_capabilities(&self) -> inker::WebSurfaceCapabilities {

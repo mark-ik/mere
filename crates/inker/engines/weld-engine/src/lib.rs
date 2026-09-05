@@ -41,6 +41,10 @@
 
 pub mod engine;
 pub mod producer;
+#[cfg(feature = "welding-0-15")]
+pub mod welding_0_15;
 
 pub use engine::{WELD_CHROMIUM_ENGINE_ID, WeldEngine, WeldProducerFactory};
 pub use producer::{WeldFrame, WeldProducer, WeldSurface};
+#[cfg(feature = "welding-0-15")]
+pub use welding_0_15::{WeldingNativeFramePayload, WeldingSurface, into_welding_native_frame};

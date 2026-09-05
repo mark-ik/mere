@@ -13,15 +13,19 @@ repository.workspace = true
 description = "inker SurfaceEngine implementation backed by the wgpu-weld CEF (Chromium) accelerated-OSR embedding."
 publish = false
 
+[features]
+default = []
+welding-0-15 = ["dep:welding-0-15"]
+
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
 inker.workspace = true
 tracing.workspace = true
+welding-0-15 = { workspace = true, optional = true }
+dpi.workspace = true
 
-# NOTE: deliberately NO `welding` / `cef` dependency. Like `graft-engine`, this
-# crate defines the `WeldSurface` host seam. The concrete host supplies CEF and
-# chooses its frame hand-off: welding's imported-texture API or a transferred
-# raw shared handle for an external compositor. Keeping this crate inker-only
-# avoids resolving the CEF / Chromium distribution into an engine consumer.
+# Welding remains opt-in: ordinary Mere resolution stays free of CEF. The
+# adapter feature names one reviewed 0.15 contract exactly; concrete runtime,
+# profile, producer construction, and import-cache policy remain with the host.

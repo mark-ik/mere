@@ -10,9 +10,9 @@
 use inker::{
     Cookie, CursorShape, DocumentFindDirection, DocumentFindQuery, DragEvent, DragOperationSet,
     FocusReason, HttpAuthenticationAnswer, KeyboardEvent, MouseEvent, NativeTextureHandle,
-    NavigationEvent, PermissionAnswer, PhysicalPosition, PointerEvent, SurfaceError, SurfaceFrame,
-    SurfaceProducer, SurfaceSettings, SurfaceSyncHandle, SurfaceTextureFormat, UserAgentRequestId,
-    WebMessage, WebRequestId, WebSurface, WebSurfaceCapabilities, WebSurfaceEvent,
+    PermissionAnswer, PhysicalPosition, PointerEvent, SurfaceError, SurfaceFrame, SurfaceProducer,
+    SurfaceSettings, SurfaceSyncHandle, SurfaceTextureFormat, UserAgentRequestId, WebRequestId,
+    WebSurface, WebSurfaceCapabilities, WebSurfaceEvent,
 };
 
 /// A frame produced by a [`WeldSurface`]: the shared GPU texture handle the host
@@ -102,18 +102,10 @@ pub trait WeldSurface {
     fn notify_keyboard(&mut self, ev: KeyboardEvent) -> Result<(), SurfaceError>;
     fn focus(&mut self, reason: FocusReason) -> Result<(), SurfaceError>;
 
-    fn poll_navigation_event(&mut self) -> Option<NavigationEvent>;
     fn poll_cursor_shape(&mut self) -> Option<CursorShape>;
-    fn poll_web_message(&mut self) -> Option<WebMessage>;
-    /// The one host-facing event stream. Concrete hosts should override this
-    /// when their backend already owns a unified callback queue so event order
-    /// is retained across event kinds.
-    fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
-        if let Some(event) = self.poll_navigation_event().map(nav_to_web_event) {
-            return Some(event);
-        }
-        self.poll_web_message().map(WebSurfaceEvent::WebMessage)
-    }
+    /// The one host-facing event stream, preserving callback order across
+    /// navigation, page messages, scripts, and cookies.
+    fn poll_web_event(&mut self) -> Option<WebSurfaceEvent>;
 
     /// The concrete host must project only the CEF operations it actually
     /// forwards. This is deliberately required rather than a hopeful default:
@@ -340,14 +332,5 @@ impl WebSurface for WeldProducer {
 
     fn poll_web_event(&mut self) -> Option<WebSurfaceEvent> {
         self.inner.poll_web_event()
-    }
-}
-
-fn nav_to_web_event(event: NavigationEvent) -> WebSurfaceEvent {
-    match event {
-        NavigationEvent::Started { .. }
-        | NavigationEvent::Committed { .. }
-        | NavigationEvent::Finished { .. }
-        | NavigationEvent::Failed { .. } => WebSurfaceEvent::Navigation(event),
     }
 }

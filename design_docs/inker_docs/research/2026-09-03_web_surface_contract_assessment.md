@@ -208,15 +208,45 @@ on it. Do not create a second, subtly different raw-handle vocabulary in Mere.
   Graft, Scry, and Weld adapter traits. Pelt's only caller was a WebView
   readiness probe; its fixture now posts `pelt.surface.ready` through the
   page-to-host message channel and Pelt drains that from the ordered event
-  stream. `scrying-engine` still downgrades correlated script-result and cookie
-  reads until Scry's platform callbacks can settle those requests natively.
+  stream.
+- 2026-09-04: `scrying` 0.7.1 added one native ordered event stream for
+  navigation, page messages, script completions, and cookie completions on
+  WebView2, WKWebView, and WPE. `scrying-engine` now forwards caller ids without
+  reminting them, consumes only that queue, maps completion payloads back into
+  Inker, and reports backend-specific cookie-read limits instead of a hopeful
+  shared default. The registry-backed adapter suite passed all 18 tests against
+  the crates.io package. The registry-backed wider receipt passed 99 Inker
+  tests, 24 adapter tests, and six Pelt tests with
+  `cargo test -p inker -p scrying-engine -p weld-engine -p graft-engine -p pelt-core -j 1 --locked`.
+- 2026-09-04: Direct Weld binding was assessed against Welding 0.14.1 and
+  Turnstone's live factory. It must start in wgpu-weld: the public producer
+  trait has separate navigation/message/result queues, and only Windows exposes
+  a native-frame take path. Mere cannot reconstruct native callback order or
+  honest Metal/Vulkan frame custody above that boundary. `WeldProducerFactory`
+  remains the right host seam for CEF subprocess bootstrap, runtime lifetime,
+  profile policy, and host import caches. After Weld exposes ordered events and
+  cross-platform owned native frames, a version-pinned opt-in adapter can own
+  the mechanical translation without absorbing those host policies.
+- 2026-09-04: Welding 0.15 now satisfies those prerequisites. The opt-in
+  `welding-0-15` adapter is pinned to Weld commit
+  `4784d07c4064195c33136b9b91c8231913f08e06`, consumes its single ordered
+  event queue, preserves caller ids across the full `u64` range, and carries
+  the complete owned `NativeFrame` through Inker's type-erased payload until
+  the host importer consumes it. The adapter requires the exact
+  `CefSurfaceConfig` used by the host so configured permission, auth, download,
+  background, and actual frame-mode facts are not replaced by build-time
+  guesses. CEF bootstrap, runtime lifetime, profiles, producer construction,
+  and import caches remain in `WeldProducerFactory`. Focused receipts passed
+  six feature-enabled tests, three feature-disabled tests, and target-only
+  clippy with warnings denied.
 - Pelt's Windows consumer now recovers Scry's owned native-frame payload and
   imports it with Scry's host-device importer and the same shared fence
   synchronizer given to WebView2. The mixed headed receipt passed at 1280x800
   and 960x640 with three owned imports, three fence waits, host composition,
   and the page-message readiness event (artifact digest `85d1b0ba8a86778f`).
-- Focused tests pass for Inker, Graft/Scry/Weld adapters, and Pelt core. Direct
-  Weld callback binding, Scry callback migration, and extraction remain open.
+- Focused tests pass for Inker, Graft/Scry/Weld adapters, and Pelt core. Graft's
+  wgpu-free frame/sync factor, extraction, and a combined demo with real Graft
+  and Weld factories remain open.
 
 ## Open decisions
 

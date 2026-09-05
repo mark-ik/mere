@@ -25,7 +25,7 @@ inker.workspace = true
 # 30 is now Scry's default: an imported texture has to come from the same major
 # as the host device, and an implicit default can silently add a second stack
 # when either side advances.
-scrying = { version = "0.7.0", default-features = false, features = [
+scrying = { version = "0.7.1", default-features = false, features = [
     "wgpu-30",
 ] }
 dpi.workspace = true
