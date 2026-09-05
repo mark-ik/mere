@@ -63,7 +63,7 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
   semantic rule. The `murmuring` package was folded into `murm` on 2026-07-14.
   Use role-descriptive internal names and keep the product words for product
   concepts.
-- **Gazetteer** — handle-resolution index: turns a name / handle / key into reachable, trust-stated endpoints (WebFinger today; NIP-05 / atproto-did / moot web-of-trust to come). An index / *directory*, not a broadcast *gazette*, so it sits on the persona / identity tier (`crates/persona/gazetteer`), promoted out of the murm supercrate 2026-07-08. Incubating — no consumer wired yet, and its blocking HTTP needs an async port first.
+- **Gazetteer** — handle-resolution index: turns a name / handle / key into reachable, trust-stated endpoints (WebFinger today; NIP-05 / atproto-did / moot web-of-trust to come). An index / *directory*, not a broadcast *gazette*, so it sits on the persona / identity tier (`ports/gazette`), promoted out of the murm supercrate 2026-07-08. Incubating — no consumer wired yet, and its blocking HTTP needs an async port first.
 
 ## In-product vocabulary
 

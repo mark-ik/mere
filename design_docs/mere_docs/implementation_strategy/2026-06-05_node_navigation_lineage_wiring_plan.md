@@ -4,6 +4,10 @@
 **Status**: Implementation plan — pre-build
 **Scope**: Drive the already-built per-node navigation-lineage substrate from the live navigation path, so navigating the focused tile changes *that node* in place (within-node history), an explicit gesture mints a new node (a new browsing surface) with a typed lineage edge back to its origin, and the two histories (within-node back/forward, across-node previous/next) become real. This is a **wiring + finish** job: the model is decided and the substrate exists; the live path never drives it.
 
+> **Historical note (2026-09-05):** This is a Meerkat/Orrery-era wiring proposal.
+> Its code-path and substrate claims are retained as rationale, not a current
+> implementation map; verify current ownership before resuming the work.
+
 ## Supersedes / builds on
 
 - [`2026-05-11_node_per_tile_lineage_plan.md`](2026-05-11_node_per_tile_lineage_plan.md) — same intent, but its file/type references (`mere-host`, `TileManager`, host-side per-tile history) predate the meerkat/orrery/platen architecture **and** the substrate has since moved onto the kernel `Node` itself (`Node.navigation_memory`). Architecture-stale; this plan replaces its "where" while keeping its "what."

@@ -12,6 +12,10 @@ Separately, the scripted-live follow-on's `ResourceFetcher` trait mismatch at
 progress log; `--features scripted` now compiles, 5/5 tests). The smolweb feature
 itself builds green.
 
+> **Historical note (2026-09-05):** This is a Meerkat integration receipt. Its
+> phase and path names preserve the landed context, but do not establish current
+> Smolweb ownership; verify the active Genet and Turnstone documentation first.
+
 **Thesis**: render a focused smolweb capsule (gemini/gopher/feed/…) in the Mere host
 through the **genet lane** — the native `smolweb-views` render we built and shipped
 in pelt (`SmolwebDocument`) — instead of the block-card reader path. The block lane

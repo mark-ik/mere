@@ -10,6 +10,10 @@ This is the E0 portability receipt for the Vates and Sibylla consolidation.
 It records compilation and execution separately. A target check does not claim
 that a browser or actor runtime was exercised.
 
+> **Historical note (2026-09-05):** This is an August E0 portability receipt.
+> Its target results and toolchain assumptions must be rerun before any current
+> release or support claim.
+
 ## Dependency floor
 
 `cargo tree -p esp --no-default-features -e normal` contains only ESP and

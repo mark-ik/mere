@@ -16,6 +16,11 @@ wider P3 contract shape below.
 54,760 LOC across ~86 modules, with ~85 of them declared in `main.rs` (the bin)
 and only the small chrome view-model set in `lib.rs`. The crate's own
 description says "chrome shell"; this plan makes the code match it.
+
+> **Historical/supersession note (2026-09-05):** This promotion-pass mapping and
+> its compile blockers are receipt-era context. Current ownership follows the
+> [platform-boundary plan](2026-09-02_platform_boundary_and_repository_topology_plan.md)
+> and the active topology index.
 **Relates to**: the
 [render ladder + extraction plan](2026-06-23_render_ladder_and_extraction_plan.md)
 (frames the crawl/extraction axis as corpus + agent infrastructure, not shell

@@ -1,5 +1,9 @@
 # Xilem provenance and patch ledger
 
+> **Historical note (2026-09-05):** The recorded revisions and replay describe
+> extraction provenance at the audit point. They are not a current upstream
+> alignment claim; re-check live forks and patches before acting on this ledger.
+
 ## Recorded bases
 
 - Serval extraction source: `6b955ff96ed8b2912d04f7a36a85a36b401bb780`

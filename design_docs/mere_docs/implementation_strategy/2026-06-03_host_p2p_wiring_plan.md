@@ -9,6 +9,11 @@ surface + cheap p2p win)**: how the proven p2p substrate (transport + murm's
 `fetch.rs`, `lib.rs`) against the 2026-06-03 tree, plus the just-landed tessera
 store/sync productization ([tessera plan](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md)).
 
+> **Historical/supersession note (2026-09-05):** This pre-consolidation
+> Meerkat wiring proposal retains its seam analysis as context, but its host and
+> module references are receipt-era. Current peer-runtime and domain ownership
+> is tracked by the [Murm/Moot plan](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md).
+
 ---
 
 ## The one idea

@@ -7,7 +7,7 @@ policy and their CSS themes.
 
 ## Current acceptance surface
 
-`crates/cambium/examples/component_catalog.rs` is the executable catalog. It
+`crates/cambium/cambium/examples/component_catalog.rs` is the executable catalog. It
 currently proves controls, text editing, a searchable action list, positioned
 menu rows, a virtualized data grid, retained hover routing, Sprigging leaves,
 and the interactive graph-canvas swatch.

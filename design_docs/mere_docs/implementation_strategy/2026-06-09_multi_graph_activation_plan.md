@@ -13,6 +13,10 @@ on multi-persona) and **per-session engine-profile escalation** (manifest field
 present, unwired).
 **Related**: [shellbar plan F2.3](2026-06-09_shellbar_plan.md), [graph session manifest plan](2026-05-11_graph_session_manifest_plan.md), [switcher thumbnails plan](2026-05-14_switcher_thumbnails_plan.md), [multi-window plan](2026-06-10_multi_window_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window), [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md). Code: `crates/system/session-runtime/`, `crates/meerkat/`, `crates/shell/frame/`.
 
+> **Historical/supersession note (2026-09-05):** This is the Meerkat activation
+> record. Its MG evidence remains useful context; the current multi-window
+> direction is the [one-state, n-windows design](../design/2026-07-05_one_state_n_windows_design.md).
+
 Give one window many graphs, switchable from the shellbar. The destination is
 **Model B** (the window holds the panes, the graph is the content that flows
 through the graph-bound ones); **Model A** (a session owns its whole content band)

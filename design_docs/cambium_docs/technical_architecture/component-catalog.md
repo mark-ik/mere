@@ -1,6 +1,6 @@
 # Component catalog acceptance surface
 
-`crates/cambium/examples/component_catalog.rs` is both a renderable catalog and
+`crates/cambium/cambium/examples/component_catalog.rs` is both a renderable catalog and
 an executable acceptance test. It is the first place a new Cambium component
 should appear.
 

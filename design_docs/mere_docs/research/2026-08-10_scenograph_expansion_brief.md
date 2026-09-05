@@ -16,8 +16,7 @@ surface does not ship.
 (0.0.3 published 2026-07-24), the scene contract note
 (`design_docs/scenograph_docs/technical_architecture/2026-07-22_scene_contract_note.md`),
 [projection_proofs_plan](../implementation_strategy/2026-07-21_projection_proofs_plan.md),
-woodshed's stage/set/tools plan
-(`woodshed/design_docs/2026-07-11_stage_set_tools_plan.md`),
+woodshed's [stage/set/tools plan](../../../../woodshed/design_docs/2026-07-11_stage_set_tools_plan.md),
 [swatch_primitive_design](../design/2026-06-27_swatch_primitive_design.md)
 (the cells-as-edges ruling that multi-edge is truth).
 
@@ -87,7 +86,8 @@ Stage renders a Set graph through the portable contract with fanned relations,
 before woodshed's release.
 
 **Founded 2026-08-18.** woodshed took its first `sceno` dependency;
-`StageGraphSnapshot` lives at `crates/woodshed-core/src/stage_scene.rs` and
+[`StageGraphSnapshot`](../../../../woodshed/crates/woodshed-core/src/stage_scene.rs)
+lives in Woodshed and
 emits the Set as items plus fanned relations (10 module tests, 68 core tests,
 workspace green). It was adapter-only work, because the finding on arrival
 was that woodshed's own plan understated its state: `CardId`, `Set::graph()`,

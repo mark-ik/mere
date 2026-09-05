@@ -7,6 +7,10 @@ numbers and recorded gate rationales, on the model that killed held-RDF-truth
 (measure, then decide). Re-run the cheap numbers roughly twice a month; drift
 becomes a diff instead of a feeling.
 
+> **Historical note (2026-09-05):** This is the July dependency measurement
+> baseline, not a statement of current footprint or clearance. Re-measure the
+> active manifests and current dependency decisions before using it for a gate.
+
 ## Method
 
 Extracted every crates.io-versioned dependency declaration across the eight

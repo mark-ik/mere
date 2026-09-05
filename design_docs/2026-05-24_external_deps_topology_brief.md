@@ -7,6 +7,11 @@ relative-path convention between them, the cross-repo rename lineage, and which
 map in [`mere_docs/technical_architecture/2026-05-19_workspace_topology_status.md`](mere_docs/technical_architecture/2026-05-19_workspace_topology_status.md)
 — that doc is about `repos/mere/crates/`; this one is about the workspace root.
 
+> **Historical note (2026-09-05):** This is a May workspace-topology and rename
+> snapshot. Preserve its path-dependency context, but use the current
+> [`DOC_README`](DOC_README.md) and active repository-boundary plans for present
+> ownership and layout.
+
 ## The `crates/` ↔ `repos/` split
 
 Two sibling directories under `Code/`:
