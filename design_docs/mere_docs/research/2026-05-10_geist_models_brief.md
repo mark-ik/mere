@@ -22,7 +22,7 @@ as the implemented FLORA protocol.
 - [`../implementation_strategy/2026-05-07_event_dag_substrate_brief.md`](../implementation_strategy/2026-05-07_event_dag_substrate_brief.md) — substrate; particularly §8.7 (persona keypair derivation) and the engram envelope shape.
 - [`../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) — tier framework (orrery → moot → moothold → coalition) and voluntary-hosting-with-stakes pattern that compute hosting extends.
 - [`../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md`](../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md) — graph-cluster namespaces; relevant for scoping which engrams a tier-specific adapter trains on.
-- [`../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md`](../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md) — Phase 5 already stores model weights as content-addressed engrams; this brief uses that as substrate.
+- [`../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md`](../../archive_docs/2026-06-09_completed_plans/2026-05-09_eidetic_layered_stack_plan.md) — Phase 5 already stores model weights as content-addressed engrams; this brief uses that as substrate.
 
 ---
 

@@ -13,7 +13,7 @@
 Meristem began as Linebender's Apache-2.0 `xilem_core`, vendored into Serval at
 `10b557c3d27003288bd54b86bb5225b4d8127e82`. The extraction repository replays
 the four Serval commits that touched that subtree, preserving their authors,
-dates, and messages before moving the files to `crates/meristem`.
+dates, and messages before moving the files to `crates/cambium/meristem`.
 
 The upstream side is a path-only replay of the 113 commits that touched
 `xilem_core` through the recorded `mark-ik/xilem` base. The filtered tip is

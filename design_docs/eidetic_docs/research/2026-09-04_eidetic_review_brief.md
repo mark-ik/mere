@@ -95,7 +95,7 @@ is portable, which is what seven repositories pinning `chartulary` and
 
 ### What it indexes
 
-`TrailIndex::rebuild_with_text` (`crates/intel/eidetic-search/src/index.rs:161-199`)
+[`TrailIndex::rebuild_with_text`](../../../crates/intel/eidetic-search/src/index.rs)
 writes **one tantivy document per `TraceEvent`**, not per page. The schema
 (`index.rs:50-74`) is eight fields: `url` (`STRING | STORED`), `url_text`
 (`TEXT`, the same bytes through the default tokenizer), `title` (`TEXT |
@@ -176,11 +176,11 @@ Two further facts about that cost:
 **(a) The graph itself as the index.** Eidetic is a graph store, and
 graph-kernel already holds every visited page as a `Node` carrying url,
 title and tags, with a single shared `chartulary::stemma::Stemma` visit tree
-(`crates/graph/graph-kernel/src/graph/history.rs:1-24`). Sorting the
+([`history.rs`](../../../crates/graph/graph-kernel/src/graph/history.rs)). Sorting the
 queries by what they actually need:
 
 - "recent", "this node's history", "removed" — `mere-trail`'s entire
-  `TrailInput` (`crates/domain/trail/src/lib.rs:27-36`). Graph and store
+  [`TrailInput`](../../../crates/domain/trail/src/lib.rs). Graph and store
   reads. **No text index needed.**
 - `top_domains`, `visits_histogram` — aggregations over a domain string and
   a timestamp. Columnar or a `BTreeMap` fold. **No text index needed.**
@@ -261,7 +261,7 @@ same page recorded at several layers.**
 One visit to one URL materializes as:
 
 1. A `Node` in graph-kernel carrying `addresses` and `title`
-   (`crates/graph/graph-kernel/src/graph/chart.rs:1-30` implements
+   ([`chart.rs`](../../../crates/graph/graph-kernel/src/graph/chart.rs) implements
    chartulary's `Addressed` / `Labeled` over it), plus a visit in the shared
    `Stemma` (`graph/history.rs`).
 2. A `TraceEvent` whose `from` and `to` are each a full inline
@@ -353,7 +353,7 @@ Five, each anchored in a type that exists today.
 `visits_histogram` (`eidetic-search/src/index.rs:276, 299`) already answer
 "where does my attention go" over fast-field columns with no re-index. The
 consumer they would serve is the Trail pane: `mere-trail`'s `TrailInput`
-(`crates/domain/trail/src/lib.rs:27-36`) is a three-section projection whose
+([`TrailInput`](../../../crates/domain/trail/src/lib.rs)) is a three-section projection whose
 `build_trail_items` **has no caller anywhere in the workspace**. A fourth
 section — top domains, a visits histogram — is a report the data supports
 and nothing renders. (If the tantivy recommendation is taken these become

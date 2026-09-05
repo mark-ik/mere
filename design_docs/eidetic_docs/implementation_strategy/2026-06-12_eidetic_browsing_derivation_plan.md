@@ -87,7 +87,7 @@ file under the 600-LOC ceiling.
 
 ### E3 — the lexical index (Phase 9 producer half, native-first)
 
-New crate `crates/eidetic/eidetic-search` (tantivy is a heavy dep; it does
+New crate `crates/intel/eidetic-search` (tantivy is a heavy dep; it does
 not enter eidetic-core). Scope per the deferred plan's verified Phase 9
 detail, producer side only:
 

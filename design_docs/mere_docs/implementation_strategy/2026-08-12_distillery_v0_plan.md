@@ -1121,7 +1121,7 @@ trainer still does not make.
 
 ### Components founded, 2026-09-02
 
-Alembic (the recall and workshop component) moved from `ports/alembic` to
+Alembic (the recall and workshop component) moved from its former top-level home to
 `ports/distillery/alembic`, and Athanor (its authority half, the furnace) was
 founded at `ports/distillery/athanor` as `mere-athanor`, on the suite census
 §7.4 re-ruling and the same-day ruling that the authority lives with the

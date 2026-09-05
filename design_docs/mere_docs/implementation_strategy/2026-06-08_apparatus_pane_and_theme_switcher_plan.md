@@ -3,7 +3,7 @@
 **Date**: 2026-06-08
 **Status**: Planning → building. Greenlit by Mark as the next arc after F1 (the
 frame tree). The first **settings/system** consumer of the frame-tree substrate.
-**Related**: [frame tree in meerkat](2026-06-08_frame_tree_in_meerkat_plan.md) (the pane substrate), [graph roster + frame taxonomy](../design/2026-06-07_graph_roster_and_frame_taxonomy.md) (apparatus = the system pane; settings folds into it), `register-theme` (the tokens), `apparatus` crate (uxtree skeleton).
+**Related**: [frame tree in meerkat](../../archive_docs/2026-06-09_completed_plans/2026-06-08_frame_tree_in_meerkat_plan.md) (the pane substrate), [graph roster + frame taxonomy](../design/2026-06-07_graph_roster_and_frame_taxonomy.md) (apparatus = the system pane; settings folds into it), `register-theme` (the tokens), `apparatus` crate (uxtree skeleton).
 
 Build **apparatus** as a frame pane (host diagnostics + settings) and land the
 **light / dark / high-contrast theme switcher** whose chrome tokens the theming

@@ -352,7 +352,7 @@ browser-like optional OS integration.
   never contain secret bytes.
 - The sealed-record store is a separate concern owning secret material, unlock
   policy, and record formats. **Decided (2026-07-04): it lands as a
-  sealed-record backend inside `crates/persona/identity`, beside the existing
+  sealed-record backend inside `crates/dramatis/personae`, beside the existing
   slot vault, and `session-runtime` consumes it** (the dependency edge already
   exists: `session-runtime` depends on `identity`). No new crate. The rule
   this placement enforces: **one unlock ladder** — the record backend shares
@@ -599,7 +599,7 @@ both evaluated in the substrate spike.
   convention, scoped `TrustedPeersOnly` v1 to own devices, and made epoch-history support
   an explicit restore requirement.
 - **2026-07-02** — implemented the first code slice in
-  `crates/system/session-runtime/src/wallet_store.rs`: typed `IdentityWalletManifest`,
+  `crates/system/pandect/src/wallet_store/mod.rs`: typed `IdentityWalletManifest`,
   `DeviceRoster`, and `PersonaWalletManifest` shapes; path helpers; atomic load/save for
   identity wallet, persona wallet, roster, and opaque grant blobs; plus 8 focused tests.
   Verified with `cargo test -p session-runtime wallet_store -- --nocapture`.
@@ -610,7 +610,7 @@ both evaluated in the substrate spike.
   shared identity root instead of separate `node_identity.seed` / `comms_identity.seed`
   sidecars. Verified with `cargo check -p meerkat`.
 - **2026-07-02** — landed the typed grant slice in
-  `crates/system/session-runtime/src/wallet_grant.rs`: a signed
+  `crates/system/pandect/src/wallet_grant/mod.rs`: a signed
   `identity/grants/<device_id>.cbor` envelope, canonical CBOR encode/decode helpers,
   delegator-signing and verification helpers, stable content-hash refs, and load/save
   helpers/tests over the existing grant path. This narrows the live gap to pairing,
@@ -665,7 +665,7 @@ both evaluated in the substrate spike.
   full-workspace `meerkat` verification is blocked by an unrelated dirty-tree `kernel`
   compile error in `graph/apply.rs`.
 - **2026-07-02** — landed the enrollment-bundle slice in
-  `crates/system/session-runtime/src/wallet_grant.rs`: typed
+  `crates/system/pandect/src/wallet_grant/mod.rs`: typed
   `RemoteAuthEnrollmentBundle` CBOR encode/decode helpers, delegator-side
   `build_remote_auth_enrollment_bundle(...)`, and delegatee-side
   `install_remote_auth_enrollment_bundle(...)` now bridge signed grant + persona wallet
@@ -754,8 +754,8 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   (`xchacha20poly1305-v1` + typed AAD), append-shaped epoch history. This was the design
   checkpoint before the code slice below landed later the same day.
 - **2026-07-04** — landed the first encrypted-vault implementation slice:
-  `crates/persona/identity/src/sealed_record_storage.rs` now provides a typed sealed-record
-  backend, `crates/persona/identity/src/startup_unlock.rs` now declares
+  `crates/dramatis/personae/src/sealed_record_storage.rs` now provides a typed sealed-record
+  backend, `crates/dramatis/personae/src/startup_unlock.rs` now declares
   `StartupUnlockMode::{AutoOs, Prompt, Locked}` and implements a Windows DPAPI-backed
   local vault root for `AutoOs`, and `session-runtime::wallet_store` now uses that local
   secret store to auto-migrate `identity/master.seed` and `identity/local-device.json`
@@ -793,7 +793,7 @@ current head, and replacement of the temporary plaintext bridges as the live sea
   passphrase-entry chrome for `Prompt` and delegated device follow-through beyond the
   seed-backed lanes.
 - **2026-07-06** — landed the passphrase-wrapped vault-root backend in
-  `crates/persona/identity/src/passphrase_root.rs`: an Argon2id-KEK + ChaCha20-Poly1305
+  `crates/dramatis/personae/src/passphrase_root.rs`: an Argon2id-KEK + ChaCha20-Poly1305
   seal over the same 32-byte vault root the DPAPI `AutoOs` wrapper produces, reusing
   `passphrase_storage::derive_kek` (one unlock ladder, one KDF config). Public API is
   `wrap`/`unwrap_vault_root`, `save`/`load_passphrase_root`, `change_passphrase`,

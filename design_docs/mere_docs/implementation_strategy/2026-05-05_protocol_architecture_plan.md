@@ -9,12 +9,12 @@
 
 **Drives**: The Mere Phase 2C → Phase 3 work program, plus per-protocol mod specs that branch from this plan.
 
-> **Crate-name + substrate note (2026-06-09 audit):** crate names below predate the 2026-05-19 supercrate naming pass and the `graphshell` dissolution: `mere-identity`→`persona/identity`, `mere-transport`→`murm/transport`, `mere-kernel`→`graph/graph-kernel`, `mere-host-runtime`→`system/session-runtime`. The bilateral substrate has since pivoted Cable→p2panda (the `mere-transport` iroh path retired, BLAKE2b→BLAKE3), so the Cable wire-format and iroh-transport sections are partially superseded by the [p2panda spike](2026-06-01_p2panda_substrate_spike_plan.md). Dated "shipped"/progress receipts below are left as historical record.
+> **Crate-name + substrate note (2026-06-09 audit):** crate names below predate the 2026-05-19 supercrate naming pass and the `graphshell` dissolution: `mere-identity`→`persona/identity`, `mere-transport`→`murm/transport`, `mere-kernel`→`graph/graph-kernel`, `mere-host-runtime`→`system/session-runtime`. The bilateral substrate has since pivoted Cable→p2panda (the `mere-transport` iroh path retired, BLAKE2b→BLAKE3), so the Cable wire-format and iroh-transport sections are partially superseded by the [p2panda spike](../../archive_docs/2026-06-09_completed_plans/2026-06-01_p2panda_substrate_spike_plan.md). Dated "shipped"/progress receipts below are left as historical record.
 
 **Related**:
 
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) — Murm's authority + boundaries (this plan extends Murm with sibling-protocol layers and identity-vault elaboration)
-- [`../../murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md`](../../murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md) — Cable's Phase 0–5 migration plan (this plan's iroh-layering work picks up after Cable Phase 2 ships)
+- [`../../murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-04_cable_migration_from_verso_plan.md) — Cable's Phase 0–5 migration plan (this plan's iroh-layering work picks up after Cable Phase 2 ships)
 - [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — Mere lexicon (orrery, moot, coalition, kith/kin, tessera)
 - [`../../TERMINOLOGY.md`](../../TERMINOLOGY.md) — canonical terms
 - Inherited: [`protocol_modularity_and_host_capability_model.md`](../../../../graphshell/design_docs/graphshell_docs/technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md) — packaging classes (`CoreBuiltins`, `DefaultPortableProtocolSet`, `OptionalPortableProtocolAdapters`, `NativeFeatureMods`, `NonEngineNetworkLayers`); this plan extends that taxonomy with "primitive moot node" semantics for `NonEngineNetworkLayers` protocols

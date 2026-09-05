@@ -74,7 +74,7 @@ workspace Cargo processes can regenerate the ignored target-specific lockfile.
 
 Knot's ESP consumer compiled during E1. Its later full library-test run met a
 concurrent, unrelated borrow error in the new publication-client test at
-`ports/knot/src/publish_host.rs`; that work is outside this consolidation and
+`../../../../knot-editor/crates/knot-editor/src/publish_host.rs`; that work is outside this consolidation and
 was left untouched.
 
 ## Done boundary

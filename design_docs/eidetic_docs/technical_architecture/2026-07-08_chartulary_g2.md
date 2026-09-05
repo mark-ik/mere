@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-08
 **Status:** G2 landed. Follows G1 (`2026-07-08_chartulary_g1.md`). The lineage crate
-`stemma` was founded separately (`repos/stemma`, G2a). This doc records the
+`stemma` was founded separately (now `crates/eidetic/chartulary/src/stemma`, G2a). This doc records the
 fork-and-derivation half (G2b) that lives in chartulary and codicil. Canonical
 program plan in mere:
 `design_docs/mere_docs/technical_architecture/2026-07-08_generic_graph_substrate_plan.md`.
@@ -14,7 +14,7 @@ knows where it came from, and individual nodes can record that they were derived
 from another graph's node. Done-condition met (15 tests): a forked graph carries
 lineage across the fork, and derivation records survive a round-trip.
 
-- **codicil fork (`repos/codicil`).** A `Codicil` can carry a `LogId` and, if it is
+- **codicil fork (now `crates/eidetic/eidetic-core/src/codicil.rs`).** A `Codicil` can carry a `LogId` and, if it is
   a fork, a `Provenance { source, at }`. `fork(new_id)` copies the current entries,
   stamps provenance (source log id + the seq at the fork point), and diverges. This
   is git-style branching over the append-only log.

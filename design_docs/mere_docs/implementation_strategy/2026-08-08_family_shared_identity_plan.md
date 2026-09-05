@@ -166,8 +166,8 @@ Woodshed took a different route to the same rule (see below): the row raises
 the shared picker rather than being a `Choice` whose `apply` swaps, so
 nothing there is `RestartRequired` either.
 
-**Graphshell is not just a consumer; it is a prior implementation.**
-`ports/graphshell/src/native/personae_host.rs::snapshot` already builds
+**Graphshell is not just a consumer; it is a prior implementation.** Its host
+was promoted to [`castellan::authority::PersonaeHost::snapshot`](../../../ports/castellan/src/authority.rs), which builds
 `ProfileView { selected, id, display_name, slot_count,
 master_public_fingerprint }` — the same list-and-mark-and-sort-by-id that
 `read_roster` does, projected over the protocol as a secret-free read model.

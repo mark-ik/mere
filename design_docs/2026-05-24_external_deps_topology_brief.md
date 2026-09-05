@@ -39,11 +39,11 @@ Two sibling directories under `Code/`:
   `netfetcher`, `errand`, `strophe`, `woodshed`, `wgpu-graft`, `wgpu-scry`,
   `wgpu-weld`. (**`graphshell`** was here until 2026-05-27, when it was
   GitHub-archived and the local clone deleted — see the [donor-repo code
-  salvage map](mere_docs/research/2026-05-27_donor_graphshell_repo_salvage_map.md)
+  salvage map](archive_docs/2026-06-09_pivot_superseded/2026-05-27_donor_graphshell_repo_salvage_map.md)
   and [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md).)
   (**`netfetcher`** added 2026-05-25 — a scaffold; the portable
   WHATWG-Fetch network engine. Mere owns it; genet/consumers receive bytes. Plan:
-  [`mere_docs/.../2026-05-25_netfetcher_plan.md`](mere_docs/implementation_strategy/2026-05-25_netfetcher_plan.md).)
+  [`mere_docs/.../2026-05-25_netfetcher_plan.md`](archive_docs/2026-06-09_completed_plans/2026-05-25_netfetcher_plan.md).)
 
 Anything "essentially a library I don't maintain" moves into `crates/`. The
 `xilem` fork (branch `mere-wgpu-29-vello-0-9`, rebased onto the `mark-ik/xilem`

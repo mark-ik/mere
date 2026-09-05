@@ -433,7 +433,7 @@ script block over RDFa/microdata attributes (directly parseable, host paints sta
 presentational); reserve element-level RDFa for when a tool must grab a specific
 sub-element (a `schema:name` span). This complements the shipped JSON-LD I/O
 (`linked-data` crate, `Command::ExportGraph` / `>export_graph`, plus `from_html`
-foreign-page ingest; [linked-data ingest/export plan](2026-05-22_linked_data_ingest_export_plan.md)),
+foreign-page ingest; [linked-data ingest/export plan](../../archive_docs/2026-06-09_completed_plans/2026-05-22_linked_data_ingest_export_plan.md)),
 it does not replace it, and it is an affordance riding the node-as-container-in-the-document
 done-condition (the container rides the spine; the card is one sprite) rather than a hard Phase 2
 requirement.

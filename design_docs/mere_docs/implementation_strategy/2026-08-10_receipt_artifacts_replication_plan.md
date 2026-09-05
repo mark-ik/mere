@@ -125,7 +125,8 @@ More than expected, and the plan is mostly wiring because of it:
   `device_sync.rs`, `mesh/src/lib.rs`, and the transfer staging surface;
   the dogfood-over-adopt ruling recorded here and in workspace memory.
 
-- **2026-08-10, later: R0-R2 built.** `ports/graphshell/src/receipts.rs`
+- **2026-08-10, later: R0-R2 built.**
+  [`receipts/ingest.rs`](../../../ports/graphshell/src/receipts/ingest.rs)
   (the ingest) plus `src/bin/receipt_ingest.rs` (the CLI). Nine tests green.
 
   **R0 — the schema and ingest.** A receipt directory becomes a node id, an

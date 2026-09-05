@@ -11,7 +11,7 @@ gone, its solver registry belongs to `scenomise`, and the published
 `scenograph` name is held for the scene editor. This remains the historical
 receipt for absorbing `arrangements` into the scene family.
 **Supersedes:** the half-finished `arrangements` → `scenomise` migration begun
-2026-05-18 (see `crates/canvas/cartography/src/adapters.rs` header and the
+2026-05-18 (see `crates/canvas/cartography/src/adapters/mod.rs` header and the
 `scenomise` crate doc: "The first consumer proof moves the generic Spiral,
 board, and geographic solvers here").
 

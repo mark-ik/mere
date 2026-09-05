@@ -351,7 +351,7 @@ dramatis resolver crate already held it — package and lib both, published,
 484 lines, no library consumers — and bare `gazetteer` is held by a stranger,
 so freeing the name by renaming the resolver was unavailable. Ruled: the
 resolver *is* the port, one directory earlier than expected.
-`crates/dramatis/gazette` moved to `ports/gazette`, keeping its package name,
+`crates/dramatis/gaz` moved to `ports/gazette`, keeping its package name,
 version, and code; the manifest, README, and module doc were reframed to the
 port identity, and the workspace member and dependency entries follow. The
 reasoning is the 2026-08-10 brief's own: the word's three senses — an index,
@@ -422,7 +422,7 @@ and invents nothing — so the same precedent puts Athanor's authority (what a
 furnace pass is, what it may propose, the grants, runs, petitions, and
 revocation over bounded actors) in Distillery, with Djinn scheduling it and
 keeping the proposals-not-truth invariant. **Shape:** flat under the port, as
-`ports/graphshell/web` and `ports/knot/desktop` already are —
+`ports/graphshell/web` and `knot-editor/crates/knot-editor` already are —
 `ports/distillery/alembic` (moved) and `ports/distillery/athanor` (founded);
 no intermediate `ports/` or `crates/` directory. **Names:** `mere-alembic` /
 `alembic` unchanged; `mere-athanor` / `athanor`, free on crates.io at the
@@ -550,13 +550,13 @@ incumbent application.
 7. Found the gazette port; its picker consumed by Knot, Moot, and Signalman
    is the boundary proof 7.3 asked for. *(Amended 2026-08-22. **Executed
    2026-08-23 by promotion**, per the naming ruling in 7.3: the resolver
-   crate moved `crates/dramatis/gazette` → `ports/gazette`, keeping its
+   crate moved `crates/dramatis/gaz` → `ports/gazette`, keeping its
    package name and code, with the manifest, README, and module doc reframed
    to the port. Compiles from its new home; the picker and feed surfaces
    remain unbuilt.)*
 8. Keep the Alembic workshop behind one bounded two-host workflow receipt;
    the receipt is its founding gate, per 7.4. *(Amended 2026-08-22. **Stub
-   founded 2026-08-23** at `ports/alembic`, MPL-2.0, with the `recall`
+   founded 2026-08-23** at `ports/distillery/alembic`, MPL-2.0, with the `recall`
    feature declared and empty; the two-host receipt still gates
    implementation. **Published 2026-08-24** as `mere-alembic` 0.0.1. One
    correction was needed first: the fleece scope's F5 pass had added

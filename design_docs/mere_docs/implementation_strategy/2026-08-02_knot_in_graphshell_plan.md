@@ -25,7 +25,7 @@ The visitor was admitted, mounted `Knot`, saved, heard the unseen revision,
 remained live, read back exactly what it wrote from Q-PC's file, closed, and
 exited zero. Both native runners used the same source snapshot and lockfile.
 See the
-[K2 physical two-machine receipt](../../../ports/knot/docs/2026-08-08_k2_physical_two_machine_receipt.md).
+[K2 physical two-machine receipt](../../../../knot-editor/crates/knot-editor/docs/2026-08-08_k2_physical_two_machine_receipt.md).
 
 The reverse Windows-holder to Q-PC-visitor direction timed out before
 admission and left the file unchanged. That direction remains a reachability
@@ -308,7 +308,7 @@ still show what was there and no longer offer a save that cannot land.
 Windows visitor completed admission, mount, save, revision bell, live readback,
 and close over the ticketed p2panda carrier. The holder's file hash matched the
 captured Windows copy. See the
-[physical receipt](../../../ports/knot/docs/2026-08-08_k2_physical_two_machine_receipt.md).
+[physical receipt](../../../../knot-editor/crates/knot-editor/docs/2026-08-08_k2_physical_two_machine_receipt.md).
 
 Three decisions were taken along the way, each forced by a compiler or a red
 test rather than chosen in the abstract.

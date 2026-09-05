@@ -20,7 +20,7 @@ rendering, aimed at making mere/meerkat operable and legible from the omnibar.
 
 ## The idea
 
-The highlight core we built for the knot editor (`crates/inker/illume`, renamed from
+The highlight core we built for the knot editor (`crates/nematic/illume`, renamed from
 `knot-editor`: jotdown djot structure + the pluggable `InjectionLexer` registry + the
 `logos` language pack) is not editor-specific. It is a general capability: take text, run a lexer, get
 `(range, kind)` spans. **illume** is that core promoted to its own name and scope: a
@@ -268,7 +268,7 @@ illume's first non-editor consumer.
   pieces shipped" though points 1-6 are done and headed-verified (each point now carries
   its DONE marker + commit); `illume` is **available** on crates.io (verified), not "taken
   by an abandoned non-entry" as written, so point 7 needs no reclaim; Decision #4's
-  `KnotEditor` is now `KnotReadout`; the `crates/inker/knot-editor` path is now `illume`;
+  `KnotEditor` is now `KnotReadout`; the `crates/inker/knot-editor-host` path is now `illume`;
   and Decision #1's "wired through register-theme" was corrected to the path Tail A
   actually took (`theme.theme_def(id).seeds` directly, no register-theme change). Commit
   SHAs verify (the lone "missing" hit is a tincture commit, correctly scoped). Carried
@@ -287,7 +287,7 @@ illume's first non-editor consumer.
   0.0.1** as a name-reserve straight from the workspace (no extraction yet), claiming the
   scarce name with a 0.0.x that signals the API is still moving. Deferred: illume's
   extraction to its own sibling repo + a stable (0.1) release, both held until the API
-  settles. Cosmetic loose end: the local checkout is still `repos/tincture` (crate + remote
+  settles. Cosmetic loose end: the local checkout is now `crates/cambium/tinct` (crate + remote
   are tinct); rename the dir whenever convenient.
 - **2026-07-08, point 8: illume extracted + the bridge dissolved into genet.** Prompted
   by Mark asking whether the editor should promote to a standalone that Isometry could

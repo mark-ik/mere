@@ -220,7 +220,7 @@ Render one signed, network-isolated package in its own Genet root. Limit it to h
 
 Primary upstream sources used for the refresh:
 
-- [Mere linked-data plan](../implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md)
+- [Mere linked-data plan](../../archive_docs/2026-06-09_completed_plans/2026-05-22_linked_data_ingest_export_plan.md)
 - [Willow implementations](https://willowprotocol.org/more/botanical-garden/implementations/index.html)
 - [`willow25` crate docs](https://docs.rs/willow25/latest/willow25/)
 - [`n0-computer/iroh-willow`](https://github.com/n0-computer/iroh-willow)

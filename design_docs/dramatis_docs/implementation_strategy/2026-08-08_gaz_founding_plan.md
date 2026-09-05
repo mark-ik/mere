@@ -15,7 +15,7 @@ into records, then mere reconciliation.
 - [`personae`](https://crates.io/crates/personae) owns the *me* side.
 - [`muniment`](https://crates.io/crates/muniment) is the persistence seam M1
   rides.
-- Mere's `crates/persona/gazetteer` is the resolution sibling.
+- Mere's `ports/gazette` is the resolution sibling.
 
 ---
 

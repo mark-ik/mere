@@ -8,7 +8,7 @@ added §2a, the swatch elevated to a portable, embeddable primitive (gloss is
 one consumer), the half of the point beyond minimap / MRU / outline.
 **2026-06-23:** added §2b, the swatch resolved as the Navigator itself
 (scope-zoom, view/edit, a variant library), the node facet editor being variant #1.
-**Related**: [card system + staging plan](../implementation_strategy/2026-06-07_card_system_and_staging_plan.md) (§8 staging surfaces here), [pane UX pass](2026-05-11_pane_ux_design_pass_brief.md) (gloss as a Pane variant), `cartography` (swatch / minimap projections), `forme` (graphlets).
+**Related**: [card system + staging plan](../../archive_docs/2026-06-09_completed_plans/2026-06-07_card_system_and_staging_plan.md) (§8 staging surfaces here), [pane UX pass](2026-05-11_pane_ux_design_pass_brief.md) (gloss as a Pane variant), `cartography` (swatch / minimap projections), `forme` (graphlets).
 
 ---
 

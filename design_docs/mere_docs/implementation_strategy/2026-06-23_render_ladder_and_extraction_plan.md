@@ -63,7 +63,7 @@ not wasm-safety. Capability gate: JS engine + script DOM bindings appear only at
 | `genet-fullweb` | navigation / workers / storage / media / WebGL / devtools | yes |
 
 The **scripted rung already exists and is tested**: pelt's `ScriptedDocument`
-(`ports/pelt-desktop/scripted.rs`, ~40 tests across Boa + Nova) runs the classic-script
+(`ports/pelt/desktop/scripted.rs`, ~40 tests across Boa + Nova) runs the classic-script
 timing model (inline / `defer` / `async` / `type=module` with cross-module `import`,
 SRI, charset), drives `setTimeout`/`setInterval` + microtasks + frame-cadence GC, runs
 the script → layout → render loop (`frame()`), serves `getComputedStyle` off the last
@@ -464,7 +464,7 @@ parsed (and optionally scripted) DOM.
   `737e0cd`) has never compiled. The default JS-free build is unaffected.
 - **2026-07-01 (scripted-feature break fixed, same day)**: pelt-desktop now re-exports
   `genet_scripted::ResourceFetcher` as `pelt_desktop::ScriptResourceFetcher`
-  (`ports/pelt-desktop/scripted.rs` + `lib.rs`, mirroring the existing
+(`ports/pelt/desktop/scripted.rs` + `lib.rs`, mirroring the existing
   `LocalFetcher` bridge idiom), and meerkat's scripted-fetch seam switched to it
   wholesale: `ScriptFetcher`'s impl, `build_scripted`'s `fetcher` parameter, the
   actor call-site cast, and the two test mocks (`MapFetcher`, `NoFetch`) all use

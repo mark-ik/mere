@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-19
 **Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §8 (2026-06-07) records the `canvas-ir` + `graph-layout` review → `orrery/arrangements` + `gyre::barnes_hut`. §§1–5 predate the genet-as-host flip and are stale (see §7's staleness flag).
-**Companion to**: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../research/2026-05-15_browser_taxonomy_translation_brief.md) (taxonomy-translation framing), [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).
+**Companion to**: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_browser_taxonomy_translation_brief.md) (taxonomy-translation framing), [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).
 
 Earlier doc-level snapshots (e.g. the topology table in `DOC_README.md`) predate this pass and still cite a `crates/workbench/` umbrella that the rename dissolved. This file is the current source of truth for the workspace shape; the index has been updated to point here.
 
@@ -172,10 +172,10 @@ The follow-up commit (today) covered the type-level fallout: `MereHostApp` → `
 
 ## 6. Pointers
 
-- Browser-taxonomy framing: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../research/2026-05-15_browser_taxonomy_translation_brief.md)
-- Renderer-registry contract: [`../research/2026-05-15_renderer_registry_contract_brief.md`](../research/2026-05-15_renderer_registry_contract_brief.md)
-- Spatial chrome IR: [`../research/2026-05-15_spatial_chrome_ir_brief.md`](../research/2026-05-15_spatial_chrome_ir_brief.md)
-- Adoption sequencing: [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md)
+- Browser-taxonomy framing: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_browser_taxonomy_translation_brief.md)
+- Renderer-registry contract: [`../research/2026-05-15_renderer_registry_contract_brief.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_renderer_registry_contract_brief.md)
+- Spatial chrome IR: [`../research/2026-05-15_spatial_chrome_ir_brief.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_spatial_chrome_ir_brief.md)
+- Adoption sequencing: [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_spatial_chrome_modular_adoption_plan.md)
 - Current cluster layout: §7 below (the former `graphshell/` README's role); the
   root `Cargo.toml` is the authoritative member list.
 
@@ -236,7 +236,7 @@ green: full `cargo build` + tests at the same counts as before the move (kernel
 
 §§1–5 above predate **both** the genet-as-host flip **and** this dissolution.
 They still describe `crates/mere/host` + `host-substrate` as the binary — the host
-is now **`meerkat`** (genet-as-host; see the [genet host flip plan](../implementation_strategy/2026-06-01_genet_host_flip_plan.md)),
+is now **`meerkat`** (genet-as-host; see the [genet host flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_genet_host_flip_plan.md)),
 and several crates named there (`spatial-substrate`, `host-ports`, `control-plane`,
 `register-renderer`, `verso/scrying-renderer`, `crates/mere/host-substrate`) have
 since moved, merged, or been cut. The cluster tree in this §7 is the current
