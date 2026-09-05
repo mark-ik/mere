@@ -171,7 +171,9 @@ pub use surface::{
     ResolvedSurfaceEvent, RetainedSurfaceSession, RunnerSurfaceSession, SurfaceEffect,
     SurfaceViewport,
 };
-pub use tabs::{TabStrip, tab_strip};
+pub use tabs::{
+    TabAccentColors, TabItem, TabStrip, tab_strip, tab_strip_closable, tab_strip_items,
+};
 pub use tags::*;
 pub use text::text;
 pub use wheel::{OnWheel, WheelEvent, on_wheel};
