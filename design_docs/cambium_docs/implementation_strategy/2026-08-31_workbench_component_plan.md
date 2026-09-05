@@ -11,7 +11,8 @@ composition, which is Mere's. Nothing about what it owns changed.
 
 **Date**: 2026-08-31
 **Status (2026-09-04)**: W5 opened — Turnstone's panes become tiles, ruled by
-Mark; S1/S2 are stack work here, S3 is Turnstone's. W1 through W4 are implemented and landed through
+Mark; S1 and S2 landed the same day; S3 is Turnstone's and waits on a push
+of this repository and a pin bump. W1 through W4 are implemented and landed through
 coordinated Genet, Mere, and product branches. W4 has captured native Pelt
 acceptance and cancellation receipts, a headed Graphshell browser
 save/mutate/reload receipt, and a durable Woodshed open-lane consumer with full
@@ -293,6 +294,39 @@ tile surface is unchanged through the all-holes form; and a `workspace`
 acceptance test stacks an in-house component beside a hole, moves the
 component to another stack and then to a second projection, and finds its
 local state intact each time.
+
+*Landed 2026-09-04*, three commits by opus subagents from briefs, each
+verified and committed by path because another lane was live in
+`cambium-rootstock` and this directory's zoom plan at the time.
+`dc5ff2b0`: `TabStrip::current`, `TabItem` (label, `data-tabkey`, inline
+accent), `tab_strip_items`, `tab_strip_closable` (a `tab-close` control
+whose click stops propagation and returns the caller's action).
+`f0c7966b`: the strip's DOM core is `tab_bar_view`, generic over the host's
+state, and frisket renders its bar with it; `Slot`, `SlotKind`,
+`frisket_with`, `slot_kind`; stack content is `PortableKeyed` by `TileId`
+and a test pins a view slot's `NodeId` across a drag between stacks.
+`f0c7966b`'s vocabulary is **additive**: the elements wear both the shared
+tokens (`tablist`, `tab`, `tab-close`, `data-tabkey`) and the `frisket-*`
+tokens Pelt's sheet and lookups still read, so Pelt is unchanged; frisket
+tabs gained the strip's roving tabindex and arrow keys. The core is named
+`tab_bar_view` because `selection_bar` already exports `tab_bar`. Third
+commit: `workspace_view`, `WorkspaceModel`, `composited_slots`,
+`WORKSPACE_CSS`, `frisket_with_current`; the acceptance test runs two
+`GenetMultiRunner` projections over one state and proves the plan's claim
+in its honest form — element and component-local state survive a move
+between stacks within a projection; a tile moved to a second projection
+arrives fresh and the host's `TileId`-keyed state is what survives, which
+the module header now states as the rule. cambium 198/198, pelt-desktop
+64/64, pelt-core 6/6, graphshell builds.
+
+Follow-ups owed, none blocking S3: a Pelt slice onto the shared bar names,
+after which the `frisket-*` aliases and `TabBarNames` can go; frisket's
+bar names and slot literals made `pub(crate)` so `workspace.rs` stops
+duplicating them; a float's view child through `PortableKeyed` so a move
+between the tree and the float layer keeps its element. And a workspace
+finding: mere has no `rustfmt.toml`, so `cargo fmt` strips the `},`
+match-arm commas cambium inherited from genet — a formatter run in this
+crate now churns twenty-five files, and which style wins is Mark's call.
 
 **S3. Turnstone's panes ride the tree.** (Owned by
 `turnstone/design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md`,
