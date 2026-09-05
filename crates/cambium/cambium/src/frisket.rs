@@ -28,16 +28,34 @@
 //! real geometry, resolving a tab drop to an insertion index, takes the rects
 //! through a closure ([`tab_drop_index`]).
 //!
-//! Content is a hole. The component draws a placeholder marked with the active
-//! tile's id and nothing else; the host composites a document scene, an
-//! external texture, or its own surface into that rect. So a browser pane, a
-//! practice-set pane, and a tactical map pane are the same frame.
+//! Content is a [`Slot`]. [`frisket`] draws a placeholder marked with the
+//! active tile's id and nothing else, and the host composites a document scene,
+//! an external texture, or its own surface into that rect. [`frisket_with`]
+//! widens that to three: the same hole, a surface the host names as one, or a
+//! child view the frame nests. So a browser pane, a practice-set pane, a
+//! tactical map pane and a pane made of ordinary views are the same frame.
+//!
+//! A [`Slot::View`] child is rendered through a
+//! [`PortableKeyed`](crate::PortableKeyed) keyed by [`TileId`], so dragging a
+//! tile into another stack *moves* its element rather than rebuilding it: the
+//! child keeps its DOM node, its view state and its handlers.
+//!
+//! The tab bar is [`tab_bar_view`](crate::tab_bar_view), the crate's one tab
+//! bar, wearing Frisket's `frisket-*` names on top of the shared `tablist` /
+//! `tab` / `tab-close` vocabulary so a product stylesheet written against
+//! either keeps matching.
+
+use std::marker::PhantomData;
 
 use layout_dom_api::{LayoutDom, LocalName, Namespace};
-use workbench::{SplitAxis, TabStack, TileEvent, TileId, TilePath, TileTree};
+use meristem::{MessageCtx, MessageResult, Mut, ViewMarker};
+use workbench::{SplitAxis, TabStack, Tile, TileEvent, TileId, TilePath, TileTree};
 
 use crate::pod::GenetElement;
-use crate::{AnyView, GenetCtx, PointerClick, View, el, on_click};
+use crate::{
+    AnyView, GenetCtx, PortableKeyed, TabAccentColors, TabBar, TabBarNames, TabItem, View, el,
+    tab_bar_view,
+};
 
 /// The erased child-view type a pane frame nests: a split holds splits or
 /// stacks, so the recursion needs one boxed type.
@@ -47,10 +65,27 @@ pub type PaneView<State, AppAction> = Box<dyn AnyView<State, AppAction, GenetCtx
 const ATTR_DIVIDER: &str = "data-divider";
 /// `data-dindex`: which boundary within that split.
 const ATTR_DINDEX: &str = "data-dindex";
-/// `data-tabid`: the tile a tab represents.
+/// `data-tabkey`: the tile a tab represents, in the shared tab-bar vocabulary.
+const ATTR_TABKEY: &str = "data-tabkey";
+/// `data-tabid`: the same value under Frisket's older name, kept because hosts
+/// address tabs by it from their own code.
 const ATTR_TABID: &str = "data-tabid";
 /// `data-stack`: the path of the stack a tab bar belongs to.
 const ATTR_STACK: &str = "data-stack";
+/// `data-slot`: which of [`SlotKind`]'s three a content element carries.
+const ATTR_SLOT: &str = "data-slot";
+
+/// The names Frisket's bar wears on top of the shared `tablist` / `tab` /
+/// `tab selected` / `tab-close` vocabulary. Products style `frisket-*`
+/// directly, so the bar answers to both.
+const FRISKET_TAB_NAMES: TabBarNames = TabBarNames {
+    bar: Some("frisket-tabbar"),
+    tab: Some("frisket-tab"),
+    selected: Some("active"),
+    close: Some("frisket-close"),
+    label: Some("frisket-label"),
+    key_alias: Some(ATTR_TABID),
+};
 /// `data-tile`: the active tile whose content area this is. A host finds this
 /// element's rect to composite the tile's content into it.
 pub const FRISKET_TILE_ATTR: &str = "data-tile";
@@ -88,12 +123,156 @@ pub fn decode_pane_path(s: &str) -> TilePath {
     }
 }
 
-/// Render `tree` as a pane frame. `on_event` receives every gesture the frame
-/// raises (a tab activated, a tab closed); the caller applies it to its own
-/// authoritative tree.
+/// What fills one stack's content element.
+///
+/// The frame draws the element either way; the difference is who owns what is
+/// inside it. A [`Slot::View`] is a child view the frame nests and keeps alive
+/// across a tile's move between stacks; [`Slot::Surface`] and [`Slot::Hole`]
+/// leave it empty for a host to composite into, and differ only in what the
+/// host reads back off the DOM ([`slot_kind`]).
+pub enum Slot<State, AppAction> {
+    /// A child view, rendered inside the content element.
+    View(PaneView<State, AppAction>),
+    /// Empty; the host composites its own surface into the element's rect.
+    Surface,
+    /// Empty and unclaimed — the original content hole.
+    Hole,
+}
+
+/// Which of [`Slot`]'s three a content element carries, read back off the DOM.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SlotKind {
+    View,
+    Surface,
+    Hole,
+}
+
+impl SlotKind {
+    /// The `data-slot` value for this kind.
+    fn attr_value(self) -> &'static str {
+        match self {
+            SlotKind::View => "view",
+            SlotKind::Surface => "surface",
+            SlotKind::Hole => "hole",
+        }
+    }
+
+    fn from_attr(value: &str) -> Option<Self> {
+        match value {
+            "view" => Some(SlotKind::View),
+            "surface" => Some(SlotKind::Surface),
+            "hole" => Some(SlotKind::Hole),
+            _ => None,
+        }
+    }
+}
+
+/// One stack's content child, rebuilt from its tile and the host's `fill` on
+/// demand rather than held as a value.
+///
+/// [`PortableKeyed`] needs a `Clone` child view — the parked previous view is
+/// what an adopting rebuild diffs against — and an erased `PaneView` is not
+/// `Clone`. Cloning the *recipe* (the tile plus the fill closure) instead is
+/// the `TaggedText` pattern, and it is what buys a tile its element and view
+/// state across a drag into another stack.
+struct SlotChild<State, AppAction, Fill> {
+    tile: Tile,
+    fill: Fill,
+    marker: PhantomData<fn() -> (State, AppAction)>,
+}
+
+impl<State, AppAction, Fill> SlotChild<State, AppAction, Fill>
+where
+    State: 'static,
+    AppAction: 'static,
+    Fill: Fn(&Tile) -> Slot<State, AppAction>,
+{
+    fn new(tile: Tile, fill: Fill) -> Self {
+        Self {
+            tile,
+            fill,
+            marker: PhantomData,
+        }
+    }
+
+    /// The view this child stands for. Only ever built for a tile whose slot is
+    /// a [`Slot::View`]; the other arms cannot be reached from `render_stack`,
+    /// and degrade to an empty element rather than a panic if `fill` is not a
+    /// function of its tile alone.
+    fn inner(&self) -> PaneView<State, AppAction> {
+        match (self.fill)(&self.tile) {
+            Slot::View(view) => view,
+            Slot::Surface | Slot::Hole => Box::new(el::<_, State, AppAction>("div", ())),
+        }
+    }
+}
+
+impl<State, AppAction, Fill: Clone> Clone for SlotChild<State, AppAction, Fill> {
+    fn clone(&self) -> Self {
+        Self {
+            tile: self.tile.clone(),
+            fill: self.fill.clone(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<State, AppAction, Fill> ViewMarker for SlotChild<State, AppAction, Fill> {}
+
+impl<State, AppAction, Fill> View<State, AppAction, GenetCtx> for SlotChild<State, AppAction, Fill>
+where
+    State: 'static,
+    AppAction: 'static,
+    Fill: Fn(&Tile) -> Slot<State, AppAction> + 'static,
+{
+    type Element = GenetElement;
+    type ViewState = <PaneView<State, AppAction> as View<State, AppAction, GenetCtx>>::ViewState;
+
+    fn build(&self, ctx: &mut GenetCtx, app_state: &mut State) -> (Self::Element, Self::ViewState) {
+        self.inner().build(ctx, app_state)
+    }
+
+    fn rebuild(
+        &self,
+        prev: &Self,
+        view_state: &mut Self::ViewState,
+        ctx: &mut GenetCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) {
+        self.inner()
+            .rebuild(&prev.inner(), view_state, ctx, element, app_state);
+    }
+
+    fn teardown(
+        &self,
+        view_state: &mut Self::ViewState,
+        ctx: &mut GenetCtx,
+        element: Mut<'_, Self::Element>,
+    ) {
+        self.inner().teardown(view_state, ctx, element);
+    }
+
+    fn message(
+        &self,
+        view_state: &mut Self::ViewState,
+        message: &mut MessageCtx,
+        element: Mut<'_, Self::Element>,
+        app_state: &mut State,
+    ) -> MessageResult<AppAction> {
+        self.inner()
+            .message(view_state, message, element, app_state)
+    }
+}
+
+/// Render `tree` as a pane frame with every content element left a hole.
+/// `on_event` receives every gesture the frame raises (a tab activated, a tab
+/// closed); the caller applies it to its own authoritative tree.
 ///
 /// The returned view fills its parent, so a host wraps it in whatever frame it
 /// wants — a status bar under it, chrome above it.
+///
+/// [`frisket_with`] with a `fill` of [`Slot::Hole`], exactly.
 pub fn frisket<State, AppAction, Ev>(
     tree: &TileTree,
     on_event: Ev,
@@ -103,7 +282,28 @@ where
     AppAction: 'static,
     Ev: Fn(&mut State, TileEvent) + Clone + 'static,
 {
-    el::<_, State, AppAction>("div", render_node(tree, &[], &on_event))
+    frisket_with(tree, on_event, |_: &Tile| Slot::Hole)
+}
+
+/// Render `tree` as a pane frame, asking `fill` what each stack's active tile
+/// puts in its content element.
+///
+/// A [`Slot::View`] child is rendered through a [`PortableKeyed`] keyed by
+/// [`TileId`], so dragging a tile to another stack moves its element rather
+/// than rebuilding it: the child keeps its DOM node, its view state and its
+/// handlers across the one rebuild that relocates it.
+pub fn frisket_with<State, AppAction, Ev, Fill>(
+    tree: &TileTree,
+    on_event: Ev,
+    fill: Fill,
+) -> impl View<State, AppAction, GenetCtx, Element = GenetElement>
+where
+    State: 'static,
+    AppAction: 'static,
+    Ev: Fn(&mut State, TileEvent) + Clone + 'static,
+    Fill: Fn(&Tile) -> Slot<State, AppAction> + Clone + 'static,
+{
+    el::<_, State, AppAction>("div", render_node(tree, &[], &on_event, &fill))
         .attr("class", "frisket-body")
         .attr(
             "style",
@@ -111,15 +311,17 @@ where
         )
 }
 
-fn render_node<State, AppAction, Ev>(
+fn render_node<State, AppAction, Ev, Fill>(
     node: &TileTree,
     path: &[usize],
     on_event: &Ev,
+    fill: &Fill,
 ) -> PaneView<State, AppAction>
 where
     State: 'static,
     AppAction: 'static,
     Ev: Fn(&mut State, TileEvent) + Clone + 'static,
+    Fill: Fn(&Tile) -> Slot<State, AppAction> + Clone + 'static,
 {
     match node {
         TileTree::Split { axis, children } => {
@@ -135,7 +337,7 @@ where
             for (index, branch) in children.iter().enumerate() {
                 let mut child_path = path.to_vec();
                 child_path.push(index);
-                let inner = render_node(&branch.tree, &child_path, on_event);
+                let inner = render_node(&branch.tree, &child_path, on_event, fill);
                 items.push(Box::new(
                     el::<_, State, AppAction>("div", inner)
                         .attr("class", "frisket-branch")
@@ -172,96 +374,87 @@ where
                     .attr("style", format!("display: flex; flex-direction: {dir};")),
             )
         },
-        TileTree::Stack(stack) => render_stack(stack, path, on_event),
+        TileTree::Stack(stack) => render_stack(stack, path, on_event, fill),
     }
 }
 
-fn render_stack<State, AppAction, Ev>(
+fn render_stack<State, AppAction, Ev, Fill>(
     stack: &TabStack,
     path: &[usize],
     on_event: &Ev,
+    fill: &Fill,
 ) -> PaneView<State, AppAction>
 where
     State: 'static,
     AppAction: 'static,
     Ev: Fn(&mut State, TileEvent) + Clone + 'static,
+    Fill: Fn(&Tile) -> Slot<State, AppAction> + Clone + 'static,
 {
-    let tabs: Vec<PaneView<State, AppAction>> = stack
+    // The stack's tabs as the crate's tab items: the tile's id is the tab's
+    // stable key, and a host accent is the item's accent, so a product can tint
+    // a tab to match its content without forking the component's CSS.
+    let items: Vec<TabItem> = stack
         .tabs
         .iter()
-        .enumerate()
-        .map(|(index, tile)| {
-            let id = tile.id;
-            let active = index == stack.active;
-            let label = el::<_, State, AppAction>("span", tile.title.clone())
-                .attr("class", "frisket-label");
-            // The × is its own control, announced as "Close <title>", and it
-            // stops propagation so closing does not also activate.
-            let close_event = on_event.clone();
-            let close = on_click(
-                el::<_, State, AppAction>("span", "\u{00d7}")
-                    .attr("class", "frisket-close")
-                    .attr("role", "button")
-                    .attr("aria-label", format!("Close {}", tile.title)),
-                move |state: &mut State, ev: PointerClick| {
-                    ev.stop_propagation();
-                    close_event(state, TileEvent::Closed(id));
-                },
-            );
-            // A host accent paints the tab inline, so a product can tint a tab
-            // to match its content without forking the component's CSS.
-            let style = match tile.accent {
-                Some(accent) => format!(
-                    "background-color: rgb({}, {}, {}); color: rgb({}, {}, {});",
-                    accent.background[0],
-                    accent.background[1],
-                    accent.background[2],
-                    accent.foreground[0],
-                    accent.foreground[1],
-                    accent.foreground[2],
-                ),
-                None => String::new(),
-            };
-            let activate = on_event.clone();
-            Box::new(on_click(
-                el::<_, State, AppAction>("div", (label, close))
-                    .attr(
-                        "class",
-                        if active {
-                            "frisket-tab active"
-                        } else {
-                            "frisket-tab"
-                        },
-                    )
-                    .attr(ATTR_TABID, id.0.to_string())
-                    // The title lives in a child span, so the tab names itself
-                    // with aria-label; selection is state, not a class name.
-                    .attr("role", "tab")
-                    .attr("aria-label", tile.title.clone())
-                    .attr("aria-selected", if active { "true" } else { "false" })
-                    .attr("style", style),
-                move |state: &mut State, _: PointerClick| activate(state, TileEvent::Activated(id)),
-            )) as PaneView<State, AppAction>
+        .map(|tile| {
+            let mut item = TabItem::new(tile.title.clone()).with_key(tile.id.0.to_string());
+            if let Some(accent) = tile.accent {
+                item =
+                    item.with_accent(TabAccentColors::new(accent.background, accent.foreground));
+            }
+            item
         })
         .collect();
-
+    let ids: Vec<TileId> = stack.tabs.iter().map(|tile| tile.id).collect();
+    let close_ids = ids.clone();
+    let activate_event = on_event.clone();
+    let close_event = on_event.clone();
     // The bar carries its stack's path, so a tab dropped on it resolves to
     // `DropTarget::Stack` (merge into this stack) rather than an edge split.
-    let tab_bar = el::<_, State, AppAction>("div", tabs)
-        .attr("class", "frisket-tabbar")
-        .attr("role", "tablist")
-        .attr(ATTR_STACK, encode_pane_path(path));
+    let bar_attrs = [(ATTR_STACK, encode_pane_path(path))];
+    let bar = tab_bar_view(
+        TabBar::new(&items, stack.active)
+            .with_names(FRISKET_TAB_NAMES)
+            .with_attrs(&bar_attrs),
+        move |state: &mut State, index: usize| {
+            if let Some(id) = ids.get(index) {
+                activate_event(state, TileEvent::Activated(*id));
+            }
+        },
+        // The × stops propagation, so a close never also activates.
+        Some(move |state: &mut State, index: usize| {
+            if let Some(id) = close_ids.get(index) {
+                close_event(state, TileEvent::Closed(*id));
+            }
+        }),
+    );
 
-    // The content hole: marked with the active tile's id and otherwise empty.
-    // What fills it is the host's business, which is what lets one frame serve
-    // a document, an external texture, or an app's own surface.
-    let active = stack.tabs.get(stack.active).map(|t| t.id.0).unwrap_or(0);
-    let content = el::<_, State, AppAction>("div", ())
+    // The content element: marked with the active tile's id and with which of
+    // the three slots it carries. A `View` slot nests the host's child through
+    // a `PortableKeyed` keyed by the tile, so the child survives the tile being
+    // dragged to another stack; `Surface` and `Hole` stay empty, and what fills
+    // their rect is the host's business — which is what lets one frame serve a
+    // document, an external texture, or an app's own surface.
+    let active_tile = stack.tabs.get(stack.active);
+    let active = active_tile.map(|tile| tile.id.0).unwrap_or(0);
+    let kind = match active_tile.map(fill) {
+        Some(Slot::View(_)) => SlotKind::View,
+        Some(Slot::Surface) => SlotKind::Surface,
+        Some(Slot::Hole) | None => SlotKind::Hole,
+    };
+    let children: PortableKeyed<TileId, SlotChild<State, AppAction, Fill>> = match active_tile {
+        Some(tile) if kind == SlotKind::View => {
+            PortableKeyed::new(vec![(tile.id, SlotChild::new(tile.clone(), fill.clone()))])
+        },
+        _ => PortableKeyed::new(Vec::new()),
+    };
+    let content = el::<_, State, AppAction>("div", children)
         .attr("class", "frisket-content")
-        .attr(FRISKET_TILE_ATTR, active.to_string());
+        .attr(FRISKET_TILE_ATTR, active.to_string())
+        .attr(ATTR_SLOT, kind.attr_value());
 
     Box::new(
-        el::<_, State, AppAction>("div", (tab_bar, content))
+        el::<_, State, AppAction>("div", (bar, content))
             .attr("class", "frisket-stack")
             .attr("style", "display: flex; flex-direction: column;"),
     )
@@ -307,12 +500,12 @@ pub fn divider_target<D: LayoutDom>(dom: &D, hit: D::NodeId) -> Option<DividerTa
 /// resolves to `None`, because that press is a close and not the start of a tab
 /// drag.
 pub fn tab_target<D: LayoutDom>(dom: &D, hit: D::NodeId) -> Option<TileId> {
-    if has_class(dom, hit, "frisket-close") {
+    if has_class(dom, hit, "tab-close") {
         return None;
     }
     let mut node = hit;
     loop {
-        if let Some(id) = attr(dom, node, ATTR_TABID).and_then(|s| s.parse::<u64>().ok()) {
+        if let Some(id) = attr(dom, node, ATTR_TABKEY).and_then(|s| s.parse::<u64>().ok()) {
             return Some(TileId(id));
         }
         node = dom.parent(node)?;
@@ -322,12 +515,12 @@ pub fn tab_target<D: LayoutDom>(dom: &D, hit: D::NodeId) -> Option<TileId> {
 /// Resolve a press on a tab's close affordance to the tile it closes.
 /// Returns `None` for every other descendant of the tab.
 pub fn close_target<D: LayoutDom>(dom: &D, hit: D::NodeId) -> Option<TileId> {
-    if !has_class(dom, hit, "frisket-close") {
+    if !has_class(dom, hit, "tab-close") {
         return None;
     }
     let mut node = dom.parent(hit)?;
     loop {
-        if let Some(id) = attr(dom, node, ATTR_TABID).and_then(|s| s.parse::<u64>().ok()) {
+        if let Some(id) = attr(dom, node, ATTR_TABKEY).and_then(|s| s.parse::<u64>().ok()) {
             return Some(TileId(id));
         }
         node = dom.parent(node)?;
@@ -341,6 +534,19 @@ pub fn content_target<D: LayoutDom>(dom: &D, hit: D::NodeId) -> Option<TileId> {
     loop {
         if let Some(id) = attr(dom, node, FRISKET_TILE_ATTR).and_then(|s| s.parse::<u64>().ok()) {
             return Some(TileId(id));
+        }
+        node = dom.parent(node)?;
+    }
+}
+
+/// Walk up from a content descendant to which slot its Frisket content element
+/// carries: a host composites into [`SlotKind::Surface`] and
+/// [`SlotKind::Hole`] elements and leaves [`SlotKind::View`] ones to the frame.
+pub fn slot_kind<D: LayoutDom>(dom: &D, hit: D::NodeId) -> Option<SlotKind> {
+    let mut node = hit;
+    loop {
+        if let Some(value) = attr(dom, node, ATTR_SLOT) {
+            return SlotKind::from_attr(&value);
         }
         node = dom.parent(node)?;
     }
@@ -381,7 +587,7 @@ pub fn tab_drop_index<D: LayoutDom>(
     let mut before = 0usize;
     let mut stack = vec![bar];
     while let Some(current) = stack.pop() {
-        if attr(dom, current, ATTR_TABID).is_some() {
+        if attr(dom, current, ATTR_TABKEY).is_some() {
             if let Some((rx, _, rw, _)) = rect_of(current) {
                 if rx + rw / 2.0 < x {
                     before += 1;
@@ -401,12 +607,17 @@ mod tests {
     use std::rc::Rc;
 
     use genet_scripted_dom::{NodeId, ScriptedDom};
-    use workbench::{ContentSource, DocumentRef, Tile, TileBranch};
+    use workbench::{ContentSource, DocumentRef, DropTarget, Tile, TileBranch};
 
     use super::*;
-    use crate::{DomHandle, GenetAppRunner};
+    use crate::{DomHandle, GenetAppRunner, PointerClick};
 
     type TestView = Box<dyn AnyView<State, (), GenetCtx, GenetElement>>;
+    /// A runner over one of the module's frames, plus the DOM it drew into.
+    type Harness = (
+        DomHandle,
+        GenetAppRunner<State, fn(&State) -> TestView, TestView, ()>,
+    );
 
     struct State {
         tree: TileTree,
@@ -451,10 +662,7 @@ mod tests {
         }))
     }
 
-    fn harness() -> (
-        DomHandle,
-        GenetAppRunner<State, fn(&State) -> TestView, TestView, ()>,
-    ) {
+    fn harness() -> Harness {
         let dom: DomHandle = Rc::new(RefCell::new(ScriptedDom::new()));
         let state = State {
             tree: sample(),
@@ -490,6 +698,192 @@ mod tests {
                 .dom_children(root)
                 .map(|child| count_class(dom, child, class))
                 .sum::<usize>()
+    }
+
+    /// A slot per tile id: 2 gets a child view, 3 a surface, everything else a
+    /// hole. A plain `fn` so the fill is `Clone + 'static` without ceremony.
+    fn fill_by_id(tile: &Tile) -> Slot<State, ()> {
+        match tile.id.0 {
+            2 => Slot::View(Box::new(
+                el::<_, State, ()>("p", "child").attr("class", "slot-child"),
+            )),
+            3 => Slot::Surface,
+            _ => Slot::Hole,
+        }
+    }
+
+    fn slot_view(state: &State) -> TestView {
+        Box::new(frisket_with(
+            &state.tree,
+            |state: &mut State, event| state.events.push(event),
+            fill_by_id,
+        ))
+    }
+
+    fn slot_harness() -> Harness {
+        let dom: DomHandle = Rc::new(RefCell::new(ScriptedDom::new()));
+        let state = State {
+            tree: sample(),
+            events: Vec::new(),
+        };
+        let runner = GenetAppRunner::new(dom.clone(), slot_view as fn(&State) -> TestView, state);
+        (dom, runner)
+    }
+
+    #[test]
+    fn a_view_slot_inlines_its_child_and_the_empty_slots_stay_empty() {
+        let (dom, runner) = slot_harness();
+        let root = runner.root();
+        let dom = dom.borrow();
+
+        // Tile 2 is the left stack's active tab and fills with a view: the
+        // child is inside the content element, which says so.
+        let view_slot = find_attr(&dom, root, FRISKET_TILE_ATTR, "2").expect("view content");
+        assert_eq!(attr_of(&dom, view_slot, "data-slot"), Some("view"));
+        assert_eq!(attr_of(&dom, view_slot, "class"), Some("frisket-content"));
+        let child = dom.dom_children(view_slot).next().expect("the slot child");
+        assert!(has_class(&*dom, child, "slot-child"));
+        assert_eq!(dom.dom_children(view_slot).count(), 1);
+
+        // Tile 3's stack asked for a surface: marked, and left empty for the
+        // host to composite into.
+        let surface = find_attr(&dom, root, FRISKET_TILE_ATTR, "3").expect("surface content");
+        assert_eq!(attr_of(&dom, surface, "data-slot"), Some("surface"));
+        assert_eq!(dom.dom_children(surface).count(), 0);
+
+        // And the default frame is all holes, also empty.
+        let (hole_dom, hole_runner) = harness();
+        let hole_dom = hole_dom.borrow();
+        let hole = find_attr(&hole_dom, hole_runner.root(), FRISKET_TILE_ATTR, "2")
+            .expect("hole content");
+        assert_eq!(attr_of(&hole_dom, hole, "data-slot"), Some("hole"));
+        assert_eq!(hole_dom.dom_children(hole).count(), 0);
+    }
+
+    #[test]
+    fn a_content_element_reports_its_slot_and_still_names_its_tile() {
+        let (dom, runner) = slot_harness();
+        let root = runner.root();
+        let dom = dom.borrow();
+
+        let view_slot = find_attr(&dom, root, FRISKET_TILE_ATTR, "2").expect("view content");
+        let surface = find_attr(&dom, root, FRISKET_TILE_ATTR, "3").expect("surface content");
+        assert_eq!(slot_kind(&*dom, view_slot), Some(SlotKind::View));
+        assert_eq!(slot_kind(&*dom, surface), Some(SlotKind::Surface));
+        // A descendant of a view slot answers for the element it is in.
+        let child = dom.dom_children(view_slot).next().expect("the slot child");
+        assert_eq!(slot_kind(&*dom, child), Some(SlotKind::View));
+        // The tab bar is not in any content element, and neither is the root.
+        let bar = find_class(&dom, root, "frisket-tabbar").expect("tab bar");
+        assert_eq!(slot_kind(&*dom, bar), None);
+        assert_eq!(slot_kind(&*dom, root), None);
+
+        // The slot mark rides beside the tile mark; neither displaces the other.
+        assert_eq!(content_target(&*dom, child), Some(TileId(2)));
+        assert_eq!(content_target(&*dom, surface), Some(TileId(3)));
+
+        let (hole_dom, hole_runner) = harness();
+        let hole_dom = hole_dom.borrow();
+        let hole = find_class(&hole_dom, hole_runner.root(), "frisket-content").expect("hole");
+        assert_eq!(slot_kind(&*hole_dom, hole), Some(SlotKind::Hole));
+    }
+
+    /// The tear-out contract, through the frame: a tile dragged into another
+    /// stack takes its content child's DOM node with it, rather than the child
+    /// being torn down here and rebuilt there. (`PortableKeyed`, moveBefore S5.)
+    #[test]
+    fn a_view_slot_keeps_its_element_when_its_tile_moves_to_another_stack() {
+        fn every_tile(tile: &Tile) -> Slot<State, ()> {
+            Slot::View(Box::new(
+                el::<_, State, ()>("p", format!("tile {}", tile.id.0)).attr("class", "slot-child"),
+            ))
+        }
+        fn view(state: &State) -> TestView {
+            Box::new(frisket_with(
+                &state.tree,
+                |state: &mut State, event| state.events.push(event),
+                every_tile,
+            ))
+        }
+
+        // Two stacks, both keeping a spare tab so neither empties and collapses
+        // the split out from under the move.
+        let tree = TileTree::Split {
+            axis: SplitAxis::Row,
+            children: vec![
+                TileBranch {
+                    fraction: 0.5,
+                    tree: TileTree::Stack(TabStack {
+                        tabs: vec![tile(1, "First"), tile(4, "Fourth")],
+                        active: 0,
+                    }),
+                },
+                TileBranch {
+                    fraction: 0.5,
+                    tree: TileTree::Stack(TabStack {
+                        tabs: vec![tile(3, "Third")],
+                        active: 0,
+                    }),
+                },
+            ],
+        };
+        let dom: DomHandle = Rc::new(RefCell::new(ScriptedDom::new()));
+        let mut runner = GenetAppRunner::new(
+            dom.clone(),
+            view as fn(&State) -> TestView,
+            State {
+                tree,
+                events: Vec::new(),
+            },
+        );
+        let root = runner.root();
+        let (left_content, right_content, moved) = {
+            let dom = dom.borrow();
+            let left = find_attr(&dom, root, FRISKET_TILE_ATTR, "1").expect("left content");
+            let right = find_attr(&dom, root, FRISKET_TILE_ATTR, "3").expect("right content");
+            let moved = dom.dom_children(left).next().expect("tile 1's slot child");
+            (left, right, moved)
+        };
+
+        // Drag tile 1 into the right-hand stack. The left stack rebuilds first
+        // in tree order, so it parks the child and the right stack adopts it.
+        runner.update(|state| {
+            state.tree.apply(&TileEvent::Dragged {
+                tile: TileId(1),
+                to: DropTarget::Stack {
+                    stack: TilePath(vec![1]),
+                    index: 0,
+                },
+            });
+        });
+
+        let dom = dom.borrow();
+        assert_eq!(
+            attr_of(&dom, right_content, FRISKET_TILE_ATTR),
+            Some("1"),
+            "the dropped tile is active in the stack it landed in"
+        );
+        assert_eq!(
+            attr_of(&dom, left_content, FRISKET_TILE_ATTR),
+            Some("4"),
+            "the stack it left falls back to its other tab"
+        );
+        assert_eq!(
+            dom.dom_children(right_content).next(),
+            Some(moved),
+            "the same node moved; the child was not rebuilt in its new stack"
+        );
+        assert_eq!(dom.parent(moved), Some(right_content));
+        assert_eq!(
+            dom.dom_children(left_content).count(),
+            1,
+            "the vacated stack shows its new active tile's own child"
+        );
+        assert_ne!(
+            dom.dom_children(left_content).next(),
+            Some(moved),
+            "and that child is a different element"
+        );
     }
 
     #[test]

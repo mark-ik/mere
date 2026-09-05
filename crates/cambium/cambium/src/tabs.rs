@@ -30,6 +30,13 @@
 //! [`tab_strip_closable`] which adds a close control per tab. A strip belonging
 //! to the focused stack sets [`TabStrip::with_current`], which marks the
 //! `tablist` itself rather than any one tab.
+//!
+//! All three are [`tab_bar_view`], the DOM-producing core, with
+//! `State = TabStrip`. That core is generic over the caller's state, so a host
+//! whose activation is not "set an index" — [`frisket`](crate::frisket), whose
+//! is "report a [`TileEvent`](workbench::TileEvent)" — draws the same bar
+//! rather than hand-rolling a second one. What it wears on top of the shared
+//! class names is [`TabBarNames`].
 
 use crate::pod::GenetElement;
 use crate::{
@@ -77,12 +84,19 @@ impl TabStrip {
     /// step, exposed so a caller can drive the same motion from its own
     /// shortcut. A `len` of 0 leaves the selection alone.
     pub fn step(&mut self, delta: isize, len: usize) {
-        if len == 0 {
-            return;
-        }
-        let cur = self.selected.min(len - 1) as isize;
-        self.selected = (cur + delta).rem_euclid(len as isize) as usize;
+        self.selected = step_index(self.selected, delta, len);
     }
+}
+
+/// Step `from` by `delta` over `len` tabs, wrapping, clamping a stale index
+/// first. A `len` of 0 gives `from` back. The arrow-key motion, shared by
+/// [`TabStrip::step`] and [`tab_bar_view`]'s key handler.
+fn step_index(from: usize, delta: isize, len: usize) -> usize {
+    if len == 0 {
+        return from;
+    }
+    let cur = from.min(len - 1) as isize;
+    (cur + delta).rem_euclid(len as isize) as usize
 }
 
 impl Default for TabStrip {
@@ -175,91 +189,226 @@ impl From<String> for TabItem {
     }
 }
 
-/// The one strip. `on_close` present means every tab carries a close control;
-/// absent leaves the tab's only child its label text, which is what keeps
-/// [`tab_strip`]'s DOM what it always was.
-fn strip<Action, Out, F>(
-    state: &TabStrip,
-    items: &[TabItem],
-    on_close: Option<F>,
-) -> impl View<TabStrip, Action, GenetCtx, Element = GenetElement> + use<Action, Out, F>
+/// Extra class and attribute names a bar wears *beyond* the shared
+/// `tablist` / `tab` / `tab selected` / `tab-close` vocabulary.
+///
+/// The default names nothing, which is [`tab_strip`]'s DOM. A host whose own
+/// stylesheet already addresses its bar — Frisket's `frisket-*` sheet, which
+/// products style directly and which this crate may not rename out from under
+/// them — names its tokens here, so one bar wears both vocabularies instead of
+/// the crate carrying two tab bars.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TabBarNames {
+    /// An extra class token on the `tablist`.
+    pub bar: Option<&'static str>,
+    /// An extra class token on every `tab`.
+    pub tab: Option<&'static str>,
+    /// An extra class token on the active tab, beside `selected`.
+    pub selected: Option<&'static str>,
+    /// An extra class token on every `tab-close`.
+    pub close: Option<&'static str>,
+    /// Wrap the label text in a `span` of this class rather than leaving it
+    /// bare; the tab then names itself with `aria-label`, since its text is no
+    /// longer its own child.
+    pub label: Option<&'static str>,
+    /// Emit each item's key under this second attribute name as well as
+    /// `data-tabkey`.
+    pub key_alias: Option<&'static str>,
+}
+
+/// Everything a bar draws: its tabs, which one is active, the group's
+/// accessible name, whether it is the current bar, the names it wears, and any
+/// extra attributes the host wants on the `tablist` itself (Frisket's
+/// `data-stack`).
+///
+/// A borrowed description, consumed by [`tab_bar_view`]; nothing it borrows outlives
+/// the call (labels, keys and attribute values are cloned into the DOM).
+pub struct TabBar<'a> {
+    /// The tabs, in order.
+    pub items: &'a [TabItem],
+    /// Index of the active tab. Out of range renders every tab inactive.
+    pub selected: usize,
+    /// The `aria-label` announced for the bar; empty emits none.
+    pub label: &'a str,
+    /// Whether this is the host's current bar.
+    pub current: bool,
+    /// The extra names this bar wears.
+    pub names: TabBarNames,
+    /// Extra attributes set on the `tablist`, in order, after `aria-label`.
+    pub attrs: &'a [(&'a str, String)],
+}
+
+impl<'a> TabBar<'a> {
+    /// A bar over `items` with `selected` active, unnamed and not current.
+    pub fn new(items: &'a [TabItem], selected: usize) -> Self {
+        Self {
+            items,
+            selected,
+            label: "",
+            current: false,
+            names: TabBarNames::default(),
+            attrs: &[],
+        }
+    }
+
+    /// Set the accessible name announced for the bar.
+    pub fn with_label(mut self, label: &'a str) -> Self {
+        self.label = label;
+        self
+    }
+
+    /// Mark this bar as the current one.
+    pub fn with_current(mut self, current: bool) -> Self {
+        self.current = current;
+        self
+    }
+
+    /// Wear these extra class and attribute names.
+    pub fn with_names(mut self, names: TabBarNames) -> Self {
+        self.names = names;
+        self
+    }
+
+    /// Set extra attributes on the `tablist` element.
+    pub fn with_attrs(mut self, attrs: &'a [(&'a str, String)]) -> Self {
+        self.attrs = attrs;
+        self
+    }
+}
+
+/// Join a base class token with an optional extra one.
+fn class_with(base: &str, extra: Option<&str>) -> String {
+    match extra {
+        Some(extra) => format!("{base} {extra}"),
+        None => base.to_string(),
+    }
+}
+
+/// **The one tab bar.** A `tablist` of `tab`s over any `State`: activation is
+/// whatever `on_activate` does to that state, and `on_close`, when present,
+/// gives every tab a `tab-close` control whose click stops propagation so a
+/// close never also activates.
+///
+/// Activation is a state change by construction — a bar switching tabs emits no
+/// action — so `on_activate` returns nothing. Closing is the caller's business
+/// and bubbles, so `on_close` returns an [`OptionalAction`].
+///
+/// Roving tabindex per the ARIA tabs pattern: only the active tab is in the tab
+/// order, and Left/Right (wrapping) plus Home/End move the active tab by
+/// calling `on_activate` with the target index.
+///
+/// [`tab_strip_items`] and [`tab_strip_closable`] are this with
+/// `State = TabStrip`; [`frisket`](crate::frisket) is this with the host's own
+/// state and a [`TileEvent`](workbench::TileEvent) per gesture.
+pub fn tab_bar_view<State, Action, Out, A, C>(
+    bar: TabBar<'_>,
+    on_activate: A,
+    on_close: Option<C>,
+) -> impl View<State, Action, GenetCtx, Element = GenetElement> + use<State, Action, Out, A, C>
 where
+    State: 'static,
     Action: 'static,
     Out: OptionalAction<Action> + 'static,
-    F: Fn(usize) -> Out + Clone + 'static,
+    A: Fn(&mut State, usize) + Clone + 'static,
+    C: Fn(&mut State, usize) -> Out + Clone + 'static,
 {
-    let len = items.len();
+    let len = bar.items.len();
+    let names = bar.names;
     // One clickable tab per item. The per-tab closures share one type (one
     // closure definition capturing a `usize`), so the `Vec` is homogeneous.
-    let tabs: Vec<_> = items
+    let tabs: Vec<_> = bar
+        .items
         .iter()
         .enumerate()
         .map(|(i, item)| {
-            let selected = i == state.selected;
+            let selected = i == bar.selected;
             // The × is its own control, announced as "Close <label>", and it
             // stops propagation so closing does not also activate.
             let close = on_close.clone().map(|close| {
                 on_click(
-                    el::<_, TabStrip, Action>("span", "\u{00d7}")
-                        .attr("class", "tab-close")
+                    el::<_, State, Action>("span", "\u{00d7}")
+                        .attr("class", class_with("tab-close", names.close))
                         .attr("role", "button")
                         .attr("aria-label", format!("Close {}", item.label)),
-                    move |_: &mut TabStrip, ev: PointerClick| {
+                    move |state: &mut State, ev: PointerClick| {
                         ev.stop_propagation();
-                        close(i)
+                        close(state, i)
                     },
                 )
             });
-            let mut tab = el::<_, TabStrip, Action>("div", (item.label.clone(), close))
+            // The label is bare text unless the host named a wrapper span for
+            // it; exactly one of the two is ever present.
+            let bare = names.label.is_none().then(|| item.label.clone());
+            let wrapped = names.label.map(|class| {
+                el::<_, State, Action>("span", item.label.clone()).attr("class", class)
+            });
+            let mut tab = el::<_, State, Action>("div", (bare, wrapped, close))
                 .attr("role", "tab")
                 .attr("aria-selected", if selected { "true" } else { "false" })
                 .attr("tabindex", if selected { "0" } else { "-1" })
-                .attr("class", if selected { "tab selected" } else { "tab" });
+                .attr(
+                    "class",
+                    if selected {
+                        class_with(&class_with("tab selected", names.tab), names.selected)
+                    } else {
+                        class_with("tab", names.tab)
+                    },
+                );
+            if names.label.is_some() {
+                // The text lives in a child span, so the tab names itself.
+                tab = tab.attr("aria-label", item.label.clone());
+            }
             if let Some(key) = &item.key {
                 tab = tab.attr("data-tabkey", key.clone());
+                if let Some(alias) = names.key_alias {
+                    tab = tab.attr(alias, key.clone());
+                }
             }
             if let Some(accent) = item.accent {
                 tab = tab.attr("style", accent.style());
             }
+            let activate = on_activate.clone();
+            let arrows = on_activate.clone();
             focusable_if(
                 on_key(
-                    on_click(tab, move |s: &mut TabStrip, _| s.selected = i),
-                    move |s: &mut TabStrip, event| match event.key {
-                        Key::Named(NamedKey::ArrowRight) => {
-                            s.step(1, len);
+                    on_click(tab, move |state: &mut State, _| activate(state, i)),
+                    move |state: &mut State, event| {
+                        // The key reaches the focused tab, which roving
+                        // tabindex keeps as the active one, so `i` is the seat
+                        // the motion starts from.
+                        let target = match event.key {
+                            Key::Named(NamedKey::ArrowRight) => Some(step_index(i, 1, len)),
+                            Key::Named(NamedKey::ArrowLeft) => Some(step_index(i, -1, len)),
+                            Key::Named(NamedKey::Home) => Some(0),
+                            Key::Named(NamedKey::End) if len > 0 => Some(len - 1),
+                            _ => None,
+                        };
+                        if let Some(target) = target {
+                            arrows(state, target);
                             event.prevent_default();
-                        },
-                        Key::Named(NamedKey::ArrowLeft) => {
-                            s.step(-1, len);
-                            event.prevent_default();
-                        },
-                        Key::Named(NamedKey::Home) => {
-                            s.selected = 0;
-                            event.prevent_default();
-                        },
-                        Key::Named(NamedKey::End) if len > 0 => {
-                            s.selected = len - 1;
-                            event.prevent_default();
-                        },
-                        _ => {},
+                        }
                     },
                 ),
                 selected,
             )
         })
         .collect();
-    let strip = el::<_, TabStrip, Action>("div", tabs)
+    let mut strip = el::<_, State, Action>("div", tabs)
         .attr("role", "tablist")
         .attr(
             "class",
-            if state.current {
-                "tablist current"
-            } else {
-                "tablist"
-            },
-        )
-        .attr("aria-label", state.label.clone());
-    if state.current {
+            class_with(
+                if bar.current { "tablist current" } else { "tablist" },
+                names.bar,
+            ),
+        );
+    if !bar.label.is_empty() {
+        strip = strip.attr("aria-label", bar.label.to_string());
+    }
+    for (name, value) in bar.attrs {
+        strip = strip.attr(*name, value.clone());
+    }
+    if bar.current {
         strip.attr("aria-current", "true")
     } else {
         strip
@@ -303,7 +452,13 @@ pub fn tab_strip_items<Action>(
 where
     Action: 'static,
 {
-    strip::<Action, (), fn(usize)>(state, items, None)
+    tab_bar_view::<TabStrip, Action, (), _, fn(&mut TabStrip, usize)>(
+        TabBar::new(items, state.selected)
+            .with_label(&state.label)
+            .with_current(state.current),
+        |s: &mut TabStrip, i| s.selected = i,
+        None,
+    )
 }
 
 /// A tab strip whose tabs can be closed: [`tab_strip_items`] plus, per tab, a
@@ -323,7 +478,13 @@ where
     Out: OptionalAction<Action> + 'static,
     F: Fn(usize) -> Out + Clone + 'static,
 {
-    strip(state, items, Some(on_close))
+    tab_bar_view(
+        TabBar::new(items, state.selected)
+            .with_label(&state.label)
+            .with_current(state.current),
+        |s: &mut TabStrip, i| s.selected = i,
+        Some(move |_: &mut TabStrip, i| on_close(i)),
+    )
 }
 
 #[cfg(test)]
