@@ -309,8 +309,8 @@ and a test pins a view slot's `NodeId` across a drag between stacks.
 tokens (`tablist`, `tab`, `tab-close`, `data-tabkey`) and the `frisket-*`
 tokens Pelt's sheet and lookups still read, so Pelt is unchanged; frisket
 tabs gained the strip's roving tabindex and arrow keys. The core is named
-`tab_bar_view` because `selection_bar` already exports `tab_bar`. Third
-commit: `workspace_view`, `WorkspaceModel`, `composited_slots`,
+`tab_bar_view` because `selection_bar` already exports `tab_bar`.
+`9408681b`: `workspace_view`, `WorkspaceModel`, `composited_slots`,
 `WORKSPACE_CSS`, `frisket_with_current`; the acceptance test runs two
 `GenetMultiRunner` projections over one state and proves the plan's claim
 in its honest form — element and component-local state survive a move
