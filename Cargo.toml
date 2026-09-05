@@ -548,6 +548,7 @@ vello = "0.10"
 # a second, type-incompatible vello lineage.
 netrender_vello = { package = "netrender-vello", version = "0.10.0", default-features = false }
 wgpu = "30"
+welding-0-15 = { package = "welding", git = "https://github.com/merely-made/wgpu-weld.git", rev = "4784d07c4064195c33136b9b91c8231913f08e06", default-features = false, features = ["wgpu-30"] }
 kurbo = "0.13"
 peniko = "0.6"
 parley = "0.10"
