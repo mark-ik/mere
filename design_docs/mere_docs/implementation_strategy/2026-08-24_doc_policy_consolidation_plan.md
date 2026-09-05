@@ -7,7 +7,8 @@ and C landed 2026-08-24 and stay closed. D1 (mechanical pass) and D2
 re-pass of batches 03–06 in progress under decision 12; D4 (judgment report)
 delivered the same day, four class rulings taken (decisions 9–12), item-level
 escalations open; D3 was remeasured on the live tree 2026-09-04 with a restored,
-self-testing audit script and remains a broad repair lane. Decisions taken by Mark 2026-08-24 (four questions) and
+self-testing audit script. Its safe 2026-09-05 disposition slice is landed, but
+124 affected source documents still require manual judgment. Decisions taken by Mark 2026-08-24 (four questions) and
 2026-09-02 (four more), both recorded in §Decisions. Phases A and B were
 mere-local; phase C touched smolweb and genet; phase D is mere-local.
 
@@ -455,6 +456,19 @@ item's evidence.
   totals must not be attributed to the parser correction alone. The separate
   missing-path and relative-link counts still require judgment for historical
   paths, placeholders, glob examples, and symbol-qualified code citations.
+
+- **2026-09-05 (D3 safe disposition slice):** a live-tree review grouped the
+  176 source documents with findings into 36 already historical or superseded,
+  nine unequivocally historical but unmarked, seven current documents with
+  bounded repair candidates, and 124 ambiguous documents requiring manual
+  review. The nine historical documents now carry explicit banners, and six
+  exact live references were repaired across the terminology, Cambium catalog,
+  and Woodshed/Scenograph documents. The checker reports 298 active documents,
+  zero orphans, zero ghosts, zero private-memory links, zero Status-less plans,
+  347 broken relative links, and 538 concrete missing known-root paths. D3 stays
+  open because the remaining findings have not all been shown to sit in
+  historical documents; ambiguous donor history, planned seams, symbol-qualified
+  citations, and cross-repository references were deliberately left unchanged.
 
 ### Finding: genet now has two doc homes
 
