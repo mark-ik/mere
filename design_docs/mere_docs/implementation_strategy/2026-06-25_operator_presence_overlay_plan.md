@@ -1,6 +1,6 @@
 # Operator Presence — watching an agent (or a guest, or yourself) act in the graph
 
-**Status (2026-06-25):** design. A live, ephemeral, multi-scale focus-presence overlay:
+**Status:** design (2026-06-25). A live, ephemeral, multi-scale focus-presence overlay:
 a colour-tagged ring around the node an operator is on, descending into the node to
 highlight the document section they are reading. One "operator" abstraction with three
 sources: an agent, a co-op guest, and you. The rendering half mostly exists; the new

@@ -1,5 +1,7 @@
 # Scriptable Field Regions Plan
 
+**Status:** partially implemented: movable and resizable field regions landed; physics-setting and further scripted-region work remains deferred.
+
 A **field region** is a spatial area you place on the graph that carries a rule
 set — scriptable in rhai — governing the graph's characteristics inside it:
 forces (how nodes are pulled), edge visibility (which relations show), and node

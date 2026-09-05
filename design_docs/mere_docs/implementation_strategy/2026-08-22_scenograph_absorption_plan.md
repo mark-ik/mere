@@ -4,6 +4,12 @@
 **Status:** complete — S1–S7 landed; `arrangements` is deleted and `mer3ly`
 names one engine. Committed and pushed as mere `cc40c24f`, with `mer3ly`
 `54fd8e2` repinned to mere `330eee98`.
+**Home / supersession note (2026-09-04):** the [platform boundary and
+repository topology plan](2026-09-02_platform_boundary_and_repository_topology_plan.md)
+supersedes this plan's generic `scenograph` facade destination. The facade is
+gone, its solver registry belongs to `scenomise`, and the published
+`scenograph` name is held for the scene editor. This remains the historical
+receipt for absorbing `arrangements` into the scene family.
 **Supersedes:** the half-finished `arrangements` → `scenomise` migration begun
 2026-05-18 (see `crates/canvas/cartography/src/adapters.rs` header and the
 `scenomise` crate doc: "The first consumer proof moves the generic Spiral,

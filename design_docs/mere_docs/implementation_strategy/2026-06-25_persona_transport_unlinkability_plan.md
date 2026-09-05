@@ -1,6 +1,6 @@
 # Persona Transport Unlinkability — Plan + Research Brief
 
-**Status (2026-06-25):** design. Mode 1 + the relay-diversity half-measure are the
+**Status:** design (2026-06-25). Mode 1 + the relay-diversity half-measure are the
 near-term buildable plan; the own-device-cluster family is the core of the privacy
 story and is mostly a design gap, not an implementation gap; Nym and the metadata
 ceiling are a named research track. No code yet.

@@ -1,5 +1,7 @@
 # net-media Plan — a portable media organ for the Mere ecosystem
 
+**Status:** plan-only; no `net-media` crate exists. Media tracks, session integration, and decode remain unimplemented after browser WebRTC data-channel carriage moved to Murm transport.
+
 **2026-05-26.** Plan for **`net-media`**: the Mere ecosystem's **media organ**:
 WebRTC media tracks and audio/video **decode** (everything we can get *shy of
 being blessed by the censors*, i.e. no DRM/EME). Sibling to

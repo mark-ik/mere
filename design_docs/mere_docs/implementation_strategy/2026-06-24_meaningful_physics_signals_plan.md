@@ -1,5 +1,7 @@
 # Meaningful physics: signals, presets, and the ambient pulse
 
+**Status:** plan-only: seams and source signals were scoped, but no implementation slice has landed.
+
 Builds on the [physics-scenes plan](2026-06-22_physics_scenes_and_tangibility_plan.md) (the mechanics:
 scenes, fluid, fields, emitters, ambient sims, tangibility). That work made the orrery *delightful*.
 This plan is the next phase: making the physics *meaningful*, so a behavior either carries a true

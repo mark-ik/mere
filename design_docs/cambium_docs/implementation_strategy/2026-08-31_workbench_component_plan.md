@@ -10,7 +10,7 @@ true when it was written, and the boundary plan reclassed it as application
 composition, which is Mere's. Nothing about what it owns changed.
 
 **Date**: 2026-08-31
-**Status (2026-09-04)**: W5 opened — Turnstone's panes become tiles, ruled by
+**Status:** W5 opened (2026-09-04) — Turnstone's panes become tiles, ruled by
 Mark; S1 and S2 landed the same day; S3 is Turnstone's and waits on a push
 of this repository and a pin bump. W1 through W4 are implemented and landed through
 coordinated Genet, Mere, and product branches. W4 has captured native Pelt

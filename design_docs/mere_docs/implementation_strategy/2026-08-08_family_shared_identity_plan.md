@@ -1,5 +1,7 @@
 # Family-Shared Identity: One Persona Across Every Merely Application
 
+**Status:** shared-identity adoption landed for Graphshell, Turnstone, Knot, Woodshed, and Hocket; Hocket's return-to-own-identity UI remains intentionally unbuilt.
+
 **2026-08-08.** Turnstone, Woodshed, Knot, Hocket and Cleromancy are separate
 products and the same person's. A document sealed in one should open in the
 next. They did not agree on where identity lives, so it did not.
@@ -117,7 +119,7 @@ stands, and the next save seals it. Nothing to run, and nothing to run in the
 right order.
 
 This closes the "deferred: host wiring" item on woodshed's
-[`2026-07-08_personae_sealed_session.md`](../../../../../woodshed/design_docs/2026-07-08_personae_sealed_session.md).
+[`2026-07-08_personae_sealed_session.md`](../../../../woodshed/design_docs/2026-07-08_personae_sealed_session.md).
 
 ### Hocket looked like a key rotation (superseded 2026-08-09)
 
@@ -382,7 +384,7 @@ Two defects the tests caught, both worth carrying as cautions:
   is the hazard, and creation is the only place it can be refused rather than
   papered over.
 
-  Woodshed's own [persona picker plan](../../../../../woodshed/design_docs/2026-08-12_persona_picker_plan.md)
+  Woodshed's own [persona picker plan](../../../../woodshed/design_docs/2026-08-12_persona_picker_plan.md)
   P3 still wants a local name input for its gate's create row, which is not a
   duplicate: the naming UI is app-local, the act (`roster::create_profile`) is
   already shared. Worth noting that woodshed's gate only appears with **more
@@ -392,4 +394,3 @@ Two defects the tests caught, both worth carrying as cautions:
   "return to my own identity", because that is a second rotation with the same
   cost and no caller has asked for it. The consent record is a single file, so
   the mechanism is there if it is ever wanted.
-

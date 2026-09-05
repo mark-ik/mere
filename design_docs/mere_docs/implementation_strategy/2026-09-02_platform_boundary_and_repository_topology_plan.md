@@ -1,11 +1,11 @@
 # Platform Boundary and Repository Topology Plan
 
 **Date:** 2026-09-02  
-**Status:** P0 and P1 landed 2026-09-02; **P2 landed 2026-09-03** in the
-consumers-first order the second-pass assessment recommended, with P3's Pelt,
-Tabard, knot-editor-host and mere-document-lanes moving ahead of it (§9 and the
-Progress entries). The authority boundary is ruled with Mark. Nothing has been
-pushed and no GitHub operation has run.  
+**Status:** **P0-P6 landed 2026-09-02 through 2026-09-05.** Woodshed's P4
+exception closed 2026-09-04 with single-source, software, and headed receipts.
+P6's public topology and hosted Pages receipt closed 2026-09-05. P7 remains
+open behind the documentation-policy D3 historical-disposition gate. Vello
+V1-V4 are owned separately by Netrender's durable upstream-ask note.
 **Authority:** this is the canonical plan for the Genet/Mere boundary and the
 follow-on repository-topology review. Mer3ly continues to own the public
 repository manifest and transfer receipts.  
@@ -329,7 +329,7 @@ stated point before the phase that touches their seam:
 
 | Before | Plan | Must reach | Why |
 | --- | --- | --- | --- |
-| P2 | [Workbench component plan](../../../../genet/design_docs/2026-08-31_workbench_component_plan.md) | W4 landed on genet `main` | `codex/workbench-core-20260831` is already on `main`; the four remaining `codex/workbench-followups-*` and `codex/pelt-*` branches (nine commits) touch none of the four mixed crates, so P1 may split them, but Workbench itself must not move under an open lane |
+| P2 | [Workbench component plan](../../cambium_docs/implementation_strategy/2026-08-31_workbench_component_plan.md) | W4 landed on genet `main` | `codex/workbench-core-20260831` is already on `main`; the four remaining `codex/workbench-followups-*` and `codex/pelt-*` branches (nine commits) touch none of the four mixed crates, so P1 may split them, but Workbench itself must not move under an open lane |
 | P1 | [Knot shared surface and port contribution plan](2026-08-24_knot_shared_surface_and_port_contribution_plan.md) | F0, or an explicit hold on the v1-frozen surface contract | the surface contract in `genet-host-api` is what P1 moves to Mere; it was frozen at v1 under this plan (Genet `001448d55`) |
 | P2 | [License sweep plan](2026-08-22_license_sweep_plan.md) | genet's P2-P7 headers and ledger, or a deliberate move-then-sweep ruling | invariant 5; each moved crate otherwise re-enters the sweep |
 | P2 | [Browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md) | a quiet window, not completion | the lane commits to mere hourly and `git subtree` refuses a dirty tree (July finding) |
@@ -2733,3 +2733,49 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   separate repository has a stated surface, both folded placeholders are
   archived with a durable pointer, and both candidate extractions remain
   mere crates.
+
+- 2026-09-04: **P4's Woodshed exception closed.** Woodshed now resolves the
+  moved Cambium family, Workbench, Tinct, surface API, scenes, identity, and
+  storage crates from mere `d82afa17e2cca86da843f07a2d718d2e69eb9f10`, and
+  the remaining raw engine, layout, scripted-DOM, probe, Taffy, Parley, and IPC
+  crates from genet `115d348deddc344d949754e63beaece47cf49f34`. A
+  config-free locked metadata audit reports one origin for every package in
+  both families. The repoint also follows the landed Scholia fold by using
+  `chartulary::rdf` and moves settings projections from `genet-host-api` to
+  `mere-surface-api`.
+
+  Receipts: `cargo test -p woodshed-core --locked -j 1` passes 77 unit tests
+  and one integration test; `cargo check -p woodshed-genet --locked -j 1` and
+  an isolated build pass; and the headed `p4e_stage_layouts.scn` receipt passes
+  all three Snake, Ten, and Circle captures. The host reports accessibility
+  installed, projects 286 nodes, and reaches `RESULT ok`. This closes the last
+  consumer exception recorded above. The selective change was integrated over
+  the newer graph lineage in an isolated worktree and pushed normally as
+  Woodshed `c5eaa7d6`; the original dirty checkout and its concurrent docs,
+  workflow, README, and example work were left untouched.
+
+- 2026-09-05: **P6 public-topology receipt.** `mark-ik/p2panda` remains a
+  personal, diverged upstream line: at refresh it is 8 commits ahead and 199
+  behind `p2panda/p2panda:main`; Mere-family consumers continue to pin the
+  immutable `mere-p2panda-net-0.7.2` tag, so no branch-following dependency
+  was introduced. Graphshell is still archived, but now points at
+  `merely-made/mere`; GitHub required a recoverable unarchive/edit/rearchive
+  sequence to make that metadata change. Ringdown and Cleromancy now have
+  plain README-derived descriptions. The live Sonance and Anise endpoints are
+  deleted (404), not archived, so Mer3ly's refreshed public manifest removes
+  their stale archive cards. Emblem's separately owned transfer is now live at
+  `merely-made/emblem`, with the old slug redirecting. Main protection now
+  requires only the exact shared software contexts on wgpu-scry, wgpu-weld,
+  and wgpu-graft; headed hardware lanes are deliberately non-required.
+  Mer3ly's P6 receipt records the exact contexts and mutation evidence at
+  `docs/receipts/org-transfer/2026-09-05_p6_platform_topology.md`.
+
+  Emblem's own metadata correction is pushed as `8c9aebb8`, with 151 focused
+  tests green. Woodshed's public relation evidence followed in Mer3ly after its
+  P4 push. Mer3ly's hosted Pages run `33948128095` passed the Rust behavior,
+  immutable Mere graph, exact artifact, headed browser smoke, receipt upload,
+  and deploy gates; the live custom domain served the new artifact after that
+  deployment. **P6's topology done-condition is met.** Separate site hardening
+  remains outside this repository move: Cloudflare still proxies the custom
+  domain, GitHub therefore reports the organization domain unverified and does
+  not yet permit HTTPS enforcement.

@@ -1,5 +1,7 @@
 # Gloss Outline Lens Plan
 
+**Status:** partially implemented: P0, P1, P1a, and P2 caps landed; the remaining pluggable-lens work stays open.
+
 **Planning (with Mark), 2026-06-23.** A hierarchical **djot outline of the graph**
 plus a compact **metrics** readout, surfaced as the gloss Navigator's long-deferred
 **outline form factor** (the interaction-model spine's named-but-unscheduled

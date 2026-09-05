@@ -1,5 +1,7 @@
 # Castellan Keeper Founding: the Identity Surface Moves to Its Port
 
+**Status:** complete: the keeper surface moved, its feature matrix and direct-consumer receipt passed, and the subsequent Titulus/Chirograph and wire-string corrections landed.
+
 **2026-08-14.** Executes the correction recorded in the
 [family-shared identity plan](2026-08-08_family_shared_identity_plan.md):
 graphshell's H4 identity surface is, by the

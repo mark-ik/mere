@@ -6,7 +6,8 @@ and C landed 2026-08-24 and stay closed. D1 (mechanical pass) and D2
 (judgment pass over all 281 active docs) complete 2026-09-02, with a depth
 re-pass of batches 03–06 in progress under decision 12; D4 (judgment report)
 delivered the same day, four class rulings taken (decisions 9–12), item-level
-escalations open; D3 (mechanical fixes) waits for the live tree to quiet. Decisions taken by Mark 2026-08-24 (four questions) and
+escalations open; D3 was remeasured on the live tree 2026-09-04 with a restored,
+self-testing audit script and remains a broad repair lane. Decisions taken by Mark 2026-08-24 (four questions) and
 2026-09-02 (four more), both recorded in §Decisions. Phases A and B were
 mere-local; phase C touched smolweb and genet; phase D is mere-local.
 
@@ -426,6 +427,34 @@ item's evidence.
   plan's new 2026-09-02 section, the tree's own precedent for tails. Not
   committed. The proposed Sonnet/Opus method memory was declined ("won't age
   well") and not written.
+
+- **2026-09-04 (D3 checker restored and live tree remeasured):**
+  `scripts/mere_doc_audit.py` now makes the D3 mechanical gate reproducible in
+  the repository. Its self-test plants a defect in each reported category and
+  then proves a clean fixture reaches zero. Against today's active tree it
+  initially reported 297 documents, 18 index orphans, one private-memory link,
+  31 plans without a Status line, 372 broken relative links, and 726 missing
+  known-root path citations. The bounded pass brought the first three defect
+  classes to zero, repaired three confirmed current links, and hardened the
+  checker against angle-bracket placeholders, bare-memory prose, ambiguous
+  bare roots, glob syntax, and versioned protocol identifiers while continuing
+  to report those exclusions. The current tree reports 298 active documents,
+  347 broken relative links, and 544 concrete missing known-root paths. The
+  remaining clean-doc link set did not yield an unambiguous live retarget in a
+  319-finding review; it is historical-disposition work, not a bulk rewrite.
+  D3 therefore remains open behind banners and archival judgment.
+
+- **2026-09-05 (plan-review checker correction):** the restored checker's
+  `STATUS_LINE` expression rejected existing dated labels such as
+  `**Status (2026-09-04):**`. The review found 17 such headers among its 31
+  reported Status-less plans; those were syntax false positives, not absent
+  status records. The checker now accepts plain, bold, dated, and reconciled
+  labels, and its self-test includes those real forms plus prose/non-header
+  negative controls. The self-test and Python compilation pass. Concurrent D3
+  work has also normalized headers and repaired index coverage, so subsequent
+  totals must not be attributed to the parser correction alone. The separate
+  missing-path and relative-link counts still require judgment for historical
+  paths, placeholders, glob examples, and symbol-qualified code citations.
 
 ### Finding: genet now has two doc homes
 

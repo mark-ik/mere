@@ -1,5 +1,7 @@
 # Family Repo Merges Plan (eidetic + conatus)
 
+**Status:** P1-P3 and the `mere-eidetic` publish follow-on landed; donor GitHub archiving and later published-metadata refreshes remain pending.
+
 2026-07-21. Ecosystem repo reorganization: group satellite single-crate repos
 into family repos by concern, where the family is a true lockstep stack.
 Decided with Mark in session; both merges executed same day.

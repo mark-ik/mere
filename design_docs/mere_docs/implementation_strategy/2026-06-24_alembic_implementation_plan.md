@@ -1,5 +1,7 @@
 # Alembic implementation plan: graph engrams, the memory pane, and Athanor
 
+**Status:** partially implemented: slices A-C landed; merge, promotion, event-log, LoRA, and settings/Timeline follow-ons remain deferred.
+
 The build plan that realizes the [Alembic memory + engrams architecture](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md)
 (the design seed). That doc stays the canonical model; this sequences the build into shippable slices,
 resolves or defers its 7 open decisions, and grounds each phase in the code that already exists.

@@ -1,6 +1,6 @@
 # Terminology and crate folds plan
 
-**Status (2026-09-02):** Landed on `main`. The stack was rebased from its
+**Status:** landed on `main` (2026-09-02). The stack was rebased from its
 `9a53c77a` base onto `origin/main` `f2924f08` on 2026-09-02, reconciled with
 the Djinn Distillery lane that arrived upstream in between, and every recorded
 gate was rerun green before the push. The seven external consumer commits

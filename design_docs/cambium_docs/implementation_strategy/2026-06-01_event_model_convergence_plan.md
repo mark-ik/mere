@@ -1,5 +1,7 @@
 # Event-model convergence plan (2026-06-01)
 
+**Status:** core dispatcher convergence landed; `window`/`document` targeting and shadow-tree `composedPath` remain explicitly deferred.
+
 The audit's [#1 priority](./2026-05-29_serval_holistic_audit.md): serval has
 **two** capture→target→bubble dispatchers, and they have already drifted. This
 plan pins the divergence with evidence, defines the one propagation/cancellation

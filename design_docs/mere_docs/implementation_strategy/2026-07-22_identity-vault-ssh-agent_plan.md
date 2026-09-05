@@ -1,5 +1,7 @@
 # Identity Vault + SSH Agent Plan
 
+**Status:** V1-V3 landed and the personae fold executed; V4 is demand-driven and V5 sync remains deferred.
+
 **2026-07-22.** Turn personae's existing vault skeleton into a working credential
 vault with an SSH-agent front end. This is the "our own 1Password/KeePassXC
 alternative" utility, scoped honestly: protocol credentials and SSH keys first,

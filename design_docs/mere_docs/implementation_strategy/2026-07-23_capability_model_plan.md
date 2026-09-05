@@ -1,5 +1,7 @@
 # Capability Model Plan
 
+**Status:** completed round: typed delegation, revocation, Moot authorization, peer use, and the D3b extraction landed; later consumer-driven extensions remain separate work.
+
 Servitor's authority layer, from stringly prefixes to a typed capability with
 a partial order, plus the three things that order makes possible: attenuation,
 expiry, and revocation.

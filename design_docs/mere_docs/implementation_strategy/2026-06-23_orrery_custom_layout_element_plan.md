@@ -1,5 +1,7 @@
 # Orrery Custom-Layout Element Plan (cond 1)
 
+**Status:** parked by design: no code landed; un-park only if host-driven transform setting becomes a performance or correctness problem.
+
 **Parked / deferred, 2026-06-23.** Spun out of the
 [unified document host plan](2026-06-17_unified_document_host_plan.md) as its Phase-2 cond 1, the
 one remaining engine-native piece after Phase 1 + the four pressing slices landed. cond 1 makes the

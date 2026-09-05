@@ -1,6 +1,6 @@
 # Persona Wallet — The Universal Carry Layer
 
-**Status (2026-07-04):** storage slice, first host-adoption slice, typed signed-grant
+**Status:** storage slice, first host-adoption slice, typed signed-grant (2026-07-04)
 slice, remote-auth grant issuance slice, wrapped private-epoch crypto helper slice,
 pairing-transcript helper slice, pairing ticket/code helper slice, first Meerkat
 pairing-host slice, delegated-device response/SAS preview slice, enrollment-bundle

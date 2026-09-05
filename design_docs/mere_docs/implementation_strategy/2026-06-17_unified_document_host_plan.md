@@ -1,5 +1,7 @@
 # Unified Document Host Plan
 
+**Status:** closed 2026-06-23: Phase-1 core and its four pressing slices landed; Phase-2 tails are explicitly re-homed to successor plans.
+
 **CLOSED 2026-06-23 — core complete, Phase-2 tail spun out** (see the closing Progress entry for the
 thread map). Kept in place (not archived) as the still-current foundational record of the Phase-1
 consolidation + orrery-as-element architecture that active sibling plans cite. Remaining threads

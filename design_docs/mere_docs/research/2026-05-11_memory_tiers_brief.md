@@ -28,7 +28,7 @@ A short-term tier exists so working state doesn't have to be either ephemeral-in
 | **Short-term**    | TBD (likely fjall or simple JSON sidecar) | Cheap     | Until garbage-collected or consolidated   | Live branch state, fork before consolidation, view intent, transient diffs, in-progress edits, ephemeral lineage extensions |
 | **Long-term**     | Eidetic engrams                           | Expensive | Forever (content-hashed; supersedable)    | Saved sessions, named branches, published forks, consolidated lineage records, durable diagnostics |
 
-The boundary between them is a **user gesture**, not a heuristic. Heuristics can apply on top (auto-consolidate idle branches after N days) but every default has to be a user-overridable policy, not a silent rule (per [user preference: configurability over opinionated defaults](../../../.claude/memory/feedback_configurability_over_opinionated_defaults.md)).
+The boundary between them is a **user gesture**, not a heuristic. Heuristics can apply on top (auto-consolidate idle branches after N days) but every default has to be a user-overridable policy, not a silent rule.
 
 ## 3. What lives where
 

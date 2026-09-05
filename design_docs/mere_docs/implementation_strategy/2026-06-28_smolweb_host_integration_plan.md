@@ -1,7 +1,7 @@
 # Smolweb Host Integration Plan — the genet native lane in meerkat
 
 **Date**: 2026-06-28
-**Status (2026-07-01)**: **P1–P3 landed 2026-06-28** (genet `1bbbfdb`, `0b7ca87`,
+**Status:** **P1–P3 landed 2026-06-28** (reconciled 2026-07-01; genet `1bbbfdb`, `0b7ca87`,
 `5c07ad5`; mere `476880b`, `0dd0c3e`, `3eed418`, `8dc3683`) — render, theme, scroll,
 link nav all wired, but **compile-verified only, no headed run yet**. The 2026-07-01
 review left open items (see Open questions): theme hard-coded to `App` against the

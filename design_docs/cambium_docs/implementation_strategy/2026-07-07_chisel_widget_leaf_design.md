@@ -1,6 +1,6 @@
 # chisel: custom-paint widget leaves for the serval host
 
-**Status (2026-07-07):** proposed; first design pass. Defines a small, sharp
+**Status:** proposed (2026-07-07); first design pass. Defines a small, sharp
 widget-leaf layer that lets imperative custom-paint widgets (knobs, meters,
 waveforms, graph canvases) live as first-class serval elements without a second
 UI engine. Sits beside the reactive backend from

@@ -1,6 +1,6 @@
 # Tactile Tier Plan (2026-08-14)
 
-**Status: founded 2026-08-14; T1-T3 landed the same day.** The tactile
+**Status:** founded 2026-08-14; T1-T3 landed the same day. The tactile
 half of the two-tier ruling (field system extraction doc, amendments of
 2026-08-13): CPU rapier, the bodies a hand manipulates, the source of
 commitment events. Its doctrine is already ruled and this plan builds

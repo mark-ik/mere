@@ -1,6 +1,6 @@
 # Scenograph 0.0.3 Release Plan
 
-**Status (reconciled 2026-08-19): completed historical release plan.** The
+**Status:** completed historical release plan (reconciled 2026-08-19). The
 published 0.0.3 artifacts remain a release baseline. Development on `main`
 continues through explicit score and crate versions.
 

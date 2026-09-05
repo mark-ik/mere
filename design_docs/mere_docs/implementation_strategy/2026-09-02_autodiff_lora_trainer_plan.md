@@ -1,6 +1,6 @@
 # Autodiff LoRA trainer plan
 
-**Status (2026-09-02):** in progress. Assessment complete; Mark ruled D1–D3
+**Status:** in progress (2026-09-02). Assessment complete; Mark ruled D1–D3
 on 2026-09-02, each on the recommended option; every phase landed 2026-09-03 and the
 receipts were rerun on the rebased tree and on the Fedora ThinkPad. Complete
 once the branch is on `main`; the padding-with-mask follow-on and the burn

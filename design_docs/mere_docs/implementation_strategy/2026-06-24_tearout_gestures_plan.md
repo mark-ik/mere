@@ -9,7 +9,7 @@ turnstone re-wire. Fork specifically now carries layout through the `arrangement
 facet families, not the retired `commit_positions_to_graph` write-back — see **G4-R** at the
 tail. The status line below is the meerkat-era record, kept for the design (not the wiring).
 
-**Status (meerkat-era)**: **Trichotomy + cross-graph copy/move + cascade DONE + driven** (G1
+**Status:** **Trichotomy + cross-graph copy/move + cascade DONE + driven** (meerkat-era; G1
 plumbing, G3 branch, G4 fork, G5 copy+move, G6 cascade via graphlet #3; graphlet #1 per-window
 focus also landed). **Tile-tab leaf tear-out is now DONE + fresh-headed verified.** The one substantial
 interactive item still open is the ambiguous **no-modifier orrery drag** path, which now cleanly

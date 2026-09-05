@@ -1,5 +1,7 @@
 # Reticulum transport plan
 
+**Status:** partial: P0/P1 and the bounded test row landed and verified; documentation and the decision gate remain open.
+
 Plan for adding an optional `ReticulumTransport` backend to the Mere `transport`
 crate (`crates/murm/transport`).
 

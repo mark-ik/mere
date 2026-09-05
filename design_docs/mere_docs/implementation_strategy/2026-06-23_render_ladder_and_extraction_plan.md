@@ -1,7 +1,7 @@
 # Mere render ladder + web-extraction lane
 
 **Date**: 2026-06-23
-**Status (2026-07-01)**: Substantially built — see Progress. Phase 1a (rung taxonomy),
+**Status:** substantially built (2026-07-01) — see Progress. Phase 1a (rung taxonomy),
 phase 2a-c (scripted render rung + external scripts + cookies), phase 3 (input → event
 bridge), and phase 4 slices 1-3 + wiring (genet-extract, Contribution path,
 headless-scripted + reader-mode extract, single-hop link materializer) all landed

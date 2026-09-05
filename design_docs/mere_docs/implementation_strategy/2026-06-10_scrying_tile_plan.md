@@ -1,7 +1,7 @@
 # Scrying Tile Plan (flip P4 / integration S6)
 
 **Date**: 2026-06-10
-**Status** (reconciled to code 2026-06-23): X1 shipped, X2 input core shipped
+**Status:** reconciled to code 2026-06-23; X1 shipped, X2 input core shipped
 (chrome round-trip still open), X3 multi-tile lifecycle shipped (durable
 `compat_mode` not yet the source of truth), X4 untouched (Windows-only).
 Shipped via a session-local `engine_pins` map + a host-concrete producer pool

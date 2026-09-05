@@ -1,6 +1,6 @@
 # chisel widget catalog: coverage across the xilem-serval consumers
 
-**Status (2026-07-08):** proposed catalog + build order. Companion to
+**Status:** proposed catalog + build order (2026-07-08). Companion to
 [2026-07-07_chisel_widget_leaf_design.md](./2026-07-07_chisel_widget_leaf_design.md)
 (the leaf contract, paint paths, retention gates). This doc maps what each
 xilem-serval consumer (Mere/meerkat, Strophe, Woodshed, Isometry) needs, what

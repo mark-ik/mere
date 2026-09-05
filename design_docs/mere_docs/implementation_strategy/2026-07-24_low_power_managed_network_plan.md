@@ -1,6 +1,6 @@
 # Low-Power Radio and Managed Network Plan
 
-**Status (2026-07-27): in execution. V1-V8 have landed; V7's carrier matrix
+**Status:** in execution (2026-07-27). V1-V8 have landed; V7's carrier matrix
 passes over Memory, real p2panda/Iroh, Reticulum/TCP, and headed
 Reticulum/direct-PHY RF. Murm's accept path consumes the carrier's accepted
 session directly. The V0/V2 power and sleep bench remains open.**
