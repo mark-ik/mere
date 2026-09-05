@@ -7,8 +7,9 @@ and C landed 2026-08-24 and stay closed. D1 (mechanical pass) and D2
 re-pass of batches 03–06 in progress under decision 12; D4 (judgment report)
 delivered the same day, four class rulings taken (decisions 9–12), item-level
 escalations open; D3 was remeasured on the live tree 2026-09-04 with a restored,
-self-testing audit script. Its safe 2026-09-05 disposition slice is landed, but
-124 affected source documents still require manual judgment. Decisions taken by Mark 2026-08-24 (four questions) and
+self-testing audit script. Its safe 2026-09-05 disposition and exact-link slices
+are landed, but the remaining findings still require disposition against D3's
+exit condition. Decisions taken by Mark 2026-08-24 (four questions) and
 2026-09-02 (four more), both recorded in §Decisions. Phases A and B were
 mere-local; phase C touched smolweb and genet; phase D is mere-local.
 
@@ -469,6 +470,18 @@ item's evidence.
   open because the remaining findings have not all been shown to sit in
   historical documents; ambiguous donor history, planned seams, symbol-qualified
   citations, and cross-repository references were deliberately left unchanged.
+
+- **2026-09-05 (D3 three-shard reference review):** Luna/Terra reviewers
+  inspected every source document still reported after the safe disposition
+  slice. Confirmed archive targets and live moved owners were repaired; guessed
+  successors, removed components, planned seams, and symbol-only references were
+  left alone. Commit `e620e8f6` was re-audited from an isolated worktree beside
+  the sibling repositories: 297 active documents, 296 indexed documents, zero
+  orphans, zero ghosts, zero private-memory links, zero Status-less plans, 322
+  broken relative links, and 517 concrete missing known-root paths across 154
+  source documents. The remaining findings are dominated by historical donor
+  paths and ambiguous ownership. D3 stays open until each remaining source is
+  either explicitly historical or its current citations are proven.
 
 ### Finding: genet now has two doc homes
 
