@@ -303,7 +303,30 @@ where
     Ev: Fn(&mut State, TileEvent) + Clone + 'static,
     Fill: Fn(&Tile) -> Slot<State, AppAction> + Clone + 'static,
 {
-    el::<_, State, AppAction>("div", render_node(tree, &[], &on_event, &fill))
+    frisket_with_current(tree, None, on_event, fill)
+}
+
+/// [`frisket_with`], plus which tile the host holds current.
+///
+/// The stack that *contains* `current` draws its bar
+/// [`with_current`](crate::TabBar::with_current) — `aria-current` on the
+/// `tablist`, and a `current` class token — so a window of several stacks says
+/// which one has the focus. `None` marks nothing, which is
+/// [`frisket_with`] exactly. The current tile need not be its stack's active
+/// tab; the mark is about the stack, not the tab.
+pub fn frisket_with_current<State, AppAction, Ev, Fill>(
+    tree: &TileTree,
+    current: Option<TileId>,
+    on_event: Ev,
+    fill: Fill,
+) -> impl View<State, AppAction, GenetCtx, Element = GenetElement>
+where
+    State: 'static,
+    AppAction: 'static,
+    Ev: Fn(&mut State, TileEvent) + Clone + 'static,
+    Fill: Fn(&Tile) -> Slot<State, AppAction> + Clone + 'static,
+{
+    el::<_, State, AppAction>("div", render_node(tree, &[], current, &on_event, &fill))
         .attr("class", "frisket-body")
         .attr(
             "style",
@@ -314,6 +337,7 @@ where
 fn render_node<State, AppAction, Ev, Fill>(
     node: &TileTree,
     path: &[usize],
+    current: Option<TileId>,
     on_event: &Ev,
     fill: &Fill,
 ) -> PaneView<State, AppAction>
@@ -337,7 +361,7 @@ where
             for (index, branch) in children.iter().enumerate() {
                 let mut child_path = path.to_vec();
                 child_path.push(index);
-                let inner = render_node(&branch.tree, &child_path, on_event, fill);
+                let inner = render_node(&branch.tree, &child_path, current, on_event, fill);
                 items.push(Box::new(
                     el::<_, State, AppAction>("div", inner)
                         .attr("class", "frisket-branch")
@@ -374,13 +398,14 @@ where
                     .attr("style", format!("display: flex; flex-direction: {dir};")),
             )
         },
-        TileTree::Stack(stack) => render_stack(stack, path, on_event, fill),
+        TileTree::Stack(stack) => render_stack(stack, path, current, on_event, fill),
     }
 }
 
 fn render_stack<State, AppAction, Ev, Fill>(
     stack: &TabStack,
     path: &[usize],
+    current: Option<TileId>,
     on_event: &Ev,
     fill: &Fill,
 ) -> PaneView<State, AppAction>
@@ -412,9 +437,12 @@ where
     // The bar carries its stack's path, so a tab dropped on it resolves to
     // `DropTarget::Stack` (merge into this stack) rather than an edge split.
     let bar_attrs = [(ATTR_STACK, encode_pane_path(path))];
+    // The host's current tile marks the stack it sits in, active tab or not.
+    let is_current = current.is_some_and(|id| stack.tabs.iter().any(|tile| tile.id == id));
     let bar = tab_bar_view(
         TabBar::new(&items, stack.active)
             .with_names(FRISKET_TAB_NAMES)
+            .with_current(is_current)
             .with_attrs(&bar_attrs),
         move |state: &mut State, index: usize| {
             if let Some(id) = ids.get(index) {
@@ -943,6 +971,47 @@ mod tests {
         let divider = find_class(&dom, root, "frisket-divider").expect("divider");
         assert_eq!(attr_of(&dom, divider, "role"), Some("separator"));
         assert_eq!(attr_of(&dom, divider, "aria-orientation"), Some("vertical"));
+    }
+
+    /// The current tile marks the bar of the stack that holds it, and only
+    /// that one; the plain doors mark nothing.
+    #[test]
+    fn the_current_tile_marks_its_stack_s_bar_and_no_other() {
+        fn current_view(state: &State) -> TestView {
+            Box::new(frisket_with_current(
+                &state.tree,
+                // Tile 1 is the left stack's FIRST tab, not its active one:
+                // the mark is about the stack, not the tab.
+                Some(TileId(1)),
+                |state: &mut State, event| state.events.push(event),
+                |_: &Tile| Slot::Hole,
+            ))
+        }
+        let dom: DomHandle = Rc::new(RefCell::new(ScriptedDom::new()));
+        let runner = GenetAppRunner::new(
+            dom.clone(),
+            current_view as fn(&State) -> TestView,
+            State {
+                tree: sample(),
+                events: Vec::new(),
+            },
+        );
+        let root = runner.root();
+        let dom = dom.borrow();
+
+        let left = find_attr(&dom, root, ATTR_STACK, "0").expect("left bar");
+        let right = find_attr(&dom, root, ATTR_STACK, "1").expect("right bar");
+        assert_eq!(attr_of(&dom, left, "aria-current"), Some("true"));
+        assert!(has_class(&*dom, left, "current"));
+        assert_eq!(attr_of(&dom, right, "aria-current"), None);
+        assert!(!has_class(&*dom, right, "current"));
+
+        // `frisket` and `frisket_with` are unchanged: no bar is current.
+        let (plain_dom, plain_runner) = harness();
+        let plain_dom = plain_dom.borrow();
+        let plain = find_attr(&plain_dom, plain_runner.root(), ATTR_STACK, "0").expect("bar");
+        assert_eq!(attr_of(&plain_dom, plain, "aria-current"), None);
+        assert!(!has_class(&*plain_dom, plain, "current"));
     }
 
     #[test]

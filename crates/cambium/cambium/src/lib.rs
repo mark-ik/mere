@@ -76,6 +76,7 @@ mod tabs;
 mod tags;
 mod text;
 mod wheel;
+mod workspace;
 
 #[cfg(test)]
 mod tests;
@@ -163,7 +164,7 @@ pub use summary_body::{SummaryBody, summary_body};
 pub use frisket::{
     DividerTarget, FRISKET_CSS, FRISKET_TILE_ATTR, PaneView, Slot, SlotKind, close_target,
     content_target, decode_pane_path, divider_target, encode_pane_path, frisket, frisket_with,
-    slot_kind, stack_target, tab_drop_index, tab_target,
+    frisket_with_current, slot_kind, stack_target, tab_drop_index, tab_target,
 };
 pub use sectioned_list::{ListRow, ListRowKind, ListSection, sectioned_list};
 pub use split::{Split, SplitAxis, split};
@@ -178,6 +179,7 @@ pub use tabs::{
 pub use tags::*;
 pub use text::text;
 pub use wheel::{OnWheel, WheelEvent, on_wheel};
+pub use workspace::{WORKSPACE_CSS, WorkspaceModel, composited_slots, workspace_view};
 
 // Compatibility aliases for consumers that still use the pre-extraction
 // backend names. New code should use the canonical `Genet*` names above.
