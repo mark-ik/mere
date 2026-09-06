@@ -3,8 +3,10 @@
 **Date:** 2026-09-02  
 **Status:** **P0-P6 landed 2026-09-02 through 2026-09-05.** Woodshed's P4
 exception closed 2026-09-04 with single-source, software, and headed receipts.
-P6's public topology and hosted Pages receipt closed 2026-09-05. P7 remains
-open behind the documentation-policy D3 historical-disposition gate. Vello
+P6's public topology and hosted Pages receipt closed 2026-09-05; the follow-up
+domain verification, certificate issuance, and HTTPS enforcement are also
+complete. P7 remains open behind the documentation-policy D3
+historical-disposition gate. Vello
 V1-V4 are owned separately by Netrender's durable upstream-ask note.
 **Authority:** this is the canonical plan for the Genet/Mere boundary and the
 follow-on repository-topology review. Mer3ly continues to own the public
@@ -480,6 +482,11 @@ extractions that fail the bar remain Mere crates without ceremony.
 
 **Done when:** GitHub, Cargo, Mer3ly's public graph, repository descriptions,
 and local remotes agree, and each external mutation has a recoverable receipt.
+
+**Status (2026-09-05): met.** The Mer3ly
+[P6 receipt](../../../../mer3ly/docs/receipts/org-transfer/2026-09-05_p6_platform_topology.md)
+records the accepted Pages deployment and the completed Cloudflare DNS,
+organization-domain verification, certificate, redirect, and HTTPS checks.
 
 ### P7. Disseminate and archive
 
