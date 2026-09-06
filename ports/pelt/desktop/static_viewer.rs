@@ -2514,10 +2514,13 @@ pub(crate) mod windowed {
             match SurfaceHost::boot(window.clone(), self.width, self.height, options) {
                 Ok(host) => {
                     if let Err(error) = self.doc.initialize(host.device(), host.queue()) {
-                        eprintln!("[pelt-viewer] could not initialize content: {error}");
+                        let error = format!("could not initialize content: {error}");
+                        eprintln!("[pelt-viewer] {error}");
+                        self.receipt_failure = Some(error);
                         event_loop.exit();
                         return;
                     }
+                    window.set_title(&self.window_title());
                     self.host = Some(host);
                 },
                 Err(err) => {
