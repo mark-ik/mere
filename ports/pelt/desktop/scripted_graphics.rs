@@ -159,11 +159,13 @@ impl WebGlHandler for PeltWebGl {
             height.max(1).min(self.max_drawing_buffer_axis),
         );
         self.context.resize(size.0, size.1).ok()?;
+        let texture = self.context.texture().texture.clone();
+        let actual = (texture.width(), texture.height());
         self.registry
             .lock()
             .expect("Pelt WebGL texture registry poisoned")
-            .insert(self.key, self.context.texture().texture.clone());
-        Some(size)
+            .insert(self.key, texture);
+        Some(actual)
     }
     fn clear_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
         self.clear = [r, g, b, a]
@@ -416,7 +418,7 @@ mod tests {
               const reset = gl.readPixels(0, 0, 1, 1, 0, 0);
               document.getElementById('canvas').width = 8;
               document.getElementById('canvas').setAttribute('height', '6');
-              document.getElementById('canvas').width = 4294967295;
+              document.getElementById('canvas').setAttribute('width', '4294967295');
               const bounded = [gl.drawingBufferWidth, gl.drawingBufferHeight];
               document.getElementById('canvas').width = 8;
               gl.clear(gl.COLOR_BUFFER_BIT);
