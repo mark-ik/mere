@@ -17,7 +17,7 @@
 
 use std::sync::OnceLock;
 #[cfg(feature = "netfetch")]
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "netfetch")]
 use bytes::BytesMut;
@@ -51,9 +51,7 @@ fn runtime() -> &'static Runtime {
 pub(crate) struct HttpResourceHost {
     context: netfetcher::FetchContext,
     policy: ResourceFetchPolicy,
-    async_permits: Arc<tokio::sync::Semaphore>,
-    available: Mutex<usize>,
-    changed: Condvar,
+    permits: Arc<tokio::sync::Semaphore>,
 }
 
 #[cfg(feature = "netfetch")]
@@ -65,24 +63,16 @@ impl HttpResourceHost {
         Self {
             context,
             policy,
-            async_permits: Arc::new(tokio::sync::Semaphore::new(
+            permits: Arc::new(tokio::sync::Semaphore::new(
                 policy.max_concurrent_fetches.max(1),
             )),
-            available: Mutex::new(policy.max_concurrent_fetches.max(1)),
-            changed: Condvar::new(),
         }
     }
 
-    fn acquire(&self) -> HttpFetchPermit<'_> {
-        let mut available = self.available.lock().expect("HTTP fetch permit lock");
-        while *available == 0 {
-            available = self
-                .changed
-                .wait(available)
-                .expect("HTTP fetch permit wait");
-        }
-        *available -= 1;
-        HttpFetchPermit { host: self }
+    fn acquire(&self) -> tokio::sync::OwnedSemaphorePermit {
+        runtime()
+            .block_on(Arc::clone(&self.permits).acquire_owned())
+            .expect("HTTP fetch permit semaphore")
     }
 
     pub(crate) fn fetch_response(&self, url: &str) -> Option<ResourceResponse> {
@@ -126,21 +116,6 @@ impl HttpResourceHost {
             .ok()
             .flatten()
         })
-    }
-}
-
-#[cfg(feature = "netfetch")]
-struct HttpFetchPermit<'a> {
-    host: &'a HttpResourceHost,
-}
-
-#[cfg(feature = "netfetch")]
-impl Drop for HttpFetchPermit<'_> {
-    fn drop(&mut self) {
-        if let Ok(mut available) = self.host.available.lock() {
-            *available += 1;
-            self.host.changed.notify_one();
-        }
     }
 }
 
@@ -334,7 +309,7 @@ async fn script_fetch(
     origin: Option<url::Origin>,
     host: &HttpResourceHost,
 ) -> Result<FetchOutcome, String> {
-    let _permit = Arc::clone(&host.async_permits)
+    let _permit = Arc::clone(&host.permits)
         .acquire_owned()
         .await
         .map_err(|_| "Fetch host stopped".to_owned())?;
@@ -498,12 +473,35 @@ fn install_tofu() {
 
 #[cfg(all(test, feature = "netfetch"))]
 mod tests {
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     use genet_host_api::{ResourceFetchPolicy, ResourceFetcher};
     use script_runtime_api::{FetchEvent, FetchHandler, FetchRequest};
 
+    use super::HttpResourceHost;
     use crate::{RemoteFetcher, ScriptFetchHandler};
+
+    struct GateTransport {
+        started: std::sync::mpsc::Sender<()>,
+        release: Arc<tokio::sync::Notify>,
+    }
+
+    impl netfetcher::Transport for GateTransport {
+        fn send(&self, _request: netfetcher::WireRequest) -> netfetcher::TransportFuture<'_> {
+            let started = self.started.clone();
+            let release = Arc::clone(&self.release);
+            Box::pin(async move {
+                let _ = started.send(());
+                release.notified().await;
+                Some(netfetcher::RawResponse::once(
+                    200,
+                    Vec::new(),
+                    bytes::Bytes::from_static(b"ok"),
+                ))
+            })
+        }
+    }
 
     fn request(url: String) -> FetchRequest {
         FetchRequest {
@@ -591,6 +589,61 @@ mod tests {
             FetchEvent::Failed { id: 11, .. }
         ));
         foreign.assert();
+    }
+
+    #[test]
+    fn resource_and_script_fetches_share_one_concurrency_budget() {
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let release = Arc::new(tokio::sync::Notify::new());
+        let policy = ResourceFetchPolicy {
+            max_concurrent_fetches: 1,
+            ..ResourceFetchPolicy::default()
+        };
+        let mut context = netfetcher::FetchContext::permissive()
+            .with_redirect_limit(policy.max_redirects)
+            .with_transport(Arc::new(GateTransport {
+                started: started_tx,
+                release: Arc::clone(&release),
+            }));
+        context.cache = Arc::new(netfetcher::InMemoryHttpCache::new());
+        let http = Arc::new(HttpResourceHost {
+            context,
+            policy,
+            permits: Arc::new(tokio::sync::Semaphore::new(1)),
+        });
+        let resource_fetcher = RemoteFetcher {
+            http: Arc::clone(&http),
+        };
+        let script_handler = ScriptFetchHandler::from_http("http://same.invalid/page", http);
+
+        let resource_thread =
+            std::thread::spawn(move || resource_fetcher.fetch("http://same.invalid/resource"));
+        started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("resource fetch entered transport");
+        assert!(
+            script_handler
+                .start(21, request("http://same.invalid/script".to_owned()))
+                .is_none()
+        );
+        assert!(
+            started_rx.recv_timeout(Duration::from_millis(30)).is_err(),
+            "script fetch must wait behind the resource permit"
+        );
+
+        release.notify_one();
+        assert_eq!(
+            resource_thread.join().expect("resource thread"),
+            Some(b"ok".to_vec())
+        );
+        started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("script fetch entered after resource released permit");
+        release.notify_one();
+        assert!(matches!(
+            await_event(&script_handler),
+            FetchEvent::Complete { id: 21, .. }
+        ));
     }
 
     #[test]
