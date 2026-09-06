@@ -321,3 +321,120 @@ impl WebGlHandler for PeltWebGl {
             .unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::WebGlTextureRegistry;
+    use genet_scripted::{LiveryScriptedDocument, ResourceFetcher, ScriptedDocumentOptions};
+    use netrender::{ColorLoad, NetrenderOptions};
+
+    #[derive(Clone, Copy)]
+    struct EmptyResources;
+    impl ResourceFetcher for EmptyResources {
+        fn fetch(&self, _url: &str) -> Option<Vec<u8>> {
+            None
+        }
+    }
+
+    fn pixel(bytes: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
+        let offset = ((y * width + x) * 4) as usize;
+        bytes[offset..offset + 4].try_into().unwrap()
+    }
+
+    #[test]
+    fn ordinary_scripted_document_presents_and_retires_webgl_canvas() {
+        const WIDTH: u32 = 48;
+        const HEIGHT: u32 = 48;
+        let core = genet_render_host::RenderCore::boot(NetrenderOptions {
+            tile_cache_size: Some(16),
+            enable_vello: true,
+            ..Default::default()
+        })
+        .expect("shared render host boots");
+        let registry = WebGlTextureRegistry::default();
+        let html = r#"
+            <style>
+              html, body { margin: 0; padding: 0; background: white; }
+              canvas { display: block; width: 32px; height: 32px; }
+              #later { position: absolute; left: 12px; top: 12px;
+                       width: 8px; height: 8px; background: blue; }
+            </style>
+            <canvas id="canvas" width="32" height="32"></canvas>
+            <div id="later"></div>
+            <script>
+              const gl = document.getElementById('canvas').getContext('webgl');
+              gl.clearColor(1, 0, 0, 1);
+              gl.clear(gl.COLOR_BUFFER_BIT);
+            </script>
+        "#;
+        let mut doc =
+            LiveryScriptedDocument::<script_engine_boa::BoaEngine>::from_body_with_options(
+                html,
+                EmptyResources,
+                "https://pelt.test/webgl-receipt.html",
+                ScriptedDocumentOptions {
+                    webgl: Some(registry.factory(core.device().clone(), core.queue().clone())),
+                    ..Default::default()
+                },
+            )
+            .expect("ordinary scripted document loads");
+
+        let frame = doc.frame_with_external_textures(WIDTH, HEIGHT);
+        assert_eq!(frame.external_textures.len(), 1);
+        let draw = &frame.external_textures[0];
+        assert_eq!(draw.dest_rect, [0.0, 0.0, 32.0, 32.0]);
+        assert!(draw.scene_op_boundary < frame.scene.ops.len());
+        let key = draw.texture_key;
+        let textures: Vec<_> = frame
+            .external_textures
+            .iter()
+            .map(|draw| {
+                (
+                    registry
+                        .texture(draw.texture_key)
+                        .expect("registered canvas texture"),
+                    netrender::ExternalTexturePlacement::new(draw.dest_rect)
+                        .with_opacity(draw.opacity),
+                    draw.scene_op_boundary,
+                )
+            })
+            .collect();
+        let views: Vec<_> = textures
+            .iter()
+            .map(|(texture, placement, boundary)| {
+                (
+                    texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    *placement,
+                    *boundary,
+                )
+            })
+            .collect();
+        let composites: Vec<_> = views
+            .iter()
+            .map(|(view, placement, boundary)| {
+                netrender::ExternalTextureComposite::new(view, *placement)
+                    .with_scene_op_boundary(*boundary)
+            })
+            .collect();
+        let (texture, _) = core.rasterize_scaled_with_external_textures(
+            &frame.scene,
+            WIDTH,
+            HEIGHT,
+            ColorLoad::Clear(wgpu::Color::WHITE),
+            1.0,
+            &composites,
+        );
+        let rgba = core
+            .read_rgba8_texture(&texture, WIDTH, HEIGHT)
+            .expect("receipt texture reads back");
+        assert_eq!(pixel(&rgba.rgba, WIDTH, 4, 4), [255, 0, 0, 255]);
+        assert_eq!(pixel(&rgba.rgba, WIDTH, 16, 16), [0, 0, 255, 255]);
+        assert_eq!(pixel(&rgba.rgba, WIDTH, 40, 40), [255, 255, 255, 255]);
+
+        drop(doc);
+        assert!(
+            registry.texture(key).is_none(),
+            "document drop retires its GPU texture"
+        );
+    }
+}
