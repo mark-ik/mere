@@ -2786,3 +2786,25 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   remains outside this repository move: Cloudflare still proxies the custom
   domain, GitHub therefore reports the organization domain unverified and does
   not yet permit HTTPS enforcement.
+
+- 2026-09-06: **Pelt scripted host continuation, first native slice validated.**
+  Pelt now creates scripted sessions after the shared GPU device is available,
+  supplying a fresh Fetch handler and WebGL factory before authored scripts
+  execute. `mere-document-lanes` owns the asynchronous transport adapter and
+  shares the existing resource cache, in-memory cookies and concurrency budget.
+  Genet retains engine-neutral runtime contracts, document retirement and
+  texture placement metadata; Pelt resolves and presents those textures on the
+  shared device.
+
+  The canonical scope, limits and frozen native receipt are recorded once at
+  `genet/design_docs/2026-09-06_scripted_host_capabilities_plan.md`. The integrated
+  adapter's 11 tests and Pelt's five scripted tests pass, including local HTTP
+  Fetch, GPU pixel composition and texture retirement. The bounded headed P5
+  scripted receipt also passes. The published Genet pin is
+  `d424a689518a53e38d4c6f89c5c792bebb439248`; all 28 Genet selectors agree.
+  Candidate metadata with the recorded source map preserves the frozen Mere
+  lock and confirms one wgpu 30.0.1 identity across Pelt, WebGL and the render
+  host. This is a source-mapped candidate receipt; a config-free build from the
+  final pins has not been claimed. Strict lint closure and broader WebGL/WPT
+  conformance remain open as stated in the canonical receipt. The work is on
+  `codex/scripted-host-capabilities-20260906`, preserving concurrent main work.
