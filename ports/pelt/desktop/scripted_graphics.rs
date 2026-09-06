@@ -22,7 +22,24 @@ const VERTEX_SHADER: u32 = 0x8B31;
 const FRAGMENT_SHADER: u32 = 0x8B30;
 const DITHER: u32 = 0x0BD0;
 const SCISSOR_TEST: u32 = 0x0C11;
-const MAX_DRAWING_BUFFER_AXIS: u32 = 2048;
+
+/// Host allocation policy for live WebGL drawing-buffer resizes.
+///
+/// The 4096-axis default admits common 4K display canvases while bounding a
+/// single RGBA8 drawing buffer to 64 MiB. The active device limit is always an
+/// additional upper bound.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WebGlFactoryOptions {
+    pub(crate) max_drawing_buffer_axis: u32,
+}
+
+impl Default for WebGlFactoryOptions {
+    fn default() -> Self {
+        Self {
+            max_drawing_buffer_axis: 4096,
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub(crate) struct WebGlTextureRegistry {
@@ -35,7 +52,19 @@ impl WebGlTextureRegistry {
         self.textures.lock().ok()?.get(&key).cloned()
     }
     pub(crate) fn factory(&self, device: wgpu::Device, queue: wgpu::Queue) -> WebGlFactory {
+        self.factory_with_options(device, queue, WebGlFactoryOptions::default())
+    }
+    pub(crate) fn factory_with_options(
+        &self,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        options: WebGlFactoryOptions,
+    ) -> WebGlFactory {
         let registry = self.clone();
+        let max_drawing_buffer_axis = options
+            .max_drawing_buffer_axis
+            .max(1)
+            .min(device.limits().max_texture_dimension_2d);
         Box::new(move |width, height| {
             let texture_key = registry
                 .next_key
@@ -56,6 +85,7 @@ impl WebGlTextureRegistry {
                 texture_key,
                 context,
                 registry.textures.clone(),
+                max_drawing_buffer_axis,
             ))
         })
     }
@@ -65,6 +95,7 @@ struct PeltWebGl {
     key: u64,
     registry: Arc<Mutex<HashMap<u64, wgpu::Texture>>>,
     context: WebGlContext,
+    max_drawing_buffer_axis: u32,
     next: u64,
     buffers: HashMap<u64, WebGlBufferId>,
     shaders: HashMap<u64, WebGlShaderId>,
@@ -79,6 +110,7 @@ impl PeltWebGl {
         key: u64,
         context: WebGlContext,
         registry: Arc<Mutex<HashMap<u64, wgpu::Texture>>>,
+        max_drawing_buffer_axis: u32,
     ) -> Self {
         let mut enabled = HashSet::new();
         enabled.insert(DITHER);
@@ -86,6 +118,7 @@ impl PeltWebGl {
             key,
             registry,
             context,
+            max_drawing_buffer_axis,
             next: 1,
             buffers: HashMap::new(),
             shaders: HashMap::new(),
@@ -122,8 +155,8 @@ impl WebGlHandler for PeltWebGl {
     }
     fn resize(&mut self, width: u32, height: u32) -> Option<(u32, u32)> {
         let size = (
-            width.max(1).min(MAX_DRAWING_BUFFER_AXIS),
-            height.max(1).min(MAX_DRAWING_BUFFER_AXIS),
+            width.max(1).min(self.max_drawing_buffer_axis),
+            height.max(1).min(self.max_drawing_buffer_axis),
         );
         self.context.resize(size.0, size.1).ok()?;
         self.registry
@@ -337,7 +370,7 @@ impl WebGlHandler for PeltWebGl {
 
 #[cfg(test)]
 mod tests {
-    use super::WebGlTextureRegistry;
+    use super::{WebGlFactoryOptions, WebGlTextureRegistry};
     use genet_scripted::{LiveryScriptedDocument, ResourceFetcher, ScriptedDocumentOptions};
     use netrender::{ColorLoad, NetrenderOptions};
 
@@ -400,13 +433,19 @@ mod tests {
                 EmptyResources,
                 "https://pelt.test/webgl-receipt.html",
                 ScriptedDocumentOptions {
-                    webgl: Some(registry.factory(core.device().clone(), core.queue().clone())),
+                    webgl: Some(registry.factory_with_options(
+                        core.device().clone(),
+                        core.queue().clone(),
+                        WebGlFactoryOptions {
+                            max_drawing_buffer_axis: 32,
+                        },
+                    )),
                     ..Default::default()
                 },
             )
             .expect("ordinary scripted document loads");
 
-        assert_eq!(doc.title().as_deref(), Some("true:8:6:0:0:0:0:2048x6"));
+        assert_eq!(doc.title().as_deref(), Some("true:8:6:0:0:0:0:32x6"));
 
         let frame = doc.frame_with_external_textures(WIDTH, HEIGHT);
         assert_eq!(frame.external_textures.len(), 1);
