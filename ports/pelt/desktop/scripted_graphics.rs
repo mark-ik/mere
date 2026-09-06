@@ -447,7 +447,11 @@ mod tests {
             )
             .expect("ordinary scripted document loads");
 
-        assert_eq!(doc.title().as_deref(), Some("true:8:6:0:0:0:0:32x6"));
+        doc.evaluate(
+            "if (document.title !== 'true:8:6:0:0:0:0:32x6') { \
+             throw new Error('unexpected canvas resize receipt: ' + document.title); }",
+        )
+        .expect("same context reports its actual size and cleared buffer");
 
         let frame = doc.frame_with_external_textures(WIDTH, HEIGHT);
         assert_eq!(frame.external_textures.len(), 1);
