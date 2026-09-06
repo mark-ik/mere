@@ -26,6 +26,8 @@ pub use reader::{
     ReaderSessionEngine, lower_article,
 };
 pub use remote::RemoteFetcher;
+#[cfg(feature = "netfetch")]
+pub use remote::ScriptFetchHandler;
 #[cfg(feature = "smolweb")]
 pub use session::{SmolwebDocumentSession, SmolwebSessionEngine};
 pub use smolweb::{SmolwebDocument, SmolwebInlineMediaPolicy, SmolwebPalette, SmolwebTheme};

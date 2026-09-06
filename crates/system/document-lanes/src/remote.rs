@@ -25,6 +25,8 @@ use bytes::BytesMut;
 use tokio::runtime::Runtime;
 
 use genet_host_api::{ResourceFetchPolicy, ResourceFetcher, ResourceResponse};
+#[cfg(feature = "netfetch")]
+use script_runtime_api::{FetchEvent, FetchHandler, FetchOutcome, FetchRequest};
 
 #[cfg(any(feature = "netfetch", feature = "smolweb"))]
 /// The shared tokio runtime the blocking bridge drives. Built once on first use: a
@@ -49,6 +51,7 @@ fn runtime() -> &'static Runtime {
 pub(crate) struct HttpResourceHost {
     context: netfetcher::FetchContext,
     policy: ResourceFetchPolicy,
+    async_permits: Arc<tokio::sync::Semaphore>,
     available: Mutex<usize>,
     changed: Condvar,
 }
@@ -62,6 +65,9 @@ impl HttpResourceHost {
         Self {
             context,
             policy,
+            async_permits: Arc::new(tokio::sync::Semaphore::new(
+                policy.max_concurrent_fetches.max(1),
+            )),
             available: Mutex::new(policy.max_concurrent_fetches.max(1)),
             changed: Condvar::new(),
         }
@@ -169,6 +175,13 @@ impl RemoteFetcher {
             .get_or_init(|| Self::new(ResourceFetchPolicy::default()))
             .clone()
     }
+
+    /// Create a per-document script handler sharing this fetcher's HTTP cache,
+    /// cookies, redirect policy, and concurrency budget.
+    #[cfg(feature = "netfetch")]
+    pub fn script_handler(&self, document_url: &str) -> ScriptFetchHandler {
+        ScriptFetchHandler::from_http(document_url, Arc::clone(&self.http))
+    }
 }
 
 impl ResourceFetcher for RemoteFetcher {
@@ -191,6 +204,262 @@ impl ResourceFetcher for RemoteFetcher {
         }
         let _ = url;
         None
+    }
+}
+
+/// Per-document, deferred `window.fetch()` adapter over Mere's shared
+/// netfetcher host. Network work runs on the host runtime; the script thread
+/// drains completions through [`FetchHandler::poll`].
+#[cfg(feature = "netfetch")]
+pub struct ScriptFetchHandler {
+    http: Arc<HttpResourceHost>,
+    origin: Option<url::Origin>,
+    tx: std::sync::mpsc::Sender<FetchEvent>,
+    rx: Mutex<std::sync::mpsc::Receiver<FetchEvent>>,
+    active: Mutex<std::collections::HashMap<u64, tokio::task::AbortHandle>>,
+}
+
+#[cfg(feature = "netfetch")]
+impl ScriptFetchHandler {
+    /// Create one request namespace for one scripted document.
+    pub fn new(document_url: &str, policy: ResourceFetchPolicy) -> Self {
+        Self::from_http(document_url, Arc::new(HttpResourceHost::new(policy)))
+    }
+
+    fn from_http(document_url: &str, http: Arc<HttpResourceHost>) -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        Self {
+            http,
+            origin: url::Url::parse(document_url).ok().map(|url| url.origin()),
+            tx,
+            rx: Mutex::new(rx),
+            active: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+
+    fn abort_all(&self) {
+        let mut active = self.active.lock().expect("script fetch active lock");
+        for (_, handle) in active.drain() {
+            handle.abort();
+        }
+        let rx = self.rx.lock().expect("script fetch completion lock");
+        while rx.try_recv().is_ok() {}
+    }
+}
+
+#[cfg(feature = "netfetch")]
+impl FetchHandler for ScriptFetchHandler {
+    fn start(&self, id: u64, request: FetchRequest) -> Option<FetchOutcome> {
+        let host = Arc::clone(&self.http);
+        let origin = self.origin.clone();
+        let tx = self.tx.clone();
+        let task = runtime().spawn(async move {
+            let event = match tokio::time::timeout(
+                host.policy.timeout,
+                script_fetch(request, origin, &host),
+            )
+            .await
+            {
+                Ok(Ok(outcome)) => FetchEvent::Complete { id, outcome },
+                Ok(Err(message)) => FetchEvent::Failed { id, message },
+                Err(_) => FetchEvent::Failed {
+                    id,
+                    message: "Fetch timed out".to_owned(),
+                },
+            };
+            let _ = tx.send(event);
+        });
+        self.active
+            .lock()
+            .expect("script fetch active lock")
+            .insert(id, task.abort_handle());
+        None
+    }
+
+    fn cancel(&self, id: u64) {
+        if let Some(handle) = self
+            .active
+            .lock()
+            .expect("script fetch active lock")
+            .remove(&id)
+        {
+            handle.abort();
+        }
+    }
+
+    fn poll(&self, max_events: usize) -> Vec<FetchEvent> {
+        let rx = self.rx.lock().expect("script fetch completion lock");
+        let mut events = Vec::new();
+        for _ in 0..max_events {
+            let Ok(event) = rx.try_recv() else { break };
+            let id = match &event {
+                FetchEvent::Complete { id, .. } | FetchEvent::Failed { id, .. } => *id,
+            };
+            if self
+                .active
+                .lock()
+                .expect("script fetch active lock")
+                .remove(&id)
+                .is_some()
+            {
+                events.push(event);
+            }
+        }
+        events
+    }
+
+    fn has_pending(&self) -> bool {
+        !self
+            .active
+            .lock()
+            .expect("script fetch active lock")
+            .is_empty()
+    }
+
+    fn cancel_all(&self) {
+        self.abort_all();
+    }
+}
+
+#[cfg(feature = "netfetch")]
+impl Drop for ScriptFetchHandler {
+    fn drop(&mut self) {
+        self.abort_all();
+    }
+}
+
+#[cfg(feature = "netfetch")]
+async fn script_fetch(
+    req: FetchRequest,
+    origin: Option<url::Origin>,
+    host: &HttpResourceHost,
+) -> Result<FetchOutcome, String> {
+    let _permit = Arc::clone(&host.async_permits)
+        .acquire_owned()
+        .await
+        .map_err(|_| "Fetch host stopped".to_owned())?;
+    let url = url::Url::parse(&req.url).map_err(|_| "Failed to fetch".to_owned())?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err("Unsupported fetch scheme".to_owned());
+    }
+    let mut request = netfetcher::Request::get(url);
+    request.method = match req.method.as_str() {
+        "GET" => netfetcher::Method::Get,
+        "HEAD" => netfetcher::Method::Head,
+        "POST" => netfetcher::Method::Post,
+        "PUT" => netfetcher::Method::Put,
+        "DELETE" => netfetcher::Method::Delete,
+        "PATCH" => netfetcher::Method::Patch,
+        "OPTIONS" => netfetcher::Method::Options,
+        method => netfetcher::Method::Other(method.to_owned()),
+    };
+    request.headers = req.headers;
+    request.body = req.body.map(bytes::Bytes::from);
+    request.cache = match req.cache.as_str() {
+        "no-store" => netfetcher::CacheMode::NoStore,
+        "reload" => netfetcher::CacheMode::Reload,
+        "no-cache" => netfetcher::CacheMode::NoCache,
+        "force-cache" => netfetcher::CacheMode::ForceCache,
+        "only-if-cached" => netfetcher::CacheMode::OnlyIfCached,
+        _ => netfetcher::CacheMode::Default,
+    };
+    request.redirect = match req.redirect.as_str() {
+        "error" => netfetcher::RedirectMode::Error,
+        "manual" => netfetcher::RedirectMode::Manual,
+        _ => netfetcher::RedirectMode::Follow,
+    };
+    request.mode = match req.mode.as_str() {
+        "no-cors" => netfetcher::RequestMode::NoCors,
+        "same-origin" => netfetcher::RequestMode::SameOrigin,
+        "navigate" => netfetcher::RequestMode::Navigate,
+        _ => netfetcher::RequestMode::Cors,
+    };
+    request.referrer = (!req.referrer.is_empty())
+        .then(|| url::Url::parse(&req.referrer).ok())
+        .flatten();
+    request.origin = origin;
+    request.referrer_policy = match req.referrer_policy.as_str() {
+        "no-referrer" => netfetcher::ReferrerPolicy::NoReferrer,
+        "no-referrer-when-downgrade" => netfetcher::ReferrerPolicy::NoReferrerWhenDowngrade,
+        "same-origin" => netfetcher::ReferrerPolicy::SameOrigin,
+        "origin" => netfetcher::ReferrerPolicy::Origin,
+        "strict-origin" => netfetcher::ReferrerPolicy::StrictOrigin,
+        "origin-when-cross-origin" => netfetcher::ReferrerPolicy::OriginWhenCrossOrigin,
+        "strict-origin-when-cross-origin" => {
+            netfetcher::ReferrerPolicy::StrictOriginWhenCrossOrigin
+        },
+        "unsafe-url" => netfetcher::ReferrerPolicy::UnsafeUrl,
+        _ => netfetcher::ReferrerPolicy::Empty,
+    };
+    request.credentials = match req.credentials.as_str() {
+        "omit" => netfetcher::Credentials::Omit,
+        "include" => netfetcher::Credentials::Include,
+        _ => netfetcher::Credentials::SameOrigin,
+    };
+    request.integrity = req.integrity;
+
+    let mut response = netfetcher::fetch(request, &host.context).await;
+    if response.is_network_error() {
+        return Err("Failed to fetch".to_owned());
+    }
+    let mut body = BytesMut::new();
+    while let Some(chunk) = response.body.next_chunk().await {
+        let chunk = chunk.map_err(|_| "Failed to read response body".to_owned())?;
+        if body.len().saturating_add(chunk.len()) > host.policy.max_response_bytes {
+            return Err("Fetch response exceeded host limit".to_owned());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(FetchOutcome {
+        network_error: false,
+        status: response.status,
+        status_text: status_text(response.status).to_owned(),
+        response_type: match response.response_type {
+            netfetcher::ResponseType::Basic => "basic",
+            netfetcher::ResponseType::Cors => "cors",
+            netfetcher::ResponseType::Opaque => "opaque",
+            netfetcher::ResponseType::OpaqueRedirect => "opaqueredirect",
+            netfetcher::ResponseType::Error => "error",
+        }
+        .to_owned(),
+        url: response
+            .url_list
+            .last()
+            .map(ToString::to_string)
+            .unwrap_or_default(),
+        redirected: response.url_list.len() > 1,
+        headers: response.headers,
+        body: body.to_vec(),
+    })
+}
+
+#[cfg(feature = "netfetch")]
+fn status_text(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        201 => "Created",
+        202 => "Accepted",
+        204 => "No Content",
+        301 => "Moved Permanently",
+        302 => "Found",
+        303 => "See Other",
+        304 => "Not Modified",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        408 => "Request Timeout",
+        409 => "Conflict",
+        410 => "Gone",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        _ => "",
     }
 }
 
@@ -229,9 +498,137 @@ fn install_tofu() {
 
 #[cfg(all(test, feature = "netfetch"))]
 mod tests {
-    use genet_host_api::{ResourceFetchPolicy, ResourceFetcher};
+    use std::time::{Duration, Instant};
 
-    use crate::RemoteFetcher;
+    use genet_host_api::{ResourceFetchPolicy, ResourceFetcher};
+    use script_runtime_api::{FetchEvent, FetchHandler, FetchRequest};
+
+    use crate::{RemoteFetcher, ScriptFetchHandler};
+
+    fn request(url: String) -> FetchRequest {
+        FetchRequest {
+            method: "GET".to_owned(),
+            url,
+            headers: Vec::new(),
+            body: None,
+            cache: "default".to_owned(),
+            redirect: "follow".to_owned(),
+            mode: "cors".to_owned(),
+            referrer: String::new(),
+            referrer_policy: String::new(),
+            credentials: "same-origin".to_owned(),
+            integrity: String::new(),
+        }
+    }
+
+    fn await_event(handler: &ScriptFetchHandler) -> FetchEvent {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(event) = handler.poll(1).pop() {
+                return event;
+            }
+            assert!(Instant::now() < deadline, "deferred fetch did not complete");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn scripted_fetch_completes_off_thread_with_status_headers_and_body() {
+        let mut server = mockito::Server::new();
+        let mock = server
+            .mock("GET", "/script-data")
+            .with_status(201)
+            .with_header("content-type", "text/plain")
+            .with_body("cedar")
+            .create();
+        let document_url = format!("{}/page", server.url());
+        let handler = ScriptFetchHandler::new(&document_url, ResourceFetchPolicy::default());
+        assert!(
+            handler
+                .start(7, request(format!("{}/script-data", server.url())))
+                .is_none()
+        );
+        assert!(handler.has_pending());
+        match await_event(&handler) {
+            FetchEvent::Complete { id, outcome } => {
+                assert_eq!(id, 7);
+                assert_eq!(outcome.status, 201);
+                assert_eq!(outcome.status_text, "Created");
+                assert_eq!(outcome.body, b"cedar");
+                assert!(
+                    outcome
+                        .headers
+                        .iter()
+                        .any(|(name, value)| name.eq_ignore_ascii_case("content-type")
+                            && value == "text/plain")
+                );
+            },
+            FetchEvent::Failed { message, .. } => panic!("fetch failed: {message}"),
+        }
+        assert!(!handler.has_pending());
+        mock.assert();
+    }
+
+    #[test]
+    fn scripted_fetch_keeps_document_origin_when_referrer_is_suppressed() {
+        let document_server = mockito::Server::new();
+        let mut foreign_server = mockito::Server::new();
+        let foreign = foreign_server
+            .mock("GET", "/private")
+            .with_status(200)
+            .with_body("must not be exposed")
+            .create();
+        let handler = ScriptFetchHandler::new(
+            &format!("{}/page", document_server.url()),
+            ResourceFetchPolicy::default(),
+        );
+        let mut req = request(format!("{}/private", foreign_server.url()));
+        req.referrer_policy = "no-referrer".to_owned();
+        assert!(req.referrer.is_empty());
+        assert!(handler.start(11, req).is_none());
+        assert!(matches!(
+            await_event(&handler),
+            FetchEvent::Failed { id: 11, .. }
+        ));
+        foreign.assert();
+    }
+
+    #[test]
+    fn scripted_fetch_reports_errors_and_cancellation_without_stale_delivery() {
+        let handler =
+            ScriptFetchHandler::new("https://document.invalid/", ResourceFetchPolicy::default());
+        assert!(
+            handler
+                .start(1, request("gemini://example.invalid/".to_owned()))
+                .is_none()
+        );
+        assert!(matches!(
+            await_event(&handler),
+            FetchEvent::Failed { id: 1, .. }
+        ));
+
+        assert!(
+            handler
+                .start(2, request("http://192.0.2.1/slow".to_owned()))
+                .is_none()
+        );
+        handler.cancel(2);
+        assert!(!handler.has_pending());
+        std::thread::sleep(Duration::from_millis(20));
+        assert!(
+            handler.poll(8).is_empty(),
+            "cancelled completion was discarded"
+        );
+
+        assert!(
+            handler
+                .start(3, request("http://192.0.2.1/later".to_owned()))
+                .is_none()
+        );
+        handler.cancel_all();
+        assert!(!handler.has_pending());
+        assert!(handler.poll(8).is_empty());
+    }
 
     /// http(s) loading flows through the netfetcher engine end to end: an offline
     /// mock server serves a body, and `RemoteFetcher` (with the `netfetch` branch)

@@ -13,7 +13,7 @@ path = "src/lib.rs"
 [features]
 default = []
 # Remote http(s) loading for RemoteFetcher via the netfetcher engine.
-netfetch = ["dep:netfetcher", "dep:tokio", "dep:bytes"]
+netfetch = ["dep:netfetcher", "dep:script-runtime-api", "dep:tokio", "dep:bytes"]
 # The smolweb engine-native lane: errand transport and Nematic EngineDocument
 # lowering; the reader lane is unconditional.
 smolweb = ["dep:errand", "dep:nematic", "dep:tokio"]
@@ -34,7 +34,8 @@ url = "2.5"
 nematic = { workspace = true, optional = true }
 errand = { workspace = true, optional = true }
 netfetcher = { workspace = true, optional = true }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"], optional = true }
+script-runtime-api = { workspace = true, optional = true }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time"], optional = true }
 bytes = { version = "1", optional = true }
 
 [dev-dependencies]
