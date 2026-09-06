@@ -268,6 +268,9 @@ mod tests {
                     Err(error) => panic!("local receipt accept failed: {error}"),
                 };
                 stream
+                    .set_nonblocking(false)
+                    .expect("accepted receipt connection uses bounded blocking reads");
+                stream
                     .set_read_timeout(Some(Duration::from_secs(2)))
                     .expect("bounded request read");
                 let mut request = [0; 2048];
