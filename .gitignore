@@ -71,6 +71,10 @@ mere-sessions/
 # not source — never commit.
 .sem/
 
+# Python helper bytecode is local tooling output.
+__pycache__/
+*.py[cod]
+
 # Local cargo path overrides (genet/netrender local working copies) - local-dev only.
 # The .example is committed: it documents the sibling-checkout edit loop and its
 # paths are relative, so it is copyable as-is. The live file stays ignored so a

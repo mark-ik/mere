@@ -1,13 +1,15 @@
 # Doc Policy Consolidation Plan — one canonical core, facade-collapsed areas, spec docs repatriated
 
 **Date**: 2026-08-24
-**Status**: **D3 complete 2026-09-06; phase D remains open for D2 coverage of
-16 documents added after the 281-document judgment snapshot.** A, B and C
-landed 2026-08-24. D1, the original D2 judgment pass and depth re-pass, and D4
+**Status**: **Complete 2026-09-06; phases A-D landed.** A, B and C landed
+2026-08-24. D1, the original D2 judgment pass and depth re-pass, and D4
 completed 2026-09-02. D3 closed 2026-09-06 with the repository's self-testing
-audit at zero failing findings; intentional unresolved evidence and committed
-future targets now carry exact occurrence-level annotations rather than
-weakening an authoritative document with a whole-file historical label.
+audit at zero failing findings. The D2 identity closeout then preserved the
+281-record aggregate, added 34 supplemental records, and proved coverage for
+all 298 active documents; 17 archived snapshot records remain as history.
+Intentional unresolved evidence and committed future targets carry exact
+occurrence-level annotations rather than weakening an authoritative document
+with a whole-file historical label.
 Decisions taken by Mark 2026-08-24 and 2026-09-02 remain recorded in
 §Decisions.
 
@@ -499,9 +501,40 @@ Mark with each item's evidence.
   versioned protocol identifiers remain explicitly excluded. The self-test,
   Python compilation, and `--fail-on-findings` gate pass. This closes D3 and
   the platform-boundary plan's P7 dependency. It does not close this plan's
-  overall phase-D condition: D2's aggregate covers the 281-document 2026-09-02
-  snapshot, while the active tree now has 297 documents. The 16 additions need
-  D2 judgment blocks before phase D can be called complete.
+  overall phase-D condition by itself. At that commit the active tree had 297
+  documents, but subtracting the 281-record snapshot was not a coverage check:
+  17 audited plans had left the active tree and 33 new path identities had
+  entered it. The identity-based closeout below corrects that arithmetic.
+
+- **2026-09-06 (D2 identity closeout; phase D complete):** the full original
+  281-record aggregate and protocol are now durable under `support/doc-audit/d2/`
+  instead of surviving only in a temporary scratchpad. Comparing record
+  identity with the live tree at `724b613d` found 264 original records still
+  active, 17 inactive records retained as history, and 34 current documents
+  absent from the snapshot. Two evidence batches cover those 34 documents:
+  Cambium checked 130 claims (110 hold, 15 stale, 5 unverifiable), and the
+  remaining areas checked 195 (179 hold, 10 stale, 6 unverifiable). Combined
+  with the original pass, the durable ledger carries 315 records and 4,673
+  checked claims: 3,380 hold, 1,169 stale, and 124 unverifiable. The new
+  `scripts/mere_doc_judgment_audit.py` gate reports **298/298 active documents
+  covered** (264 original + 34 supplemental) and retains the 17 inactive
+  records explicitly. A two-entry correction overlay repairs arithmetic typos
+  in the original spatial-compute and moot-constitution blocks: each classified
+  27 outcomes while writing 26 as its claim total; the source aggregate remains
+  preserved unchanged and digest-pinned as
+  `f0b64eef4cd5514157bb1b49d389b84db29a1e823d6f3e2cebf827337fe56abf`.
+
+  Four D3 regressions introduced after the prior receipt were also resolved:
+  the Cleromancy and Genet sources are explicit sibling-repository citations,
+  while two concurrent uncommitted Mere targets are occurrence-marked as
+  planned and will become stale markers when those files land. The final D3
+  receipt is 298 active documents, 297 indexed plus the index itself, and zero
+  orphans, ghosts, private-memory links, Status-less plans, broken relative
+  links, missing known-root paths, invalid annotations, or stale annotations.
+  Informational inventory is 267 historical links, 474 historical paths, 3
+  planned links, 16 planned paths, 112 ambiguous-root examples, 38 glob/pattern
+  examples, and 30 versioned protocol identifiers. Both D2 identity coverage
+  and the self-testing D3 gate pass, satisfying phase D's done-condition.
 
 ### Finding: genet now has two doc homes
 

@@ -141,6 +141,15 @@ creating that exact target. These markers do not make the whole document or
 section historical or planned. Mere's active-tree audit fails detached,
 malformed, wrong-kind, and newly resolving annotations.
 
+### Active-tree judgment coverage
+
+Every active Markdown document must have a D2 judgment record. The durable
+ledger lives under `support/doc-audit/d2/`: the original snapshot aggregate is
+retained unchanged, later documents receive parser-shaped supplemental batch
+records, and archived records remain as history. Run
+`python scripts/mere_doc_judgment_audit.py` whenever an active document is
+added, moved, or archived; the command must report full current-path coverage.
+
 ### Area roots
 
 Corrected 2026-08-24. The previous list named `platen_docs/`, which has never

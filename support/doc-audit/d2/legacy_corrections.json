@@ -1,0 +1,10 @@
+{
+  "mere_docs/technical_architecture/2026-08-13_spatial_compute_plan.md": {
+    "claims": 27,
+    "reason": "The source block classifies 20 holds, 6 stale claims, and 1 unverifiable claim; its written total of 26 is an arithmetic typo."
+  },
+  "mere_docs/implementation_strategy/2026-06-06_moot_constitution_brief.md": {
+    "claims": 27,
+    "reason": "The source block classifies 21 holds, 5 stale claims, and 1 unverifiable claim; its written total of 26 is an arithmetic typo."
+  }
+}

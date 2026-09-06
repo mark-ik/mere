@@ -267,7 +267,7 @@ immutable canonical-text resource. Eidetic owns the complete Annotation JSON-LD
 envelope and wraps the payload with source URL, capture time, response and DOM-mode
 facts, plus raw or replay blob identities. Fleece retains no fetch, storage,
 replication, or Moot policy. The complete cross-standard ledger lives in Genet's
-`design_docs/2026-09-05_fleece_preservation_contract_plan.md`.
+`genet/design_docs/2026-09-05_fleece_preservation_contract_plan.md`.
 
 Done when real selected pages survive peer transfer/reopen, a body-only query finds
 them, duplicate submissions preserve both contributors while results group content,
@@ -316,7 +316,7 @@ management require their own subsequent consumer receipts.
   16 anchors, a changed paragraph, independent journal forks and body-text queries.
   It exercised neither p2panda transport nor service commitments. Its sources and
   reproducible command are local artifacts, not checked-in shipping evidence.
-- Concurrent untracked `crates/moot/commons/examples/commons_practice_peer.rs`
+- Concurrent untracked `crates/moot/commons/examples/commons_practice_peer.rs` *(planned target)* <!-- doc-audit: planned-path -->
   describes a line-JSON retained Woodshed space with one redb store per process and
   explicitly no transport implementation. `ports/graphshell/web/co_op.*` and
   related projection work are another active lane. Their presence is not a landed
@@ -335,8 +335,9 @@ management require their own subsequent consumer receipts.
   exchange. Distinct Personae roots signed the publication/contribution and
   hosting facts. Corrupt carrier bytes and a foreign-Moot operation were refused;
   proof-local policy rejected unauthorized publication and hosting candidates;
-  an unpublished path returned Gemini `51`. Receipt and exact ids:
-  [author-offline community publication proof](../research/2026-09-05_author_offline_publication_proof.md).
+  an unpublished path returned Gemini `51`. The concurrent proof artifact is
+  not yet committed; its target and exact ids are:
+  [author-offline community publication proof](../research/2026-09-05_author_offline_publication_proof.md) *(planned target)* <!-- doc-audit: planned-link -->
   P1 remains partial: candidate publication/hosting records and explicit fixture
   policy must become production authority. Current `Shared` and Standing folds
   also need attested outer-signer binding to stable Personae roots. The

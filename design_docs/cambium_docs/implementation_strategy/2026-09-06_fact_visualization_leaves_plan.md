@@ -19,7 +19,7 @@ component over the existing pointer, keyboard, and retained-state seams.
 
 This plan owns the reusable rendering and interaction contracts in Mere. The
 first consumer remains in `cleromancy`, whose
-`design_docs/2026-09-04_legible_reader_and_fact_surfaces_plan.md` records the
+`cleromancy/design_docs/2026-09-04_legible_reader_and_fact_surfaces_plan.md` records the
 original asks and owns the astrology projection. Mere does not learn zodiac
 signs, aspects, ephemerides, or millidegrees.
 
