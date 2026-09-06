@@ -592,6 +592,47 @@ mod tests {
     }
 
     #[test]
+    fn redirected_document_final_url_becomes_the_script_origin() {
+        let mut initial_server = mockito::Server::new();
+        let mut final_server = mockito::Server::new();
+        let final_page_url = format!("{}/page", final_server.url());
+        let redirect = initial_server
+            .mock("GET", "/start")
+            .with_status(302)
+            .with_header("location", &final_page_url)
+            .create();
+        let page = final_server
+            .mock("GET", "/page")
+            .with_status(200)
+            .with_body("<script>fetch('/data')</script>")
+            .create();
+        let data = final_server
+            .mock("GET", "/data")
+            .with_status(200)
+            .with_body("same origin after redirect")
+            .create();
+        let remote = RemoteFetcher::new(ResourceFetchPolicy::default());
+        let response = remote
+            .fetch_response(&format!("{}/start", initial_server.url()))
+            .expect("redirected top-level document");
+        assert_eq!(response.final_url, final_page_url);
+
+        let handler = remote.script_handler(&response.final_url);
+        assert!(
+            handler
+                .start(12, request(format!("{}/data", final_server.url())))
+                .is_none()
+        );
+        assert!(matches!(
+            await_event(&handler),
+            FetchEvent::Complete { id: 12, .. }
+        ));
+        redirect.assert();
+        page.assert();
+        data.assert();
+    }
+
+    #[test]
     fn resource_and_script_fetches_share_one_concurrency_budget() {
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let release = Arc::new(tokio::sync::Notify::new());
