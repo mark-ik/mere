@@ -689,6 +689,12 @@ textarea {
     grid-column: span 2;
 }
 
+.catalog-dimension-line-card {
+    flex-direction: column;
+    gap: 0.35rem;
+    grid-column: span 2;
+}
+
 .catalog-leaf-caption {
     color: var(--catalog-muted);
     font-size: 0.8rem;
@@ -793,6 +799,7 @@ textarea {
 
 .catalog-width-narrow .catalog-graph-swatch-card,
 .catalog-width-narrow .catalog-angle-strip-card,
+.catalog-width-narrow .catalog-dimension-line-card,
 .catalog-width-narrow .catalog-graph-variant-crowded,
 .catalog-width-narrow .catalog-leaf-grid > .catalog-label {
     grid-column: 1;

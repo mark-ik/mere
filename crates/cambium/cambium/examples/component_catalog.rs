@@ -17,17 +17,18 @@ use std::rc::Rc;
 use cambium::{
     AccordionConfig, AccordionItem, AccordionState, Action, AngleStrip, AngleStripMark, AnyView,
     COMPONENT_PROBE_ATTR, CommandEvent, CommandItem, CommandState, ComponentView,
-    DetailPopoverMode, DetailPopoverState, DisclosureState, DomHandle, GenetAppRunner, GenetCtx,
-    GenetElement, GraphCanvasEdge, GraphCanvasNode, GraphCanvasSubgraph, GraphCanvasSwatch,
-    GridColumn, GridSpec, GridView, HoverEvent, HoverPhase, Key, KeyEvent, NamedKey,
-    OverlayDismiss, OverlayRole, OverlaySurface, Placement, PointerClick, PointerEvent,
-    PointerPhase, RadioGroup, ReorderItem, ReorderMove, ReorderState, SelectState, SelectionItem,
-    SelectionState, Slider, StyleRange, SummaryBody, TabActivation, TextInput, TreeItem, TreeState,
-    accordion_with, button, button_with, checkbox, command_menu, command_palette, command_picker,
-    component, custom_leaf, data_grid, detail_popover, disclosure, el, filter_chips, frisket,
-    graph_canvas_swatch, graph_canvas_swatch_with_focus, lens, map_action, on_hover, on_pointer,
-    overlay_surface, radio_group, reorderable_list, segmented_control, select, setting_row, slider,
-    styled_textarea, summary_body, tab_bar, text_field_typed, textarea_typed, toggle, tree_view,
+    DetailPopoverMode, DetailPopoverState, DimensionLine, DimensionLineTraversal, DisclosureState,
+    DomHandle, GenetAppRunner, GenetCtx, GenetElement, GraphCanvasEdge, GraphCanvasNode,
+    GraphCanvasSubgraph, GraphCanvasSwatch, GridColumn, GridSpec, GridView, HoverEvent, HoverPhase,
+    Key, KeyEvent, NamedKey, OverlayDismiss, OverlayRole, OverlaySurface, Placement, PointerClick,
+    PointerEvent, PointerPhase, RadioGroup, ReorderItem, ReorderMove, ReorderState, SelectState,
+    SelectionItem, SelectionState, Slider, StyleRange, SummaryBody, TabActivation, TextInput,
+    TreeItem, TreeState, accordion_with, button, button_with, checkbox, command_menu,
+    command_palette, command_picker, component, custom_leaf, data_grid, detail_popover, disclosure,
+    el, filter_chips, frisket, graph_canvas_swatch, graph_canvas_swatch_with_focus, lens,
+    map_action, on_hover, on_pointer, overlay_surface, radio_group, reorderable_list,
+    segmented_control, select, setting_row, slider, styled_textarea, summary_body, tab_bar,
+    text_field_typed, textarea_typed, toggle, tree_view,
 };
 use genet_scripted_dom::{NodeId, ScriptedDom};
 use layout_dom_api::{LayoutDom, LocalName, Namespace};
@@ -53,7 +54,10 @@ const GRAPH_EMPTY_KEY: u64 = 106;
 const GRAPH_SINGLE_KEY: u64 = 107;
 const GRAPH_CROWDED_KEY: u64 = 108;
 const ANGLE_STRIP_KEY: u64 = 109;
-const LEAF_KEYS: [u64; 9] = [
+const DIMENSION_DIRECT_KEY: u64 = 110;
+const DIMENSION_WRAPPED_KEY: u64 = 111;
+const DIMENSION_COINCIDENT_KEY: u64 = 112;
+const LEAF_KEYS: [u64; 12] = [
     SWATCH_KEY,
     GRAPH_KEY,
     METER_KEY,
@@ -63,6 +67,9 @@ const LEAF_KEYS: [u64; 9] = [
     GRAPH_SINGLE_KEY,
     GRAPH_CROWDED_KEY,
     ANGLE_STRIP_KEY,
+    DIMENSION_DIRECT_KEY,
+    DIMENSION_WRAPPED_KEY,
+    DIMENSION_COINCIDENT_KEY,
 ];
 
 type CatalogView = Box<dyn AnyView<CatalogState, (), GenetCtx, GenetElement>>;
@@ -1284,6 +1291,36 @@ fn catalog(state: &CatalogState) -> CatalogView {
             el(
                 "div",
                 (
+                    custom_leaf::<CatalogState, ()>(DIMENSION_DIRECT_KEY, 240, 24)
+                        .attr("aria-hidden", "true"),
+                    el::<_, CatalogState, ()>("p", "Direct span: 72° to 216°, target 144°")
+                        .attr("class", "catalog-leaf-caption"),
+                ),
+            )
+            .attr("class", "catalog-leaf-card catalog-dimension-line-card"),
+            el(
+                "div",
+                (
+                    custom_leaf::<CatalogState, ()>(DIMENSION_WRAPPED_KEY, 240, 24)
+                        .attr("aria-hidden", "true"),
+                    el::<_, CatalogState, ()>("p", "Wrapped span: 288° to 72°, target 0°")
+                        .attr("class", "catalog-leaf-caption"),
+                ),
+            )
+            .attr("class", "catalog-leaf-card catalog-dimension-line-card"),
+            el(
+                "div",
+                (
+                    custom_leaf::<CatalogState, ()>(DIMENSION_COINCIDENT_KEY, 240, 24)
+                        .attr("aria-hidden", "true"),
+                    el::<_, CatalogState, ()>("p", "Coincident endpoints: 180°")
+                        .attr("class", "catalog-leaf-caption"),
+                ),
+            )
+            .attr("class", "catalog-leaf-card catalog-dimension-line-card"),
+            el(
+                "div",
+                (
                     on_pointer(
                         custom_leaf::<CatalogState, ()>(KNOB_KEY, 48, 48)
                             .attr("id", "catalog-knob")
@@ -1427,6 +1464,39 @@ fn catalog_leaves(state: &CatalogState) -> LeafRegistry<u64> {
                 width: 240.0,
                 height: 24.0,
             },
+        )),
+    );
+    registry.insert(
+        DIMENSION_DIRECT_KEY,
+        Box::new(DimensionLine::with_size(
+            0.2,
+            0.6,
+            DimensionLineTraversal::Direct,
+            Some(0.4),
+            240.0,
+            24.0,
+        )),
+    );
+    registry.insert(
+        DIMENSION_WRAPPED_KEY,
+        Box::new(DimensionLine::with_size(
+            0.8,
+            0.2,
+            DimensionLineTraversal::Wrapped,
+            Some(0.0),
+            240.0,
+            24.0,
+        )),
+    );
+    registry.insert(
+        DIMENSION_COINCIDENT_KEY,
+        Box::new(DimensionLine::with_size(
+            0.5,
+            0.5,
+            DimensionLineTraversal::Direct,
+            None,
+            240.0,
+            24.0,
         )),
     );
     let mut knob = Knob::new(Size {
@@ -1824,7 +1894,7 @@ fn assert_initial_surface(dom: &ScriptedDom, root: NodeId, width: CatalogWidth) 
         "custom-leaf",
         &mut leaves,
     );
-    assert_eq!(leaves.len(), 9);
+    assert_eq!(leaves.len(), 12);
     let angle_strip = find_id(dom, root, "leaves-section");
     let angle_label = find_where(dom, angle_strip, &|dom, node| {
         attr(dom, node, "key") == Some("109")
@@ -1840,6 +1910,33 @@ fn assert_initial_surface(dom: &ScriptedDom, root: NodeId, width: CatalogWidth) 
         node_text(dom, find_class(dom, angle_strip, "catalog-leaf-caption")),
         "Chart body longitudes: 29°, 76°, 166°, 227°, 281°, 338°"
     );
+    for (key, caption) in [
+        (
+            DIMENSION_DIRECT_KEY,
+            "Direct span: 72° to 216°, target 144°",
+        ),
+        (
+            DIMENSION_WRAPPED_KEY,
+            "Wrapped span: 288° to 72°, target 0°",
+        ),
+        (DIMENSION_COINCIDENT_KEY, "Coincident endpoints: 180°"),
+    ] {
+        let key = key.to_string();
+        let dimension_line = find_where(dom, angle_strip, &|dom, node| {
+            attr(dom, node, "key") == Some(key.as_str())
+        })
+        .expect("dimension-line custom leaf");
+        assert_attr(dom, dimension_line, "aria-hidden", "true");
+        assert!(
+            find_where(dom, angle_strip, &|dom, node| {
+                dom.element_name(node)
+                    .is_some_and(|name| name.local.as_ref() == "p")
+                    && node_text(dom, node) == caption
+            })
+            .is_some(),
+            "dimension-line caption {caption:?}"
+        );
+    }
     assert_eq!(
         node_text(dom, find_id(dom, root, "catalog-knob-value")),
         "62%"
@@ -2400,6 +2497,10 @@ fn assert_leaf_pipeline(state: &CatalogState) {
                 height: 144.0,
             }),
             ANGLE_STRIP_KEY => Some(Size {
+                width: 240.0,
+                height: 24.0,
+            }),
+            DIMENSION_DIRECT_KEY | DIMENSION_WRAPPED_KEY | DIMENSION_COINCIDENT_KEY => Some(Size {
                 width: 240.0,
                 height: 24.0,
             }),

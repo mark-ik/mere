@@ -1,7 +1,7 @@
 # Cambium fact-visualization leaves
 
 **Date:** 2026-09-06
-**Status (2026-09-06):** V0 landed; V1 and V2 planned
+**Status (2026-09-06):** V0 and V1 landed; V2 planned
 
 ## Decision
 
@@ -87,6 +87,18 @@ The consumer supplies endpoint labels, the measured value, units, and relation
 kind as DOM. Cleromancy may place it beside a selected aspect while retaining
 the aspects grid as the complete reading.
 
+**V1 rulings (2026-09-06):**
+
+- The caller supplies ordered endpoints, `Direct` or `Wrapped` traversal, and
+  an optional absolute normalized target tick. Cambium clamps coordinates but
+  does not infer direction, shortest paths, units, or relation meaning.
+- A filled start marker and ring end marker preserve endpoint order. Wrapped
+  traversal paints from start to the upper boundary and from the lower
+  boundary to end.
+- Cleromancy displays the shortest stored separation in increasing direct
+  order or increasing across the `360/0` boundary. That convention is a
+  product projection and does not change stored astrology facts.
+
 **Done when:**
 
 - endpoint order and wrap policy are inputs rather than inferred domain rules;
@@ -148,3 +160,15 @@ cargo test --test chart_surface_dom --features analytic-ephemeris --offline -j 1
   regressions pass 3/3; and the `portable-core` check passes. Independent
   review found and closed visibility, cache-retention, second-selection,
   track-contract, and resize-receipt gaps. Final review is clean.
+- **2026-09-06:** V1 landed. Sprigging now provides a read-only
+  `DimensionLine` with caller-ordered endpoints, explicit direct or wrapped
+  traversal, an optional absolute target tick, clipped endpoint styling, and
+  retained dirty/resize behavior. The catalog carries ordinary, wrapped, and
+  coincident specimens with DOM sibling values. Cleromancy's Chart surface
+  adds a view-local aspect selector and supplies the documented increasing
+  shortest-path convention while retaining the complete aspects grid and all
+  source identity. Sprigging passes 28/28; the catalog passes 2/2 and both
+  receipts were regenerated; Cleromancy's projection tests pass 3/3; and Chart
+  passes 3/3 in default and `analytic-ephemeris` builds. Independent review
+  found and closed chart-switch focus and selector-reconciliation gaps; final
+  review is clean.

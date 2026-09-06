@@ -31,6 +31,7 @@ use paint_list_api::{CommonPlacement, LayoutPoint, LayoutRect, RectItem};
 
 mod angle;
 mod arrange;
+mod dimension;
 mod glyphs;
 mod grid;
 mod path;
@@ -38,6 +39,7 @@ mod slot;
 
 pub use angle::{AngleStrip, AngleStripMark};
 pub use arrange::{Placement, VirtualWindow};
+pub use dimension::{DimensionLine, DimensionLineTraversal};
 pub use glyphs::{
     GraphCanvas, GraphGlyph, GraphGlyphNode, GraphGlyphRelation, GraphViewport, Knob, Meter,
 };
