@@ -65,6 +65,9 @@ pub use smolweb_glue::{run_smolweb_receipt, run_smolweb_viewer};
 mod scripted;
 
 #[cfg(all(feature = "present", feature = "scripted"))]
+mod scripted_graphics;
+
+#[cfg(all(feature = "present", feature = "scripted"))]
 mod scripted_viewer;
 
 // (STRUCTURAL_SHEET moved to genet-documents with the lanes; genet-scripted

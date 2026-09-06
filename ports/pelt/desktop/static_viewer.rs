@@ -1296,6 +1296,10 @@ impl ControllerViewerContent {
             imported_accent: false,
         }
     }
+
+    pub(crate) fn external_texture_draws(&self) -> &[inker::SessionExternalTextureDraw] {
+        self.controller.external_texture_draws()
+    }
 }
 
 #[cfg(any(feature = "livery", feature = "reader"))]
@@ -2047,6 +2051,15 @@ pub(crate) mod windowed {
     /// documents implement it, so they share this one winit shell. The Pelt
     /// host-reconstruction lane replaces this private seam with a public host core.
     pub(crate) trait ViewerContent {
+        /// Install services that require the window host's shared GPU device.
+        /// Called once after host boot and before the first authored frame.
+        fn initialize(
+            &mut self,
+            _device: &wgpu::Device,
+            _queue: &wgpu::Queue,
+        ) -> Result<(), String> {
+            Ok(())
+        }
         /// The document title for native window chrome, when this content has one.
         fn title(&self) -> Option<String> {
             None
@@ -2072,6 +2085,14 @@ pub(crate) mod windowed {
         }
         /// Render at `width`×`height` at the current scroll.
         fn frame(&mut self, width: u32, height: u32) -> Scene;
+        /// Resolve a session texture key to the same-device producer texture.
+        fn external_texture(&self, _key: u64) -> Option<wgpu::Texture> {
+            None
+        }
+        /// Ordered external draws emitted by the latest document frame.
+        fn external_texture_draws(&self) -> &[inker::SessionExternalTextureDraw] {
+            &[]
+        }
         /// Scroll by a device-px wheel delta; return whether the offset moved.
         fn scroll_by(&mut self, dx: f32, dy: f32) -> bool;
         /// Scroll by a device-px wheel delta at scene point `(x, y)`: the wheel default
@@ -2318,12 +2339,45 @@ pub(crate) mod windowed {
             }
             // White canvas: a document with no root/body background paints over white
             // (the page background), as a browser does.
-            let (_tex, view) = host.rasterize_scaled(
+            let external_textures: Vec<_> = self
+                .doc
+                .external_texture_draws()
+                .iter()
+                .filter_map(|draw| {
+                    self.doc.external_texture(draw.texture_key).map(|texture| {
+                        (
+                            texture,
+                            ExternalTexturePlacement::new(draw.dest_rect)
+                                .with_opacity(draw.opacity),
+                            draw.scene_op_boundary,
+                        )
+                    })
+                })
+                .collect();
+            let external_views: Vec<_> = external_textures
+                .iter()
+                .map(|(texture, placement, boundary)| {
+                    (
+                        texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                        *placement,
+                        *boundary,
+                    )
+                })
+                .collect();
+            let external_composites: Vec<_> = external_views
+                .iter()
+                .map(|(view, placement, boundary)| {
+                    netrender::ExternalTextureComposite::new(view, *placement)
+                        .with_scene_op_boundary(*boundary)
+                })
+                .collect();
+            let (_tex, view) = host.rasterize_scaled_with_external_textures(
                 &scene,
                 self.width.max(1),
                 self.height.max(1),
                 ColorLoad::Clear(wgpu::Color::WHITE),
                 self.scale_factor,
+                &external_composites,
             );
 
             let capture_now = self.config.product_receipt.is_some()
@@ -2458,7 +2512,14 @@ pub(crate) mod windowed {
                 ..Default::default()
             };
             match SurfaceHost::boot(window.clone(), self.width, self.height, options) {
-                Ok(host) => self.host = Some(host),
+                Ok(host) => {
+                    if let Err(error) = self.doc.initialize(host.device(), host.queue()) {
+                        eprintln!("[pelt-viewer] could not initialize content: {error}");
+                        event_loop.exit();
+                        return;
+                    }
+                    self.host = Some(host);
+                },
                 Err(err) => {
                     eprintln!("[pelt-viewer] {err}");
                     event_loop.exit();
