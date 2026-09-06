@@ -724,6 +724,68 @@ mod tests {
         assert!(handler.poll(8).is_empty());
     }
 
+    #[test]
+    fn scripted_fetch_enforces_body_and_time_limits() {
+        let mut server = mockito::Server::new();
+        let oversized = server
+            .mock("GET", "/oversized")
+            .with_status(200)
+            .with_body("four")
+            .create();
+        let body_limited = ScriptFetchHandler::new(
+            &format!("{}/page", server.url()),
+            ResourceFetchPolicy {
+                max_response_bytes: 3,
+                ..ResourceFetchPolicy::default()
+            },
+        );
+        assert!(
+            body_limited
+                .start(31, request(format!("{}/oversized", server.url())))
+                .is_none()
+        );
+        assert!(matches!(
+            await_event(&body_limited),
+            FetchEvent::Failed { id: 31, .. }
+        ));
+        oversized.assert();
+
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let release = Arc::new(tokio::sync::Notify::new());
+        let policy = ResourceFetchPolicy {
+            timeout: Duration::from_millis(20),
+            ..ResourceFetchPolicy::default()
+        };
+        let context =
+            netfetcher::FetchContext::permissive().with_transport(Arc::new(GateTransport {
+                started: started_tx,
+                release,
+            }));
+        let timeout_handler = ScriptFetchHandler::from_http(
+            "http://same.invalid/page",
+            Arc::new(HttpResourceHost {
+                context,
+                policy,
+                permits: Arc::new(tokio::sync::Semaphore::new(1)),
+            }),
+        );
+        assert!(
+            timeout_handler
+                .start(32, request("http://same.invalid/slow".to_owned()))
+                .is_none()
+        );
+        started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("timed request entered transport");
+        match await_event(&timeout_handler) {
+            FetchEvent::Failed { id, message } => {
+                assert_eq!(id, 32);
+                assert_eq!(message, "Fetch timed out");
+            },
+            FetchEvent::Complete { .. } => panic!("timed request completed"),
+        }
+    }
+
     /// http(s) loading flows through the netfetcher engine end to end: an offline
     /// mock server serves a body, and `RemoteFetcher` (with the `netfetch` branch)
     /// fetches its bytes -- the same path `pelt --engine static https://…` takes,
