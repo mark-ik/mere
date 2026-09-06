@@ -213,7 +213,7 @@ impl<E: ScriptEngine + 'static> crate::static_viewer::windowed::ViewerContent
 
 #[cfg(test)]
 mod tests {
-    use super::run_scripted_viewer;
+    use super::{ScriptedViewerContent, run_scripted_viewer};
     use crate::{ProductReceipt, ScriptedEngine, StaticViewerConfig, WindowingMode};
     use genet_host_api::EngineProfile;
 
@@ -230,5 +230,97 @@ mod tests {
                 .expect_err("livery receipt must not enter scripted"),
             "product receipt article is owned by the livery profile"
         );
+    }
+
+    #[cfg(feature = "netfetch")]
+    #[test]
+    fn deferred_viewer_fetches_and_mutates_through_its_real_host_services() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        use crate::static_viewer::windowed::ViewerContent;
+
+        const RESPONSE: &str = "Pelt deferred fetch receipt 6d7357";
+        let listener = TcpListener::bind("127.0.0.1:0").expect("local receipt server binds");
+        listener
+            .set_nonblocking(true)
+            .expect("local receipt server becomes bounded");
+        let address = listener.local_addr().expect("local receipt address");
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut served = 0;
+            while served < 2 && Instant::now() < deadline {
+                let (mut stream, _) = match listener.accept() {
+                    Ok(connection) => connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(2));
+                        continue;
+                    },
+                    Err(error) => panic!("local receipt accept failed: {error}"),
+                };
+                let mut request = [0; 2048];
+                let count = stream.read(&mut request).expect("receipt request reads");
+                let request = String::from_utf8_lossy(&request[..count]);
+                let (content_type, body) = if request.starts_with("GET /data ") {
+                    ("application/json", format!(r#"{{"value":"{RESPONSE}"}}"#))
+                } else {
+                    (
+                        "text/html; charset=utf-8",
+                        r#"<!doctype html><title>waiting</title><body>waiting<script>
+                          fetch('/data').then(response => response.json()).then(data => {
+                            document.title = data.value;
+                            document.body.textContent = data.value;
+                          });
+                        </script>"#
+                            .to_owned(),
+                    )
+                };
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .expect("receipt response writes");
+                served += 1;
+            }
+            assert_eq!(
+                served, 2,
+                "document and authored fetch both reached the host"
+            );
+        });
+
+        let url = format!("http://{address}/index.html");
+        let config = StaticViewerConfig::new(EngineProfile::Scripted, WindowingMode::Headed, url)
+            .with_size(160, 80);
+        let core = genet_render_host::RenderCore::boot(netrender::NetrenderOptions {
+            tile_cache_size: Some(16),
+            enable_vello: true,
+            ..Default::default()
+        })
+        .expect("receipt render core boots");
+        let mut content = ScriptedViewerContent::<script_engine_boa::BoaEngine>::new(
+            &config,
+            inker::routing::ENGINE_GENET_SCRIPTED,
+            "Scripted · Boa",
+        );
+        content
+            .initialize(core.device(), core.queue())
+            .expect("deferred viewer initializes after device boot");
+
+        let start = Instant::now();
+        let deadline = start + Duration::from_secs(5);
+        let mut pending = true;
+        while (content.title().as_deref() != Some(RESPONSE) || pending) && Instant::now() < deadline
+        {
+            pending = content.pump(start.elapsed().as_secs_f64() * 1000.0);
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(content.title().as_deref(), Some(RESPONSE));
+        assert!(!pending, "deferred fetch and its script jobs settle");
+        assert!(!content.frame(160, 80).ops.is_empty());
+        drop(content);
+        server.join().expect("local receipt server exits cleanly");
     }
 }
