@@ -29,12 +29,14 @@ use std::hash::Hash;
 use paint_list_api::items::PathItem;
 use paint_list_api::{CommonPlacement, LayoutPoint, LayoutRect, RectItem};
 
+mod angle;
 mod arrange;
 mod glyphs;
 mod grid;
 mod path;
 mod slot;
 
+pub use angle::{AngleStrip, AngleStripMark};
 pub use arrange::{Placement, VirtualWindow};
 pub use glyphs::{
     GraphCanvas, GraphGlyph, GraphGlyphNode, GraphGlyphRelation, GraphViewport, Knob, Meter,

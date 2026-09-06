@@ -15,19 +15,19 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cambium::{
-    AccordionConfig, AccordionItem, AccordionState, Action, AnyView, COMPONENT_PROBE_ATTR,
-    CommandEvent, CommandItem, CommandState, ComponentView, DetailPopoverMode, DetailPopoverState,
-    DisclosureState, DomHandle, GenetAppRunner, GenetCtx, GenetElement, GraphCanvasEdge,
-    GraphCanvasNode, GraphCanvasSubgraph, GraphCanvasSwatch, GridColumn, GridSpec, GridView,
-    HoverEvent, HoverPhase, Key, KeyEvent, NamedKey, OverlayDismiss, OverlayRole, OverlaySurface,
-    Placement, PointerClick, PointerEvent, PointerPhase, RadioGroup, ReorderItem, ReorderMove,
-    ReorderState, SelectState, SelectionItem, SelectionState, Slider, StyleRange, SummaryBody,
-    TabActivation, TextInput, TreeItem, TreeState, accordion_with, button, button_with, checkbox,
-    command_menu, command_palette, command_picker, component, custom_leaf, data_grid,
-    detail_popover, disclosure, el, filter_chips, frisket, graph_canvas_swatch,
-    graph_canvas_swatch_with_focus, lens, map_action, on_hover, on_pointer, overlay_surface,
-    radio_group, reorderable_list, segmented_control, select, setting_row, slider, styled_textarea,
-    summary_body, tab_bar, text_field_typed, textarea_typed, toggle, tree_view,
+    AccordionConfig, AccordionItem, AccordionState, Action, AngleStrip, AngleStripMark, AnyView,
+    COMPONENT_PROBE_ATTR, CommandEvent, CommandItem, CommandState, ComponentView,
+    DetailPopoverMode, DetailPopoverState, DisclosureState, DomHandle, GenetAppRunner, GenetCtx,
+    GenetElement, GraphCanvasEdge, GraphCanvasNode, GraphCanvasSubgraph, GraphCanvasSwatch,
+    GridColumn, GridSpec, GridView, HoverEvent, HoverPhase, Key, KeyEvent, NamedKey,
+    OverlayDismiss, OverlayRole, OverlaySurface, Placement, PointerClick, PointerEvent,
+    PointerPhase, RadioGroup, ReorderItem, ReorderMove, ReorderState, SelectState, SelectionItem,
+    SelectionState, Slider, StyleRange, SummaryBody, TabActivation, TextInput, TreeItem, TreeState,
+    accordion_with, button, button_with, checkbox, command_menu, command_palette, command_picker,
+    component, custom_leaf, data_grid, detail_popover, disclosure, el, filter_chips, frisket,
+    graph_canvas_swatch, graph_canvas_swatch_with_focus, lens, map_action, on_hover, on_pointer,
+    overlay_surface, radio_group, reorderable_list, segmented_control, select, setting_row, slider,
+    styled_textarea, summary_body, tab_bar, text_field_typed, textarea_typed, toggle, tree_view,
 };
 use genet_scripted_dom::{NodeId, ScriptedDom};
 use layout_dom_api::{LayoutDom, LocalName, Namespace};
@@ -52,7 +52,8 @@ const GRAPH_SWATCH_KEY: u64 = 105;
 const GRAPH_EMPTY_KEY: u64 = 106;
 const GRAPH_SINGLE_KEY: u64 = 107;
 const GRAPH_CROWDED_KEY: u64 = 108;
-const LEAF_KEYS: [u64; 8] = [
+const ANGLE_STRIP_KEY: u64 = 109;
+const LEAF_KEYS: [u64; 9] = [
     SWATCH_KEY,
     GRAPH_KEY,
     METER_KEY,
@@ -61,6 +62,7 @@ const LEAF_KEYS: [u64; 8] = [
     GRAPH_EMPTY_KEY,
     GRAPH_SINGLE_KEY,
     GRAPH_CROWDED_KEY,
+    ANGLE_STRIP_KEY,
 ];
 
 type CatalogView = Box<dyn AnyView<CatalogState, (), GenetCtx, GenetElement>>;
@@ -1269,6 +1271,19 @@ fn catalog(state: &CatalogState) -> CatalogView {
             el(
                 "div",
                 (
+                    custom_leaf::<CatalogState, ()>(ANGLE_STRIP_KEY, 240, 24)
+                        .attr("aria-hidden", "true"),
+                    el::<_, CatalogState, ()>(
+                        "p",
+                        "Chart body longitudes: 29°, 76°, 166°, 227°, 281°, 338°",
+                    )
+                    .attr("class", "catalog-leaf-caption"),
+                ),
+            )
+            .attr("class", "catalog-leaf-card catalog-angle-strip-card"),
+            el(
+                "div",
+                (
                     on_pointer(
                         custom_leaf::<CatalogState, ()>(KNOB_KEY, 48, 48)
                             .attr("id", "catalog-knob")
@@ -1397,6 +1412,23 @@ fn catalog_leaves(state: &CatalogState) -> LeafRegistry<u64> {
     );
     meter.set_level(0.68, Some(0.82));
     registry.insert(METER_KEY, Box::new(meter));
+    registry.insert(
+        ANGLE_STRIP_KEY,
+        Box::new(AngleStrip::new(
+            vec![
+                AngleStripMark::new(0.08, color(0.22, 0.41, 0.72)),
+                AngleStripMark::new(0.21, color(0.65, 0.35, 0.72)),
+                AngleStripMark::new(0.46, color(0.25, 0.65, 0.45)),
+                AngleStripMark::new(0.63, color(0.82, 0.46, 0.23)),
+                AngleStripMark::new(0.78, color(0.32, 0.63, 0.72)),
+                AngleStripMark::new(0.94, color(0.76, 0.34, 0.48)),
+            ],
+            Size {
+                width: 240.0,
+                height: 24.0,
+            },
+        )),
+    );
     let mut knob = Knob::new(Size {
         width: 48.0,
         height: 48.0,
@@ -1792,7 +1824,22 @@ fn assert_initial_surface(dom: &ScriptedDom, root: NodeId, width: CatalogWidth) 
         "custom-leaf",
         &mut leaves,
     );
-    assert_eq!(leaves.len(), 8);
+    assert_eq!(leaves.len(), 9);
+    let angle_strip = find_id(dom, root, "leaves-section");
+    let angle_label = find_where(dom, angle_strip, &|dom, node| {
+        attr(dom, node, "key") == Some("109")
+    })
+    .expect("angle-strip custom leaf");
+    assert_eq!(
+        dom.element_name(angle_label)
+            .map(|name| name.local.to_string()),
+        Some("custom-leaf".to_string())
+    );
+    assert_attr(dom, angle_label, "aria-hidden", "true");
+    assert_eq!(
+        node_text(dom, find_class(dom, angle_strip, "catalog-leaf-caption")),
+        "Chart body longitudes: 29°, 76°, 166°, 227°, 281°, 338°"
+    );
     assert_eq!(
         node_text(dom, find_id(dom, root, "catalog-knob-value")),
         "62%"
@@ -2352,6 +2399,10 @@ fn assert_leaf_pipeline(state: &CatalogState) {
                 width: 300.0,
                 height: 144.0,
             }),
+            ANGLE_STRIP_KEY => Some(Size {
+                width: 240.0,
+                height: 24.0,
+            }),
             _ => None,
         }
     }
@@ -2505,11 +2556,15 @@ mod tests {
     fn committed_receipts_match_the_live_catalog() {
         assert_eq!(
             super::receipt_html(super::CatalogWidth::Narrow),
-            include_str!("../../../../design_docs/cambium_docs/testing/receipts/component_catalog_narrow.html")
+            include_str!(
+                "../../../../design_docs/cambium_docs/testing/receipts/component_catalog_narrow.html"
+            )
         );
         assert_eq!(
             super::receipt_html(super::CatalogWidth::Regular),
-            include_str!("../../../../design_docs/cambium_docs/testing/receipts/component_catalog_regular.html")
+            include_str!(
+                "../../../../design_docs/cambium_docs/testing/receipts/component_catalog_regular.html"
+            )
         );
     }
 }

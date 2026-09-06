@@ -152,7 +152,7 @@ pub use selection_bar::{
 };
 pub use slider::{Slider, slider};
 pub use splice::GenetChildrenSplice;
-pub use sprigging::{GraphCanvas, GraphViewport, GridColumn, GridSpec};
+pub use sprigging::{AngleStrip, AngleStripMark, GraphCanvas, GraphViewport, GridColumn, GridSpec};
 pub use styled_field::{
     FIELD_CARET_CLASS, FIELD_PREEDIT_CLASS, FieldChild, StyleRange, caret_field_children,
     caret_text_field, styled_text_field, styled_textarea,
