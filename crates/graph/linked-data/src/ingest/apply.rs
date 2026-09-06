@@ -17,6 +17,7 @@ use kernel::types::{
     NodeDerivation,
 };
 
+#[cfg(not(target_arch = "wasm32"))]
 use super::GraphContribution;
 
 /// What [`apply_contribution`] did.
@@ -173,20 +174,20 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             // Recorded as a node derivation (like cross-graph `CopiedFrom`), so it
             // feeds the provenance trail without polluting the link graph's
             // out-edges — a channel distinct from the `Hyperlink` semantic edge.
-            if sub_kind == SemanticSubKind::Hyperlink {
-                if let Some(source_node) = graph.get_node(from).map(|n| n.id.to_string()) {
-                    let _ = apply_graph_delta(
-                        graph,
-                        GraphDelta::RecordNodeDerivation {
-                            key: to,
-                            derivation: NodeDerivation {
-                                sub_kind: ProvenanceSubKind::ExtractedFrom,
-                                source_node,
-                                source_graph: None,
-                            },
+            if sub_kind == SemanticSubKind::Hyperlink
+                && let Some(source_node) = graph.get_node(from).map(|n| n.id.to_string())
+            {
+                let _ = apply_graph_delta(
+                    graph,
+                    GraphDelta::RecordNodeDerivation {
+                        key: to,
+                        derivation: NodeDerivation {
+                            sub_kind: ProvenanceSubKind::ExtractedFrom,
+                            source_node,
+                            source_graph: None,
                         },
-                    );
-                }
+                    },
+                );
             }
             semantic_ok
         } else {

@@ -27,8 +27,11 @@
 //! materializes a contribution into a graph (recognized predicate → typed
 //! sub-kind, raw → open-predicate edge). Export ↔ ingest round-trips.
 //!
-//! Later: `@type` ↔ classification mapping, real bundled context assets, and the
-//! host-side `application/ld+json` dispatch.
+//! Hosts parse HTML and dispatch preserved `application/ld+json` blocks into
+//! these JSON-LD entry points. `mere-document-lanes` owns that Fleece adapter;
+//! this crate remains an RDF processor rather than a second HTML parser.
+//!
+//! Later: `@type` ↔ classification mapping.
 
 #![doc(html_root_url = "https://docs.rs/linked-data/0.0.1")]
 
@@ -65,9 +68,8 @@ pub mod query;
 #[cfg(not(target_arch = "wasm32"))]
 pub use ingest::{ApplyOutcome, apply_contribution};
 pub use ingest::{
-    ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_html,
-    from_html_with_contexts, from_jsonld, from_jsonld_with_contexts, from_quads,
-    is_bundled_context, referenced_context_urls,
+    ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_jsonld,
+    from_jsonld_with_contexts, from_quads, is_bundled_context, referenced_context_urls,
 };
 pub use serialize::{from_nquads, from_trig, to_nquads, to_trig};
 pub use statements::{StatementOutcome, apply_link_statements, resolve_rel};
@@ -194,6 +196,10 @@ fn asserted_at_literal(asserted_at_ms: u64) -> Option<Literal> {
     Some(Literal::new_typed_literal(lexical, datatype))
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the helper mirrors the complete RDF statement metadata tuple"
+)]
 fn push_statement_metadata_quads(
     quads: &mut Vec<Quad>,
     subject: &NamedNode,
@@ -644,7 +650,7 @@ fn compact_node_object(
                     predicate.to_string()
                 };
                 (emit_key, json!({ "@id": object.as_str() }))
-            }
+            },
             Term::Literal(object) => (predicate.to_string(), compact_literal_json_value(object)),
             _ => continue,
         };
@@ -687,9 +693,11 @@ fn compact_node_object(
 #[cfg(test)]
 mod tests {
     use super::{
-        EdgeContribution, GraphContribution, RDF_REIFIES, apply_contribution, from_jsonld,
-        node_quads, to_jsonld, to_jsonld_compact,
+        EdgeContribution, GraphContribution, apply_contribution, from_jsonld, to_jsonld,
+        to_jsonld_compact,
     };
+    #[cfg(feature = "query")]
+    use super::{RDF_REIFIES, node_quads};
     use kernel::graph::fixtures::GraphFixtures;
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use kernel::types::{GraphScope, NodeProperty};
@@ -1001,7 +1009,6 @@ mod tests {
                     graph_scope: GraphScope::User,
                     provenance_iri: Some("https://persona.test/mark".to_string()),
                     asserted_at_ms: Some(1_720_000_000_000),
-                    ..Default::default()
                 },
             )
             .expect("cites statement");

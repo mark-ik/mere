@@ -17,6 +17,11 @@ netfetch = ["dep:netfetcher", "dep:tokio", "dep:bytes"]
 # The smolweb engine-native lane: errand transport and Nematic EngineDocument
 # lowering; the reader lane is unconditional.
 smolweb = ["dep:errand", "dep:nematic", "dep:tokio"]
+# Preserve Fleece-derived reading evidence through Eidetic without making the
+# document lane's ordinary reader/session consumers take a storage dependency.
+eidetic-bridge = ["fleece/wire", "dep:eidetic", "dep:serde", "dep:serde_json"]
+# Project Fleece-preserved JSON-LD blocks through Mere's RDF authority.
+fleece-json-ld = ["dep:linked-data"]
 
 [dependencies]
 document-session-api = { workspace = true }
@@ -36,9 +41,18 @@ errand = { workspace = true, optional = true }
 netfetcher = { workspace = true, optional = true }
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"], optional = true }
 bytes = { version = "1", optional = true }
+eidetic = { workspace = true, optional = true }
+linked-data = { workspace = true, optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Offline mock HTTP server for the netfetch integration tests; runs without a
 # live network.
 mockito = "1"
 wgpu = { workspace = true }
+eidetic-fjall = { workspace = true }
+pollster = "0.4"
+tempfile = "3"
+oxjsonld = "0.2"
+oxrdf = "0.3"

@@ -705,7 +705,7 @@ mod tests {
         let (x, y) = reader(session.as_ref())
             .accessibility_pointer_target(identity)
             .expect("visible semantic link resolves to a retained point");
-        assert!(x >= 0.0 && x < 130.0 && y >= 0.0 && y < 300.0);
+        assert!((0.0..130.0).contains(&x) && (0.0..300.0).contains(&y));
 
         // A sizing query can rebuild retained geometry but cannot publish it
         // as the next a11y snapshot before the corresponding frame finishes.

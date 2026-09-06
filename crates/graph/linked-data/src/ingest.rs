@@ -215,7 +215,7 @@ fn scope_from_graph_name(graph_name: &oxrdf::GraphName, namespace: &str) -> Grap
         },
         oxrdf::GraphName::BlankNode(node) => {
             GraphScope::Custom(skolemize(namespace, node.as_str()))
-        }
+        },
     }
 }
 
@@ -266,12 +266,6 @@ pub fn from_jsonld_with_contexts(
     collect_contribution(quads, &namespace)
 }
 
-/// Extract every `<script type="application/ld+json">` block from an HTML body
-/// and parse each as JSON-LD, returning the contributions that parsed (parse
-/// failures and other `<script>` types are skipped). A lightweight tag scan, not
-/// a full HTML parser — enough to harvest the structured data most pages embed.
-/// A host pairs this with rendering: a page both displays and contributes its
-/// linked data.
 /// Scan a JSON-LD document for the remote `@context` URLs it references — the
 /// string entries of any `@context`, top-level or nested, including inside
 /// `@graph`. A host fetches these (minus the ones the bundled packs already
@@ -301,9 +295,9 @@ fn collect_context_urls(value: &serde_json::Value, out: &mut Vec<String>) {
                     collect_context_urls(child, out);
                 }
             }
-        }
+        },
         serde_json::Value::Array(items) => items.iter().for_each(|i| collect_context_urls(i, out)),
-        _ => {}
+        _ => {},
     }
 }
 
@@ -313,45 +307,12 @@ fn collect_context_strings(ctx: &serde_json::Value, out: &mut Vec<String>) {
     match ctx {
         serde_json::Value::String(s) if s.starts_with("http://") || s.starts_with("https://") => {
             out.push(s.clone());
-        }
+        },
         serde_json::Value::Array(items) => {
             items.iter().for_each(|i| collect_context_strings(i, out))
-        }
-        _ => {}
+        },
+        _ => {},
     }
-}
-
-pub fn from_html(html: &str) -> Vec<GraphContribution> {
-    from_html_with_contexts(html, ContextCache::new())
-}
-
-/// Like [`from_html`], but each embedded document is parsed with `contexts`, so a
-/// `<script>` block referencing a remote `@context` (e.g. schema.org) resolves
-/// from the bundled cache rather than being skipped.
-pub fn from_html_with_contexts(html: &str, contexts: ContextCache) -> Vec<GraphContribution> {
-    let lower = html.to_ascii_lowercase();
-    let mut out = Vec::new();
-    let mut pos = 0;
-    while let Some(rel) = lower[pos..].find("<script") {
-        let tag_start = pos + rel;
-        let Some(gt) = lower[tag_start..].find('>') else {
-            break;
-        };
-        let open_tag = &lower[tag_start..tag_start + gt];
-        let content_start = tag_start + gt + 1;
-        let Some(close_rel) = lower[content_start..].find("</script>") else {
-            break;
-        };
-        let content_end = content_start + close_rel;
-        if open_tag.contains("application/ld+json") {
-            let block = html[content_start..content_end].as_bytes();
-            if let Ok(contribution) = from_jsonld_with_contexts(block, contexts.clone()) {
-                out.push(contribution);
-            }
-        }
-        pos = content_end + "</script>".len();
-    }
-    out
 }
 
 /// The reifier-IRI prefix `dataset_quads` mints fact handles under.
@@ -420,7 +381,7 @@ fn collect_contribution<E: std::fmt::Display>(
                 Term::NamedNode(node) => ReifiedObject::Resource(node.as_str().to_string()),
                 Term::BlankNode(node) => {
                     ReifiedObject::Resource(skolemize(namespace, node.as_str()))
-                }
+                },
                 Term::Literal(literal) => ReifiedObject::Literal {
                     value: literal.value().to_string(),
                     datatype: literal.datatype().as_str().to_string(),
@@ -431,7 +392,7 @@ fn collect_contribution<E: std::fmt::Display>(
             reified.insert(
                 reifier,
                 ReifiedStatement {
-                    subject: subject_iri(&triple.subject.clone().into(), namespace),
+                    subject: subject_iri(&triple.subject.clone(), namespace),
                     predicate: normalize_schema_org(triple.predicate.as_str()),
                     object,
                     graph_scope: scope_from_graph_name(&quad.graph_name, namespace),
@@ -463,14 +424,14 @@ fn collect_contribution<E: std::fmt::Display>(
             match (quad.predicate.as_str(), &quad.object) {
                 (RDFS_LABEL, Term::Literal(literal)) => {
                     statement.label = Some(literal.value().to_string());
-                }
+                },
                 (PROV_WAS_ATTRIBUTED_TO, Term::NamedNode(agent)) => {
                     statement.provenance_iri = Some(agent.as_str().to_string());
-                }
+                },
                 (PROV_GENERATED_AT_TIME, Term::Literal(literal)) => {
                     statement.asserted_at_ms = parse_xsd_datetime_ms(literal.value());
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     }
@@ -507,7 +468,7 @@ fn collect_contribution<E: std::fmt::Display>(
                     property.lang = lang;
                     node.properties.push(property);
                 }
-            }
+            },
             Term::NamedNode(object) => route_resource(
                 &mut nodes,
                 &mut edges,
@@ -524,7 +485,7 @@ fn collect_contribution<E: std::fmt::Display>(
                 skolemize(namespace, object.as_str()),
                 graph_scope,
             ),
-            Term::Triple(_) => {}
+            Term::Triple(_) => {},
         }
     }
 
@@ -619,7 +580,7 @@ fn collect_contribution<E: std::fmt::Display>(
                         asserted_at_ms: statement.asserted_at_ms,
                     });
                 }
-            }
+            },
             ReifiedObject::Literal {
                 value,
                 datatype,
@@ -650,7 +611,7 @@ fn collect_contribution<E: std::fmt::Display>(
                 }
                 property.provenance_iri = statement.provenance_iri;
                 property.asserted_at_ms = statement.asserted_at_ms;
-            }
+            },
         }
     }
 
@@ -697,7 +658,7 @@ fn collect_contribution<E: std::fmt::Display>(
 /// URL not present, so a document's remote `@context` never hits the network.
 #[derive(Clone, Default)]
 pub struct ContextCache {
-    documents: std::collections::HashMap<String, Vec<u8>>,
+    documents: std::sync::Arc<std::collections::HashMap<String, Vec<u8>>>,
 }
 
 /// The URL Mere's curated context is served at.
@@ -802,7 +763,7 @@ impl ContextCache {
 
     /// Bundle a context document under its URL (builder style).
     pub fn with(mut self, url: impl Into<String>, document: impl Into<Vec<u8>>) -> Self {
-        self.documents.insert(url.into(), document.into());
+        std::sync::Arc::make_mut(&mut self.documents).insert(url.into(), document.into());
         self
     }
 
@@ -812,6 +773,7 @@ impl ContextCache {
 }
 
 mod apply;
+#[cfg(not(target_arch = "wasm32"))]
 pub use apply::ApplyOutcome;
 #[cfg(not(target_arch = "wasm32"))]
 pub use apply::apply_contribution;

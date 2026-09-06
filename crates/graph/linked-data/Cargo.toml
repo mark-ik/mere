@@ -43,5 +43,10 @@ spareval = { version = "0.2", optional = true, features = ["sparql-12"] }
 spargebra = { version = "0.4", optional = true, features = ["sparql-12"] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# oxrdf's random blank-node support reaches getrandom 0.3. Browser builds also
+# pass `--cfg getrandom_backend="wasm_js"`, following Mere's existing web lanes.
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
 [dev-dependencies]
 kernel = { workspace = true, features = ["fixtures"] }

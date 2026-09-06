@@ -22,36 +22,6 @@ const SAMPLE: &[u8] = br#"[
 ]"#;
 
 #[test]
-fn from_html_harvests_embedded_jsonld_scripts() {
-    let html = r#"<!doctype html><html><head>
-      <title>A page</title>
-      <script type="application/ld+json">
-        {"@context":{"name":"https://schema.org/name","cites":"https://mere.computer/ns/rel#cites"},
-         "@id":"https://a.test/","name":"Paper A","cites":{"@id":"https://b.test/"}}
-      </script>
-      <script type="text/javascript">console.log("ignored");</script>
-    </head><body>body</body></html>"#;
-    let contributions = from_html(html);
-    assert_eq!(
-        contributions.len(),
-        1,
-        "only the ld+json script is harvested"
-    );
-    let nodes = &contributions[0].nodes;
-    assert!(
-        nodes
-            .iter()
-            .any(|n| n.id == "https://a.test/" && n.title.as_deref() == Some("Paper A"))
-    );
-    assert!(
-        contributions[0]
-            .edges
-            .iter()
-            .any(|e| e.predicate.ends_with("#cites"))
-    );
-}
-
-#[test]
 fn blank_nodes_skolemize_under_a_document_namespace() {
     // A blank node becomes `urn:mere:bnode:<doc-namespace>:<label>`. The
     // namespace is stable per document content; oxjsonld assigns the label
