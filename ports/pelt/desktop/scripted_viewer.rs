@@ -164,6 +164,15 @@ impl<E: ScriptEngine + 'static> crate::static_viewer::windowed::ViewerContent
             .and_then(|v| crate::static_viewer::windowed::ViewerContent::address(v))
             .or(Some(&self.address))
     }
+    fn drive_product_receipt(
+        &mut self,
+        receipt: crate::static_viewer::StaticProductReceipt,
+    ) -> Result<String, String> {
+        crate::static_viewer::windowed::ViewerContent::drive_product_receipt(
+            self.controller_mut(),
+            receipt,
+        )
+    }
     fn frame(&mut self, w: u32, h: u32) -> Scene {
         crate::static_viewer::windowed::ViewerContent::frame(self.controller_mut(), w, h)
     }
